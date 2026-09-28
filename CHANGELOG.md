@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [1.37.1] — 2026-09-28
+
+Play no longer flashes controls then stalls, and each TV episode on the title page has its own Play.
+
+### Highlights
+- **In-app Play sticks the landing.** Opening `/watch` no longer remounts the HLS session on every status tick (flash of OSD → poster → blank). The reel stays attached through loading → ready → playing.
+- **Episode Play on the seasons list.** Each SxxExx row has an obvious **Play** (and the title is a play link) that opens `/watch/{episodeRatingKey}`. Show-level Play still picks on-deck / first unwatched. **Open in Plex** stays overflow; **Remove** stays owner-only and no longer the only action.
+
+### Fixed
+- `TheaterPlayer` keeps parent `onStatus` / `onHlsRef` / `onVideoRef` in refs so the HLS attach effect depends only on `src` (and `autoFullscreen`). Inline callbacks from `LibraryPlayer` no longer tear down hls.js on every re-render.
+- `LibraryPlayer` surfaces an honest stall message when the player reports `error`, and clears it when playback recovers.
+- `ShowSeasonsPanel` episode rows expose in-app Play (≥44px) before Remove; episode titles link to the same `/watch` path.
+
+### Verification
+- Frontend unit: `theaterPlayer.test.mjs`, `titleLinks.test.mjs`, `showSeasons.test.mjs`.
+- Targeted Playwright (chromium, :8799): `e2e/library-watch.spec.ts` including HLS non-thrash + episode Play → `/watch/{episodeKey}`.
+
 ## [1.37.0] — 2026-09-28
 
 Play opens titles in Projectionist instead of handing off to Plex. New code is AGPL-3.0-only; already-shipped tags through 1.36.2 stay MIT. Login and job APIs show less of the house.
