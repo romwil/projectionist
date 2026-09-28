@@ -123,4 +123,86 @@ test.describe("In-app library Play", () => {
     await expect(page.getByRole("button", { name: "Resume" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Start over" })).toBeVisible();
   });
+
+  test("watch does not thrash HLS playlist fetches after status ticks", async ({ page }) => {
+    let m3u8Hits = 0;
+    page.on("request", (req) => {
+      if (req.url().includes("/api/library/playback/") && req.url().includes(".m3u8")) {
+        m3u8Hits += 1;
+      }
+    });
+    await page.goto("/watch/plex-949");
+    await expect(page.getByTestId("library-player")).toBeVisible();
+    // Allow status loading→ready→playing ticks; a remount loop would explode this count.
+    await page.waitForTimeout(2000);
+    expect(m3u8Hits).toBeGreaterThan(0);
+    expect(m3u8Hits).toBeLessThan(8);
+    await expect(page.getByTestId("library-player-error")).toHaveCount(0);
+  });
+
+  test("show seasons episode Play opens /watch for that episode key", async ({ page }) => {
+    await page.route("**/api/title/show/43323**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          media_type: "show",
+          title: "Between Two Ferns",
+          year: 2012,
+          tmdb_id: 43323,
+          in_library: true,
+          rating_key: "show-rk",
+          library_item_id: 42,
+          plex_machine_id: "mock-plex-machine",
+        }),
+      });
+    });
+    await page.route("**/api/library/tv/seasons**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          show_id: 42,
+          show_title: "Between Two Ferns",
+          total_seasons: 1,
+          total_episodes: 1,
+          file_size_bytes: 1000,
+          seasons: [
+            {
+              season_number: 1,
+              episode_count: 1,
+              watched_count: 0,
+              file_size_bytes: 1000,
+              episodes: [
+                {
+                  id: 1,
+                  rating_key: "ep-fern-1",
+                  season_number: 1,
+                  episode_number: 1,
+                  title: "Zach Galifianakis",
+                  view_count: 0,
+                  runtime_minutes: 22,
+                  file_size: 500,
+                },
+              ],
+            },
+          ],
+        }),
+      });
+    });
+    await page.route("**/api/watch-tracker/shows/**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ hasCoverage: false, timeline: [], episode_completions: {} }),
+      });
+    });
+
+    await page.goto("/title/show/43323");
+    await expect(page.getByTestId("show-seasons-panel")).toBeVisible();
+    await expect(page.getByTestId("show-episode-play-ep-fern-1")).toBeVisible();
+    await page.getByTestId("show-episode-play-ep-fern-1").click();
+    await expect(page).toHaveURL(/\/watch\/ep-fern-1/);
+    await expect(page.getByTestId("library-player")).toBeVisible();
+  });
 });

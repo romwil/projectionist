@@ -78,6 +78,23 @@ export default function LibraryPlayer({
     sessionRef.current = null;
   }, []);
 
+  const handlePlayerStatus = useCallback((next) => {
+    setStatus(next);
+    if (next === "error") {
+      setError((prev) => prev || "Playback stalled. Try Resume, refresh, or Open in Plex.");
+    } else if (next === "playing" || next === "ready") {
+      setError("");
+    }
+  }, []);
+
+  const handleHlsRef = useCallback((hls) => {
+    hlsRef.current = hls;
+  }, []);
+
+  const handleVideoRef = useCallback((el) => {
+    videoRef.current = el;
+  }, []);
+
   const begin = useCallback(
     async ({ startOver = false } = {}) => {
       if (!key || startingRef.current) return;
@@ -436,13 +453,9 @@ export default function LibraryPlayer({
         loadingCopy="warming the reel"
         error=""
         osd={osd}
-        onStatus={setStatus}
-        onVideoRef={(el) => {
-          videoRef.current = el;
-        }}
-        onHlsRef={(hls) => {
-          hlsRef.current = hls;
-        }}
+        onStatus={handlePlayerStatus}
+        onVideoRef={handleVideoRef}
+        onHlsRef={handleHlsRef}
         onTimeUpdate={(video) => {
           setNowMs(Math.round((video.currentTime || 0) * 1000));
           if (video.duration) setDurationMs(Math.round(video.duration * 1000));
