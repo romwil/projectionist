@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   canWatchOnPlex,
+  libraryEpisodePath,
   libraryWatchPath,
   plexClientPlayUrl,
   plexPlayRatingKey,
@@ -11,6 +12,12 @@ import {
   titleDetailPath,
   titleDetailTo,
 } from "./titleLinks.js";
+
+test("libraryEpisodePath encodes the rating key", () => {
+  assert.equal(libraryEpisodePath("ep-1"), "/title/episode/ep-1");
+  assert.equal(libraryEpisodePath("a/b"), "/title/episode/a%2Fb");
+  assert.equal(libraryEpisodePath(""), "");
+});
 
 test("titleDetailPath prefers tmdb id", () => {
   assert.equal(

@@ -1614,6 +1614,13 @@ export async function getShowSeasons({
   return api(`/library/tv/seasons${qs ? `?${qs}` : ""}`);
 }
 
+/** Single episode detail (show context + prev/next) for `/title/episode/:ratingKey`. */
+export async function getLibraryEpisode(ratingKey) {
+  const key = String(ratingKey || "").trim();
+  if (!key) return Promise.reject(new Error("Missing episode key"));
+  return api(`/library/tv/episode/${encodeURIComponent(key)}`);
+}
+
 /** Owner season/episode remove via Sonarr episode files + Plex + index. */
 export async function removeTvScope(body) {
   return api("/library/tv/remove", {

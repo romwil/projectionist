@@ -4,6 +4,22 @@ import { libraryWatchPath, libraryWatchTo } from "./theaterPlayer.js";
 
 export { libraryWatchPath, libraryWatchTo };
 
+/** Episode detail route — show seasons list titles land here before Play. */
+export function libraryEpisodePath(ratingKey) {
+  const key = String(ratingKey || "").trim();
+  if (!key) return "";
+  return `/title/episode/${encodeURIComponent(key)}`;
+}
+
+export function libraryEpisodeTo(ratingKey, fromLocation = null) {
+  const pathname = libraryEpisodePath(ratingKey);
+  if (!pathname) return null;
+  return {
+    pathname,
+    state: returnStateFromLocation(fromLocation),
+  };
+}
+
 /** Build the in-app title detail route for a card/item, or null if not linkable. */
 export function titleDetailPath(item) {
   if (!item) return null;

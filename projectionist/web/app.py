@@ -76,6 +76,7 @@ from projectionist.memory import MemoryAccessError, UserMemoryService
 from projectionist.library.health import compute_library_health
 from projectionist.library.facets import ensure_library_facet_index
 from projectionist.library.episodes import (
+    get_episode_detail,
     query_episodes,
     query_show_seasons,
     summarize_tv_progress,
@@ -2965,6 +2966,17 @@ def library_tv_episodes_endpoint(
         ),
         user,
     )
+
+
+@app.get("/api/library/tv/episode/{rating_key}")
+def library_tv_episode_detail_endpoint(
+    rating_key: str,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    payload = get_episode_detail(_db(), rating_key)
+    if payload.get("error"):
+        raise HTTPException(status_code=404, detail=str(payload["error"]))
+    return _sanitize_library_payload(payload, user)
 
 
 @app.get("/api/library/tv/seasons")
