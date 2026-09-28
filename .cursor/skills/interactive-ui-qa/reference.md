@@ -1172,6 +1172,70 @@ Dual-role: **member living-room first**, then a **full admin/owner second pass**
 - **steps:** Tap a library/explore poster to open `title-detail-drawer`. Confirm a phone sheet (safe-area top/bottom), close ≥44px, content scrolls inside the sheet. Dismiss.
 - **pass:** Sheet opens and closes; does not overflow the 390px canvas.
 
+### `watch.play-in-app`
+
+- **roles:** `member`, `owner`
+- **tags:** `watch`, `delight`, `library`
+- **source:** `frontend/src/pages/LibraryWatchPage.jsx`, `frontend/src/components/theater/LibraryPlayer.jsx`, `frontend/src/lib/titleLinks.js`
+- **steps:** From a library poster or title detail, activate **Play**. Confirm `/watch/{ratingKey}` opens in Projectionist (not app.plex.tv / `plex://`). Confirm **Open in Plex** remains overflow. Hostile: spam Play — only one session starts.
+- **pass:** In-app theater loads; overflow still reaches Plex; no PMS host or token in the page, network URLs, or console.
+
+### `watch.skip-15`
+
+- **roles:** `member`, `owner`
+- **tags:** `watch`, `delight`
+- **source:** `frontend/src/lib/theaterPlayer.js`, `frontend/src/components/theater/LibraryPlayer.jsx`
+- **steps:** On `/watch`, double-click (desktop) the left third, then the right third. Confirm −15s / +15s gold skip chips. Confirm Space/`k` play-pause and `j`/`l` skip. Confirm the completing click of a double-click does not toggle play.
+- **pass:** Skip chips appear; playhead moves; single-click still play/pauses.
+
+### `watch.fullscreen-popout`
+
+- **roles:** `member`, `owner`
+- **tags:** `watch`, `delight`
+- **source:** `frontend/src/pages/LibraryWatchPage.jsx`
+- **steps:** Desktop: `f` or center double-click fullscreen; **Pop-out** opens `/watch/{rk}/popout` and unloads the opener player. Escape: close CC → exit fullscreen → leave `/watch`.
+- **pass:** Fullscreen and pop-out work; opener does not keep a second decoder; Escape restores the trigger route.
+
+### `watch.resume`
+
+- **roles:** `member`, `owner`
+- **tags:** `watch`, `delight`
+- **source:** `frontend/src/components/theater/LibraryPlayer.jsx`
+- **steps:** Open a title with `view_offset_ms` ≳ 2 minutes. Confirm **Resume** (gold) and **Start over** (ghost). Under ~2 minutes, no gate.
+- **pass:** Gate copy is honest; Resume continues; Start over begins at 0.
+
+### `watch.youth-gate`
+
+- **roles:** `youth`
+- **tags:** `watch`, `youth`, `gating`
+- **source:** `projectionist/library/playback.py`
+- **steps:** As youth, Play an over-ceiling or unrated title (do not use a live household title you care about — use QA fixtures). Confirm start fails closed with human copy. Confirm an allowed title can start.
+- **pass:** 403 / on-screen refusal; no stream URL; no token leak.
+
+### `watch.mobile-play`
+
+- **roles:** `member`, `owner`
+- **tags:** `watch`, `delight`, `mobile`
+- **source:** `frontend/src/components/TitleDetailContent.jsx`, `frontend/src/pages/LibraryWatchPage.jsx`
+- **steps:** At 390×844, Play from `title-detail-drawer` (and a poster). Confirm `/watch` in Projectionist, `playsInline`, no `plex://` primary. Overflow **Open in Plex** remains. After Back / Escape, `/chat` composer is still pinned (`mobile.chat-composer`).
+- **pass:** In-app Play; composer still pinned on return; no new Plex app/tab as the primary path.
+
+### `watch.mobile-skip-15`
+
+- **roles:** `member`, `owner`
+- **tags:** `watch`, `delight`, `mobile`
+- **source:** `frontend/src/lib/theaterPlayer.js`
+- **steps:** At 390×844 on `/watch`, double-tap left and right thirds (~300ms). Confirm ±15s chips. Confirm a single tap still play/pauses and the second tap of a skip does not toggle play.
+- **pass:** Double-tap skip works without iOS `dblclick`; 44px OSD skip buttons also work.
+
+### `watch.mobile-landscape`
+
+- **roles:** `member`, `owner`
+- **tags:** `watch`, `delight`, `mobile`
+- **source:** `frontend/src/styles/13-watch.css`
+- **steps:** Rotate `/watch` to landscape at phone width. Confirm immersive theater, OSD auto-hides, controls ≥44px with `env(safe-area-inset-*)`, no `100vw` bounce. Confirm no Pop-out control; PiP / fullscreen available when the browser allows.
+- **pass:** Landscape is watch-first; portrait letterboxes with pinned chrome; no horizontal page bounce.
+
 ### `mobile.live-watch`
 
 - **roles:** `member`, `owner`
@@ -1467,6 +1531,14 @@ Investigate is **Admin → Libraries → Investigate episodes** (`#episode-inves
 | `mobile.chat-conversation` | member, owner |
 | `mobile.library-browse` | member, owner |
 | `mobile.title-overlay` | member, owner |
+| `watch.play-in-app` | member, owner |
+| `watch.skip-15` | member, owner |
+| `watch.fullscreen-popout` | member, owner |
+| `watch.resume` | member, owner |
+| `watch.youth-gate` | youth |
+| `watch.mobile-play` | member, owner |
+| `watch.mobile-skip-15` | member, owner |
+| `watch.mobile-landscape` | member, owner |
 | `mobile.live-watch` | member, owner |
 | `mobile.settings-notifications` | member, owner |
 | `mobile.admin-overview` | owner |

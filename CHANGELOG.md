@@ -2,10 +2,11 @@
 
 ## [Unreleased]
 
-Failed syncs keep a friendly error, guests see less of the house, library stats stay cheap, parked clients stop polling, and Identify says when a clip leaves the LAN.
+Failed syncs keep a friendly error, guests see less of the house, library stats stay cheap, parked clients stop polling, and Identify says when a clip leaves the LAN. **Play** now opens the title in Projectionist — desktop and phone — instead of handing off to Plex as the first tap.
 
 ### Highlights
 - **AGPL-3.0-only going forward.** New code and future releases use the GNU Affero GPL v3.0 only. Household / Unraid CA / Hub stay a free self-host app. If you run a modified copy for other people over a network, you offer them the source. Already-shipped tags through 1.36.2 stay MIT.
+- **Play stays in the house.** Poster, title sheet, and cards open `/watch` in Projectionist. Plex still transcodes; the browser never sees the server token. **Open in Plex** stays as overflow when a stream will not start.
 - **Failed library sync no longer shows a stack trace.** Job history keeps a short friendly error so `GET /api/jobs` does not leak frames from the host.
 - **The login screen learns less about the house.** Guests see whether multi-user is on, whether they can ask for an invite, and how they can sign in — not household domain, proxy, or Seerr flags. Setup status is owner-only; members still get Radarr/Sonarr readiness for dock-drop.
 - **Identify test clips stay on the media roots.** A test path has to sit under the configured TV/movie folders (or a current snapshot row, including a mapped `resolved_path`). A miss still does not rename files.
@@ -21,6 +22,7 @@ Failed syncs keep a friendly error, guests see less of the house, library stats 
 - `Database.close()` runs `PRAGMA wal_checkpoint(PASSIVE)` after the writer serializer stops. Never `TRUNCATE`.
 - Identify `_identified_keys` is an `OrderedDict` capped at 4096 (P2-MED-01). Rate-limit buckets evict empty and oldest keys after `check()` when over 4096, without applying the caller’s window cutoff to other buckets (P2-MED-02).
 - Config / Libraries / chat job polls use a shared visible-busy helper (2s while busy, 8s idle, `document.hidden` pause). Chat `listJobs` runs only while a sync toast is open (P2-HIGH-03). Live Channels status depends on a busy boolean so a running job cannot remount the poll. Library Sync keeps `syncingLibrary` in a ref so the first click is not cleared by a stale `listJobs` tick.
+- Primary Play CTA is an in-app `/watch/{play_rating_key}` link on posters, title detail / sheet, chat cards, and the ⋮ menu. Overflow remains **Open in Plex**. Show keys resolve to an on-deck or first unwatched episode.
 
 ### Security
 - Failed `library_sync` jobs store `summary.failed` and a friendly `error`. `Job.to_dict()` never includes a `traceback` key or frame strings, including jobs persisted before this change (P3-MED-01).
@@ -36,11 +38,12 @@ Failed syncs keep a friendly error, guests see less of the house, library stats 
 
 ### Added
 - Identify settings and **Test Identify** on Admin → Libraries, with `IDENTIFY_LEAVES_LAN` (`IDENTIFY_CLIP_SECONDS` = 12). Test honesty is `renamed: false` (P4-MED-03).
+- In-app library Play: `POST /api/library/playback/start` plus session playlist/seek/progress/stop proxy. Shared `TheaterPlayer`, `LibraryPlayer`, `/watch/:ratingKey` (pop-out alias). Phone 390 uses double-tap ±15s, 44px safe-area OSD, fullscreen + PiP (no `plex://` primary, no pop-out).
 
 ### Verification
-- Focused pytest: durable jobs, webhooks, authz, Identify paths, library counts, WAL close, Identify key cap, rate-limit eviction.
-- Frontend unit: `visibleBusyPoll.test.mjs`, `episodeInvestigate.test.mjs`, `chatLayout.test.mjs`.
-- Targeted Playwright (chromium, :8799): `e2e/config-maintenance.spec.ts` Identify settings/test; `e2e/ca-release.spec.ts` chat sync toast.
+- Focused pytest: durable jobs, webhooks, authz, Identify paths, library counts, WAL close, Identify key cap, rate-limit eviction, `tests/test_license.py`, `tests/test_library_playback.py`.
+- Frontend unit: `visibleBusyPoll.test.mjs`, `episodeInvestigate.test.mjs`, `chatLayout.test.mjs`, `aboutHashScroll.test.mjs`, `theaterPlayer.test.mjs`, `titleLinks.test.mjs`.
+- Targeted Playwright (chromium, :8799): `e2e/config-maintenance.spec.ts` Identify settings/test; `e2e/ca-release.spec.ts` chat sync toast; `e2e/library-watch.spec.ts`; mobile `e2e/mobile-native.spec.ts` in-app Play.
 
 ## [1.36.2] — 2026-09-25
 

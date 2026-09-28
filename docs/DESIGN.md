@@ -101,7 +101,7 @@ Inline and turnstyle cards share the same affordances:
 |--------|----------|
 | **Click title / poster** | Navigate to `/title/{movie\|show}/{id}` — AppShell sticky header (AppNav + BackLink), backdrop hero, synopsis, meta tiles, cast/tags |
 | **Watch trailer** | YouTube trailer modal when `trailer_youtube_key` is present |
-| **Watch on Plex** | Shown when the title is in-library (`rating_key`); opens Plex deep link |
+| **Play** | Shown when the title is in-library (`play_rating_key` or `rating_key`); opens `/watch/{key}` in Projectionist. **Open in Plex** stays overflow / error fallback. |
 | **More Like This** | Horizontal neighbor carousel from cached `item_neighbors` (empty until idle `plot_neighbors` ran) |
 | **Recommend** | Multi-user: pick household peers + optional note; unread inbox on home |
 | **Pin (☆)** | Add/remove local watchlist pin |

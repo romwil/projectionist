@@ -18,6 +18,7 @@ import TasteSettingsPage from "./pages/settings/TasteSettingsPage";
 import NotificationsSettingsPage from "./pages/settings/NotificationsSettingsPage";
 import LivePage from "./pages/LivePage";
 import LiveWatchPage from "./pages/LiveWatchPage";
+import LibraryWatchPage from "./pages/LibraryWatchPage";
 import ExplorePage from "./pages/ExplorePage";
 import ExploreSectionPage from "./pages/ExploreSectionPage";
 import MyJourneyPage from "./pages/MyJourneyPage";
@@ -97,6 +98,8 @@ export default function AppRoutes() {
       <Route path="/live" element={<LivePage />} />
       <Route path="/live/watch" element={<LiveWatchPage />} />
       <Route path="/live/popout" element={<LiveWatchPage />} />
+      <Route path="/watch/:ratingKey/popout" element={<LibraryWatchPage popout />} />
+      <Route path="/watch/:ratingKey" element={<LibraryWatchPage />} />
       <Route path="/library" element={<LibraryHubPage />} />
       <Route path="/library/saved" element={<LibraryPage />} />
       <Route path="/library/saved/:pageId" element={<LibraryPage />} />

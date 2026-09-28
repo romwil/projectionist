@@ -16,7 +16,7 @@
   }
 }
 
-/* 390×844 phone: Play goes to the Plex client; composer stays pinned. */
+/* 390×844 phone: Play stays in-app on /watch; composer stays pinned on return. */
 @media (max-width: 390px) {
   .app-root.workspace {
     overflow: hidden;

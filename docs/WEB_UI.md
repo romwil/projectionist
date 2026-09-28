@@ -64,7 +64,8 @@ With `features.multi_user_enabled` left at `false` (the default), Projectionist 
 | `/settings/*` | Profile (font size), lists, preferences |
 | `/admin/*` | Owner Admin shell (setup wizard, users, dashboard, advanced) |
 | `/admin/dashboard` | Owner library intelligence dashboard (includes Knowledge coverage panel) |
-| `/title/{movie\|show}/{id}` | Title detail — backdrop hero, Plot knowledge panel, trailer modal, Watch on Plex, purge notes |
+| `/title/{movie\|show}/{id}` | Title detail — backdrop hero, Plot knowledge panel, trailer modal, **Play** in Projectionist, Open in Plex overflow, purge notes |
+| `/watch/{ratingKey}` | In-app library theater (movie / episode; show keys resolve). Pop-out alias `/watch/{ratingKey}/popout` on desktop. |
 | `/privacy` | Privacy disclosure (no login) |
 | `/about` | About / version |
 | `/help` | Help guide — Chat, Explore, Related titles, owner idle curation (no login; role-aware sections) |
@@ -108,7 +109,8 @@ On `/config` load, the UI fetches certification status and sequentially tests an
   - `Esc` — close results overlay
 - **Ambient tint** — The workspace background subtly shifts based on inferred conversation context (e.g. neo-noir, 1970s).
 - **Watchlist shelf** — Pin titles from any title card with the ☆ button. Pinned count appears in the top bar (click toggles the panel); open the list from the sidebar. Refresh pull-syncs from Plex Discover when configured. Click a pin to open title detail.
-- **Title detail** — Click poster/title on a card to open detail with optional YouTube trailer modal and **Watch on Plex** when in-library.
+- **Title detail** — Click poster/title on a card to open detail with optional YouTube trailer modal and **Play** (in Projectionist) when in-library. **Open in Plex** remains overflow.
+- **Library watch** — `/watch/{ratingKey}` plays a Plex HLS transcode through an auth’d proxy (no PMS token in the browser). Space/`k` play-pause, `j`/`l` or arrows ±15s, double-click/tap left/right thirds skip, center double-activate fullscreen, `f` fullscreen, `m` mute, `c` captions, Escape closes captions then fullscreen then the page. Phone hides pop-out and uses fullscreen + PiP.
 - **Recommend** — When multi-user is on, send a title to household peers; unread items appear in a home inbox.
 - **Persona selector** — Switch persona per conversation from the composer; create custom personas with seven sliders.
 - **Font size** — Settings → Profile: small / medium / large.
