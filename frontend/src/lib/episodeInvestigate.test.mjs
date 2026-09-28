@@ -5,11 +5,16 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   FFMPEG_MISSING,
+  IDENTIFY_CLIP_SECONDS,
+  IDENTIFY_LEAVES_LAN,
+  IDENTIFY_TEST_NO_RENAME,
   SCENE_NAMES_NOT_EVIDENCE,
   STILLS_LEAVE_LAN,
   applyButtonClass,
   confidenceLabel,
   defaultRowSelected,
+  identifyTestHonestyLine,
+  identifyTestRenamed,
   reviewEvidenceSummary,
   selectedFileIds,
   selectionMap,
@@ -46,10 +51,27 @@ describe("episode investigate selection", () => {
     assert.match(libraries, /data-testid="episode-investigate-card"/);
     assert.match(libraries, /InvestigatePanel/);
     assert.match(libraries, /STILLS_LEAVE_LAN/);
+    assert.match(libraries, /IDENTIFY_LEAVES_LAN/);
     assert.match(libraries, /SCENE_NAMES_NOT_EVIDENCE/);
     assert.match(libraries, /\/admin\/investigate\/start/);
     assert.equal(STILLS_LEAVE_LAN.includes("leave the LAN"), true);
     assert.equal(SCENE_NAMES_NOT_EVIDENCE.includes("not evidence"), true);
+  });
+
+  it("says Identify leaves the LAN and that a test miss does not rename", () => {
+    assert.equal(IDENTIFY_CLIP_SECONDS, 12);
+    assert.match(IDENTIFY_LEAVES_LAN, new RegExp(`${IDENTIFY_CLIP_SECONDS}-second`));
+    assert.match(IDENTIFY_LEAVES_LAN, /leaves the LAN/);
+    assert.match(IDENTIFY_LEAVES_LAN, /does not rename/);
+    assert.equal(identifyTestRenamed({ renamed: true }), false);
+    assert.equal(identifyTestRenamed({ renamed: false, found: true }), false);
+    assert.equal(identifyTestHonestyLine({ renamed: true }), IDENTIFY_TEST_NO_RENAME);
+    assert.match(libraries, /IdentifySettingsPanel/);
+    assert.match(libraries, /Save Identify settings/);
+    assert.match(libraries, /Test Identify/);
+    assert.match(libraries, /IDENTIFY_TEST_NO_RENAME/);
+    assert.match(libraries, /\/admin\/investigate\/identify\/settings/);
+    assert.match(libraries, /\/admin\/investigate\/identify\/test/);
   });
 
   it("uses a dense review table with sticky Apply, not stacked cards", () => {

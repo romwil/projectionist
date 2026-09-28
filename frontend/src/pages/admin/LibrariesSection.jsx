@@ -10,14 +10,18 @@ import {
 } from "../../lib/jobProgress.js";
 import {
   FFMPEG_MISSING,
+  IDENTIFY_LEAVES_LAN,
+  IDENTIFY_TEST_NO_RENAME,
   SCENE_NAMES_NOT_EVIDENCE,
   STILLS_LEAVE_LAN,
   applyButtonClass,
   confidenceLabel,
+  identifyTestHonestyLine,
   reviewEvidenceSummary,
   selectedFileIds,
   selectionMap,
 } from "../../lib/episodeInvestigate.js";
+import { startVisibleBusyPoll } from "../../lib/visibleBusyPoll.js";
 import {
   sonarrFindMissingButtonClass,
   sonarrMissingBySeries,
@@ -434,6 +438,8 @@ export default function LibrariesSection({
           onHighlight={handleRepairRematch}
         />
 
+        <IdentifySettingsPanel />
+
         <InvestigatePanel focusHint={investigateHint} />
 
         <section className="config-section" data-testid="plex-library-mapping">
@@ -556,6 +562,143 @@ export default function LibrariesSection({
   );
 }
 
+function IdentifySettingsPanel() {
+  const [host, setHost] = useState("");
+  const [accessKey, setAccessKey] = useState("");
+  const [accessSecret, setAccessSecret] = useState("");
+  const [defaultHost, setDefaultHost] = useState("identify-us-west-2.acrcloud.com");
+  const [keySet, setKeySet] = useState(false);
+  const [secretSet, setSecretSet] = useState(false);
+  const [available, setAvailable] = useState(false);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const [testResult, setTestResult] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api("/admin/investigate/identify/settings")
+      .then((next) => {
+        if (cancelled) return;
+        setHost(String(next?.host || ""));
+        setDefaultHost(String(next?.default_host || "identify-us-west-2.acrcloud.com"));
+        setKeySet(Boolean(next?.access_key_set));
+        setSecretSet(Boolean(next?.access_secret_set));
+        setAvailable(Boolean(next?.available));
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message || "Could not load Identify settings.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleSave() {
+    setError("");
+    setBusy("save");
+    try {
+      const next = await api("/admin/investigate/identify/settings", {
+        method: "PUT",
+        body: JSON.stringify({
+          host,
+          access_key: accessKey,
+          access_secret: accessSecret,
+        }),
+      });
+      setHost(String(next?.host || host));
+      setKeySet(Boolean(next?.access_key_set || keySet));
+      setSecretSet(Boolean(next?.access_secret_set || secretSet));
+      setAvailable(Boolean(next?.available));
+      setAccessKey("");
+      setAccessSecret("");
+    } catch (err) {
+      setError(err.message || "Could not save Identify settings.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function handleTest() {
+    setError("");
+    setBusy("test");
+    try {
+      const result = await api("/admin/investigate/identify/test", {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      setTestResult(result && typeof result === "object" ? result : {});
+    } catch (err) {
+      setError(err.message || "Identify test failed.");
+      setTestResult(null);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  const testMessage = testResult
+    ? [testResult.message, testResult.title, identifyTestHonestyLine(testResult)].filter(Boolean).join(" ")
+    : "";
+
+  return (
+    <section className="config-section" aria-labelledby="identify-settings-heading">
+      <h2 id="identify-settings-heading">Identify</h2>
+      <p className="wizard-note">{IDENTIFY_LEAVES_LAN}</p>
+      <p className="wizard-note">{IDENTIFY_TEST_NO_RENAME}</p>
+      {available ? (
+        <p className="status status-secondary">Identify keys are configured.</p>
+      ) : (
+        <p className="status status-secondary">Identify is off until you save an ACRCloud access key and secret.</p>
+      )}
+      <div className="section-dropdowns">
+        <label>
+          <span>Identify host</span>
+          <input
+            type="text"
+            value={host}
+            onChange={(event) => setHost(event.target.value)}
+            placeholder={defaultHost}
+            autoComplete="off"
+          />
+        </label>
+        <label>
+          <span>Access key</span>
+          <input
+            type="password"
+            value={accessKey}
+            onChange={(event) => setAccessKey(event.target.value)}
+            placeholder={keySet ? "Configured (leave blank to keep)" : ""}
+            autoComplete="off"
+          />
+        </label>
+        <label>
+          <span>Access secret</span>
+          <input
+            type="password"
+            value={accessSecret}
+            onChange={(event) => setAccessSecret(event.target.value)}
+            placeholder={secretSet ? "Configured (leave blank to keep)" : ""}
+            autoComplete="off"
+          />
+        </label>
+      </div>
+      <div className="config-actions">
+        <button type="button" className="primary" onClick={handleSave} disabled={Boolean(busy)}>
+          {busy === "save" ? "Saving…" : "Save Identify settings"}
+        </button>
+        <button type="button" className="ghost" onClick={handleTest} disabled={Boolean(busy)}>
+          {busy === "test" ? "Testing…" : "Test Identify"}
+        </button>
+      </div>
+      {testResult ? (
+        <p className="status status-secondary" role="status">
+          {testMessage}
+        </p>
+      ) : null}
+      {error ? <p className="status status-error">{error}</p> : null}
+    </section>
+  );
+}
+
 function InvestigatePanel({ focusHint }) {
   const [health, setHealth] = useState(null);
   const [shows, setShows] = useState([]);
@@ -598,6 +741,7 @@ function InvestigatePanel({ focusHint }) {
 
   useEffect(() => {
     let cancelled = false;
+    let busy = Boolean(job?.busy || applyJob?.busy || busyStart);
     async function poll() {
       try {
         const [status, applyStatus] = await Promise.all([
@@ -607,6 +751,7 @@ function InvestigatePanel({ focusHint }) {
         if (cancelled) return;
         setJob(status);
         setApplyJob(applyStatus);
+        busy = Boolean(status?.busy || applyStatus?.busy);
         if (status?.phase === "done" && Array.isArray(status?.result?.rows)) {
           setReviewOpen(true);
         }
@@ -614,13 +759,15 @@ function InvestigatePanel({ focusHint }) {
         /* keep last snapshot */
       }
     }
-    poll();
-    const interval = setInterval(poll, 2000);
+    const stop = startVisibleBusyPoll(poll, {
+      isBusy: () => busy,
+      isEnabled: () => !cancelled,
+    });
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      stop();
     };
-  }, []);
+  }, [job?.busy, applyJob?.busy, busyStart]);
 
   useEffect(() => {
     if (!focusHint?.title || !shows.length) return;
@@ -723,6 +870,7 @@ function InvestigatePanel({ focusHint }) {
       <p className="wizard-note" data-testid="investigate-stills-leave-lan">
         {STILLS_LEAVE_LAN}
       </p>
+      <p className="wizard-note">{IDENTIFY_LEAVES_LAN}</p>
       {!health?.sonarr?.configured ? (
         <p className="status status-secondary">Sonarr is required so Investigate can see episode files.</p>
       ) : null}

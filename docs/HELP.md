@@ -285,6 +285,10 @@ If an older install still has a legacy custom prompt, Admin shows a one-click **
 
 Bind the host TV and movie libraries **read-write** into the container (`/tv` and `/movies`, or the same host path). Investigate Apply renames episode files on disk — a read-only bind will fail. Set **Admin → Connections → Library folders** (`tv_root` / `movies_root`), or host env `PROJECTIONIST_TV_MEDIA` / `PROJECTIONIST_MOVIE_MEDIA` (those win when set). Unraid/Automat defaults: `/mnt/user/data/media/tv` and `/mnt/user/data/media/movies`.
 
+### Identify (ACRCloud)
+
+**Admin → Libraries** has Identify settings and a **Test Identify** control next to Investigate. When Identify is on, a 12-second clip leaves the LAN so ACRCloud can listen. A miss does not rename files. **Test Identify** sends a silent clip (or a chosen file) and always reports that it did not rename anything — use it to check keys, not to fix a filename.
+
 ### After sync
 
 1. Run **Sync library** from **Admin → Libraries** (`/admin/libraries`) — library sources and the refresh control live on the same page. Bookmarks to `/admin/sync` redirect there. (Or type `/sync` in chat when multi-user is off.)

@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+Parked HDMI/kiosk clients no longer hammer job APIs, and Identify says when a clip leaves the LAN.
+
+### Highlights
+- **Admin polls only the page you are looking at.** Library sync, Sonarr missing, Radarr register, and Investigate back off to eight seconds when idle, and pause when the tab is hidden. Chat only asks for job status while a sync toast is open — a parked living-room display will not keep waking the server.
+- **Identify says the clip leaves the LAN.** Settings and the test control tell you a 12-second clip goes to ACRCloud, and that a miss (or a test) does not rename files.
+
+### Changed
+- Config / Libraries / chat job polls use a shared visible-busy helper (2s while busy, 8s idle, `document.hidden` pause). Chat `listJobs` runs only while a sync toast is open (P2-HIGH-03).
+
+### Added
+- Identify settings and **Test Identify** on Admin → Libraries, with `IDENTIFY_LEAVES_LAN` (`IDENTIFY_CLIP_SECONDS` = 12). Test honesty is `renamed: false` (P4-MED-03).
+
+### Verification
+- Frontend unit: 815 passed, including `visibleBusyPoll.test.mjs` and `episodeInvestigate.test.mjs`.
+- Targeted Playwright (chromium, :8799): `e2e/config-maintenance.spec.ts` Identify settings/test; `e2e/ca-release.spec.ts` chat sync toast.
+
 ## [1.36.2] — 2026-09-25
 
 TV and movie libraries are inside the container, read-write, so Investigate can see the files and Apply can rename them.
