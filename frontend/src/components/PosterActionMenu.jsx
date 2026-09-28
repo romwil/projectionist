@@ -15,7 +15,13 @@ import { useAuthGate } from "./UserMenu";
 import ReportMediaIssueModal from "./ReportMediaIssueModal";
 import TitleDetailLink from "./TitleDetailLink";
 import { chatAboutTitleHref, recommendLikeHref } from "../lib/backNav.js";
-import { canWatchOnPlex, plexWatchUrl, titleDetailPath } from "../lib/titleLinks.js";
+import {
+  canWatchOnPlex,
+  libraryWatchPath,
+  plexPlayRatingKey,
+  plexWatchUrl,
+  titleDetailPath,
+} from "../lib/titleLinks.js";
 import { posterWatchAction, watchedStatePatch } from "../lib/posterWatchAction.js";
 
 function placePosterMenu(anchor, menu) {
@@ -60,6 +66,7 @@ export default function PosterActionMenu({
     repositionKey: `${listOpen}`,
   });
   const detailPath = titleDetailPath({ ...item, in_library: true });
+  const playHref = canWatchOnPlex(item) ? libraryWatchPath(plexPlayRatingKey(item)) : "";
   const plexHref = item?.plex_watch_url || (canWatchOnPlex(item) ? plexWatchUrl(item.rating_key) : "");
   const effectiveItem = watchPatch ? { ...item, ...watchPatch } : item;
   const watchAction = posterWatchAction(effectiveItem, { role, multiUserEnabled });
@@ -171,7 +178,8 @@ export default function PosterActionMenu({
           Open details
         </TitleDetailLink>
       ) : null}
-      {plexHref ? <a href={plexHref} target="_blank" rel="noopener noreferrer">Watch on Plex</a> : null}
+      {playHref ? <Link to={playHref} onClick={() => setOpen(false)}>Play</Link> : null}
+      {plexHref ? <a href={plexHref} target="_blank" rel="noopener noreferrer">Open in Plex</a> : null}
       {watchAction ? <button type="button" className="poster-action-watched" onClick={toggleWatched}>{watchAction.label}</button> : null}
       <button type="button" onClick={togglePin}>{pinned ? "Remove from watchlist" : "Add to watchlist"}</button>
       {listId && onRemoveFromList ? <button type="button" onClick={async () => { await onRemoveFromList(listId, listItemId); onRemovedFromList?.(); flashStatus("Removed from this collection."); }}>Remove from this collection</button> : null}

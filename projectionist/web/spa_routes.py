@@ -95,6 +95,13 @@ def live_page() -> HTMLResponse:
     return _serve_index()
 
 
+@router.get("/watch/{rating_key}", response_class=HTMLResponse)
+@router.get("/watch/{rating_key}/popout", response_class=HTMLResponse)
+def library_watch_page(rating_key: str = "") -> HTMLResponse:
+    del rating_key
+    return _serve_index()
+
+
 @router.get("/title/{media_type}/{item_id}", response_class=HTMLResponse)
 def title_page(media_type: str, item_id: str) -> HTMLResponse:
     return _serve_index()

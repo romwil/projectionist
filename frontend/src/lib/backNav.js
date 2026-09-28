@@ -26,6 +26,7 @@ export const ROUTES = {
   engagement: "/explore/engagement",
   live: "/live",
   liveWatch: "/live/watch",
+  watch: "/watch",
   watchlist: "/watchlist",
   library: "/library",
   tour: "/login",
@@ -337,6 +338,7 @@ export function backLabelForPath(path, { defaultLabel = "Back" } = {}) {
   if (normalized.startsWith("/tag/")) return "Back to tag";
   if (normalized.startsWith("/person/")) return "Back to person";
   if (normalized.startsWith("/title/")) return "Back to title";
+  if (normalized.startsWith("/watch/")) return "Back to player";
   if (normalized.startsWith("/settings")) return "Back to settings";
   if (normalized.startsWith("/admin")) return "Back to admin";
   if (normalized === ROUTES.help) return "Back to Help";
