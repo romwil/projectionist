@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import secrets
@@ -17,6 +18,15 @@ from projectionist.reviews.store import COMPLETION_THRESHOLD, queue_rating_promp
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["webhooks"])
+
+
+def webhook_secrets_match(provided: str, secret: str) -> bool:
+    """Length-stable compare. Empty secret or header is always a miss."""
+    if not secret or not provided:
+        return False
+    left = hashlib.sha256(provided.encode("utf-8")).digest()
+    right = hashlib.sha256(secret.encode("utf-8")).digest()
+    return secrets.compare_digest(left, right)
 
 SUPPORTED_EVENTS = frozenset({"media.stop", "media.scrobble", "media.pause"})
 SUPPORTED_MEDIA_TYPES = frozenset({"movie", "episode"})
@@ -176,7 +186,7 @@ def register_webhook_routes(
         secret = str(settings.webhook_secret or "").strip()
         provided = str(request.headers.get("X-Projectionist-Webhook-Secret") or "").strip()
         # Unconfigured and invalid both fail closed as generic 401 — no env names.
-        if not secret or not provided or not secrets.compare_digest(provided, secret):
+        if not webhook_secrets_match(provided, secret):
             raise HTTPException(status_code=401, detail="Unauthorized")
         payload = await parse_plex_webhook_payload(request)
         # Offload sync sqlite (user lookup + prompt enqueue) from the event loop.
