@@ -240,6 +240,34 @@ class LibraryApiContractTests(CaApiFixture):
                     break
                 time.sleep(0.05)
 
+    def test_library_sync_single_flight_returns_existing_job(self) -> None:
+        with patch("projectionist.web.jobs.threading.Thread") as thread_cls:
+            thread_cls.return_value.start = MagicMock()
+            first = self.client.post("/api/library/sync")
+            second = self.client.post("/api/library/sync")
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(first.json()["id"], second.json()["id"])
+        self.assertEqual(first.json()["job_type"], "library_sync")
+        self.assertIn(first.json()["status"], ("queued", "running"))
+
+    def test_library_stats_uses_library_counts_not_all_rows(self) -> None:
+        db = self.app_mod.get_job_manager().db
+        with patch.object(
+            db, "library_counts", return_value={"movies": 3, "shows": 1, "items": 4}
+        ) as counts:
+            with patch.object(
+                db, "all_library_items", side_effect=AssertionError("must not load every row")
+            ):
+                with patch.object(self.app_mod, "compute_knowledge_coverage", return_value={}):
+                    resp = self.client.get("/api/library/stats")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(body["total"], 4)
+        self.assertEqual(body["movies"], 3)
+        self.assertEqual(body["shows"], 1)
+        counts.assert_called_once()
+
 
 class FeatureFlagSafetyTests(CaApiFixture):
     def test_seerr_off_does_not_break_core_apis(self) -> None:

@@ -11,6 +11,7 @@ from typing import Deque, Dict, Tuple
 from fastapi import HTTPException, Request
 
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
+HITS_CAP = 4096
 
 
 class SlidingWindowRateLimiter:
@@ -27,12 +28,35 @@ class SlidingWindowRateLimiter:
                 q.popleft()
             if len(q) >= limit:
                 retry_after = max(1, int(window_seconds - (now - q[0])) + 1)
+                if len(self._hits) > HITS_CAP:
+                    self._evict_hits(cutoff)
                 raise HTTPException(
                     status_code=429,
                     detail="Too many requests",
                     headers={"Retry-After": str(retry_after)},
                 )
             q.append(now)
+            if len(self._hits) > HITS_CAP:
+                self._evict_hits(cutoff)
+
+    def _evict_hits(self, cutoff: float) -> None:
+        empty = []
+        for bucket_key, hits in self._hits.items():
+            while hits and hits[0] < cutoff:
+                hits.popleft()
+            if not hits:
+                empty.append(bucket_key)
+        for bucket_key in empty:
+            del self._hits[bucket_key]
+        overflow = len(self._hits) - HITS_CAP
+        if overflow <= 0:
+            return
+        oldest = sorted(
+            self._hits.items(),
+            key=lambda item: item[1][0] if item[1] else 0.0,
+        )
+        for bucket_key, _hits in oldest[:overflow]:
+            del self._hits[bucket_key]
 
     def clear(self) -> None:
         with self._lock:

@@ -15,6 +15,7 @@ from fastapi import Request
 from fastapi.testclient import TestClient
 
 from projectionist.web.rate_limit import (
+    HITS_CAP,
     SlidingWindowRateLimiter,
     clear_rate_limits,
     client_ip,
@@ -65,6 +66,22 @@ class SlidingWindowRateLimiterTests(unittest.TestCase):
             self.limiter.check(key="10.0.0.1", bucket="test", limit=3, window_seconds=60)
         self.limiter.clear()
         self.limiter.check(key="10.0.0.1", bucket="test", limit=3, window_seconds=60)
+
+    def test_evicts_oldest_when_over_cap(self) -> None:
+        for index in range(HITS_CAP + 2):
+            self.limiter.check(key=f"ip-{index}", bucket="auth", limit=10, window_seconds=60)
+        self.assertLessEqual(len(self.limiter._hits), HITS_CAP)
+        self.assertNotIn(("auth", "ip-0"), self.limiter._hits)
+        self.assertIn(("auth", f"ip-{HITS_CAP + 1}"), self.limiter._hits)
+
+    def test_drops_empty_after_cutoff_before_evicting(self) -> None:
+        stale = time.monotonic() - 120
+        for index in range(HITS_CAP + 10):
+            self.limiter._hits[("auth", f"old-{index}")].append(stale)
+        self.limiter.check(key="fresh", bucket="auth", limit=10, window_seconds=60)
+        self.assertLessEqual(len(self.limiter._hits), HITS_CAP)
+        self.assertIn(("auth", "fresh"), self.limiter._hits)
+        self.assertNotIn(("auth", "old-0"), self.limiter._hits)
 
 
 class ClientIpExtractionTests(unittest.TestCase):
