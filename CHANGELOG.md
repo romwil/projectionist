@@ -15,6 +15,7 @@ TV and movie libraries are inside the container, read-write, so Investigate can 
 - Unraid CA Path mounts, `docker-compose.yml`, `docker-compose.unraid.yml`, and `rollout.sh` bind those host folders **read-write** at `/tv` and `/movies` (same-path too on Unraid). Never `:ro`.
 
 ### Fixed
+- Saved-library chips on chat home and Library continue that response on `/chat?saved_library=…` instead of dropping the query at the `/` redirect.
 - Episode investigation translates Sonarr episode paths for ffmpeg stills, runtime, OSHash, and Identify. Unreadable paths are `stills_error=unreadable_path` (failed, not completed). Unknown-scope rows no longer say “other show.”
 - Investigate path mapper treats `tv_root` / `movies_root` as first-class local roots, then `/tv` and `/movies`.
 
