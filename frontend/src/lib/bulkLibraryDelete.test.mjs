@@ -307,6 +307,7 @@ describe("owner title-detail delete gating", () => {
       "utf8",
     );
     const content = readFileSync(join(libDir, "components", "TitleDetailContent.jsx"), "utf8");
+    const ctaBar = readFileSync(join(libDir, "components", "TitleCtaBar.jsx"), "utf8");
     const dialog = readFileSync(
       join(libDir, "components", "BulkLibraryDeleteDialog.jsx"),
       "utf8",
@@ -320,7 +321,8 @@ describe("owner title-detail delete gating", () => {
     assert.match(page, /LIBRARY_DELETE_NOTICE_KEY/);
     assert.match(interactions, /deleteLibraryItems/);
     assert.match(interactions, /mode/);
-    assert.match(content, /data-testid="title-detail-delete-button"/);
+    assert.match(content, /canDeleteLibrary=\{canDeleteLibrary\}/);
+    assert.match(ctaBar, /data-testid="title-detail-delete-button"/);
     assert.match(dialog, /bulk-library-delete-mode-full/);
     assert.match(dialog, /LIBRARY_DELETE_MODE_FULL/);
     assert.match(
