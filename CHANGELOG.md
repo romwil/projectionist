@@ -2,13 +2,19 @@
 
 ## [Unreleased]
 
-Failed library syncs keep a short friendly error in job history. The stack trace stays in the server log.
+Failed library syncs keep a short friendly error in job history. Guest features and setup status stay small. Identify test clips stay inside configured media folders.
 
 ### Highlights
 - **Failed library sync no longer shows a stack trace.** Job history keeps a short friendly error so `GET /api/jobs` does not leak frames from the host.
+- **The login screen learns less about the house.** Guests see whether multi-user is on and how they can sign in — not household domain, proxy, or Seerr flags. Setup status is owner-only.
+- **Identify test clips stay on the media roots.** A test path has to sit under the configured TV/movie folders (or a current snapshot row). A miss still does not rename files.
 
 ### Security
 - Failed `library_sync` jobs store `summary.failed` and a friendly `error`. `Job.to_dict()` never includes a `traceback` key or frame strings, including jobs persisted before this change (P3-MED-01).
+- Plex webhook secrets compare SHA-256 of both sides so a length mismatch is 401, not 500. Empty secret or header is still 401. Header remains `X-Projectionist-Webhook-Secret` (P3-MED-03).
+- Unauthenticated `GET /api/features` returns only `features.multi_user_enabled`, `features.access_requests_enabled`, `auth_methods`, `setup_state`, `authenticated: false`, and `user: null` (P4-MED-01). The login screen can hide Need an invite? when access requests are off.
+- `GET /api/setup/status` requires the owner role. Signed-in members get Radarr/Sonarr readiness from `features.arr` (P4-MED-04).
+- Identify test clips resolve under configured media roots (Plex / Radarr / Sonarr / `tv_root` / `movies_root` / `/tv` / `/movies`). A raw path is used only when it matches a snapshot row; `file_id` prefers the snapshot `resolved_path` so a mapped Sonarr path still works. Paths outside those roots return 400 (P3-MED-04).
 
 ## [1.36.2] — 2026-09-25
 
