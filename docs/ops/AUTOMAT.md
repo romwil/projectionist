@@ -2,7 +2,7 @@
 
 Task-first notes for the **Automat** Unraid host that runs Projectionist production and the maintainer QA sidecar. Audience: developers and Cursor agents working on this repo’s live stack — not end-user install docs (see [wiki/Unraid.md](../wiki/Unraid.md) and [DOCKER.md](../DOCKER.md) for generic Unraid).
 
-Jump to: [LAN hosts](#lan-hosts-source-of-truth) · [Rollout](#rollout--appdata) · [UI verification](#ui-verification) · [Ops UI](#ops-ui-newsletters--mail) · [QA lifecycle](#qa--release-lifecycle) · [See also](#see-also)
+Jump to: [LAN hosts](#lan-hosts-source-of-truth) · [Rollout](#rollout--appdata) · [Docker directory](#docker-vdisk--directory-maintenance-window) · [UI verification](#ui-verification) · [Ops UI](#ops-ui-newsletters--mail) · [QA lifecycle](#qa--release-lifecycle) · [See also](#see-also)
 
 ---
 
@@ -132,6 +132,21 @@ No tokens, Apprise URLs, or other secrets belong in this runbook — they live i
 - **Do not** claim prod is on `X.Y.Z` from the public hostname; use LAN `:8788` (table above).
 - **Do not** stop smartmap or bind QA to `:8790`. QA is ephemeral on `:8792`. The 2026-09-12 “park smartmap for QA” pattern is retired.
 
+### Docker vDisk → directory (maintenance window)
+
+Hand-run on Automat as **root** when converting Docker’s `docker.img` vDisk to a **directory** data-root on the cache pool (`/mnt/cache/...`, never FUSE `/mnt/user`). **Maintenance window only.** The script never stops Docker, never stops projectionist/smartmap, never starts QA, and never deletes `docker.img`.
+
+Will sets **Docker stop timeout → 60** and **Enable Docker: No** in the GUI; the script waits until Docker is actually down, rsyncs, then prints the GUI steps to switch data-root (path `/mnt/cache/system/docker/docker/`, keep the vDisk) and re-enable.
+
+```bash
+# On Automat (root). Copy the script onto the host if needed — not part of prod appdata.
+./scripts/unraid-docker-directory-migrate.sh --dry-run
+./scripts/unraid-docker-directory-migrate.sh
+# After Settings → Docker → Enable Yes:
+./scripts/unraid-docker-directory-migrate.sh --verify
+```
+
+Full checkpoints live in the script header.
 
 ---
 
@@ -232,5 +247,7 @@ Or wait for the next container start / history ingest after upgrading to **1.32.
 - `.cursor/rules/interactive-ui-qa.mdc` + skill — authored QA on `:8792` (never smartmap `:8790`)
 - `.cursor/rules/release.mdc` · [RELEASE.md](../RELEASE.md) — version bump, Hub publish, QA teardown
 - Maintainer pentest kit (host-local): `/Volumes/appdata/projectionist-qa-scripts/pentest/` — QA `:8792` only
+- [UNRAID-API.md](UNRAID-API.md) — Automat GraphQL (`:8081/graphql`): telemetry, container start/stop, honest limits (no Enable Docker / `docker.cfg` / rsync)
 - [DOCKER.md](../DOCKER.md) · [wiki/Unraid.md](../wiki/Unraid.md) — generic Unraid install / Force Update
+- `scripts/unraid-docker-directory-migrate.sh` — docker.img → directory data-root (GUI disable; cache pool; keep vDisk)
 - [AGENTS.md](../../AGENTS.md) — Cursor Cloud / agent quickstart (links here)
