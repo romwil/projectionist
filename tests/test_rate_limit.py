@@ -83,6 +83,32 @@ class SlidingWindowRateLimiterTests(unittest.TestCase):
         self.assertIn(("auth", "fresh"), self.limiter._hits)
         self.assertNotIn(("auth", "old-0"), self.limiter._hits)
 
+    def test_short_window_eviction_does_not_trim_hour_access_request(self) -> None:
+        now = time.monotonic()
+        long_key = ("access_request", "10.0.0.1")
+        for offset in range(5):
+            self.limiter._hits[long_key].append(now - 2000 + offset)
+        for index in range(HITS_CAP):
+            self.limiter._hits[("auth", f"old-{index}")].append(now - 7200)
+        self.limiter.check(key="fresh", bucket="auth", limit=10, window_seconds=60)
+        self.assertEqual(len(self.limiter._hits[long_key]), 5)
+        self.assertIn(("auth", "fresh"), self.limiter._hits)
+
+    def test_429_keeps_the_limited_bucket(self) -> None:
+        from fastapi import HTTPException
+
+        now = time.monotonic()
+        for index in range(HITS_CAP):
+            self.limiter._hits[("auth", f"old-{index}")].append(now - 1)
+        for _ in range(3):
+            self.limiter.check(key="hot", bucket="auth", limit=3, window_seconds=60)
+        with self.assertRaises(HTTPException) as ctx:
+            self.limiter.check(key="hot", bucket="auth", limit=3, window_seconds=60)
+        self.assertEqual(ctx.exception.status_code, 429)
+        self.assertEqual(len(self.limiter._hits[("auth", "hot")]), 3)
+        with self.assertRaises(HTTPException):
+            self.limiter.check(key="hot", bucket="auth", limit=3, window_seconds=60)
+
 
 class ClientIpExtractionTests(unittest.TestCase):
     def _make_request(
