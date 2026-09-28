@@ -101,21 +101,60 @@ Inline and turnstyle cards share the same affordances:
 |--------|----------|
 | **Click title / poster** | Navigate to `/title/{movie\|show}/{id}` — AppShell sticky header (AppNav + BackLink), backdrop hero, synopsis, meta tiles, cast/tags |
 | **Watch trailer** | YouTube trailer modal when `trailer_youtube_key` is present |
-| **Play** | Shown when the title is in-library (`play_rating_key` or `rating_key`); opens `/watch/{key}` in Projectionist. **Open in Plex** stays overflow / error fallback. |
+| **Play** | Shown when the title is in-library (`play_rating_key` or `rating_key`); opens `/watch/{key}` in Projectionist — the **only** gold primary on the title CTA row. **Open in Plex** stays overflow / error fallback. |
 | **More Like This** | Horizontal neighbor carousel from cached `item_neighbors` (empty until idle `plot_neighbors` ran) |
 | **Recommend** | Multi-user: pick household peers + optional note; unread inbox on home |
 | **Pin (☆)** | Add/remove local watchlist pin |
 | **Why this?** | Expand `recommendation_reason` / facet matches (also surfaced on detail) |
-| **Add / Request** | Radarr, Sonarr, or Seerr via confirmation flow |
+| **Add / Request** | Radarr, Sonarr, or Seerr via confirmation flow — gold primary only when Play is absent |
 | **Not interested** | Preference dismiss signal |
 
 Runtime under 100 minutes gets emphasis on the card. Show cards may display a TV progress ring.
 
-In-library **TV show** title detail (full page and drawer) includes **Seasons & episodes**: accordion seasons with episode codes, runtime, size, and watched state from `library_episodes`. Owners can typed-`DELETE` confirm a season or episode (Sonarr files + Plex metadata + index), or remove the whole show through the existing delete dialog.
+In-library **TV show** title detail (full page and drawer) includes **Seasons & episodes**: accordion seasons with episode codes, runtime, size, and watched state from `library_episodes`. Episode **titles** open episode detail (`/title/episode/{ratingKey}`); the gold **Play** control jumps straight to `/watch/{ratingKey}`. Owners can typed-`DELETE` confirm a season or episode (Sonarr files + Plex metadata + index), or remove the whole show through the existing delete dialog.
 
 ### Agent avatar
 
 Assistant messages show a circular **AgentAvatar** (curator initial) beside the bubble. Streaming state adds a subtle pulse so the chat feels inhabited without competing with title cards.
+
+---
+
+## Playback & Title surfaces (intentional decisions)
+
+These surfaces share one bar: **picture first, one gold primary, quiet chrome, Lights Down atmosphere.** They are not dashboards and not Netflix button salads.
+
+### Watch theater (`/watch/{ratingKey}`)
+
+| Decision | Why |
+|----------|-----|
+| **One viewport composition** (`100dvh`, `overflow: hidden`, fixed shell) | Living-room Play must fill the screen. Poster art must never grow the document or force scroll-to-find controls. |
+| **Cover poster behind contain video** | Atmosphere without lying about the frame. Video letterboxes honestly; art is backdrop only. |
+| **OSD hierarchy** | Primary = Play/Pause + scrubber + clock. ±15 is discreet (double-tap thirds remain the living-room skip). CC + Fullscreen secondary. PiP, Pop-out, Open in Plex, Back under **More**. |
+| **Large center play when paused** | One clear invitation; auto-hide OSD on idle; mouse move / tap reveals chrome. |
+| **Mobile 390** | ≥44px primaries, safe-area insets, no Pop-out in the primary row, landscape immersive. |
+| **Honest empty / loading / error** | “warming the reel”, Resume/Start over, Try again + Open in Plex — never a blank stall or dead Play after tab-hide. |
+
+Implementation lives in `LibraryWatchPage` / `TheaterPlayer` / `LibraryPlayer` + `frontend/src/styles/13-watch.css`. Live TV keeps its cable-box OSD language; library Play borrows the dark stage and quiet transport.
+
+### Title surfaces (full page + mini sheet)
+
+| Decision | Why |
+|----------|-----|
+| **One gold primary** | In-library → **Play**. Not-in-library → **Add** / **Request** (or guest lock copy). Never two competing primaries. |
+| **Secondary row (ghost)** | Trailer, Rate, Watched, Chat about this, Watch together — visible when they earn space, not equal-weight to Play. |
+| **Overflow / More** | Open in Plex, Mark as bad media, Delete (owner) — destructive last, never peer to Play. |
+| **Sheet vs full page** | Drawer (`TitleDetailDrawer`) is the same CTA grammar at compact density; full page adds backdrop hero + seasons. Desktop and 390 share hierarchy; 390 may collapse secondaries into More sooner. |
+
+### Show → seasons → episodes → episode detail
+
+| Step | Surface | Intent |
+|------|---------|--------|
+| Show | `/title/show/{id}` | Hero + synopsis + **Play** (on-deck / first unwatched) + seasons panel. |
+| Seasons | Accordion on show detail | Browse; episode rows show code, title, runtime, watched. |
+| Episode list → detail | Title opens `/title/episode/{ratingKey}` | Still/meta/air date/runtime/watched; **Play** primary to `/watch/{rk}`; next/prev episode; back to show. |
+| Episode → Play | Gold Play (or theater from list Play) | Always `rating_key` → `/watch/{ratingKey}`. Open in Plex stays overflow. |
+
+Episode detail uses local index fields (title, season/episode, aired_at, runtime, watched). Synopsis/thumb enrichments stay optional when present — never invent copy.
 
 ---
 
