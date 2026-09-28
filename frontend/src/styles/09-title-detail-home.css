@@ -241,11 +241,14 @@
   align-items: center;
 }
 
-/* Portaled More menu — never push sheet/page layout. */
+/* Portaled More menu — never push sheet/page layout.
+   Must stack ABOVE title-detail-drawer scrim (85) / panel (90); match other
+   body portals (share/poster at 1000). z-index 80 left the menu invisible
+   under the sheet while open state still flipped. */
 .title-detail-cta-menu,
 .title-detail-cta-menu--portal {
   position: fixed;
-  z-index: 80;
+  z-index: 1000;
   min-width: 12.5rem;
   padding: 0.35rem;
   border-radius: 12px;
