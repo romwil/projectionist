@@ -1,6 +1,34 @@
 {
-  "generated_at": "2026-09-28T19:30:53Z",
+  "generated_at": "2026-09-28T19:57:50Z",
   "releases": [
+    {
+      "version": "1.37.4",
+      "date": "2026-09-28",
+      "summary": "Title mini sheets stop looking like a button salad: one gold Play, icon-forward secondaries with tooltips, and a More menu that overlays instead of shoving the sheet apart.",
+      "highlights": [
+        "**Quieter title CTAs.** Trailer, Review, Watched, Chat, and Together share one compact row with consistent Material icons and hover/focus explanations — not five equal-weight long pills.",
+        "**More overlays, never expands.** The overflow menu portals next to the button, so opening it no longer pushes synopsis and seasons down the mini sheet.",
+        "**Same grammar everywhere.** Full title page, chat mini sheet, episode detail, poster overlay, and chat cards follow the locked order and terms in `docs/DESIGN.md`."
+      ],
+      "sections": [
+        {
+          "title": "Changed",
+          "bullets": [
+            "New shared `TitleCtaBar` + `frontend/src/lib/titleCta.js` catalog (icons, labels, tooltips, secondary order, phone overflow).",
+            "`TitleDetailContent` / `EpisodeDetailPage` use the shared bar; More uses `useAnchoredPopover` + portal (not `<details>`).",
+            "Poster overlay / TitleCard / episode list: Play stays primary; Open in Plex demoted when Play is present; Watch together / Trailer icons aligned.",
+            "Interactive UI QA `title.cta-hierarchy` checklist updated for portaled More + icon-forward secondaries."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Frontend unit: `titleCta.test.mjs`, `titleDetailExtras.test.mjs`.",
+            "`npm run lint` (0 errors) + `npm run build`."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.3",
       "date": "2026-09-28",

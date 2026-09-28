@@ -80,7 +80,7 @@ export default function PosterOverlayControls({
           title="Play"
           onClick={(event) => event.stopPropagation()}
         >
-          <span className="material-symbols-outlined" aria-hidden="true">play_arrow</span>
+          <span className="material-symbols-outlined" aria-hidden="true">play_circle</span>
         </Link>
       ) : null}
       <PosterActionMenu
@@ -99,7 +99,7 @@ export default function PosterOverlayControls({
               className="explore-hover-icon explore-hover-icon-trailer"
               data-testid={`${testPrefix}-view-trailer`}
               disabled={trailerLoading}
-              aria-label={trailerLoading ? "Loading trailer" : "Watch trailer"}
+              aria-label={trailerLoading ? "Loading trailer" : "Trailer"}
               title="Trailer"
               onClick={handleTrailer}
             >
@@ -113,15 +113,15 @@ export default function PosterOverlayControls({
               type="button"
               className="explore-hover-icon explore-hover-icon-recommend"
               data-testid={`${testPrefix}-recommend`}
-              aria-label="Recommend"
-              title="Recommend"
+              aria-label="Watch together"
+              title="Watch together"
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
                 onRecommend(item);
               }}
             >
-              <span className="material-symbols-outlined" aria-hidden="true">recommend</span>
+              <span className="material-symbols-outlined" aria-hidden="true">groups</span>
             </button>
           ) : null}
         </div>

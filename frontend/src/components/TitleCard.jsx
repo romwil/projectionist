@@ -211,18 +211,20 @@ export default function TitleCard({
           to={playTo}
           className="btn-link title-card-plex-link"
           aria-label="Play"
+          title="Play in Projectionist"
           onClick={(event) => event.stopPropagation()}
         >
           Play
         </Link>
       ) : null}
-      {showWatchPlex && plexHref ? (
+      {!playTo && showWatchPlex && plexHref ? (
         <a
           href={plexHref}
           className="btn-link title-card-plex-link"
           data-testid="watch-on-plex-button"
           target="_blank"
           rel="noopener noreferrer"
+          title="Open in Plex"
           onClick={(event) => event.stopPropagation()}
         >
           Open in Plex
@@ -235,8 +237,15 @@ export default function TitleCard({
     <>
       {watchPlexAction}
       {onRecommend ? (
-        <button type="button" className="ghost" data-testid="recommend-title-button" onClick={handleRecommend}>
-          Recommend
+        <button
+          type="button"
+          className="ghost"
+          data-testid="recommend-title-button"
+          title="Watch together"
+          aria-label="Watch together"
+          onClick={handleRecommend}
+        >
+          Watch together
         </button>
       ) : null}
       {canRequestSeerr ? (

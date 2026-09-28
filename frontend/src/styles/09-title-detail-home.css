@@ -229,7 +229,7 @@
 .title-detail-cta-row {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
+  gap: var(--space-2);
   align-items: center;
 }
 
@@ -237,29 +237,16 @@
 .title-detail-cta-secondary {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
+  gap: var(--space-2);
   align-items: center;
 }
 
-.title-detail-cta-more {
-  position: relative;
-}
-
-.title-detail-cta-more > summary {
-  list-style: none;
-  cursor: pointer;
-}
-
-.title-detail-cta-more > summary::-webkit-details-marker {
-  display: none;
-}
-
-.title-detail-cta-menu {
-  position: absolute;
-  z-index: 8;
-  top: calc(100% + 0.4rem);
-  left: 0;
-  min-width: 12rem;
+/* Portaled More menu — never push sheet/page layout. */
+.title-detail-cta-menu,
+.title-detail-cta-menu--portal {
+  position: fixed;
+  z-index: 80;
+  min-width: 12.5rem;
   padding: 0.35rem;
   border-radius: 12px;
   background: color-mix(in srgb, var(--surface-raised) 96%, transparent);
@@ -271,7 +258,9 @@
 }
 
 .title-detail-cta-menu-item {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
   width: 100%;
   text-align: left;
   min-height: 44px;
@@ -284,6 +273,11 @@
   font-size: var(--text-sm);
   text-decoration: none;
   cursor: pointer;
+}
+
+.title-detail-cta-menu-item .material-symbols-outlined {
+  font-size: 18px;
+  opacity: 0.9;
 }
 
 .title-detail-cta-menu-item:hover,
@@ -299,22 +293,72 @@
   display: none;
 }
 
+.title-cta-icon-forward {
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 14px;
+}
+
+.title-cta-icon-forward .title-cta-secondary-label {
+  font-size: 11px;
+}
+
 @media (max-width: 720px) {
   .title-detail-cta-desktop-only {
     display: none;
   }
 
   .title-detail-cta-phone-only {
-    display: block;
+    display: inline-flex;
   }
 
   .title-detail-cta-row {
     gap: var(--space-2);
   }
 
-  .title-cta {
+  .title-cta-primary {
+    min-height: 44px;
     padding: 12px 18px;
   }
+
+  /* Icon-only secondaries + More on phone — tooltips carry the verb. */
+  .title-cta-icon-forward {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    padding: 0;
+  }
+
+  .title-cta-icon-forward .title-cta-secondary-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
+.title-detail-content--compact .title-cta-icon-forward {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
+}
+
+.title-detail-content--compact .title-cta-icon-forward .title-cta-secondary-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* Episode detail — show → seasons → episode sheet */
@@ -387,10 +431,11 @@
   font-size: var(--text-sm);
 }
 
-.episode-detail-cta {
+.episode-detail-cta,
+.episode-detail .title-detail-cta-row {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
+  gap: var(--space-2);
   margin-top: var(--space-5);
 }
 
