@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { getLibraryEpisode } from "../api/client";
 import BackLink from "../components/BackLink";
+import TitleCtaBar from "../components/TitleCtaBar.jsx";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/backNav.js";
 import { formatEpisodeCode } from "../lib/showSeasons.js";
@@ -120,27 +121,15 @@ export default function EpisodeDetailPage() {
                 {episode.runtime_minutes ? <span>{episode.runtime_minutes} min</span> : null}
                 <span>{episode.unwatched ? "Unwatched" : "Watched"}</span>
               </div>
-              <div className="episode-detail-cta" data-testid="episode-detail-cta">
-                {playTo ? (
-                  <Link to={playTo} className="title-cta title-cta-primary" data-testid="episode-detail-play">
-                    <span className="material-symbols-outlined" aria-hidden="true">
-                      play_circle
-                    </span>
-                    Play
-                  </Link>
-                ) : null}
-                {plexHref ? (
-                  <a
-                    href={plexHref}
-                    className="title-cta title-cta-ghost"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    data-testid="episode-detail-plex"
-                  >
-                    Open in Plex
-                  </a>
-                ) : null}
-              </div>
+              <TitleCtaBar
+                compact
+                testId="episode-detail-cta"
+                playTo={playTo}
+                playTestId="episode-detail-play"
+                plexHref={plexHref}
+                plexTestId="episode-detail-plex"
+                moreTestId="episode-detail-cta-more"
+              />
             </div>
           </div>
           <nav className="episode-detail-nav" aria-label="Episode neighbors">

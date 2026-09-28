@@ -100,14 +100,15 @@ Inline and turnstyle cards share the same affordances:
 | Action | Behavior |
 |--------|----------|
 | **Click title / poster** | Navigate to `/title/{movie\|show}/{id}` — AppShell sticky header (AppNav + BackLink), backdrop hero, synopsis, meta tiles, cast/tags |
-| **Watch trailer** | YouTube trailer modal when `trailer_youtube_key` is present |
-| **Play** | Shown when the title is in-library (`play_rating_key` or `rating_key`); opens `/watch/{key}` in Projectionist — the **only** gold primary on the title CTA row. **Open in Plex** stays overflow / error fallback. |
+| **Watch trailer** | YouTube trailer modal when `trailer_youtube_key` is present — glyph `movie`, label **Trailer** |
+| **Play** | Shown when the title is in-library (`play_rating_key` or `rating_key`); opens `/watch/{key}` in Projectionist — the **only** gold primary on the title CTA row. Glyph `play_circle`. **Open in Plex** stays overflow / error fallback. |
 | **More Like This** | Horizontal neighbor carousel from cached `item_neighbors` (empty until idle `plot_neighbors` ran) |
-| **Recommend** | Multi-user: pick household peers + optional note; unread inbox on home |
+| **Recommend / Watch together** | Multi-user: pick household peers + optional note; unread inbox on home — glyph `groups` |
 | **Pin (☆)** | Add/remove local watchlist pin |
 | **Why this?** | Expand `recommendation_reason` / facet matches (also surfaced on detail) |
 | **Add / Request** | Radarr, Sonarr, or Seerr via confirmation flow — gold primary only when Play is absent |
 | **Not interested** | Preference dismiss signal |
+| **Review / Watched / Chat** | Title surfaces use `TitleCtaBar` (see **Playback & Title surfaces**) — short labels + tooltips; never long equal-weight pills |
 
 Runtime under 100 minutes gets emphasis on the card. Show cards may display a TV progress ring.
 
@@ -138,12 +139,56 @@ Implementation lives in `LibraryWatchPage` / `TheaterPlayer` / `LibraryPlayer` +
 
 ### Title surfaces (full page + mini sheet)
 
+Shared implementation: `TitleCtaBar` + `frontend/src/lib/titleCta.js`. Mini sheet, full title page, episode detail, and poster overlay must not invent parallel labels or icons.
+
 | Decision | Why |
 |----------|-----|
 | **One gold primary** | In-library → **Play**. Not-in-library → **Add** / **Request** (or guest lock copy). Never two competing primaries. |
-| **Secondary row (ghost)** | Trailer, Rate, Watched, Chat about this, Watch together — visible when they earn space, not equal-weight to Play. |
-| **Overflow / More** | Open in Plex, Mark as bad media, Delete (owner) — destructive last, never peer to Play. |
-| **Sheet vs full page** | Drawer (`TitleDetailDrawer`) is the same CTA grammar at compact density; full page adds backdrop hero + seasons. Desktop and 390 share hierarchy; 390 may collapse secondaries into More sooner. |
+| **Secondary (icon-forward)** | Compact ghost actions with **tooltip + aria-label**. Short visible label on desktop; icon-only (≥44px) on 390 and in the mini sheet. |
+| **Secondary order** | Trailer → Review → Watched → Chat → Together → Add (Add only when Play already owns primary). |
+| **Overflow / More** | **Portaled popover** anchored to the More button (`useAnchoredPopover` + `createPortal`) — never a `<details>` that expands the sheet. Contents: Open in Plex, phone-collapsed Chat/Together/Add, Mark as bad media, Delete (owner, last). |
+| **Sheet vs full page** | Drawer (`TitleDetailDrawer`) is the same CTA grammar at compact density; full page adds backdrop hero + seasons. |
+
+#### Locked terms
+
+| Action | Visible label | Tooltip / aria-label |
+|--------|---------------|----------------------|
+| Play | Play | Play in Projectionist |
+| Add / Request | Add to Radarr / Add to Sonarr / Request in Seerr | same as visible |
+| Trailer | Trailer | Watch trailer |
+| Review | Review | Leave a review |
+| Watched toggle | Watched / Unwatched | Mark as watched / Mark as unwatched |
+| Chat | Chat | Chat about this |
+| Watch together | Together | Watch together |
+| Open in Plex | Open in Plex | Open in Plex |
+| More | More | More actions |
+| Mark as bad media | Mark as bad media | (menu) |
+| Delete | Delete | (menu, owner) |
+
+Do **not** ship long peer pills (“Leave a review”, “Mark as unwatched”, “Chat about this”, “Watch together”) on the secondary row — those verbs live in tooltips / More menu copy. Poster ⋮ menu and Help docs may still use the full verb (“Mark as watched”) because they are labelled menu rows, not icon-forward chrome.
+
+#### Locked Material Symbols (Outlined)
+
+| Action | Glyph |
+|--------|-------|
+| Play | `play_circle` |
+| Add | `add_circle` |
+| Trailer | `movie` |
+| Review | `rate_review` |
+| Mark watched (currently unwatched) | `visibility` |
+| Mark unwatched (currently watched) | `visibility_off` |
+| Chat | `forum` |
+| Watch together | `groups` |
+| More | `more_horiz` |
+| Open in Plex | `open_in_new` |
+| Mark as bad media | `report` |
+| Delete | `delete` |
+
+`chat` and `rate_review` must stay distinct — never two speech-bubble peers on the same row.
+
+#### Spacing
+
+Single wrapping row with consistent `gap` (token `--space-2`). No staggered uneven pill stacks. Touch targets ≥ **44px** on 390 and in the mini sheet.
 
 ### Show → seasons → episodes → episode detail
 
