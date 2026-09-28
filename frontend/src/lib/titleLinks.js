@@ -1,5 +1,8 @@
 import { returnStateFromLocation } from "./backNav.js";
 import { isPhonePlayViewport } from "./chatLayout.js";
+import { libraryWatchPath, libraryWatchTo } from "./theaterPlayer.js";
+
+export { libraryWatchPath, libraryWatchTo };
 
 /** Build the in-app title detail route for a card/item, or null if not linkable. */
 export function titleDetailPath(item) {
@@ -39,7 +42,8 @@ export function titleDetailTo(item, fromLocation = null) {
 }
 
 /**
- * Plex client deep link — phone Play should open the Plex app, not desktop web.
+ * Plex client deep link — overflow / error fallback only.
+ * In-app Play is {@link libraryWatchPath}; phone primary is no longer plex://.
  */
 export function plexClientPlayUrl(ratingKey, machineId = "") {
   const key = String(ratingKey || "").trim();
@@ -52,7 +56,9 @@ export function plexClientPlayUrl(ratingKey, machineId = "") {
 /**
  * Plex web deep link for a library title.
  * Requires rating_key; machineId makes the link open the correct server.
- * On a 390-wide phone, prefer the Plex client scheme unless `toClient` is false.
+ * Overflow “Open in Plex” only. Primary Play is {@link libraryWatchPath}.
+ * On a 390-wide phone, overflow still prefers the Plex client scheme unless
+ * `toClient` is false.
  */
 export function plexWatchUrl(ratingKey, machineId = "", options = {}) {
   const key = String(ratingKey || "").trim();

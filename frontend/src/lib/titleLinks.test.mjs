@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   canWatchOnPlex,
+  libraryWatchPath,
   plexClientPlayUrl,
   plexPlayRatingKey,
   plexWatchUrl,
@@ -87,7 +88,12 @@ test("plexWatchUrl requires rating key and machine id", () => {
   );
 });
 
-test("phone Play uses the Plex client scheme", () => {
+test("in-app Play path is /watch, not plex://", () => {
+  assert.equal(libraryWatchPath("plex-949"), "/watch/plex-949");
+  assert.notEqual(libraryWatchPath("99"), plexClientPlayUrl("99", "machine-abc"));
+});
+
+test("Open in Plex overflow still uses the Plex client scheme on phone", () => {
   assert.equal(
     plexClientPlayUrl("99", "machine-abc"),
     "plex://preplay/?metadataKey=%2Flibrary%2Fmetadata%2F99&server=machine-abc",

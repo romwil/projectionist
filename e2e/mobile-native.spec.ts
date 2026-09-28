@@ -276,6 +276,85 @@ test.describe("Native mobile — member living-room", () => {
     expect(swipe.after).toBeGreaterThan(swipe.before);
   });
 
+  test("in-app Play from the title sheet, skip, and 44px OSD", async ({ page }) => {
+    await page.route("**/api/library/playback/**", async (route) => {
+      const url = new URL(route.request().url());
+      if (route.request().method() === "POST" && url.pathname.endsWith("/start")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            session_id: "sess-mobile",
+            stream_url: "/api/library/playback/sess-mobile/index.m3u8",
+            duration_ms: 3_600_000,
+            view_offset_ms: 0,
+            title: "Alien",
+            can_resume: false,
+            next_episode: null,
+            poster_url: "",
+            rating_key: "plex-348",
+            plex_watch_url: "https://app.plex.tv/desktop/#!/server/mock/details?key=x",
+          }),
+        });
+        return;
+      }
+      if (url.pathname.endsWith(".m3u8")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/vnd.apple.mpegurl",
+          body: "#EXTM3U\n#EXTINF:10.0,\nseg0.ts\n#EXT-X-ENDLIST\n",
+        });
+        return;
+      }
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+    });
+    await page.route("**/api/title/movie/348**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          media_type: "movie",
+          title: "Alien",
+          year: 1979,
+          tmdb_id: 348,
+          in_library: true,
+          rating_key: "plex-348",
+        }),
+      });
+    });
+
+    await page.goto("/search");
+    await expect(page.getByTestId("library-browse-results")).toBeVisible();
+    await page.getByTestId("library-browse-card").first().locator(".explore-cinema-card-link").click();
+    const drawer = page.getByTestId("title-detail-drawer");
+    await expect(drawer).toBeVisible();
+    const play = drawer.getByRole("link", { name: "Play" });
+    await expect(play).toBeVisible();
+    await expect(play).toHaveAttribute("href", /\/watch\//);
+    await expect(play).not.toHaveAttribute("href", /plex:\/\//);
+    await play.click();
+    await expect(page).toHaveURL(/\/watch\//);
+    await expect(page.getByTestId("title-detail-drawer")).toHaveCount(0);
+    await expect(page.getByTestId("library-player")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Pop-out" })).toHaveCount(0);
+    await assertMinTapSize(page.getByRole("button", { name: "+15s" }));
+    await assertNoHorizontalPageOverflow(page);
+
+    const player = page.getByTestId("library-player");
+    const box = await player.boundingBox();
+    expect(box).not.toBeNull();
+    const x = box!.x + box!.width * 0.85;
+    const y = box!.y + box!.height * 0.4;
+    await page.touchscreen.tap(x, y);
+    await page.touchscreen.tap(x, y);
+    await expect(page.getByRole("status")).toContainText("+15s");
+
+    await page.getByRole("button", { name: "Back" }).click();
+    await page.goto("/chat");
+    await expect(page.getByTestId("composer-input")).toBeVisible();
+    await assertPinnedNearViewportBottom(page.locator("form.composer"), NATIVE_VIEWPORT.height);
+  });
+
   test("Live watch chrome is thumb-reachable and does not bounce horizontally", async ({ page }) => {
     await page.goto("/live?mode=watch");
     await expect(page.getByTestId("live-page").or(page.getByTestId("live-watch-page"))).toBeVisible({

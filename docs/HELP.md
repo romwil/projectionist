@@ -16,6 +16,7 @@ Deep dive: [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) · [About](/about) · [P
 | Search your collection (and beyond) | [Search](/search) |
 | Browse rails & Pulse | [Explore](/explore) |
 | Watch household Live TV | [Live](/live) (when the owner has stations on the air) |
+| Play a library title in Projectionist | Tap **Play** on a poster, card, or title sheet — `/watch` |
 | Recommendations & notices | [Inbox](/inbox) |
 | Achievements & cinema pathways | [My Journey](/my-journey) |
 | Follow and explain title connections | [Related titles](/explore/related) |
@@ -239,7 +240,13 @@ Three shelves, three different promises:
 
 Use the grip's **Add to list or playlist** chooser to place a title in more than one shelf.
 
-**The ⋮ action grip** is repeated on posters, title-card overlays, and list rows on purpose — so "open details," Plex playback when available, watchlist pinning, list/playlist membership, household recommendations, **Recommend like this in chat**, discovery, and **Report issue** all live in one place whether you browse with mouse, keyboard, or touch. The centered **Play** control appears only when a card is a library title with a playable Plex rating key; external discovery cards never show a dead Play action.
+**The ⋮ action grip** is repeated on posters, title-card overlays, and list rows on purpose — so "open details," **Play** in Projectionist when available, **Open in Plex** as overflow, watchlist pinning, list/playlist membership, household recommendations, **Recommend like this in chat**, discovery, and **Report issue** all live in one place whether you browse with mouse, keyboard, or touch. The centered **Play** control appears only when a card is a library title with a playable Plex rating key; it opens `/watch` in this app (phone included — not the `plex://` handoff). External discovery cards never show a dead Play action.
+
+### Play in Projectionist
+
+**Play** starts the title here. Movies and episodes play as themselves; a show card plays the on-deck or first unwatched episode. Projectionist asks Plex for an HLS transcode and keeps the Plex token on the server.
+
+On the player: Space or `k` play/pause; `j` / `l` or the arrows skip 15 seconds; double-click (or double-tap on a phone) the left or right third to skip, the center to go fullscreen; `f` fullscreen; `m` mute; `c` captions. Escape closes captions, then fullscreen, then leaves the player. Desktop can pop the player into its own window; a phone uses fullscreen and picture-in-picture so chat can stay up. If you were more than two minutes in, you get **Resume** or **Start over**. If the stream will not start, **Open in Plex** is still there.
 
 **Mark as watched — a guided one-tap.** For any title that lives in your Plex library, the grip offers **Mark as watched**. Say you just finished *Heat* on the TV downstairs but forgot to press play in Plex — open the ⋮ menu on its poster and choose **Mark as watched**. Projectionist records the view and tells Plex, so the poster's watched overlay turns on and the title stops showing up as "unwatched" everywhere it appears. Changed your mind, or marked the wrong one? The same spot now reads **Mark as unwatched** and reverses it. The action only appears on real library titles (the same rule as **Play**) — discovery cards for things you don't own never show it — and, like everything else, it's tied to *your* signed-in Plex context.
 

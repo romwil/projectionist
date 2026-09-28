@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import HelpHint from "./HelpHint";
 import {
   isAddableToRadarr,
@@ -36,8 +36,9 @@ import {
   titleAvailability,
   titleAvailabilityClassName,
 } from "../lib/titleAvailability.js";
-import { canWatchOnPlex, plexWatchUrl } from "../lib/titleLinks.js";
+import { canWatchOnPlex, libraryWatchTo, plexPlayRatingKey, plexWatchUrl } from "../lib/titleLinks.js";
 import { chatAboutTitleHref, ROUTES } from "../lib/backNav.js";
+import { useTitleDetailOverlayOptional } from "./TitleDetailOverlayProvider.jsx";
 import ShowSeasonsPanel from "./ShowSeasonsPanel.jsx";
 import TitleSubtitlesPanel from "./TitleSubtitlesPanel.jsx";
 import WatchHistoryTimeline from "./WatchHistoryTimeline.jsx";
@@ -123,10 +124,13 @@ export default function TitleDetailContent({
   onOpenMarkBadMedia,
   titleId,
 }) {
+  const location = useLocation();
+  const overlay = useTitleDetailOverlayOptional();
   if (!detail) return null;
 
   const compact = variant === "compact";
   const trailerKey = String(detail.trailer_youtube_key || "").trim();
+  const playTo = canWatchOnPlex(detail) ? libraryWatchTo(plexPlayRatingKey(detail), location) : null;
   const plexHref =
     String(detail.plex_watch_url || "").trim() ||
     (canWatchOnPlex(detail) ? plexWatchUrl(detail.rating_key, detail.plex_machine_id || "") : "");
@@ -266,18 +270,31 @@ export default function TitleDetailContent({
             ) : null}
           </div>
           <div className="title-detail-cta-row">
+            {playTo ? (
+              <Link
+                to={playTo}
+                className="title-cta title-cta-primary"
+                aria-label="Play"
+                onClick={() => overlay?.closeTitleDetail?.()}
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">
+                  play_circle
+                </span>
+                Play
+              </Link>
+            ) : null}
             {plexHref ? (
               <a
                 href={plexHref}
-                className="title-cta title-cta-primary"
+                className={`title-cta ${playTo ? "title-cta-ghost" : "title-cta-primary"}`}
                 data-testid="watch-on-plex-button"
                 target="_blank"
                 rel="noopener noreferrer"
               >
                 <span className="material-symbols-outlined" aria-hidden="true">
-                  play_circle
+                  open_in_new
                 </span>
-                Watch on Plex
+                Open in Plex
               </a>
             ) : null}
             {trailerKey ? (
@@ -323,7 +340,7 @@ export default function TitleDetailContent({
             {canAddOrRequest ? (
               <button
                 type="button"
-                className={`title-cta ${plexHref ? "title-cta-ghost" : "title-cta-primary"}`}
+                className={`title-cta ${playTo || plexHref ? "title-cta-ghost" : "title-cta-primary"}`}
                 data-testid="title-detail-add-button"
                 disabled={addStatus === "loading" || addStatus === "success"}
                 onClick={onRequestAdd}

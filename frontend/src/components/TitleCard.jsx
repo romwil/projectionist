@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { getPlexMachineId } from "../api/client";
 import {
   isAddableToRadarr,
@@ -15,7 +16,14 @@ import {
   titleAvailability,
   titleAvailabilityClassName,
 } from "../lib/titleAvailability.js";
-import { canWatchOnPlex, plexWatchUrl, preferPhonePlexPlayHref, titleDetailPath } from "../lib/titleLinks.js";
+import {
+  canWatchOnPlex,
+  libraryWatchTo,
+  plexPlayRatingKey,
+  plexWatchUrl,
+  preferPhonePlexPlayHref,
+  titleDetailPath,
+} from "../lib/titleLinks.js";
 import { watchProgressState } from "../lib/watchProgress.js";
 import { allowWatchlistPin } from "../lib/watchlistPin.js";
 import { normalizeWatchSummary, trackedCompletionCardLabel } from "../lib/watchTracker.js";
@@ -87,6 +95,7 @@ export default function TitleCard({
 }) {
   const [hovered, setHovered] = useState(false);
   const [whyOpen, setWhyOpen] = useState(false);
+  const location = useLocation();
   const [addStatus, setAddStatus] = useState(null); // idle | loading | success | error
   const [plexHref, setPlexHref] = useState(() => String(item?.plex_watch_url || "").trim());
   const availability = titleAvailability(item, { requestPath });
@@ -116,6 +125,7 @@ export default function TitleCard({
   const showAskOwner =
     capability.showGuidedCopy && itemNeedsAddGuidance(item) && addStatus !== "success";
   const showWatchPlex = canWatchOnPlex(item);
+  const playTo = showWatchPlex ? libraryWatchTo(plexPlayRatingKey(item), location) : null;
   const backdropUrl = item.backdrop_url || item.art || "";
   const showRing =
     item.media_type === "show" &&
@@ -194,19 +204,32 @@ export default function TitleCard({
     onRecommend?.(item);
   }
 
-  const watchPlexAction =
-    showWatchPlex && plexHref ? (
-      <a
-        href={plexHref}
-        className="btn-link title-card-plex-link"
-        data-testid="watch-on-plex-button"
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={(event) => event.stopPropagation()}
-      >
-        Watch on Plex
-      </a>
-    ) : null;
+  const watchPlexAction = (
+    <>
+      {playTo ? (
+        <Link
+          to={playTo}
+          className="btn-link title-card-plex-link"
+          aria-label="Play"
+          onClick={(event) => event.stopPropagation()}
+        >
+          Play
+        </Link>
+      ) : null}
+      {showWatchPlex && plexHref ? (
+        <a
+          href={plexHref}
+          className="btn-link title-card-plex-link"
+          data-testid="watch-on-plex-button"
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(event) => event.stopPropagation()}
+        >
+          Open in Plex
+        </a>
+      ) : null}
+    </>
+  );
 
   const addActions = (
     <>

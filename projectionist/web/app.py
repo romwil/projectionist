@@ -219,6 +219,7 @@ from projectionist.web.knowledge_ops_routes import register_knowledge_ops_routes
 from projectionist.web.holidays_routes import register_holidays_routes
 from projectionist.web.house_routes import register_house_routes
 from projectionist.web.live_channels_routes import register_live_channels_routes
+from projectionist.web.playback_routes import register_playback_routes
 from projectionist.web.investigate_routes import register_investigate_routes
 from projectionist.web.rematch_routes import register_rematch_routes
 from projectionist.web.spa_routes import register_spa_routes
@@ -1337,6 +1338,12 @@ register_live_channels_routes(
     db_factory=_db,
     safe_error_detail=_safe_error_detail,
     data_dir=DATA_DIR,
+)
+register_playback_routes(
+    app,
+    settings_factory=_settings,
+    db_factory=_db,
+    safe_error_detail=_safe_error_detail,
 )
 register_investigate_routes(app)
 register_rematch_routes(app)
