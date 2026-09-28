@@ -65,7 +65,8 @@ def register_setup_routes(app):
     router = APIRouter(tags=["setup"])
 
     @router.get("/api/setup/status")
-    def setup_status() -> Dict[str, Any]:
+    def setup_status(user=Depends(require_role("owner"))) -> Dict[str, Any]:
+        del user
         return build_setup_status(_settings(), _db())
 
 

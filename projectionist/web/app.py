@@ -1175,14 +1175,27 @@ register_webhook_routes(app, db_factory=_db, settings_factory=_settings)
 
 def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any]:
     settings = _settings()
+    from projectionist.web.setup_mode import resolve_setup_state
+
+    setup_state = resolve_setup_state(_db())
+    if not authenticated:
+        return {
+            "features": {
+                "multi_user_enabled": settings.features.multi_user_enabled,
+                "access_requests_enabled": bool(
+                    getattr(settings.features, "access_requests_enabled", True)
+                ),
+            },
+            "auth_methods": available_auth_methods(settings),
+            "setup_state": setup_state,
+            "authenticated": False,
+            "user": None,
+        }
     if user is None:
         user = bootstrap_owner(_db())
     request_path = "seerr" if uses_seerr_request_path(settings, role=user.role) else "arr"
     from projectionist.config_store import household_profile_name
     from projectionist.notifications.service import notification_channel_offerings
-    from projectionist.web.setup_mode import resolve_setup_state
-
-    setup_state = resolve_setup_state(_db())
     profile = household_profile_name(settings)
     payload: Dict[str, Any] = {
         "features": {
@@ -1224,6 +1237,16 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
             "require_linked_user_for_requests": settings.seerr.require_linked_user_for_requests,
         },
         "request_path": request_path,
+        "arr": {
+            "radarr_configured": bool(
+                str(getattr(settings, "radarr_url", "") or "").strip()
+                and str(getattr(settings, "radarr_api_key", "") or "").strip()
+            ),
+            "sonarr_configured": bool(
+                str(getattr(settings, "sonarr_url", "") or "").strip()
+                and str(getattr(settings, "sonarr_api_key", "") or "").strip()
+            ),
+        },
         "authenticated": authenticated,
         "notifications": {
             "channels": notification_channel_offerings(settings),
@@ -1377,17 +1400,15 @@ def start_library_sync(user=Depends(require_role("owner"))) -> Dict[str, Any]:
 @app.get("/api/library/stats")
 def library_stats(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
     db = _db()
-    items = db.all_library_items()
-    movies = sum(1 for i in items if i["media_type"] == "movie")
-    shows = sum(1 for i in items if i["media_type"] == "show")
+    counts = db.library_counts()
     settings = _settings()
     plex_server_name = ""
     if settings.plex_url and settings.plex_token:
         plex_server_name = cached_plex_friendly_name(settings.plex_url, settings.plex_token, timeout=5)
     payload = {
-        "total": len(items),
-        "movies": movies,
-        "shows": shows,
+        "total": int(counts.get("items") or 0),
+        "movies": int(counts.get("movies") or 0),
+        "shows": int(counts.get("shows") or 0),
         "last_sync": db.get_sync_state("last_sync"),
         "plex_server_name": plex_server_name or None,
         # Phase A data surface for Admin/Explore knowledge-depth UI (Phase D).
