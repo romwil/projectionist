@@ -8,7 +8,6 @@ import logging
 import os
 import threading
 import time
-import traceback
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
@@ -77,6 +76,10 @@ class Job:
     def to_dict(self) -> Dict[str, object]:
         payload = asdict(self)
         payload["progress"] = self.progress.to_dict()
+        summary = payload.get("summary")
+        if isinstance(summary, dict) and "traceback" in summary:
+            cleaned = {key: value for key, value in summary.items() if key != "traceback"}
+            payload["summary"] = cleaned or {"failed": True}
         return payload
 
     def to_persist_dict(self) -> Dict[str, object]:
@@ -374,7 +377,7 @@ class JobManager:
                 job.status = "failed"
                 job.finished_at = time.time()
                 job.error = friendly_job_error(error)
-                job.summary = {"traceback": traceback.format_exc()}
+                job.summary = {"failed": True}
                 self._persist_locked()
 
 
