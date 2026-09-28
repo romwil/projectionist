@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import TitleDetailDrawer from "./TitleDetailDrawer";
 import { titleDetailTargetFromItem } from "../lib/titleDetailDrawer.js";
 
@@ -9,6 +10,7 @@ const TitleDetailOverlayContext = createContext(null);
  * place so chat/explore/search scroll position stays underneath.
  */
 export function TitleDetailOverlayProvider({ children }) {
+  const location = useLocation();
   const [target, setTarget] = useState(null);
   const [drawerOptions, setDrawerOptions] = useState({});
   const returnFocusRef = useRef(null);
@@ -17,6 +19,13 @@ export function TitleDetailOverlayProvider({ children }) {
     setTarget(null);
     setDrawerOptions({});
   }, []);
+
+  useEffect(() => {
+    const path = location.pathname || "";
+    if (path.startsWith("/watch/") || path === "/live/watch" || path === "/live/popout") {
+      closeTitleDetail();
+    }
+  }, [location.pathname, closeTitleDetail]);
 
   const openTitleDetail = useCallback((itemOrTarget, options = {}) => {
     const targetFromItem = titleDetailTargetFromItem(itemOrTarget);
