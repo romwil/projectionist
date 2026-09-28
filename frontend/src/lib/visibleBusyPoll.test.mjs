@@ -131,4 +131,16 @@ describe("visible busy poll wiring", () => {
     assert.match(app, /startVisibleBusyPoll/);
     assert.doesNotMatch(app, /setInterval\(refreshJobs,\s*5000\)/);
   });
+
+  it("does not remount the Live poll on every status object", () => {
+    assert.match(configPage, /liveJobBusy/);
+    assert.match(configPage, /\[liveJobBusy, liveBusy, section, showWizard\]/);
+    assert.doesNotMatch(configPage, /liveChannelsStatus\?\.job,/);
+  });
+
+  it("does not remount library sync poll when Sync is clicked", () => {
+    assert.match(configPage, /syncingLibraryRef/);
+    assert.match(configPage, /\[showWizard, section\]/);
+    assert.doesNotMatch(configPage, /\[showWizard, section, syncingLibrary\]/);
+  });
 });

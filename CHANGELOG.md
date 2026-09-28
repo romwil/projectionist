@@ -9,7 +9,11 @@ Parked HDMI/kiosk clients no longer hammer job APIs, and Identify says when a cl
 - **Identify says the clip leaves the LAN.** Settings and the test control tell you a 12-second clip goes to ACRCloud, and that a miss (or a test) does not rename files.
 
 ### Changed
-- Config / Libraries / chat job polls use a shared visible-busy helper (2s while busy, 8s idle, `document.hidden` pause). Chat `listJobs` runs only while a sync toast is open (P2-HIGH-03).
+- Config / Libraries / chat job polls use a shared visible-busy helper (2s while busy, 8s idle, `document.hidden` pause). Chat `listJobs` runs only while a sync toast is open (P2-HIGH-03). Live Channels status depends on a busy boolean so a running job cannot remount the poll. Library Sync keeps `syncingLibrary` in a ref so the first click is not cleared by a stale `listJobs` tick.
+
+### Fixed
+- A second saved-library chip on `/chat` starts that page. The first consume no longer leaves `savedLibraryStartedRef` stuck true.
+- Members who cannot read `/api/setup/status` still get Radarr/Sonarr dock-drop from `features.arr` instead of looking disconnected.
 
 ### Added
 - Identify settings and **Test Identify** on Admin → Libraries, with `IDENTIFY_LEAVES_LAN` (`IDENTIFY_CLIP_SECONDS` = 12). Test honesty is `renamed: false` (P4-MED-03).

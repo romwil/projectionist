@@ -139,6 +139,8 @@ describe("1.36.5 whisper/tonight chat home", () => {
     assert.match(libraryJsx, /savedLibraryChatHref\(/);
     assert.match(appJsx, /resumeChipFromThread/);
     assert.match(appJsx, /refreshSavedShelf/);
+    assert.match(appJsx, /savedLibraryStartedRef\.current = false/);
+    assert.match(appJsx, /arrServiceConnected/);
   });
 
   it("pins the composer at 390 so Play cannot push it off the phone fold", () => {
