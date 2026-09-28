@@ -112,13 +112,21 @@ def _snapshot_rows(snapshot: Dict[str, Any]) -> List[Dict[str, Any]]:
     return [row for row in rows if isinstance(row, dict)]
 
 
+def _row_local_path(row: Dict[str, Any]) -> str:
+    """Prefer Investigate's mapped local path over the Sonarr/remote path."""
+    resolved = str(row.get("resolved_path") or "").strip()
+    if resolved:
+        return resolved
+    return str(row.get("path") or "").strip()
+
+
 def _snapshot_path_for_file_id(snapshot: Dict[str, Any], file_id: str) -> str:
     wanted = str(file_id or "").strip()
     if not wanted:
         return ""
     for row in _snapshot_rows(snapshot):
         if str(row.get("id") or "") == wanted:
-            return str(row.get("path") or "").strip()
+            return _row_local_path(row)
     return ""
 
 
@@ -137,9 +145,10 @@ def _paths_match(left: str, right: str) -> bool:
 
 def _snapshot_path_matching(snapshot: Dict[str, Any], path: str) -> str:
     for row in _snapshot_rows(snapshot):
-        candidate = str(row.get("path") or "").strip()
-        if _paths_match(path, candidate):
-            return candidate
+        local = _row_local_path(row)
+        remote = str(row.get("path") or "").strip()
+        if _paths_match(path, local) or _paths_match(path, remote):
+            return local
     return ""
 
 
