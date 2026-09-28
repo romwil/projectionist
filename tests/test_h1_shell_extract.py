@@ -49,6 +49,8 @@ class H1ShellExtractTests(unittest.TestCase):
         self.assertIn("/chat", paths)
         self.assertIn("/admin/{section}", paths)
         self.assertIn("/settings/{section}", paths)
+        self.assertIn("/watch/{rating_key}", paths)
+        self.assertIn("/watch/{rating_key}/popout", paths)
 
     def test_health_and_setup_still_served(self) -> None:
         health = self.client.get("/api/health")

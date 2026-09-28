@@ -25,6 +25,7 @@ import {
   toggleLiveVideoPlayback,
   tryPlayLiveVideo,
 } from "../../lib/liveChannels.js";
+import { theaterHlsConfig } from "../../lib/theaterPlayer.js";
 import { formatLiveStreamError, liveStreamHealthCopy } from "../../lib/liveChannelsCopy.js";
 import { pickLiveSoftStallPhrase } from "../../lib/liveStreamSoftStallCopy.js";
 import LiveProgramHoverCard from "./LiveProgramHoverCard.jsx";
@@ -325,19 +326,7 @@ export default function LivePlayer({
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
-      const hls = new Hls({
-        // Main-thread XHR keeps session cookies reliable on the auth’d proxy.
-        enableWorker: false,
-        lowLatencyMode: false,
-        backBufferLength: 30,
-        manifestLoadingTimeOut: 20000,
-        levelLoadingTimeOut: 20000,
-        fragLoadingTimeOut: 30000,
-        // Auth’d stream proxy needs the session cookie on every playlist/segment.
-        xhrSetup: (xhr) => {
-          xhr.withCredentials = true;
-        },
-      });
+      const hls = new Hls(theaterHlsConfig());
       hlsRef.current = hls;
       hls.loadSource(url);
       hls.attachMedia(video);

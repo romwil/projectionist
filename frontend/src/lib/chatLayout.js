@@ -6,7 +6,7 @@
 /** CSS class applied to the scrollable transcript host. */
 export const CHAT_SCROLL_REGION_CLASS = "chat-scroll-region";
 
-/** Phone Play (390×844) opens the Plex client; composer stays pinned. */
+/** Phone Play (390×844) opens in-app /watch; composer stays pinned on return. */
 export const PHONE_PLAY_MAX_WIDTH = 390;
 
 /** CSS class for the New reply chip — lives above the composer, not in the transcript. */
