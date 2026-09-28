@@ -18,6 +18,7 @@ import {
   stripChatFromRailParam,
   stripRecommendLikeParam,
   stripWatchlistPanelParam,
+  savedLibraryChatHref,
   watchlistBrowseHref,
   watchlistPanelHref,
   withReturnTo,
@@ -163,6 +164,18 @@ describe("watchlist panel deep link (legacy)", () => {
     const next = stripWatchlistPanelParam(new URLSearchParams("watchlist=1&foo=bar"));
     assert.equal(next.get("watchlist"), null);
     assert.equal(next.get("foo"), "bar");
+  });
+});
+
+describe("saved library chat deep link", () => {
+  it("targets /chat so the / redirect cannot drop saved_library", () => {
+    assert.equal(savedLibraryChatHref("sunday-stack"), "/chat?saved_library=sunday-stack");
+    assert.match(savedLibraryChatHref("sunday-stack"), /\/chat\?saved_library=/);
+    assert.equal(
+      savedLibraryChatHref("sunday-stack", "more like this"),
+      "/chat?saved_library=sunday-stack&follow_up=more+like+this",
+    );
+    assert.equal(savedLibraryChatHref(""), "/chat");
   });
 });
 
