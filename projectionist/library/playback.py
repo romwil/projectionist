@@ -33,6 +33,11 @@ PROGRESS_THROTTLE_S = 10.0
 RESUME_THRESHOLD_MS = 2 * 60 * 1000
 SESSION_TTL_S = 6 * 60 * 60
 MAX_RATING_KEY_LEN = 128
+# Plex universal HLS masters live under this directory. Relative playlist lines
+# like ``session/{id}/base/index.m3u8`` must resolve here — not at PMS root —
+# or the proxy fetches ``/session/...`` and Plex returns 4xx → we surface 502.
+UNIVERSAL_HLS_DIR = "video/:/transcode/universal"
+UNIVERSAL_HLS_MASTER = f"{UNIVERSAL_HLS_DIR}/start.m3u8"
 
 _SAFE_RATING_KEY = re.compile(r"^[A-Za-z0-9._:@/-]{1,128}$")
 _SAFE_SESSION = re.compile(r"^[A-Za-z0-9._-]{8,80}$")
@@ -132,6 +137,31 @@ def validate_playback_path(relative_path: str) -> str:
 
 def playback_proxy_base(session_id: str) -> str:
     return f"/api/library/playback/{quote(str(session_id), safe='')}"
+
+
+def playlist_resolution_path(playlist_path: str) -> str:
+    """Path used as the urljoin base when rewriting relative HLS URIs.
+
+    Browser-facing masters are advertised as ``index.m3u8``, but Plex emits
+    relatives against ``/video/:/transcode/universal/``. Bare ``session/…``
+    proxy paths (from older rewrites) get the same prefix.
+    """
+    path = str(playlist_path or "").strip().lstrip("/")
+    if not path or path in {"index.m3u8", "master.m3u8"}:
+        return UNIVERSAL_HLS_MASTER
+    if path.startswith("session/") and UNIVERSAL_HLS_DIR not in path:
+        return f"{UNIVERSAL_HLS_DIR}/{path}"
+    return path
+
+
+def plex_fetch_path(relative_path: str) -> str:
+    """Map a proxied relative path onto the PMS path to GET."""
+    path = validate_playback_path(relative_path)
+    if path in {"index.m3u8", "master.m3u8"}:
+        return UNIVERSAL_HLS_MASTER
+    if path.startswith("session/") and UNIVERSAL_HLS_DIR not in path:
+        return f"{UNIVERSAL_HLS_DIR}/{path}"
+    return path
 
 
 def should_resume_from_offset(view_offset_ms: Any) -> bool:
@@ -462,14 +492,15 @@ def _proxy_uri_for_plex(
             query = f"?{q}"
         return _from_plex_path(path, query)
 
-    playlist_dir = str(playlist_path or "").rsplit("/", 1)[0] if "/" in playlist_path else ""
+    resolved_playlist = playlist_resolution_path(playlist_path)
+    playlist_dir = resolved_playlist.rsplit("/", 1)[0] if "/" in resolved_playlist else ""
     joined = urljoin(f"{playlist_dir}/" if playlist_dir else "", text)
     if joined.startswith(("http://", "https://", "/")):
         return _proxy_uri_for_plex(
             joined,
             session_id=session_id,
             plex_base=plex_root,
-            playlist_path=playlist_path,
+            playlist_path=resolved_playlist,
         )
     return f"{proxy_root}/{joined.lstrip('/')}"
 
@@ -897,22 +928,28 @@ def proxy_session_asset(
             session_id=session.session_id,
             offset_seconds=session.last_offset_s,
         )
+        rewrite_base = UNIVERSAL_HLS_MASTER
     else:
         base = session.plex_base.rstrip("/")
-        url = f"{base}/{path.lstrip('/')}"
-    body, upstream_ct, status, _final = fetch(
+        upstream = plex_fetch_path(path)
+        url = f"{base}/{upstream.lstrip('/')}"
+        rewrite_base = upstream
+    body, upstream_ct, status, final_url = fetch(
         url,
         headers=plex_identity_headers(session.token),
         timeout=30,
     )
     media_type = content_type_for_path(path, upstream_ct)
     if is_playlist_path(path):
+        final_path = urlparse(str(final_url or "")).path.lstrip("/")
+        if final_path and UNIVERSAL_HLS_DIR in final_path:
+            rewrite_base = final_path
         text = body.decode("utf-8", errors="replace")
         rewritten = rewrite_plex_hls_playlist(
             text,
             session_id=session.session_id,
             plex_base=session.plex_base,
-            playlist_path=path,
+            playlist_path=rewrite_base,
         )
         return {
             "body": rewritten.encode("utf-8"),

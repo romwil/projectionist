@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [1.37.6] — 2026-09-28
+
+Library Play actually streams again — episode (and movie) HLS no longer dies on the first child playlist with a silent 502.
+
+### Highlights
+- **TV episodes play through.** Hitting Play on a show or episode warms the reel and keeps buffering instead of stalling on a poster with nothing on the wire.
+- **Same fix for movies that hit the relative playlist shape.** Masters that hand out `session/…` URIs now resolve under Plex’s universal transcoder path.
+
+### Fixed
+- HLS rewrite treated browser `index.m3u8` as the playlist directory, so Plex-relative `session/{id}/base/index.m3u8` was proxied as `/session/…` on the PMS root (4xx → household 502). Relatives now resolve under `video/:/transcode/universal/`; bare `session/…` proxy paths get the same prefix on fetch.
+
+### Verification
+- Backend: `tests/test_library_playback.py` — relative `session/…` rewrite under universal/, `plex_fetch_path` prefix, `proxy_session_asset` fetch URL.
+
 ## [1.37.5] — 2026-09-28
 
 Title sheet **More** actually opens again — the overflow menu was portaling behind the drawer.

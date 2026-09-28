@@ -16,8 +16,11 @@ from projectionist.config_store import Settings, YouthSettings
 from projectionist.library.db import Database
 from projectionist.library.playback import (
     PlaybackError,
+    PlaybackSession,
     YouthBlockedError,
     assert_youth_allowed,
+    plex_fetch_path,
+    proxy_session_asset,
     report_progress,
     reset_playback_sessions,
     resolve_playable_item,
@@ -167,6 +170,66 @@ class PlaylistRewriteTests(unittest.TestCase):
         )
         self.assertIn("/api/library/playback/sess-9/", out)
         self.assertNotIn("10.10.1.9", out)
+
+    def test_relative_session_uri_resolves_under_universal(self) -> None:
+        """Plex masters emit session/… relatives; bare index.m3u8 must not root them."""
+        body = (
+            "#EXTM3U\n"
+            "#EXT-X-STREAM-INF:BANDWIDTH=800000\n"
+            "session/abc/base/index.m3u8\n"
+        )
+        out = rewrite_plex_hls_playlist(
+            body,
+            session_id="sess-1",
+            plex_base="http://plex.test:32400",
+            playlist_path="index.m3u8",
+        )
+        self.assertIn(
+            "/api/library/playback/sess-1/video/:/transcode/universal/session/abc/base/index.m3u8",
+            out,
+        )
+        self.assertNotIn("/api/library/playback/sess-1/session/", out)
+
+    def test_plex_fetch_path_prefixes_bare_session(self) -> None:
+        self.assertEqual(
+            plex_fetch_path("session/abc/base/index.m3u8"),
+            "video/:/transcode/universal/session/abc/base/index.m3u8",
+        )
+        self.assertEqual(plex_fetch_path("index.m3u8"), "video/:/transcode/universal/start.m3u8")
+
+    def test_proxy_fetches_universal_prefixed_session_path(self) -> None:
+        session = PlaybackSession(
+            session_id="sess-proxy",
+            user_id="owner",
+            rating_key="ep-1",
+            plex_base="http://plex.test:32400",
+            token="tok",
+        )
+        seen: list[str] = []
+
+        def fake_fetch(url, **_kwargs):
+            seen.append(url)
+            return (
+                b"#EXTM3U\n#EXTINF:4.0,\n0.ts\n",
+                "application/vnd.apple.mpegurl",
+                200,
+                url,
+            )
+
+        asset = proxy_session_asset(
+            session,
+            "session/sess-proxy/base/index.m3u8",
+            fetch=fake_fetch,
+        )
+        self.assertEqual(len(seen), 1)
+        self.assertIn(
+            "http://plex.test:32400/video/:/transcode/universal/session/sess-proxy/base/index.m3u8",
+            seen[0],
+        )
+        self.assertIn(
+            "/api/library/playback/sess-proxy/video/:/transcode/universal/session/sess-proxy/base/0.ts",
+            asset["body"].decode(),
+        )
 
     def test_strip_secret_query(self) -> None:
         self.assertEqual(
