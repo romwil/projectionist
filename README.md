@@ -289,6 +289,6 @@ Projectionist is licensed under the **GNU Affero General Public License v3.0 onl
 
 Household, Unraid Community Applications, and Docker Hub installs stay a free self-host app. If you run a modified copy as a network service, you must offer the corresponding source to its users.
 
-Releases **through 1.36.0** — including already-shipped Hub tags — remain MIT. This change applies to new code and future releases.
+Releases **through 1.36.2** — including already-shipped Hub tags — remain MIT. This change applies to new code and future releases.
 
 The name **Projectionist** and the logo are not a grant to call forks “Projectionist.”
