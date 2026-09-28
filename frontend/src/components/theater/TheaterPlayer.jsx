@@ -236,11 +236,14 @@ export default function TheaterPlayer({
       }}
       onKeyDown={handleKeyDown}
     >
+      {/* Cover art fills the stage behind the contain video — never sizes the document. */}
+      {poster ? (
+        <img className="theater-stage-poster" src={poster} alt="" aria-hidden="true" data-testid={`${testId}-stage-poster`} />
+      ) : null}
       <video
         ref={videoRef}
         className="live-player-video theater-player-video"
         playsInline
-        poster={poster || undefined}
         autoPlay
         muted={false}
         controls={false}
@@ -257,7 +260,6 @@ export default function TheaterPlayer({
 
       {loading ? (
         <div className="live-player-status theater-player-loading" data-testid={`${testId}-loading`}>
-          {poster ? <img className="theater-player-poster-still" src={poster} alt="" /> : null}
           <p>{loadingCopy}</p>
         </div>
       ) : null}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   progressLibraryPlayback,
@@ -21,12 +21,24 @@ import {
 import { plexPlayRatingKey } from "../../lib/titleLinks.js";
 import TheaterPlayer from "./TheaterPlayer.jsx";
 
-function displayTitle(session) {
+function displayHeadline(session) {
   if (!session) return "Play";
-  if (session.show_title && session.season != null && session.episode != null) {
-    return `${session.show_title} · S${session.season}E${session.episode} · ${session.title}`;
-  }
+  if (session.show_title) return session.show_title;
   return session.title || "Play";
+}
+
+function displayMeta(session) {
+  if (!session) return "";
+  if (session.show_title && session.season != null && session.episode != null) {
+    return `S${session.season}E${session.episode} · ${session.title || ""}`.replace(/\s·\s$/, "");
+  }
+  return "";
+}
+
+function displayTitle(session) {
+  const meta = displayMeta(session);
+  if (meta) return `${displayHeadline(session)} · ${meta}`;
+  return displayHeadline(session);
 }
 
 export default function LibraryPlayer({
@@ -47,6 +59,7 @@ export default function LibraryPlayer({
   const [ended, setEnded] = useState(false);
   const [skipChip, setSkipChip] = useState("");
   const [ccOpen, setCcOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [nowMs, setNowMs] = useState(0);
   const [durationMs, setDurationMs] = useState(0);
   const [bufferedEndS, setBufferedEndS] = useState(0);
@@ -76,6 +89,14 @@ export default function LibraryPlayer({
       // Best-effort — unmount / hide still tears down local state.
     }
     sessionRef.current = null;
+  }, []);
+
+  const disarmStream = useCallback(() => {
+    sessionRef.current = null;
+    // Keep poster/title for the shell, but drop the dead stream URL so TheaterPlayer
+    // detaches HLS and Play can begin() again instead of calling play() on nothing.
+    setSession((prev) => (prev ? { ...prev, stream_url: "", session_id: "" } : prev));
+    setStatus("paused");
   }, []);
 
   const handlePlayerStatus = useCallback((next) => {
@@ -177,7 +198,7 @@ export default function LibraryPlayer({
   useEffect(() => {
     function onHide() {
       if (document.visibilityState === "hidden") {
-        stopSession();
+        stopSession().finally(() => disarmStream());
       }
     }
     document.addEventListener("visibilitychange", onHide);
@@ -186,7 +207,7 @@ export default function LibraryPlayer({
       document.removeEventListener("visibilitychange", onHide);
       window.removeEventListener("pagehide", onHide);
     };
-  }, [stopSession]);
+  }, [stopSession, disarmStream]);
 
   async function sendProgress(state, video) {
     const current = sessionRef.current;
@@ -251,8 +272,14 @@ export default function LibraryPlayer({
   }
 
   async function togglePlayback() {
+    if (status === "loading" || status === "error" || resumeOpen) return;
     const video = videoRef.current;
-    if (!video || status === "loading" || status === "error" || resumeOpen) return;
+    // Tab-hide stopSession clears the server session + stream_url. Play must
+    // re-arm via begin() instead of no-op play() on an empty <video>.
+    if (!video || (!video.currentSrc && !session?.stream_url && !sessionRef.current?.stream_url)) {
+      await begin({ startOver: false });
+      return;
+    }
     if (video.paused) {
       try {
         await video.play();
@@ -292,12 +319,22 @@ export default function LibraryPlayer({
   }
 
   function leaveWatch() {
+    setMoreOpen(false);
     stopSession();
     if (popout) {
       window.close();
       return;
     }
     navigate(-1);
+  }
+
+  function toggleFullscreen() {
+    const root = document.querySelector("[data-testid='library-player']");
+    if (document.fullscreenElement) {
+      document.exitFullscreen?.().catch(() => {});
+    } else {
+      root?.requestFullscreen?.().catch(() => {});
+    }
   }
 
   function handleStageActivate(_event, _zone) {
@@ -310,15 +347,10 @@ export default function LibraryPlayer({
       skipBy(delta);
       return;
     }
-    const root = document.querySelector("[data-testid='library-player']");
-    if (document.fullscreenElement) {
-      document.exitFullscreen?.().catch(() => {});
-    } else {
-      root?.requestFullscreen?.().catch(() => {});
-    }
+    toggleFullscreen();
   }
 
-  function handleKeyDown(event, { toggleFullscreen, video }) {
+  function handleKeyDown(event, { toggleFullscreen: fs, video }) {
     const key = event.key;
     if (key === " " || key === "k" || key === "K") {
       event.preventDefault();
@@ -335,8 +367,13 @@ export default function LibraryPlayer({
     } else if (key === "c" || key === "C") {
       event.preventDefault();
       setCcOpen((open) => !open);
+      setMoreOpen(false);
     } else if (key === "Escape") {
       event.preventDefault();
+      if (moreOpen) {
+        setMoreOpen(false);
+        return;
+      }
       if (ccOpen) {
         setCcOpen(false);
         return;
@@ -347,7 +384,7 @@ export default function LibraryPlayer({
       }
       leaveWatch();
     } else if (key === "f" || key === "F") {
-      toggleFullscreen?.();
+      fs?.();
     }
   }
 
@@ -362,23 +399,32 @@ export default function LibraryPlayer({
   const plexHref = session?.plex_watch_url || "";
   const next = session?.next_episode;
   const showOsd = !resumeOpen && !ended;
+  const playing = status === "playing";
+  const showCenterPlay =
+    showOsd && !playing && !error && status !== "loading" && Boolean(session);
   const durationS = durationMs / 1000 || 0;
   const bufferedPct = durationS ? Math.round((bufferedEndS / durationS) * 100) : 0;
   const playheadPct = durationMs ? Math.round((nowMs / durationMs) * 1000) : 0;
+  const headline = displayHeadline(session);
+  const metaLine = displayMeta(session);
+  const forceOsd = moreOpen || ccOpen;
 
   const osd = showOsd ? (
-    <div className="theater-osd-inner live-osd-inner">
-      <div className="live-osd-channel theater-osd-meta">
-        <div className="live-osd-meta">
-          <p className="live-osd-station">{popout ? "Pop-out" : "Projectionist"}</p>
-          <h2 className="live-osd-title">{displayTitle(session)}</h2>
-        </div>
+    <div className="theater-osd-inner" data-testid="library-osd-inner">
+      <div className="theater-osd-meta">
+        {popout ? <p className="theater-osd-kicker">Pop-out</p> : null}
+        <h2 className="theater-osd-title">{headline}</h2>
+        {metaLine ? <p className="theater-osd-episode">{metaLine}</p> : null}
       </div>
-      <div className="live-osd-progress-row theater-scrubber-row">
-        <span>{formatClockMs(nowMs)}</span>
+
+      <div className="theater-scrubber-row" data-testid="library-scrubber-row">
+        <span className="theater-clock">{formatClockMs(nowMs)}</span>
         <label className="theater-scrubber" data-theater-chrome="true">
           <span className="visually-hidden">Seek</span>
-          <span className="theater-scrubber-buffered" style={{ width: `${Math.max(0, Math.min(100, bufferedPct))}%` }} />
+          <span
+            className="theater-scrubber-buffered"
+            style={{ width: `${Math.max(0, Math.min(100, bufferedPct))}%` }}
+          />
           <input
             type="range"
             min={0}
@@ -388,54 +434,111 @@ export default function LibraryPlayer({
             onChange={onScrub}
           />
         </label>
-        <span>{durationMs ? formatClockMs(durationMs) : ""}</span>
+        <span className="theater-clock">{durationMs ? formatClockMs(durationMs) : "–:––"}</span>
       </div>
-      <div className="live-osd-actions theater-osd-actions">
-        <button type="button" className="ghost live-osd-btn" onClick={() => skipBy(-SKIP_SECONDS)}>
-          −15s
-        </button>
-        <button type="button" className="ghost live-osd-btn" onClick={togglePlayback}>
-          {status === "paused" ? "Play" : "Pause"}
-        </button>
-        <button type="button" className="ghost live-osd-btn" onClick={() => skipBy(SKIP_SECONDS)}>
-          +15s
+
+      <div className="theater-osd-transport" data-testid="library-osd-transport">
+        <button
+          type="button"
+          className="theater-osd-skip"
+          onClick={() => skipBy(-SKIP_SECONDS)}
+          aria-label={`Skip back ${SKIP_SECONDS} seconds`}
+          data-testid="library-skip-back"
+        >
+          −{SKIP_SECONDS}
         </button>
         <button
           type="button"
-          className="ghost live-osd-btn"
-          onClick={() => setCcOpen((open) => !open)}
+          className="theater-osd-play"
+          onClick={togglePlayback}
+          aria-label={playing ? "Pause" : "Play"}
+          data-testid="library-play-toggle"
+        >
+          <span className="theater-osd-play-glyph" aria-hidden="true">
+            {playing ? "❚❚" : "▶"}
+          </span>
+          <span className="theater-osd-play-label">{playing ? "Pause" : "Play"}</span>
+        </button>
+        <button
+          type="button"
+          className="theater-osd-skip"
+          onClick={() => skipBy(SKIP_SECONDS)}
+          aria-label={`Skip forward ${SKIP_SECONDS} seconds`}
+          data-testid="library-skip-forward"
+        >
+          +{SKIP_SECONDS}
+        </button>
+
+        <span className="theater-osd-spacer" aria-hidden="true" />
+
+        <button
+          type="button"
+          className={`theater-osd-secondary${ccOpen ? " is-active" : ""}`}
+          onClick={() => {
+            setCcOpen((open) => !open);
+            setMoreOpen(false);
+          }}
           aria-expanded={ccOpen}
+          data-testid="library-cc"
         >
           CC
         </button>
         <button
           type="button"
-          className="ghost live-osd-btn"
-          onClick={() => {
-            const root = document.querySelector("[data-testid='library-player']");
-            if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
-            else root?.requestFullscreen?.().catch(() => {});
-          }}
+          className="theater-osd-secondary"
+          onClick={toggleFullscreen}
+          data-testid="library-fullscreen"
         >
           Fullscreen
         </button>
-        {pipSupported ? (
-          <button type="button" className="ghost live-osd-btn" onClick={enterPiP}>
-            Picture in Picture
+        <div className="theater-osd-more-wrap" data-theater-chrome="true">
+          <button
+            type="button"
+            className={`theater-osd-secondary${moreOpen ? " is-active" : ""}`}
+            onClick={() => {
+              setMoreOpen((open) => !open);
+              setCcOpen(false);
+            }}
+            aria-expanded={moreOpen}
+            aria-haspopup="menu"
+            data-testid="library-osd-more"
+          >
+            More
           </button>
-        ) : null}
-        {!phone && !popout ? (
-          <button type="button" className="ghost live-osd-btn" onClick={openPopout}>
-            Pop-out
-          </button>
-        ) : null}
-        <button type="button" className="ghost live-osd-btn" onClick={leaveWatch}>
-          Back
-        </button>
+          {moreOpen ? (
+            <div className="theater-osd-menu" role="menu" data-testid="library-osd-menu">
+              {pipSupported ? (
+                <button type="button" role="menuitem" onClick={() => { enterPiP(); setMoreOpen(false); }}>
+                  Picture in Picture
+                </button>
+              ) : null}
+              {!phone && !popout ? (
+                <button type="button" role="menuitem" onClick={() => { openPopout(); setMoreOpen(false); }}>
+                  Pop-out
+                </button>
+              ) : null}
+              {plexHref ? (
+                <a
+                  role="menuitem"
+                  href={plexHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setMoreOpen(false)}
+                >
+                  Open in Plex
+                </a>
+              ) : null}
+              <button type="button" role="menuitem" onClick={leaveWatch} data-testid="library-osd-back">
+                Back
+              </button>
+            </div>
+          ) : null}
+        </div>
       </div>
+
       {ccOpen ? (
-        <div className="live-cc-picker" data-theater-chrome="true">
-          <p className="live-cc-empty">Captions follow the Plex-selected track when the stream carries them.</p>
+        <div className="theater-cc-note" data-theater-chrome="true" data-testid="library-cc-note">
+          <p>Captions follow the Plex-selected track when the stream carries them.</p>
         </div>
       ) : null}
     </div>
@@ -453,6 +556,7 @@ export default function LibraryPlayer({
         loadingCopy="warming the reel"
         error=""
         osd={osd}
+        osdVisible={forceOsd ? true : undefined}
         onStatus={handlePlayerStatus}
         onVideoRef={handleVideoRef}
         onHlsRef={handleHlsRef}
@@ -465,22 +569,43 @@ export default function LibraryPlayer({
         }}
         onEnded={() => {
           setEnded(true);
+          setMoreOpen(false);
           sendProgress("stopped", videoRef.current);
         }}
         onStageActivate={handleStageActivate}
         onStageDoubleActivate={handleStageDoubleActivate}
         onKeyDown={handleKeyDown}
       >
+        {showCenterPlay ? (
+          <button
+            type="button"
+            className="theater-center-play"
+            onClick={togglePlayback}
+            aria-label="Play"
+            data-testid="library-center-play"
+            data-theater-chrome="true"
+          >
+            <span className="theater-center-play-glyph" aria-hidden="true">
+              ▶
+            </span>
+          </button>
+        ) : null}
+
         {skipChip ? (
-          <div className="theater-skip-chip" role="status">
+          <div className="theater-skip-chip" role="status" data-testid="library-skip-chip">
             {skipChip}
           </div>
         ) : null}
 
         {resumeOpen ? (
           <div className="theater-resume-gate" data-testid="library-resume-gate">
-            {session?.poster_url ? <img src={session.poster_url} alt="" /> : null}
-            <p>Resume {displayTitle(session)}?</p>
+            <div className="theater-resume-copy">
+              <p className="theater-resume-kicker">Continue watching</p>
+              <p className="theater-resume-title">{displayTitle(session)}</p>
+              <p className="theater-resume-offset muted">
+                From {formatClockMs(Number(session?.view_offset_ms) || nowMs)}
+              </p>
+            </div>
             <div className="theater-resume-actions">
               <button
                 type="button"
@@ -504,7 +629,7 @@ export default function LibraryPlayer({
 
         {ended ? (
           <div className="theater-end-card" data-testid="library-end-card">
-            <p>That’s the reel.</p>
+            <p className="theater-end-kicker">That’s the reel</p>
             <div className="theater-resume-actions">
               {next?.rating_key ? (
                 <Link
@@ -525,11 +650,21 @@ export default function LibraryPlayer({
         {error ? (
           <div className="live-player-status live-player-status--error" data-testid="library-player-error">
             <p>{error}</p>
-            {plexHref ? (
-              <a className="title-cta title-cta-ghost" href={plexHref} target="_blank" rel="noopener noreferrer">
-                Open in Plex
-              </a>
-            ) : null}
+            <div className="theater-resume-actions">
+              <button
+                type="button"
+                className="title-cta title-cta-primary"
+                disabled={startBusy}
+                onClick={() => begin({ startOver: false })}
+              >
+                Try again
+              </button>
+              {plexHref ? (
+                <a className="title-cta title-cta-ghost" href={plexHref} target="_blank" rel="noopener noreferrer">
+                  Open in Plex
+                </a>
+              ) : null}
+            </div>
           </div>
         ) : null}
       </TheaterPlayer>

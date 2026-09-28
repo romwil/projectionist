@@ -1177,15 +1177,15 @@ Dual-role: **member living-room first**, then a **full admin/owner second pass**
 - **roles:** `member`, `owner`
 - **tags:** `watch`, `delight`, `library`
 - **source:** `frontend/src/pages/LibraryWatchPage.jsx`, `frontend/src/components/theater/LibraryPlayer.jsx`, `frontend/src/lib/titleLinks.js`
-- **steps:** From a library poster or title detail, activate **Play**. Confirm `/watch/{ratingKey}` opens in Projectionist (not app.plex.tv / `plex://`). Confirm **Open in Plex** remains overflow. Hostile: spam Play — only one session starts.
-- **pass:** In-app theater loads; overflow still reaches Plex; no PMS host or token in the page, network URLs, or console.
+- **steps:** From a library poster or title detail, activate **Play**. Confirm `/watch/{ratingKey}` opens in Projectionist (not app.plex.tv / `plex://`). Confirm one viewport composition (`watch-theater-shell` ≤ viewport; no document scroll for poster). Confirm stage poster (`library-player-stage-poster`) is cover-behind-video. Confirm primary transport `library-play-toggle` + scrubber; overflow **Open in Plex** via `library-osd-more` → menu. Hostile: spam Play — only one session starts.
+- **pass:** In-app theater loads viewport-bound; More menu still reaches Plex; no PMS host or token in the page, network URLs, or console.
 
 ### `watch.skip-15`
 
 - **roles:** `member`, `owner`
 - **tags:** `watch`, `delight`
 - **source:** `frontend/src/lib/theaterPlayer.js`, `frontend/src/components/theater/LibraryPlayer.jsx`
-- **steps:** On `/watch`, double-click (desktop) the left third, then the right third. Confirm −15s / +15s gold skip chips. Confirm Space/`k` play-pause and `j`/`l` skip. Confirm the completing click of a double-click does not toggle play.
+- **steps:** On `/watch`, double-click (desktop) the left third, then the right third. Confirm −15s / +15s gold skip chips (`library-skip-chip`). Confirm Space/`k` play-pause and `j`/`l` skip. Confirm discreet OSD skip (`library-skip-back` / `library-skip-forward`). Confirm the completing click of a double-click does not toggle play.
 - **pass:** Skip chips appear; playhead moves; single-click still play/pauses.
 
 ### `watch.fullscreen-popout`
@@ -1193,7 +1193,7 @@ Dual-role: **member living-room first**, then a **full admin/owner second pass**
 - **roles:** `member`, `owner`
 - **tags:** `watch`, `delight`
 - **source:** `frontend/src/pages/LibraryWatchPage.jsx`
-- **steps:** Desktop: `f` or center double-click fullscreen; **Pop-out** opens `/watch/{rk}/popout` and unloads the opener player. Escape: close CC → exit fullscreen → leave `/watch`.
+- **steps:** Desktop: `f` or center double-click fullscreen; open `library-osd-more` → **Pop-out** opens `/watch/{rk}/popout` and unloads the opener player. Escape: close More/CC → exit fullscreen → leave `/watch`.
 - **pass:** Fullscreen and pop-out work; opener does not keep a second decoder; Escape restores the trigger route.
 
 ### `watch.resume`
@@ -1201,7 +1201,7 @@ Dual-role: **member living-room first**, then a **full admin/owner second pass**
 - **roles:** `member`, `owner`
 - **tags:** `watch`, `delight`
 - **source:** `frontend/src/components/theater/LibraryPlayer.jsx`
-- **steps:** Open a title with `view_offset_ms` ≳ 2 minutes. Confirm **Resume** (gold) and **Start over** (ghost). Under ~2 minutes, no gate.
+- **steps:** Open a title with `view_offset_ms` ≳ 2 minutes. Confirm **Resume** (gold) and **Start over** (ghost) on `library-resume-gate` with continue-watching copy (no giant poster card). Under ~2 minutes, no gate.
 - **pass:** Gate copy is honest; Resume continues; Start over begins at 0.
 
 ### `watch.youth-gate`
@@ -1217,7 +1217,7 @@ Dual-role: **member living-room first**, then a **full admin/owner second pass**
 - **roles:** `member`, `owner`
 - **tags:** `watch`, `delight`, `mobile`
 - **source:** `frontend/src/components/TitleDetailContent.jsx`, `frontend/src/pages/LibraryWatchPage.jsx`
-- **steps:** At 390×844, Play from `title-detail-drawer` (and a poster). Confirm `/watch` in Projectionist, `playsInline`, no `plex://` primary. Overflow **Open in Plex** remains. After Back / Escape, `/chat` composer is still pinned (`mobile.chat-composer`).
+- **steps:** At 390×844, Play from `title-detail-drawer` (and a poster). Confirm `/watch` in Projectionist, `playsInline`, no `plex://` primary. Confirm center play (`library-center-play`) when paused, pinned bottom transport ≥44px, **no** Pop-out in the primary row (More only). Overflow **Open in Plex** via More. After Back / Escape, `/chat` composer is still pinned (`mobile.chat-composer`).
 - **pass:** In-app Play; composer still pinned on return; no new Plex app/tab as the primary path.
 
 ### `watch.mobile-skip-15`
@@ -1233,7 +1233,7 @@ Dual-role: **member living-room first**, then a **full admin/owner second pass**
 - **roles:** `member`, `owner`
 - **tags:** `watch`, `delight`, `mobile`
 - **source:** `frontend/src/styles/13-watch.css`
-- **steps:** Rotate `/watch` to landscape at phone width. Confirm immersive theater, OSD auto-hides, controls ≥44px with `env(safe-area-inset-*)`, no `100vw` bounce. Confirm no Pop-out control; PiP / fullscreen available when the browser allows.
+- **steps:** Rotate `/watch` to landscape at phone width. Confirm immersive theater, OSD auto-hides, controls ≥44px with `env(safe-area-inset-*)`, no `100vw` bounce. Confirm no Pop-out in primary transport; PiP / fullscreen via More / secondary when the browser allows.
 - **pass:** Landscape is watch-first; portrait letterboxes with pinned chrome; no horizontal page bounce.
 
 ### `mobile.live-watch`
