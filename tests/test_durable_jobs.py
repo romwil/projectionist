@@ -108,6 +108,31 @@ class DurableJobsTests(unittest.TestCase):
         self.assertEqual(payload["jobs"][0]["id"], job.id)
         self.assertEqual(payload["jobs"][0]["status"], "queued")
 
+    def test_start_sync_single_flight_returns_existing_job(self) -> None:
+        manager = JobManager(self.data_dir)
+        settings = MagicMock()
+
+        with patch("projectionist.web.jobs.threading.Thread") as thread_cls:
+            thread_cls.return_value.start = MagicMock()
+            first = manager.start_sync(settings)
+            second = manager.start_sync(settings)
+
+        self.assertEqual(first.id, second.id)
+        self.assertEqual(thread_cls.call_count, 1)
+
+    def test_start_sync_allows_new_job_after_completed(self) -> None:
+        manager = JobManager(self.data_dir)
+        settings = MagicMock()
+
+        with patch("projectionist.web.jobs.threading.Thread") as thread_cls:
+            thread_cls.return_value.start = MagicMock()
+            first = manager.start_sync(settings)
+            first.status = "completed"
+            second = manager.start_sync(settings)
+
+        self.assertNotEqual(first.id, second.id)
+        self.assertEqual(thread_cls.call_count, 2)
+
     def test_progress_updates_are_persisted(self) -> None:
         manager = JobManager(self.data_dir)
         job = Job(

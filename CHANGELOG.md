@@ -2,12 +2,20 @@
 
 ## [Unreleased]
 
-Failed library syncs keep a short friendly error in job history. Guest features and setup status stay small. Identify test clips stay inside configured media folders.
+Library stats stay cheap, a second Sync click joins the job already running, and shutdown checkpoints WAL without truncating it.
 
 ### Highlights
+- **Library stats stay cheap.** Counts come from SQL, not by loading every title into memory, so a large library does not stall the dashboard.
+- **One library sync at a time.** A second Sync while a job is queued or running returns that same job instead of starting another thread.
 - **Failed library sync no longer shows a stack trace.** Job history keeps a short friendly error so `GET /api/jobs` does not leak frames from the host.
 - **The login screen learns less about the house.** Guests see whether multi-user is on and how they can sign in — not household domain, proxy, or Seerr flags. Setup status is owner-only.
 - **Identify test clips stay on the media roots.** A test path has to sit under the configured TV/movie folders (or a current snapshot row). A miss still does not rename files.
+
+### Changed
+- `GET /api/library/stats` uses `library_counts()` (`total` from `items`) and still returns `last_sync`, cached Plex name, `knowledge_coverage`, and the sanitized payload (P2-HIGH-01).
+- `start_sync` is single-flight under `_lock`: a queued or running `library_sync` is returned as 200 with that job (P2-HIGH-02).
+- `Database.close()` runs `PRAGMA wal_checkpoint(PASSIVE)` after the writer serializer stops. Never `TRUNCATE`.
+- Identify `_identified_keys` is an `OrderedDict` capped at 4096 (P2-MED-01). Rate-limit buckets evict empty and oldest keys after `check()` when over 4096, without applying the caller’s window cutoff to other buckets (P2-MED-02).
 
 ### Security
 - Failed `library_sync` jobs store `summary.failed` and a friendly `error`. `Job.to_dict()` never includes a `traceback` key or frame strings, including jobs persisted before this change (P3-MED-01).

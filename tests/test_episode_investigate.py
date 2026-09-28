@@ -960,6 +960,25 @@ class IdentifyLaneTests(unittest.TestCase):
         self.assertEqual(series_title_from_acr("The Bear (Main Title Theme)"), "The Bear")
         self.assertEqual(series_title_from_acr("The Studio Theme"), "The Studio")
 
+    def test_identified_keys_cap_evicts_oldest(self) -> None:
+        from projectionist.library.episode_investigate import acrcloud
+
+        acrcloud.reset_identify_throttle_for_tests()
+        original_cap = acrcloud.IDENTIFIED_KEYS_CAP
+        acrcloud.IDENTIFIED_KEYS_CAP = 3
+        try:
+            self.assertTrue(acrcloud._claim_file("a"))
+            self.assertTrue(acrcloud._claim_file("b"))
+            self.assertTrue(acrcloud._claim_file("c"))
+            self.assertFalse(acrcloud._claim_file("a"))
+            self.assertTrue(acrcloud._claim_file("d"))
+            self.assertTrue(acrcloud._claim_file("a"))
+            self.assertEqual(len(acrcloud._identified_keys), 3)
+            self.assertNotIn("b", acrcloud._identified_keys)
+        finally:
+            acrcloud.IDENTIFIED_KEYS_CAP = original_cap
+            acrcloud.reset_identify_throttle_for_tests()
+
     def test_hmac_and_parse(self) -> None:
         from projectionist.library.episode_investigate.acrcloud import parse_identify_payload, sign_identify
 
