@@ -51,12 +51,22 @@ async function mockChatStreamMessage(
   buildMessage: (sessionId: string) => Record<string, unknown>,
 ) {
   await page.route("**/api/chat/stream**", async (route) => {
-    if (route.request().method() !== "GET") {
+    const req = route.request();
+    if (req.method() !== "POST" && req.method() !== "GET") {
       await route.continue();
       return;
     }
-    const url = new URL(route.request().url());
-    const sessionId = url.searchParams.get("session_id") || crypto.randomUUID().replace(/-/g, "");
+    let sessionId = "";
+    if (req.method() === "POST") {
+      try {
+        sessionId = String(req.postDataJSON()?.session_id || "");
+      } catch {
+        sessionId = "";
+      }
+    } else {
+      sessionId = new URL(req.url()).searchParams.get("session_id") || "";
+    }
+    sessionId = sessionId || crypto.randomUUID().replace(/-/g, "");
     await route.fulfill({
       status: 200,
       contentType: "text/event-stream",
@@ -333,16 +343,90 @@ test.describe("Title cards in chat", () => {
 
     const libraryCard = page.getByTestId("chat-message-assistant").getByTestId("title-card").first();
     await expect(libraryCard).toContainText("Heat");
+    await expect(libraryCard.getByRole("link", { name: "Play" })).toHaveAttribute("href", "/watch/plex-949");
     const plexLink = libraryCard.getByTestId("watch-on-plex-button");
     await expect(plexLink).toBeVisible();
     await expect(plexLink).toHaveAttribute(
       "href",
       "https://app.plex.tv/desktop/#!/server/mock-plex-machine/details?key=%2Flibrary%2Fmetadata%2Fplex-949",
     );
+    await expect(plexLink).toHaveText("Open in Plex");
 
     const discoveryCard = page.getByTestId("chat-message-assistant").getByTestId("title-card").nth(1);
     await expect(discoveryCard.getByTestId("watch-on-plex-button")).toHaveCount(0);
     await expect(discoveryCard.getByTestId("add-radarr-button")).toBeVisible();
+  });
+
+  test("title sheet More opens portaled Open in Plex above the drawer", async ({ page }) => {
+    await mockChatStreamMessage(page, () => ({
+      id: "assistant-library-sheet",
+      role: "assistant",
+      blocks: [
+        { type: "text", content: "From your library." },
+        { type: "title_cards", items: [LIBRARY_CARD] },
+      ],
+      created_at: Math.floor(Date.now() / 1000),
+      lens_id: "general",
+    }));
+
+    await page.route("**/api/title/movie/949**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          media_type: "movie",
+          title: "Heat",
+          year: 1995,
+          tmdb_id: 949,
+          overview: "A group of professional bank robbers start to feel the heat.",
+          in_library: true,
+          rating_key: "plex-949",
+          plex_machine_id: "mock-plex-machine",
+          plex_watch_url:
+            "https://app.plex.tv/desktop/#!/server/mock-plex-machine/details?key=%2Flibrary%2Fmetadata%2Fplex-949",
+          view_count: 0,
+        }),
+      });
+    });
+
+    await sendMockChat(page);
+
+    const card = page.getByTestId("chat-message-assistant").getByTestId("title-card").first();
+    await card.getByTestId("title-card-title-link").click();
+
+    const drawer = page.getByTestId("title-detail-drawer");
+    await expect(drawer).toBeVisible();
+    await expect(drawer).toContainText("Heat");
+
+    const more = drawer.getByRole("button", { name: "More actions" });
+    await expect(more).toBeVisible();
+    await more.click();
+
+    const menu = page.getByTestId("title-detail-cta-more-menu");
+    await expect(menu).toBeVisible();
+    const plex = menu.getByRole("menuitem", { name: /Open in Plex/i });
+    await expect(plex).toBeVisible();
+    await expect(plex).toHaveAttribute(
+      "href",
+      "https://app.plex.tv/desktop/#!/server/mock-plex-machine/details?key=%2Flibrary%2Fmetadata%2Fplex-949",
+    );
+
+    const stacking = await menu.evaluate((el) => {
+      const style = getComputedStyle(el);
+      const panel = document.querySelector('[data-testid="title-detail-drawer"]');
+      const panelZ = panel ? Number(getComputedStyle(panel).zIndex) : 0;
+      return {
+        menuZ: Number(style.zIndex),
+        panelZ,
+        parentIsBody: el.parentElement === document.body,
+      };
+    });
+    expect(stacking.parentIsBody).toBe(true);
+    expect(stacking.menuZ).toBeGreaterThan(stacking.panelZ);
+
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+    await expect(drawer).toBeVisible();
   });
 
   test("Why this expands human rationale and hides pipeline labels", async ({ page }) => {

@@ -1172,6 +1172,86 @@ Dual-role: **member living-room first**, then a **full admin/owner second pass**
 - **steps:** Tap a library/explore poster to open `title-detail-drawer`. Confirm a phone sheet (safe-area top/bottom), close ≥44px, content scrolls inside the sheet. Dismiss.
 - **pass:** Sheet opens and closes; does not overflow the 390px canvas.
 
+### `watch.play-in-app`
+
+- **roles:** `member`, `owner`
+- **tags:** `watch`, `delight`, `library`
+- **source:** `frontend/src/pages/LibraryWatchPage.jsx`, `frontend/src/components/theater/LibraryPlayer.jsx`, `frontend/src/lib/titleLinks.js`
+- **steps:** From a library poster or title detail, activate **Play**. Confirm `/watch/{ratingKey}` opens in Projectionist (not app.plex.tv / `plex://`). Confirm one viewport composition (`watch-theater-shell` ≤ viewport; no document scroll for poster). Confirm stage poster (`library-player-stage-poster`) is cover-behind-video. Confirm primary transport `library-play-toggle` + scrubber; overflow **Open in Plex** via `library-osd-more` → menu. Hostile: spam Play — only one session starts.
+- **pass:** In-app theater loads viewport-bound; More menu still reaches Plex; no PMS host or token in the page, network URLs, or console.
+
+### `watch.skip-15`
+
+- **roles:** `member`, `owner`
+- **tags:** `watch`, `delight`
+- **source:** `frontend/src/lib/theaterPlayer.js`, `frontend/src/components/theater/LibraryPlayer.jsx`
+- **steps:** On `/watch`, double-click (desktop) the left third, then the right third. Confirm −15s / +15s gold skip chips (`library-skip-chip`). Confirm Space/`k` play-pause and `j`/`l` skip. Confirm discreet OSD skip (`library-skip-back` / `library-skip-forward`). Confirm the completing click of a double-click does not toggle play.
+- **pass:** Skip chips appear; playhead moves; single-click still play/pauses.
+
+### `watch.fullscreen-popout`
+
+- **roles:** `member`, `owner`
+- **tags:** `watch`, `delight`
+- **source:** `frontend/src/pages/LibraryWatchPage.jsx`
+- **steps:** Desktop: `f` or center double-click fullscreen; open `library-osd-more` → **Pop-out** opens `/watch/{rk}/popout` and unloads the opener player. Escape: close More/CC → exit fullscreen → leave `/watch`.
+- **pass:** Fullscreen and pop-out work; opener does not keep a second decoder; Escape restores the trigger route.
+
+### `watch.resume`
+
+- **roles:** `member`, `owner`
+- **tags:** `watch`, `delight`
+- **source:** `frontend/src/components/theater/LibraryPlayer.jsx`
+- **steps:** Open a title with `view_offset_ms` ≳ 2 minutes. Confirm **Resume** (gold) and **Start over** (ghost) on `library-resume-gate` with continue-watching copy (no giant poster card). Under ~2 minutes, no gate.
+- **pass:** Gate copy is honest; Resume continues; Start over begins at 0.
+
+### `title.cta-hierarchy`
+
+- **roles:** `member`, `owner`
+- **tags:** `watch`, `delight`, `library`
+- **source:** `frontend/src/components/TitleCtaBar.jsx`, `frontend/src/lib/titleCta.js`
+- **steps:** Open an in-library title (full page + drawer). Confirm one gold primary **Play** (`title-detail-play`). Confirm icon-forward secondaries in order Trailer → Review → Watched → Chat → Together (`watch-trailer-button`, `title-reviews-cta`, `title-watched-cta`, `chat-about-title-link`, `recommend-title-button`) with tooltip/aria-label on hover/focus. Open **More** (`title-detail-cta-more`) — menu portals as `title-detail-cta-more-menu` (does **not** expand the sheet). Confirm Open in Plex + owner Delete last. At 390 / compact drawer, Chat / Together collapse into More; secondaries are ≥44px icon-only.
+- **pass:** No equal-weight button salad; More overlays; destructive never peers Play; icons match DESIGN.md Material Symbols table.
+
+### `title.episode-detail`
+
+- **roles:** `member`, `owner`
+- **tags:** `watch`, `delight`, `library`
+- **source:** `frontend/src/pages/EpisodeDetailPage.jsx`, `frontend/src/components/ShowSeasonsPanel.jsx`
+- **steps:** On a show title with seasons, click an episode **title** → `/title/episode/{rk}` (`episode-detail-page`). Confirm code, air/runtime/watched meta, gold **Play** → `/watch/{rk}`. Confirm prev/next when neighbors exist. Confirm row **Play** still goes straight to `/watch`.
+- **pass:** Title opens detail; Play reaches theater; no token leak.
+
+### `watch.youth-gate`
+
+- **roles:** `youth`
+- **tags:** `watch`, `youth`, `gating`
+- **source:** `projectionist/library/playback.py`
+- **steps:** As youth, Play an over-ceiling or unrated title (do not use a live household title you care about — use QA fixtures). Confirm start fails closed with human copy. Confirm an allowed title can start.
+- **pass:** 403 / on-screen refusal; no stream URL; no token leak.
+
+### `watch.mobile-play`
+
+- **roles:** `member`, `owner`
+- **tags:** `watch`, `delight`, `mobile`
+- **source:** `frontend/src/components/TitleDetailContent.jsx`, `frontend/src/pages/LibraryWatchPage.jsx`
+- **steps:** At 390×844, Play from `title-detail-drawer` (and a poster). Confirm `/watch` in Projectionist, `playsInline`, no `plex://` primary. Confirm center play (`library-center-play`) when paused, pinned bottom transport ≥44px, **no** Pop-out in the primary row (More only). Overflow **Open in Plex** via More. After Back / Escape, `/chat` composer is still pinned (`mobile.chat-composer`).
+- **pass:** In-app Play; composer still pinned on return; no new Plex app/tab as the primary path.
+
+### `watch.mobile-skip-15`
+
+- **roles:** `member`, `owner`
+- **tags:** `watch`, `delight`, `mobile`
+- **source:** `frontend/src/lib/theaterPlayer.js`
+- **steps:** At 390×844 on `/watch`, double-tap left and right thirds (~300ms). Confirm ±15s chips. Confirm a single tap still play/pauses and the second tap of a skip does not toggle play.
+- **pass:** Double-tap skip works without iOS `dblclick`; 44px OSD skip buttons also work.
+
+### `watch.mobile-landscape`
+
+- **roles:** `member`, `owner`
+- **tags:** `watch`, `delight`, `mobile`
+- **source:** `frontend/src/styles/13-watch.css`
+- **steps:** Rotate `/watch` to landscape at phone width. Confirm immersive theater, OSD auto-hides, controls ≥44px with `env(safe-area-inset-*)`, no `100vw` bounce. Confirm no Pop-out in primary transport; PiP / fullscreen via More / secondary when the browser allows.
+- **pass:** Landscape is watch-first; portrait letterboxes with pinned chrome; no horizontal page bounce.
+
 ### `mobile.live-watch`
 
 - **roles:** `member`, `owner`
@@ -1222,6 +1302,76 @@ Dual-role: **member living-room first**, then a **full admin/owner second pass**
 
 ---
 
+## 1.36 Delight surfaces
+
+Investigate is **Admin → Libraries → Investigate episodes** (`#episode-investigate` / `episode-investigate-card`). There is no `/investigate` route. Never click **Repair Plex**. Do not Apply a rematch or Investigate job against Automat library files unless the campaign explicitly uses a disposable show.
+
+### `admin.investigate-surface`
+
+- **roles:** `owner`
+- **tags:** `admin`, `library`, `investigate`, `delight`
+- **source:** `frontend/src/pages/admin/LibrariesSection.jsx` (`InvestigatePanel`)
+- **steps:** Sign in as owner. Open Admin → Libraries (`/admin/libraries`). Scroll to `episode-investigate-card` / `#episode-investigate`. Confirm heading **Investigate episodes**, `investigate-stills-leave-lan` (stills leave the LAN), `investigate-show`, optional `investigate-season`, `investigate-vision-toggle`, and `investigate-start`. Confirm filename / Sonarr `SxxEyy` is described as a claim, not evidence. Empty: no show selected → Investigate stays disabled or honest. Loading: if a leftover job card is visible, confirm it does not CLS the page. Hostile: do not paste into show select; confirm click-spam on Investigate while idle does not start a second job (button disables). Overlay: if `investigate-review` is present from a prior run, Escape / `investigate-cancel-review` restores the trigger. Do **not** click Apply.
+- **pass:** Card reachable; stills-leave-LAN copy visible; show picker present; no `/investigate` route; no Repair Plex primary. Empty/loading/overflow honest. Member hitting `/admin/libraries` still redirects (covered by `nav.admin-redirect`).
+
+### `admin.rematch-studio`
+
+- **roles:** `owner`
+- **tags:** `admin`, `library`, `rematch`, `delight`
+- **source:** `frontend/src/pages/admin/RematchStudio.jsx`, `frontend/src/pages/admin/RepairMiss.jsx`
+- **steps:** On `/admin/libraries`, locate `rematch-studio-card`. Click `rematch-scan` once. Wait for `rematch-empty`, `rematch-counts`, or rows (`rematch-row-*`) with Plex / Radarr / folder columns. Confirm human copy (no JSON dump). Locate `repair-miss-card` — empty or rows with rematch / skip / retry / Investigate. Hostile: double-click Scan; second click must not spawn a parallel scan (button disables or same result). Overflow: long path/title wraps, page does not bounce horizontally. Do **not** Apply rematch or skip a live household title unless it is already a QA marker.
+- **pass:** Studio + Repair the miss render. Scan completes to empty or rows. Copy is human. FileBot / Plex Match / Gracenote are not presented as investigators.
+
+### `explore.afterglow-unfinished`
+
+- **roles:** `member`, `owner`
+- **tags:** `explore`, `delight`, `afterglow`
+- **source:** `frontend/src/pages/ExplorePage.jsx`
+- **steps:** Open `/explore`. Locate Unfinished (`explore-section-unfinished` / `explore-unfinished-rail`) and Afterglow (`explore-section-afterglow` / `explore-afterglow-rail`) under Continue Watching. Confirm Unfinished copy is leftover runtime (not the 60-day idle Revisit These shelf). Afterglow opener/questions visible when items exist. Visual triad: loading skeleton/note without CLS; empty note when no items (not FAIL); overflow is horizontal rail scroll, no nested vertical scrollbar. Open one card if present.
+- **pass:** Both rails mount. Empty is honest copy. Populated: card opens; Unfinished ≠ Revisit These. Afterglow uses persona review voice, not a generic rating prompt.
+
+### `explore.tonight-table`
+
+- **roles:** `member`, `owner`
+- **tags:** `explore`, `delight`, `tonight`
+- **source:** `frontend/src/pages/ExplorePage.jsx`
+- **steps:** On `/explore`, locate Tonight's table (`#tonight-table` / `explore-tonight-table-rail`) after Continue Watching and before Unfinished. Confirm subtitle about two unwatched under-two-hour seats and one comfort. Empty/loading/overflow as `explore.afterglow-unfinished`. Open one seat if present.
+- **pass:** Rail present and distinct from afterglow / unfinished / revisit. Empty is honest. Populated: two-plus-one shape or honest shortfall; card opens.
+
+### `whisper.inbox`
+
+- **roles:** `member`, `owner`
+- **tags:** `chat`, `inbox`, `whisper`, `delight`
+- **source:** `frontend/src/pages/WhisperInboxPage.jsx`, `frontend/src/components/WhisperInboxLink.jsx`
+- **steps:** On `/chat`, confirm `whisper-inbox-link` (or `whisper-home-link-row`). Open `/whisper`. Confirm `whisper-inbox-page`. Empty → `whisper-inbox-empty` / `whisper-inbox-empty-state` with usable copy. Item → `whisper-card` + `whisper-card-why` (≤12 words). Hostile: click-spam dismiss (`whisper-card-dismiss`) does not error. Do not clear a live household whisper unless it is a QA card.
+- **pass:** Chat home opens whisper. Empty or card+why. Not a download-complete ping. Member can open `/whisper` (not owner-only).
+
+### `admin.house-letter`
+
+- **roles:** `owner`
+- **tags:** `admin`, `house`, `delight`
+- **source:** `frontend/src/pages/HouseLetterPage.jsx`
+- **steps:** Open Admin → House (`admin-nav-house` / `/admin/house`). Confirm `admin-house` and `house-letter` (salutation + body + signoff) — not a tile wall. Seasonal preview empty (`house-seasonal-empty`) or rails with veto. Gift form `house-gift-form` present; do **not** deliver a live gift. Trust diary empty (`house-diary-empty`) or entries linking rematch/Investigate/jobs. Escape: if a confirm dialog opens, cancel restores the trigger. Hostile paste into `house-gift-why` / search: clamp/wrap, no freeze.
+- **pass:** Letter prose visible. Gift queue is confirm-before-send. Member `/admin/house` redirects. Nothing is purged from the letter.
+
+### `chat.scholar-footnotes`
+
+- **roles:** `member`, `owner`
+- **tags:** `chat`, `scholar`, `delight`
+- **source:** `frontend/src/components/MessageText.jsx`, `frontend/src/lib/chatFootnotes.js`, `projectionist/syllabus/walks.py`
+- **steps:** On `/chat`, if an assistant reply contains `chat-footnote-ref`, open it → `chat-footnote-sheet`. Confirm GFM footnote dump (`chat-footnotes`) is hidden. Escape or Close restores focus to the ref. If no footnote is in the current thread, send a short scholar-shaped prompt (lineage / “why this title”) once; if the model does not emit `[^1]`, record N/A for the sheet and still prove hostile paste on `composer-input` (multi-KB paste clamps, composer stays pinned, no whiteout). Village pending, if visible, says they have not called back — not spinner JSON.
+- **pass:** Sheet opens and Escape/Close works when refs exist; otherwise N/A + composer hostile-paste holds. Walks stay in chat (no published scholar page).
+
+### `admin.h1-chrome`
+
+- **roles:** `owner`
+- **tags:** `admin`, `shell`, `delight`
+- **source:** `frontend/src/pages/admin/OverviewSection.jsx`, `frontend/src/pages/admin/ConnectionsSection.jsx`, `frontend/src/layouts/AdminLayout.jsx`
+- **steps:** Open `/admin/overview`, then `/admin/connections`. Confirm `admin-layout` rail still lists Overview / Connections / Libraries / House. Confirm one gold primary per region, 14px notes, 12px action gaps, no stretched gold slabs. Connections fields (`connections-llm-fields` when present) do not expose raw tokens. Theme once Lights Up and once Lights Down on Overview.
+- **pass:** H1 extract did not drop Admin destinations or restyle chrome. Overview + Connections usable. House remains in the Experience group.
+
+---
+
 ## Delta selection cheat sheet
 
 | Tag | Typical surfaces |
@@ -1257,6 +1407,14 @@ Dual-role: **member living-room first**, then a **full admin/owner second pass**
 | `lists` | Settings → Lists create/add/remove/rename/delete |
 | `watchlist` | Pin to watchlist; pin persistence |
 | `mobile` | Phone 390×844 dual-role campaign: member living-room + full admin pass |
+| `investigate` | Admin → Libraries Investigate episodes (not a `/investigate` route) |
+| `rematch` | Rematch studio + Repair the miss |
+| `afterglow` | Explore afterglow + unfinished rails |
+| `tonight` | Explore tonight's table |
+| `whisper` | Named-member whisper inbox |
+| `house` | Admin → House letter, gifts, diary |
+| `scholar` | Chat footnote sheet + scholar walks |
+| `delight` | 1.36 Delight program surfaces |
 
 ---
 
@@ -1389,9 +1547,25 @@ Dual-role: **member living-room first**, then a **full admin/owner second pass**
 | `mobile.chat-conversation` | member, owner |
 | `mobile.library-browse` | member, owner |
 | `mobile.title-overlay` | member, owner |
+| `watch.play-in-app` | member, owner |
+| `watch.skip-15` | member, owner |
+| `watch.fullscreen-popout` | member, owner |
+| `watch.resume` | member, owner |
+| `watch.youth-gate` | youth |
+| `watch.mobile-play` | member, owner |
+| `watch.mobile-skip-15` | member, owner |
+| `watch.mobile-landscape` | member, owner |
 | `mobile.live-watch` | member, owner |
 | `mobile.settings-notifications` | member, owner |
 | `mobile.admin-overview` | owner |
 | `mobile.admin-libraries` | owner |
 | `mobile.admin-live-channels` | owner |
 | `mobile.admin-newsletters` | owner |
+| `admin.investigate-surface` | owner |
+| `admin.rematch-studio` | owner |
+| `explore.afterglow-unfinished` | member, owner |
+| `explore.tonight-table` | member, owner |
+| `whisper.inbox` | member, owner |
+| `admin.house-letter` | owner |
+| `chat.scholar-footnotes` | member, owner |
+| `admin.h1-chrome` | owner |

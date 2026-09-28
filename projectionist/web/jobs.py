@@ -8,7 +8,6 @@ import logging
 import os
 import threading
 import time
-import traceback
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
@@ -77,6 +76,10 @@ class Job:
     def to_dict(self) -> Dict[str, object]:
         payload = asdict(self)
         payload["progress"] = self.progress.to_dict()
+        summary = payload.get("summary")
+        if isinstance(summary, dict) and "traceback" in summary:
+            cleaned = {key: value for key, value in summary.items() if key != "traceback"}
+            payload["summary"] = cleaned or {"failed": True}
         return payload
 
     def to_persist_dict(self) -> Dict[str, object]:
@@ -171,13 +174,23 @@ class JobManager:
             return self._jobs.get(job_id)
 
     def start_sync(self, settings: Settings) -> Job:
-        job_id = uuid.uuid4().hex[:12]
-        job = Job(id=job_id, job_type="library_sync", status="queued", created_at=time.time())
         with self._lock:
+            existing = next(
+                (
+                    job
+                    for job in self._jobs.values()
+                    if job.job_type == "library_sync" and job.status in ("queued", "running")
+                ),
+                None,
+            )
+            if existing is not None:
+                return existing
+            job_id = uuid.uuid4().hex[:12]
+            job = Job(id=job_id, job_type="library_sync", status="queued", created_at=time.time())
             self._jobs[job_id] = job
             self._persist_locked()
-        logger.info("Library sync job queued job_id=%s", job_id)
-        thread = threading.Thread(target=self._run_sync, args=(job_id, settings), daemon=True)
+        logger.info("Library sync job queued job_id=%s", job.id)
+        thread = threading.Thread(target=self._run_sync, args=(job.id, settings), daemon=True)
         thread.start()
         return job
 
@@ -374,7 +387,7 @@ class JobManager:
                 job.status = "failed"
                 job.finished_at = time.time()
                 job.error = friendly_job_error(error)
-                job.summary = {"traceback": traceback.format_exc()}
+                job.summary = {"failed": True}
                 self._persist_locked()
 
 

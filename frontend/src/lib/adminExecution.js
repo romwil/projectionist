@@ -38,6 +38,8 @@ export function adminCanCancel(job) {
 
 export function adminDisplayPercent(job) {
   if (!job) return null;
+  const phase = String(job.phase || "").toLowerCase();
+  if (!job.busy && phase === "idle") return null;
   const execution = job.execution;
   if (job.busy && execution && typeof execution.percent === "number") {
     return Math.min(99, execution.percent);
@@ -105,16 +107,36 @@ export function adminItemStatusLabel(item) {
 
 export function adminShouldShowCard(job) {
   if (!job) return false;
-  const phase = String(job.phase || "idle");
-  if (phase !== "idle") return true;
-  if (job.result) return true;
-  if (Array.isArray(job.items) && job.items.length) return true;
-  return Boolean(job.message && job.message !== "Ready when you are");
+  if (job.busy) return true;
+  const phase = String(job.phase || "idle").toLowerCase();
+  if (phase === "idle") {
+    const items = Array.isArray(job.items) ? job.items : [];
+    if (items.length) return true;
+    const result = job.result;
+    if (result && typeof result === "object" && Object.keys(result).length) return true;
+    return false;
+  }
+  return true;
 }
 
 export function adminSecondsAgo(seconds) {
+  if (seconds == null || seconds === "") return "";
   const value = Number(seconds);
   if (!Number.isFinite(value) || value < 0) return "";
   if (value < 60) return `${Math.round(value)}s since last completion`;
   return `${Math.round(value / 60)}m since last completion`;
+}
+
+const ADMIN_TERMINAL_PHASES = new Set(["done", "cancelled", "error", "searched"]);
+
+export function adminIsTerminal(job) {
+  if (!job || job.busy) return false;
+  return ADMIN_TERMINAL_PHASES.has(String(job.phase || "").toLowerCase());
+}
+
+export function adminCompletionCopy(job) {
+  if (!job) return "";
+  if (adminIsTerminal(job)) return "Run ended";
+  if (!job.busy) return "";
+  return adminSecondsAgo(job?.execution?.seconds_since_last_completion);
 }

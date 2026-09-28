@@ -604,6 +604,21 @@ def merge_secret_fields(incoming: Mapping[str, Any], existing: Settings) -> Dict
         if not str(apprise_merged.get("config") or "").strip():
             apprise_merged["config"] = existing.apprise.config
         merged["apprise"] = apprise_merged
+    existing_acrcloud = getattr(existing, "acrcloud", None)
+    acrcloud_incoming = merged.get("acrcloud")
+    if isinstance(acrcloud_incoming, Mapping) and existing_acrcloud is not None:
+        acr_merged = dict(acrcloud_incoming)
+        if not str(acr_merged.get("access_key") or "").strip():
+            acr_merged["access_key"] = existing_acrcloud.access_key
+        if not str(acr_merged.get("access_secret") or "").strip():
+            acr_merged["access_secret"] = existing_acrcloud.access_secret
+        if not str(acr_merged.get("host") or "").strip():
+            acr_merged["host"] = existing_acrcloud.host
+        merged["acrcloud"] = acr_merged
+    elif existing_acrcloud is not None:
+        from dataclasses import asdict
+
+        merged["acrcloud"] = asdict(existing_acrcloud)
     for field in PRESERVE_IF_EMPTY_FIELDS:
         if not str(merged.get(field) or "").strip():
             merged[field] = getattr(existing, field)

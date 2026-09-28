@@ -100,22 +100,106 @@ Inline and turnstyle cards share the same affordances:
 | Action | Behavior |
 |--------|----------|
 | **Click title / poster** | Navigate to `/title/{movie\|show}/{id}` — AppShell sticky header (AppNav + BackLink), backdrop hero, synopsis, meta tiles, cast/tags |
-| **Watch trailer** | YouTube trailer modal when `trailer_youtube_key` is present |
-| **Watch on Plex** | Shown when the title is in-library (`rating_key`); opens Plex deep link |
+| **Watch trailer** | YouTube trailer modal when `trailer_youtube_key` is present — glyph `movie`, label **Trailer** |
+| **Play** | Shown when the title is in-library (`play_rating_key` or `rating_key`); opens `/watch/{key}` in Projectionist — the **only** gold primary on the title CTA row. Glyph `play_circle`. **Open in Plex** stays overflow / error fallback. |
 | **More Like This** | Horizontal neighbor carousel from cached `item_neighbors` (empty until idle `plot_neighbors` ran) |
-| **Recommend** | Multi-user: pick household peers + optional note; unread inbox on home |
+| **Recommend / Watch together** | Multi-user: pick household peers + optional note; unread inbox on home — glyph `groups` |
 | **Pin (☆)** | Add/remove local watchlist pin |
 | **Why this?** | Expand `recommendation_reason` / facet matches (also surfaced on detail) |
-| **Add / Request** | Radarr, Sonarr, or Seerr via confirmation flow |
+| **Add / Request** | Radarr, Sonarr, or Seerr via confirmation flow — gold primary only when Play is absent |
 | **Not interested** | Preference dismiss signal |
+| **Review / Watched / Chat** | Title surfaces use `TitleCtaBar` (see **Playback & Title surfaces**) — short labels + tooltips; never long equal-weight pills |
 
 Runtime under 100 minutes gets emphasis on the card. Show cards may display a TV progress ring.
 
-In-library **TV show** title detail (full page and drawer) includes **Seasons & episodes**: accordion seasons with episode codes, runtime, size, and watched state from `library_episodes`. Owners can typed-`DELETE` confirm a season or episode (Sonarr files + Plex metadata + index), or remove the whole show through the existing delete dialog.
+In-library **TV show** title detail (full page and drawer) includes **Seasons & episodes**: accordion seasons with episode codes, runtime, size, and watched state from `library_episodes`. Episode **titles** open episode detail (`/title/episode/{ratingKey}`); the gold **Play** control jumps straight to `/watch/{ratingKey}`. Owners can typed-`DELETE` confirm a season or episode (Sonarr files + Plex metadata + index), or remove the whole show through the existing delete dialog.
 
 ### Agent avatar
 
 Assistant messages show a circular **AgentAvatar** (curator initial) beside the bubble. Streaming state adds a subtle pulse so the chat feels inhabited without competing with title cards.
+
+---
+
+## Playback & Title surfaces (intentional decisions)
+
+These surfaces share one bar: **picture first, one gold primary, quiet chrome, Lights Down atmosphere.** They are not dashboards and not Netflix button salads.
+
+### Watch theater (`/watch/{ratingKey}`)
+
+| Decision | Why |
+|----------|-----|
+| **One viewport composition** (`100dvh`, `overflow: hidden`, fixed shell) | Living-room Play must fill the screen. Poster art must never grow the document or force scroll-to-find controls. |
+| **Cover poster behind contain video** | Atmosphere without lying about the frame. Video letterboxes honestly; art is backdrop only. |
+| **OSD hierarchy** | Primary = Play/Pause + scrubber + clock. ±15 is discreet (double-tap thirds remain the living-room skip). CC + Fullscreen secondary. PiP, Pop-out, Open in Plex, Back under **More**. |
+| **Large center play when paused** | One clear invitation; auto-hide OSD on idle; mouse move / tap reveals chrome. |
+| **Mobile 390** | ≥44px primaries, safe-area insets, no Pop-out in the primary row, landscape immersive. |
+| **Honest empty / loading / error** | “warming the reel”, Resume/Start over, Try again + Open in Plex — never a blank stall or dead Play after tab-hide. |
+
+Implementation lives in `LibraryWatchPage` / `TheaterPlayer` / `LibraryPlayer` + `frontend/src/styles/13-watch.css`. Live TV keeps its cable-box OSD language; library Play borrows the dark stage and quiet transport.
+
+### Title surfaces (full page + mini sheet)
+
+Shared implementation: `TitleCtaBar` + `frontend/src/lib/titleCta.js`. Mini sheet, full title page, episode detail, and poster overlay must not invent parallel labels or icons.
+
+| Decision | Why |
+|----------|-----|
+| **One gold primary** | In-library → **Play**. Not-in-library → **Add** / **Request** (or guest lock copy). Never two competing primaries. |
+| **Secondary (icon-forward)** | Compact ghost actions with **tooltip + aria-label**. Short visible label on desktop; icon-only (≥44px) on 390 and in the mini sheet. |
+| **Secondary order** | Trailer → Review → Watched → Chat → Together → Add (Add only when Play already owns primary). |
+| **Overflow / More** | **Portaled popover** anchored to the More button (`useAnchoredPopover` + `createPortal` → `document.body`) — never a `<details>` that expands the sheet. Contents: Open in Plex, phone-collapsed Chat/Together/Add, Mark as bad media, Delete (owner, last). Stack **above** the title drawer scrim/panel (portal `z-index: 1000`; drawer panel is `90`) or the menu opens invisibly under the sheet. Escape closes More before the sheet. |
+| **Sheet vs full page** | Drawer (`TitleDetailDrawer`) is the same CTA grammar at compact density; full page adds backdrop hero + seasons. |
+
+#### Locked terms
+
+| Action | Visible label | Tooltip / aria-label |
+|--------|---------------|----------------------|
+| Play | Play | Play in Projectionist |
+| Add / Request | Add to Radarr / Add to Sonarr / Request in Seerr | same as visible |
+| Trailer | Trailer | Watch trailer |
+| Review | Review | Leave a review |
+| Watched toggle | Watched / Unwatched | Mark as watched / Mark as unwatched |
+| Chat | Chat | Chat about this |
+| Watch together | Together | Watch together |
+| Open in Plex | Open in Plex | Open in Plex |
+| More | More | More actions |
+| Mark as bad media | Mark as bad media | (menu) |
+| Delete | Delete | (menu, owner) |
+
+Do **not** ship long peer pills (“Leave a review”, “Mark as unwatched”, “Chat about this”, “Watch together”) on the secondary row — those verbs live in tooltips / More menu copy. Poster ⋮ menu and Help docs may still use the full verb (“Mark as watched”) because they are labelled menu rows, not icon-forward chrome.
+
+#### Locked Material Symbols (Outlined)
+
+| Action | Glyph |
+|--------|-------|
+| Play | `play_circle` |
+| Add | `add_circle` |
+| Trailer | `movie` |
+| Review | `rate_review` |
+| Mark watched (currently unwatched) | `visibility` |
+| Mark unwatched (currently watched) | `visibility_off` |
+| Chat | `forum` |
+| Watch together | `groups` |
+| More | `more_horiz` |
+| Open in Plex | `open_in_new` |
+| Mark as bad media | `report` |
+| Delete | `delete` |
+
+`chat` and `rate_review` must stay distinct — never two speech-bubble peers on the same row.
+
+#### Spacing
+
+Single wrapping row with consistent `gap` (token `--space-2`). No staggered uneven pill stacks. Touch targets ≥ **44px** on 390 and in the mini sheet.
+
+### Show → seasons → episodes → episode detail
+
+| Step | Surface | Intent |
+|------|---------|--------|
+| Show | `/title/show/{id}` | Hero + synopsis + **Play** (on-deck / first unwatched) + seasons panel. |
+| Seasons | Accordion on show detail | Browse; episode rows show code, title, runtime, watched. |
+| Episode list → detail | Title opens `/title/episode/{ratingKey}` | Still/meta/air date/runtime/watched; **Play** primary to `/watch/{rk}`; next/prev episode; back to show. |
+| Episode → Play | Gold Play (or theater from list Play) | Always `rating_key` → `/watch/{ratingKey}`. Open in Plex stays overflow. |
+
+Episode detail uses local index fields (title, season/episode, aired_at, runtime, watched). Synopsis/thumb enrichments stay optional when present — never invent copy.
 
 ---
 

@@ -54,6 +54,36 @@ class DatabaseTests(unittest.TestCase):
             self.assertEqual(int(sync), 1)
             self.assertEqual(int(autocheckpoint), 1000)
 
+    def test_close_runs_passive_wal_checkpoint(self) -> None:
+        from contextlib import contextmanager
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            statements: list[str] = []
+            real_connect = db.connect
+
+            class _RecordingConnection:
+                def __init__(self, inner: object) -> None:
+                    self._inner = inner
+
+                def execute(self, sql, *args, **kwargs):
+                    statements.append(str(sql))
+                    return self._inner.execute(sql, *args, **kwargs)
+
+                def __getattr__(self, name: str):
+                    return getattr(self._inner, name)
+
+            @contextmanager
+            def tracking_connect():
+                with real_connect() as conn:
+                    yield _RecordingConnection(conn)
+
+            db.connect = tracking_connect  # type: ignore[method-assign]
+            db.close()
+            joined = " ".join(statements).upper()
+            self.assertIn("WAL_CHECKPOINT(PASSIVE)", joined)
+            self.assertNotIn("TRUNCATE", joined)
+
     def test_upsert_library_items_batches_one_commit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")

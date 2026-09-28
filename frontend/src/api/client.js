@@ -196,6 +196,21 @@ export async function markNotificationsSeen(payload) {
   });
 }
 
+export async function listWhispers(params = {}) {
+  const query = new URLSearchParams();
+  if (params.unread_only) query.set("unread_only", "true");
+  if (params.limit) query.set("limit", String(params.limit));
+  const suffix = query.toString() ? `?${query}` : "";
+  return api(`/whispers${suffix}`);
+}
+
+export async function markWhispersSeen(payload) {
+  return api("/whispers/seen", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function testMailSend(payload = {}) {
   return api("/admin/mail/test", {
     method: "POST",
@@ -958,6 +973,46 @@ export async function tuneLiveChannel(channelId) {
   });
 }
 
+/** Household: start an in-app library HLS session (movie / episode / show key). */
+export async function startLibraryPlayback(ratingKey, { startOver = false } = {}) {
+  return api("/library/playback/start", {
+    method: "POST",
+    body: JSON.stringify({
+      rating_key: String(ratingKey || ""),
+      start_over: Boolean(startOver),
+    }),
+  });
+}
+
+export async function seekLibraryPlayback(sessionId, offsetMs) {
+  return api(`/library/playback/${encodeURIComponent(sessionId)}/seek`, {
+    method: "POST",
+    body: JSON.stringify({ offset_ms: Math.max(0, Math.floor(Number(offsetMs) || 0)) }),
+  });
+}
+
+export async function progressLibraryPlayback(sessionId, payload) {
+  return api(`/library/playback/${encodeURIComponent(sessionId)}/progress`, {
+    method: "POST",
+    body: JSON.stringify({
+      state: String(payload?.state || "playing"),
+      time_ms: Math.max(0, Math.floor(Number(payload?.time_ms) || 0)),
+      duration_ms: Math.max(0, Math.floor(Number(payload?.duration_ms) || 0)),
+    }),
+  });
+}
+
+export async function stopLibraryPlayback(sessionId, payload = {}) {
+  return api(`/library/playback/${encodeURIComponent(sessionId)}/stop`, {
+    method: "POST",
+    body: JSON.stringify({
+      time_ms: payload.time_ms == null ? undefined : Math.max(0, Math.floor(Number(payload.time_ms) || 0)),
+      duration_ms:
+        payload.duration_ms == null ? undefined : Math.max(0, Math.floor(Number(payload.duration_ms) || 0)),
+    }),
+  });
+}
+
 /** Owner-only: assemble and store the digest for the current week on demand. */
 export async function generateWeeklyDigest() {
   return api("/admin/weekly-digest/generate", { method: "POST" });
@@ -1027,7 +1082,8 @@ export async function sendChat(message, lensId, { timeoutMs = CHAT_TIMEOUT_MS, s
 }
 
 /**
- * Stream chat via the SSE endpoint. Calls event handlers as tokens arrive.
+ * Stream chat via POST /api/chat/stream (SSE). Native EventSource cannot POST —
+ * this uses fetch + a body reader and must not fall back to EventSource.
  *
  * @param {string} message
  * @param {object} options
@@ -1040,11 +1096,14 @@ export async function sendChat(message, lensId, { timeoutMs = CHAT_TIMEOUT_MS, s
  * @param {AbortSignal} [options.signal]  - abort controller signal
  */
 export async function sendChatStream(message, { sessionId: sid, personaId, onToken, onToolCall, onDone, onError, signal } = {}) {
-  const params = new URLSearchParams({ message, session_id: sid || sessionId() });
-  if (personaId) params.set("persona_id", personaId);
+  const body = { message, session_id: sid || sessionId() };
+  if (personaId) body.persona_id = personaId;
 
-  const response = await fetch(`${API}/chat/stream?${params}`, {
+  const response = await fetch(`${API}/chat/stream`, {
+    method: "POST",
     credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
     signal,
   });
 
@@ -1346,6 +1405,27 @@ export async function getExploreFeedContinueWatching({ limit = 12 } = {}) {
   return api(`/library/feeds/continue-watching?${params}`);
 }
 
+export async function getExploreFeedUnfinished({ limit = 12, idleDays = 60 } = {}) {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    idle_days: String(idleDays),
+  });
+  return api(`/library/feeds/unfinished?${params}`);
+}
+
+export async function getExploreFeedAfterglow({ limit = 12, days = 14 } = {}) {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    days: String(days),
+  });
+  return api(`/library/feeds/afterglow?${params}`);
+}
+
+export async function getExploreFeedTonightTable({ limit = 3 } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return api(`/library/feeds/tonight-table?${params}`);
+}
+
 export async function getExploreFeedForYou({ limit = 12 } = {}) {
   const params = new URLSearchParams({ limit: String(limit) });
   return api(`/library/feeds/for-you?${params}`);
@@ -1532,6 +1612,13 @@ export async function getShowSeasons({
   if (show) params.set("show", String(show));
   const qs = params.toString();
   return api(`/library/tv/seasons${qs ? `?${qs}` : ""}`);
+}
+
+/** Single episode detail (show context + prev/next) for `/title/episode/:ratingKey`. */
+export async function getLibraryEpisode(ratingKey) {
+  const key = String(ratingKey || "").trim();
+  if (!key) return Promise.reject(new Error("Missing episode key"));
+  return api(`/library/tv/episode/${encodeURIComponent(key)}`);
 }
 
 /** Owner season/episode remove via Sonarr episode files + Plex + index. */
@@ -1931,4 +2018,49 @@ export async function searchHolidayLibrary(q, { limit = 12 } = {}) {
 
 export async function refreshHolidaySchedule() {
   return api("/admin/holidays-schedule/refresh", { method: "POST" });
+}
+
+export async function getHouseLetter() {
+  return api("/admin/house/letter");
+}
+
+export async function getHouseSeasonalPreview() {
+  return api("/admin/house/seasonal-preview");
+}
+
+export async function vetoHouseSeasonalTitle(payload) {
+  return api("/admin/house/seasonal-preview/veto", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function restoreHouseSeasonalVeto(scopeId, libraryItemId) {
+  return api(
+    `/admin/house/seasonal-preview/veto/${encodeURIComponent(scopeId)}/${encodeURIComponent(libraryItemId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function listHouseGifts() {
+  return api("/admin/house/gifts");
+}
+
+export async function enqueueHouseGift(payload) {
+  return api("/admin/house/gifts", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function removeHouseGift(giftId) {
+  return api(`/admin/house/gifts/${encodeURIComponent(giftId)}`, { method: "DELETE" });
+}
+
+export async function deliverHouseGift(giftId) {
+  return api(`/admin/house/gifts/${encodeURIComponent(giftId)}/deliver`, { method: "POST" });
+}
+
+export async function getHouseTrustDiary() {
+  return api("/admin/house/trust-diary");
 }

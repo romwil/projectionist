@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { getShowSeasons, getShowWatchSummary, removeTvScope } from "../api/client";
 import { canOwnerDeleteLibraryTitle } from "../lib/bulkLibraryDelete.js";
 import {
@@ -8,6 +9,7 @@ import {
   normalizeShowSeasonsPayload,
   showSeasonsSummaryLine,
 } from "../lib/showSeasons.js";
+import { libraryEpisodeTo, libraryWatchTo, plexWatchUrl } from "../lib/titleLinks.js";
 import {
   completionConfidenceLabel,
   formatTrackedDate,
@@ -26,6 +28,7 @@ export default function ShowSeasonsPanel({
   compact = false,
   onShowDelete,
 }) {
+  const location = useLocation();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -242,8 +245,15 @@ export default function ShowSeasonsPanel({
                   <ul className="show-episode-list">
                     {season.episodes.map((ep) => {
                       const epSize = formatShowBytes(ep.file_size);
+                      const epKey = String(ep.rating_key || "").trim();
+                      const playTo = epKey ? libraryWatchTo(epKey, location) : null;
+                      const detailTo = epKey ? libraryEpisodeTo(epKey, location) : null;
+                      const plexHref = epKey
+                        ? plexWatchUrl(epKey, detail?.plex_machine_id || "")
+                        : "";
                       const tracked =
                         watchSummary?.episode_completions?.[String(ep.rating_key || "")] || null;
+                      const code = formatEpisodeCode(ep.season_number, ep.episode_number);
                       return (
                         <li
                           key={ep.rating_key || `${ep.season_number}-${ep.episode_number}`}
@@ -251,10 +261,18 @@ export default function ShowSeasonsPanel({
                           data-testid="show-episode-row"
                         >
                           <div className="show-episode-main">
-                            <span className="show-episode-code">
-                              {formatEpisodeCode(ep.season_number, ep.episode_number)}
-                            </span>
-                            <span className="show-episode-title">{ep.title}</span>
+                            <span className="show-episode-code">{code}</span>
+                            {detailTo ? (
+                              <Link
+                                to={detailTo}
+                                className="show-episode-title show-episode-title-link"
+                                data-testid={`show-episode-title-${epKey}`}
+                              >
+                                {ep.title}
+                              </Link>
+                            ) : (
+                              <span className="show-episode-title">{ep.title}</span>
+                            )}
                           </div>
                           <div className="show-episode-meta">
                             {ep.runtime_minutes ? (
@@ -270,26 +288,48 @@ export default function ShowSeasonsPanel({
                                   : "completions"}
                               </span>
                             ) : null}
-                            {canDelete && ep.rating_key ? (
-                              <button
-                                type="button"
-                                className="ghost show-episode-remove"
-                                data-testid={`show-episode-remove-${ep.rating_key}`}
-                                onClick={() => {
-                                  setRemoveError("");
-                                  setPending({
-                                    scope: "episode",
-                                    episode_rating_key: ep.rating_key,
-                                    label: `${data.show_title} · ${formatEpisodeCode(
-                                      ep.season_number,
-                                      ep.episode_number,
-                                    )} · ${ep.title}`,
-                                  });
-                                }}
-                              >
-                                Remove
-                              </button>
-                            ) : null}
+                            <div className="show-episode-actions">
+                              {playTo ? (
+                                <Link
+                                  to={playTo}
+                                  className="title-cta title-cta-primary show-episode-play"
+                                  data-testid={`show-episode-play-${epKey}`}
+                                  aria-label={`Play ${code} ${ep.title}`}
+                                  title="Play in Projectionist"
+                                >
+                                  Play
+                                </Link>
+                              ) : null}
+                              {!playTo && plexHref ? (
+                                <a
+                                  className="ghost show-episode-plex"
+                                  href={plexHref}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  data-testid={`show-episode-plex-${epKey}`}
+                                  title="Open in Plex"
+                                >
+                                  Open in Plex
+                                </a>
+                              ) : null}
+                              {canDelete && epKey ? (
+                                <button
+                                  type="button"
+                                  className="ghost show-episode-remove"
+                                  data-testid={`show-episode-remove-${epKey}`}
+                                  onClick={() => {
+                                    setRemoveError("");
+                                    setPending({
+                                      scope: "episode",
+                                      episode_rating_key: epKey,
+                                      label: `${data.show_title} · ${code} · ${ep.title}`,
+                                    });
+                                  }}
+                                >
+                                  Remove
+                                </button>
+                              ) : null}
+                            </div>
                           </div>
                         </li>
                       );

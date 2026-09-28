@@ -20,6 +20,7 @@ from projectionist.web.webhooks import (
     handle_plex_webhook,
     media_type_from_plex_metadata,
     title_from_plex_metadata,
+    webhook_secrets_match,
 )
 
 
@@ -292,6 +293,37 @@ class PlexWebhookApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["queued"])
+
+    def test_webhook_rejects_mismatched_secret_lengths_as_401(self) -> None:
+        save_settings(
+            Path(os.environ["DATA_DIR"]),
+            Settings(webhook_secret="super-secret"),
+        )
+        import projectionist.web.jobs as jobs
+
+        jobs._manager = None
+        import projectionist.web.app as app_mod
+
+        importlib.reload(app_mod)
+        client = TestClient(app_mod.app)
+        response = client.post(
+            "/api/webhooks/plex",
+            json=_movie_stop_payload(),
+            headers={"X-Projectionist-Webhook-Secret": "x"},
+        )
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json().get("detail"), "Unauthorized")
+
+
+class WebhookSecretCompareTests(unittest.TestCase):
+    def test_empty_sides_do_not_match(self) -> None:
+        self.assertFalse(webhook_secrets_match("", "secret"))
+        self.assertFalse(webhook_secrets_match("secret", ""))
+        self.assertFalse(webhook_secrets_match("", ""))
+
+    def test_length_mismatch_is_false_not_error(self) -> None:
+        self.assertFalse(webhook_secrets_match("short", "much-longer-secret"))
+        self.assertTrue(webhook_secrets_match("same-secret", "same-secret"))
 
 
 if __name__ == "__main__":

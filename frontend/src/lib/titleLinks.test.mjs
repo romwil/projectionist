@@ -3,11 +3,21 @@ import test from "node:test";
 
 import {
   canWatchOnPlex,
+  libraryEpisodePath,
+  libraryWatchPath,
+  plexClientPlayUrl,
   plexPlayRatingKey,
   plexWatchUrl,
+  preferPhonePlexPlayHref,
   titleDetailPath,
   titleDetailTo,
 } from "./titleLinks.js";
+
+test("libraryEpisodePath encodes the rating key", () => {
+  assert.equal(libraryEpisodePath("ep-1"), "/title/episode/ep-1");
+  assert.equal(libraryEpisodePath("a/b"), "/title/episode/a%2Fb");
+  assert.equal(libraryEpisodePath(""), "");
+});
 
 test("titleDetailPath prefers tmdb id", () => {
   assert.equal(
@@ -80,9 +90,35 @@ test("plexWatchUrl requires rating key and machine id", () => {
   assert.equal(plexWatchUrl("", "server-1"), "");
   assert.equal(plexWatchUrl("99", ""), "");
   assert.equal(
-    plexWatchUrl("99", "machine-abc"),
+    plexWatchUrl("99", "machine-abc", { toClient: false }),
     "https://app.plex.tv/desktop/#!/server/machine-abc/details?key=%2Flibrary%2Fmetadata%2F99",
   );
+});
+
+test("in-app Play path is /watch, not plex://", () => {
+  assert.equal(libraryWatchPath("plex-949"), "/watch/plex-949");
+  assert.notEqual(libraryWatchPath("99"), plexClientPlayUrl("99", "machine-abc"));
+});
+
+test("Open in Plex overflow still uses the Plex client scheme on phone", () => {
+  assert.equal(
+    plexClientPlayUrl("99", "machine-abc"),
+    "plex://preplay/?metadataKey=%2Flibrary%2Fmetadata%2F99&server=machine-abc",
+  );
+  assert.equal(
+    plexWatchUrl("99", "machine-abc", { toClient: true }),
+    plexClientPlayUrl("99", "machine-abc"),
+  );
+  assert.equal(
+    plexWatchUrl("99", "machine-abc", { viewportWidth: 390 }),
+    plexClientPlayUrl("99", "machine-abc"),
+  );
+  const desktop = plexWatchUrl("99", "machine-abc", { toClient: false });
+  assert.equal(
+    preferPhonePlexPlayHref(desktop, { viewportWidth: 390 }),
+    plexClientPlayUrl("99", "machine-abc"),
+  );
+  assert.equal(preferPhonePlexPlayHref(desktop, { viewportWidth: 1024 }), desktop);
 });
 
 test("canWatchOnPlex only when in library with rating_key", () => {

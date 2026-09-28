@@ -1,28 +1,14 @@
 import { useEffect, useState } from "react";
-import { api, getPlexMachineId } from "../api/client";
-import { canWatchOnPlex, plexPlayRatingKey, plexWatchUrl } from "../lib/titleLinks.js";
+import { Link, useLocation } from "react-router-dom";
+import { api } from "../api/client";
+import {
+  canWatchOnPlex,
+  libraryWatchTo,
+  plexPlayRatingKey,
+} from "../lib/titleLinks.js";
 import { watchProgressState } from "../lib/watchProgress.js";
 import PosterActionMenu from "./PosterActionMenu";
 import WatchProgressBadge from "./WatchProgressBadge";
-
-let cachedPlexMachineId;
-let plexMachineIdPromise;
-
-function loadPlexMachineId() {
-  if (cachedPlexMachineId !== undefined) return Promise.resolve(cachedPlexMachineId);
-  if (!plexMachineIdPromise) {
-    plexMachineIdPromise = getPlexMachineId()
-      .then((machineId) => {
-        cachedPlexMachineId = machineId;
-        return machineId;
-      })
-      .catch(() => {
-        cachedPlexMachineId = "";
-        return "";
-      });
-  }
-  return plexMachineIdPromise;
-}
 
 /**
  * Shared interactive title-poster controls. Play deliberately requires a
@@ -38,31 +24,13 @@ export default function PosterOverlayControls({
   motifWhy,
   testPrefix = "explore",
 }) {
-  const [plexHref, setPlexHref] = useState(() => String(item?.plex_watch_url || "").trim());
+  const location = useLocation();
   const [trailerKey, setTrailerKey] = useState(() => String(item?.trailer_youtube_key || "").trim());
   const [trailerOpen, setTrailerOpen] = useState(false);
   const [trailerLoading, setTrailerLoading] = useState(false);
   const showWatch = canWatchOnPlex(item);
+  const playTo = showWatch ? libraryWatchTo(plexPlayRatingKey(item), location) : null;
   const hasWatchBadge = watchProgressState(item) !== "unwatched";
-
-  useEffect(() => {
-    const provided = String(item?.plex_watch_url || "").trim();
-    if (provided) {
-      setPlexHref(provided);
-      return undefined;
-    }
-    if (!showWatch) {
-      setPlexHref("");
-      return undefined;
-    }
-    let cancelled = false;
-    loadPlexMachineId().then((machineId) => {
-      if (!cancelled) setPlexHref(plexWatchUrl(plexPlayRatingKey(item), machineId));
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [item?.plex_watch_url, item?.rating_key, item?.play_rating_key, showWatch]);
 
   useEffect(() => {
     if (!trailerOpen) return undefined;
@@ -103,19 +71,17 @@ export default function PosterOverlayControls({
   return (
     <>
       <WatchProgressBadge item={item} />
-      {showWatch && plexHref ? (
-        <a
-          href={plexHref}
+      {showWatch && playTo ? (
+        <Link
+          to={playTo}
           className="explore-hover-icon explore-hover-icon-watch is-always-on"
           data-testid={`${testPrefix}-watch-plex`}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Watch on Plex"
-          title="Watch on Plex"
+          aria-label="Play"
+          title="Play"
           onClick={(event) => event.stopPropagation()}
         >
-          <span className="material-symbols-outlined" aria-hidden="true">play_arrow</span>
-        </a>
+          <span className="material-symbols-outlined" aria-hidden="true">play_circle</span>
+        </Link>
       ) : null}
       <PosterActionMenu
         item={item}
@@ -133,7 +99,7 @@ export default function PosterOverlayControls({
               className="explore-hover-icon explore-hover-icon-trailer"
               data-testid={`${testPrefix}-view-trailer`}
               disabled={trailerLoading}
-              aria-label={trailerLoading ? "Loading trailer" : "Watch trailer"}
+              aria-label={trailerLoading ? "Loading trailer" : "Trailer"}
               title="Trailer"
               onClick={handleTrailer}
             >
@@ -147,15 +113,15 @@ export default function PosterOverlayControls({
               type="button"
               className="explore-hover-icon explore-hover-icon-recommend"
               data-testid={`${testPrefix}-recommend`}
-              aria-label="Recommend"
-              title="Recommend"
+              aria-label="Watch together"
+              title="Watch together"
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
                 onRecommend(item);
               }}
             >
-              <span className="material-symbols-outlined" aria-hidden="true">recommend</span>
+              <span className="material-symbols-outlined" aria-hidden="true">groups</span>
             </button>
           ) : null}
         </div>

@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import HelpHint from "./HelpHint";
 import {
   isAddableToRadarr,
@@ -20,10 +20,8 @@ import {
   canMarkTitleWatched,
   formatTitleReleaseBadge,
   formatTvProgress,
-  isTitleWatched,
   reviewsCtaForDetail,
   titleWatchCountLabel,
-  watchedCtaLabel,
 } from "../lib/titleDetailExtras.js";
 import {
   countryBrowsePath,
@@ -36,9 +34,11 @@ import {
   titleAvailability,
   titleAvailabilityClassName,
 } from "../lib/titleAvailability.js";
-import { canWatchOnPlex, plexWatchUrl } from "../lib/titleLinks.js";
+import { canWatchOnPlex, libraryWatchTo, plexPlayRatingKey, plexWatchUrl } from "../lib/titleLinks.js";
 import { chatAboutTitleHref, ROUTES } from "../lib/backNav.js";
+import { useTitleDetailOverlayOptional } from "./TitleDetailOverlayProvider.jsx";
 import ShowSeasonsPanel from "./ShowSeasonsPanel.jsx";
+import TitleCtaBar from "./TitleCtaBar.jsx";
 import TitleSubtitlesPanel from "./TitleSubtitlesPanel.jsx";
 import WatchHistoryTimeline from "./WatchHistoryTimeline.jsx";
 
@@ -123,10 +123,13 @@ export default function TitleDetailContent({
   onOpenMarkBadMedia,
   titleId,
 }) {
+  const location = useLocation();
+  const overlay = useTitleDetailOverlayOptional();
   if (!detail) return null;
 
   const compact = variant === "compact";
   const trailerKey = String(detail.trailer_youtube_key || "").trim();
+  const playTo = canWatchOnPlex(detail) ? libraryWatchTo(plexPlayRatingKey(detail), location) : null;
   const plexHref =
     String(detail.plex_watch_url || "").trim() ||
     (canWatchOnPlex(detail) ? plexWatchUrl(detail.rating_key, detail.plex_machine_id || "") : "");
@@ -265,146 +268,63 @@ export default function TitleDetailContent({
               </span>
             ) : null}
           </div>
-          <div className="title-detail-cta-row">
-            {plexHref ? (
-              <a
-                href={plexHref}
-                className="title-cta title-cta-primary"
-                data-testid="watch-on-plex-button"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <span className="material-symbols-outlined" aria-hidden="true">
-                  play_circle
-                </span>
-                Watch on Plex
-              </a>
-            ) : null}
-            {trailerKey ? (
-              <button
-                type="button"
-                className="title-cta title-cta-ghost"
-                data-testid="watch-trailer-button"
-                onClick={onOpenTrailer}
-              >
-                <span className="material-symbols-outlined" aria-hidden="true">
-                  play_arrow
-                </span>
-                Trailer
-              </button>
-            ) : null}
-            {reviewsCta?.kind === "rate" ? (
-              <button
-                type="button"
-                className="title-cta title-cta-ghost"
-                data-testid="title-reviews-cta"
-                onClick={onOpenReview}
-              >
-                <span className="material-symbols-outlined" aria-hidden="true">
-                  rate_review
-                </span>
-                {reviewsCta.label}
-              </button>
-            ) : null}
-            {canToggleWatched ? (
-              <button
-                type="button"
-                className="title-cta title-cta-ghost"
-                data-testid="title-watched-cta"
-                disabled={watchStatus === "loading"}
-                onClick={onToggleWatched}
-              >
-                <span className="material-symbols-outlined" aria-hidden="true">
-                  {isTitleWatched(detail) ? "visibility_off" : "visibility"}
-                </span>
-                {watchStatus === "loading" ? "Updating…" : watchedCtaLabel(detail)}
-              </button>
-            ) : null}
-            {canAddOrRequest ? (
-              <button
-                type="button"
-                className={`title-cta ${plexHref ? "title-cta-ghost" : "title-cta-primary"}`}
-                data-testid="title-detail-add-button"
-                disabled={addStatus === "loading" || addStatus === "success"}
-                onClick={onRequestAdd}
-              >
-                <span className="material-symbols-outlined" aria-hidden="true">
-                  add_circle
-                </span>
-                {addStatus === "loading"
-                  ? "Adding…"
-                  : addStatus === "success"
-                    ? "Added"
-                    : addCtaLabel}
-              </button>
-            ) : null}
-            {showAskOwner ? (
-              <span
-                className="title-cta title-cta-ghost title-cta-disabled"
-                data-testid="title-detail-ask-owner"
-                title="Guests cannot request or add media"
-              >
-                <span className="material-symbols-outlined" aria-hidden="true">
-                  lock
-                </span>
-                {addCapability.guidedCopy}
-              </span>
-            ) : null}
-            {detail.title ? (
-              <Link
-                to={chatAboutTitleHref(detail)}
-                className="title-cta title-cta-ghost"
-                data-testid="chat-about-title-link"
-              >
-                <span className="material-symbols-outlined" aria-hidden="true">
-                  chat
-                </span>
-                Chat about this
-              </Link>
-            ) : null}
-            {multiUserEnabled ? (
-              <button
-                type="button"
-                className="title-cta title-cta-ghost"
-                data-testid="recommend-title-button"
-                aria-label="Watch together or recommend to household"
-                onClick={onOpenRecommend}
-              >
-                <span className="material-symbols-outlined" aria-hidden="true">
-                  groups
-                </span>
-                Watch together
-              </button>
-            ) : null}
-            {canDeleteLibrary ? (
-              <>
-                <button
-                  type="button"
-                  className="title-cta title-cta-ghost"
-                  data-testid="title-detail-mark-bad-media-button"
-                  disabled={markingBadMedia || deleting}
-                  onClick={onOpenMarkBadMedia}
-                >
-                  <span className="material-symbols-outlined" aria-hidden="true">
-                    sync_problem
-                  </span>
-                  Mark as bad media
-                </button>
-                <button
-                  type="button"
-                  className="title-cta title-cta-danger"
-                  data-testid="title-detail-delete-button"
-                  disabled={deleting || markingBadMedia}
-                  onClick={onOpenDelete}
-                >
-                  <span className="material-symbols-outlined" aria-hidden="true">
-                    delete
-                  </span>
-                  Delete
-                </button>
-              </>
-            ) : null}
-          </div>
+          <TitleCtaBar
+            compact={compact}
+            playTo={playTo}
+            onPlayClick={() => overlay?.closeTitleDetail?.()}
+            addPrimary={
+              !playTo && canAddOrRequest
+                ? {
+                    label:
+                      addStatus === "loading"
+                        ? "Adding…"
+                        : addStatus === "success"
+                          ? "Added"
+                          : addCtaLabel,
+                    disabled: addStatus === "loading" || addStatus === "success",
+                    onClick: onRequestAdd,
+                    tooltip: addCtaLabel,
+                  }
+                : null
+            }
+            askOwner={
+              !playTo && showAskOwner
+                ? { label: addCapability.guidedCopy, tooltip: "Guests cannot request or add media" }
+                : null
+            }
+            trailerKey={trailerKey}
+            onOpenTrailer={onOpenTrailer}
+            reviewsCta={reviewsCta}
+            onOpenReview={onOpenReview}
+            canToggleWatched={canToggleWatched}
+            detail={detail}
+            watchStatus={watchStatus}
+            onToggleWatched={onToggleWatched}
+            chatHref={detail.title ? chatAboutTitleHref(detail) : ""}
+            multiUserEnabled={multiUserEnabled}
+            onOpenRecommend={onOpenRecommend}
+            secondaryAdd={
+              playTo && canAddOrRequest
+                ? {
+                    label:
+                      addStatus === "loading"
+                        ? "Adding…"
+                        : addStatus === "success"
+                          ? "Added"
+                          : addCtaLabel,
+                    disabled: addStatus === "loading" || addStatus === "success",
+                    onClick: onRequestAdd,
+                    tooltip: addCtaLabel,
+                  }
+                : null
+            }
+            plexHref={plexHref}
+            canDeleteLibrary={canDeleteLibrary}
+            markingBadMedia={markingBadMedia}
+            deleting={deleting}
+            onOpenMarkBadMedia={onOpenMarkBadMedia}
+            onOpenDelete={onOpenDelete}
+          />
           {addMessage ? (
             <p
               className={`title-detail-add-feedback ${addStatus === "error" ? "is-error" : ""}`}

@@ -14,3 +14,4 @@ Port **8788** is frequently an **SSH tunnel to production** (or Docker). If Play
 - Do not change the default back to 8788.
 - When debugging e2e locally and something looks like a stale/remote UI, check whether :8788 is a tunnel — run with `E2E_PORT=8799` (or another free port).
 - Intentional live-stack against Docker may still use `E2E_BASE_URL=http://127.0.0.1:8788` with `CURATORX_E2E_LIVE=1`.
+- Locator standard, triad, and cadence: [ui-testing-architecture.mdc](ui-testing-architecture.mdc).

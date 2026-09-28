@@ -6,6 +6,7 @@ import asyncio
 import json
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -13,15 +14,19 @@ from projectionist.agent.curator import _append_persona_consult_blocks, househol
 from projectionist.agent.tools import TOOL_DEFINITIONS, ToolRegistry, build_system_prompt
 from projectionist.agent.village import (
     CONSULT_MAX_ANSWER_CHARS,
+    _deterministic_specialty_answer,
     build_shared_consult_context,
     cancel_unpromised_persona_consults,
     clip_consult_answer,
+    consult_quote_lead,
+    gather_specialty_context,
+    pending_consult_human_copy,
     quote_block_from_consult,
     resolve_village_sibling,
     run_persona_consult,
 )
 from projectionist.config_store import Settings
-from projectionist.library.db import DEFAULT_LENS_ID, Database
+from projectionist.library.db import BOOTSTRAP_OWNER_ID, DEFAULT_LENS_ID, Database
 from projectionist.telemetry.llm_usage import PURPOSE_PERSONA_CONSULT, VALID_PURPOSES
 
 
@@ -453,6 +458,35 @@ class TestConsultQuoteBlocks(unittest.TestCase):
         self.assertEqual(len(blocks), 2)
         self.assertEqual(blocks[1]["type"], "persona_consult")
 
+    def test_pending_consult_uses_human_copy_not_json(self) -> None:
+        sibling = resolve_village_sibling("The Professor")
+        assert sibling is not None
+        copy = pending_consult_human_copy(sibling.display_name)
+        self.assertEqual(copy, "The Professor has not called back")
+        self.assertNotIn("{", copy)
+        self.assertNotIn("pending", copy.casefold())
+
+        payload = {
+            "ok": True,
+            "pending": True,
+            "code": "consult_pending",
+            "consult_id": "abc123",
+            "persona": sibling.display_name,
+            "persona_id": sibling.template_id,
+            "specialty": sibling.specialty,
+            "question": "Compare the two cuts",
+            "message": copy,
+        }
+        block = quote_block_from_consult(payload)
+        self.assertIsNotNone(block)
+        assert block is not None
+        lead = str(block["payload"].get("lead") or "")
+        message = str(block["payload"].get("message") or "")
+        self.assertIn("not called back", lead)
+        self.assertIn("not called back", message)
+        self.assertNotIn("{", lead)
+        self.assertNotIn("consult_pending", lead)
+
     def test_household_summary_for_consult(self) -> None:
         self.assertEqual(
             household_tool_summary(
@@ -470,6 +504,112 @@ class TestConsultQuoteBlocks(unittest.TestCase):
             household_tool_summary(json.dumps({"code": "consult_timeout", "busy": True})),
             "Sibling busy",
         )
+
+
+class TestScholarWalkVillage(unittest.IsolatedAsyncioTestCase):
+    async def test_professor_specialty_gathers_walk_and_seminar_lead(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "walks.db")
+            db.ensure_bootstrap_owner()
+            list_id = uuid.uuid4().hex
+            db.create_curated_list(
+                list_id=list_id,
+                user_id=None,
+                name="Kurosawa Lab",
+                description="Study the masters",
+                list_kind="course",
+            )
+            db.add_curated_list_item(
+                item_id=uuid.uuid4().hex,
+                list_id=list_id,
+                user_id=None,
+                tmdb_id=1000,
+                tvdb_id=None,
+                media_type="movie",
+                title="Rashomon",
+            )
+            db.set_curated_list_visibility(list_id, visibility="published")
+            registry = ToolRegistry(
+                db,
+                Settings(),
+                DEFAULT_LENS_ID,
+                user_id=BOOTSTRAP_OWNER_ID,
+                user_role="member",
+            )
+            sibling = resolve_village_sibling("The Professor")
+            assert sibling is not None
+            specialty = await gather_specialty_context(
+                registry,
+                sibling,
+                {"question": "Open a silent seminar on Kurosawa", "title": "Kurosawa"},
+            )
+            walk = specialty.get("scholar_walk") or {}
+            self.assertEqual(walk.get("kind"), "silent_seminar")
+            self.assertFalse(walk.get("public"))
+            self.assertIn("Rashomon", walk.get("stop_titles") or [])
+
+            lead = consult_quote_lead(sibling, specialty)
+            self.assertIn("silent seminar", lead.casefold())
+            self.assertIn(sibling.display_name, lead)
+
+            answer = _deterministic_specialty_answer(
+                sibling, specialty, "Open a silent seminar on Kurosawa"
+            )
+            self.assertIn("seminar", answer.casefold())
+
+            fallback = await run_persona_consult(
+                registry,
+                sibling,
+                question="Open a silent seminar on Kurosawa",
+                shared={"question": "Open a silent seminar on Kurosawa"},
+                specialty=specialty,
+            )
+            self.assertTrue(fallback.get("quote_ok"))
+            self.assertIn("silent seminar", str(fallback.get("quote_lead") or "").casefold())
+
+    async def test_gap_walk_in_village_still_needs_confirm(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "gaps.db")
+            db.ensure_bootstrap_owner()
+            list_id = uuid.uuid4().hex
+            db.create_curated_list(
+                list_id=list_id,
+                user_id=None,
+                name="Kurosawa Lab",
+                list_kind="course",
+            )
+            db.add_curated_list_item(
+                item_id=uuid.uuid4().hex,
+                list_id=list_id,
+                user_id=None,
+                tmdb_id=2001,
+                tvdb_id=None,
+                media_type="movie",
+                title="Dersu Uzala",
+            )
+            db.set_curated_list_visibility(list_id, visibility="published")
+            registry = ToolRegistry(
+                db,
+                Settings(),
+                DEFAULT_LENS_ID,
+                user_id=BOOTSTRAP_OWNER_ID,
+                user_role="member",
+            )
+            sibling = resolve_village_sibling("Scholar")
+            assert sibling is not None
+            specialty = await gather_specialty_context(
+                registry,
+                sibling,
+                {"question": "Draft a gap reading list for Kurosawa"},
+            )
+            walk = specialty.get("scholar_walk") or {}
+            self.assertEqual(walk.get("kind"), "gap_reading_list")
+            self.assertTrue(walk.get("needs_confirm"))
+            answer = _deterministic_specialty_answer(
+                sibling, specialty, "Draft a gap reading list for Kurosawa"
+            )
+            self.assertIn("confirm", answer.casefold())
+            self.assertNotIn("Dersu Uzala", answer)
 
 
 if __name__ == "__main__":

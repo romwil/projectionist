@@ -35,6 +35,8 @@ describe("adminNav", () => {
     );
     assert.equal(adminNavLinks().find((item) => item.id === "holidays")?.label, "Holidays");
     assert.equal(adminNavLinks().find((item) => item.id === "holidays")?.to, "/admin/holidays");
+    assert.equal(adminNavLinks().find((item) => item.id === "house")?.label, "House");
+    assert.equal(adminNavLinks().find((item) => item.id === "house")?.to, "/admin/house");
     assert.equal(adminNavLinks().find((item) => item.id === "lobby")?.label, "Lobby");
     assert.equal(adminNavLinks().find((item) => item.id === "lobby")?.to, "/admin/lobby");
     assert.equal(
@@ -46,7 +48,7 @@ describe("adminNav", () => {
       adminNavLinks().some((item) => item.id === "dashboard" || item.id === "usage" || item.id === "issues"),
       false,
     );
-    assert.equal(adminNavLinks().length, 18);
+    assert.equal(adminNavLinks().length, 19);
   });
 
   it("groups the dense rail with Setup / Experience / Platform / Communications / System headings", () => {
@@ -66,7 +68,7 @@ describe("adminNav", () => {
     );
     assert.equal(
       groups.reduce((sum, group) => sum + group.links.length, 0),
-      18,
+      19,
     );
     assert.deepEqual(
       groups[0].links.map((item) => item.id),
@@ -74,7 +76,7 @@ describe("adminNav", () => {
     );
     assert.deepEqual(
       groups[1].links.map((item) => item.id),
-      ["live-channels", "lobby", "holidays", "seerr"],
+      ["live-channels", "lobby", "holidays", "house", "seerr"],
     );
     assert.ok(groups[2].links.some((item) => item.id === "health"));
     assert.ok(groups[3].links.some((item) => item.id === "mail"));
@@ -116,7 +118,7 @@ describe("adminNav", () => {
     );
   });
 
-  it("filters single-user admin to nine essentials with Experience grouping", () => {
+  it("filters single-user admin to the essentials with Experience grouping", () => {
     const links = adminNavLinks({ multiUserEnabled: false });
     assert.equal(links.length, SINGLE_USER_ADMIN_LINK_IDS.length);
     assert.deepEqual(
@@ -137,7 +139,7 @@ describe("adminNav", () => {
     assert.match(String(groups[1].subtitle || ""), /On the wall/i);
     assert.deepEqual(
       groups[1].links.map((item) => item.id),
-      ["lobby", "live-channels"],
+      ["lobby", "live-channels", "house"],
     );
   });
 

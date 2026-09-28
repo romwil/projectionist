@@ -15,6 +15,7 @@ export const ROUTES = {
   chat: "/chat",
   search: "/search",
   inbox: "/inbox",
+  whisper: "/whisper",
   myJourney: "/my-journey",
   explore: "/explore",
   tags: "/explore/tags",
@@ -25,6 +26,7 @@ export const ROUTES = {
   engagement: "/explore/engagement",
   live: "/live",
   liveWatch: "/live/watch",
+  watch: "/watch",
   watchlist: "/watchlist",
   library: "/library",
   tour: "/login",
@@ -78,6 +80,21 @@ export function watchlistBrowseHref() {
 /** Deep-link to chat that triggers the rate / review batch flow. */
 export function rateFlowHref() {
   return `${ROUTES.chat}?${RATE_FLOW_PARAM}=1`;
+}
+
+/** Query flag that continues a saved-library page in chat. */
+export const SAVED_LIBRARY_PARAM = "saved_library";
+const SAVED_LIBRARY_FOLLOW_UP_PARAM = "follow_up";
+
+/** Deep-link to /chat so `/` → `/chat` replace cannot drop saved_library. */
+export function savedLibraryChatHref(pageId, followUp = "") {
+  const id = String(pageId || "").trim();
+  if (!id) return ROUTES.chat;
+  const params = new URLSearchParams();
+  params.set(SAVED_LIBRARY_PARAM, id);
+  const nextStep = String(followUp || "").trim();
+  if (nextStep) params.set(SAVED_LIBRARY_FOLLOW_UP_PARAM, nextStep);
+  return `${ROUTES.chat}?${params.toString()}`;
 }
 
 /** Deep-link to chat and seed a discussion based on a library title. */
@@ -321,6 +338,7 @@ export function backLabelForPath(path, { defaultLabel = "Back" } = {}) {
   if (normalized.startsWith("/tag/")) return "Back to tag";
   if (normalized.startsWith("/person/")) return "Back to person";
   if (normalized.startsWith("/title/")) return "Back to title";
+  if (normalized.startsWith("/watch/")) return "Back to player";
   if (normalized.startsWith("/settings")) return "Back to settings";
   if (normalized.startsWith("/admin")) return "Back to admin";
   if (normalized === ROUTES.help) return "Back to Help";

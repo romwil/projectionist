@@ -229,8 +229,249 @@
 .title-detail-cta-row {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
+  gap: var(--space-2);
   align-items: center;
+}
+
+.title-detail-cta-primary,
+.title-detail-cta-secondary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+/* Portaled More menu — never push sheet/page layout.
+   Must stack ABOVE title-detail-drawer scrim (85) / panel (90); match other
+   body portals (share/poster at 1000). z-index 80 left the menu invisible
+   under the sheet while open state still flipped. */
+.title-detail-cta-menu,
+.title-detail-cta-menu--portal {
+  position: fixed;
+  z-index: 1000;
+  min-width: 12.5rem;
+  padding: 0.35rem;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-raised) 96%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.title-detail-cta-menu-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  text-align: left;
+  min-height: 44px;
+  padding: 0.65rem 0.75rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.title-detail-cta-menu-item .material-symbols-outlined {
+  font-size: 18px;
+  opacity: 0.9;
+}
+
+.title-detail-cta-menu-item:hover,
+.title-detail-cta-menu-item:focus-visible {
+  background: var(--accent-soft);
+}
+
+.title-detail-cta-menu-item.is-danger {
+  color: var(--danger);
+}
+
+.title-detail-cta-phone-only {
+  display: none;
+}
+
+.title-cta-icon-forward {
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 14px;
+}
+
+.title-cta-icon-forward .title-cta-secondary-label {
+  font-size: 11px;
+}
+
+@media (max-width: 720px) {
+  .title-detail-cta-desktop-only {
+    display: none;
+  }
+
+  .title-detail-cta-phone-only {
+    display: inline-flex;
+  }
+
+  .title-detail-cta-row {
+    gap: var(--space-2);
+  }
+
+  .title-cta-primary {
+    min-height: 44px;
+    padding: 12px 18px;
+  }
+
+  /* Icon-only secondaries + More on phone — tooltips carry the verb. */
+  .title-cta-icon-forward {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    padding: 0;
+  }
+
+  .title-cta-icon-forward .title-cta-secondary-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
+.title-detail-content--compact .title-cta-icon-forward {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
+}
+
+.title-detail-content--compact .title-cta-icon-forward .title-cta-secondary-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Episode detail — show → seasons → episode sheet */
+.episode-detail-page .workspace-main,
+.episode-detail-page {
+  min-height: 0;
+}
+
+.episode-detail {
+  width: min(var(--reading-column-max, 72rem), 100%);
+  margin: 0 auto;
+  padding: 0 var(--gutter) var(--space-8);
+}
+
+.episode-detail-stage {
+  position: relative;
+  min-height: clamp(18rem, 48vh, 28rem);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background-color: #0a0c10;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: flex-end;
+}
+
+.episode-detail-stage-veil {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(5, 6, 8, 0.2), rgba(5, 6, 8, 0.88));
+  pointer-events: none;
+}
+
+.episode-detail-copy {
+  position: relative;
+  z-index: 1;
+  padding: var(--space-6);
+  max-width: 40rem;
+}
+
+.episode-detail-show {
+  margin: 0;
+  color: var(--accent);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-decoration: none;
+}
+
+.episode-detail-code {
+  margin: var(--space-2) 0 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.episode-detail-title {
+  margin: var(--space-2) 0 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.6rem, 4vw, 2.4rem);
+  line-height: 1.15;
+}
+
+.episode-detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.episode-detail-cta,
+.episode-detail .title-detail-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+
+.episode-detail-nav {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.episode-detail-neighbor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-height: 44px;
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.episode-detail-neighbor--next {
+  text-align: right;
+}
+
+.episode-detail-neighbor.is-empty {
+  border-color: transparent;
+}
+
+.episode-detail-neighbor:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--accent-soft);
 }
 
 .title-detail-add-feedback {
@@ -1836,11 +2077,40 @@ a.explore-cinema-card-link:focus-visible h3 {
 .show-season-summary-row::-webkit-details-marker { display: none; }
 .show-season-title { font-weight: 600; }
 .show-season-meta { color: var(--muted); font-size: var(--text-sm); }
-.show-season-remove, .show-episode-remove, .show-seasons-show-delete { font-size: var(--text-xs); }
+.show-season-remove, .show-episode-remove, .show-episode-plex, .show-seasons-show-delete { font-size: var(--text-xs); }
 .show-episode-list { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: grid; gap: var(--space-2); }
-.show-episode-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2); padding: var(--space-1) 0; }
-.show-episode-main { display: flex; flex-wrap: wrap; gap: var(--space-2); min-width: 0; }
+.show-episode-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--space-2); padding: var(--space-1) 0; }
+.show-episode-main { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; flex: 1 1 12rem; }
 .show-episode-code { font-variant-numeric: tabular-nums; color: var(--muted); font-size: var(--text-sm); }
 .show-episode-title { min-width: 0; }
+.show-episode-title-link {
+  color: inherit;
+  text-decoration: none;
+  font-weight: 600;
+}
+.show-episode-title-link:hover,
+.show-episode-title-link:focus-visible {
+  color: var(--gold, #e6b422);
+  text-decoration: underline;
+  outline: none;
+}
 .show-episode-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); color: var(--muted); font-size: var(--text-sm); }
+.show-episode-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.show-episode-play {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0.45rem 0.9rem;
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+.show-episode-plex,
+.show-episode-remove {
+  min-height: 44px;
+  padding: 0.35rem 0.65rem;
+}
 .show-seasons-panel.is-compact .show-episode-meta { gap: var(--space-1); }
