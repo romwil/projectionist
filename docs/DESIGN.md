@@ -146,7 +146,7 @@ Shared implementation: `TitleCtaBar` + `frontend/src/lib/titleCta.js`. Mini shee
 | **One gold primary** | In-library → **Play**. Not-in-library → **Add** / **Request** (or guest lock copy). Never two competing primaries. |
 | **Secondary (icon-forward)** | Compact ghost actions with **tooltip + aria-label**. Short visible label on desktop; icon-only (≥44px) on 390 and in the mini sheet. |
 | **Secondary order** | Trailer → Review → Watched → Chat → Together → Add (Add only when Play already owns primary). |
-| **Overflow / More** | **Portaled popover** anchored to the More button (`useAnchoredPopover` + `createPortal`) — never a `<details>` that expands the sheet. Contents: Open in Plex, phone-collapsed Chat/Together/Add, Mark as bad media, Delete (owner, last). |
+| **Overflow / More** | **Portaled popover** anchored to the More button (`useAnchoredPopover` + `createPortal` → `document.body`) — never a `<details>` that expands the sheet. Contents: Open in Plex, phone-collapsed Chat/Together/Add, Mark as bad media, Delete (owner, last). Stack **above** the title drawer scrim/panel (portal `z-index: 1000`; drawer panel is `90`) or the menu opens invisibly under the sheet. Escape closes More before the sheet. |
 | **Sheet vs full page** | Drawer (`TitleDetailDrawer`) is the same CTA grammar at compact density; full page adds backdrop hero + seasons. |
 
 #### Locked terms

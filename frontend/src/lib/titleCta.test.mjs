@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   placeTitleCtaMoreMenu,
   TITLE_CTA_COPY,
@@ -8,6 +11,8 @@ import {
   TITLE_CTA_SECONDARY_ORDER,
   watchedCtaPresentation,
 } from "./titleCta.js";
+
+const stylesDir = join(dirname(fileURLToPath(import.meta.url)), "../styles");
 
 describe("titleCta catalog", () => {
   it("locks secondary order Trailer → Review → Watched → Chat → Together → Add", () => {
@@ -66,5 +71,21 @@ describe("titleCta catalog", () => {
     );
     assert.equal(style.top, "148px");
     assert.equal(style.left, "20px");
+  });
+
+  it("portaled More CSS stacks above the title drawer panel", () => {
+    const ctaCss = readFileSync(join(stylesDir, "09-title-detail-home.css"), "utf8");
+    const delightCss = readFileSync(join(stylesDir, "10-explore-delight.css"), "utf8");
+    const menuBlock = ctaCss.match(
+      /\.title-detail-cta-menu,\s*\n\.title-detail-cta-menu--portal \{([\s\S]*?)\n\}/,
+    )?.[1];
+    const panelBlock = delightCss.match(
+      /\.title-detail-drawer-panel,\s*\n\.title-detail-drawer-panel--modal \{([\s\S]*?)\n\}/,
+    )?.[1];
+    const menuZ = Number(menuBlock?.match(/z-index:\s*(\d+)/)?.[1]);
+    const panelZ = Number(panelBlock?.match(/z-index:\s*(\d+)/)?.[1]);
+    assert.ok(menuZ >= 1000, `expected portal menu z-index >= 1000, got ${menuZ}`);
+    assert.ok(panelZ >= 90, `expected drawer panel z-index, got ${panelZ}`);
+    assert.ok(menuZ > panelZ, `More menu z-index ${menuZ} must exceed drawer panel ${panelZ}`);
   });
 });
