@@ -3,6 +3,24 @@
 export const STILLS_LEAVE_LAN =
   "When vision is on, three stills leave the LAN so the chat LLM can look at them.";
 
+/** Match projectionist.library.episode_investigate.ffmpeg.IDENTIFY_CLIP_SECONDS. */
+export const IDENTIFY_CLIP_SECONDS = 12;
+
+export const IDENTIFY_LEAVES_LAN =
+  `When Identify is on, a ${IDENTIFY_CLIP_SECONDS}-second clip leaves the LAN so ACRCloud can listen. A miss does not rename files.`;
+
+export const IDENTIFY_TEST_NO_RENAME = "This test does not rename files.";
+
+export function identifyTestRenamed(result) {
+  void result;
+  return false;
+}
+
+export function identifyTestHonestyLine(result) {
+  void result;
+  return IDENTIFY_TEST_NO_RENAME;
+}
+
 export const SCENE_NAMES_NOT_EVIDENCE =
   "Scene names and SxxEyy in the filename are a claim, not evidence.";
 
