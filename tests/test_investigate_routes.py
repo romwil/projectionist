@@ -293,3 +293,37 @@ class InvestigateRoutesTests(unittest.TestCase):
             )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(identify.call_args.kwargs["path"], "")
+
+    def test_identify_test_uses_snapshot_resolved_path_for_mapped_file_id(self) -> None:
+        from projectionist.config_store import Settings, save_settings
+
+        media = Path(self._tmpdir.name) / "media"
+        media.mkdir()
+        clip = media / "episode.mkv"
+        clip.write_bytes(b"x")
+        save_settings(Path(self._tmpdir.name), Settings(tv_root=str(media)))
+        snapshot = {
+            "result": {
+                "rows": [
+                    {
+                        "id": "row-1",
+                        "path": "/tv/Show/Season 01/episode.mkv",
+                        "resolved_path": str(clip),
+                    }
+                ]
+            }
+        }
+        with patch(
+            "projectionist.library.episode_investigate.job.build_status",
+            return_value=snapshot,
+        ), patch(
+            "projectionist.library.episode_investigate.acrcloud.test_identify_clip",
+            return_value={"ok": True, "found": False, "renamed": False, "source": "file"},
+        ) as identify:
+            resp = self.client.post(
+                "/api/admin/investigate/identify/test",
+                json={"file_id": "row-1"},
+            )
+        self.assertEqual(resp.status_code, 200, resp.text)
+        self.assertFalse(resp.json()["renamed"])
+        self.assertEqual(identify.call_args.kwargs["path"], str(clip.resolve()))
