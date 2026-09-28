@@ -210,7 +210,8 @@ class OIDCAuthTests(unittest.TestCase):
         resp = self.client.get("/api/features")
         body = resp.json()
         self.assertIn("oidc", body.get("auth_methods", []))
-        self.assertEqual(body["auth"]["oidc_provider_name"], "TestIDP")
+        self.assertNotIn("auth", body)
+        self.assertEqual(body["oidc_provider_name"], "TestIDP")
 
 
 if __name__ == "__main__":
