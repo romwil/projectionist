@@ -274,7 +274,7 @@ If you don't have a link yet, use **Need an invite?** on `/login`. The owner see
 
 ## License
 
-Projectionist’s **code** is licensed under the GNU Affero General Public License v3.0 only (`AGPL-3.0-only`). The source is the [GitHub repo](https://github.com/romwil/projectionist). Releases **through 1.36.0** were MIT — those shipped Hub tags stay MIT.
+Projectionist’s **code** is licensed under the GNU Affero General Public License v3.0 only (`AGPL-3.0-only`). The source is the [GitHub repo](https://github.com/romwil/projectionist). Releases **through 1.36.2** were MIT — those shipped Hub tags stay MIT.
 
 Unraid Community Applications and Docker Hub stay a **free self-host** household app. If you run a modified copy for other people over a network, you must offer them the corresponding source.
 

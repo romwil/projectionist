@@ -32,7 +32,7 @@ class LicenseMetadataTests(unittest.TestCase):
     def test_about_page_states_agpl_and_mit_history(self) -> None:
         about = (_REPO_ROOT / "frontend/src/pages/AboutPage.jsx").read_text(encoding="utf-8")
         self.assertIn("AGPL-3.0-only", about)
-        self.assertIn("Previous releases through 1.36.0 were MIT", about)
+        self.assertIn("Previous releases through 1.36.2 were MIT", about)
         self.assertIn("not a grant to call forks", about)
         self.assertNotIn("License · MIT", about)
 

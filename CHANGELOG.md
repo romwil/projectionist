@@ -30,6 +30,7 @@ Failed syncs keep a friendly error, guests see less of the house, library stats 
 - Identify test clips resolve under configured media roots (Plex / Radarr / Sonarr / `tv_root` / `movies_root` / `/tv` / `/movies`). A raw path is used only when it matches a snapshot row; `file_id` prefers the snapshot `resolved_path` so a mapped Sonarr path still works. Paths outside those roots return 400 (P3-MED-04).
 
 ### Fixed
+- `/about#license` and `/about#release-notes` scroll to those sections after the shell is ready, instead of landing at the top.
 - Saved-library chips on chat home and Library continue that response on `/chat?saved_library=…` instead of dropping the query at the `/` redirect. A second chip on `/chat` starts that page; the first consume no longer leaves the starter stuck.
 - Members who cannot read `/api/setup/status` still get Radarr/Sonarr dock-drop from `features.arr` instead of looking disconnected.
 

@@ -1,15 +1,24 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { getHealth } from "../api/client";
 import BackLink from "../components/BackLink";
 import ReleaseNotesPanel from "../components/ReleaseNotesPanel";
 import AppShell from "../layouts/AppShell";
+import { scrollAboutHashIntoView } from "../lib/aboutHashScroll.js";
 import { ROUTES } from "../lib/backNav.js";
 import { fetchReleaseNotes, normalizeReleaseNotes } from "../lib/releaseNotes.js";
 
 const GITHUB_URL = "https://github.com/romwil/projectionist";
 const DOCKER_HUB_URL = "https://hub.docker.com/r/romwil/projectionist";
 const DOCS_URL = `${GITHUB_URL}/tree/main/docs`;
+
+function AboutHashScroller() {
+  const { hash } = useLocation();
+  useEffect(() => {
+    scrollAboutHashIntoView(hash);
+  }, [hash]);
+  return null;
+}
 
 export default function AboutPage() {
   const [version, setVersion] = useState("");
@@ -55,6 +64,7 @@ export default function AboutPage() {
       eyebrow={eyebrow}
       actions={<BackLink fallbackTo={ROUTES.chat} testId="about-back" label="Back to chat" />}
     >
+      <AboutHashScroller />
       <main className="explore-main about-main">
         <section className="explore-section about-intro" aria-labelledby="about-intro-heading">
           <div className="explore-section-header">
@@ -128,7 +138,7 @@ export default function AboutPage() {
             <a href={GITHUB_URL} target="_blank" rel="noreferrer">
               GitHub repo
             </a>
-            . Previous releases through 1.36.0 were MIT.
+            . Previous releases through 1.36.2 were MIT.
           </p>
           <p>
             The name Projectionist and the logo are not a grant to call forks
