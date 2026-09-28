@@ -46,20 +46,34 @@ export default function TheaterPlayer({
   const hlsRef = useRef(null);
   const idleTimerRef = useRef(null);
   const pointerPosRef = useRef(null);
+  // Keep parent callbacks out of the HLS effect deps. LibraryPlayer (and Live)
+  // pass inline onHlsRef / onStatus — putting those in deps remounts hls.js on
+  // every status tick (loading→ready→playing), which looks like: OSD flash,
+  // poster still, then permanent stall with no honest error.
+  const onStatusRef = useRef(onStatus);
+  const onHlsRefRef = useRef(onHlsRef);
+  const onVideoRefRef = useRef(onVideoRef);
+  const onBumpOsdRef = useRef(onBumpOsd);
+  useEffect(() => {
+    onStatusRef.current = onStatus;
+    onHlsRefRef.current = onHlsRef;
+    onVideoRefRef.current = onVideoRef;
+    onBumpOsdRef.current = onBumpOsd;
+  });
   const [internalOsd, setInternalOsd] = useState(true);
   const osdVisible = osdVisibleProp ?? internalOsd;
 
   function bumpOsd() {
     setInternalOsd(true);
-    onBumpOsd?.();
+    onBumpOsdRef.current?.();
     if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     idleTimerRef.current = setTimeout(() => setInternalOsd(false), OSD_IDLE_MS);
   }
 
   useEffect(() => {
-    onVideoRef?.(videoRef.current);
-    return () => onVideoRef?.(null);
-  }, [onVideoRef]);
+    onVideoRefRef.current?.(videoRef.current);
+    return () => onVideoRefRef.current?.(null);
+  }, []);
 
   useEffect(() => {
     bumpOsd();
@@ -74,7 +88,7 @@ export default function TheaterPlayer({
     if (!video || !src) return undefined;
 
     let destroyed = false;
-    onStatus?.("loading");
+    onStatusRef.current?.("loading");
 
     const attachHls = () => {
       if (destroyed || !video || !Hls.isSupported()) return;
@@ -84,13 +98,13 @@ export default function TheaterPlayer({
       }
       const hls = new Hls(theaterHlsConfig());
       hlsRef.current = hls;
-      onHlsRef?.(hls);
+      onHlsRefRef.current?.(hls);
       hls.loadSource(src);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         if (destroyed) return;
-        onStatus?.("ready");
-        video.play?.().then(() => onStatus?.("playing")).catch(() => onStatus?.("paused"));
+        onStatusRef.current?.("ready");
+        video.play?.().then(() => onStatusRef.current?.("playing")).catch(() => onStatusRef.current?.("paused"));
       });
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (destroyed || !data?.fatal) return;
@@ -102,7 +116,7 @@ export default function TheaterPlayer({
           hls.recoverMediaError();
           return;
         }
-        onStatus?.("error");
+        onStatusRef.current?.("error");
       });
     };
 
@@ -112,12 +126,12 @@ export default function TheaterPlayer({
       video.src = src;
       video.addEventListener("loadedmetadata", () => {
         if (!destroyed) {
-          onStatus?.("ready");
-          video.play?.().then(() => onStatus?.("playing")).catch(() => onStatus?.("paused"));
+          onStatusRef.current?.("ready");
+          video.play?.().then(() => onStatusRef.current?.("playing")).catch(() => onStatusRef.current?.("paused"));
         }
       });
     } else {
-      onStatus?.("error");
+      onStatusRef.current?.("error");
     }
 
     if (autoFullscreen && rootRef.current?.requestFullscreen) {
@@ -129,12 +143,12 @@ export default function TheaterPlayer({
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
-        onHlsRef?.(null);
+        onHlsRefRef.current?.(null);
       }
       video.removeAttribute("src");
       video.load();
     };
-  }, [src, autoFullscreen, onHlsRef, onStatus]);
+  }, [src, autoFullscreen]);
 
   function toggleFullscreen() {
     const root = rootRef.current;

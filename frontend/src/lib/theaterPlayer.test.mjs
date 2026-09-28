@@ -14,6 +14,7 @@ import {
   shouldSendProgress,
   skipDeltaForZone,
   skipZoneFromClientX,
+  theaterHlsConfig,
 } from "./theaterPlayer.js";
 
 test("libraryWatchPath encodes the rating key", () => {
@@ -66,6 +67,15 @@ test("formatClockMs is living-room readable", () => {
   assert.equal(formatClockMs(0), "0:00");
   assert.equal(formatClockMs(65_000), "1:05");
   assert.equal(formatClockMs(3_661_000), "1:01:01");
+});
+
+test("theaterHlsConfig uses credentialed XHR (session cookies on proxy)", () => {
+  const cfg = theaterHlsConfig();
+  assert.equal(cfg.enableWorker, false);
+  assert.equal(typeof cfg.xhrSetup, "function");
+  const xhr = { withCredentials: false };
+  cfg.xhrSetup(xhr);
+  assert.equal(xhr.withCredentials, true);
 });
 
 test("clampTime stays inside duration", () => {

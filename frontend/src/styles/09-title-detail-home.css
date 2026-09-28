@@ -1836,11 +1836,40 @@ a.explore-cinema-card-link:focus-visible h3 {
 .show-season-summary-row::-webkit-details-marker { display: none; }
 .show-season-title { font-weight: 600; }
 .show-season-meta { color: var(--muted); font-size: var(--text-sm); }
-.show-season-remove, .show-episode-remove, .show-seasons-show-delete { font-size: var(--text-xs); }
+.show-season-remove, .show-episode-remove, .show-episode-plex, .show-seasons-show-delete { font-size: var(--text-xs); }
 .show-episode-list { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: grid; gap: var(--space-2); }
-.show-episode-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2); padding: var(--space-1) 0; }
-.show-episode-main { display: flex; flex-wrap: wrap; gap: var(--space-2); min-width: 0; }
+.show-episode-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--space-2); padding: var(--space-1) 0; }
+.show-episode-main { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; flex: 1 1 12rem; }
 .show-episode-code { font-variant-numeric: tabular-nums; color: var(--muted); font-size: var(--text-sm); }
 .show-episode-title { min-width: 0; }
+.show-episode-title-link {
+  color: inherit;
+  text-decoration: none;
+  font-weight: 600;
+}
+.show-episode-title-link:hover,
+.show-episode-title-link:focus-visible {
+  color: var(--gold, #e6b422);
+  text-decoration: underline;
+  outline: none;
+}
 .show-episode-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); color: var(--muted); font-size: var(--text-sm); }
+.show-episode-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.show-episode-play {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0.45rem 0.9rem;
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+.show-episode-plex,
+.show-episode-remove {
+  min-height: 44px;
+  padding: 0.35rem 0.65rem;
+}
 .show-seasons-panel.is-compact .show-episode-meta { gap: var(--space-1); }
