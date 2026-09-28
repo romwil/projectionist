@@ -1204,6 +1204,22 @@ Dual-role: **member living-room first**, then a **full admin/owner second pass**
 - **steps:** Open a title with `view_offset_ms` ≳ 2 minutes. Confirm **Resume** (gold) and **Start over** (ghost) on `library-resume-gate` with continue-watching copy (no giant poster card). Under ~2 minutes, no gate.
 - **pass:** Gate copy is honest; Resume continues; Start over begins at 0.
 
+### `title.cta-hierarchy`
+
+- **roles:** `member`, `owner`
+- **tags:** `watch`, `delight`, `library`
+- **source:** `frontend/src/components/TitleDetailContent.jsx`
+- **steps:** Open an in-library title (full page + drawer). Confirm one gold primary **Play** (`title-detail-play`). Confirm Trailer / Rate / Watched as ghost secondaries. Open **More** (`title-detail-cta-more`) for Open in Plex + owner Delete last. At 390, Chat / Watch together appear in More.
+- **pass:** No equal-weight button salad; destructive never peers Play.
+
+### `title.episode-detail`
+
+- **roles:** `member`, `owner`
+- **tags:** `watch`, `delight`, `library`
+- **source:** `frontend/src/pages/EpisodeDetailPage.jsx`, `frontend/src/components/ShowSeasonsPanel.jsx`
+- **steps:** On a show title with seasons, click an episode **title** → `/title/episode/{rk}` (`episode-detail-page`). Confirm code, air/runtime/watched meta, gold **Play** → `/watch/{rk}`. Confirm prev/next when neighbors exist. Confirm row **Play** still goes straight to `/watch`.
+- **pass:** Title opens detail; Play reaches theater; no token leak.
+
 ### `watch.youth-gate`
 
 - **roles:** `youth`

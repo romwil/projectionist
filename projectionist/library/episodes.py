@@ -628,6 +628,84 @@ def _episode_api_item(show_title: str, row: Any) -> Dict[str, Any]:
     }
 
 
+def get_episode_detail(db: Database, rating_key: str) -> Dict[str, Any]:
+    """Single episode + show context + prev/next for the episode detail page."""
+    key = str(rating_key or "").strip()
+    if not key:
+        return {"error": "Episode not found"}
+
+    with db.connect() as conn:
+        row = conn.execute(
+            """
+            SELECT e.*, s.title AS show_title, s.rating_key AS show_rating_key,
+                   s.tmdb_id AS show_tmdb_id, s.tvdb_id AS show_tvdb_id,
+                   s.poster_url AS show_poster_url, s.id AS show_item_id
+            FROM library_episodes e
+            JOIN library_items s ON s.id = e.show_item_id
+            WHERE e.rating_key = ?
+            LIMIT 1
+            """,
+            (key,),
+        ).fetchone()
+        if row is None:
+            return {"error": "Episode not found"}
+
+        show_item_id = int(row["show_item_id"])
+        season = int(row["season_number"]) if row["season_number"] is not None else None
+        episode = int(row["episode_number"]) if row["episode_number"] is not None else None
+        neighbors = conn.execute(
+            """
+            SELECT rating_key, title, season_number, episode_number
+            FROM library_episodes
+            WHERE show_item_id = ?
+            ORDER BY season_number ASC, episode_number ASC
+            """,
+            (show_item_id,),
+        ).fetchall()
+
+    show_title = str(row["show_title"] or "")
+    item = _episode_api_item(show_title, row)
+    prev_ep = None
+    next_ep = None
+    for index, neighbor in enumerate(neighbors):
+        if str(neighbor["rating_key"] or "").strip() != key:
+            continue
+        if index > 0:
+            prior = neighbors[index - 1]
+            prev_ep = {
+                "rating_key": str(prior["rating_key"] or "").strip() or None,
+                "title": str(prior["title"] or ""),
+                "season_number": int(prior["season_number"]) if prior["season_number"] is not None else None,
+                "episode_number": int(prior["episode_number"]) if prior["episode_number"] is not None else None,
+            }
+        if index + 1 < len(neighbors):
+            following = neighbors[index + 1]
+            next_ep = {
+                "rating_key": str(following["rating_key"] or "").strip() or None,
+                "title": str(following["title"] or ""),
+                "season_number": int(following["season_number"]) if following["season_number"] is not None else None,
+                "episode_number": int(following["episode_number"]) if following["episode_number"] is not None else None,
+            }
+        break
+
+    return {
+        "media_type": "episode",
+        "episode": item,
+        "show": {
+            "id": show_item_id,
+            "title": show_title,
+            "rating_key": str(row["show_rating_key"] or "").strip() or None,
+            "tmdb_id": int(row["show_tmdb_id"]) if row["show_tmdb_id"] is not None else None,
+            "tvdb_id": int(row["show_tvdb_id"]) if row["show_tvdb_id"] is not None else None,
+            "poster_url": str(row["show_poster_url"] or "").strip() or None,
+        },
+        "prev_episode": prev_ep,
+        "next_episode": next_ep,
+        "season_number": season,
+        "episode_number": episode,
+    }
+
+
 def query_episodes(
     db: Database,
     *,

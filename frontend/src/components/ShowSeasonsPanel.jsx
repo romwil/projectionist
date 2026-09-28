@@ -9,7 +9,7 @@ import {
   normalizeShowSeasonsPayload,
   showSeasonsSummaryLine,
 } from "../lib/showSeasons.js";
-import { libraryWatchTo, plexWatchUrl } from "../lib/titleLinks.js";
+import { libraryEpisodeTo, libraryWatchTo, plexWatchUrl } from "../lib/titleLinks.js";
 import {
   completionConfidenceLabel,
   formatTrackedDate,
@@ -247,6 +247,7 @@ export default function ShowSeasonsPanel({
                       const epSize = formatShowBytes(ep.file_size);
                       const epKey = String(ep.rating_key || "").trim();
                       const playTo = epKey ? libraryWatchTo(epKey, location) : null;
+                      const detailTo = epKey ? libraryEpisodeTo(epKey, location) : null;
                       const plexHref = epKey
                         ? plexWatchUrl(epKey, detail?.plex_machine_id || "")
                         : "";
@@ -261,11 +262,11 @@ export default function ShowSeasonsPanel({
                         >
                           <div className="show-episode-main">
                             <span className="show-episode-code">{code}</span>
-                            {playTo ? (
+                            {detailTo ? (
                               <Link
-                                to={playTo}
+                                to={detailTo}
                                 className="show-episode-title show-episode-title-link"
-                                data-testid={`show-episode-title-play-${epKey}`}
+                                data-testid={`show-episode-title-${epKey}`}
                               >
                                 {ep.title}
                               </Link>
