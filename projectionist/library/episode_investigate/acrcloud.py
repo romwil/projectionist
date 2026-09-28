@@ -13,6 +13,7 @@ import struct
 import threading
 import time
 import urllib.request
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Callable, Dict, Mapping, Optional, Sequence
 from urllib.parse import urlparse
@@ -47,9 +48,11 @@ THEME_SUFFIXES = (
     "score",
 )
 
+IDENTIFIED_KEYS_CAP = 4096
+
 _last_identify_at = 0.0
 _rate_lock = threading.Lock()
-_identified_keys: set[str] = set()
+_identified_keys: OrderedDict[str, None] = OrderedDict()
 _identified_lock = threading.Lock()
 
 IdentifyFetch = Callable[[str, bytes, str, Mapping[str, str]], Mapping[str, Any]]
@@ -418,7 +421,9 @@ def _claim_file(key: str) -> bool:
     with _identified_lock:
         if key in _identified_keys:
             return False
-        _identified_keys.add(key)
+        _identified_keys[key] = None
+        while len(_identified_keys) > IDENTIFIED_KEYS_CAP:
+            _identified_keys.popitem(last=False)
         return True
 
 
