@@ -233,6 +233,199 @@
   align-items: center;
 }
 
+.title-detail-cta-primary,
+.title-detail-cta-secondary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.title-detail-cta-more {
+  position: relative;
+}
+
+.title-detail-cta-more > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.title-detail-cta-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.title-detail-cta-menu {
+  position: absolute;
+  z-index: 8;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  min-width: 12rem;
+  padding: 0.35rem;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-raised) 96%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.title-detail-cta-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  min-height: 44px;
+  padding: 0.65rem 0.75rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.title-detail-cta-menu-item:hover,
+.title-detail-cta-menu-item:focus-visible {
+  background: var(--accent-soft);
+}
+
+.title-detail-cta-menu-item.is-danger {
+  color: var(--danger);
+}
+
+.title-detail-cta-phone-only {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .title-detail-cta-desktop-only {
+    display: none;
+  }
+
+  .title-detail-cta-phone-only {
+    display: block;
+  }
+
+  .title-detail-cta-row {
+    gap: var(--space-2);
+  }
+
+  .title-cta {
+    padding: 12px 18px;
+  }
+}
+
+/* Episode detail — show → seasons → episode sheet */
+.episode-detail-page .workspace-main,
+.episode-detail-page {
+  min-height: 0;
+}
+
+.episode-detail {
+  width: min(var(--reading-column-max, 72rem), 100%);
+  margin: 0 auto;
+  padding: 0 var(--gutter) var(--space-8);
+}
+
+.episode-detail-stage {
+  position: relative;
+  min-height: clamp(18rem, 48vh, 28rem);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background-color: #0a0c10;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: flex-end;
+}
+
+.episode-detail-stage-veil {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(5, 6, 8, 0.2), rgba(5, 6, 8, 0.88));
+  pointer-events: none;
+}
+
+.episode-detail-copy {
+  position: relative;
+  z-index: 1;
+  padding: var(--space-6);
+  max-width: 40rem;
+}
+
+.episode-detail-show {
+  margin: 0;
+  color: var(--accent);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-decoration: none;
+}
+
+.episode-detail-code {
+  margin: var(--space-2) 0 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.episode-detail-title {
+  margin: var(--space-2) 0 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.6rem, 4vw, 2.4rem);
+  line-height: 1.15;
+}
+
+.episode-detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.episode-detail-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.episode-detail-nav {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.episode-detail-neighbor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-height: 44px;
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.episode-detail-neighbor--next {
+  text-align: right;
+}
+
+.episode-detail-neighbor.is-empty {
+  border-color: transparent;
+}
+
+.episode-detail-neighbor:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--accent-soft);
+}
+
 .title-detail-add-feedback {
   margin: var(--space-3) 0 0;
   font-size: var(--text-sm);

@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [1.37.3] — 2026-09-28
+
+Title surfaces get the same intentional CTA grammar as Play theater, plus a real episode detail page on the show → seasons → episode path.
+
+### Highlights
+- **One gold primary on title sheets.** Play (or Add when not in library) owns the CTA row; Trailer / Rate / Watched stay secondary; Open in Plex and destructive owner tools live under **More** — including on the mini drawer sheet.
+- **Episode detail like Plex.** Season list titles open `/title/episode/{ratingKey}` with air date, runtime, watched, Play → `/watch/{rk}`, and previous/next episode. The gold Play on the row still jumps straight into theater.
+- **Design decisions written down.** `docs/DESIGN.md` now records Playback & Title surface choices (theater composition, CTA hierarchy, show→episode path) so the living-room bar stays intentional.
+
+### Changed
+- `TitleDetailContent` CTA row: primary / secondary / More menu; phone collapses Chat / Watch together into More.
+- `GET /api/library/tv/episode/{rating_key}` + `EpisodeDetailPage` + seasons title links.
+- Design doc section **Playback & Title surfaces**.
+
+### Verification
+- Playwright: `e2e/library-watch.spec.ts` (episode title → detail → Play; direct Play still works).
+- Frontend unit: `titleLinks.test.mjs` (episode path helper).
+
 ## [1.37.2] — 2026-09-28
 
 Play theater is a living-room composition again: one viewport, picture first, quiet chrome — not a scrollable poster with eight equal buttons.

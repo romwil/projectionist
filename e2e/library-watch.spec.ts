@@ -220,7 +220,7 @@ test.describe("In-app library Play", () => {
     await expect(page.getByTestId("library-player-error")).toHaveCount(0);
   });
 
-  test("show seasons episode Play opens /watch for that episode key", async ({ page }) => {
+  test("show seasons episode Play opens /watch; title opens episode detail", async ({ page }) => {
     await page.route("**/api/title/show/43323**", async (route) => {
       await route.fulfill({
         status: 200,
@@ -277,12 +277,45 @@ test.describe("In-app library Play", () => {
         body: JSON.stringify({ hasCoverage: false, timeline: [], episode_completions: {} }),
       });
     });
+    await page.route("**/api/library/tv/episode/ep-fern-1**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          media_type: "episode",
+          episode: {
+            rating_key: "ep-fern-1",
+            title: "Zach Galifianakis",
+            season_number: 1,
+            episode_number: 1,
+            runtime_minutes: 22,
+            unwatched: true,
+            aired_at: "2012-01-01",
+          },
+          show: {
+            id: 42,
+            title: "Between Two Ferns",
+            tmdb_id: 43323,
+            poster_url: "",
+          },
+          prev_episode: null,
+          next_episode: null,
+        }),
+      });
+    });
 
     await page.goto("/title/show/43323");
     await expect(page.getByTestId("show-seasons-panel")).toBeVisible();
     await expect(page.getByTestId("show-episode-play-ep-fern-1")).toBeVisible();
-    await page.getByTestId("show-episode-play-ep-fern-1").click();
+    await page.getByTestId("show-episode-title-ep-fern-1").click();
+    await expect(page).toHaveURL(/\/title\/episode\/ep-fern-1/);
+    await expect(page.getByTestId("episode-detail-play")).toBeVisible();
+    await page.getByTestId("episode-detail-play").click();
     await expect(page).toHaveURL(/\/watch\/ep-fern-1/);
     await expect(page.getByTestId("library-player")).toBeVisible();
+
+    await page.goto("/title/show/43323");
+    await page.getByTestId("show-episode-play-ep-fern-1").click();
+    await expect(page).toHaveURL(/\/watch\/ep-fern-1/);
   });
 });
