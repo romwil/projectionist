@@ -973,6 +973,46 @@ export async function tuneLiveChannel(channelId) {
   });
 }
 
+/** Household: start an in-app library HLS session (movie / episode / show key). */
+export async function startLibraryPlayback(ratingKey, { startOver = false } = {}) {
+  return api("/library/playback/start", {
+    method: "POST",
+    body: JSON.stringify({
+      rating_key: String(ratingKey || ""),
+      start_over: Boolean(startOver),
+    }),
+  });
+}
+
+export async function seekLibraryPlayback(sessionId, offsetMs) {
+  return api(`/library/playback/${encodeURIComponent(sessionId)}/seek`, {
+    method: "POST",
+    body: JSON.stringify({ offset_ms: Math.max(0, Math.floor(Number(offsetMs) || 0)) }),
+  });
+}
+
+export async function progressLibraryPlayback(sessionId, payload) {
+  return api(`/library/playback/${encodeURIComponent(sessionId)}/progress`, {
+    method: "POST",
+    body: JSON.stringify({
+      state: String(payload?.state || "playing"),
+      time_ms: Math.max(0, Math.floor(Number(payload?.time_ms) || 0)),
+      duration_ms: Math.max(0, Math.floor(Number(payload?.duration_ms) || 0)),
+    }),
+  });
+}
+
+export async function stopLibraryPlayback(sessionId, payload = {}) {
+  return api(`/library/playback/${encodeURIComponent(sessionId)}/stop`, {
+    method: "POST",
+    body: JSON.stringify({
+      time_ms: payload.time_ms == null ? undefined : Math.max(0, Math.floor(Number(payload.time_ms) || 0)),
+      duration_ms:
+        payload.duration_ms == null ? undefined : Math.max(0, Math.floor(Number(payload.duration_ms) || 0)),
+    }),
+  });
+}
+
 /** Owner-only: assemble and store the digest for the current week on demand. */
 export async function generateWeeklyDigest() {
   return api("/admin/weekly-digest/generate", { method: "POST" });
