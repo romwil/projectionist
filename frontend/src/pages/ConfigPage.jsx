@@ -538,6 +538,8 @@ export default function ConfigPage() {
   const [modelCatalogLoading, setModelCatalogLoading] = useState(false);
   const trackedSyncJobIdRef = useRef(null);
   const syncWasRunningRef = useRef(false);
+  const syncingLibraryRef = useRef(false);
+  syncingLibraryRef.current = syncingLibrary;
   const enginePollRef = useRef(null);
   const continuityPollRef = useRef(null);
   const publishPollRef = useRef(null);
@@ -700,10 +702,10 @@ export default function ConfigPage() {
     }
   }, [showWizard, section, settings?.features?.live_channels_enabled, settings?.tunarr?.url, settings?.tunarr?.docker_orchestration]);
 
+  const liveJobBusy = isLiveJobBusy(liveChannelsStatus?.job);
   useEffect(() => {
-    const jobBusy = isLiveJobBusy(liveChannelsStatus?.job);
     const localBusy = Boolean(liveBusy) && liveBusy !== "status" && liveBusy !== "attach";
-    if ((!jobBusy && !localBusy) || showWizard) return undefined;
+    if ((!liveJobBusy && !localBusy) || showWizard) return undefined;
     if (section !== "live-channels" && section !== "overview") return undefined;
     return startVisibleBusyPoll(
       () =>
@@ -712,7 +714,7 @@ export default function ConfigPage() {
           .catch(() => {}),
       { isBusy: () => true },
     );
-  }, [liveChannelsStatus?.job, liveBusy, section, showWizard]);
+  }, [liveJobBusy, liveBusy, section, showWizard]);
 
   useEffect(() => {
     return () => {
@@ -832,14 +834,14 @@ export default function ConfigPage() {
     }
 
     const stop = startVisibleBusyPoll(pollSyncJobs, {
-      isBusy: () => Boolean(syncingLibrary || syncWasRunningRef.current),
+      isBusy: () => Boolean(syncingLibraryRef.current || syncWasRunningRef.current),
       isEnabled: () => !cancelled,
     });
     return () => {
       cancelled = true;
       stop();
     };
-  }, [showWizard, section, syncingLibrary]);
+  }, [showWizard, section]);
 
   useEffect(() => {
     if (showWizard || section !== "libraries") return undefined;
