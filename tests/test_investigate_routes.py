@@ -209,3 +209,121 @@ class InvestigateRoutesTests(unittest.TestCase):
             json={"host": "https://bm-us-west-2.acrcloud.com", "access_key": "k", "access_secret": "s"},
         )
         self.assertEqual(rejected.status_code, 400)
+
+    def test_identify_test_rejects_path_outside_media_roots(self) -> None:
+        from projectionist.config_store import Settings, save_settings
+
+        media = Path(self._tmpdir.name) / "media"
+        media.mkdir()
+        outside = Path(self._tmpdir.name) / "outside.mkv"
+        outside.write_bytes(b"x")
+        save_settings(Path(self._tmpdir.name), Settings(tv_root=str(media)))
+        resp = self.client.post(
+            "/api/admin/investigate/identify/test",
+            json={"path": str(outside)},
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_identify_test_uses_snapshot_file_id_under_root(self) -> None:
+        from projectionist.config_store import Settings, save_settings
+
+        media = Path(self._tmpdir.name) / "media"
+        media.mkdir()
+        clip = media / "episode.mkv"
+        clip.write_bytes(b"x")
+        save_settings(Path(self._tmpdir.name), Settings(tv_root=str(media)))
+        snapshot = {"result": {"rows": [{"id": "row-1", "path": str(clip)}]}}
+        with patch(
+            "projectionist.library.episode_investigate.job.build_status",
+            return_value=snapshot,
+        ), patch(
+            "projectionist.library.episode_investigate.acrcloud.test_identify_clip",
+            return_value={"ok": True, "found": False, "renamed": False, "source": "file"},
+        ) as identify:
+            resp = self.client.post(
+                "/api/admin/investigate/identify/test",
+                json={"file_id": "row-1"},
+            )
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.json()["renamed"])
+        self.assertEqual(identify.call_args.kwargs["path"], str(clip.resolve()))
+
+    def test_identify_test_uses_in_root_path_that_matches_snapshot(self) -> None:
+        from projectionist.config_store import Settings, save_settings
+
+        media = Path(self._tmpdir.name) / "media"
+        media.mkdir()
+        clip = media / "episode.mkv"
+        clip.write_bytes(b"x")
+        save_settings(Path(self._tmpdir.name), Settings(tv_root=str(media)))
+        snapshot = {"result": {"rows": [{"id": "row-1", "path": str(clip)}]}}
+        with patch(
+            "projectionist.library.episode_investigate.job.build_status",
+            return_value=snapshot,
+        ), patch(
+            "projectionist.library.episode_investigate.acrcloud.test_identify_clip",
+            return_value={"ok": True, "found": False, "renamed": False, "source": "file"},
+        ) as identify:
+            resp = self.client.post(
+                "/api/admin/investigate/identify/test",
+                json={"path": str(clip)},
+            )
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.json()["renamed"])
+        self.assertEqual(identify.call_args.kwargs["path"], str(clip.resolve()))
+
+    def test_identify_test_ignores_in_root_path_absent_from_snapshot(self) -> None:
+        from projectionist.config_store import Settings, save_settings
+
+        media = Path(self._tmpdir.name) / "media"
+        media.mkdir()
+        clip = media / "episode.mkv"
+        clip.write_bytes(b"x")
+        save_settings(Path(self._tmpdir.name), Settings(tv_root=str(media)))
+        with patch(
+            "projectionist.library.episode_investigate.job.build_status",
+            return_value={"result": {"rows": []}},
+        ), patch(
+            "projectionist.library.episode_investigate.acrcloud.test_identify_clip",
+            return_value={"ok": True, "found": False, "renamed": False, "source": "silent"},
+        ) as identify:
+            resp = self.client.post(
+                "/api/admin/investigate/identify/test",
+                json={"path": str(clip)},
+            )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(identify.call_args.kwargs["path"], "")
+
+    def test_identify_test_uses_snapshot_resolved_path_for_mapped_file_id(self) -> None:
+        from projectionist.config_store import Settings, save_settings
+
+        media = Path(self._tmpdir.name) / "media"
+        media.mkdir()
+        clip = media / "episode.mkv"
+        clip.write_bytes(b"x")
+        save_settings(Path(self._tmpdir.name), Settings(tv_root=str(media)))
+        snapshot = {
+            "result": {
+                "rows": [
+                    {
+                        "id": "row-1",
+                        "path": "/tv/Show/Season 01/episode.mkv",
+                        "resolved_path": str(clip),
+                    }
+                ]
+            }
+        }
+        with patch(
+            "projectionist.library.episode_investigate.job.build_status",
+            return_value=snapshot,
+        ), patch(
+            "projectionist.library.episode_investigate.acrcloud.test_identify_clip",
+            return_value={"ok": True, "found": False, "renamed": False, "source": "file"},
+        ) as identify:
+            resp = self.client.post(
+                "/api/admin/investigate/identify/test",
+                json={"file_id": "row-1"},
+            )
+        self.assertEqual(resp.status_code, 200, resp.text)
+        self.assertFalse(resp.json()["renamed"])
+        self.assertEqual(identify.call_args.kwargs["path"], str(clip.resolve()))

@@ -51,20 +51,20 @@ Hard constraints from Will — later threads cannot miss these.
 | P3-HIGH-02 | High | A | SETUP_MODE skips WAN interlock; unauthenticated plex/tmdb tests on allowlist |
 | P3-HIGH-03 | High | A | Assistant markdown hrefs not sanitized |
 | P4-HIGH-01 | High | A | Chat stream puts full message on the query string |
-| P3-MED-01 | Med | A | Failed sync persists traceback in `GET /api/jobs` |
-| P3-MED-02 | Med | A | `ChatRequest.message` / stream query unbounded (pair with P4-HIGH-01) |
-| P3-MED-03 | Med | A | Webhook `compare_digest` not length-stable |
-| P3-MED-04 | Med | A | Identify test `path` has no media-root allowlist |
-| P4-MED-01 | Med | A | Unauthenticated `/api/features` leaks household topology |
-| P4-MED-04 | Med | A | `/api/setup/status` has no owner gate |
-| P2-HIGH-01 | High | B | `/api/library/stats` materializes every `library_items` row |
-| P2-HIGH-02 | High | B | HTTP `start_sync` is not single-flight |
-| P2-MED-01 | Med | B | `_identified_keys` grows for process lifetime |
-| P2-MED-02 | Med | B | Rate-limit buckets never evicted |
-| P4-MED-02 | Med | B | Whisper seeds from household `last_viewed_at` |
-| WAL close | Med | B | Add `PRAGMA wal_checkpoint(PASSIVE)` on `Database.close()` |
-| P2-HIGH-03 | High | C | Config / Libraries / Chat poll every 2–5 s while parked |
-| P4-MED-03 | Med | C | Identify has no owner-facing leaves-the-LAN sentence |
+| P3-MED-01 | Med | A | Failed sync persists traceback in `GET /api/jobs` — **done** |
+| P3-MED-02 | Med | A | `ChatRequest.message` / stream query unbounded (pair with P4-HIGH-01) — **done** (1.36.1) |
+| P3-MED-03 | Med | A | Webhook `compare_digest` not length-stable — **done** |
+| P3-MED-04 | Med | A | Identify test `path` has no media-root allowlist — **done** |
+| P4-MED-01 | Med | A | Unauthenticated `/api/features` leaks household topology — **done** |
+| P4-MED-04 | Med | A | `/api/setup/status` has no owner gate — **done** |
+| P2-HIGH-01 | High | B | `/api/library/stats` materializes every `library_items` row — **done** |
+| P2-HIGH-02 | High | B | HTTP `start_sync` is not single-flight — **done** |
+| P2-MED-01 | Med | B | `_identified_keys` grows for process lifetime — **done** |
+| P2-MED-02 | Med | B | Rate-limit buckets never evicted — **done** |
+| P4-MED-02 | Med | B | Whisper seeds from household `last_viewed_at` — **parked** |
+| WAL close | Med | B | Add `PRAGMA wal_checkpoint(PASSIVE)` on `Database.close()` — **done** |
+| P2-HIGH-03 | High | C | Config / Libraries / Chat poll every 2–5 s while parked — **done** |
+| P4-MED-03 | Med | C | Identify has no owner-facing leaves-the-LAN sentence — **done** |
 | P1-HIGH-01 | High | D | `auth_routes` / `setup_routes` re-import `app.py` |
 | P1-HIGH-02 | High | D | Next feature in `app.py` re-welds the god file |
 | P1-MED-01 | Med | D | User-visible CuratorX strings (except cookie + compose) |
@@ -106,32 +106,32 @@ Closest mechanical patches (fail-closed auth, markdown hrefs, stats `COUNT`, syn
 
 #### P3-MED-01 — no traceback in job API
 
-- **Status:** Landed on `fix/p3-med-01-jobs-traceback` (Thread A). `job.summary = {"failed": True}`; `to_dict()` strips any leftover `traceback` key. Do not implement P2-HIGH-02 `start_sync` in this file until Thread B.
+- **Status:** Done — merged on `release/1.36` via #53. `job.summary = {"failed": True}`; `to_dict()` strips any leftover `traceback` key.
 - **Where:** `jobs.py:376-377` (`job.summary` stores `traceback.format_exc()`). Exposed by `app.py:1354-1357` `GET /api/jobs` then `job.to_dict()`.
 - **Do:** `job.summary = {"failed": True}`; keep `friendly_job_error` on `job.error`. `logger.exception` server-side. Never put traceback in `to_dict()`.
 - **Lock:** same file as B `start_sync` — sequential or one owner.
 
 #### P3-MED-03 — webhook digest length-stable
 
-- **Status:** Landed on `fix/thread-a-perimeter-mediums` (Thread A). SHA-256 + `compare_digest`; empty secret/header still 401.
+- **Status:** Done — merged on `release/1.36` via #54. SHA-256 + `compare_digest`; empty secret/header still 401.
 - **Where:** `projectionist/web/webhooks.py:179` — `secrets.compare_digest(provided, secret)` raises on length mismatch then 500.
 - **Do:** Reject empty secret/provided as 401. Compare SHA-256 digests of both sides so `compare_digest` is fixed-length. Keep rejecting empty secret. Do not restore `X-CuratorX-Webhook-Secret`.
 
 #### P3-MED-04 — Identify test path roots
 
-- **Status:** Landed on `fix/thread-a-perimeter-mediums` (Thread A). Roots = Plex / Radarr / Sonarr / `tv_root` / `movies_root` / `/tv` / `/movies`. Raw path ignored unless it matches a snapshot row.
+- **Status:** Done — merged on `release/1.36` via #54. Roots = Plex / Radarr / Sonarr / `tv_root` / `movies_root` / `/tv` / `/movies`. `file_id` prefers snapshot `resolved_path`. Raw path ignored unless it matches a snapshot row.
 - **Where:** `investigate_routes.py:234-250` (`identify_test`). Raw `payload.path` goes to `test_identify_clip` (`acrcloud.py:378-384`) if it is a readable file. Stills GET is already allowlisted (`:256-269`).
 - **Do:** Resolve against configured media roots (Plex section paths / Radarr/Sonarr roots). Reject unless `resolved.is_relative_to(root)`. If only `file_id`, keep snapshot-row resolve (already implemented). Ignore raw `path` unless it matches a snapshot row. Owner-session only; no exploit write-up.
 
 #### P4-MED-01 — shrink unauthenticated `/api/features`
 
-- **Status:** Landed on `fix/thread-a-perimeter-mediums` (Thread A). `_features_payload` only; `library_stats` untouched.
+- **Status:** Done — merged on `release/1.36` via #54. Guest payload also keeps `features.access_requests_enabled`. `_features_payload` only; `library_stats` untouched.
 - **Where:** `app.py:1176` `_features_payload`; `app.py:1286` `GET /api/features`. `authenticated=False` still emits `household_domain`, `live_channels_ready`, `trust_proxy_headers`, Seerr flags, and `youth.max_content_rating` (`:1254-1262`).
 - **Do:** When `authenticated=False`, return only `features.multi_user_enabled`, `auth_methods`, `setup_state`, `authenticated: false`, `user: null`.
 
 #### P4-MED-04 — owner-gate `/api/setup/status`
 
-- **Status:** Landed on `fix/thread-a-perimeter-mediums` (Thread A). `Depends(require_role("owner"))`. Unauth is 401 from `get_current_user`; member is 403.
+- **Status:** Done — merged on `release/1.36` via #54. `Depends(require_role("owner"))`. Members get Radarr/Sonarr readiness from `features.arr`.
 - **Where:** `setup_routes.py:67-69` — `setup_status()` has no `require_role`. Builder `setup.py:506` (`build_setup_status`) reports whether Plex/Radarr/Sonarr/TMDB/LLM are configured.
 - **Do:** `Depends(require_role("owner"))` on `setup_status`. Members already get readiness from `/api/features`.
 
@@ -143,11 +143,13 @@ Closest mechanical patches (fail-closed auth, markdown hrefs, stats `COUNT`, syn
 
 #### P2-HIGH-01 — `library_stats` via COUNT(*)
 
+- **Status:** Done — merged on `release/1.36` via #56. `counts = db.library_counts()`; `total` maps from `items`. Other `all_library_items()` callers unchanged.
 - **Where:** `app.py:1377-1382` — `db.all_library_items()` then counts in Python. `all_library_items` is `_library_query.py:167`. The COUNT helper already exists: **`library_counts()`** at `_library_query.py:156` (not `library_item_counts` — that name is not on this tree).
 - **Do:** `counts = db.library_counts()`; map `total` / `movies` / `shows` from those COUNTs. Keep `last_sync`, cached Plex name, `knowledge_coverage`, `_sanitize_library_payload`.
 
 #### P2-HIGH-02 — single-flight `start_sync`
 
+- **Status:** Done — merged on `release/1.36` via #56. Under `_lock`, return the existing queued/running `library_sync` job as HTTP 200 (same job dict; frontend `api()` throws on 409).
 - **Where:** `jobs.py:173-182` — every `POST /api/library/sync` (`app.py:1369`) starts a new UUID + daemon thread. Scheduler already refuses a second run (`jobs.py:422-423`). Investigate / Sonarr-missing already single-flight via `admin_execution.store.begin`.
 - **Do:** Under `_lock`, if a `library_sync` job is `queued`/`running`, return it. Return 200 with the existing job (or 409 — match Sonarr missing).
 - **Lock:** same file as A P3-MED-01.
@@ -156,21 +158,25 @@ Closest mechanical patches (fail-closed auth, markdown hrefs, stats `COUNT`, syn
 
 #### P2-MED-01 — cap `_identified_keys`
 
+- **Status:** Done — merged on `release/1.36` via #56. `OrderedDict` cap 4096; oldest evicted. Tests still call `reset_identify_throttle_for_tests`.
 - **Where:** `acrcloud.py:52` (`set`) and `:417` (`_claim_file` adds forever). `reset_identify_throttle_for_tests` already clears (`:409-414`).
 - **Do:** `OrderedDict` cap 4096; evict oldest when over. Tests still call reset.
 
 #### P2-MED-02 — evict rate-limit buckets
 
+- **Status:** Done — merged on `release/1.36` via #56. After `check()`, if `len(_hits) > 4096`, drop empty keys then oldest buckets. Do not apply the caller’s window cutoff to other buckets.
 - **Where:** `rate_limit.py:19` — `_hits` keyed `(bucket, client_ip)` for process lifetime. Homelab-default is fine; Automat + `trust_proxy_headers` is not bounded.
 - **Do:** After `check()`, if `len(self._hits) > 4096`, drop empty-after-cutoff keys, else evict oldest stale buckets. Same lock.
 
 #### P4-MED-02 — whisper from per-user watch state
 
+- **Status:** Parked (Thread B). Week filled; seed still household `last_viewed_at`. Do not implement in this cut.
 - **Where:** `whisper.py:165-184` `_recent_seed` — household `library_items.last_viewed_at`. `:201` unwatched set is household `view_count=0`. Why-string names the member and that seed (`:23-26`). Inbox is correctly `user_id`-scoped.
 - **Do:** Seed and unwatched set from `watch_tracker` / per-user view state for `user_id`. If none, cluster-only fallback — never another member `last_viewed_at`. Keep notification delivery scoped to `user_id`. Youth already excluded.
 
 #### WAL close (no finding ID)
 
+- **Status:** Done — merged on `release/1.36` via #56. `PRAGMA wal_checkpoint(PASSIVE)` after serializer shutdown. Never `TRUNCATE`.
 - **Where:** `projectionist/library/db/_schema.py:71` `Database.close()`. Writer-serializer + WAL + `wal_autocheckpoint=1000` already exist.
 - **Do:** `PRAGMA wal_checkpoint(PASSIVE)` on close so Unraid appdata does not accumulate `-wal` across restarts. Do not TRUNCATE under live readers. Do not Repair Plex. Do not touch smartmap `:8790`.
 
@@ -184,7 +190,7 @@ Closest mechanical patches (fail-closed auth, markdown hrefs, stats `COUNT`, syn
 
 - **Where:** `ConfigPage.jsx:833` sync jobs 2 s (`[showWizard]` only — all `/admin/*`). `:854` Sonarr missing 2 s. `:885` Radarr register 2 s. Live `:705` is already gated to `live-channels`/`overview` while busy. `LibrariesSection.jsx:615` Investigate 2 s (`[]`). `App.jsx:747` `listJobs` every 5 s forever.
 - **Do:** Poll only the visible section, only while busy, backoff 8–10 s when idle, pause on `document.hidden`. Drop chat-shell `listJobs` unless a sync toast is open.
-- **Landed:** `visibleBusyPoll.js` (2s busy / 8s idle / hidden pause). Config libraries polls, Investigate, and chat `listJobs` (toast-only).
+- **Landed:** Done — merged on `release/1.36` via #55. `visibleBusyPoll.js` (2s busy / 8s idle / hidden pause). Config libraries polls, Investigate, and chat `listJobs` (toast-only). Live poll depends on a busy boolean; Sync keeps busy in a ref.
 
 ### Medium
 
@@ -192,7 +198,7 @@ Closest mechanical patches (fail-closed auth, markdown hrefs, stats `COUNT`, syn
 
 - **Where:** Vision copy is honest — `frontend/src/lib/episodeInvestigate.js:3-4` `STILLS_LEAVE_LAN`, surfaced at `LibrariesSection.jsx:716`. Identify uploads a clip to `identify-*.acrcloud.com` (`acrcloud.py:309` `identify_file`). Host allowlist and key masking are already correct.
 - **Do:** Add `IDENTIFY_LEAVES_LAN` next to `STILLS_LEAVE_LAN` (match `IDENTIFY_CLIP_SECONDS`; a miss does not rename files). Surface on Identify settings + test controls. Keep test `renamed: False`.
-- **Landed:** `IDENTIFY_LEAVES_LAN` + Identify settings / **Test Identify** on Admin → Libraries. Test honesty stays `renamed: false`.
+- **Landed:** Done — merged on `release/1.36` via #55. `IDENTIFY_LEAVES_LAN` + Identify settings / **Test Identify** on Admin → Libraries. Test honesty stays `renamed: false`.
 
 Verify Investigate / Rematch / Whisper / House on QA `:8792` only (390-wide + desktop).
 

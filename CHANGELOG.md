@@ -2,24 +2,41 @@
 
 ## [Unreleased]
 
-Parked HDMI/kiosk clients no longer hammer job APIs, and Identify says when a clip leaves the LAN.
+Failed syncs keep a friendly error, guests see less of the house, library stats stay cheap, parked clients stop polling, and Identify says when a clip leaves the LAN.
 
 ### Highlights
+- **Failed library sync no longer shows a stack trace.** Job history keeps a short friendly error so `GET /api/jobs` does not leak frames from the host.
+- **The login screen learns less about the house.** Guests see whether multi-user is on, whether they can ask for an invite, and how they can sign in — not household domain, proxy, or Seerr flags. Setup status is owner-only; members still get Radarr/Sonarr readiness for dock-drop.
+- **Identify test clips stay on the media roots.** A test path has to sit under the configured TV/movie folders (or a current snapshot row, including a mapped `resolved_path`). A miss still does not rename files.
+- **Library stats stay cheap.** Counts come from SQL, not by loading every title into memory, so a large library does not stall the dashboard.
+- **One library sync at a time.** A second Sync while a job is queued or running returns that same job instead of starting another thread.
 - **Admin polls only the page you are looking at.** Library sync, Sonarr missing, Radarr register, and Investigate back off to eight seconds when idle, and pause when the tab is hidden. Chat only asks for job status while a sync toast is open — a parked living-room display will not keep waking the server.
 - **Identify says the clip leaves the LAN.** Settings and the test control tell you a 12-second clip goes to ACRCloud, and that a miss (or a test) does not rename files.
 
 ### Changed
+- `GET /api/library/stats` uses `library_counts()` (`total` from `items`) and still returns `last_sync`, cached Plex name, `knowledge_coverage`, and the sanitized payload (P2-HIGH-01).
+- `start_sync` is single-flight under `_lock`: a queued or running `library_sync` is returned as 200 with that job (P2-HIGH-02).
+- `Database.close()` runs `PRAGMA wal_checkpoint(PASSIVE)` after the writer serializer stops. Never `TRUNCATE`.
+- Identify `_identified_keys` is an `OrderedDict` capped at 4096 (P2-MED-01). Rate-limit buckets evict empty and oldest keys after `check()` when over 4096, without applying the caller’s window cutoff to other buckets (P2-MED-02).
 - Config / Libraries / chat job polls use a shared visible-busy helper (2s while busy, 8s idle, `document.hidden` pause). Chat `listJobs` runs only while a sync toast is open (P2-HIGH-03). Live Channels status depends on a busy boolean so a running job cannot remount the poll. Library Sync keeps `syncingLibrary` in a ref so the first click is not cleared by a stale `listJobs` tick.
 
+### Security
+- Failed `library_sync` jobs store `summary.failed` and a friendly `error`. `Job.to_dict()` never includes a `traceback` key or frame strings, including jobs persisted before this change (P3-MED-01).
+- Plex webhook secrets compare SHA-256 of both sides so a length mismatch is 401, not 500. Empty secret or header is still 401. Header remains `X-Projectionist-Webhook-Secret` (P3-MED-03).
+- Unauthenticated `GET /api/features` returns only `features.multi_user_enabled`, `features.access_requests_enabled`, `auth_methods`, `setup_state`, `authenticated: false`, and `user: null` (P4-MED-01). The login screen can hide Need an invite? when access requests are off.
+- `GET /api/setup/status` requires the owner role. Signed-in members get Radarr/Sonarr readiness from `features.arr` (P4-MED-04).
+- Identify test clips resolve under configured media roots (Plex / Radarr / Sonarr / `tv_root` / `movies_root` / `/tv` / `/movies`). A raw path is used only when it matches a snapshot row; `file_id` prefers the snapshot `resolved_path` so a mapped Sonarr path still works. Paths outside those roots return 400 (P3-MED-04).
+
 ### Fixed
-- A second saved-library chip on `/chat` starts that page. The first consume no longer leaves `savedLibraryStartedRef` stuck true.
+- Saved-library chips on chat home and Library continue that response on `/chat?saved_library=…` instead of dropping the query at the `/` redirect. A second chip on `/chat` starts that page; the first consume no longer leaves the starter stuck.
 - Members who cannot read `/api/setup/status` still get Radarr/Sonarr dock-drop from `features.arr` instead of looking disconnected.
 
 ### Added
 - Identify settings and **Test Identify** on Admin → Libraries, with `IDENTIFY_LEAVES_LAN` (`IDENTIFY_CLIP_SECONDS` = 12). Test honesty is `renamed: false` (P4-MED-03).
 
 ### Verification
-- Frontend unit: 815 passed, including `visibleBusyPoll.test.mjs` and `episodeInvestigate.test.mjs`.
+- Focused pytest: durable jobs, webhooks, authz, Identify paths, library counts, WAL close, Identify key cap, rate-limit eviction.
+- Frontend unit: `visibleBusyPoll.test.mjs`, `episodeInvestigate.test.mjs`, `chatLayout.test.mjs`.
 - Targeted Playwright (chromium, :8799): `e2e/config-maintenance.spec.ts` Identify settings/test; `e2e/ca-release.spec.ts` chat sync toast.
 
 ## [1.36.2] — 2026-09-25
@@ -35,7 +52,6 @@ TV and movie libraries are inside the container, read-write, so Investigate can 
 - Unraid CA Path mounts, `docker-compose.yml`, `docker-compose.unraid.yml`, and `rollout.sh` bind those host folders **read-write** at `/tv` and `/movies` (same-path too on Unraid). Never `:ro`.
 
 ### Fixed
-- Saved-library chips on chat home and Library continue that response on `/chat?saved_library=…` instead of dropping the query at the `/` redirect.
 - Episode investigation translates Sonarr episode paths for ffmpeg stills, runtime, OSHash, and Identify. Unreadable paths are `stills_error=unreadable_path` (failed, not completed). Unknown-scope rows no longer say “other show.”
 - Investigate path mapper treats `tv_root` / `movies_root` as first-class local roots, then `/tv` and `/movies`.
 

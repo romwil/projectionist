@@ -90,6 +90,23 @@ class AuthTests(unittest.TestCase):
         self.assertTrue(body["features"]["multi_user_enabled"])
         self.assertFalse(body["authenticated"])
         self.assertIsNone(body["user"])
+        self.assertEqual(
+            set(body.keys()),
+            {"features", "auth_methods", "setup_state", "authenticated", "user"},
+        )
+        self.assertEqual(set(body["features"].keys()), {"multi_user_enabled"})
+        for key in (
+            "household_domain",
+            "seerr",
+            "request_path",
+            "notifications",
+            "youth",
+            "auth",
+        ):
+            self.assertNotIn(key, body)
+        self.assertNotIn("live_channels_ready", body["features"])
+        self.assertNotIn("trust_proxy_headers", body["features"])
+        self.assertNotIn("seerr_enabled", body["features"])
 
     def test_plex_login_creates_owner_and_session(self) -> None:
         self._enable_multi_user()
