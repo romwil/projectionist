@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
+from projectionist.web.job_progress import friendly_job_error
 from projectionist.web.jobs import (
     INTERRUPTED_BY_RESTART,
     JOBS_STATE_FILENAME,
@@ -190,6 +191,48 @@ class DurableJobsTests(unittest.TestCase):
         self.assertIn("label", payload["progress"])
         self.assertIn("message", payload["progress"])
         self.assertEqual(payload["progress"]["phase"], "tv")
+
+    def test_failed_sync_omits_traceback_from_job_dict(self) -> None:
+        manager = JobManager(self.data_dir)
+        job = Job(id="fail1", job_type="library_sync", status="queued", created_at=1.0)
+        with manager._lock:
+            manager._jobs[job.id] = job
+        with patch(
+            "projectionist.web.jobs.sync_library",
+            side_effect=RuntimeError("Plex is not configured"),
+        ):
+            manager._run_sync("fail1", MagicMock())
+        stored = manager.get_job("fail1")
+        self.assertIsNotNone(stored)
+        payload = stored.to_dict()
+        dumped = json.dumps(payload)
+        self.assertEqual(payload["status"], "failed")
+        self.assertEqual(payload["error"], friendly_job_error(RuntimeError("Plex is not configured")))
+        self.assertEqual(payload["summary"], {"failed": True})
+        self.assertNotIn("traceback", payload)
+        self.assertNotIn("traceback", payload["summary"])
+        self.assertNotIn("Traceback", dumped)
+        self.assertNotIn('File "', dumped)
+
+    def test_to_dict_strips_legacy_traceback_summary(self) -> None:
+        job = Job(
+            id="legacy1",
+            job_type="library_sync",
+            status="failed",
+            created_at=1.0,
+            error="Plex is not configured",
+            summary={
+                "traceback": 'Traceback (most recent call last):\n  File "jobs.py", line 1, in _run_sync\n    boom',
+                "failed": True,
+            },
+        )
+        payload = job.to_dict()
+        dumped = json.dumps(payload)
+        self.assertEqual(payload["error"], "Plex is not configured")
+        self.assertEqual(payload["summary"], {"failed": True})
+        self.assertNotIn("traceback", payload["summary"])
+        self.assertNotIn("Traceback", dumped)
+        self.assertNotIn('File "', dumped)
 
 
 class StartupLifespanTests(unittest.TestCase):
