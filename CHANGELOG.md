@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [1.37.2] — 2026-09-28
+
+Play theater is a living-room composition again: one viewport, picture first, quiet chrome — not a scrollable poster with eight equal buttons.
+
+### Highlights
+- **One screen, one picture.** `/watch` locks to the viewport. Poster art is a blurred cover backdrop behind the video — never the thing that makes the page scroll.
+- **Chrome that knows its job.** Primary = Play/Pause + scrubber + time. ±15 stays discreet (double-tap thirds still skip). CC and Fullscreen sit secondary. PiP, Pop-out, Open in Plex, and Back live under **More**.
+- **Paused invites you in.** A large center play glyph when the reel is paused; OSD auto-hides until you move or tap. Tab-hide no longer leaves a dead Play control.
+
+### Fixed
+- Theater shell is `position: fixed; inset: 0` / `100dvh` with document pin via `html:has([data-theater-mode])`. Stage poster is a cover `<img>`; `<video>` no longer carries a layout-breaking `poster` attribute.
+- Redesigned `LibraryPlayer` OSD hierarchy + center play affordance; More menu for overflow actions; honest resume / error / end states with Try again + Open in Plex.
+- `togglePlayback` re-arms via `begin()` when the stream was cleared after visibility stop.
+- Playwright asserts viewport-bound poster/stage, phone hides Pop-out from the primary row, and More exposes Pop-out.
+
+### Verification
+- Frontend unit: `theaterPlayer.test.mjs`.
+- Targeted Playwright (chromium, :8799): `e2e/library-watch.spec.ts` (viewport-bound poster, phone 390, Play actionable, More/Pop-out, skip chip, HLS non-thrash).
+
 ## [1.37.1] — 2026-09-28
 
 Play no longer flashes controls then stalls, and each TV episode on the title page has its own Play.
