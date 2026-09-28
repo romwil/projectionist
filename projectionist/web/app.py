@@ -1175,14 +1175,27 @@ register_webhook_routes(app, db_factory=_db, settings_factory=_settings)
 
 def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any]:
     settings = _settings()
+    from projectionist.web.setup_mode import resolve_setup_state
+
+    setup_state = resolve_setup_state(_db())
+    if not authenticated:
+        return {
+            "features": {
+                "multi_user_enabled": settings.features.multi_user_enabled,
+                "access_requests_enabled": bool(
+                    getattr(settings.features, "access_requests_enabled", True)
+                ),
+            },
+            "auth_methods": available_auth_methods(settings),
+            "setup_state": setup_state,
+            "authenticated": False,
+            "user": None,
+        }
     if user is None:
         user = bootstrap_owner(_db())
     request_path = "seerr" if uses_seerr_request_path(settings, role=user.role) else "arr"
     from projectionist.config_store import household_profile_name
     from projectionist.notifications.service import notification_channel_offerings
-    from projectionist.web.setup_mode import resolve_setup_state
-
-    setup_state = resolve_setup_state(_db())
     profile = household_profile_name(settings)
     payload: Dict[str, Any] = {
         "features": {
@@ -1224,6 +1237,16 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
             "require_linked_user_for_requests": settings.seerr.require_linked_user_for_requests,
         },
         "request_path": request_path,
+        "arr": {
+            "radarr_configured": bool(
+                str(getattr(settings, "radarr_url", "") or "").strip()
+                and str(getattr(settings, "radarr_api_key", "") or "").strip()
+            ),
+            "sonarr_configured": bool(
+                str(getattr(settings, "sonarr_url", "") or "").strip()
+                and str(getattr(settings, "sonarr_api_key", "") or "").strip()
+            ),
+        },
         "authenticated": authenticated,
         "notifications": {
             "channels": notification_channel_offerings(settings),
