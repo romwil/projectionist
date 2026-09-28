@@ -66,6 +66,7 @@ import {
   secretPlaceholder,
   seerrSecretPlaceholder,
 } from "../lib/secretField.js";
+import { jobIsActive, startVisibleBusyPoll } from "../lib/visibleBusyPoll.js";
 
 const ADMIN_SECTIONS = new Set([
   "overview",
@@ -121,8 +122,8 @@ const FIELD_LABELS = {
   long_synopsis_source: "Long synopsis source",
   tautulli_url: "Tautulli URL",
   tautulli_api_key: "API key",
-  movies_root: "Movies folder path",
-  tv_root: "TV folder path",
+  movies_root: "Movie library path",
+  tv_root: "TV library path",
   radarr_root_folder: "Radarr root folder",
   sonarr_root_folder: "Sonarr root folder",
   library_sync_interval_hours: "Auto-sync every (hours)",
@@ -150,8 +151,10 @@ const FIELD_HELP = {
   long_synopsis_source:
     "Defaults to wikipedia (free, no key, deeper plot without LLM). Set to off to disable, or omdb / auto.",
   tautulli_url: "Optional: watch history for purge suggestions and “what we’ve been watching”.",
-  movies_root: "Host path Radarr uses for movies (advanced; usually matches Radarr).",
-  tv_root: "Host path Sonarr uses for TV (advanced; usually matches Sonarr).",
+  movies_root:
+    "Path this container uses for movies (usually /movies or the host folder bind-mounted read-write). PROJECTIONIST_MOVIE_MEDIA wins when set. Needed so Investigate can rename files.",
+  tv_root:
+    "Path this container uses for TV (usually /tv or the host folder bind-mounted read-write). PROJECTIONIST_TV_MEDIA wins when set. Investigate Apply renames episode files here — the bind must be rw, not :ro.",
   library_enrich_workers: "How many titles to enrich at once during sync. Lower if Unraid feels busy.",
 };
 
@@ -535,6 +538,8 @@ export default function ConfigPage() {
   const [modelCatalogLoading, setModelCatalogLoading] = useState(false);
   const trackedSyncJobIdRef = useRef(null);
   const syncWasRunningRef = useRef(false);
+  const syncingLibraryRef = useRef(false);
+  syncingLibraryRef.current = syncingLibrary;
   const enginePollRef = useRef(null);
   const continuityPollRef = useRef(null);
   const publishPollRef = useRef(null);
@@ -697,18 +702,19 @@ export default function ConfigPage() {
     }
   }, [showWizard, section, settings?.features?.live_channels_enabled, settings?.tunarr?.url, settings?.tunarr?.docker_orchestration]);
 
+  const liveJobBusy = isLiveJobBusy(liveChannelsStatus?.job);
   useEffect(() => {
-    const jobBusy = isLiveJobBusy(liveChannelsStatus?.job);
     const localBusy = Boolean(liveBusy) && liveBusy !== "status" && liveBusy !== "attach";
-    if ((!jobBusy && !localBusy) || showWizard) return undefined;
+    if ((!liveJobBusy && !localBusy) || showWizard) return undefined;
     if (section !== "live-channels" && section !== "overview") return undefined;
-    const id = setInterval(() => {
-      getLiveChannelsStatus()
-        .then(setLiveChannelsStatus)
-        .catch(() => {});
-    }, 2000);
-    return () => clearInterval(id);
-  }, [liveChannelsStatus?.job, liveBusy, section, showWizard]);
+    return startVisibleBusyPoll(
+      () =>
+        getLiveChannelsStatus()
+          .then(setLiveChannelsStatus)
+          .catch(() => {}),
+      { isBusy: () => true },
+    );
+  }, [liveJobBusy, liveBusy, section, showWizard]);
 
   useEffect(() => {
     return () => {
@@ -796,7 +802,7 @@ export default function ConfigPage() {
   }, [showWizard]);
 
   useEffect(() => {
-    if (showWizard) return undefined;
+    if (showWizard || section !== "libraries") return undefined;
 
     let cancelled = false;
 
@@ -805,7 +811,7 @@ export default function ConfigPage() {
         const jobs = await listJobs();
         if (cancelled) return;
         const syncJobs = jobs.filter((job) => job.job_type === "library_sync");
-        const running = syncJobs.find((job) => job.status === "running" || job.status === "queued");
+        const running = syncJobs.find((job) => jobIsActive(job));
         const trackedId = trackedSyncJobIdRef.current;
         const tracked =
           (trackedId && syncJobs.find((job) => job.id === trackedId)) || syncJobs[0] || null;
@@ -827,41 +833,46 @@ export default function ConfigPage() {
       }
     }
 
-    pollSyncJobs();
-    // Poll at a fixed 2s while Config is open. Do not depend on syncingLibrary —
-    // setSyncingLibrary inside this effect would re-run it and stack intervals.
-    const interval = setInterval(pollSyncJobs, 2000);
+    const stop = startVisibleBusyPoll(pollSyncJobs, {
+      isBusy: () => Boolean(syncingLibraryRef.current || syncWasRunningRef.current),
+      isEnabled: () => !cancelled,
+    });
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      stop();
     };
-  }, [showWizard]);
+  }, [showWizard, section]);
 
   useEffect(() => {
-    if (showWizard) return undefined;
+    if (showWizard || section !== "libraries") return undefined;
     let cancelled = false;
+    let sonarrBusy = Boolean(sonarrMissing?.busy);
 
     async function pollSonarrMissing() {
       try {
         const status = await getSonarrMissingStatus();
-        if (!cancelled) setSonarrMissing(status);
+        if (cancelled) return;
+        setSonarrMissing(status);
+        sonarrBusy = Boolean(status?.busy);
       } catch {
         /* keep last snapshot */
       }
     }
 
-    pollSonarrMissing();
-    const interval = setInterval(pollSonarrMissing, 2000);
+    const stop = startVisibleBusyPoll(pollSonarrMissing, {
+      isBusy: () => sonarrBusy,
+      isEnabled: () => !cancelled,
+    });
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      stop();
     };
-  }, [showWizard]);
+  }, [showWizard, section, sonarrMissing?.busy]);
 
   useEffect(() => {
-    if (showWizard) return undefined;
+    if (showWizard || section !== "libraries") return undefined;
     let cancelled = false;
-    let wasBusy = false;
+    let wasBusy = Boolean(radarrRegister?.busy);
 
     async function pollRadarrRegister() {
       try {
@@ -881,13 +892,15 @@ export default function ConfigPage() {
       }
     }
 
-    pollRadarrRegister();
-    const interval = setInterval(pollRadarrRegister, 2000);
+    const stop = startVisibleBusyPoll(pollRadarrRegister, {
+      isBusy: () => wasBusy,
+      isEnabled: () => !cancelled,
+    });
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      stop();
     };
-  }, [showWizard]);
+  }, [showWizard, section, registeringRadarr, radarrRegister?.busy]);
 
   function updateSettings(patch) {
     setSettings((prev) => ({ ...prev, ...patch }));

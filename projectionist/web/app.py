@@ -1175,14 +1175,27 @@ register_webhook_routes(app, db_factory=_db, settings_factory=_settings)
 
 def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any]:
     settings = _settings()
+    from projectionist.web.setup_mode import resolve_setup_state
+
+    setup_state = resolve_setup_state(_db())
+    if not authenticated:
+        return {
+            "features": {
+                "multi_user_enabled": settings.features.multi_user_enabled,
+                "access_requests_enabled": bool(
+                    getattr(settings.features, "access_requests_enabled", True)
+                ),
+            },
+            "auth_methods": available_auth_methods(settings),
+            "setup_state": setup_state,
+            "authenticated": False,
+            "user": None,
+        }
     if user is None:
         user = bootstrap_owner(_db())
     request_path = "seerr" if uses_seerr_request_path(settings, role=user.role) else "arr"
     from projectionist.config_store import household_profile_name
     from projectionist.notifications.service import notification_channel_offerings
-    from projectionist.web.setup_mode import resolve_setup_state
-
-    setup_state = resolve_setup_state(_db())
     profile = household_profile_name(settings)
     payload: Dict[str, Any] = {
         "features": {
@@ -1224,6 +1237,16 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
             "require_linked_user_for_requests": settings.seerr.require_linked_user_for_requests,
         },
         "request_path": request_path,
+        "arr": {
+            "radarr_configured": bool(
+                str(getattr(settings, "radarr_url", "") or "").strip()
+                and str(getattr(settings, "radarr_api_key", "") or "").strip()
+            ),
+            "sonarr_configured": bool(
+                str(getattr(settings, "sonarr_url", "") or "").strip()
+                and str(getattr(settings, "sonarr_api_key", "") or "").strip()
+            ),
+        },
         "authenticated": authenticated,
         "notifications": {
             "channels": notification_channel_offerings(settings),
@@ -1377,17 +1400,15 @@ def start_library_sync(user=Depends(require_role("owner"))) -> Dict[str, Any]:
 @app.get("/api/library/stats")
 def library_stats(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
     db = _db()
-    items = db.all_library_items()
-    movies = sum(1 for i in items if i["media_type"] == "movie")
-    shows = sum(1 for i in items if i["media_type"] == "show")
+    counts = db.library_counts()
     settings = _settings()
     plex_server_name = ""
     if settings.plex_url and settings.plex_token:
         plex_server_name = cached_plex_friendly_name(settings.plex_url, settings.plex_token, timeout=5)
     payload = {
-        "total": len(items),
-        "movies": movies,
-        "shows": shows,
+        "total": int(counts.get("items") or 0),
+        "movies": int(counts.get("movies") or 0),
+        "shows": int(counts.get("shows") or 0),
         "last_sync": db.get_sync_state("last_sync"),
         "plex_server_name": plex_server_name or None,
         # Phase A data surface for Admin/Explore knowledge-depth UI (Phase D).
@@ -3860,15 +3881,24 @@ def list_thread_feedback(
 
 
 @app.get("/api/chat/stream")
+async def chat_stream_get_gone() -> None:
+    """GET query-string stream is gone. Stub stays for one release, then delete."""
+    raise HTTPException(
+        status_code=410,
+        detail="GET /api/chat/stream is gone. POST a JSON body to /api/chat/stream.",
+    )
+
+
+@app.post("/api/chat/stream")
 async def chat_stream(
     request: Request,
-    message: str,
-    session_id: Optional[str] = None,
-    lens_id: Optional[str] = None,
-    persona_id: Optional[str] = None,
+    payload: ChatRequest,
     user=Depends(get_current_user_dep),
 ) -> EventSourceResponse:
     """SSE endpoint for token-by-token chat streaming.
+
+    Native EventSource cannot POST. Clients must use fetch + a stream reader
+    and must not reconstruct EventSource after a dropped socket.
 
     Events emitted:
 
@@ -3881,8 +3911,8 @@ async def chat_stream(
     scheduler = _idle_scheduler()
     if scheduler is not None:
         scheduler.record_activity()
-    sid = session_id or uuid.uuid4().hex
-    resolved_lens = _resolve_lens_id(lens_id)
+    sid = payload.session_id or uuid.uuid4().hex
+    resolved_lens = _resolve_lens_id(payload.lens_id)
     scoped = _scoped_user_id(user)
 
     async def event_generator():
@@ -3892,12 +3922,12 @@ async def chat_stream(
                 _db(),
                 _settings(),
                 sid,
-                message,
+                payload.message,
                 lens_id=resolved_lens,
                 user_id=scoped,
                 seerr_user_id=user.seerr_user_id,
                 user_role=user.role,
-                persona_id=persona_id,
+                persona_id=payload.persona_id,
                 is_youth=bool(getattr(user, "is_youth", False)),
             ):
                 data = json.loads(chunk)
@@ -3905,14 +3935,14 @@ async def chat_stream(
 
                 if event_type in ("tool_start", "tool_result"):
                     status = "start" if event_type == "tool_start" else "complete"
-                    payload = {"name": data.get("name"), "status": status}
+                    event_payload = {"name": data.get("name"), "status": status}
                     if event_type == "tool_start" and data.get("args") is not None:
-                        payload["args"] = data.get("args")
+                        event_payload["args"] = data.get("args")
                     if event_type == "tool_result" and data.get("summary") is not None:
-                        payload["summary"] = data.get("summary")
+                        event_payload["summary"] = data.get("summary")
                     yield {
                         "event": "tool_call",
-                        "data": json.dumps(payload),
+                        "data": json.dumps(event_payload),
                     }
                 else:
                     if event_type == "done":

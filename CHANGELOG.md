@@ -2,11 +2,93 @@
 
 ## [Unreleased]
 
+Failed syncs keep a friendly error, guests see less of the house, library stats stay cheap, parked clients stop polling, and Identify says when a clip leaves the LAN.
+
 ### Highlights
-- **AGPL-3.0-only going forward.** New code and future releases use the GNU Affero GPL v3.0 only. Household / Unraid CA / Hub stay a free self-host app. If you run a modified copy for other people over a network, you offer them the source. Already-shipped tags through 1.36.0 stay MIT.
+- **AGPL-3.0-only going forward.** New code and future releases use the GNU Affero GPL v3.0 only. Household / Unraid CA / Hub stay a free self-host app. If you run a modified copy for other people over a network, you offer them the source. Already-shipped tags through 1.36.2 stay MIT.
+- **Failed library sync no longer shows a stack trace.** Job history keeps a short friendly error so `GET /api/jobs` does not leak frames from the host.
+- **The login screen learns less about the house.** Guests see whether multi-user is on, whether they can ask for an invite, and how they can sign in — not household domain, proxy, or Seerr flags. Setup status is owner-only; members still get Radarr/Sonarr readiness for dock-drop.
+- **Identify test clips stay on the media roots.** A test path has to sit under the configured TV/movie folders (or a current snapshot row, including a mapped `resolved_path`). A miss still does not rename files.
+- **Library stats stay cheap.** Counts come from SQL, not by loading every title into memory, so a large library does not stall the dashboard.
+- **One library sync at a time.** A second Sync while a job is queued or running returns that same job instead of starting another thread.
+- **Admin polls only the page you are looking at.** Library sync, Sonarr missing, Radarr register, and Investigate back off to eight seconds when idle, and pause when the tab is hidden. Chat only asks for job status while a sync toast is open — a parked living-room display will not keep waking the server.
+- **Identify says the clip leaves the LAN.** Settings and the test control tell you a 12-second clip goes to ACRCloud, and that a miss (or a test) does not rename files.
 
 ### Changed
 - Project license is `AGPL-3.0-only` (official GNU text in `LICENSE`). About, README, Help, package metadata, and Docker labels match. The name and logo are not a grant to call forks “Projectionist.”
+- `GET /api/library/stats` uses `library_counts()` (`total` from `items`) and still returns `last_sync`, cached Plex name, `knowledge_coverage`, and the sanitized payload (P2-HIGH-01).
+- `start_sync` is single-flight under `_lock`: a queued or running `library_sync` is returned as 200 with that job (P2-HIGH-02).
+- `Database.close()` runs `PRAGMA wal_checkpoint(PASSIVE)` after the writer serializer stops. Never `TRUNCATE`.
+- Identify `_identified_keys` is an `OrderedDict` capped at 4096 (P2-MED-01). Rate-limit buckets evict empty and oldest keys after `check()` when over 4096, without applying the caller’s window cutoff to other buckets (P2-MED-02).
+- Config / Libraries / chat job polls use a shared visible-busy helper (2s while busy, 8s idle, `document.hidden` pause). Chat `listJobs` runs only while a sync toast is open (P2-HIGH-03). Live Channels status depends on a busy boolean so a running job cannot remount the poll. Library Sync keeps `syncingLibrary` in a ref so the first click is not cleared by a stale `listJobs` tick.
+
+### Security
+- Failed `library_sync` jobs store `summary.failed` and a friendly `error`. `Job.to_dict()` never includes a `traceback` key or frame strings, including jobs persisted before this change (P3-MED-01).
+- Plex webhook secrets compare SHA-256 of both sides so a length mismatch is 401, not 500. Empty secret or header is still 401. Header remains `X-Projectionist-Webhook-Secret` (P3-MED-03).
+- Unauthenticated `GET /api/features` returns only `features.multi_user_enabled`, `features.access_requests_enabled`, `auth_methods`, `setup_state`, `authenticated: false`, and `user: null` (P4-MED-01). The login screen can hide Need an invite? when access requests are off.
+- `GET /api/setup/status` requires the owner role. Signed-in members get Radarr/Sonarr readiness from `features.arr` (P4-MED-04).
+- Identify test clips resolve under configured media roots (Plex / Radarr / Sonarr / `tv_root` / `movies_root` / `/tv` / `/movies`). A raw path is used only when it matches a snapshot row; `file_id` prefers the snapshot `resolved_path` so a mapped Sonarr path still works. Paths outside those roots return 400 (P3-MED-04).
+
+### Fixed
+- Saved-library chips on chat home and Library continue that response on `/chat?saved_library=…` instead of dropping the query at the `/` redirect. A second chip on `/chat` starts that page; the first consume no longer leaves the starter stuck.
+- Members who cannot read `/api/setup/status` still get Radarr/Sonarr dock-drop from `features.arr` instead of looking disconnected.
+
+### Added
+- Identify settings and **Test Identify** on Admin → Libraries, with `IDENTIFY_LEAVES_LAN` (`IDENTIFY_CLIP_SECONDS` = 12). Test honesty is `renamed: false` (P4-MED-03).
+
+### Verification
+- Focused pytest: durable jobs, webhooks, authz, Identify paths, library counts, WAL close, Identify key cap, rate-limit eviction.
+- Frontend unit: `visibleBusyPoll.test.mjs`, `episodeInvestigate.test.mjs`, `chatLayout.test.mjs`.
+- Targeted Playwright (chromium, :8799): `e2e/config-maintenance.spec.ts` Identify settings/test; `e2e/ca-release.spec.ts` chat sync toast.
+
+## [1.36.2] — 2026-09-25
+
+TV and movie libraries are inside the container, read-write, so Investigate can see the files and Apply can rename them.
+
+### Highlights
+- **TV and movie libraries are bind-mounted read-write.** The container sees `/tv` and `/movies` (and the same host path on Unraid) so Investigate can read files and Apply can rename them on disk. Automat defaults: `/mnt/user/data/media/tv` and `/mnt/user/data/media/movies`.
+- **Investigate maps Sonarr paths before it grabs stills.** `/tv/Show/...` is tried as-is, then the Sonarr root is rewritten onto configured TV/Sonarr roots and Plex library locations. The first existing file wins. Rows that still cannot be read fail instead of completing Uncertain with no stills.
+
+### Added
+- `PROJECTIONIST_TV_MEDIA` / `PROJECTIONIST_MOVIE_MEDIA` (env wins over settings) plus existing `TV_ROOT` / `MOVIES_ROOT`. Owner Settings: **Connections → Library folders** and Advanced disk paths (`tv_root` / `movies_root`). Paths are not secrets.
+- Unraid CA Path mounts, `docker-compose.yml`, `docker-compose.unraid.yml`, and `rollout.sh` bind those host folders **read-write** at `/tv` and `/movies` (same-path too on Unraid). Never `:ro`.
+
+### Fixed
+- Episode investigation translates Sonarr episode paths for ffmpeg stills, runtime, OSHash, and Identify. Unreadable paths are `stills_error=unreadable_path` (failed, not completed). Unknown-scope rows no longer say “other show.”
+- Investigate path mapper treats `tv_root` / `movies_root` as first-class local roots, then `/tv` and `/movies`.
+
+### Verification
+- Backend: 2,310 passed, 6 skipped, 36 subtests passed; 77.02% coverage (74% required).
+- Frontend unit: 805 passed; ESLint 0 errors (pre-existing warnings OK); production Vite build passed.
+- Focused: `tests/test_config_store.py` (branded media env wins); `tests/test_episode_investigate.py::PathMapTests`.
+
+## [1.36.1] — 2026-09-25
+
+Investigate stills ship inside the image, review is a table you can scan, idle Ready 0% is gone, and first-boot plus chat stay on the LAN allowlist.
+
+### Highlights
+- **Investigate stills work in the container.** New images ship `ffmpeg` and `ffprobe` on PATH, so Automat no longer needs a host binary. `FFMPEG_PATH` / `FFPROBE_PATH` still override.
+- **Investigate review stays scannable.** Eighty episode rows are a compact table, not stacked cards. Finished jobs say the run ended. Idle Apply no longer shows a mystery Ready 0% card. If this container has no ffmpeg, the summary says so — not “install a host binary.”
+- **First-boot stays on the LAN.** If the database is down, household APIs no longer fail open. Setup from a public or Docker-NAT address cannot probe Plex/TMDB or create the owner unless `PROJECTIONIST_OWNER_PASSWORD` is already on the host.
+- **Chat links stay on the allowlist.** Assistant markdown only follows http(s), in-app title and library paths, and hash jumps. Other schemes show as plain text. Streaming chat now POSTs the message in the body, capped at 8,000 characters.
+
+### Changed
+- Docker runtime installs the Debian `ffmpeg` package (includes `ffprobe`) in an early BuildKit-cached apt layer so app `COPY` does not re-download it. Capabilities resolve `ffmpeg` / `ffprobe` on PATH; `FFMPEG_PATH` / `FFPROBE_PATH` still override.
+
+### Security
+- Auth middleware returns `503 Service unavailable` for `/api/*` (except `/api/health` and `/api/features`) when the job manager or database cannot be opened, instead of passing the request through.
+- SETUP_MODE applies the same WAN interlock as single-owner ACTIVE. Plex/TMDB connection tests are allowlisted only when handshake classification is LAN. Commit from a WAN or `public_failsafe` peer requires `PROJECTIONIST_OWNER_PASSWORD`.
+- Assistant markdown hrefs allow `http:`, `https:`, in-app `/title` and `/library` paths, and `#` fragments. Other schemes (`javascript:`, `data:`, `vbscript:`) render as text. `rehype-sanitize` is on; `rehype-raw` is not.
+- `POST /api/chat/stream` takes `ChatRequest` JSON (`message` 1–8000 characters). The same cap applies to `POST /api/chat`. `GET /api/chat/stream` returns 410 for one release (query-string messages are gone). The client uses fetch + a stream reader and does not reconstruct `EventSource` after a dropped socket.
+
+### Fixed
+- Investigate review uses a dense table with sticky Apply/Cancel. Admin execution cards hide empty idle snapshots (including Investigate Apply `Nothing to apply` / Ready 0%). Terminal jobs stop the “since last completion” timer and say the run ended. Apply is gold only when at least one same-show row is selected.
+- Investigate no longer tells owners to install a host ffmpeg binary. Missing ffmpeg is a container PATH / image problem; `FFMPEG_PATH` / `FFPROBE_PATH` remain overrides. The review summary explains empty evidence (no stills, no vision, no Identify) when fusion has already finished.
+
+### Verification
+- Backend: 2,301 passed, 6 skipped, 36 subtests passed; 76.69% coverage (74% required).
+- Frontend unit: 805 passed; ESLint 0 errors (135 warnings pre-existing); production Vite build passed.
+- Focused: `tests/test_episode_investigate.py::CapabilitiesTests`; `frontend/src/lib/episodeInvestigate.test.mjs`; `frontend/src/lib/adminExecution.test.mjs`.
 
 ## [1.36.0] — 2026-09-25
 

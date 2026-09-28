@@ -124,6 +124,14 @@ class ApiAuthzTests(unittest.TestCase):
         self.assertEqual(allowed.status_code, 200, allowed.text)
         self.assertTrue(allowed.json()["features"]["multi_user_enabled"])
 
+    def test_auth_middleware_fail_closed_when_db_unavailable(self) -> None:
+        with patch("projectionist.web.jobs.get_job_manager", side_effect=RuntimeError("db down")):
+            stats = self.client.get("/api/library/stats")
+            self.assertEqual(stats.status_code, 503, stats.text)
+            self.assertEqual(stats.json()["detail"], "Service unavailable")
+            health = self.client.get("/api/health")
+            self.assertEqual(health.status_code, 200, health.text)
+
     def test_public_allowlist_stays_open(self) -> None:
         self._write_multi_user_settings()
         self.client.cookies.clear()
@@ -132,6 +140,75 @@ class ApiAuthzTests(unittest.TestCase):
         self.assertEqual(features.status_code, 200)
         self.assertTrue(features.json()["features"]["multi_user_enabled"])
         self.assertFalse(features.json()["authenticated"])
+        self.assertNotIn("household_domain", features.json())
+        self.assertNotIn("youth", features.json())
+        self.assertNotIn("arr", features.json())
+        self.assertIn("access_requests_enabled", features.json()["features"])
+
+    def test_guest_features_include_access_request_flag(self) -> None:
+        path = Path(self._tmpdir.name) / "settings.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "features": {
+                        "multi_user_enabled": True,
+                        "access_requests_enabled": False,
+                    },
+                    "auth": {"mode": "plex", "plex_login_enabled": True},
+                    "llm_provider": "ollama",
+                }
+            ),
+            encoding="utf-8",
+        )
+        self.client.cookies.clear()
+        features = self.client.get("/api/features")
+        self.assertEqual(features.status_code, 200)
+        self.assertFalse(features.json()["features"]["access_requests_enabled"])
+        self.assertFalse(features.json()["authenticated"])
+
+    def test_member_features_include_arr_readiness(self) -> None:
+        path = Path(self._tmpdir.name) / "settings.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "features": {"multi_user_enabled": True, "open_auto_provision": True},
+                    "auth": {"mode": "plex", "plex_login_enabled": True},
+                    "llm_provider": "ollama",
+                    "radarr_url": "http://radarr.test",
+                    "radarr_api_key": "radarr-secret",
+                    "sonarr_url": "http://sonarr.test",
+                    "sonarr_api_key": "sonarr-secret",
+                }
+            ),
+            encoding="utf-8",
+        )
+        self._login_as(1, "Owner")
+        self.client.post("/api/auth/logout")
+        self._login_as(2, "Member")
+        features = self.client.get("/api/features")
+        self.assertEqual(features.status_code, 200)
+        self.assertTrue(features.json()["authenticated"])
+        self.assertTrue(features.json()["arr"]["radarr_configured"])
+        self.assertTrue(features.json()["arr"]["sonarr_configured"])
+        self.client.cookies.clear()
+        guest = self.client.get("/api/features")
+        self.assertNotIn("arr", guest.json())
+
+    def test_setup_status_requires_owner(self) -> None:
+        self._enable_multi_user_via_api()
+        self.client.cookies.clear()
+        unauth = self.client.get("/api/setup/status")
+        self.assertIn(unauth.status_code, (401, 403))
+        self._login_as(1, "Owner")
+        self.client.post("/api/auth/logout")
+        self._login_as(2, "Member")
+        member = self.client.get("/api/setup/status")
+        self.assertEqual(member.status_code, 403)
+        self.client.post("/api/auth/logout")
+        self._login_as(1, "Owner")
+        owner = self.client.get("/api/setup/status")
+        self.assertEqual(owner.status_code, 200)
+        self.assertIn("onboarding_complete", owner.json())
 
     def test_library_csv_export_requires_auth_and_uses_requested_columns(self) -> None:
         self._enable_multi_user_via_api()

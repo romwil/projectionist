@@ -15,6 +15,7 @@ from fastapi import Request
 from fastapi.testclient import TestClient
 
 from projectionist.web.rate_limit import (
+    HITS_CAP,
     SlidingWindowRateLimiter,
     clear_rate_limits,
     client_ip,
@@ -65,6 +66,48 @@ class SlidingWindowRateLimiterTests(unittest.TestCase):
             self.limiter.check(key="10.0.0.1", bucket="test", limit=3, window_seconds=60)
         self.limiter.clear()
         self.limiter.check(key="10.0.0.1", bucket="test", limit=3, window_seconds=60)
+
+    def test_evicts_oldest_when_over_cap(self) -> None:
+        for index in range(HITS_CAP + 2):
+            self.limiter.check(key=f"ip-{index}", bucket="auth", limit=10, window_seconds=60)
+        self.assertLessEqual(len(self.limiter._hits), HITS_CAP)
+        self.assertNotIn(("auth", "ip-0"), self.limiter._hits)
+        self.assertIn(("auth", f"ip-{HITS_CAP + 1}"), self.limiter._hits)
+
+    def test_drops_empty_after_cutoff_before_evicting(self) -> None:
+        stale = time.monotonic() - 120
+        for index in range(HITS_CAP + 10):
+            self.limiter._hits[("auth", f"old-{index}")].append(stale)
+        self.limiter.check(key="fresh", bucket="auth", limit=10, window_seconds=60)
+        self.assertLessEqual(len(self.limiter._hits), HITS_CAP)
+        self.assertIn(("auth", "fresh"), self.limiter._hits)
+        self.assertNotIn(("auth", "old-0"), self.limiter._hits)
+
+    def test_short_window_eviction_does_not_trim_hour_access_request(self) -> None:
+        now = time.monotonic()
+        long_key = ("access_request", "10.0.0.1")
+        for offset in range(5):
+            self.limiter._hits[long_key].append(now - 2000 + offset)
+        for index in range(HITS_CAP):
+            self.limiter._hits[("auth", f"old-{index}")].append(now - 7200)
+        self.limiter.check(key="fresh", bucket="auth", limit=10, window_seconds=60)
+        self.assertEqual(len(self.limiter._hits[long_key]), 5)
+        self.assertIn(("auth", "fresh"), self.limiter._hits)
+
+    def test_429_keeps_the_limited_bucket(self) -> None:
+        from fastapi import HTTPException
+
+        now = time.monotonic()
+        for index in range(HITS_CAP):
+            self.limiter._hits[("auth", f"old-{index}")].append(now - 1)
+        for _ in range(3):
+            self.limiter.check(key="hot", bucket="auth", limit=3, window_seconds=60)
+        with self.assertRaises(HTTPException) as ctx:
+            self.limiter.check(key="hot", bucket="auth", limit=3, window_seconds=60)
+        self.assertEqual(ctx.exception.status_code, 429)
+        self.assertEqual(len(self.limiter._hits[("auth", "hot")]), 3)
+        with self.assertRaises(HTTPException):
+            self.limiter.check(key="hot", bucket="auth", limit=3, window_seconds=60)
 
 
 class ClientIpExtractionTests(unittest.TestCase):

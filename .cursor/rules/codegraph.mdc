@@ -1,0 +1,10 @@
+---
+description: Codegraph lives in the git-root DB; do not init worktrees; reconnect MCP after first index
+alwaysApply: true
+---
+
+# Codegraph (local index)
+
+- Canonical DB is the **git root** `.codegraph/codegraph.db`. Do **not** `codegraph init` or `--force` reindex. Worktrees are unindexed unless that file already exists; skip them.
+- Cursor MCP is `codegraph serve --mcp --path ${workspaceFolder}` (user-global). While connected it file-watches and catch-up-syncs. Git hooks (`scripts/git-hooks`, enable with `git config core.hooksPath scripts/git-hooks`) run `codegraph sync --quiet` after merge/commit/checkout when the DB exists.
+- Cursor’s **session tool catalog does not refresh** after index. Reconnect MCP or start a new chat after the first index; tools then exist. Query freshness after that is automatic.

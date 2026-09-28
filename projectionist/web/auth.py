@@ -437,12 +437,19 @@ async def multi_user_api_auth_middleware(request: Request, call_next):
     try:
         db = get_job_manager().db
     except Exception:
-        return await call_next(request)
+        logger.exception("auth middleware: database unavailable")
+        if not path.startswith("/api/") or path in {"/api/health", "/api/features"}:
+            return await call_next(request)
+        return JSONResponse({"detail": "Service unavailable"}, status_code=503)
 
     if is_setup_mode(db):
         if not path.startswith("/api/"):
             return await call_next(request)
-        if is_setup_public_path(method, path):
+        if wan_interlock_blocks(request, multi_user_enabled=False):
+            if path in {"/api/health", "/api/features"}:
+                return await call_next(request)
+            return JSONResponse({"detail": WAN_INTERLOCK_DETAIL}, status_code=403)
+        if is_setup_public_path(method, path, request):
             return await call_next(request)
         return JSONResponse({"detail": "Not found"}, status_code=404)
 
