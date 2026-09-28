@@ -1042,7 +1042,8 @@ export async function sendChat(message, lensId, { timeoutMs = CHAT_TIMEOUT_MS, s
 }
 
 /**
- * Stream chat via the SSE endpoint. Calls event handlers as tokens arrive.
+ * Stream chat via POST /api/chat/stream (SSE). Native EventSource cannot POST —
+ * this uses fetch + a body reader and must not fall back to EventSource.
  *
  * @param {string} message
  * @param {object} options
@@ -1055,11 +1056,14 @@ export async function sendChat(message, lensId, { timeoutMs = CHAT_TIMEOUT_MS, s
  * @param {AbortSignal} [options.signal]  - abort controller signal
  */
 export async function sendChatStream(message, { sessionId: sid, personaId, onToken, onToolCall, onDone, onError, signal } = {}) {
-  const params = new URLSearchParams({ message, session_id: sid || sessionId() });
-  if (personaId) params.set("persona_id", personaId);
+  const body = { message, session_id: sid || sessionId() };
+  if (personaId) body.persona_id = personaId;
 
-  const response = await fetch(`${API}/chat/stream?${params}`, {
+  const response = await fetch(`${API}/chat/stream`, {
+    method: "POST",
     credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
     signal,
   });
 

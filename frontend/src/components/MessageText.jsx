@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import {
   findFootnote,
@@ -8,9 +9,18 @@ import {
   footnoteWalkKind,
   parseMarkdownFootnotes,
 } from "../lib/chatFootnotes.js";
+import { isAllowedMarkdownHref } from "../lib/markdownHref.js";
 import { linkifyKnownTitles, titleItemFromHref } from "../lib/titleDigIn.js";
 import TitleDetailLink from "./TitleDetailLink";
 import "./MessageText.css";
+
+const markdownSanitizeSchema = {
+  ...defaultSchema,
+  protocols: {
+    ...defaultSchema.protocols,
+    href: ["http", "https"],
+  },
+};
 
 function MarkdownTitleLink({ href, children }) {
   const item = titleItemFromHref(href);
@@ -21,7 +31,10 @@ function MarkdownTitleLink({ href, children }) {
       </TitleDetailLink>
     );
   }
-  if (/^https?:\/\//.test(String(href || ""))) {
+  if (!isAllowedMarkdownHref(href)) {
+    return children;
+  }
+  if (/^https?:\/\//i.test(String(href || ""))) {
     return (
       <a href={href} target="_blank" rel="noreferrer">
         {children}
@@ -153,7 +166,11 @@ export default function MessageText({
   if (markdown || hasMarkdownLinks) {
     return (
       <div className={`${className} markdown-body`}>
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          rehypePlugins={[[rehypeSanitize, markdownSanitizeSchema]]}
+          components={components}
+        >
           {text}
         </ReactMarkdown>
         {openNote ? (

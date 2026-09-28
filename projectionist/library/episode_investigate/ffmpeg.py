@@ -1,4 +1,4 @@
-"""Extract three stills and probe runtime via host ffmpeg/ffprobe."""
+"""Extract three stills and probe runtime via ffmpeg/ffprobe on PATH."""
 
 from __future__ import annotations
 

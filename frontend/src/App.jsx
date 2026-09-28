@@ -121,6 +121,7 @@ import {
 import { mergeRailSeedCards, takeRailSeed } from "./lib/railChatSeed.js";
 import { buildWatchlistLookup } from "./lib/watchlistKeys.js";
 import { applyOptimisticPinToggle, upsertPin } from "./lib/optimisticWatchlist.js";
+import { startVisibleBusyPoll, syncToastIsOpen } from "./lib/visibleBusyPoll.js";
 import ChatWorkspace from "./components/ChatWorkspace";
 import { useBulkActionProgress } from "./components/BulkActionProgress";
 import { useAuthGate } from "./components/UserMenu";
@@ -148,6 +149,11 @@ function appendPerfectPickAck(message) {
     return block;
   });
   return { ...message, blocks };
+}
+
+function arrServiceConnected(setup, features, service) {
+  if (setup?.checks?.[service]?.ok) return true;
+  return Boolean(features?.arr?.[`${service}_configured`]);
 }
 
 export default function App() {
@@ -715,7 +721,7 @@ export default function App() {
 
   useEffect(() => {
     Promise.all([
-      api("/setup/status").then(setSetup),
+      api("/setup/status").then(setSetup).catch(() => setSetup(null)),
       api("/library/stats").then(setStats),
       api("/persona").then(setPersona).catch(console.error),
       getFeatures().then(setFeatures).catch(console.error),
@@ -744,10 +750,8 @@ export default function App() {
       })
       .catch(() => {});
     refreshSavedShelf();
-    const interval = setInterval(refreshJobs, 5000);
     const nightInterval = setInterval(() => setNightOwl(isNightOwlHour()), 60_000);
     return () => {
-      clearInterval(interval);
       clearInterval(nightInterval);
     };
   }, [
@@ -783,6 +787,12 @@ export default function App() {
     }
     jobsRunningRef.current = running;
   }, [jobs, refreshReviewData, glanceShown]);
+
+  const chatSyncToastOpen = syncToastIsOpen(jobs);
+  useEffect(() => {
+    if (!chatSyncToastOpen) return undefined;
+    return startVisibleBusyPoll(refreshJobs, { isBusy: () => true });
+  }, [chatSyncToastOpen, refreshJobs]);
 
   useEffect(() => {
     if (!loading) return;
@@ -1107,7 +1117,11 @@ export default function App() {
   useEffect(() => {
     const pageId = searchParams.get("saved_library");
     const followUp = searchParams.get("follow_up");
-    if (!authReady || !threadsReady || loading || !pageId || savedLibraryStartedRef.current) return;
+    if (!pageId) {
+      savedLibraryStartedRef.current = false;
+      return;
+    }
+    if (!authReady || !threadsReady || loading || savedLibraryStartedRef.current) return;
     savedLibraryStartedRef.current = true;
     searchParams.delete("saved_library");
     searchParams.delete("follow_up");
@@ -1493,8 +1507,8 @@ export default function App() {
 
   function handleDockDrop(item) {
     const target = resolveDockDropTarget(item, {
-      radarrConnected: Boolean(setup?.checks?.radarr?.ok),
-      sonarrConnected: Boolean(setup?.checks?.sonarr?.ok),
+      radarrConnected: arrServiceConnected(setup, features, "radarr"),
+      sonarrConnected: arrServiceConnected(setup, features, "sonarr"),
     });
     if (!target) return;
     handleAdd(item, target);
@@ -1502,8 +1516,8 @@ export default function App() {
 
   const agentPulse = resolveAgentPulse({ loading, chatError });
   const curatorName = persona?.curator_name || "Curator";
-  const radarrConnected = Boolean(setup?.checks?.radarr?.ok);
-  const sonarrConnected = Boolean(setup?.checks?.sonarr?.ok);
+  const radarrConnected = arrServiceConnected(setup, features, "radarr");
+  const sonarrConnected = arrServiceConnected(setup, features, "sonarr");
   const dockDropEnabled =
     requestPath !== "seerr" && (radarrConnected || sonarrConnected);
   const personaLookup = useMemo(

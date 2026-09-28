@@ -64,6 +64,129 @@ def _data_dir() -> Path:
     return Path(get_job_manager().data_dir)
 
 
+def _posix_path(value: str) -> str:
+    return str(value or "").replace("\\", "/").strip()
+
+
+def identify_media_roots(settings: Any) -> List[Path]:
+    """Plex section paths, Radarr/Sonarr, tv_root/movies_root, /tv, /movies."""
+    from projectionist.library.episode_investigate.path_map import (
+        discover_media_roots,
+        plex_library_locations,
+    )
+
+    raw_roots = list(discover_media_roots(settings))
+    raw_roots.extend(plex_library_locations(settings, section_type="movie"))
+    roots: List[Path] = []
+    seen: set[str] = set()
+    for raw in raw_roots:
+        try:
+            resolved = Path(str(raw)).resolve()
+        except OSError:
+            continue
+        key = str(resolved)
+        if key in seen:
+            continue
+        seen.add(key)
+        roots.append(resolved)
+    return roots
+
+
+def path_is_under_media_root(path: Path, roots: List[Path]) -> bool:
+    try:
+        resolved = path.resolve()
+    except OSError:
+        return False
+    for root in roots:
+        try:
+            if resolved.is_relative_to(root):
+                return True
+        except (OSError, ValueError):
+            continue
+    return False
+
+
+def _snapshot_rows(snapshot: Dict[str, Any]) -> List[Dict[str, Any]]:
+    result = snapshot.get("result") if isinstance(snapshot.get("result"), dict) else {}
+    rows = result.get("rows") or []
+    return [row for row in rows if isinstance(row, dict)]
+
+
+def _row_local_path(row: Dict[str, Any]) -> str:
+    """Prefer Investigate's mapped local path over the Sonarr/remote path."""
+    resolved = str(row.get("resolved_path") or "").strip()
+    if resolved:
+        return resolved
+    return str(row.get("path") or "").strip()
+
+
+def _snapshot_path_for_file_id(snapshot: Dict[str, Any], file_id: str) -> str:
+    wanted = str(file_id or "").strip()
+    if not wanted:
+        return ""
+    for row in _snapshot_rows(snapshot):
+        if str(row.get("id") or "") == wanted:
+            return _row_local_path(row)
+    return ""
+
+
+def _paths_match(left: str, right: str) -> bool:
+    a = _posix_path(left)
+    b = _posix_path(right)
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    try:
+        return Path(a).resolve() == Path(b).resolve()
+    except OSError:
+        return False
+
+
+def _snapshot_path_matching(snapshot: Dict[str, Any], path: str) -> str:
+    for row in _snapshot_rows(snapshot):
+        local = _row_local_path(row)
+        remote = str(row.get("path") or "").strip()
+        if _paths_match(path, local) or _paths_match(path, remote):
+            return local
+    return ""
+
+
+def resolve_identify_test_path(payload: IdentifyTestPayload, settings: Any, snapshot: Dict[str, Any]) -> str:
+    """Owner test clip path: snapshot file_id, or raw path that matches a snapshot row.
+
+    Raw paths outside configured media roots are rejected. A raw path that is not
+    on the current snapshot is ignored (empty → silent test clip).
+    """
+    raw_path = str(payload.path or "").strip()
+    file_id = str(payload.file_id or "").strip()
+    roots = identify_media_roots(settings)
+
+    if raw_path:
+        try:
+            resolved_raw = Path(raw_path).resolve()
+        except OSError as error:
+            raise HTTPException(status_code=400, detail="Path is outside configured media roots") from error
+        if not path_is_under_media_root(resolved_raw, roots):
+            raise HTTPException(status_code=400, detail="Path is outside configured media roots")
+
+    if file_id:
+        candidate = _snapshot_path_for_file_id(snapshot, file_id)
+    else:
+        candidate = _snapshot_path_matching(snapshot, raw_path) if raw_path else ""
+
+    if not candidate:
+        return ""
+
+    try:
+        resolved = Path(candidate).resolve()
+    except OSError as error:
+        raise HTTPException(status_code=400, detail="Path is outside configured media roots") from error
+    if not path_is_under_media_root(resolved, roots):
+        raise HTTPException(status_code=400, detail="Path is outside configured media roots")
+    return str(resolved)
+
+
 @router.get("/api/admin/investigate/health")
 def investigate_health(user=Depends(require_role("owner"))) -> Dict[str, Any]:
     del user
@@ -239,15 +362,9 @@ def identify_test(
     from projectionist.library.episode_investigate.acrcloud import test_identify_clip
     from projectionist.library.episode_investigate.job import build_status
 
-    path = str(payload.path or "").strip()
-    if not path and payload.file_id:
-        snap = build_status()
-        result = snap.get("result") if isinstance(snap.get("result"), dict) else {}
-        for row in result.get("rows") or []:
-            if str(row.get("id") or "") == str(payload.file_id):
-                path = str(row.get("path") or "")
-                break
-    snap = test_identify_clip(settings=_settings(), path=path, dest_dir=_data_dir() / "investigate" / "identify-test")
+    settings = _settings()
+    path = resolve_identify_test_path(payload, settings, build_status())
+    snap = test_identify_clip(settings=settings, path=path, dest_dir=_data_dir() / "investigate" / "identify-test")
     if snap.get("renamed"):
         snap["renamed"] = False
     return snap

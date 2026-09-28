@@ -20,7 +20,7 @@ After a local package rename, also purge the venv editable install before trusti
 
 ### Build caching (Dockerfile / BuildKit)
 
-The image is **multi-stage**: Node builds the Vite SPA, then a slim Python runtime copies `frontend/dist` and installs `.[web,mcp]`.
+The image is **multi-stage**: Node builds the Vite SPA, then a slim Python runtime copies `frontend/dist`, installs `.[web,mcp]`, and the Debian `ffmpeg` package (`ffmpeg` + `ffprobe` on PATH; override with `FFMPEG_PATH` / `FFPROBE_PATH`).
 
 Caching that matters:
 
@@ -28,6 +28,8 @@ Caching that matters:
 |---|---|---|
 | Frontend `npm ci` | `frontend/package-lock.json` unchanged | Lockfile / package.json change |
 | BuildKit npm cache (`/root/.npm`) | Download cache across builds | Rare; cleared with builder prune |
+| Runtime apt (`ca-certificates`, `gosu`, `ffmpeg`) | Early RUN, before any `COPY` | This RUN or the `python:3.12-slim` FROM line |
+| BuildKit apt cache (`/var/cache/apt`, `/var/lib/apt`) | Downloaded .debs / lists across rebuilds | Builder prune |
 | Python deps (`pip install` on stub package) | `pyproject.toml` (+ README/LICENSE) unchanged | Dependency / metadata change |
 | BuildKit pip cache (`/root/.cache/pip`) | Wheel cache across builds | Rare; cleared with builder prune |
 | App source / SPA rebuild | — | Any `projectionist/` or frontend source edit |
@@ -42,7 +44,7 @@ docker build -t projectionist:local .
 
 `scripts/docker-release.sh` exports `DOCKER_BUILDKIT=1` and always uses `buildx` (Hub multi-arch). **Automat `unraid-rollout.sh` only pulls Hub images** — it does not build, so no BuildKit flag is needed on the Unraid host for production rollout.
 
-Maintainer QA Path A (local `docker build` of a WIP tag on Automat) should use BuildKit the same way (`DOCKER_BUILDKIT=1` or buildx) so npm/pip cache mounts apply. Path B/C that only recreate from Hub tags are unchanged.
+Maintainer QA Path A (local `docker build` of a WIP tag on Automat) should use BuildKit the same way (`DOCKER_BUILDKIT=1` or buildx) so npm/pip/apt cache mounts apply. Path B/C that only recreate from Hub tags are unchanged.
 
 CI (`docker-smoke`) uses Buildx + GitHub Actions cache (`cache-from`/`cache-to: type=gha`) so PR image smokes reuse layers across runs.
 
@@ -147,6 +149,8 @@ Install from the Community Applications template (`templates/projectionist.xml` 
 |---------|-------|
 | **Port** | 8788 |
 | **Config path** | `/mnt/user/appdata/projectionist/config` → `/config` (legacy …/curatorx/config OK if never migrated) |
+| **TV library (rw)** | `/mnt/user/data/media/tv` → `/tv` (and same-path). Read-write so Investigate can rename files. Env: `PROJECTIONIST_TV_MEDIA` |
+| **Movie library (rw)** | `/mnt/user/data/media/movies` → `/movies` (and same-path). Env: `PROJECTIONIST_MOVIE_MEDIA` |
 | **Image** | `romwil/projectionist:latest` (or a `:X.Y` line / `:X.Y.Z` pin) — multi-arch amd64+arm64 |
 
 Optional advanced env (or generate in **Admin → Advanced**): `PROJECTIONIST_MCP_API_KEY` (privacy) and `PROJECTIONIST_MCP_FULL_API_KEY` (full; must differ). See [MCP.md](MCP.md) and [PRIVACY.md](PRIVACY.md).

@@ -13,7 +13,13 @@ from unittest.mock import patch
 
 from projectionist.library.admin_execution import reset_admin_execution_for_tests
 from projectionist.library.episode_investigate.apply import apply_rows, plex_proper_path, undo_apply
-from projectionist.library.episode_investigate.capabilities import health_payload, llm_accepts_images
+from projectionist.library.episode_investigate.capabilities import (
+    FFMPEG_NOTE,
+    health_payload,
+    llm_accepts_images,
+    resolve_ffmpeg,
+    resolve_ffprobe,
+)
 from projectionist.library.episode_investigate.catalog import list_investigate_shows, merge_tmdb_runtimes
 from projectionist.library.episode_investigate.filenames import (
     claimed_from_path,
@@ -342,6 +348,54 @@ class CapabilitiesTests(unittest.TestCase):
         self.assertTrue(payload["vision"]["leaves_lan"])
         self.assertFalse(payload["acrcloud"]["available"])
         self.assertFalse(payload["acrcloud"]["deferred"])
+        self.assertIn("container", FFMPEG_NOTE)
+        self.assertIn("FFMPEG_PATH", FFMPEG_NOTE)
+        self.assertNotIn("Install a host binary", FFMPEG_NOTE)
+        self.assertNotIn("not bundled", FFMPEG_NOTE)
+
+    def test_resolve_uses_path_binaries(self) -> None:
+        with patch.dict(os.environ, {"FFMPEG_PATH": "", "FFPROBE_PATH": ""}, clear=False), patch(
+            "projectionist.library.episode_investigate.capabilities.shutil.which",
+            side_effect=lambda name: f"/usr/bin/{name}" if name in {"ffmpeg", "ffprobe"} else None,
+        ):
+            self.assertEqual(resolve_ffmpeg(), "/usr/bin/ffmpeg")
+            self.assertEqual(resolve_ffprobe(), "/usr/bin/ffprobe")
+            payload = health_payload()
+            self.assertTrue(payload["ffmpeg"]["available"])
+            self.assertEqual(payload["ffmpeg"]["path"], "/usr/bin/ffmpeg")
+            self.assertEqual(payload["ffmpeg"]["note"], "")
+            self.assertTrue(payload["ffprobe"]["available"])
+            self.assertEqual(payload["ffprobe"]["path"], "/usr/bin/ffprobe")
+
+    def test_resolve_prefers_env_override(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ffmpeg = Path(tmp) / "custom-ffmpeg"
+            ffprobe = Path(tmp) / "custom-ffprobe"
+            ffmpeg.write_text("#!/bin/sh\n")
+            ffprobe.write_text("#!/bin/sh\n")
+            ffmpeg.chmod(0o755)
+            ffprobe.chmod(0o755)
+            with patch.dict(
+                os.environ,
+                {"FFMPEG_PATH": str(ffmpeg), "FFPROBE_PATH": str(ffprobe)},
+                clear=False,
+            ), patch(
+                "projectionist.library.episode_investigate.capabilities.shutil.which",
+                return_value="/usr/bin/should-not-win",
+            ):
+                self.assertEqual(resolve_ffmpeg(), str(ffmpeg))
+                self.assertEqual(resolve_ffprobe(), str(ffprobe))
+
+    def test_health_note_when_binaries_missing(self) -> None:
+        with patch.dict(os.environ, {"FFMPEG_PATH": "", "FFPROBE_PATH": ""}, clear=False), patch(
+            "projectionist.library.episode_investigate.capabilities.shutil.which",
+            return_value=None,
+        ):
+            payload = health_payload()
+            self.assertFalse(payload["ffmpeg"]["available"])
+            self.assertEqual(payload["ffmpeg"]["note"], FFMPEG_NOTE)
+            self.assertIn("Image includes ffmpeg", payload["ffmpeg"]["note"])
+            self.assertFalse(payload["ffprobe"]["available"])
 
 
 class JobHappyPathTests(unittest.TestCase):
@@ -387,6 +441,239 @@ class JobHappyPathTests(unittest.TestCase):
         self.assertEqual(row["confidence"], "certain")
         self.assertEqual(row["proposed"]["episode"], 7)
         self.assertFalse(row["claimed"]["evidence"])
+        self.assertEqual(row["stills_error"], "")
+
+    def test_unreadable_path_is_failed_not_completed(self) -> None:
+        from projectionist.library.episode_investigate.job import (
+            UNREADABLE_PATH,
+            UNREADABLE_REASON,
+            investigate_files,
+            investigate_one,
+        )
+
+        recorded: list[tuple] = []
+
+        class _Store:
+            def set_item(self, item_id, status, **kwargs):
+                recorded.append((item_id, status, kwargs.get("outcome"), kwargs.get("error")))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = str(Path(tmp) / "missing" / "Expedition.Unknown.S15E04.mkv")
+            row = investigate_one(
+                SimpleNamespace(llm_provider="anthropic", llm_model="claude-sonnet-4-6", tmdb_api_key=""),
+                _show(),
+                {
+                    "id": "80",
+                    "file_id": 80,
+                    "series_id": 4,
+                    "path": missing,
+                    "claimed": claimed_from_path(missing),
+                    "sonarr": {"season": 15, "episode": 4, "title": "Shipwreck", "evidence": False},
+                },
+                catalog=_catalog(),
+                use_vision=True,
+                household=["The Bear"],
+                job_id="job2",
+                data_dir=Path(tmp),
+            )
+            self.assertEqual(row["stills_error"], UNREADABLE_PATH)
+            self.assertEqual(row["stills"], [])
+            self.assertIsNone(row["runtime_seconds"])
+            self.assertIn(UNREADABLE_REASON, row["reasons"])
+            self.assertIsNone(row["vision"])
+
+            investigate_files(
+                SimpleNamespace(llm_provider="anthropic", llm_model="claude-sonnet-4-6", tmdb_api_key=""),
+                _show(),
+                [
+                    {
+                        "id": "80",
+                        "file_id": 80,
+                        "series_id": 4,
+                        "path": missing,
+                        "claimed": claimed_from_path(missing),
+                        "sonarr": {"season": 15, "episode": 4, "title": "Shipwreck", "evidence": False},
+                    }
+                ],
+                catalog=_catalog(),
+                season=None,
+                use_vision=True,
+                household=["The Bear"],
+                job_id="job2",
+                data_dir=Path(tmp),
+                store=_Store(),
+            )
+        failed = [item for item in recorded if item[1] == "failed"]
+        completed = [item for item in recorded if item[1] == "completed"]
+        self.assertTrue(failed)
+        self.assertEqual(failed[-1][2], "unreadable")
+        self.assertEqual(completed, [])
+        self.assertNotIn("Bind-mount", UNREADABLE_REASON)
+
+
+class PathMapTests(unittest.TestCase):
+    def test_prefix_translate_picks_existing_file(self) -> None:
+        from projectionist.library.episode_investigate.path_map import resolve_visible_media_path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            local = Path(tmp) / "media" / "tv"
+            dest = local / "Expedition Unknown (2015)" / "Season 15"
+            dest.mkdir(parents=True)
+            visible = dest / "Expedition.Unknown.S15E04.mkv"
+            visible.write_bytes(b"video")
+            settings = SimpleNamespace(
+                sonarr_root_folder="/tv",
+                tv_root=str(local),
+                movies_root="",
+                radarr_root_folder="",
+            )
+            sonarr = "/tv/Expedition Unknown (2015)/Season 15/Expedition.Unknown.S15E04.mkv"
+            self.assertEqual(
+                resolve_visible_media_path(sonarr, settings, include_host_hints=False),
+                str(visible),
+            )
+
+    def test_missing_file_returns_none(self) -> None:
+        from projectionist.library.episode_investigate.path_map import resolve_visible_media_path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            local = Path(tmp) / "media" / "tv"
+            local.mkdir(parents=True)
+            settings = SimpleNamespace(
+                sonarr_root_folder="/tv",
+                tv_root=str(local),
+                movies_root="",
+                radarr_root_folder="",
+            )
+            sonarr = "/tv/Expedition Unknown (2015)/Season 15/missing.mkv"
+            self.assertIsNone(resolve_visible_media_path(sonarr, settings, include_host_hints=False))
+
+    def test_first_existing_root_wins(self) -> None:
+        from projectionist.library.episode_investigate.path_map import resolve_visible_media_path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            first = Path(tmp) / "first"
+            second = Path(tmp) / "second"
+            rel = Path("Show") / "Season 01" / "a.mkv"
+            for root in (first, second):
+                dest = root / rel
+                dest.parent.mkdir(parents=True)
+                dest.write_bytes(b"video")
+            settings = SimpleNamespace(
+                sonarr_root_folder="/tv",
+                tv_root=str(first),
+                movies_root="",
+                radarr_root_folder="",
+            )
+            self.assertEqual(
+                resolve_visible_media_path(
+                    "/tv/Show/Season 01/a.mkv",
+                    settings,
+                    extra_roots=[str(second)],
+                    include_host_hints=False,
+                ),
+                str(first / rel),
+            )
+
+    def test_exact_path_wins_when_present(self) -> None:
+        from projectionist.library.episode_investigate.path_map import resolve_visible_media_path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            exact = Path(tmp) / "exact" / "Show" / "a.mkv"
+            mapped = Path(tmp) / "mapped" / "Show" / "a.mkv"
+            for path in (exact, mapped):
+                path.parent.mkdir(parents=True)
+                path.write_bytes(b"video")
+            settings = SimpleNamespace(
+                sonarr_root_folder=str(Path(tmp) / "exact"),
+                tv_root=str(Path(tmp) / "mapped"),
+                movies_root="",
+                radarr_root_folder="",
+            )
+            self.assertEqual(
+                resolve_visible_media_path(str(exact), settings, include_host_hints=False),
+                str(exact),
+            )
+
+    def test_investigate_one_uses_resolved_path_for_stills(self) -> None:
+        from projectionist.library.episode_investigate.job import investigate_one
+
+        probed: list[str] = []
+        extracted: list[str] = []
+
+        with tempfile.TemporaryDirectory() as tmp:
+            local = Path(tmp) / "media" / "tv"
+            dest = local / "Expedition Unknown (2015)" / "Season 15"
+            dest.mkdir(parents=True)
+            visible = dest / "Expedition.Unknown.S15E04.mkv"
+            visible.write_bytes(b"video")
+            sonarr = "/tv/Expedition Unknown (2015)/Season 15/Expedition.Unknown.S15E04.mkv"
+            settings = SimpleNamespace(
+                llm_provider="ollama",
+                llm_model="llama3",
+                tmdb_api_key="",
+                sonarr_root_folder="/tv",
+                tv_root=str(local),
+                movies_root="",
+                radarr_root_folder="",
+            )
+            with patch(
+                "projectionist.library.episode_investigate.job.probe_runtime_seconds",
+                side_effect=lambda path, **_kwargs: probed.append(path) or 120.0,
+            ), patch(
+                "projectionist.library.episode_investigate.job.extract_stills",
+                side_effect=lambda path, dest_dir, **_kwargs: extracted.append(path) or [],
+            ), patch(
+                "projectionist.library.episode_investigate.job.file_oshash",
+                return_value=None,
+            ):
+                row = investigate_one(
+                    settings,
+                    _show(title="Expedition Unknown"),
+                    {
+                        "id": "80",
+                        "file_id": 80,
+                        "series_id": 4,
+                        "path": sonarr,
+                        "claimed": claimed_from_path(sonarr),
+                        "sonarr": {"season": 15, "episode": 4, "title": "Shipwreck", "evidence": False},
+                    },
+                    catalog=_catalog(),
+                    use_vision=False,
+                    household=["The Bear"],
+                    job_id="job-map",
+                    data_dir=Path(tmp),
+                )
+        self.assertEqual(row["path"], sonarr)
+        self.assertEqual(row["resolved_path"], str(visible))
+        self.assertEqual(row["stills_error"], "")
+        self.assertEqual(probed, [str(visible)])
+        self.assertEqual(extracted, [str(visible)])
+
+    def test_settings_roots_are_first_class_before_container_namespaces(self) -> None:
+        from projectionist.library.episode_investigate.path_map import configured_local_roots
+
+        settings = SimpleNamespace(
+            tv_root="/mnt/user/data/media/tv",
+            movies_root="/mnt/user/data/media/movies",
+            sonarr_root_folder="/tv",
+            radarr_root_folder="/movies",
+        )
+        roots = configured_local_roots(settings)
+        self.assertEqual(roots[0], "/mnt/user/data/media/tv")
+        self.assertEqual(roots[1], "/mnt/user/data/media/movies")
+        self.assertIn("/tv", roots)
+        self.assertIn("/movies", roots)
+
+    def test_translation_logs_once_per_job(self) -> None:
+        from projectionist.library.episode_investigate.path_map import TranslationLog
+
+        with patch("projectionist.library.episode_investigate.path_map.logger") as mock_log:
+            log = TranslationLog()
+            log.emit("/tv/Show/a.mkv", "/media/tv/Show/a.mkv")
+            log.emit("/tv/Show/b.mkv", "/media/tv/Show/b.mkv")
+            mock_log.info.assert_called_once()
+            self.assertIn("/tv/Show/a.mkv", mock_log.info.call_args[0][1])
 
 
 class CatalogSonarrTests(unittest.TestCase):
@@ -672,6 +959,25 @@ class IdentifyLaneTests(unittest.TestCase):
 
         self.assertEqual(series_title_from_acr("The Bear (Main Title Theme)"), "The Bear")
         self.assertEqual(series_title_from_acr("The Studio Theme"), "The Studio")
+
+    def test_identified_keys_cap_evicts_oldest(self) -> None:
+        from projectionist.library.episode_investigate import acrcloud
+
+        acrcloud.reset_identify_throttle_for_tests()
+        original_cap = acrcloud.IDENTIFIED_KEYS_CAP
+        acrcloud.IDENTIFIED_KEYS_CAP = 3
+        try:
+            self.assertTrue(acrcloud._claim_file("a"))
+            self.assertTrue(acrcloud._claim_file("b"))
+            self.assertTrue(acrcloud._claim_file("c"))
+            self.assertFalse(acrcloud._claim_file("a"))
+            self.assertTrue(acrcloud._claim_file("d"))
+            self.assertTrue(acrcloud._claim_file("a"))
+            self.assertEqual(len(acrcloud._identified_keys), 3)
+            self.assertNotIn("b", acrcloud._identified_keys)
+        finally:
+            acrcloud.IDENTIFIED_KEYS_CAP = original_cap
+            acrcloud.reset_identify_throttle_for_tests()
 
     def test_hmac_and_parse(self) -> None:
         from projectionist.library.episode_investigate.acrcloud import parse_identify_payload, sign_identify

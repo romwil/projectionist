@@ -984,6 +984,42 @@ class TestLibraryCounts(unittest.TestCase):
         self.assertEqual(counts["shows"], 0)
         self.assertEqual(counts["items"], 0)
 
+    def test_library_counts_uses_sql_count(self):
+        from contextlib import contextmanager
+
+        _, db = _make_db()
+        _seed_library(db, [
+            {"rating_key": "m1", "media_type": "movie", "title": "Movie 1"},
+            {"rating_key": "s1", "media_type": "show", "title": "Show 1"},
+        ])
+        statements: list[str] = []
+        real_connect = db.connect
+
+        class _RecordingConnection:
+            def __init__(self, inner: object) -> None:
+                self._inner = inner
+
+            def execute(self, sql, *args, **kwargs):
+                statements.append(str(sql))
+                return self._inner.execute(sql, *args, **kwargs)
+
+            def __getattr__(self, name: str):
+                return getattr(self._inner, name)
+
+        @contextmanager
+        def tracking_connect():
+            with real_connect() as conn:
+                yield _RecordingConnection(conn)
+
+        db.connect = tracking_connect  # type: ignore[method-assign]
+        counts = db.library_counts()
+        self.assertEqual(counts["movies"], 1)
+        self.assertEqual(counts["shows"], 1)
+        self.assertEqual(counts["items"], 2)
+        joined = " ".join(statements).upper()
+        self.assertIn("COUNT(*)", joined)
+        self.assertNotIn("SELECT * FROM LIBRARY_ITEMS", joined)
+
 
 # ---------------------------------------------------------------------------
 # upsert_message_feedback — upsert conflict handling
