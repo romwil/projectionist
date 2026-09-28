@@ -1,6 +1,66 @@
 {
-  "generated_at": "2026-09-25T07:01:39Z",
+  "generated_at": "2026-09-28T18:31:30Z",
   "releases": [
+    {
+      "version": "1.37.0",
+      "date": "2026-09-28",
+      "summary": "Play opens titles in Projectionist instead of handing off to Plex. New code is AGPL-3.0-only; already-shipped tags through 1.36.2 stay MIT. Login and job APIs show less of the house.",
+      "highlights": [
+        "**Play stays in the house.** Poster, title sheet, and cards open `/watch` in Projectionist. Plex still transcodes; the browser never sees the server token. **Open in Plex** stays as overflow when a stream will not start.",
+        "**AGPL-3.0-only going forward.** New code and future releases use the GNU Affero GPL v3.0 only. Household / Unraid CA / Hub stay a free self-host app. If you run a modified copy for other people over a network, you offer them the source. Already-shipped tags through 1.36.2 stay MIT.",
+        "**The login screen learns less about the house.** Guests see whether multi-user is on, whether they can ask for an invite, and how they can sign in — not household domain, proxy, or Seerr flags. Setup status is owner-only; members still get Radarr/Sonarr readiness for dock-drop.",
+        "**Failed library sync no longer shows a stack trace.** Job history keeps a short friendly error so `GET /api/jobs` does not leak frames from the host."
+      ],
+      "sections": [
+        {
+          "title": "Changed",
+          "bullets": [
+            "Project license is `AGPL-3.0-only` (official GNU text in `LICENSE`). About, README, Help, package metadata, and Docker labels match. The name and logo are not a grant to call forks “Projectionist.”",
+            "`GET /api/library/stats` uses `library_counts()` (`total` from `items`) and still returns `last_sync`, cached Plex name, `knowledge_coverage`, and the sanitized payload (P2-HIGH-01).",
+            "`start_sync` is single-flight under `_lock`: a queued or running `library_sync` is returned as 200 with that job (P2-HIGH-02).",
+            "`Database.close()` runs `PRAGMA wal_checkpoint(PASSIVE)` after the writer serializer stops. Never `TRUNCATE`.",
+            "Identify `_identified_keys` is an `OrderedDict` capped at 4096 (P2-MED-01). Rate-limit buckets evict empty and oldest keys after `check()` when over 4096, without applying the caller’s window cutoff to other buckets (P2-MED-02).",
+            "Config / Libraries / chat job polls use a shared visible-busy helper (2s while busy, 8s idle, `document.hidden` pause). Chat `listJobs` runs only while a sync toast is open (P2-HIGH-03). Live Channels status depends on a busy boolean so a running job cannot remount the poll. Library Sync keeps `syncingLibrary` in a ref so the first click is not cleared by a stale `listJobs` tick.",
+            "Primary Play CTA is an in-app `/watch/{play_rating_key}` link on posters, title detail / sheet, chat cards, and the ⋮ menu. Overflow remains **Open in Plex**. Show keys resolve to an on-deck or first unwatched episode."
+          ]
+        },
+        {
+          "title": "Security",
+          "bullets": [
+            "Failed `library_sync` jobs store `summary.failed` and a friendly `error`. `Job.to_dict()` never includes a `traceback` key or frame strings, including jobs persisted before this change (P3-MED-01).",
+            "Plex webhook secrets compare SHA-256 of both sides so a length mismatch is 401, not 500. Empty secret or header is still 401. Header remains `X-Projectionist-Webhook-Secret` (P3-MED-03).",
+            "Unauthenticated `GET /api/features` returns only `features.multi_user_enabled`, `features.access_requests_enabled`, `auth_methods`, `setup_state`, `authenticated: false`, and `user: null` (P4-MED-01). When OIDC is a sign-in method, `oidc_provider_name` is included as the login button label. The login screen can hide Need an invite? when access requests are off.",
+            "`GET /api/setup/status` requires the owner role. Signed-in members get Radarr/Sonarr readiness from `features.arr` (P4-MED-04).",
+            "Identify test clips resolve under configured media roots (Plex / Radarr / Sonarr / `tv_root` / `movies_root` / `/tv` / `/movies`). A raw path is used only when it matches a snapshot row; `file_id` prefers the snapshot `resolved_path` so a mapped Sonarr path still works. Paths outside those roots return 400 (P3-MED-04)."
+          ]
+        },
+        {
+          "title": "Fixed",
+          "bullets": [
+            "`/about#license` and `/about#release-notes` scroll to those sections after the shell is ready, instead of landing at the top.",
+            "Saved-library chips on chat home and Library continue that response on `/chat?saved_library=…` instead of dropping the query at the `/` redirect. A second chip on `/chat` starts that page; the first consume no longer leaves the starter stuck.",
+            "Members who cannot read `/api/setup/status` still get Radarr/Sonarr dock-drop from `features.arr` instead of looking disconnected."
+          ]
+        },
+        {
+          "title": "Added",
+          "bullets": [
+            "Identify settings and **Test Identify** on Admin → Libraries, with `IDENTIFY_LEAVES_LAN` (`IDENTIFY_CLIP_SECONDS` = 12). Test honesty is `renamed: false` (P4-MED-03).",
+            "In-app library Play: `POST /api/library/playback/start` plus session playlist/seek/progress/stop proxy. Shared `TheaterPlayer`, `LibraryPlayer`, `/watch/:ratingKey` (pop-out alias). Phone 390 uses double-tap ±15s, 44px safe-area OSD, fullscreen + PiP (no `plex://` primary, no pop-out).",
+            "Maintainer ops: `scripts/unraid-docker-directory-migrate.sh` (GUI Docker-off, cache-pool directory data-root, never Enable Docker / never stop projectionist or smartmap) and `docs/ops/UNRAID-API.md` (GraphQL telemetry and container start/stop only)."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend: 2,357 passed, 6 skipped, 44 subtests passed; 77.04% coverage (74% required).",
+            "Frontend unit: 831 passed; ESLint 0 errors (pre-existing warnings OK); production Vite build passed.",
+            "Focused: `tests/test_library_playback.py`, `tests/test_license.py`, public `/api/features` sanitizer + OIDC login label; `theaterPlayer.test.mjs`, `titleLinks.test.mjs`.",
+            "Targeted Playwright (chromium, :8799) from the Play session: `e2e/library-watch.spec.ts`; mobile `e2e/mobile-native.spec.ts` in-app Play."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.36.2",
       "date": "2026-09-25",
@@ -28,7 +88,7 @@
           "title": "Verification",
           "bullets": [
             "Backend: 2,310 passed, 6 skipped, 36 subtests passed; 77.02% coverage (74% required).",
-            "Frontend unit: 805 passed; ESLint 0 errors (pre-existing warnings OK); production Vite build not re-run for this patch (lockstep + unit only).",
+            "Frontend unit: 805 passed; ESLint 0 errors (pre-existing warnings OK); production Vite build passed.",
             "Focused: `tests/test_config_store.py` (branded media env wins); `tests/test_episode_investigate.py::PathMapTests`."
           ]
         }

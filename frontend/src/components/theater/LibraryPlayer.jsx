@@ -49,6 +49,7 @@ export default function LibraryPlayer({
   const [ccOpen, setCcOpen] = useState(false);
   const [nowMs, setNowMs] = useState(0);
   const [durationMs, setDurationMs] = useState(0);
+  const [bufferedEndS, setBufferedEndS] = useState(0);
   const [phone, setPhone] = useState(() => isPhonePlayViewport());
   const [pipSupported, setPipSupported] = useState(false);
   const [startBusy, setStartBusy] = useState(false);
@@ -344,12 +345,9 @@ export default function LibraryPlayer({
   const plexHref = session?.plex_watch_url || "";
   const next = session?.next_episode;
   const showOsd = !resumeOpen && !ended;
-  const buffered = bufferedRanges(videoRef.current);
-  const durationS = (videoRef.current?.duration || durationMs / 1000 || 0);
-  const bufferedPct = durationS
-    ? Math.round(((buffered[buffered.length - 1]?.end || 0) / durationS) * 100)
-    : 0;
-  const playheadPct = durationS ? Math.round(((videoRef.current?.currentTime || nowMs / 1000) / durationS) * 1000) : 0;
+  const durationS = durationMs / 1000 || 0;
+  const bufferedPct = durationS ? Math.round((bufferedEndS / durationS) * 100) : 0;
+  const playheadPct = durationMs ? Math.round((nowMs / durationMs) * 1000) : 0;
 
   const osd = showOsd ? (
     <div className="theater-osd-inner live-osd-inner">
@@ -448,6 +446,8 @@ export default function LibraryPlayer({
         onTimeUpdate={(video) => {
           setNowMs(Math.round((video.currentTime || 0) * 1000));
           if (video.duration) setDurationMs(Math.round(video.duration * 1000));
+          const ranges = bufferedRanges(video);
+          setBufferedEndS(ranges[ranges.length - 1]?.end || 0);
           sendProgress("playing", video);
         }}
         onEnded={() => {
