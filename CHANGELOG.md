@@ -5,6 +5,7 @@
 Failed syncs keep a friendly error, guests see less of the house, library stats stay cheap, parked clients stop polling, and Identify says when a clip leaves the LAN.
 
 ### Highlights
+- **AGPL-3.0-only going forward.** New code and future releases use the GNU Affero GPL v3.0 only. Household / Unraid CA / Hub stay a free self-host app. If you run a modified copy for other people over a network, you offer them the source. Already-shipped tags through 1.36.2 stay MIT.
 - **Failed library sync no longer shows a stack trace.** Job history keeps a short friendly error so `GET /api/jobs` does not leak frames from the host.
 - **The login screen learns less about the house.** Guests see whether multi-user is on, whether they can ask for an invite, and how they can sign in — not household domain, proxy, or Seerr flags. Setup status is owner-only; members still get Radarr/Sonarr readiness for dock-drop.
 - **Identify test clips stay on the media roots.** A test path has to sit under the configured TV/movie folders (or a current snapshot row, including a mapped `resolved_path`). A miss still does not rename files.
@@ -14,6 +15,7 @@ Failed syncs keep a friendly error, guests see less of the house, library stats 
 - **Identify says the clip leaves the LAN.** Settings and the test control tell you a 12-second clip goes to ACRCloud, and that a miss (or a test) does not rename files.
 
 ### Changed
+- Project license is `AGPL-3.0-only` (official GNU text in `LICENSE`). About, README, Help, package metadata, and Docker labels match. The name and logo are not a grant to call forks “Projectionist.”
 - `GET /api/library/stats` uses `library_counts()` (`total` from `items`) and still returns `last_sync`, cached Plex name, `knowledge_coverage`, and the sanitized payload (P2-HIGH-01).
 - `start_sync` is single-flight under `_lock`: a queued or running `library_sync` is returned as 200 with that job (P2-HIGH-02).
 - `Database.close()` runs `PRAGMA wal_checkpoint(PASSIVE)` after the writer serializer stops. Never `TRUNCATE`.
@@ -28,6 +30,7 @@ Failed syncs keep a friendly error, guests see less of the house, library stats 
 - Identify test clips resolve under configured media roots (Plex / Radarr / Sonarr / `tv_root` / `movies_root` / `/tv` / `/movies`). A raw path is used only when it matches a snapshot row; `file_id` prefers the snapshot `resolved_path` so a mapped Sonarr path still works. Paths outside those roots return 400 (P3-MED-04).
 
 ### Fixed
+- `/about#license` and `/about#release-notes` scroll to those sections after the shell is ready, instead of landing at the top.
 - Saved-library chips on chat home and Library continue that response on `/chat?saved_library=…` instead of dropping the query at the `/` redirect. A second chip on `/chat` starts that page; the first consume no longer leaves the starter stuck.
 - Members who cannot read `/api/setup/status` still get Radarr/Sonarr dock-drop from `features.arr` instead of looking disconnected.
 
