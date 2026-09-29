@@ -327,13 +327,23 @@ test.describe("Title cards in chat", () => {
     );
   });
 
-  test("Watch on Plex appears only for in-library titles with rating_key", async ({ page }) => {
+  test("Play is primary for in-library titles; Open in Plex stays in overflow", async ({ page }) => {
     await mockChatStreamMessage(page, () => ({
       id: "assistant-library",
       role: "assistant",
       blocks: [
         { type: "text", content: "From your library." },
-        { type: "title_cards", items: [LIBRARY_CARD, MOCK_CARDS[0]] },
+        {
+          type: "title_cards",
+          items: [
+            {
+              ...LIBRARY_CARD,
+              plex_watch_url:
+                "https://app.plex.tv/desktop/#!/server/mock-plex-machine/details?key=%2Flibrary%2Fmetadata%2Fplex-949",
+            },
+            MOCK_CARDS[0],
+          ],
+        },
       ],
       created_at: Math.floor(Date.now() / 1000),
       lens_id: "general",
@@ -344,16 +354,20 @@ test.describe("Title cards in chat", () => {
     const libraryCard = page.getByTestId("chat-message-assistant").getByTestId("title-card").first();
     await expect(libraryCard).toContainText("Heat");
     await expect(libraryCard.getByRole("link", { name: "Play" })).toHaveAttribute("href", "/watch/plex-949");
-    const plexLink = libraryCard.getByTestId("watch-on-plex-button");
-    await expect(plexLink).toBeVisible();
-    await expect(plexLink).toHaveAttribute(
+    // Primary CTA is in-app Play; Open in Plex is overflow-only.
+    await expect(libraryCard.getByTestId("watch-on-plex-button")).toHaveCount(0);
+
+    await libraryCard.getByRole("button", { name: /Actions for/ }).click();
+    const menu = page.getByRole("menu");
+    await expect(menu.getByRole("link", { name: "Open in Plex" })).toHaveAttribute(
       "href",
       "https://app.plex.tv/desktop/#!/server/mock-plex-machine/details?key=%2Flibrary%2Fmetadata%2Fplex-949",
     );
-    await expect(plexLink).toHaveText("Open in Plex");
+    await page.keyboard.press("Escape");
 
     const discoveryCard = page.getByTestId("chat-message-assistant").getByTestId("title-card").nth(1);
     await expect(discoveryCard.getByTestId("watch-on-plex-button")).toHaveCount(0);
+    await expect(discoveryCard.getByRole("link", { name: "Play" })).toHaveCount(0);
     await expect(discoveryCard.getByTestId("add-radarr-button")).toBeVisible();
   });
 
