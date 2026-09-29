@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CHAT_SCROLL_PADDING,
+  applyChatScroll,
   computeFollowScrollTop,
   isScrolledAwayFromBottom,
+  isTranscriptRestore,
   resolveAutoScroll,
   resolveLatestTurnAnchorIndex,
 } from "../lib/chatScroll.js";
@@ -24,10 +26,10 @@ export default function useChatScroll({ messages, loading, sessionId }) {
     });
   }, []);
 
-  const scrollToBottom = useCallback((behavior = "auto") => {
+  const scrollToBottom = useCallback((behavior = "instant") => {
     const el = scrollRef.current;
     if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior });
+    applyChatScroll(el, el.scrollHeight, behavior);
     followingRef.current = true;
     setShowNewReplyChip(false);
   }, []);
@@ -59,7 +61,7 @@ export default function useChatScroll({ messages, loading, sessionId }) {
       userTop: targetNode.offsetTop,
       padding: CHAT_SCROLL_PADDING,
     });
-    el.scrollTo({ top, behavior });
+    applyChatScroll(el, top, behavior);
     followingRef.current = true;
     setShowNewReplyChip(false);
   }, [scrollToBottom]);
@@ -84,13 +86,16 @@ export default function useChatScroll({ messages, loading, sessionId }) {
     return () => el.removeEventListener("scroll", handleScroll);
   }, []);
 
+  // Session switch: reset counters so the next transcript paint restores instantly.
   useEffect(() => {
-    if (prevSessionRef.current !== sessionId) {
-      prevSessionRef.current = sessionId;
+    if (prevSessionRef.current === sessionId) return;
+    prevSessionRef.current = sessionId;
+    prevCountRef.current = 0;
+    followingRef.current = true;
+    setShowNewReplyChip(false);
+    if (messages.length > 0) {
       prevCountRef.current = messages.length;
-      followingRef.current = true;
-      setShowNewReplyChip(false);
-      requestAnimationFrame(() => scrollToBottom("auto"));
+      requestAnimationFrame(() => scrollToBottom("instant"));
     }
   }, [sessionId, messages.length, scrollToBottom]);
 
@@ -99,6 +104,16 @@ export default function useChatScroll({ messages, loading, sessionId }) {
     if (count === 0) {
       prevCountRef.current = 0;
       setShowNewReplyChip(false);
+      return;
+    }
+
+    // Remount / navigate back / async thread load: land at the bottom with no
+    // smooth scroll-through of the whole history.
+    if (isTranscriptRestore({ prevCount: prevCountRef.current, nextCount: count })) {
+      prevCountRef.current = count;
+      followingRef.current = true;
+      setShowNewReplyChip(false);
+      requestAnimationFrame(() => scrollToBottom("instant"));
       return;
     }
 
@@ -127,8 +142,7 @@ export default function useChatScroll({ messages, loading, sessionId }) {
       });
 
       if (action === "pin-latest") {
-        // A brand-new turn: bring the latest user turn near the top once so the
-        // question stays visible while the reply grows below it.
+        // Live new turn only — smooth is OK here. Restore path never reaches this.
         scrollToLatestTurn("smooth");
         return;
       }
@@ -136,7 +150,7 @@ export default function useChatScroll({ messages, loading, sessionId }) {
       if (action === "stick-bottom") {
         // User is reading at the bottom while the reply streams — keep them
         // pinned to the bottom. Never re-pin to the top of the response.
-        scrollToBottom("auto");
+        scrollToBottom("instant");
         return;
       }
 

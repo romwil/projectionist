@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [1.37.8] — 2026-09-28
+
+Coming back to chat lands at the bottom of the thread — no more scroll-through of the whole history.
+
+### Highlights
+- **Chat opens already at the bottom.** Leaving for Explore/Admin and returning (or switching threads) jumps straight to the latest messages instead of animating from the top of a long transcript.
+- **Smooth scroll stays for live replies.** The “new reply” chip and in-conversation turn pins still ease into place; only restore / remount jumps are instant.
+
+### Fixed
+- `useChatScroll` treated an async thread hydrate (`prevCount` 0 → N) as a live new turn and called `scrollToLatestTurn("smooth")` from `scrollTop = 0`, so returning to `/chat` visually scrolled the entire history.
+- Session switches reset the restore counter and jump with `scrollTop` assignment (`applyChatScroll` instant path) instead of smooth `scrollTo`.
+
+### Changed
+- `isTranscriptRestore` / `applyChatScroll` helpers in `chatScroll.js`; restore and streaming stick-bottom use instant scroll; NewReplyChip keeps smooth.
+
+### Verification
+- Frontend unit: `chatScroll.test.mjs` — `isTranscriptRestore`, `applyChatScroll` instant vs smooth.
+
 ## [1.37.7] — 2026-09-28
 
 Play keeps going when you slide to another Mac Space, and living-room keys get Minecraft A/S/D aliases.
