@@ -1256,6 +1256,60 @@ class OnNowGuideTests(unittest.TestCase):
         playing["duration"] = 8_000_000
         self.assertFalse(now_playing_past_file_eof(playing, now=now))
 
+    def test_pick_now_and_next_clamps_flex_six_hour_block_to_next_movie(self) -> None:
+        """Tunarr guideFlexTitle pads are ~6h; countdown must follow the next movie."""
+        from projectionist.live_channels.guide import (
+            clamp_flex_progress_to_next,
+            pick_now_and_next,
+        )
+
+        now = 1_700_000_100.0
+        programs = [
+            {
+                "title": "Sci-Fi · Up next",
+                "type": "flex",
+                "start": now - 2_183,  # ~36:23 elapsed into synthetic 6h pad
+                "stop": now - 2_183 + 21_600,
+            },
+            {
+                "title": "Sci-Fi · Up next",
+                "type": "flex",
+                "start": now - 2_183 + 21_600,
+                "stop": now - 2_183 + 43_200,
+            },
+            {
+                "title": "Blade Runner",
+                "type": "content",
+                "start": now + 900,
+                "stop": now + 900 + 7_200,
+                "program": {"title": "Blade Runner", "type": "movie"},
+            },
+        ]
+        slots = pick_now_and_next(programs, now=now)
+        self.assertTrue(slots["now"]["is_flex"])
+        self.assertEqual(slots["next"]["title"], "Blade Runner")
+        self.assertEqual(slots["now"]["ends_at"], now + 900)
+        self.assertEqual(slots["now"]["seconds_remaining"], 900)
+        self.assertLess(slots["now"]["seconds_remaining"], 3_600)
+
+        raw = {
+            "now": {
+                "title": "Sci-Fi · Up next",
+                "is_flex": True,
+                "started_at": now - 2_183,
+                "ends_at": now - 2_183 + 21_600,
+                "seconds_remaining": 21_600 - 2_183,
+            },
+            "next": {
+                "title": "Blade Runner",
+                "is_flex": False,
+                "start": now + 900,
+            },
+        }
+        clamped = clamp_flex_progress_to_next(raw, now=now)
+        self.assertEqual(clamped["now"]["ends_at"], now + 900)
+        self.assertEqual(clamped["now"]["seconds_remaining"], 900)
+
     def test_prefer_real_titles_does_not_steal_next_episode(self) -> None:
         from projectionist.live_channels.guide import (
             _prefer_real_titles_over_flex,

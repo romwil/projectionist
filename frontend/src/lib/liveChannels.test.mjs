@@ -324,6 +324,47 @@ describe("liveChannels helpers", () => {
     assert.equal(osd.nextDisplay, "Gilligan's Island — The Big Gold Strike");
   });
 
+  it("buildOsdModel clamps flex 6h guideFlexTitle block to next movie start", () => {
+    const nowMs = 1_700_000_100_000;
+    const nowSec = nowMs / 1000;
+    const osd = buildOsdModel(
+      {
+        id: "sci-fi",
+        number: 101,
+        name: "SCI-FI",
+        programs: [
+          {
+            title: "Sci-Fi · Up next",
+            is_flex: true,
+            start: nowSec - 2183,
+            stop: nowSec - 2183 + 21600,
+          },
+          {
+            title: "Sci-Fi · Up next",
+            is_flex: true,
+            start: nowSec - 2183 + 21600,
+            stop: nowSec - 2183 + 43200,
+          },
+          {
+            title: "Blade Runner",
+            is_flex: false,
+            start: nowSec + 900,
+            stop: nowSec + 900 + 7200,
+          },
+        ],
+      },
+      nowMs,
+    );
+    assert.equal(osd.isFlex, true);
+    assert.equal(osd.nextTitle, "Blade Runner");
+    assert.equal(osd.secondsRemaining, 900);
+    assert.ok(osd.secondsRemaining < 3600);
+    const l3 = buildFlexLowerThird(osd);
+    assert.ok(l3);
+    assert.equal(l3.title, "Blade Runner");
+    assert.equal(l3.countdown, formatClock(900));
+  });
+
   it("buildFlexLowerThird is visible only on flex with Up-next copy + countdown", () => {
     const flexOsd = buildOsdModel(
       {
