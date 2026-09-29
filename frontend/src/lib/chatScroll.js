@@ -95,3 +95,34 @@ export function resolveAutoScroll({ isNewTurn, streaming, nearBottom, wasFollowi
   }
   return "none";
 }
+
+/**
+ * True when the transcript just appeared (remount, navigate back to /chat,
+ * session switch, or async thread load) rather than a live incremental turn.
+ * Those cases must jump to the end instantly — never smooth-scroll the whole history.
+ *
+ * @param {{ prevCount: number, nextCount: number }} opts
+ */
+export function isTranscriptRestore({ prevCount, nextCount }) {
+  return prevCount === 0 && nextCount > 0;
+}
+
+/**
+ * Apply a scrollTop change. Instant restores assign scrollTop directly so the
+ * viewport lands at the target with no scroll-through animation. Smooth is
+ * reserved for live "new reply" / chip navigation.
+ *
+ * @param {{ scrollTop: number, scrollTo?: Function }} el
+ * @param {number} top
+ * @param {"instant" | "smooth" | "auto"} [behavior="instant"]
+ */
+export function applyChatScroll(el, top, behavior = "instant") {
+  if (!el) return;
+  if (behavior === "smooth") {
+    if (typeof el.scrollTo === "function") {
+      el.scrollTo({ top, behavior: "smooth" });
+      return;
+    }
+  }
+  el.scrollTop = top;
+}
