@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.37.19] — 2026-09-29
+
+Phone and tablet Play landscape/fullscreen: OSD stays inside the safe viewport so ±15, play/pause, and the scrubber stay tappable on the go.
+
+### Highlights
+- **Landscape Play keeps controls on-screen.** Rotate a phone to watch — the transport no longer slides under the home indicator or off the short edge.
+- **Fullscreen still shows Projectionist controls.** When Safari ignores the Fullscreen API, Play uses an immersive CSS fallback so custom OSD stays with the video.
+- **iPad theater respects safe areas** in both orientations, not desktop-only chrome.
+
+### Fixed
+- `isPhonePlayViewport` now uses short/long edges so landscape (~844×390) keeps phone Play chrome (width-alone dropped `--phone` after rotate).
+- Landscape OSD media query is `(orientation: landscape) and (max-height: 500px)` — replaces unreachable `(max-width: 390px) and (orientation: landscape)`.
+- Compact landscape OSD (tighter padding, hide episode/CC note); single safe-area pad on the OSD host; `100svh`/`100dvh` theater shell.
+- `toggleTheaterFullscreen` on the theater root with CSS `theater-player--immersive` fallback (avoids `webkitEnterFullscreen` dropping OSD).
+
+### Changed
+- HELP / DESIGN: phone landscape + iOS fullscreen limits documented for owners/members.
+
+### Verification
+- Unit: `chatLayout.test.mjs`, `theaterPlayer.test.mjs`, `nativeMobile.test.mjs`.
+- Playwright: `e2e/library-watch.spec.ts` (phone 390 + landscape), `e2e/mobile-native.spec.ts` landscape Play.
+- `cd frontend && npm run lint` — 0 errors (pre-existing warnings only).
+
 ## [1.37.18] — 2026-09-29
 
 Investigate deep-review hardening: stuck admin jobs, Identify silent drops, unbounded stills cache, and honesty gaps on vision catalog / egress docs.

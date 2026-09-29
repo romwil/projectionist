@@ -3,6 +3,9 @@ import { expect, type Locator, type Page } from "@playwright/test";
 /** iPhone 12/13 class — official native-mobile QA viewport. */
 export const NATIVE_VIEWPORT = { width: 390, height: 844 } as const;
 
+/** iPhone-class landscape — long edge first (Play OSD regression viewport). */
+export const NATIVE_LANDSCAPE_VIEWPORT = { width: 844, height: 390 } as const;
+
 export const TAP_MIN = 44;
 
 export async function assertMinTapSize(locator: Locator, min = TAP_MIN) {

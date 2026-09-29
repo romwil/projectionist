@@ -6,8 +6,12 @@
 /** CSS class applied to the scrollable transcript host. */
 export const CHAT_SCROLL_REGION_CLASS = "chat-scroll-region";
 
-/** Phone Play (390×844) opens in-app /watch; composer stays pinned on return. */
+/** Phone Play portrait reference width (390×844). Landscape uses short/long edges. */
 export const PHONE_PLAY_MAX_WIDTH = 390;
+/** Short edge ceiling for phone-class Play (portrait height or landscape height). */
+export const PHONE_PLAY_MAX_SHORT_EDGE = 500;
+/** Long edge ceiling — covers iPhone SE → Pro Max landscape (~932). */
+export const PHONE_PLAY_MAX_LONG_EDGE = 932;
 
 /** CSS class for the New reply chip — lives above the composer, not in the transcript. */
 export const NEW_REPLY_CHIP_CLASS = "new-reply-chip";
@@ -47,13 +51,44 @@ export function messageTextContainmentStyle() {
   };
 }
 
-export function isPhonePlayViewport(width) {
-  const value = Number(width);
-  if (Number.isFinite(value) && value > 0) return value <= PHONE_PLAY_MAX_WIDTH;
-  if (typeof window !== "undefined" && Number.isFinite(window.innerWidth)) {
-    return window.innerWidth <= PHONE_PLAY_MAX_WIDTH;
+/**
+ * Phone-class Play chrome (no Pop-out, compact OSD, safe-area landscape).
+ * Portrait: width ≤ 390. Landscape: short ≤ 500 and long ≤ 932 so rotating a
+ * phone does not drop `--phone` styles (width alone becomes ~844).
+ * One-arg width-only calls keep the legacy ≤390 check when height is unknown.
+ */
+export function isPhonePlayViewport(width, height) {
+  let w = Number(width);
+  let h = Number(height);
+  if ((!Number.isFinite(w) || w <= 0) && typeof window !== "undefined") {
+    w = Number(window.innerWidth);
   }
-  return false;
+  if ((!Number.isFinite(h) || h <= 0) && typeof window !== "undefined") {
+    h = Number(window.innerHeight);
+  }
+  if (Number.isFinite(w) && w > 0 && (!Number.isFinite(h) || h <= 0)) {
+    return w <= PHONE_PLAY_MAX_WIDTH;
+  }
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return false;
+  const shortEdge = Math.min(w, h);
+  const longEdge = Math.max(w, h);
+  return shortEdge <= PHONE_PLAY_MAX_SHORT_EDGE && longEdge <= PHONE_PLAY_MAX_LONG_EDGE;
+}
+
+/** Compact theater (phone + iPad-class) — safe-area OSD in either orientation. */
+export function isCompactPlayViewport(width, height) {
+  if (isPhonePlayViewport(width, height)) return true;
+  let w = Number(width);
+  let h = Number(height);
+  if ((!Number.isFinite(w) || w <= 0) && typeof window !== "undefined") {
+    w = Number(window.innerWidth);
+  }
+  if ((!Number.isFinite(h) || h <= 0) && typeof window !== "undefined") {
+    h = Number(window.innerHeight);
+  }
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return false;
+  // iPad portrait/landscape and large phones — keep theater chrome touch-safe.
+  return Math.min(w, h) <= 834 && Math.max(w, h) <= 1366;
 }
 
 /** Most recently updated thread that is not the empty chat-home session. */

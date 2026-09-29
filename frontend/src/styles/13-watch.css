@@ -18,9 +18,12 @@ html:has([data-theater-mode="true"]) #root {
   position: fixed;
   inset: 0;
   width: 100%;
+  /* dvh tracks the dynamic visual viewport; svh is the floor when chrome expands. */
   height: 100%;
+  height: 100svh;
   height: 100dvh;
   max-height: 100%;
+  max-height: 100svh;
   max-height: 100dvh;
   background: #050608;
   color: var(--text);
@@ -89,8 +92,15 @@ html:has([data-theater-mode="true"]) #root {
 .theater-osd.live-osd {
   z-index: 5;
   max-height: none;
-  padding: 0 max(1rem, env(safe-area-inset-right)) max(0.85rem, env(safe-area-inset-bottom))
-    max(1rem, env(safe-area-inset-left));
+  /* Single safe-area pad on the OSD host — do not also pad transport/inner. */
+  padding: 0 max(0.75rem, env(safe-area-inset-right, 0px)) max(0.65rem, env(safe-area-inset-bottom, 0px))
+    max(0.75rem, env(safe-area-inset-left, 0px));
+  box-sizing: border-box;
+}
+
+/* Keep the visible OSD inside the player (short landscape). */
+.theater-osd.live-osd.is-visible {
+  max-height: 100%;
 }
 
 .theater-osd-inner {
@@ -103,6 +113,11 @@ html:has([data-theater-mode="true"]) #root {
   border: 1px solid rgba(230, 226, 214, 0.1);
   box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(14px);
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .theater-osd-meta {
@@ -464,43 +479,131 @@ html:has([data-theater-mode="true"]) #root {
   }
 }
 
-@media (max-width: 390px) {
-  .library-watch--phone .theater-osd-transport {
-    padding-bottom: max(0.15rem, env(safe-area-inset-bottom));
+/* Phone + compact tablet theater — portrait chrome (width-based). */
+@media (max-width: 926px) {
+  .library-watch--phone .theater-osd-inner,
+  .library-watch--compact .theater-osd-inner {
+    padding: 0.7rem 0.85rem 0.65rem;
+    gap: 0.4rem;
   }
 
-  .library-watch--phone .theater-osd-inner {
-    padding-left: max(0.75rem, env(safe-area-inset-left));
-    padding-right: max(0.75rem, env(safe-area-inset-right));
-  }
-
-  .library-watch--phone .theater-player-video {
+  .library-watch--phone .theater-player-video,
+  .library-watch--compact .theater-player-video {
     object-fit: contain;
   }
 
-  .library-watch--phone .theater-center-play {
+  .library-watch--phone .theater-center-play,
+  .library-watch--compact .theater-center-play {
     width: 4.5rem;
     height: 4.5rem;
   }
 }
 
-@media (max-width: 390px) and (orientation: landscape) {
-  .library-watch--phone .live-osd:not(.is-visible) {
+/*
+ * Phone landscape: short viewport height (~390), long width (~844).
+ * Prior rule used (max-width: 390px) and (orientation: landscape) — unreachable
+ * once the device rotates (width becomes the long edge).
+ */
+@media (orientation: landscape) and (max-height: 500px) {
+  .library-watch--phone .live-osd:not(.is-visible),
+  .library-watch--compact .live-osd:not(.is-visible) {
     opacity: 0;
     pointer-events: none;
   }
 
-  .library-watch--phone .theater-osd-title {
-    font-size: 1.05rem;
+  .library-watch--phone .theater-osd-title,
+  .library-watch--compact .theater-osd-title {
+    font-size: 1rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .library-watch--phone .theater-osd-episode {
+  .library-watch--phone .theater-osd-episode,
+  .library-watch--compact .theater-osd-episode,
+  .library-watch--phone .theater-osd-kicker,
+  .library-watch--compact .theater-osd-kicker {
     display: none;
+  }
+
+  .library-watch--phone .theater-osd.live-osd,
+  .library-watch--compact .theater-osd.live-osd {
+    padding: 0 max(0.5rem, env(safe-area-inset-right, 0px)) max(0.35rem, env(safe-area-inset-bottom, 0px))
+      max(0.5rem, env(safe-area-inset-left, 0px));
+  }
+
+  .library-watch--phone .theater-osd-inner,
+  .library-watch--compact .theater-osd-inner {
+    gap: 0.25rem;
+    padding: 0.45rem 0.65rem 0.4rem;
+    border-radius: 12px;
+  }
+
+  .library-watch--phone .theater-scrubber-row,
+  .library-watch--compact .theater-scrubber-row {
+    gap: 0.4rem;
+  }
+
+  .library-watch--phone .theater-scrubber input[type="range"],
+  .library-watch--compact .theater-scrubber input[type="range"] {
+    min-height: 44px;
+  }
+
+  .library-watch--phone .theater-osd-transport,
+  .library-watch--compact .theater-osd-transport {
+    flex-wrap: nowrap;
+    gap: 0.25rem 0.35rem;
+  }
+
+  .library-watch--phone .theater-osd-skip,
+  .library-watch--phone .theater-osd-secondary,
+  .library-watch--compact .theater-osd-skip,
+  .library-watch--compact .theater-osd-secondary {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0.35rem 0.55rem;
+  }
+
+  .library-watch--phone .theater-osd-play,
+  .library-watch--compact .theater-osd-play {
+    min-height: 48px;
+    min-width: 48px;
+    width: 48px;
+  }
+
+  .library-watch--phone .theater-cc-note,
+  .library-watch--compact .theater-cc-note {
+    display: none;
+  }
+
+  .library-watch--phone .theater-center-play,
+  .library-watch--compact .theater-center-play {
+    width: 3.75rem;
+    height: 3.75rem;
   }
 }
 
 @media (orientation: landscape) {
-  .library-watch--phone {
+  .library-watch--phone,
+  .library-watch--compact {
     background: #000;
   }
+}
+
+/* CSS immersive fallback when the Fullscreen API is unavailable (common on iOS). */
+.theater-player.theater-player--immersive {
+  position: fixed !important;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  max-height: 100dvh;
+  z-index: 50;
+  background: #000;
+}
+
+.theater-player.theater-player--immersive .theater-osd.live-osd {
+  padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+  padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
+  padding-bottom: max(0.65rem, env(safe-area-inset-bottom, 0px));
 }
