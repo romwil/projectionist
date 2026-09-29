@@ -2,7 +2,7 @@
 
 Task-first notes for the **Automat** Unraid host that runs Projectionist production and the maintainer QA sidecar. Audience: developers and Cursor agents working on this repo’s live stack — not end-user install docs (see [wiki/Unraid.md](../wiki/Unraid.md) and [DOCKER.md](../DOCKER.md) for generic Unraid).
 
-Jump to: [LAN hosts](#lan-hosts-source-of-truth) · [Rollout](#rollout--appdata) · [Docker directory](#docker-vdisk--directory-maintenance-window) · [UI verification](#ui-verification) · [Ops UI](#ops-ui-newsletters--mail) · [QA lifecycle](#qa--release-lifecycle) · [See also](#see-also)
+Jump to: [LAN hosts](#lan-hosts-source-of-truth) · [Rollout](#rollout--appdata) · [Agent rollout](#agent-rollout-from-a-maintainer-mac) · [Docker directory](#docker-vdisk--directory-maintenance-window) · [UI verification](#ui-verification) · [Ops UI](#ops-ui-newsletters--mail) · [QA lifecycle](#qa--release-lifecycle) · [See also](#see-also)
 
 ---
 
@@ -113,15 +113,20 @@ Legacy installs that never migrated may still use `/mnt/user/appdata/curatorx/` 
 
 `rollout.sh` is **pull-only** from Docker Hub (`romwil/projectionist:X.Y.Z`). It does **not** build from a git tree. Prod promote is step 4 of the Hub-first ship path in [RELEASE.md](../RELEASE.md) — only after Hub publish + CA proof pull.
 
-```bash
-# On Unraid (SSH) — preferred one-shot pull + recreate; /config is never wiped
-cd /mnt/user/appdata/projectionist && ./rollout.sh 1.33.1
+### Agent rollout (from a maintainer Mac)
 
-# From a machine with the appdata share mounted:
-cd /Volumes/appdata/projectionist && ./rollout.sh 1.33.1
+Agents must **not** run `./rollout.sh` from the SMB mount (`/Volumes/appdata/…` has no host `docker.sock`) and must **not** SSH as `root@10.10.1.202` (key denied). Use the host alias and run on Unraid:
+
+```bash
+# Preferred one-shot from laptop / Cursor agent — pull + recreate; /config is never wiped
+ssh automat 'cd /mnt/user/appdata/projectionist && ./rollout.sh X.Y.Z'
+# Verify on LAN (not VIP CDN)
+curl -s http://10.10.1.202:8788/api/health
 ```
 
-Keep the kit synced with the repo (`rollout.sh`, optional `unraid-force-pull.sh`, compose/env examples). Generic Force Update / 0 B pull pathology: [DOCKER.md](../DOCKER.md#unraid-force-update-pulls-0-b--stays-on-an-old-version).
+Already on an Unraid shell: `cd /mnt/user/appdata/projectionist && ./rollout.sh X.Y.Z`. The macOS mount is for editing kit files / config, not for invoking Docker.
+
+Keep the kit synced with the repo (`rollout.sh` ← `scripts/unraid-rollout.sh`, optional `unraid-force-pull.sh`, compose/env examples). Generic Force Update / 0 B pull pathology: [DOCKER.md](../DOCKER.md#unraid-force-update-pulls-0-b--stays-on-an-old-version). Cursor always-on summary: [`.cursor/rules/automat-environments.mdc`](../../.cursor/rules/automat-environments.mdc).
 
 No tokens, Apprise URLs, or other secrets belong in this runbook — they live in `config/settings.json` on the host.
 
@@ -131,6 +136,8 @@ No tokens, Apprise URLs, or other secrets belong in this runbook — they live i
 - **Do not** promote prod from a host-built or untagged WIP image — only `./rollout.sh X.Y.Z` after Hub has `:X.Y.Z`.
 - **Do not** claim prod is on `X.Y.Z` from the public hostname; use LAN `:8788` (table above).
 - **Do not** stop smartmap or bind QA to `:8790`. QA is ephemeral on `:8792`. The 2026-09-12 “park smartmap for QA” pattern is retired.
+- **Do not** run `./rollout.sh` from the Mac SMB mount (`/Volumes/appdata/…`) — no host `docker.sock`. Use `ssh automat '…'`.
+- **Do not** SSH as `root@10.10.1.202` for rollout — use the **`automat`** host alias.
 
 ### Docker vDisk → directory (maintenance window)
 
@@ -192,7 +199,7 @@ Canonical ship order (full detail: [RELEASE.md](../RELEASE.md)):
 1. **Hub** — `./scripts/docker-release.sh X.Y.Z` so `romwil/projectionist:X.Y.Z` exists.
 2. **GitHub** — PR → `main` (branch protection — never bypass; use a PR even for hotfixes), then annotated tag + `gh release` **after merge** matching that version.
 3. **CA proof** — pull Hub tag onto QA / disposable container (**Path B**). This is the Unraid CA install path.
-4. **Prod** — only when asked: `./rollout.sh X.Y.Z` (pull-only). Never stop prod while iterating on QA.
+4. **Prod** — only when asked: `ssh automat 'cd /mnt/user/appdata/projectionist && ./rollout.sh X.Y.Z'` (pull-only). Never stop prod while iterating on QA.
 
 After a successful Docker Hub publish, **spin down** maintainer QA (`projectionist-qa` on `:8792`) unless an active QA/test campaign is in progress. **Never** stop production `projectionist` / port **`:8788`**. **Never** stop smartmap / `:8790`.
 
