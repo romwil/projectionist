@@ -8,14 +8,18 @@ import {
 } from "../../api/client";
 import { isPhonePlayViewport } from "../../lib/chatLayout.js";
 import {
+  SCRUB_MAX,
   SKIP_SECONDS,
   bufferedRanges,
+  canLocalSeekTo,
   canResumeAttachedStream,
   clampTime,
   formatClockMs,
   libraryWatchPath,
   libraryWatchPopoutPath,
+  msFromScrubPct,
   notePlayingBeforeHide,
+  scrubPctFromMs,
   shouldAutoResumePlayback,
   shouldPauseOnVisibilityHide,
   shouldResumeFromOffset,
@@ -63,6 +67,8 @@ export default function LibraryPlayer({
   const startingRef = useRef(false);
   const wasPlayingBeforeHideRef = useRef(false);
   const pauseWhenBackgroundedRef = useRef(loadPauseWhenBackgrounded());
+  /** True while the user is dragging the scrubber — blocks timeupdate from stealing the thumb. */
+  const scrubbingRef = useRef(false);
   const [session, setSession] = useState(null);
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
@@ -73,6 +79,8 @@ export default function LibraryPlayer({
   const [moreOpen, setMoreOpen] = useState(false);
   const [nowMs, setNowMs] = useState(0);
   const [durationMs, setDurationMs] = useState(0);
+  /** Non-null while dragging/keyboard-scrubbing — drives the range value instead of playhead. */
+  const [scrubPct, setScrubPct] = useState(null);
   const [bufferedEndS, setBufferedEndS] = useState(0);
   const [phone, setPhone] = useState(() => isPhonePlayViewport());
   const [pipSupported, setPipSupported] = useState(false);
@@ -326,13 +334,30 @@ export default function LibraryPlayer({
     }
   }
 
+  /** Local currentTime when buffered; otherwise Plex session restart at offset. */
+  function seekToOffsetMs(offsetMs) {
+    const video = videoRef.current;
+    const durationS = video?.duration || durationMs / 1000;
+    const target = clampTime(offsetMs / 1000, durationS);
+    const targetMs = Math.round(target * 1000);
+    if (video && canLocalSeekTo(video, target)) {
+      try {
+        video.currentTime = target;
+      } catch {
+        // Some browsers reject currentTime before metadata.
+      }
+      setNowMs(targetMs);
+      return;
+    }
+    applySeekRestart(targetMs);
+  }
+
   function skipBy(deltaSeconds, { preferLocal = true } = {}) {
     const video = videoRef.current;
     const duration = video?.duration || durationMs / 1000;
     const current = video?.currentTime || nowMs / 1000;
     const target = clampTime(current + deltaSeconds, duration);
-    const buffered = bufferedRanges(video);
-    const inBuffer = buffered.some((range) => target >= range.start && target <= range.end);
+    const inBuffer = canLocalSeekTo(video, target);
     if (preferLocal && video && (Math.abs(deltaSeconds) <= SKIP_SECONDS || inBuffer)) {
       applyLocalSkip(deltaSeconds);
       return;
@@ -341,6 +366,48 @@ export default function LibraryPlayer({
     const label = deltaSeconds < 0 ? `−${SKIP_SECONDS}s` : `+${SKIP_SECONDS}s`;
     setSkipChip(label);
     window.setTimeout(() => setSkipChip(""), 900);
+  }
+
+  function scrubDurationMs() {
+    return durationMs || Math.round((videoRef.current?.duration || 0) * 1000);
+  }
+
+  function previewScrub(pct) {
+    const duration = scrubDurationMs();
+    setScrubPct(pct);
+    if (duration) setNowMs(msFromScrubPct(pct, duration));
+  }
+
+  function beginScrub(event) {
+    scrubbingRef.current = true;
+    previewScrub(Number(event.target.value));
+    try {
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    } catch {
+      // Pointer may already be released; pointerup/cancel still end the scrub.
+    }
+  }
+
+  function onScrubInput(event) {
+    const pct = Number(event.target.value);
+    previewScrub(pct);
+    // Keyboard / assistive scrub: no pointerdown, so commit each step.
+    if (!scrubbingRef.current) {
+      const duration = scrubDurationMs();
+      if (!duration) return;
+      seekToOffsetMs(msFromScrubPct(pct, duration));
+      setScrubPct(null);
+    }
+  }
+
+  function endScrub(event) {
+    if (!scrubbingRef.current) return;
+    scrubbingRef.current = false;
+    const duration = scrubDurationMs();
+    const pct = Number(event.target.value);
+    setScrubPct(null);
+    if (!duration) return;
+    seekToOffsetMs(msFromScrubPct(pct, duration));
   }
 
   async function togglePlayback() {
@@ -461,14 +528,6 @@ export default function LibraryPlayer({
     }
   }
 
-  function onScrub(event) {
-    const duration = durationMs || Math.round((videoRef.current?.duration || 0) * 1000);
-    if (!duration) return;
-    const value = Number(event.target.value);
-    const offset = Math.round((value / 1000) * duration);
-    applySeekRestart(offset);
-  }
-
   const plexHref = session?.plex_watch_url || "";
   const next = session?.next_episode;
   const showOsd = !resumeOpen && !ended;
@@ -477,7 +536,8 @@ export default function LibraryPlayer({
     showOsd && !playing && !error && status !== "loading" && Boolean(session);
   const durationS = durationMs / 1000 || 0;
   const bufferedPct = durationS ? Math.round((bufferedEndS / durationS) * 100) : 0;
-  const playheadPct = durationMs ? Math.round((nowMs / durationMs) * 1000) : 0;
+  const playheadPct = scrubPctFromMs(nowMs, durationMs);
+  const sliderPct = scrubPct != null ? scrubPct : playheadPct;
   const headline = displayHeadline(session);
   const metaLine = displayMeta(session);
   const forceOsd = moreOpen || ccOpen;
@@ -501,10 +561,15 @@ export default function LibraryPlayer({
           <input
             type="range"
             min={0}
-            max={1000}
-            value={Math.max(0, Math.min(1000, playheadPct))}
+            max={SCRUB_MAX}
+            step={1}
+            value={Math.max(0, Math.min(SCRUB_MAX, sliderPct))}
             aria-label="Seek"
-            onChange={onScrub}
+            aria-valuetext={formatClockMs(nowMs)}
+            onPointerDown={beginScrub}
+            onPointerUp={endScrub}
+            onPointerCancel={endScrub}
+            onChange={onScrubInput}
           />
         </label>
         <span className="theater-clock">{durationMs ? formatClockMs(durationMs) : "–:––"}</span>
@@ -634,11 +699,13 @@ export default function LibraryPlayer({
         onVideoRef={handleVideoRef}
         onHlsRef={handleHlsRef}
         onTimeUpdate={(video) => {
-          setNowMs(Math.round((video.currentTime || 0) * 1000));
+          if (!scrubbingRef.current) {
+            setNowMs(Math.round((video.currentTime || 0) * 1000));
+          }
           if (video.duration) setDurationMs(Math.round(video.duration * 1000));
           const ranges = bufferedRanges(video);
           setBufferedEndS(ranges[ranges.length - 1]?.end || 0);
-          sendProgress("playing", video);
+          if (!scrubbingRef.current) sendProgress("playing", video);
         }}
         onEnded={() => {
           setEnded(true);

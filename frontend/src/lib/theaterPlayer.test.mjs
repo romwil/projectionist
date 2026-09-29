@@ -3,7 +3,9 @@ import test from "node:test";
 
 import {
   RESUME_THRESHOLD_MS,
+  SCRUB_MAX,
   SKIP_SECONDS,
+  canLocalSeekTo,
   canResumeAttachedStream,
   clampTime,
   createStageGesture,
@@ -11,7 +13,9 @@ import {
   libraryWatchPath,
   libraryWatchPopoutPath,
   libraryWatchTo,
+  msFromScrubPct,
   notePlayingBeforeHide,
+  scrubPctFromMs,
   shouldAutoResumePlayback,
   shouldPauseOnVisibilityHide,
   shouldResumeFromOffset,
@@ -87,6 +91,37 @@ test("clampTime stays inside duration", () => {
   assert.equal(clampTime(-4, 100), 0);
   assert.equal(clampTime(40, 100), 40);
   assert.equal(clampTime(140, 100), 100);
+});
+
+test("scrub pct ↔ ms mapping is stable at ends and mid", () => {
+  assert.equal(scrubPctFromMs(0, 120_000), 0);
+  assert.equal(scrubPctFromMs(60_000, 120_000), SCRUB_MAX / 2);
+  assert.equal(scrubPctFromMs(120_000, 120_000), SCRUB_MAX);
+  assert.equal(scrubPctFromMs(999, 0), 0);
+  assert.equal(msFromScrubPct(0, 120_000), 0);
+  assert.equal(msFromScrubPct(SCRUB_MAX / 2, 120_000), 60_000);
+  assert.equal(msFromScrubPct(SCRUB_MAX, 120_000), 120_000);
+  assert.equal(msFromScrubPct(SCRUB_MAX + 50, 120_000), 120_000);
+  assert.equal(msFromScrubPct(-10, 120_000), 0);
+  assert.equal(msFromScrubPct(500, 0), 0);
+  // Round-trip mid-point
+  assert.equal(msFromScrubPct(scrubPctFromMs(45_000, 90_000), 90_000), 45_000);
+});
+
+test("canLocalSeekTo requires a buffered range covering the target", () => {
+  assert.equal(canLocalSeekTo(null, 10), false);
+  assert.equal(canLocalSeekTo({ buffered: { length: 0 } }, 10), false);
+  const video = {
+    buffered: {
+      length: 1,
+      start: () => 0,
+      end: () => 30,
+    },
+  };
+  assert.equal(canLocalSeekTo(video, 10), true);
+  assert.equal(canLocalSeekTo(video, 30), true);
+  assert.equal(canLocalSeekTo(video, 31), false);
+  assert.equal(canLocalSeekTo(video, Number.NaN), false);
 });
 
 test("theaterKeyAction maps J/K/L and Minecraft A/S/D aliases", () => {

@@ -16,24 +16,70 @@ logger = logging.getLogger(__name__)
 
 SCOPES = frozenset({"this_series", "household", "unknown"})
 JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
+VISION_STILL_LIMIT = 5
+CATALOG_PROMPT_LIMIT = 48
 
 VISION_SYSTEM = (
     "You identify a TV episode from still frames. Reply with JSON only. "
     "Do not trust filenames or scene-release names — they are not evidence. "
-    "Scope must be this_series, household, or unknown."
+    "Scope must be this_series, household, or unknown. "
+    "When the stills are this_series, you must propose season and episode from the "
+    "catalog when one is provided, or set season and episode to null and explain why."
 )
 
 
-def vision_user_prompt(*, this_series: str, household_shows: Sequence[str]) -> str:
+def format_catalog_for_prompt(
+    catalog: Sequence[Mapping[str, Any]],
+    *,
+    limit: int = CATALOG_PROMPT_LIMIT,
+) -> str:
+    """Compact SxxExx Title lines for the vision user prompt."""
+    lines: List[str] = []
+    for entry in catalog or []:
+        if not isinstance(entry, Mapping):
+            continue
+        try:
+            season = int(entry.get("season"))
+            episode = int(entry.get("episode"))
+        except (TypeError, ValueError):
+            continue
+        title = str(entry.get("title") or "").strip()
+        label = f"S{season:02d}E{episode:02d}"
+        lines.append(f"{label} {title}".rstrip() if title else label)
+        if len(lines) >= max(1, int(limit)):
+            break
+    return "\n".join(lines)
+
+
+def vision_user_prompt(
+    *,
+    this_series: str,
+    household_shows: Sequence[str],
+    catalog_episodes: Sequence[Mapping[str, Any]] = (),
+) -> str:
     house = ", ".join(str(title).strip() for title in household_shows if str(title).strip())
     house = house or "(none listed)"
+    catalog_block = format_catalog_for_prompt(catalog_episodes)
+    catalog_section = (
+        f"Episode catalog for this series (pick season/episode from this list only):\n"
+        f"{catalog_block}\n"
+        if catalog_block
+        else "Episode catalog was not provided — if you cannot name season/episode honestly, "
+        "set them to null.\n"
+    )
     return (
         f"This investigation is for the series: {this_series}.\n"
         f"Household shows (if the stills are a different series): {house}.\n"
-        "Look at the stills. Return JSON:\n"
+        f"{catalog_section}"
+        "Look at the stills. Prefer landmarks, on-screen text, faces, and locations over "
+        "generic B-roll (underwater schematics, sonar, stock dive footage).\n"
+        "Return JSON:\n"
         '{"scope":"this_series|household|unknown","series_title":"",'
         '"season":null,"episode":null,"episode_title":"","confidence":0.0,"reason":""}\n'
-        "If the stills are this series, scope=this_series and pick season/episode. "
+        "If the stills are this series: scope=this_series. When the catalog is present you "
+        "MUST set season and episode to a catalog entry you can justify, or set both to null "
+        "with a low confidence and a reason that the stills do not identify the episode. "
+        "Never invent an SxxExx that is not in the catalog. "
         "If they match another household show, scope=household. Otherwise unknown."
     )
 
@@ -62,6 +108,10 @@ def parse_vision_json(text: str) -> Dict[str, Any]:
     confidence = max(0.0, min(1.0, confidence))
     season = _opt_int(payload.get("season"))
     episode = _opt_int(payload.get("episode"))
+    # Honest miss: this_series without both S and E stays series-only (no invented vote).
+    if scope == "this_series" and (season is None or episode is None):
+        season = None
+        episode = None
     return {
         "scope": scope,
         "series_title": str(payload.get("series_title") or "").strip(),
@@ -89,7 +139,7 @@ def _image_messages(
 ) -> List[Dict[str, Any]]:
     provider = str(getattr(settings, "llm_provider", "") or "").strip().lower()
     parts: List[Dict[str, Any]] = []
-    for path in still_paths[:3]:
+    for path in still_paths[:VISION_STILL_LIMIT]:
         try:
             blob = Path(path).read_bytes()
         except OSError:
@@ -136,11 +186,16 @@ async def identify_from_stills_async(
     *,
     this_series: str,
     household_shows: Sequence[str],
+    catalog_episodes: Sequence[Mapping[str, Any]] = (),
     chat=None,
 ) -> Dict[str, Any]:
     if not still_paths or not llm_accepts_images(settings):
         return parse_vision_json("")
-    prompt = vision_user_prompt(this_series=this_series, household_shows=household_shows)
+    prompt = vision_user_prompt(
+        this_series=this_series,
+        household_shows=household_shows,
+        catalog_episodes=catalog_episodes,
+    )
     messages = _image_messages(settings, still_paths, prompt)
     if chat is None:
         from projectionist.agent.providers import get_chat_provider
@@ -156,6 +211,7 @@ def identify_from_stills(
     *,
     this_series: str,
     household_shows: Sequence[str],
+    catalog_episodes: Sequence[Mapping[str, Any]] = (),
     chat=None,
 ) -> Dict[str, Any]:
     try:
@@ -165,6 +221,7 @@ def identify_from_stills(
                 still_paths,
                 this_series=this_series,
                 household_shows=household_shows,
+                catalog_episodes=catalog_episodes,
                 chat=chat,
             )
         )

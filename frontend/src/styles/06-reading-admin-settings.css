@@ -1757,8 +1757,105 @@
   }
 }
 
+.investigate-scope-fields {
+  align-items: start;
+}
+
+.investigate-show-field {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.investigate-show-combobox {
+  position: relative;
+  min-width: min(100%, 22rem);
+}
+
+.investigate-show-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.investigate-show-input-row input[type="search"] {
+  flex: 1;
+  min-width: 0;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  font: inherit;
+}
+
+.investigate-show-input-row input[type="search"]:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 2px;
+}
+
+.investigate-show-clear {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  font-size: var(--text-xs, 12px);
+}
+
+.investigate-show-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: var(--space-1, 4px);
+  position: absolute;
+  z-index: 5;
+  left: 0;
+  right: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  border-radius: var(--radius-sm, 8px);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-raised);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.investigate-show-option {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  border-radius: var(--radius-sm, 8px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.investigate-show-option.is-active,
+.investigate-show-option:hover,
+.investigate-show-option:focus-visible {
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-2));
+}
+
+.investigate-show-empty {
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
 .investigate-review {
   margin-top: var(--space-4, 16px);
+}
+
+.investigate-review-guidance {
+  margin-bottom: var(--space-3, 12px);
+}
+
+.investigate-review-legend {
+  margin: 6px 0 8px;
+  padding-left: 1.2rem;
+}
+
+.investigate-review-legend li {
+  margin: 2px 0;
 }
 
 .investigate-review-table-wrap {

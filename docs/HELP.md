@@ -309,9 +309,23 @@ If an older install still has a legacy custom prompt, Admin shows a one-click **
 
 Bind the host TV and movie libraries **read-write** into the container (`/tv` and `/movies`, or the same host path). Investigate Apply renames episode files on disk — a read-only bind will fail. Set **Admin → Connections → Library folders** (`tv_root` / `movies_root`), or host env `PROJECTIONIST_TV_MEDIA` / `PROJECTIONIST_MOVIE_MEDIA` (those win when set). Unraid/Automat defaults: `/mnt/user/data/media/tv` and `/mnt/user/data/media/movies`.
 
+### Investigate episodes (wrong file vs wrong show)
+
+**Admin → Libraries → Investigate episodes** checks what is *inside* the file. Scene names and Sonarr `SxxEyy` are a claim, not evidence.
+
+Type a show title to filter the list (keyboard arrows + Enter work), then optionally pick a season for a long series. Season defaults to **All seasons**; the season list only offers seasons that have files in Sonarr (Plex’s season count can be ahead of what’s on disk). With vision on (default when the chat LLM accepts images), fusion uses stills, runtime, and OpenSubtitles hash matches. **Apply** remaps same-show rows only (rename on disk, Sonarr ManualImport onto the proposed episode, Plex refresh). Undo covers the last apply batch.
+
+**Reading the review table:** **Certain** means two independent signals agree and starts selected; **Likely** from OpenSubtitles or confident vision also starts selected; **Uncertain** stays off. A **runtime-only Likely** (unique duration, no hash or vision episode vote) starts unchecked — expand **Open stills** and compare to TMDB before checking Apply. If vision confirms the show but not the episode, that row stays Uncertain until OpenSubtitles or a manual stills-vs-TMDB check. If every row is Uncertain, confirm `PROJECTIONIST_OPENSUBTITLES_API_KEY` on the host (Unraid kit `.env`), leave vision on, then verify stills rather than Apply blindly. Identify (ACRCloud) is optional show-level audio — configure it under **Admin → Libraries** or via host env; it does not pick season/episode.
+
+**Worked example — right show, wrong episode:** the filename says *Expedition Unknown* S17E5, but playback is a different episode of the same series. Leave vision on, scope **Season 17** (not a higher empty season), then Apply only rows where file stills match the proposed TMDB stills. Runtime alone is a weak signal when most episodes are the same length — that is why runtime-only Likely does not auto-check. Identify (below) may confirm the series and still leave the row Uncertain — that is expected.
+
+**Limits today:** one show per job (up to 80 files); no library-wide sweep; Apply will not quietly attach a file to a different series without an opt-in path. Prefer Investigate’s remap over “unmonitor and search again” in Sonarr — a new download can bring the same wrong release back.
+
 ### Identify (ACRCloud)
 
 **Admin → Libraries** has Identify settings and a **Test Identify** control next to Investigate. When Identify is on, a 12-second clip leaves the LAN so ACRCloud can listen. A miss does not rename files. **Test Identify** sends a silent clip (or a chosen file) and always reports that it did not rename anything — use it to check keys, not to fix a filename.
+
+Identify is usually **show-level** (theme or score). It does **not** pick season or episode. Use it when the file might be the wrong series entirely; use Investigate vision and OpenSubtitles hash when the series is right but the episode slot is wrong.
 
 ### After sync
 

@@ -144,6 +144,38 @@ export function clampTime(seconds, duration) {
   return Math.max(0, Math.min(d, t));
 }
 
+/** Range scrubber uses 0…SCRUB_MAX so the thumb has fine resolution. */
+export const SCRUB_MAX = 1000;
+
+/** Map playback position → controlled range value (0…SCRUB_MAX). */
+export function scrubPctFromMs(nowMs, durationMs) {
+  const d = Number(durationMs);
+  if (!Number.isFinite(d) || d <= 0) return 0;
+  const t = Number(nowMs);
+  if (!Number.isFinite(t) || t <= 0) return 0;
+  return Math.max(0, Math.min(SCRUB_MAX, Math.round((t / d) * SCRUB_MAX)));
+}
+
+/** Map range value (0…SCRUB_MAX) → seek offset in ms. */
+export function msFromScrubPct(pct, durationMs) {
+  const d = Number(durationMs);
+  if (!Number.isFinite(d) || d <= 0) return 0;
+  const p = Number(pct);
+  if (!Number.isFinite(p)) return 0;
+  return Math.round((Math.max(0, Math.min(SCRUB_MAX, p)) / SCRUB_MAX) * d);
+}
+
+/**
+ * Prefer a local HTMLMediaElement seek when the target is already buffered;
+ * otherwise the caller should restart the Plex VOD session at offsetMs.
+ * Live theater has no scrubber (live-edge only) — this is library `/watch` only.
+ */
+export function canLocalSeekTo(video, offsetSeconds) {
+  const target = Number(offsetSeconds);
+  if (!video || !Number.isFinite(target)) return false;
+  return bufferedRanges(video).some((range) => target >= range.start && target <= range.end);
+}
+
 /**
  * Map a keydown key to a theater action.
  * Includes YouTube-style J/K/L and Minecraft-style A/S/D aliases (case-insensitive).

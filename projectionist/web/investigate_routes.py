@@ -204,6 +204,32 @@ def investigate_shows(user=Depends(require_role("owner"))) -> Dict[str, Any]:
     return {"items": items, "total": len(items)}
 
 
+@router.get("/api/admin/investigate/seasons")
+def investigate_seasons(show_id: int, user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    """Seasons that actually have Sonarr episode files (not Plex season_count)."""
+    del user
+    from projectionist.library.episode_investigate.catalog import list_episode_files, load_show
+
+    if show_id < 1:
+        raise HTTPException(status_code=400, detail="Show not found.")
+    show = load_show(_db(), int(show_id))
+    if show is None:
+        raise HTTPException(status_code=400, detail="Show not found.")
+    inventory = list_episode_files(_settings(), show, season=None, limit=1)
+    if not inventory.get("ok"):
+        raise HTTPException(
+            status_code=400,
+            detail=str(inventory.get("error") or "Could not list episode files."),
+        )
+    seasons = list(inventory.get("seasons_with_files") or inventory.get("seasons") or [])
+    return {
+        "show_id": int(show_id),
+        "series_id": inventory.get("series_id"),
+        "seasons": seasons,
+        "seasons_with_files": seasons,
+    }
+
+
 @router.post("/api/admin/investigate/start")
 def investigate_start(
     payload: InvestigateStartPayload, user=Depends(require_role("owner"))

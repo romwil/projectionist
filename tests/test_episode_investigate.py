@@ -26,8 +26,18 @@ from projectionist.library.episode_investigate.filenames import (
     parse_season_episode,
     plex_proper_name,
 )
-from projectionist.library.episode_investigate.ffmpeg import extract_stills, probe_runtime_seconds
-from projectionist.library.episode_investigate.fusion import default_selected, fuse_row, runtime_matches
+from projectionist.library.episode_investigate.ffmpeg import (
+    STILL_COUNT,
+    STILL_FRACTIONS,
+    extract_stills,
+    probe_runtime_seconds,
+)
+from projectionist.library.episode_investigate.fusion import (
+    VISION_SERIES_ONLY_REASON,
+    default_selected,
+    fuse_row,
+    runtime_matches,
+)
 from projectionist.library.episode_investigate.oshash import file_oshash, parse_opensubtitles_payload
 from projectionist.library.episode_investigate.stills import resolve_still, stills_dir
 from projectionist.library.episode_investigate.vision import parse_vision_json, vision_user_prompt
@@ -121,7 +131,46 @@ class FusionTests(unittest.TestCase):
         )
         self.assertEqual(fused["confidence"], "likely")
         self.assertEqual(fused["proposed"]["title"], "Braciole")
+        # Runtime-only Likely is a footgun on homogeneous-runtime series — leave off.
+        self.assertTrue(fused["signals"]["runtime_only"])
+        self.assertFalse(fused["selected_default"])
+
+    def test_oshash_likely_still_auto_selected(self) -> None:
+        fused = fuse_row(
+            show=_show(),
+            catalog=_catalog(),
+            runtime_seconds=None,
+            opensubtitles={
+                "found": True,
+                "season": 1,
+                "episode": 7,
+                "series_title": "The Bear",
+            },
+            vision=None,
+        )
+        self.assertEqual(fused["confidence"], "likely")
+        self.assertFalse(fused["signals"]["runtime_only"])
         self.assertTrue(fused["selected_default"])
+
+    def test_vision_series_only_is_uncertain_with_guidance(self) -> None:
+        fused = fuse_row(
+            show=_show(),
+            catalog=_catalog(),
+            runtime_seconds=None,
+            opensubtitles=None,
+            vision={
+                "scope": "this_series",
+                "season": None,
+                "episode": None,
+                "confidence": 0.8,
+                "reason": "generic dive footage",
+            },
+        )
+        self.assertEqual(fused["confidence"], "uncertain")
+        self.assertTrue(fused["signals"]["vision_series_only"])
+        self.assertTrue(any(VISION_SERIES_ONLY_REASON in item for item in fused["reasons"]))
+        self.assertFalse(fused["selected_default"])
+        self.assertTrue(fused["same_show"])
 
 
 class OshashTests(unittest.TestCase):
@@ -168,7 +217,22 @@ class VisionParseTests(unittest.TestCase):
         )
         self.assertEqual(parsed["scope"], "this_series")
         self.assertEqual(parsed["episode"], 2)
-        self.assertTrue("this series" in vision_user_prompt(this_series="The Bear", household_shows=["The Studio"]))
+        prompt = vision_user_prompt(
+            this_series="The Bear",
+            household_shows=["The Studio"],
+            catalog_episodes=[{"season": 1, "episode": 7, "title": "Braciole"}],
+        )
+        self.assertIn("this series", prompt)
+        self.assertIn("S01E07 Braciole", prompt)
+        self.assertIn("MUST set season and episode", prompt)
+
+    def test_series_only_clears_partial_episode(self) -> None:
+        parsed = parse_vision_json(
+            '{"scope":"this_series","season":1,"episode":null,"confidence":0.4,"reason":"generic dive"}'
+        )
+        self.assertEqual(parsed["scope"], "this_series")
+        self.assertIsNone(parsed["season"])
+        self.assertIsNone(parsed["episode"])
 
     def test_unknown_scope_on_garbage(self) -> None:
         parsed = parse_vision_json("not json")
@@ -182,7 +246,7 @@ class FfmpegTests(unittest.TestCase):
 
         self.assertEqual(probe_runtime_seconds("/tv/a.mkv", ffprobe="/bin/ffprobe", runner=runner), 1845.2)
 
-    def test_extract_builds_three_outputs(self) -> None:
+    def test_extract_builds_timeline_stills(self) -> None:
         calls = []
 
         def runner(cmd, **_kwargs):
@@ -201,9 +265,14 @@ class FfmpegTests(unittest.TestCase):
                 runtime_seconds=100,
                 runner=runner,
             )
-        self.assertEqual(len(written), 3)
-        self.assertEqual(len(calls), 3)
+        self.assertEqual(STILL_COUNT, 5)
+        self.assertEqual(STILL_FRACTIONS, (0.10, 0.22, 0.40, 0.62, 0.85))
+        self.assertEqual(len(written), 5)
+        self.assertEqual(len(calls), 5)
         self.assertIn("-ss", calls[0])
+        # Cold-open after titles (~10%) and pre-credits (~85%), not only mid-show B-roll.
+        self.assertEqual(calls[0][calls[0].index("-ss") + 1], "10.00")
+        self.assertEqual(calls[-1][calls[-1].index("-ss") + 1], "85.00")
 
 
 class ApplyTests(unittest.TestCase):
@@ -721,6 +790,21 @@ class CatalogSonarrTests(unittest.TestCase):
         self.assertEqual(len(inventory["files"]), 1)
         self.assertEqual(inventory["files"][0]["file_id"], 9)
         self.assertFalse(inventory["files"][0]["claimed"]["evidence"])
+        self.assertEqual(inventory["seasons_with_files"], [1, 2])
+
+        empty = list_episode_files(settings, _show(), season=18, client=_Client())
+        self.assertTrue(empty["ok"])
+        self.assertEqual(empty["files"], [])
+        self.assertEqual(empty["seasons_with_files"], [1, 2])
+
+    def test_empty_files_message_suggests_seasons_with_files(self) -> None:
+        from projectionist.library.episode_investigate.catalog import empty_files_message
+
+        msg = empty_files_message(season=18, seasons_with_files=[0, 1, 17])
+        self.assertIn("Season 18 has no files in Sonarr", msg)
+        self.assertIn("Season 17", msg)
+        self.assertIn("All seasons", msg)
+        self.assertIn("Season 17", empty_files_message(season=None, seasons_with_files=[17]))
 
     def test_missing_sonarr_is_error(self) -> None:
         from projectionist.library.episode_investigate.catalog import list_episode_files

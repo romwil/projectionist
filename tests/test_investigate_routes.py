@@ -49,6 +49,7 @@ class InvestigateRoutesTests(unittest.TestCase):
         self.assertTrue(callable(register_investigate_routes))
         paths = {getattr(route, "path", None) for route in router.routes}
         self.assertIn("/api/admin/investigate/health", paths)
+        self.assertIn("/api/admin/investigate/seasons", paths)
         self.assertIn("/api/admin/investigate/start", paths)
         self.assertIn("/api/admin/investigate/apply", paths)
 
@@ -85,6 +86,39 @@ class InvestigateRoutesTests(unittest.TestCase):
     def test_start_unknown_show_is_400(self) -> None:
         resp = self.client.post("/api/admin/investigate/start", json={"show_id": 999})
         self.assertEqual(resp.status_code, 400)
+
+    def test_seasons_returns_sonarr_seasons_with_files(self) -> None:
+        db = Database(Path(self._tmpdir.name) / "projectionist.db")
+        db.upsert_library_items(
+            [
+                {
+                    "rating_key": "rk-bear",
+                    "media_type": "show",
+                    "title": "The Bear",
+                    "tmdb_id": 136315,
+                    "tvdb_id": 414005,
+                    "season_count": 18,
+                }
+            ]
+        )
+        show_id = int(db.library_item_by_title("The Bear", media_type="show")["id"])
+        fake = {
+            "ok": True,
+            "files": [{"id": "9", "file_id": 9, "path": "/tv/a.mkv"}],
+            "catalog": [],
+            "series_id": 4,
+            "seasons": [1, 17],
+            "seasons_with_files": [1, 17],
+        }
+        with patch(
+            "projectionist.library.episode_investigate.catalog.list_episode_files",
+            return_value=fake,
+        ):
+            resp = self.client.get(f"/api/admin/investigate/seasons?show_id={show_id}")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(body["seasons_with_files"], [1, 17])
+        self.assertNotIn(18, body["seasons"])
 
     def test_apply_without_review_is_400(self) -> None:
         resp = self.client.post("/api/admin/investigate/apply", json={"file_ids": ["1"]})
