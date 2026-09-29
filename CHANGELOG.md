@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+## [1.37.10] — 2026-09-28
+
+Live Watch flex countdowns tell the truth, the Up-next strip survives OSD idle hide, and the cable box no longer clips its own Next line.
+
+### Highlights
+- **Filler countdown matches the next movie.** Continuity pads no longer inherit Tunarr’s synthetic ~6-hour “· Up next” block — remaining time follows the next real title.
+- **Up-next strip stays after controls fade.** The quiet lower-third during flex is independent of cable OSD idle hide.
+- **Full OSD fits the player.** Channel, progress, Next, and actions stay inside the viewport (safe-area bottom inset) instead of clipping the Next line.
+
+### Fixed
+- `pick_now_and_next` / `buildOsdModel` skip chained flex pads for `next` and `clamp_flex_progress_to_next` clamps flex `ends_at` to the next non-flex start.
+- Flex lower-third z-index / idle-hidden OSD `visibility` so the strip is not covered when `osdVisible` is false; still not nested under `showOsd`.
+- `.live-osd` dropped the `max-height: 28%` clip; inner panel scrolls only if still taller than the player.
+
+### Changed
+- DESIGN Live theater decisions; HELP “while you watch” countdown honesty.
+
+### Verification
+- Backend: `tests/test_live_channels.py` — flex 6h block clamps to next movie.
+- Frontend unit: `liveChannels.test.mjs` — same clamp + lower-third countdown.
+
 ## [1.37.9] — 2026-09-28
 
 Live filler no longer leaves you guessing — a quiet lower-third names what’s up next while Continuity holds the air.

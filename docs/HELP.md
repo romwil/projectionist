@@ -119,7 +119,7 @@ When the household owner turns **Live Channels** on and publishes stations, **[L
 3. Prefer a dedicated TV window? Tap **Pop out** — Projectionist opens a watch-first window and leaves the original tab on the guide so you aren't running two streams of the same channel.
 4. Prefer living-room apps? Use **Open in Plex Live TV** from Live chrome — same stations, Plex clients.
 
-**While you watch.** Arrow keys change channels; Space / `K` pauses; `C` opens captions when available; `F` toggles fullscreen. Tap the video stage to pause or resume. When a station is between shows (Continuity / pad), a quiet lower-third stays on screen with what’s up next and a soft countdown — the full cable OSD still motion-reveals for Ch±, captions, and fullscreen.
+**While you watch.** Arrow keys change channels; Space / `K` pauses; `C` opens captions when available; `F` toggles fullscreen. Tap the video stage to pause or resume. When a station is between shows (Continuity / pad), a quiet lower-third stays on screen with what’s up next and a countdown to the next real title — even after the full cable OSD fades. Ch±, captions, and fullscreen still motion-reveal on idle.
 
 > **Example:** Live’s Guide shows **101 · Chaos Night** with *Heat* at 45%. Tap the cell → Watch opens on that station mid-airing. Later on the couch, **Open in Plex Live TV** opens the same lineup in the Plex app — you didn't lose the channel.
 
