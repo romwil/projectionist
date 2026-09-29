@@ -26,8 +26,18 @@ from projectionist.library.episode_investigate.filenames import (
     parse_season_episode,
     plex_proper_name,
 )
-from projectionist.library.episode_investigate.ffmpeg import extract_stills, probe_runtime_seconds
-from projectionist.library.episode_investigate.fusion import default_selected, fuse_row, runtime_matches
+from projectionist.library.episode_investigate.ffmpeg import (
+    STILL_COUNT,
+    STILL_FRACTIONS,
+    extract_stills,
+    probe_runtime_seconds,
+)
+from projectionist.library.episode_investigate.fusion import (
+    VISION_SERIES_ONLY_REASON,
+    default_selected,
+    fuse_row,
+    runtime_matches,
+)
 from projectionist.library.episode_investigate.oshash import file_oshash, parse_opensubtitles_payload
 from projectionist.library.episode_investigate.stills import resolve_still, stills_dir
 from projectionist.library.episode_investigate.vision import parse_vision_json, vision_user_prompt
@@ -142,6 +152,26 @@ class FusionTests(unittest.TestCase):
         self.assertFalse(fused["signals"]["runtime_only"])
         self.assertTrue(fused["selected_default"])
 
+    def test_vision_series_only_is_uncertain_with_guidance(self) -> None:
+        fused = fuse_row(
+            show=_show(),
+            catalog=_catalog(),
+            runtime_seconds=None,
+            opensubtitles=None,
+            vision={
+                "scope": "this_series",
+                "season": None,
+                "episode": None,
+                "confidence": 0.8,
+                "reason": "generic dive footage",
+            },
+        )
+        self.assertEqual(fused["confidence"], "uncertain")
+        self.assertTrue(fused["signals"]["vision_series_only"])
+        self.assertTrue(any(VISION_SERIES_ONLY_REASON in item for item in fused["reasons"]))
+        self.assertFalse(fused["selected_default"])
+        self.assertTrue(fused["same_show"])
+
 
 class OshashTests(unittest.TestCase):
     def test_hash_is_stable(self) -> None:
@@ -187,7 +217,22 @@ class VisionParseTests(unittest.TestCase):
         )
         self.assertEqual(parsed["scope"], "this_series")
         self.assertEqual(parsed["episode"], 2)
-        self.assertTrue("this series" in vision_user_prompt(this_series="The Bear", household_shows=["The Studio"]))
+        prompt = vision_user_prompt(
+            this_series="The Bear",
+            household_shows=["The Studio"],
+            catalog_episodes=[{"season": 1, "episode": 7, "title": "Braciole"}],
+        )
+        self.assertIn("this series", prompt)
+        self.assertIn("S01E07 Braciole", prompt)
+        self.assertIn("MUST set season and episode", prompt)
+
+    def test_series_only_clears_partial_episode(self) -> None:
+        parsed = parse_vision_json(
+            '{"scope":"this_series","season":1,"episode":null,"confidence":0.4,"reason":"generic dive"}'
+        )
+        self.assertEqual(parsed["scope"], "this_series")
+        self.assertIsNone(parsed["season"])
+        self.assertIsNone(parsed["episode"])
 
     def test_unknown_scope_on_garbage(self) -> None:
         parsed = parse_vision_json("not json")
@@ -201,7 +246,7 @@ class FfmpegTests(unittest.TestCase):
 
         self.assertEqual(probe_runtime_seconds("/tv/a.mkv", ffprobe="/bin/ffprobe", runner=runner), 1845.2)
 
-    def test_extract_builds_three_outputs(self) -> None:
+    def test_extract_builds_timeline_stills(self) -> None:
         calls = []
 
         def runner(cmd, **_kwargs):
@@ -220,9 +265,14 @@ class FfmpegTests(unittest.TestCase):
                 runtime_seconds=100,
                 runner=runner,
             )
-        self.assertEqual(len(written), 3)
-        self.assertEqual(len(calls), 3)
+        self.assertEqual(STILL_COUNT, 5)
+        self.assertEqual(STILL_FRACTIONS, (0.10, 0.22, 0.40, 0.62, 0.85))
+        self.assertEqual(len(written), 5)
+        self.assertEqual(len(calls), 5)
         self.assertIn("-ss", calls[0])
+        # Cold-open after titles (~10%) and pre-credits (~85%), not only mid-show B-roll.
+        self.assertEqual(calls[0][calls[0].index("-ss") + 1], "10.00")
+        self.assertEqual(calls[-1][calls[-1].index("-ss") + 1], "85.00")
 
 
 class ApplyTests(unittest.TestCase):

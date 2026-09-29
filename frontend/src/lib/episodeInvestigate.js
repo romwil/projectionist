@@ -54,6 +54,21 @@ export const ALL_UNCERTAIN_NEXT_STEPS =
 
 export const OPEN_STILLS_LABEL = "Open stills";
 
+export const VISION_SERIES_ONLY_TIP =
+  "Vision confirmed the show but not the episode — stills alone aren’t enough; try OpenSubtitles or manual stills vs TMDB.";
+
+export function isVisionSeriesOnly(row) {
+  if (!row) return false;
+  const signals = row.signals && typeof row.signals === "object" ? row.signals : null;
+  if (signals && typeof signals.vision_series_only === "boolean") {
+    return signals.vision_series_only;
+  }
+  const vision = row.vision && typeof row.vision === "object" ? row.vision : null;
+  if (!vision) return false;
+  if (String(vision.scope || "").toLowerCase() !== "this_series") return false;
+  return vision.season == null || vision.episode == null;
+}
+
 export function isRuntimeOnlyLikely(row) {
   if (!row) return false;
   if (String(row.confidence || "").toLowerCase() !== "likely") return false;
@@ -197,10 +212,12 @@ export function reviewEvidenceSummary(rows, options = {}) {
   const ffmpegReady = options.ffmpegReady !== false;
   const visionOn = Boolean(options.visionOn);
   const identifyConfigured = options.identifyConfigured !== false;
+  const opensubtitlesConfigured = options.opensubtitlesConfigured !== false;
   const uncertain = list.filter((row) => confidenceLabel(row.confidence) === "Uncertain").length;
   const noStills = list.filter((row) => !rowHasStills(row)).length;
   const noIdentify = list.filter((row) => !rowHasIdentify(row)).length;
   const noVision = list.filter((row) => !rowHasVision(row)).length;
+  const seriesOnly = list.filter(isVisionSeriesOnly).length;
 
   if (!ffmpegReady) {
     return (
@@ -227,6 +244,11 @@ export function reviewEvidenceSummary(rows, options = {}) {
     bits.push("Vision was off.");
   } else if (noVision === list.length) {
     bits.push("Vision had nothing to look at.");
+  } else if (seriesOnly === list.length) {
+    bits.push("Vision confirmed the show on every row but did not pick an episode.");
+  }
+  if (!opensubtitlesConfigured) {
+    bits.push("OpenSubtitles is not configured (hash lane skipped).");
   }
   if (!identifyConfigured) {
     bits.push("Identify is not configured.");

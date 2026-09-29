@@ -377,6 +377,7 @@ def investigate_one(
             extracted,
             this_series=str(show.get("title") or ""),
             household_shows=household,
+            catalog_episodes=catalog,
         )
     identify = None
     try:
