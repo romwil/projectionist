@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.37.16] — 2026-09-29
+
+Investigate Season 16 all-Uncertain runs showed vision confirming the show from generic dive stills without an episode vote, while OpenSubtitles/Identify were off on Automat.
+
+### Highlights
+- **Better stills for episode ID.** Investigate grabs five frames (cold open, early act, mid, late act, pre-credits) instead of three mid-show samples that often catch useless B-roll on docu series.
+- **Vision must pick an episode or say it can’t.** The vision prompt gets the series catalog and must propose SxxExx from that list — or leave season/episode null with an honest miss.
+- **Series-only rows tell you what’s next.** When vision confirms the show but not the episode, the review row explains OpenSubtitles / stills-vs-TMDB instead of a vague Uncertain.
+
+### Added
+- `signals.vision_series_only` + `VISION_SERIES_ONLY_REASON` / UI tip.
+- Catalog lines in `vision_user_prompt` (`format_catalog_for_prompt`).
+
+### Changed
+- Still fractions `0.10 / 0.22 / 0.40 / 0.62 / 0.85` (five stills); vision reads up to five.
+- Vision invent outside the catalog is dropped; series-only stays Uncertain and unselected.
+- Review evidence summary notes when OpenSubtitles is not configured.
+- HELP documents host `PROJECTIONIST_OPENSUBTITLES_API_KEY` for the hash lane.
+
+### Verification
+- Focused: `FusionTests`, `VisionParseTests`, `FfmpegTests`; `frontend/src/lib/episodeInvestigate.test.mjs`.
+- Automat kit `.env` had no OpenSubtitles/ACRCloud keys (hash + Identify lanes skipped); local checkout `.env` has both — offer to copy keys to kit without committing secrets.
+
 ## [1.37.15] — 2026-09-29
 
 Investigate’s show picker was a scroll-only native select on large Sonarr libraries, picking a Plex season with no files returned a blunt empty error, and the review table left owners staring at Uncertain / runtime-only Likely with almost no guidance.
