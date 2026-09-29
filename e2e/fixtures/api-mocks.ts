@@ -35,6 +35,121 @@ function nowSeconds() {
   return Math.floor(Date.now() / 1000);
 }
 
+/** Chat stream moved from GET query params to POST JSON (native EventSource cannot POST). */
+function chatStreamRequestParts(request: { method: () => string; url: () => string; postDataJSON: () => unknown }) {
+  const method = request.method();
+  if (method === "POST") {
+    let message = "hello";
+    let sessionId = "";
+    try {
+      const body = request.postDataJSON() as { message?: string; session_id?: string };
+      message = body.message || message;
+      sessionId = body.session_id || "";
+    } catch {
+      // ignore malformed bodies in tests
+    }
+    return {
+      message,
+      sessionId: sessionId || crypto.randomUUID().replace(/-/g, ""),
+    };
+  }
+  const url = new URL(request.url());
+  return {
+    message: url.searchParams.get("message") || "hello",
+    sessionId: url.searchParams.get("session_id") || crypto.randomUUID().replace(/-/g, ""),
+  };
+}
+
+function isChatStreamMethod(method: string) {
+  return method === "POST" || method === "GET";
+}
+
+const MOCK_RECENTLY_ADDED_ITEM = {
+  id: 1,
+  title: "Alien",
+  year: 1979,
+  media_type: "movie",
+  tmdb_id: 348,
+  rating_key: "plex-348",
+  poster_url: "",
+  added_at: Math.floor(Date.now() / 1000) - 86400,
+};
+
+const MOCK_ON_THIS_DAY_ITEM = {
+  id: 2,
+  title: "Jaws",
+  year: 1975,
+  media_type: "movie",
+  tmdb_id: 578,
+  poster_url: "",
+  anniversary_context: "Released 50 years ago",
+};
+
+const MOCK_EXPLORE_OVERVIEW = {
+  total: 5276,
+  movies: 4474,
+  shows: 802,
+  decades: [{ decade: "1970s", decade_start: 1970, count: 142 }],
+  top_genres: [{ genre: "Drama", count: 1868 }],
+};
+
+const MOCK_EXPLORE_HEALTH = {
+  total: 5276,
+  unwatched_pct: 41.2,
+  stale_adds: 88,
+  rating_coverage_pct: 22.5,
+};
+
+function emptyExploreRail(feed: string, note: string | null = null) {
+  return { feed, total: 0, note, items: [] as unknown[] };
+}
+
+/** Single Explore home payload (`GET /api/library/feeds/hub`). */
+export function mockExploreHubPayload(overrides: Record<string, unknown> = {}) {
+  const railsOverride = (overrides.rails || {}) as Record<string, unknown>;
+  return {
+    feed: "explore-hub",
+    generated_at: nowSeconds(),
+    cached: false,
+    rails: {
+      continue_watching: emptyExploreRail("continue-watching"),
+      tonight_table: emptyExploreRail("tonight-table"),
+      unfinished: emptyExploreRail("unfinished"),
+      afterglow: emptyExploreRail("afterglow"),
+      recently_added: {
+        feed: "recently-added",
+        days: 30,
+        total: 1,
+        note: null,
+        items: [MOCK_RECENTLY_ADDED_ITEM],
+      },
+      recently_added_episodes: emptyExploreRail("recently-added-episodes"),
+      recent_releases: {
+        feed: "recent-releases",
+        days: 90,
+        total: 0,
+        note: "No library titles released in the last 90 days.",
+        items: [],
+      },
+      revisit_these: emptyExploreRail("revisit-these"),
+      on_this_day: {
+        feed: "on-this-day",
+        mode: "milestone_fallback",
+        total: 1,
+        note: "Showing milestone-year fallback.",
+        items: [MOCK_ON_THIS_DAY_ITEM],
+      },
+      director_spotlight: emptyExploreRail("director-spotlight"),
+      genre_spotlight: emptyExploreRail("genre-spotlight"),
+      seasonal_spotlight: emptyExploreRail("seasonal-spotlight"),
+      ...railsOverride,
+    },
+    overview: (overrides.overview as Record<string, unknown>) || MOCK_EXPLORE_OVERVIEW,
+    health: (overrides.health as Record<string, unknown>) || MOCK_EXPLORE_HEALTH,
+    ...Object.fromEntries(Object.entries(overrides).filter(([key]) => key !== "rails" && key !== "overview" && key !== "health")),
+  };
+}
+
 function ensureMockThread(sessionId: string, title = "New conversation") {
   if (!mockThreads.has(sessionId)) {
     const now = nowSeconds();
@@ -223,13 +338,12 @@ export async function mockCuratorApis(page: Page) {
   });
 
   await page.route("**/api/chat/stream**", async (route: Route) => {
-    if (route.request().method() !== "GET") {
+    const request = route.request();
+    if (!isChatStreamMethod(request.method())) {
       await route.continue();
       return;
     }
-    const url = new URL(route.request().url());
-    const message = url.searchParams.get("message") || "hello";
-    const sessionId = url.searchParams.get("session_id") || crypto.randomUUID().replace(/-/g, "");
+    const { message, sessionId } = chatStreamRequestParts(request);
     const thread = ensureMockThread(sessionId);
     const now = nowSeconds();
     const userMessage: MockMessage = {
@@ -426,6 +540,15 @@ export async function mockCuratorApis(page: Page) {
     });
   });
 
+  // Explore home uses the aggregated hub; keep per-rail mocks for section deep-links.
+  await page.route("**/api/library/feeds/hub**", async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(mockExploreHubPayload()),
+    });
+  });
+
   await page.route("**/api/library/feeds/recently-added**", async (route: Route) => {
     await route.fulfill({
       status: 200,
@@ -435,18 +558,7 @@ export async function mockCuratorApis(page: Page) {
         days: 30,
         total: 1,
         note: null,
-        items: [
-          {
-            id: 1,
-            title: "Alien",
-            year: 1979,
-            media_type: "movie",
-            tmdb_id: 348,
-            rating_key: "plex-348",
-            poster_url: "",
-            added_at: Math.floor(Date.now() / 1000) - 86400,
-          },
-        ],
+        items: [MOCK_RECENTLY_ADDED_ITEM],
       }),
     });
   });
@@ -474,17 +586,7 @@ export async function mockCuratorApis(page: Page) {
         mode: "milestone_fallback",
         total: 1,
         note: "Showing milestone-year fallback.",
-        items: [
-          {
-            id: 2,
-            title: "Jaws",
-            year: 1975,
-            media_type: "movie",
-            tmdb_id: 578,
-            poster_url: "",
-            anniversary_context: "Released 50 years ago",
-          },
-        ],
+        items: [MOCK_ON_THIS_DAY_ITEM],
       }),
     });
   });
@@ -763,7 +865,7 @@ export async function mockChatFailure(page: Page, detail = "LLM provider unavail
     });
   });
   await page.route("**/api/chat/stream**", async (route: Route) => {
-    if (route.request().method() !== "GET") {
+    if (!isChatStreamMethod(route.request().method())) {
       await route.continue();
       return;
     }
@@ -1197,12 +1299,12 @@ export async function mockChatStreamMessage(
   buildMessage: (sessionId: string) => Record<string, unknown>,
 ) {
   await page.route("**/api/chat/stream**", async (route: Route) => {
-    if (route.request().method() !== "GET") {
+    const request = route.request();
+    if (!isChatStreamMethod(request.method())) {
       await route.continue();
       return;
     }
-    const url = new URL(route.request().url());
-    const sessionId = url.searchParams.get("session_id") || crypto.randomUUID().replace(/-/g, "");
+    const { sessionId } = chatStreamRequestParts(request);
     await route.fulfill({
       status: 200,
       contentType: "text/event-stream",
