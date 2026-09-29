@@ -13,6 +13,18 @@ export const MEDIA_BROWSE_SORTS = [
   { id: "year", label: "Year" },
   { id: "vote_average", label: "Rating" },
   { id: "added_at", label: "Recently added" },
+  { id: "episode_added_at", label: "Recently added episodes" },
+  { id: "last_viewed_at", label: "Last watched" },
+  { id: "runtime_minutes", label: "Runtime" },
+];
+
+/** Sort options for TV browse — episode arrivals first in the list. */
+export const MEDIA_BROWSE_TV_SORTS = [
+  { id: "episode_added_at", label: "Recently added episodes" },
+  { id: "added_at", label: "Recently added shows" },
+  { id: "title", label: "Title" },
+  { id: "year", label: "Year" },
+  { id: "vote_average", label: "Rating" },
   { id: "last_viewed_at", label: "Last watched" },
   { id: "runtime_minutes", label: "Runtime" },
 ];
@@ -28,6 +40,14 @@ export const DEFAULT_MEDIA_BROWSE = {
   year: "",
   genres: [],
   keywords: [],
+};
+
+/** Default browse state when opening the TV library (fresh-episode browsing). */
+export const DEFAULT_TV_MEDIA_BROWSE = {
+  ...DEFAULT_MEDIA_BROWSE,
+  media_type: "show",
+  sort: "episode_added_at",
+  sort_dir: "desc",
 };
 
 /** Page sizes surfaced in the shared "Show" selector. "all" is a capped fetch. */
@@ -82,15 +102,26 @@ function parsePageSizeParam(value, fallback) {
 
 export function parseMediaBrowse(searchParams, defaults = {}) {
   const get = (key) => searchParams?.get?.(key);
-  const merged = { ...DEFAULT_MEDIA_BROWSE, ...defaults };
+  const mediaHint = String(get("media_type") || defaults.media_type || "").trim().toLowerCase();
+  const baseDefaults =
+    mediaHint === "show" || mediaHint === "tv"
+      ? { ...DEFAULT_TV_MEDIA_BROWSE, ...defaults }
+      : { ...DEFAULT_MEDIA_BROWSE, ...defaults };
+  const merged = baseDefaults;
   const view = get("view");
   const sort = get("sort");
   const sortDir = get("sort_dir");
+  const allowedSorts = mediaHint === "show" || mediaHint === "tv" ? MEDIA_BROWSE_TV_SORTS : MEDIA_BROWSE_SORTS;
+  const defaultSortDir = merged.sort_dir === "desc" ? "desc" : "asc";
   return {
     ...merged,
     view: view === "list" ? "list" : "poster",
-    sort: MEDIA_BROWSE_SORTS.some((option) => option.id === sort) ? sort : merged.sort,
-    sort_dir: sortDir === "desc" ? "desc" : "asc",
+    sort: allowedSorts.some((option) => option.id === sort)
+      ? sort
+      : MEDIA_BROWSE_SORTS.some((option) => option.id === sort)
+        ? sort
+        : merged.sort,
+    sort_dir: sortDir === "desc" || sortDir === "asc" ? sortDir : defaultSortDir,
     limit: parsePageSizeParam(get("limit") || merged.limit, merged.limit),
     offset: numberInRange(get("offset"), 0, 0, Number.MAX_SAFE_INTEGER),
     media_type: get("media_type") || merged.media_type || "",
@@ -102,13 +133,16 @@ export function parseMediaBrowse(searchParams, defaults = {}) {
 }
 
 export function buildMediaBrowseParams(state, updates = {}) {
-  const next = { ...DEFAULT_MEDIA_BROWSE, ...state, ...updates };
+  const mediaHint = String(updates.media_type ?? state?.media_type ?? "").trim().toLowerCase();
+  const defaults =
+    mediaHint === "show" || mediaHint === "tv" ? DEFAULT_TV_MEDIA_BROWSE : DEFAULT_MEDIA_BROWSE;
+  const next = { ...defaults, ...state, ...updates };
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(next)) {
     if (key === "offset" && !value) continue;
     if (key === "view" && value === "poster") continue;
-    if (key === "sort" && value === "title") continue;
-    if (key === "sort_dir" && value === "asc") continue;
+    if (key === "sort" && value === defaults.sort) continue;
+    if (key === "sort_dir" && value === defaults.sort_dir) continue;
     if (key === "limit" && value === DEFAULT_MEDIA_BROWSE.limit) continue;
     const normalized = Array.isArray(value) ? stringList(value).join(",") : String(value || "").trim();
     if (normalized) params.set(key, normalized);

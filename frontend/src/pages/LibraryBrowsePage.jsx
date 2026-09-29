@@ -54,6 +54,7 @@ import {
 } from "../lib/bulkLibraryDelete.js";
 import {
   MEDIA_BROWSE_PAGE_SIZES,
+  MEDIA_BROWSE_TV_SORTS,
   buildMediaBrowseParams,
   isAllPageSize,
   parseMediaBrowse,
@@ -78,7 +79,7 @@ function browseHeading(mediaType, q) {
 function browseSubtitle(mediaType, q) {
   if (q) return "Titles across your library matching your search";
   if (mediaType === "movie") return "Every movie in your library";
-  if (mediaType === "show") return "Every TV show in your library";
+  if (mediaType === "show") return "Shows ordered by the freshest episode that just landed";
   return "Every title in your library";
 }
 
@@ -502,6 +503,7 @@ export default function LibraryBrowsePage({ embedded = false }) {
             columnScope="browse"
             filterOptions={filterOptions}
             pageSizes={MEDIA_BROWSE_PAGE_SIZES}
+            sortOptions={browse.media_type === "show" ? MEDIA_BROWSE_TV_SORTS : undefined}
           />
         </details>
         <div className="explore-section-toolbar-row">
