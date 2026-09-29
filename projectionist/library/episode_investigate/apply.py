@@ -14,11 +14,27 @@ from urllib.parse import quote
 from projectionist.connectors.http import request_json
 from projectionist.library.episode_investigate.filenames import plex_proper_name
 from projectionist.library.episode_investigate.fusion import same_show_proposal
+from projectionist.library.episode_investigate.path_map import (
+    identify_media_roots,
+    path_is_under_media_root,
+)
 
 logger = logging.getLogger(__name__)
 
 RenameFn = Callable[[str, str], None]
 ExistsFn = Callable[[str], bool]
+
+
+def _assert_rename_under_media_root(settings: Any, *paths: str) -> None:
+    roots = identify_media_roots(settings)
+    if not roots:
+        raise RuntimeError("No configured media roots — refusing Apply rename.")
+    for raw in paths:
+        text = str(raw or "").strip()
+        if not text:
+            continue
+        if not path_is_under_media_root(Path(text), roots):
+            raise RuntimeError("Apply path is outside configured media roots")
 
 
 def plex_proper_path(show_title: str, proposed: Mapping[str, Any], current_path: str) -> str:
@@ -123,6 +139,7 @@ def apply_rows(
         )
         try:
             if current_path != target_path:
+                _assert_rename_under_media_root(settings, resolved_path, target_resolved)
                 if exists(target_resolved):
                     raise RuntimeError("A file already uses the Plex-proper name")
                 if exists(resolved_path):
@@ -197,6 +214,7 @@ def undo_apply(
         from_resolved = str(change.get("from_resolved") or "").strip() or from_path
         try:
             if to_path and from_path and to_path != from_path and exists(to_resolved):
+                _assert_rename_under_media_root(settings, to_resolved, from_resolved)
                 if exists(from_resolved):
                     raise RuntimeError("Original path is occupied — cannot undo rename")
                 rename(to_resolved, from_resolved)

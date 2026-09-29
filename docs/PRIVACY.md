@@ -7,7 +7,7 @@ Projectionist is a **self-hosted** app. The server owner chooses where it runs, 
 The short version:
 
 - **What we store** — your indexed library, your chats and preferences, and (for the owner) the connection credentials. All in one local SQLite database and `settings.json` on the owner's disk.
-- **What leaves the box** — only what you send to the LLM provider the owner configured (your prompts + the tool results needed to answer), and TMDB image URLs. Not your Plex token, not your `settings.json`.
+- **What leaves the box** — only what you send to the LLM provider the owner configured (your prompts + the tool results needed to answer), TMDB image URLs, and — when the owner uses **Investigate** — optional vision stills, Identify audio clips, and OpenSubtitles hash lookups. Not your Plex token, not your `settings.json`.
 - **How to export or purge** — every account can download a full copy of its own data or permanently delete it. Exactly what that covers is mapped below, under **What export and purge cover**.
 
 Jump to: [Household members](#household-members) · [Server owners](#server-owners) · [MCP](#mcp) · [Exposure matrices](#exposure-matrices) · [We do not](#we-do-not)
@@ -96,6 +96,18 @@ Chat uses the **owner's configured LLM** (OpenAI, Anthropic, Ollama, OpenRouter,
 - Tool results the agent needs (title metadata, library matches, watch signals the tools return)
 
 It should **not** receive Plex server tokens, live `X-Plex-Token` media URLs, webhook secrets, or settings dumps. Your chat content goes to whichever provider the owner configured — including a local Ollama if they chose one, in which case nothing leaves the LAN.
+
+### Investigate episodes (owner Admin)
+
+When the owner runs **Admin → Libraries → Investigate episodes**, Projectionist may send the following **only for that job** — not your chats, not the whole library:
+
+| Signal | What leaves the LAN | When |
+|--------|---------------------|------|
+| **Vision stills** | Up to **five** JPEG frames from the episode file to the configured chat LLM (when vision is on and the model accepts images) | Owner starts Investigate with vision |
+| **Identify (ACRCloud)** | A short (~12 s) audio clip to ACRCloud Identify (`identify-*.acrcloud.com`) | Identify keys are configured and the lane runs |
+| **OpenSubtitles hash** | An OpenSubtitles **file hash** (not the video bytes) to look up a subtitle match | `PROJECTIONIST_OPENSUBTITLES_API_KEY` (or UI key) is set |
+
+Stills and Identify clips are cached under the app data directory for the **current** job so the owner can review them; older Investigate job folders are purged when a new job starts. A miss does not rename files.
 
 ### Voice mode
 

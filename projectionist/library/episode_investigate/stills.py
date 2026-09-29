@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import logging
 import re
+import shutil
 from pathlib import Path
 from typing import Optional
 
+logger = logging.getLogger(__name__)
+
 SAFE_NAME = re.compile(r"^[\w.-]+$")
 SAFE_ID = re.compile(r"^[\w-]+$")
+
+# Keep the current Investigate job for review UI; purge everything else under
+# DATA_DIR/investigate/ except the Identify test scratch folder.
+KEEP_IDENTIFY_TEST_DIR = "identify-test"
 
 
 def investigate_root(data_dir: Path) -> Path:
@@ -34,3 +42,26 @@ def resolve_still(data_dir: Path, job_id: str, file_id: str, name: str) -> Optio
     except ValueError:
         return None
     return path if path.is_file() else None
+
+
+def purge_old_investigate_jobs(data_dir: Path, *, keep_job_id: str) -> int:
+    """Remove prior job trees (stills + Identify WAVs). Keep ``keep_job_id`` for review UI."""
+    root = investigate_root(data_dir)
+    if not root.is_dir():
+        return 0
+    keep = str(keep_job_id or "").strip()
+    removed = 0
+    for child in root.iterdir():
+        if not child.is_dir():
+            continue
+        name = child.name
+        if name == keep or name == KEEP_IDENTIFY_TEST_DIR:
+            continue
+        try:
+            shutil.rmtree(child)
+            removed += 1
+        except OSError as error:
+            logger.info("investigate purge skipped path=%s error=%s", child, error)
+    if removed:
+        logger.info("investigate purge removed=%s keep=%s", removed, keep or "(none)")
+    return removed

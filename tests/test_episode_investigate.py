@@ -238,6 +238,36 @@ class VisionParseTests(unittest.TestCase):
         parsed = parse_vision_json("not json")
         self.assertEqual(parsed["scope"], "unknown")
 
+    def test_prompt_safe_strips_control_and_marks_truncation(self) -> None:
+        from projectionist.library.episode_investigate.vision import (
+            CATALOG_PROMPT_LIMIT,
+            _prompt_safe,
+            catalog_prompt_meta,
+            vision_user_prompt,
+        )
+
+        self.assertEqual(_prompt_safe("Bear\nKitchen\x00"), "Bear Kitchen")
+        prompt = vision_user_prompt(
+            this_series="The Bear\ninject",
+            household_shows=["Evil\nTitle"],
+            catalog_episodes=[{"season": 1, "episode": 1, "title": "Line\nBreak"}],
+        )
+        self.assertNotIn("\ninject", prompt)
+        self.assertIn("S01E01 Line Break", prompt)
+        catalog = [
+            {"season": 1, "episode": i, "title": f"Ep {i}"}
+            for i in range(1, CATALOG_PROMPT_LIMIT + 5)
+        ]
+        meta = catalog_prompt_meta(catalog)
+        self.assertTrue(meta["truncated"])
+        self.assertEqual(meta["included"], CATALOG_PROMPT_LIMIT)
+        trunc_prompt = vision_user_prompt(
+            this_series="The Bear",
+            household_shows=[],
+            catalog_episodes=catalog,
+        )
+        self.assertIn("Catalog truncated", trunc_prompt)
+
 
 class FfmpegTests(unittest.TestCase):
     def test_probe_parses_duration(self) -> None:
@@ -273,6 +303,11 @@ class FfmpegTests(unittest.TestCase):
         # Cold-open after titles (~10%) and pre-credits (~85%), not only mid-show B-roll.
         self.assertEqual(calls[0][calls[0].index("-ss") + 1], "10.00")
         self.assertEqual(calls[-1][calls[-1].index("-ss") + 1], "85.00")
+
+    def test_still_count_matches_vision_limit(self) -> None:
+        from projectionist.library.episode_investigate.vision import VISION_STILL_LIMIT
+
+        self.assertEqual(STILL_COUNT, VISION_STILL_LIMIT)
 
 
 class ApplyTests(unittest.TestCase):
@@ -396,6 +431,29 @@ class CatalogAndStillsTests(unittest.TestCase):
             self.assertIsNotNone(resolve_still(root, "abc", "9", "0.jpg"))
             self.assertIsNone(resolve_still(root, "abc", "9", "../0.jpg"))
             self.assertIsNone(resolve_still(root, "../abc", "9", "0.jpg"))
+
+    def test_purge_old_investigate_jobs_keeps_current(self) -> None:
+        from projectionist.library.episode_investigate.stills import (
+            investigate_root,
+            purge_old_investigate_jobs,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old = investigate_root(root) / "oldjob" / "1"
+            keep = investigate_root(root) / "newjob" / "1"
+            test_dir = investigate_root(root) / "identify-test"
+            old.mkdir(parents=True)
+            keep.mkdir(parents=True)
+            test_dir.mkdir(parents=True)
+            (old / "0.jpg").write_bytes(b"old")
+            (old / "identify.wav").write_bytes(b"wav")
+            (keep / "0.jpg").write_bytes(b"new")
+            removed = purge_old_investigate_jobs(root, keep_job_id="newjob")
+            self.assertEqual(removed, 1)
+            self.assertFalse(old.parent.exists())
+            self.assertTrue((keep / "0.jpg").is_file())
+            self.assertTrue(test_dir.is_dir())
 
 
 class CapabilitiesTests(unittest.TestCase):
@@ -1318,7 +1376,10 @@ class IdentifyLaneTests(unittest.TestCase):
             )
         self.assertEqual(row["confidence"], "uncertain")
         self.assertFalse((row.get("identify") or {}).get("found"))
-        self.assertIsNone(second)
+        self.assertIsNotNone(second)
+        self.assertTrue(second.get("skipped"))
+        self.assertTrue(second.get("ok"))
+        self.assertFalse(second.get("found"))
         self.assertIsNotNone(first)
 
     def test_env_wins_over_settings(self) -> None:

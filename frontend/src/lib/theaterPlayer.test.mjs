@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   RESUME_THRESHOLD_MS,
   SCRUB_MAX,
+  SEEK_RESTART_DEBOUNCE_MS,
   SKIP_SECONDS,
   canLocalSeekTo,
   canResumeAttachedStream,
@@ -31,6 +32,11 @@ test("libraryWatchPath encodes the rating key", () => {
   assert.equal(libraryWatchPath("abc/1"), "/watch/abc%2F1");
   assert.equal(libraryWatchPath(""), "");
   assert.equal(libraryWatchPopoutPath("9"), "/watch/9/popout");
+});
+
+test("seek restart debounce is short but non-zero", () => {
+  assert.ok(SEEK_RESTART_DEBOUNCE_MS >= 100);
+  assert.ok(SEEK_RESTART_DEBOUNCE_MS <= 500);
 });
 
 test("libraryWatchTo carries return state", () => {

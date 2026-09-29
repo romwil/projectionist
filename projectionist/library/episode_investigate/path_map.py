@@ -220,6 +220,43 @@ def discover_media_roots(settings: Any) -> List[str]:
     return _dedupe(list(configured_local_roots(settings)) + plex_library_locations(settings))
 
 
+def identify_media_roots(settings: Any) -> List[Path]:
+    """Resolved media roots for Identify test + Apply rename allowlists.
+
+    Includes Plex TV + movie section paths, Radarr/Sonarr, tv_root/movies_root,
+    and the container ``/tv`` / ``/movies`` namespaces.
+    """
+    raw_roots = list(discover_media_roots(settings))
+    raw_roots.extend(plex_library_locations(settings, section_type="movie"))
+    roots: List[Path] = []
+    seen: set[str] = set()
+    for raw in raw_roots:
+        try:
+            resolved = Path(str(raw)).resolve()
+        except OSError:
+            continue
+        key = str(resolved)
+        if key in seen:
+            continue
+        seen.add(key)
+        roots.append(resolved)
+    return roots
+
+
+def path_is_under_media_root(path: Path, roots: Sequence[Path]) -> bool:
+    try:
+        resolved = path.resolve()
+    except OSError:
+        return False
+    for root in roots:
+        try:
+            if resolved.is_relative_to(root):
+                return True
+        except (OSError, ValueError):
+            continue
+    return False
+
+
 class TranslationLog:
     """One log line per job — not per episode file."""
 
