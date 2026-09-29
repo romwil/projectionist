@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   adjacentChannelId,
+  buildFlexLowerThird,
   buildOsdModel,
   classifyLiveStreamHealth,
   formatClock,
@@ -321,6 +322,51 @@ describe("liveChannels helpers", () => {
     assert.equal(osd.rating, "");
     assert.equal(osd.nextTitle, "Gilligan's Island");
     assert.equal(osd.nextDisplay, "Gilligan's Island — The Big Gold Strike");
+  });
+
+  it("buildFlexLowerThird is visible only on flex with Up-next copy + countdown", () => {
+    const flexOsd = buildOsdModel(
+      {
+        id: "flex-ch",
+        number: 105,
+        name: "Gilligan's Island",
+        now: {
+          title: "Continuity",
+          is_flex: true,
+          started_at: 1000,
+          ends_at: 2800,
+        },
+        next: {
+          title: "Gilligan's Island",
+          episode_title: "The Big Gold Strike",
+          start: 2800,
+        },
+      },
+      2000 * 1000,
+    );
+    const l3 = buildFlexLowerThird(flexOsd);
+    assert.ok(l3);
+    assert.equal(l3.eyebrow, "Up next on Gilligan's Island");
+    assert.equal(l3.title, "Gilligan's Island — The Big Gold Strike");
+    assert.equal(l3.countdown, formatClock(800));
+
+    const programOsd = buildOsdModel(
+      {
+        id: "c1",
+        number: 101,
+        name: "Chaos",
+        now: {
+          title: "Heat",
+          started_at: 1000,
+          ends_at: 4600,
+        },
+        next: { title: "Ronin", start: 4600 },
+      },
+      1600 * 1000,
+    );
+    assert.equal(buildFlexLowerThird(programOsd), null);
+    assert.equal(buildFlexLowerThird(null), null);
+    assert.equal(buildFlexLowerThird({ isFlex: false, name: "X" }), null);
   });
 
   it("pickNowAndNext advances past EOF Dora to MythBusters", () => {

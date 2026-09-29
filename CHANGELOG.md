@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [1.37.9] — 2026-09-28
+
+Live filler no longer leaves you guessing — a quiet lower-third names what’s up next while Continuity holds the air.
+
+### Highlights
+- **Up next stays visible during flex.** When a Live station is on Continuity/pad, Watch shows a persistent lower-third with the channel name, the next title (or title — episode), and a soft countdown — without forcing the full cable OSD up.
+- **OSD chrome stays motion-reveal.** Ch±, captions, and fullscreen still idle-hide; the filler strip has no buttons and vanishes the moment real programming returns.
+
+### Added
+- `buildFlexLowerThird` + `LivePlayer` lower-third strip (`.live-flex-l3`) driven by `osd.isFlex` / `nextDisplay` / `secondsRemaining`.
+
+### Changed
+- DESIGN Live theater decisions; HELP Live “while you watch” copy for the filler strip.
+
+### Verification
+- Frontend unit: `liveChannels.test.mjs` — flex lower-third visible/copy/countdown; null when not flex.
+
 ## [1.37.8] — 2026-09-28
 
 Coming back to chat lands at the bottom of the thread — no more scroll-through of the whole history.
