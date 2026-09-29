@@ -4,17 +4,33 @@ import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
+  ALL_UNCERTAIN_NEXT_STEPS,
   FFMPEG_MISSING,
   IDENTIFY_CLIP_SECONDS,
   IDENTIFY_LEAVES_LAN,
   IDENTIFY_TEST_NO_RENAME,
+  OPEN_STILLS_LABEL,
+  REVIEW_GUIDANCE_APPLY,
+  REVIEW_GUIDANCE_CERTAIN,
+  REVIEW_GUIDANCE_INTRO,
+  REVIEW_GUIDANCE_LIKELY,
+  REVIEW_GUIDANCE_UNCERTAIN,
+  RUNTIME_ONLY_LIKELY_BANNER,
   SCENE_NAMES_NOT_EVIDENCE,
   STILLS_LEAVE_LAN,
+  VISION_SERIES_ONLY_TIP,
   applyButtonClass,
   confidenceLabel,
   defaultRowSelected,
+  filterInvestigateShows,
+  formatInvestigateShowLabel,
+  hasRuntimeOnlyLikelyRows,
   identifyTestHonestyLine,
   identifyTestRenamed,
+  investigateSeasonOptions,
+  isAllUncertainBatch,
+  isRuntimeOnlyLikely,
+  isVisionSeriesOnly,
   reviewEvidenceSummary,
   selectedFileIds,
   selectionMap,
@@ -23,6 +39,7 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const libraries = readFileSync(join(here, "../pages/admin/LibrariesSection.jsx"), "utf8");
+const showCombobox = readFileSync(join(here, "../components/InvestigateShowCombobox.jsx"), "utf8");
 
 const emptyEvidenceRows = [
   { id: "a", confidence: "uncertain", stills: [], identify: { found: false }, reasons: ["not enough independent evidence"] },
@@ -47,15 +64,98 @@ describe("episode investigate selection", () => {
     assert.equal(confidenceLabel("likely"), "Likely");
   });
 
+  it("does not auto-select runtime-only Likely and surfaces review guidance", () => {
+    const runtimeOnly = {
+      id: "r",
+      confidence: "likely",
+      same_show: true,
+      selected_default: true,
+      signals: { runtime_key: [17, 5], oshash_key: null, vision_key: null, runtime_only: true },
+      reasons: ["runtime matches S17E05"],
+      stills: ["/s.jpg"],
+      tmdb_stills: ["/t.jpg"],
+    };
+    const oshashLikely = {
+      id: "o",
+      confidence: "likely",
+      same_show: true,
+      selected_default: true,
+      signals: { runtime_key: null, oshash_key: [1, 7], vision_key: null, runtime_only: false },
+      reasons: ["OpenSubtitles hash points at S01E07"],
+    };
+    assert.equal(isRuntimeOnlyLikely(runtimeOnly), true);
+    assert.equal(defaultRowSelected(runtimeOnly), false);
+    assert.equal(defaultRowSelected(oshashLikely), true);
+    assert.equal(hasRuntimeOnlyLikelyRows([runtimeOnly, oshashLikely]), true);
+    assert.equal(isAllUncertainBatch([{ confidence: "uncertain" }, { confidence: "uncertain" }]), true);
+    assert.equal(isAllUncertainBatch([runtimeOnly]), false);
+
+    assert.match(libraries, /investigate-review-guidance/);
+    assert.match(libraries, /investigate-runtime-only-banner/);
+    assert.match(libraries, /REVIEW_GUIDANCE_INTRO/);
+    assert.match(libraries, /RUNTIME_ONLY_LIKELY_BANNER/);
+    assert.match(libraries, /OPEN_STILLS_LABEL/);
+    assert.match(libraries, /compare TMDB/);
+    assert.match(REVIEW_GUIDANCE_INTRO, /independent evidence/i);
+    assert.match(REVIEW_GUIDANCE_CERTAIN, /Certain/);
+    assert.match(REVIEW_GUIDANCE_LIKELY, /runtime-only/);
+    assert.match(REVIEW_GUIDANCE_UNCERTAIN, /Open stills/);
+    assert.match(REVIEW_GUIDANCE_APPLY, /same show/);
+    assert.match(RUNTIME_ONLY_LIKELY_BANNER, /Runtime-only Likely/);
+    assert.match(RUNTIME_ONLY_LIKELY_BANNER, /docu series/);
+    assert.equal(OPEN_STILLS_LABEL, "Open stills");
+    assert.equal(
+      isVisionSeriesOnly({
+        vision: { scope: "this_series", season: null, episode: null },
+        signals: { vision_series_only: true },
+      }),
+      true,
+    );
+    assert.match(VISION_SERIES_ONLY_TIP, /not the episode/);
+    assert.match(libraries, /VISION_SERIES_ONLY_TIP/);
+  });
+
   it("wires Investigate on Libraries, not ConfigPage, with LAN stills copy", () => {
     assert.match(libraries, /data-testid="episode-investigate-card"/);
     assert.match(libraries, /InvestigatePanel/);
+    assert.match(libraries, /InvestigateShowCombobox/);
     assert.match(libraries, /STILLS_LEAVE_LAN/);
     assert.match(libraries, /IDENTIFY_LEAVES_LAN/);
     assert.match(libraries, /SCENE_NAMES_NOT_EVIDENCE/);
     assert.match(libraries, /\/admin\/investigate\/start/);
     assert.equal(STILLS_LEAVE_LAN.includes("leave the LAN"), true);
     assert.equal(SCENE_NAMES_NOT_EVIDENCE.includes("not evidence"), true);
+  });
+
+  it("uses a searchable show combobox, not a scroll-only native select", () => {
+    assert.match(showCombobox, /role="combobox"/);
+    assert.match(showCombobox, /data-testid="investigate-show"/);
+    assert.match(showCombobox, /data-testid="investigate-show-list"/);
+    assert.match(showCombobox, /filterInvestigateShows/);
+    assert.match(showCombobox, /moveTypeaheadIndex/);
+    assert.doesNotMatch(libraries, /<select[\s\S]*data-testid="investigate-show"/);
+    assert.match(libraries, /data-testid="investigate-season"/);
+    assert.match(libraries, /\/admin\/investigate\/seasons/);
+    assert.match(libraries, /investigateSeasonOptions/);
+
+    const shows = [
+      { id: 1, title: "Expedition Unknown", year: 2015 },
+      { id: 2, title: "The Expanse", year: 2015 },
+      { id: 3, title: "Unknown", year: 2011 },
+      { id: 4, title: "Better Call Saul", year: 2015 },
+    ];
+    assert.equal(formatInvestigateShowLabel(shows[0]), "Expedition Unknown (2015)");
+    const hits = filterInvestigateShows(shows, "exp");
+    assert.deepEqual(
+      hits.map((item) => item.id),
+      [1, 2],
+    );
+    assert.equal(filterInvestigateShows(shows, "zzzz").length, 0);
+    assert.equal(filterInvestigateShows(shows, "", { limit: 2 }).length, 2);
+    assert.deepEqual(investigateSeasonOptions([0, 17, 1], 18), [0, 1, 17]);
+    assert.deepEqual(investigateSeasonOptions([], 18), []);
+    assert.deepEqual(investigateSeasonOptions(null, 3), [1, 2, 3]);
+    assert.deepEqual(investigateSeasonOptions(null, 0), []);
   });
 
   it("says Identify leaves the LAN and that a test miss does not rename", () => {
@@ -115,11 +215,16 @@ describe("episode investigate selection", () => {
       ffmpegReady: true,
       visionOn: true,
       identifyConfigured: true,
+      opensubtitlesConfigured: false,
     });
     assert.match(allUncertain, /All 2 rows are Uncertain/);
     assert.match(allUncertain, /No stills were extracted/);
+    assert.match(allUncertain, /OpenSubtitles is not configured/);
     assert.match(allUncertain, /Identify did not return a match/);
     assert.match(allUncertain, /Fusion is done/);
+    assert.match(allUncertain, new RegExp(ALL_UNCERTAIN_NEXT_STEPS.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(allUncertain, /OpenSubtitles/);
+    assert.match(allUncertain, /do not Apply blindly/);
 
     const mixed = reviewEvidenceSummary(
       [

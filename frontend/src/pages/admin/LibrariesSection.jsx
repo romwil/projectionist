@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import InlineAlert from "../../components/InlineAlert";
 import AdminExecutionCard from "../../components/AdminExecutionCard";
+import InvestigateShowCombobox from "../../components/InvestigateShowCombobox";
 import { api } from "../../api/client";
 import RematchStudio from "./RematchStudio";
 import RepairMiss from "./RepairMiss";
@@ -12,12 +13,25 @@ import {
   FFMPEG_MISSING,
   IDENTIFY_LEAVES_LAN,
   IDENTIFY_TEST_NO_RENAME,
+  OPEN_STILLS_LABEL,
+  REVIEW_GUIDANCE_APPLY,
+  REVIEW_GUIDANCE_CERTAIN,
+  REVIEW_GUIDANCE_INTRO,
+  REVIEW_GUIDANCE_LIKELY,
+  REVIEW_GUIDANCE_UNCERTAIN,
+  RUNTIME_ONLY_LIKELY_BANNER,
   SCENE_NAMES_NOT_EVIDENCE,
   STILLS_LEAVE_LAN,
+  VISION_SERIES_ONLY_TIP,
   applyButtonClass,
   confidenceLabel,
+  hasRuntimeOnlyLikelyRows,
   identifyTestHonestyLine,
+  investigateSeasonOptions,
+  isRuntimeOnlyLikely,
+  isVisionSeriesOnly,
   reviewEvidenceSummary,
+  rowHasReviewStills,
   selectedFileIds,
   selectionMap,
 } from "../../lib/episodeInvestigate.js";
@@ -704,6 +718,7 @@ function InvestigatePanel({ focusHint }) {
   const [shows, setShows] = useState([]);
   const [showId, setShowId] = useState("");
   const [season, setSeason] = useState("");
+  const [seasonsWithFiles, setSeasonsWithFiles] = useState(null);
   const [useVision, setUseVision] = useState(true);
   const [job, setJob] = useState(null);
   const [applyJob, setApplyJob] = useState(null);
@@ -777,6 +792,38 @@ function InvestigatePanel({ focusHint }) {
   }, [focusHint, shows]);
 
   useEffect(() => {
+    if (!showId) {
+      setSeasonsWithFiles(null);
+      return undefined;
+    }
+    let cancelled = false;
+    setSeasonsWithFiles(null);
+    async function loadSeasons() {
+      try {
+        const body = await api(`/admin/investigate/seasons?show_id=${encodeURIComponent(showId)}`);
+        if (cancelled) return;
+        const list = Array.isArray(body?.seasons_with_files)
+          ? body.seasons_with_files
+          : Array.isArray(body?.seasons)
+            ? body.seasons
+            : [];
+        setSeasonsWithFiles(list);
+        setSeason((prev) => {
+          if (prev === "") return prev;
+          const n = Number(prev);
+          return list.map(Number).includes(n) ? prev : "";
+        });
+      } catch {
+        if (!cancelled) setSeasonsWithFiles([]);
+      }
+    }
+    loadSeasons();
+    return () => {
+      cancelled = true;
+    };
+  }, [showId]);
+
+  useEffect(() => {
     if (!reviewOpen || !rows.length) return;
     setSelected((prev) => {
       if (Object.keys(prev).length) return prev;
@@ -793,7 +840,9 @@ function InvestigatePanel({ focusHint }) {
     ffmpegReady,
     visionOn: visionAvailable && useVision,
     identifyConfigured: health?.acrcloud?.available !== false,
+    opensubtitlesConfigured: health?.opensubtitles?.available !== false,
   });
+  const runtimeOnlyBanner = hasRuntimeOnlyLikelyRows(rows);
 
   async function handleStart() {
     setError("");
@@ -858,10 +907,7 @@ function InvestigatePanel({ focusHint }) {
   }
 
   const currentShow = shows.find((item) => String(item.id) === String(showId));
-  const seasonOptions = [];
-  if (currentShow?.season_count) {
-    for (let n = 1; n <= Number(currentShow.season_count); n += 1) seasonOptions.push(n);
-  }
+  const seasonOptions = investigateSeasonOptions(seasonsWithFiles, currentShow?.season_count);
 
   return (
     <section className="config-section" data-testid="episode-investigate-card" id="episode-investigate">
@@ -879,27 +925,19 @@ function InvestigatePanel({ focusHint }) {
           {FFMPEG_MISSING}
         </p>
       ) : null}
-      <div className="section-dropdowns">
-        <label>
-          <span>Show</span>
-          <select
-            data-testid="investigate-show"
+      <div className="section-dropdowns investigate-scope-fields">
+        <div className="investigate-show-field">
+          <label htmlFor="investigate-show-input">Show</label>
+          <InvestigateShowCombobox
+            shows={shows}
             value={showId}
-            onChange={(event) => {
-              setShowId(event.target.value);
+            disabled={investigating || applying}
+            onChange={(nextId) => {
+              setShowId(nextId);
               setSeason("");
             }}
-            disabled={investigating || applying}
-          >
-            <option value="">Select a show</option>
-            {shows.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.title}
-                {item.year ? ` (${item.year})` : ""}
-              </option>
-            ))}
-          </select>
-        </label>
+          />
+        </div>
         <label>
           <span>Season (optional)</span>
           <select
@@ -911,7 +949,7 @@ function InvestigatePanel({ focusHint }) {
             <option value="">All seasons</option>
             {seasonOptions.map((n) => (
               <option key={n} value={n}>
-                Season {n}
+                {n === 0 ? "Specials" : `Season ${n}`}
               </option>
             ))}
           </select>
@@ -957,10 +995,20 @@ function InvestigatePanel({ focusHint }) {
       ) : null}
       {reviewOpen && rows.length && !investigating ? (
         <div className="investigate-review" data-testid="investigate-review">
-          <p className="wizard-note">
-            Certain and Likely start selected. Uncertain stays off. Deselect any row. Apply remaps
-            the same show only.
-          </p>
+          <div className="investigate-review-guidance" data-testid="investigate-review-guidance">
+            <p className="wizard-note">{REVIEW_GUIDANCE_INTRO}</p>
+            <ul className="investigate-review-legend wizard-note">
+              <li>{REVIEW_GUIDANCE_CERTAIN}</li>
+              <li>{REVIEW_GUIDANCE_LIKELY}</li>
+              <li>{REVIEW_GUIDANCE_UNCERTAIN}</li>
+            </ul>
+            <p className="wizard-note">{REVIEW_GUIDANCE_APPLY}</p>
+          </div>
+          {runtimeOnlyBanner ? (
+            <p className="status status-error" data-testid="investigate-runtime-only-banner">
+              {RUNTIME_ONLY_LIKELY_BANNER}
+            </p>
+          ) : null}
           {evidenceSummary ? (
             <p className="status status-secondary" data-testid="investigate-evidence-summary">
               {evidenceSummary}
@@ -1026,8 +1074,11 @@ function InvestigateReviewRow({ row, checked, onToggle }) {
           row.proposed?.title ? ` ${row.proposed.title}` : ""
         }`
       : "";
-  const stills = (row.stills || []).slice(0, 3);
-  const tmdbStills = (row.tmdb_stills || []).slice(0, 3);
+  const stills = (row.stills || []).slice(0, 5);
+  const tmdbStills = (row.tmdb_stills || []).slice(0, 5);
+  const hasStills = rowHasReviewStills(row);
+  const runtimeOnly = isRuntimeOnlyLikely(row);
+  const seriesOnlyVision = isVisionSeriesOnly(row);
   return (
     <tr data-testid={`investigate-row-${row.id}`}>
       <td>
@@ -1061,8 +1112,22 @@ function InvestigateReviewRow({ row, checked, onToggle }) {
               ? " · other show (not this sprint)"
               : ""}
             {reasons.length ? ` · ${reasons[0]}` : ""}
+            {runtimeOnly ? " · runtime-only — verify stills" : ""}
+            {seriesOnlyVision ? " · show only, not episode" : ""}
+            {hasStills ? ` · ${OPEN_STILLS_LABEL}` : ""}
+            {tmdbStills.length ? " · compare TMDB" : ""}
           </summary>
           {reasons.length > 1 ? <p className="wizard-note">{reasons.join(" · ")}</p> : null}
+          {seriesOnlyVision ? (
+            <p className="status status-secondary" data-testid={`investigate-series-only-${row.id}`}>
+              {VISION_SERIES_ONLY_TIP}
+            </p>
+          ) : null}
+          {runtimeOnly ? (
+            <p className="status status-secondary" data-testid={`investigate-runtime-only-${row.id}`}>
+              Runtime is the only vote. Docu series often share runtimes — check stills before Apply.
+            </p>
+          ) : null}
           <div className="investigate-review-stills" data-testid={`investigate-stills-${row.id}`}>
             {stills.map((src, index) => (
               <img key={`file-${index}`} src={src} alt={`File still ${index + 1}`} />
@@ -1070,6 +1135,9 @@ function InvestigateReviewRow({ row, checked, onToggle }) {
             {tmdbStills.map((src, index) => (
               <img key={`tmdb-${index}`} src={src} alt={`TMDB still ${index + 1}`} />
             ))}
+            {!hasStills ? (
+              <p className="status status-secondary">No file or TMDB stills for this row.</p>
+            ) : null}
           </div>
         </details>
       </td>
