@@ -5,6 +5,8 @@ export const RESUME_THRESHOLD_MS = 2 * 60 * 1000;
 export const PROGRESS_THROTTLE_MS = 10_000;
 export const DOUBLE_TAP_MS = 300;
 export const OSD_IDLE_MS = 3200;
+/** Collapse rapid Play scrub session-restarts into one seek. */
+export const SEEK_RESTART_DEBOUNCE_MS = 280;
 
 export function libraryWatchPath(ratingKey) {
   const key = String(ratingKey || "").trim();

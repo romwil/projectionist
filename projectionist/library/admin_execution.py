@@ -239,7 +239,13 @@ class AdminExecutionStore:
     ) -> Optional[str]:
         with self._lock:
             if self._state.get("busy"):
-                return None
+                # Reclaim a stuck busy flag when the worker thread has died.
+                if worker_alive(self.kind):
+                    return None
+                logger.warning(
+                    "admin execution %s reclaiming busy after dead worker",
+                    self.kind,
+                )
             job_id = uuid.uuid4().hex[:12]
             prepared: List[Dict[str, Any]] = []
             for raw in items or []:
@@ -265,6 +271,19 @@ class AdminExecutionStore:
                 "updated_at": time.time(),
             }
             return job_id
+
+    def rollback_begin(self, message: str = "Could not start job.") -> None:
+        """Clear busy after ``begin`` when ``start_worker`` refuses to start."""
+        with self._lock:
+            if not self._state.get("busy"):
+                return
+            self._state["phase"] = "error"
+            self._state["percent"] = 100
+            self._state["message"] = str(message or "Could not start job.")
+            self._state["busy"] = False
+            self._state["ok"] = False
+            self._state["error"] = str(message or "Could not start job.")
+            self._state["updated_at"] = time.time()
 
     def update(self, phase: str, message: str = "", *, percent: Optional[int] = None) -> None:
         with self._lock:
@@ -429,6 +448,9 @@ def start_worker(kind: str, run: RunFn, *, name: str = "") -> bool:
         existing = _WORKERS.get(kind)
         if existing is not None and existing.is_alive():
             return False
+        # Drop a dead thread handle so reclaim in ``begin`` stays consistent.
+        if existing is not None:
+            _WORKERS[kind] = None
         event = _CANCELS.get(kind)
         if event is None:
             event = threading.Event()

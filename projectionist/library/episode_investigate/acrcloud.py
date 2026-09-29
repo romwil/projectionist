@@ -321,13 +321,13 @@ def identify_file(
     fetch: Optional[IdentifyFetch] = None,
     extract: Optional[Callable[..., Optional[Path]]] = None,
 ) -> Optional[Dict[str, Any]]:
-    """One Identify per episode file. A miss returns Uncertain evidence, not an error."""
+    """One Identify per episode file within a job. A miss / skip is not an error."""
     creds = acrcloud_config(settings)
     if not creds.get("available"):
         return None
     key = str(file_key or path or "").strip()
     if key and not _claim_file(key):
-        return None
+        return _skipped_identify_payload()
     clip_fn = extract or extract_identify_clip
     clip = clip_fn(
         path,
@@ -413,8 +413,19 @@ def reset_identify_throttle_for_tests() -> None:
     global _last_identify_at
     with _rate_lock:
         _last_identify_at = 0.0
+    clear_identify_claims()
+
+
+def clear_identify_claims() -> None:
+    """Drop process Identify claims so a new Investigate job can re-Identify."""
     with _identified_lock:
         _identified_keys.clear()
+
+
+def begin_identify_job(job_id: str = "") -> None:
+    """Start a job-scoped claim window (clears prior process claims)."""
+    del job_id  # claims are cleared per job; keys stay file-scoped within the job
+    clear_identify_claims()
 
 
 def _claim_file(key: str) -> bool:
@@ -425,6 +436,18 @@ def _claim_file(key: str) -> bool:
         while len(_identified_keys) > IDENTIFIED_KEYS_CAP:
             _identified_keys.popitem(last=False)
         return True
+
+
+def _skipped_identify_payload() -> Dict[str, Any]:
+    return {
+        "found": False,
+        "ok": True,
+        "skipped": True,
+        "message": "Identify already ran for this file in this job.",
+        "title": "",
+        "series_title": "",
+        "score": None,
+    }
 
 
 def _throttle() -> None:

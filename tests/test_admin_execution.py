@@ -85,6 +85,34 @@ class StoreCancelTests(unittest.TestCase):
         self.assertEqual(by_id[2]["status"], "cancelled")
         self.assertLess(snap["percent"], 100)
 
+    def test_rollback_begin_clears_busy(self) -> None:
+        store = AdminExecutionStore("rollback-test")
+        job_id = store.begin(message="Queued…", items=[{"id": 1, "title": "Moon"}])
+        self.assertTrue(job_id)
+        self.assertTrue(store.snapshot()["busy"])
+        store.rollback_begin("Could not start worker")
+        snap = store.snapshot()
+        self.assertFalse(snap["busy"])
+        self.assertEqual(snap["phase"], "error")
+        self.assertIn("Could not start", snap["message"])
+
+    def test_begin_reclaims_busy_when_worker_dead(self) -> None:
+        reset_admin_execution_for_tests("reclaim-test")
+        store = AdminExecutionStore("reclaim-test")
+        # Register store under the same kind start_worker / worker_alive use.
+        from projectionist.library import admin_execution as admin_mod
+
+        admin_mod._STORES["reclaim-test"] = store
+        first = store.begin(items=[{"id": 1}])
+        self.assertTrue(first)
+        self.assertTrue(store.snapshot()["busy"])
+        # No live worker — begin must reclaim instead of wedging forever.
+        second = store.begin(items=[{"id": 2}])
+        self.assertTrue(second)
+        self.assertNotEqual(first, second)
+        self.assertTrue(store.snapshot()["busy"])
+        reset_admin_execution_for_tests("reclaim-test")
+
 
 class FakeRadarr:
     def __init__(self) -> None:

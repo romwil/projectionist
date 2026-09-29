@@ -183,6 +183,65 @@ def empty_files_message(
     return f"Season {season_i} has no files in Sonarr."
 
 
+def list_seasons_with_files(
+    settings: Any,
+    show: Mapping[str, Any],
+    *,
+    client: Any = None,
+) -> Dict[str, Any]:
+    """Light path for the season dropdown — seasons only, no full file inventory."""
+    if not sonarr_configured(settings) and client is None:
+        return {"ok": False, "error": "Sonarr is not configured — Investigate needs episode files.", "files": []}
+    if client is None:
+        from projectionist.connectors.sonarr import SonarrClient
+
+        client = SonarrClient(settings.sonarr_url, settings.sonarr_api_key)
+    series = find_sonarr_series(client, show)
+    if series is None:
+        return {"ok": False, "error": "This show is not in Sonarr.", "files": []}
+    series_id = int(series.id)
+    seasons_with_files: set[int] = set()
+    try:
+        raw_episodes = client.episodes(series_id)
+    except Exception as error:  # noqa: BLE001
+        logger.info("list_seasons_with_files episodes failed: %s", error)
+        raw_episodes = []
+    for episode in raw_episodes or []:
+        if not isinstance(episode, Mapping):
+            continue
+        file_id = episode.get("episodeFileId")
+        try:
+            if not file_id:
+                continue
+            seasons_with_files.add(int(episode.get("seasonNumber")))
+        except (TypeError, ValueError):
+            continue
+    if not seasons_with_files:
+        try:
+            raw_files = client.episode_files(series_id)
+        except Exception as error:  # noqa: BLE001
+            logger.info("list_seasons_with_files episode_files failed: %s", error)
+            raw_files = []
+        for raw in raw_files or []:
+            if not isinstance(raw, Mapping):
+                continue
+            try:
+                if raw.get("seasonNumber") is not None:
+                    seasons_with_files.add(int(raw.get("seasonNumber")))
+            except (TypeError, ValueError):
+                continue
+    seasons_sorted = sorted(seasons_with_files)
+    return {
+        "ok": True,
+        "error": "",
+        "series_id": series_id,
+        "files": [],
+        "catalog": [],
+        "seasons": seasons_sorted,
+        "seasons_with_files": seasons_sorted,
+    }
+
+
 def list_episode_files(
     settings: Any,
     show: Mapping[str, Any],

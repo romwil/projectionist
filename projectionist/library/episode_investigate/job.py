@@ -15,7 +15,7 @@ from projectionist.library.admin_execution import (
 )
 from projectionist.library.episode_investigate.apply import apply_rows, undo_apply
 from projectionist.library.episode_investigate.capabilities import llm_accepts_images
-from projectionist.library.episode_investigate.acrcloud import identify_file
+from projectionist.library.episode_investigate.acrcloud import begin_identify_job, identify_file
 from projectionist.library.episode_investigate.catalog import (
     empty_files_message,
     household_series,
@@ -31,13 +31,13 @@ from projectionist.library.episode_investigate.path_map import (
     discover_media_roots,
     resolve_visible_media_path,
 )
-from projectionist.library.episode_investigate.stills import still_url, stills_dir
+from projectionist.library.episode_investigate.stills import purge_old_investigate_jobs, still_url, stills_dir
 from projectionist.library.episode_investigate.tmdb_stills import (
     download_episode_stills,
     season_episodes,
     series_seasons,
 )
-from projectionist.library.episode_investigate.vision import identify_from_stills
+from projectionist.library.episode_investigate.vision import CATALOG_PROMPT_LIMIT, catalog_prompt_meta, identify_from_stills
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +115,13 @@ def start_investigate_job(
 
     root = Path(data_dir) if data_dir is not None else _data_dir()
     house = household_series(db, settings)
+    begin_identify_job(job_id)
+    try:
+        purge_old_investigate_jobs(root, keep_job_id=job_id)
+    except OSError as error:
+        logger.info("investigate purge before job failed: %s", error)
+    catalog_meta = catalog_prompt_meta(list(inventory.get("catalog") or []))
+    vision_catalog_truncated = bool(catalog_meta.get("truncated"))
 
     def _run(job_store, cancel) -> Mapping[str, Any]:
         job_store.update("running", "Investigating episode files…")
@@ -133,6 +140,10 @@ def start_investigate_job(
             cancel=cancel,
             series_id=inventory.get("series_id"),
         )
+        truncated = vision_catalog_truncated or any(
+            isinstance(row.get("vision"), Mapping) and row["vision"].get("vision_catalog_truncated")
+            for row in rows
+        )
         payload = {
             "show": show,
             "season": season,
@@ -143,6 +154,8 @@ def start_investigate_job(
                 and any(row.get("stills") for row in rows)
             ),
             "stills_leave_lan": vision_on and llm_accepts_images(settings),
+            "vision_catalog_truncated": truncated,
+            "vision_catalog_limit": CATALOG_PROMPT_LIMIT,
             "rows": rows,
             "series_id": inventory.get("series_id"),
             "seasons": inventory.get("seasons") or [],
@@ -157,8 +170,10 @@ def start_investigate_job(
         return payload
 
     if not start_worker(KIND, _run, name="episode-investigate"):
+        store.rollback_begin("An investigation is already running.")
         snap = flatten_result(store.snapshot())
         snap["accepted"] = False
+        snap["message"] = snap.get("message") or "An investigation is already running."
         return snap
     snap = flatten_result(store.snapshot())
     snap["accepted"] = True
@@ -203,35 +218,62 @@ def start_apply_job(
         return out
 
     def _run(job_store, cancel) -> Mapping[str, Any]:
-        del cancel
         job_store.update("running", "Applying same-show remaps…")
         selected_rows = [row for row in review_rows if str(row.get("id")) in set(wanted)]
+        changes: List[Dict[str, Any]] = []
+        skipped_rows: List[Dict[str, Any]] = []
+        failed_rows: List[Dict[str, Any]] = []
+        apply_id = ""
+        created_at = 0.0
         for row in selected_rows:
-            job_store.set_item(str(row.get("id")), "running", message=str(row.get("filename") or row.get("id")))
-        payload = apply_rows(
-            settings,
-            review_show,
-            review_rows,
-            wanted,
-            create_opt_in=create_opt_in or [],
-        )
-        for change in payload.get("changes") or []:
-            job_store.set_item(str(change.get("id")), "completed", outcome="applied")
-        for skipped in payload.get("skipped_rows") or []:
-            job_store.set_item(str(skipped.get("id")), "skipped", outcome="other_show")
-        for failed in payload.get("failed_rows") or []:
-            job_store.set_item(str(failed.get("id")), "failed", error=str(failed.get("error") or "failed"))
+            file_id = str(row.get("id") or "")
+            if cancel.is_set():
+                job_store.set_item(file_id, "cancelled", outcome="cancelled")
+                continue
+            job_store.set_item(file_id, "running", message=str(row.get("filename") or row.get("id")))
+            piece = apply_rows(
+                settings,
+                review_show,
+                [row],
+                [file_id],
+                create_opt_in=create_opt_in or [],
+            )
+            if not apply_id:
+                apply_id = str(piece.get("apply_id") or "")
+                created_at = float(piece.get("created_at") or 0.0)
+            for change in piece.get("changes") or []:
+                changes.append(change)
+                job_store.set_item(str(change.get("id")), "completed", outcome="applied")
+            for skipped in piece.get("skipped_rows") or []:
+                skipped_rows.append(skipped)
+                job_store.set_item(str(skipped.get("id")), "skipped", outcome="other_show")
+            for failed in piece.get("failed_rows") or []:
+                failed_rows.append(failed)
+                job_store.set_item(str(failed.get("id")), "failed", error=str(failed.get("error") or "failed"))
+        payload = {
+            "apply_id": apply_id or job_id,
+            "applied": len(changes),
+            "skipped": len(skipped_rows),
+            "failed": len(failed_rows),
+            "changes": changes,
+            "skipped_rows": skipped_rows,
+            "failed_rows": failed_rows,
+            "created_at": created_at,
+        }
         snap_now = job_store.snapshot()
+        phase = "cancelled" if cancel.is_set() else "done"
         job_store.set_done(
             finished_message(snap_now.get("execution") or {}, noun="file", action="Applied"),
             result=payload,
-            phase="done",
+            phase=phase,
         )
         return payload
 
     if not start_worker(APPLY_KIND, _run, name="episode-investigate-apply"):
+        store.rollback_begin("An apply is already running.")
         out = flatten_result(store.snapshot())
         out["accepted"] = False
+        out["message"] = out.get("message") or "An apply is already running."
         return out
     out = flatten_result(store.snapshot())
     out["accepted"] = True
