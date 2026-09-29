@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import InlineAlert from "../../components/InlineAlert";
 import AdminExecutionCard from "../../components/AdminExecutionCard";
+import InvestigateShowCombobox from "../../components/InvestigateShowCombobox";
 import { api } from "../../api/client";
 import RematchStudio from "./RematchStudio";
 import RepairMiss from "./RepairMiss";
@@ -879,27 +880,19 @@ function InvestigatePanel({ focusHint }) {
           {FFMPEG_MISSING}
         </p>
       ) : null}
-      <div className="section-dropdowns">
-        <label>
-          <span>Show</span>
-          <select
-            data-testid="investigate-show"
+      <div className="section-dropdowns investigate-scope-fields">
+        <div className="investigate-show-field">
+          <label htmlFor="investigate-show-input">Show</label>
+          <InvestigateShowCombobox
+            shows={shows}
             value={showId}
-            onChange={(event) => {
-              setShowId(event.target.value);
+            disabled={investigating || applying}
+            onChange={(nextId) => {
+              setShowId(nextId);
               setSeason("");
             }}
-            disabled={investigating || applying}
-          >
-            <option value="">Select a show</option>
-            {shows.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.title}
-                {item.year ? ` (${item.year})` : ""}
-              </option>
-            ))}
-          </select>
-        </label>
+          />
+        </div>
         <label>
           <span>Season (optional)</span>
           <select

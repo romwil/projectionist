@@ -82,6 +82,36 @@ export function rowHasVision(row) {
   return Boolean(vision.scope || vision.reason || vision.season != null);
 }
 
+/** Display label for a Sonarr show row in the Investigate picker. */
+export function formatInvestigateShowLabel(show) {
+  if (!show) return "";
+  const title = String(show.title || "").trim();
+  if (!title) return "";
+  return show.year ? `${title} (${show.year})` : title;
+}
+
+/**
+ * Filter Investigate shows by title/year substring (case-insensitive).
+ * Prefers title prefix matches, then caps the list for typeahead.
+ */
+export function filterInvestigateShows(shows, query, { limit = 50 } = {}) {
+  const list = Array.isArray(shows) ? shows : [];
+  const cap = Math.max(1, Number(limit) || 50);
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return list.slice(0, cap);
+
+  const scored = [];
+  for (const item of list) {
+    const title = String(item?.title || "").toLowerCase();
+    const label = formatInvestigateShowLabel(item).toLowerCase();
+    if (!title.includes(q) && !label.includes(q)) continue;
+    const rank = title.startsWith(q) ? 0 : label.startsWith(q) ? 1 : 2;
+    scored.push({ item, rank, title });
+  }
+  scored.sort((a, b) => a.rank - b.rank || a.title.localeCompare(b.title));
+  return scored.slice(0, cap).map((entry) => entry.item);
+}
+
 export function reviewEvidenceSummary(rows, options = {}) {
   const list = Array.isArray(rows) ? rows : [];
   if (!list.length) return "";

@@ -309,9 +309,21 @@ If an older install still has a legacy custom prompt, Admin shows a one-click **
 
 Bind the host TV and movie libraries **read-write** into the container (`/tv` and `/movies`, or the same host path). Investigate Apply renames episode files on disk — a read-only bind will fail. Set **Admin → Connections → Library folders** (`tv_root` / `movies_root`), or host env `PROJECTIONIST_TV_MEDIA` / `PROJECTIONIST_MOVIE_MEDIA` (those win when set). Unraid/Automat defaults: `/mnt/user/data/media/tv` and `/mnt/user/data/media/movies`.
 
+### Investigate episodes (wrong file vs wrong show)
+
+**Admin → Libraries → Investigate episodes** checks what is *inside* the file. Scene names and Sonarr `SxxEyy` are a claim, not evidence.
+
+Type a show title to filter the list (keyboard arrows + Enter work), then optionally pick a season for a long series. With vision on (default when the chat LLM accepts images), fusion uses stills, runtime, and OpenSubtitles hash matches. **Apply** remaps same-show rows only (rename on disk, Sonarr ManualImport onto the proposed episode, Plex refresh). Undo covers the last apply batch.
+
+**Worked example — right show, wrong episode:** the filename says *Expedition Unknown* S17E5, but playback is a different episode of the same series. Leave vision on, scope that season, then Apply only rows where file stills match the proposed TMDB stills. Runtime alone is a weak signal when most episodes are the same length. Identify (below) may confirm the series and still leave the row Uncertain — that is expected.
+
+**Limits today:** one show per job (up to 80 files); no library-wide sweep; Apply will not quietly attach a file to a different series without an opt-in path. Prefer Investigate’s remap over “unmonitor and search again” in Sonarr — a new download can bring the same wrong release back.
+
 ### Identify (ACRCloud)
 
 **Admin → Libraries** has Identify settings and a **Test Identify** control next to Investigate. When Identify is on, a 12-second clip leaves the LAN so ACRCloud can listen. A miss does not rename files. **Test Identify** sends a silent clip (or a chosen file) and always reports that it did not rename anything — use it to check keys, not to fix a filename.
+
+Identify is usually **show-level** (theme or score). It does **not** pick season or episode. Use it when the file might be the wrong series entirely; use Investigate vision and OpenSubtitles hash when the series is right but the episode slot is wrong.
 
 ### After sync
 
