@@ -16,7 +16,6 @@ def register_auth_routes(app):
 
     AccessRequestApprovePayload = app_mod.AccessRequestApprovePayload
     AuthMeUpdatePayload = app_mod.AuthMeUpdatePayload
-    DATA_DIR = app_mod.DATA_DIR
     DEFAULT_TTL_SECONDS = app_mod.DEFAULT_TTL_SECONDS
     InviteConflict = app_mod.InviteConflict
     InviteCreatePayload = app_mod.InviteCreatePayload

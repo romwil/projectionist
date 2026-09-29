@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping
 
 from projectionist.connectors.http import request_bytes, request_json
 from projectionist.connectors.tmdb import TMDBClient
