@@ -18,6 +18,7 @@ import {
   applyButtonClass,
   confidenceLabel,
   identifyTestHonestyLine,
+  investigateSeasonOptions,
   reviewEvidenceSummary,
   selectedFileIds,
   selectionMap,
@@ -705,6 +706,7 @@ function InvestigatePanel({ focusHint }) {
   const [shows, setShows] = useState([]);
   const [showId, setShowId] = useState("");
   const [season, setSeason] = useState("");
+  const [seasonsWithFiles, setSeasonsWithFiles] = useState(null);
   const [useVision, setUseVision] = useState(true);
   const [job, setJob] = useState(null);
   const [applyJob, setApplyJob] = useState(null);
@@ -776,6 +778,38 @@ function InvestigatePanel({ focusHint }) {
     const match = shows.find((item) => String(item.title || "").toLowerCase().includes(needle));
     if (match) setShowId(String(match.id));
   }, [focusHint, shows]);
+
+  useEffect(() => {
+    if (!showId) {
+      setSeasonsWithFiles(null);
+      return undefined;
+    }
+    let cancelled = false;
+    setSeasonsWithFiles(null);
+    async function loadSeasons() {
+      try {
+        const body = await api(`/admin/investigate/seasons?show_id=${encodeURIComponent(showId)}`);
+        if (cancelled) return;
+        const list = Array.isArray(body?.seasons_with_files)
+          ? body.seasons_with_files
+          : Array.isArray(body?.seasons)
+            ? body.seasons
+            : [];
+        setSeasonsWithFiles(list);
+        setSeason((prev) => {
+          if (prev === "") return prev;
+          const n = Number(prev);
+          return list.map(Number).includes(n) ? prev : "";
+        });
+      } catch {
+        if (!cancelled) setSeasonsWithFiles([]);
+      }
+    }
+    loadSeasons();
+    return () => {
+      cancelled = true;
+    };
+  }, [showId]);
 
   useEffect(() => {
     if (!reviewOpen || !rows.length) return;
@@ -859,10 +893,7 @@ function InvestigatePanel({ focusHint }) {
   }
 
   const currentShow = shows.find((item) => String(item.id) === String(showId));
-  const seasonOptions = [];
-  if (currentShow?.season_count) {
-    for (let n = 1; n <= Number(currentShow.season_count); n += 1) seasonOptions.push(n);
-  }
+  const seasonOptions = investigateSeasonOptions(seasonsWithFiles, currentShow?.season_count);
 
   return (
     <section className="config-section" data-testid="episode-investigate-card" id="episode-investigate">
@@ -904,7 +935,7 @@ function InvestigatePanel({ focusHint }) {
             <option value="">All seasons</option>
             {seasonOptions.map((n) => (
               <option key={n} value={n}>
-                Season {n}
+                {n === 0 ? "Specials" : `Season ${n}`}
               </option>
             ))}
           </select>

@@ -150,6 +150,39 @@ def find_sonarr_series(client: Any, show: Mapping[str, Any]) -> Optional[Any]:
     return None
 
 
+def empty_files_message(
+    *,
+    season: Optional[int],
+    seasons_with_files: Sequence[int],
+) -> str:
+    """Honest empty inventory copy — Plex season_count can outrun Sonarr files."""
+    with_files = sorted({int(n) for n in seasons_with_files if int(n) >= 0})
+    # Prefer numbered seasons in suggestions; keep 0 (specials) if that is all we have.
+    numbered = [n for n in with_files if n > 0]
+    suggest = numbered or with_files
+    if season is None:
+        if suggest:
+            preview = ", ".join(f"Season {n}" for n in suggest[-3:])
+            return (
+                "No episode files found for that show in Sonarr. "
+                f"Seasons with files: {preview}."
+            )
+        return "No episode files found for that show in Sonarr."
+    season_i = int(season)
+    if season_i in with_files:
+        return f"Season {season_i} has no files in Sonarr."
+    if suggest:
+        latest = suggest[-1]
+        extras = ""
+        if len(suggest) > 1:
+            extras = f" or Season {suggest[-2]}" if suggest[-2] != latest else ""
+        return (
+            f"Season {season_i} has no files in Sonarr — try All seasons "
+            f"or Season {latest}{extras}."
+        )
+    return f"Season {season_i} has no files in Sonarr."
+
+
 def list_episode_files(
     settings: Any,
     show: Mapping[str, Any],
@@ -172,6 +205,7 @@ def list_episode_files(
     raw_episodes = client.episodes(series_id)
     by_file: Dict[int, List[Mapping[str, Any]]] = {}
     catalog: List[Dict[str, Any]] = []
+    seasons_with_files: set[int] = set()
     for episode in raw_episodes:
         if not isinstance(episode, Mapping):
             continue
@@ -180,8 +214,6 @@ def list_episode_files(
             ep_number = int(episode.get("episodeNumber"))
         except (TypeError, ValueError):
             continue
-        if season is not None and ep_season != int(season):
-            continue
         file_id = episode.get("episodeFileId")
         try:
             file_i = int(file_id) if file_id else 0
@@ -189,6 +221,9 @@ def list_episode_files(
             file_i = 0
         if file_i:
             by_file.setdefault(file_i, []).append(episode)
+            seasons_with_files.add(ep_season)
+        if season is not None and ep_season != int(season):
+            continue
         catalog.append(
             {
                 "season": ep_season,
@@ -199,6 +234,15 @@ def list_episode_files(
                 "has_file": bool(file_i),
             }
         )
+    for raw in raw_files:
+        if not isinstance(raw, Mapping):
+            continue
+        file_season = raw.get("seasonNumber")
+        try:
+            if file_season is not None:
+                seasons_with_files.add(int(file_season))
+        except (TypeError, ValueError):
+            pass
     root = str(getattr(settings, "sonarr_root_folder", "") or "")
     files: List[Dict[str, Any]] = []
     for raw in raw_files:
@@ -243,20 +287,15 @@ def list_episode_files(
         )
         if len(files) >= limit:
             break
-    seasons = sorted(
-        {
-            int(item["season"])
-            for item in catalog
-            if item.get("season") is not None and int(item["season"]) >= 0
-        }
-    )
+    seasons_sorted = sorted(seasons_with_files)
     return {
         "ok": True,
         "error": "",
         "series_id": series_id,
         "files": files,
         "catalog": catalog,
-        "seasons": seasons,
+        "seasons": seasons_sorted,
+        "seasons_with_files": seasons_sorted,
     }
 
 

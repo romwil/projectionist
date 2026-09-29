@@ -721,6 +721,21 @@ class CatalogSonarrTests(unittest.TestCase):
         self.assertEqual(len(inventory["files"]), 1)
         self.assertEqual(inventory["files"][0]["file_id"], 9)
         self.assertFalse(inventory["files"][0]["claimed"]["evidence"])
+        self.assertEqual(inventory["seasons_with_files"], [1, 2])
+
+        empty = list_episode_files(settings, _show(), season=18, client=_Client())
+        self.assertTrue(empty["ok"])
+        self.assertEqual(empty["files"], [])
+        self.assertEqual(empty["seasons_with_files"], [1, 2])
+
+    def test_empty_files_message_suggests_seasons_with_files(self) -> None:
+        from projectionist.library.episode_investigate.catalog import empty_files_message
+
+        msg = empty_files_message(season=18, seasons_with_files=[0, 1, 17])
+        self.assertIn("Season 18 has no files in Sonarr", msg)
+        self.assertIn("Season 17", msg)
+        self.assertIn("All seasons", msg)
+        self.assertIn("Season 17", empty_files_message(season=None, seasons_with_files=[17]))
 
     def test_missing_sonarr_is_error(self) -> None:
         from projectionist.library.episode_investigate.catalog import list_episode_files

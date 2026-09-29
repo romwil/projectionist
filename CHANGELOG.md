@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.37.15] — 2026-09-29
+
+Investigate’s show picker was a scroll-only native select on large Sonarr libraries, and picking a Plex season with no files (Expedition Unknown “Season 18” while disks stop at 17) returned a blunt empty error.
+
+### Highlights
+- **Find a show by typing.** Admin → Libraries → Investigate filters the show list as you type (arrows + Enter), instead of forcing a long native dropdown.
+- **Empty seasons tell the truth.** Scoping a season with no Sonarr files explains that and points at All seasons or a season that has files — the season list itself only offers seasons with files.
+
+### Added
+- Searchable Investigate show combobox (`InvestigateShowCombobox`) + `filterInvestigateShows`.
+- `GET /api/admin/investigate/seasons` — seasons that have Sonarr episode files for a show.
+- `empty_files_message` / `seasons_with_files` on Investigate inventory.
+
+### Changed
+- Investigate season dropdown defaults to All seasons and uses Sonarr file seasons (not bare Plex `season_count`).
+- HELP Investigate worked example scopes Season 17 for the Expedition Unknown mislabel case.
+
+### Verification
+- Focused: `tests/test_episode_investigate.py::CatalogSonarrTests`; `tests/test_investigate_routes.py` seasons route; `frontend/src/lib/episodeInvestigate.test.mjs`.
+- Automat: Sonarr Expedition Unknown has files through Season 17 (paths under `/tv/...` readable); Season 18 returns 0 files — Season 17 Investigate inventory returns 6 files.
+
 ## [1.37.14] — 2026-09-28
 
 Explore’s home hub crashed on long-lived Automat DBs after 1.37.11 — every rail showed Internal Server Error because migration 10 had already run before `library_episodes.added_at` was stuffed into phase4.
