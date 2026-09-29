@@ -4903,6 +4903,94 @@ class CraftFiltersTests(unittest.TestCase):
         )
         self.assertEqual([p["id"] for p in with_keys], ["1"])
 
+    def test_or_groups_dnf_round_trip_and_match(self) -> None:
+        from projectionist.live_channels.filters import (
+            apply_craft_filters_to_pool,
+            normalize_craft_filters,
+            program_matches_tunarr_filters,
+        )
+
+        craft = normalize_craft_filters(
+            {
+                "version": 2,
+                "groups": [
+                    {"genres": ["Horror"], "decade": 1970},
+                    {"genres": ["Science Fiction"], "decade": 1950},
+                ],
+            }
+        )
+        self.assertEqual(len(craft.iter_groups()), 2)
+        payload = craft.to_dict()
+        self.assertEqual(payload["version"], 2)
+        self.assertEqual(len(payload["groups"]), 2)
+        # Legacy flat single-group still flattens.
+        flat = normalize_craft_filters({"genres": ["Crime"]})
+        self.assertNotIn("version", flat.to_dict())
+        self.assertEqual(flat.to_dict()["genres"], ["Crime"])
+
+        seventies_horror = {
+            "id": "1",
+            "genres": ["Horror"],
+            "year": 1975,
+            "plex_keys": ["1"],
+        }
+        fifties_scifi = {
+            "id": "2",
+            "genres": ["Science Fiction"],
+            "year": 1958,
+            "plex_keys": ["2"],
+        }
+        modern_action = {
+            "id": "3",
+            "genres": ["Action"],
+            "year": 2010,
+            "plex_keys": ["3"],
+        }
+        self.assertTrue(program_matches_tunarr_filters(seventies_horror, craft))
+        self.assertTrue(program_matches_tunarr_filters(fifties_scifi, craft))
+        self.assertFalse(program_matches_tunarr_filters(modern_action, craft))
+        matched = apply_craft_filters_to_pool(
+            [seventies_horror, fifties_scifi, modern_action], craft
+        )
+        self.assertEqual([p["id"] for p in matched], ["1", "2"])
+
+    def test_maintain_refills_thin_lineups_only(self) -> None:
+        from projectionist.live_channels.filters import maintain_live_channel_lineups
+        from projectionist.live_channels.publish import set_station_meta
+
+        settings = MagicMock()
+        settings.features = MagicMock(live_channels_enabled=True)
+        settings.tunarr = MagicMock(station_meta={})
+        set_station_meta(
+            settings,
+            "thin-1",
+            source="motif",
+            programming_mode="shuffle",
+            craft_filters={"genres": ["Horror"]},
+        )
+        client = MagicMock()
+        client.list_channels.return_value = [
+            {"id": "thin-1", "name": "Horror", "number": 101, "programCount": 0, "duration": 0},
+            {"id": "fat-1", "name": "Mystery", "number": 100, "programCount": 40, "duration": 9_000_000},
+            {"id": "orphan", "name": "No recipe", "number": 102, "programCount": 0, "duration": 0},
+        ]
+        with patch(
+            "projectionist.live_channels.publish.refill_channel_lineup",
+            return_value={"ok": True, "program_count": 30, "note": "refilled"},
+        ) as refill:
+            result = maintain_live_channel_lineups(
+                client, settings, min_programs=5, min_duration_ms=60_000
+            )
+        self.assertEqual(result["count_refilled"], 1)
+        self.assertEqual(result["refilled"][0]["channel_id"], "thin-1")
+        refill.assert_called_once()
+        self.assertTrue(
+            any(s.get("reason") == "healthy" for s in result["skipped"])
+        )
+        self.assertTrue(
+            any(s.get("reason") == "no_recipe" for s in result["skipped"])
+        )
+
     def test_exclusion_skips_rating_keys(self) -> None:
         from projectionist.live_channels.filters import (
             CraftFilters,

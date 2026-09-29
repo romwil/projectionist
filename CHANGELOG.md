@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.37.13] — 2026-09-28
+
+Live Channels craft Settings looked empty on edit, stacking filters could not express alternate pools, and soft-cap stations still needed a daily manual Refill to stay on the Guide.
+
+### Highlights
+- **Edit reloads your filter stack.** Opening Settings on Kung Fu Theater / Creature Double Feature / Drive In shows the saved genre, decade, motif, and theme again — including values outside the facet top list.
+- **AND pools with OR alternates.** Narrow the pool is groups of AND conditions; **Add alternate pool (OR)** lets you list Horror ∩ 1970s *or* Sci-Fi ∩ Space (and so on). Existing stations keep their single-stack filters.
+- **Stations stay fed.** Idle task **Live channels feed** Refills empty or very thin lineups that have a stored recipe, so Live / Guide / Plex Live TV should not need a VCR-cord Refill ritual every day.
+
+### Fixed
+- Station Settings craft draft maps `craft_filters.motifs` / `themes` / decade / genre into the form; select options inject the current saved value when facet catalogs omit it.
+- Craft options refresh when Settings opens without a prior craft-options fetch.
+
+### Added
+- Craft filter DNF model (`version: 2` `groups`) in `normalize_craft_filters` / match / preview; legacy flat dicts remain one AND group.
+- Admin `LiveChannelsCraftFilters` editor with Motif field + Add alternate pool (OR).
+- Idle scheduler task `live_channels_feed` → `maintain_live_channel_lineups` (threshold: fewer than 5 programs or under 1 minute duration).
+
+### Changed
+- DESIGN Live craft filter decisions; HELP Live Channels craft + auto-feed copy.
+
+### Verification
+- Backend: `tests/test_live_channels.py` — `CraftFiltersTests` (OR groups + maintain thin lineups).
+- Frontend unit: `liveChannelsCraft.test.mjs` — edit-load motifs, version-2 groups, `withSelectedOption`.
+
 ## [1.37.12] — 2026-09-28
 
 Live Channels motif / taste Refill was leaving Mystery, Sci-Fi, and Creature Double Feature empty even though the library still matched titles — Tunarr’s catalog stopped exposing legacy `externalKey`, so craft rating-key intersects always missed.

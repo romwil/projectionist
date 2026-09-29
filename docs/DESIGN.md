@@ -151,6 +151,17 @@ Implementation lives in `LibraryWatchPage` / `TheaterPlayer` / `LibraryPlayer` +
 
 Implementation: `LivePlayer` + `buildFlexLowerThird` / `buildOsdModel` / `clamp_flex_progress_to_next` in `liveChannels.js` + `guide.py` + `frontend/src/styles/12-live.css`.
 
+### Live Channels craft filters (Admin)
+
+| Decision | Why |
+|----------|-----|
+| **DNF pools (OR of AND groups)** | Owners need to list *specific* stacks — e.g. Horror ∩ 1970s **or** Sci-Fi ∩ Space — not one rigid AND wall. Each “pool” is AND across genre / decade / motif / theme / rating; **Add alternate pool (OR)** adds another group. |
+| **Legacy flat `craft_filters` migrate to one pool** | Existing `station_meta` decade/genre/theme rows stay valid; single-group saves still write the flat dict. Multi-pool saves use `{ version: 2, groups: [...] }`. |
+| **Edit loads saved values into selects** | Facet top-N lists often omit a saved theme/motif; inject the current value as an `<option>` so Settings does not look empty. Motifs in `craft_filters.motifs` appear in the Motif filter field. |
+| **Idle auto-feed** | Soft-cap motif/taste stations and post-scan empties must not wait for a daily **Refill**. Scheduled task `live_channels_feed` tops up thin/empty lineups that have a stored recipe. |
+
+Implementation: `projectionist/live_channels/filters.py` + `LiveChannelsCraftFilters.jsx` + `liveChannelsCraft.js` + scheduler task `live_channels_feed`.
+
 ### Title surfaces (full page + mini sheet)
 
 Shared implementation: `TitleCtaBar` + `frontend/src/lib/titleCta.js`. Mini sheet, full title page, episode detail, and poster overlay must not invent parallel labels or icons.

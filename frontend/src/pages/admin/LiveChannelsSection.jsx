@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import InlineAlert from "../../components/InlineAlert";
+import LiveChannelsCraftFilters from "../../components/LiveChannelsCraftFilters";
 import OwnerNowPlayingBreakdown from "../../components/OwnerNowPlayingBreakdown";
 import SectionHelp from "../../components/SectionHelp";
 import {
@@ -321,6 +322,13 @@ export default function LiveChannelsSection({
     setStationCraftDraft(craftDraftFromStation(row));
     setStationSettingsOpen(channelId);
     setLiveChannelsTab("stations");
+    // Facet options power the Narrow-the-pool selects; refresh if missing so
+    // saved values always have a matching <option> (edit-load bug).
+    if (!liveCraftOptions?.filter_options) {
+      getLiveChannelsCraftOptions()
+        .then((opts) => setLiveCraftOptions(opts))
+        .catch(() => {});
+    }
   }
 
   async function refillStation(channelId, name) {
@@ -1569,152 +1577,83 @@ export default function LiveChannelsSection({
                             pickerTestId="live-channels-craft-collection-picker"
                           />
                         ) : null}
-                        <details
-                          className="live-channels-craft-filters live-channels-advanced"
-                          data-testid="live-channels-craft-filters"
-                        >
-                          <summary>Narrow the pool</summary>
-                          <p className="wizard-note">
-                            Additive filters (AND) — e.g. 1970s ∩ Action ∩ martial-arts theme ∩ Movies.
-                            Titles in the “{liveCraftOptions?.exclusion_collection_name || "NoLive"}”
-                            Plex collection are skipped.
-                          </p>
-                          <label>
-                            Genre
-                            <select
-                              data-testid="live-channels-craft-genre"
-                              value={liveCraft.genres?.[0] || ""}
-                              onChange={(event) =>
-                                setLiveCraft((prev) => ({
-                                  ...prev,
-                                  genres: event.target.value ? [event.target.value] : [],
-                                }))
+                        <LiveChannelsCraftFilters
+                          groups={
+                            liveCraft.filter_groups || [
+                              {
+                                genres: liveCraft.genres || [],
+                                decade: liveCraft.decade || "",
+                                theme: liveCraft.theme || "",
+                                motif: "",
+                                content_rating: liveCraft.content_rating || "",
+                              },
+                            ]
+                          }
+                          onChange={(filter_groups) =>
+                            setLiveCraft((prev) => ({
+                              ...prev,
+                              filter_groups,
+                              genres: filter_groups[0]?.genres || [],
+                              decade: filter_groups[0]?.decade || "",
+                              theme: filter_groups[0]?.theme || "",
+                              content_rating: filter_groups[0]?.content_rating || "",
+                            }))
+                          }
+                          filterOptions={liveCraftOptions?.filter_options || {}}
+                          exclusionCollectionName={
+                            liveCraftOptions?.exclusion_collection_name || "NoLive"
+                          }
+                          testIdPrefix="live-channels-craft"
+                        />
+                        <div className="wizard-actions">
+                          <button
+                            type="button"
+                            className="ghost"
+                            data-testid="live-channels-craft-preview"
+                            disabled={liveCraftPreviewBusy}
+                            onClick={async () => {
+                              setLiveCraftPreviewBusy(true);
+                              try {
+                                const result = await previewLiveChannelsCraft({
+                                  media_scope: liveCraft.media_scope || "both",
+                                  source: liveCraft.source || "",
+                                  collection_id:
+                                    liveCraft.source === "collection"
+                                      ? liveCraft.collection_id
+                                      : "",
+                                  craft_filters: buildCraftFiltersPayload(liveCraft),
+                                });
+                                setLiveCraftPreview(result);
+                              } catch (error) {
+                                setLiveCraftPreview({
+                                  matched: 0,
+                                  note: error.message || "Preview failed.",
+                                });
+                              } finally {
+                                setLiveCraftPreviewBusy(false);
+                              }
+                            }}
+                          >
+                            {liveCraftPreviewBusy ? "Counting…" : "Preview match count"}
+                          </button>
+                          {liveCraftPreview ? (
+                            <p
+                              className="wizard-note"
+                              data-testid="live-channels-craft-preview-result"
+                              data-fill-mode={liveCraftPreview.fill_mode || ""}
+                              data-soft-capped={
+                                liveCraftPreview.soft_capped ? "true" : "false"
                               }
                             >
-                              <option value="">Any genre</option>
-                              {(liveCraftOptions?.filter_options?.genres || []).map((row) => (
-                                <option key={row.value} value={row.value}>
-                                  {row.label}
-                                  {row.count ? ` (${row.count})` : ""}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label>
-                            Decade
-                            <select
-                              data-testid="live-channels-craft-decade"
-                              value={liveCraft.decade === "" || liveCraft.decade == null ? "" : String(liveCraft.decade)}
-                              onChange={(event) =>
-                                setLiveCraft((prev) => ({
-                                  ...prev,
-                                  decade: event.target.value,
-                                }))
-                              }
-                            >
-                              <option value="">Any decade</option>
-                              {(liveCraftOptions?.filter_options?.decades || []).map((row) => (
-                                <option key={row.value} value={String(row.value)}>
-                                  {row.label}
-                                  {row.count ? ` (${row.count})` : ""}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label>
-                            Theme
-                            <select
-                              data-testid="live-channels-craft-theme"
-                              value={liveCraft.theme || ""}
-                              onChange={(event) =>
-                                setLiveCraft((prev) => ({
-                                  ...prev,
-                                  theme: event.target.value,
-                                }))
-                              }
-                            >
-                              <option value="">Any theme</option>
-                              {(liveCraftOptions?.filter_options?.themes || []).map((row) => (
-                                <option key={row.value} value={row.value}>
-                                  {row.label}
-                                  {row.count ? ` (${row.count})` : ""}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label>
-                            Rating
-                            <select
-                              data-testid="live-channels-craft-rating"
-                              value={liveCraft.content_rating || ""}
-                              onChange={(event) =>
-                                setLiveCraft((prev) => ({
-                                  ...prev,
-                                  content_rating: event.target.value,
-                                }))
-                              }
-                            >
-                              <option value="">Any rating</option>
-                              {(liveCraftOptions?.filter_options?.content_ratings || []).map(
-                                (row) => (
-                                  <option key={row.value} value={row.value}>
-                                    {row.label}
-                                    {row.count ? ` (${row.count})` : ""}
-                                  </option>
-                                ),
-                              )}
-                            </select>
-                          </label>
-                          <div className="wizard-actions">
-                            <button
-                              type="button"
-                              className="ghost"
-                              data-testid="live-channels-craft-preview"
-                              disabled={liveCraftPreviewBusy}
-                              onClick={async () => {
-                                setLiveCraftPreviewBusy(true);
-                                try {
-                                  const result = await previewLiveChannelsCraft({
-                                    media_scope: liveCraft.media_scope || "both",
-                                    source: liveCraft.source || "",
-                                    collection_id:
-                                      liveCraft.source === "collection"
-                                        ? liveCraft.collection_id
-                                        : "",
-                                    craft_filters: buildCraftFiltersPayload(liveCraft),
-                                  });
-                                  setLiveCraftPreview(result);
-                                } catch (error) {
-                                  setLiveCraftPreview({
-                                    matched: 0,
-                                    note: error.message || "Preview failed.",
-                                  });
-                                } finally {
-                                  setLiveCraftPreviewBusy(false);
-                                }
-                              }}
-                            >
-                              {liveCraftPreviewBusy ? "Counting…" : "Preview match count"}
-                            </button>
-                            {liveCraftPreview ? (
-                              <p
-                                className="wizard-note"
-                                data-testid="live-channels-craft-preview-result"
-                                data-fill-mode={liveCraftPreview.fill_mode || ""}
-                                data-soft-capped={
-                                  liveCraftPreview.soft_capped ? "true" : "false"
-                                }
-                              >
-                                {craftSoftCapHonestyNote(liveCraftPreview)
-                                  || liveCraftPreview.note
-                                  || `Matched ${liveCraftPreview.matched ?? 0}`
-                                    + (liveCraftPreview.match_total
-                                      ? ` / ${liveCraftPreview.match_total}`
-                                      : "")}
-                              </p>
-                            ) : null}
-                          </div>
-                        </details>
+                              {craftSoftCapHonestyNote(liveCraftPreview)
+                                || liveCraftPreview.note
+                                || `Matched ${liveCraftPreview.matched ?? 0}`
+                                  + (liveCraftPreview.match_total
+                                    ? ` / ${liveCraftPreview.match_total}`
+                                    : "")}
+                            </p>
+                          ) : null}
+                        </div>
                       </div>
                       <div className="wizard-actions">
                         <button
@@ -2285,113 +2224,35 @@ export default function LiveChannelsSection({
                           </select>
                         </label>
                       ) : null}
-                      <details
-                        className="live-channels-craft-filters"
-                        data-testid={`live-channels-station-filters-${settingsStationId}`}
-                        open={Boolean(
-                          stationCraftDraft.genres?.[0] ||
-                            stationCraftDraft.decade ||
-                            stationCraftDraft.theme ||
-                            stationCraftDraft.content_rating,
-                        )}
-                      >
-                        <summary>Narrow the pool</summary>
-                        <p className="wizard-note">
-                          Additive filters (AND) saved on this station — e.g. 1970s ∩ Horror.
-                          Refill applies them to the lineup.
-                        </p>
-                        <label>
-                          Genre
-                          <select
-                            data-testid={`live-channels-station-genre-${settingsStationId}`}
-                            value={stationCraftDraft.genres?.[0] || ""}
-                            onChange={(event) =>
-                              setStationCraftDraft((prev) => ({
-                                ...prev,
-                                genres: event.target.value ? [event.target.value] : [],
-                              }))
-                            }
-                          >
-                            <option value="">Any genre</option>
-                            {(liveCraftOptions?.filter_options?.genres || []).map((row) => (
-                              <option key={row.value} value={row.value}>
-                                {row.label}
-                                {row.count ? ` (${row.count})` : ""}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label>
-                          Decade
-                          <select
-                            data-testid={`live-channels-station-decade-${settingsStationId}`}
-                            value={
-                              stationCraftDraft.decade === "" ||
-                              stationCraftDraft.decade == null
-                                ? ""
-                                : String(stationCraftDraft.decade)
-                            }
-                            onChange={(event) =>
-                              setStationCraftDraft((prev) => ({
-                                ...prev,
-                                decade: event.target.value,
-                              }))
-                            }
-                          >
-                            <option value="">Any decade</option>
-                            {(liveCraftOptions?.filter_options?.decades || []).map((row) => (
-                              <option key={row.value} value={String(row.value)}>
-                                {row.label}
-                                {row.count ? ` (${row.count})` : ""}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label>
-                          Theme
-                          <select
-                            data-testid={`live-channels-station-theme-${settingsStationId}`}
-                            value={stationCraftDraft.theme || ""}
-                            onChange={(event) =>
-                              setStationCraftDraft((prev) => ({
-                                ...prev,
-                                theme: event.target.value,
-                              }))
-                            }
-                          >
-                            <option value="">Any theme</option>
-                            {(liveCraftOptions?.filter_options?.themes || []).map((row) => (
-                              <option key={row.value} value={row.value}>
-                                {row.label}
-                                {row.count ? ` (${row.count})` : ""}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label>
-                          Rating
-                          <select
-                            data-testid={`live-channels-station-rating-${settingsStationId}`}
-                            value={stationCraftDraft.content_rating || ""}
-                            onChange={(event) =>
-                              setStationCraftDraft((prev) => ({
-                                ...prev,
-                                content_rating: event.target.value,
-                              }))
-                            }
-                          >
-                            <option value="">Any rating</option>
-                            {(liveCraftOptions?.filter_options?.content_ratings || []).map(
-                              (row) => (
-                                <option key={row.value} value={row.value}>
-                                  {row.label}
-                                  {row.count ? ` (${row.count})` : ""}
-                                </option>
-                              ),
-                            )}
-                          </select>
-                        </label>
-                      </details>
+                      <LiveChannelsCraftFilters
+                        groups={
+                          stationCraftDraft.filter_groups || [
+                            {
+                              genres: stationCraftDraft.genres || [],
+                              decade: stationCraftDraft.decade || "",
+                              theme: stationCraftDraft.theme || "",
+                              motif: "",
+                              content_rating: stationCraftDraft.content_rating || "",
+                            },
+                          ]
+                        }
+                        onChange={(filter_groups) =>
+                          setStationCraftDraft((prev) => ({
+                            ...prev,
+                            filter_groups,
+                            genres: filter_groups[0]?.genres || [],
+                            decade: filter_groups[0]?.decade || "",
+                            theme: filter_groups[0]?.theme || "",
+                            content_rating: filter_groups[0]?.content_rating || "",
+                          }))
+                        }
+                        filterOptions={liveCraftOptions?.filter_options || {}}
+                        exclusionCollectionName={
+                          liveCraftOptions?.exclusion_collection_name || "NoLive"
+                        }
+                        testIdPrefix={`live-channels-station-${settingsStationId}`}
+                        open
+                      />
                       <label>
                         Media scope
                         <select

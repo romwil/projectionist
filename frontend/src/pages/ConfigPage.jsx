@@ -509,6 +509,9 @@ export default function ConfigPage() {
     collection_id: "",
     collection_title: "",
     youth_safe: false,
+    filter_groups: [
+      { genres: [], decade: "", theme: "", motif: "", content_rating: "" },
+    ],
     genres: [],
     decade: "",
     theme: "",
