@@ -13,6 +13,8 @@ import {
   applyButtonClass,
   confidenceLabel,
   defaultRowSelected,
+  filterInvestigateShows,
+  formatInvestigateShowLabel,
   identifyTestHonestyLine,
   identifyTestRenamed,
   reviewEvidenceSummary,
@@ -23,6 +25,7 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const libraries = readFileSync(join(here, "../pages/admin/LibrariesSection.jsx"), "utf8");
+const showCombobox = readFileSync(join(here, "../components/InvestigateShowCombobox.jsx"), "utf8");
 
 const emptyEvidenceRows = [
   { id: "a", confidence: "uncertain", stills: [], identify: { found: false }, reasons: ["not enough independent evidence"] },
@@ -50,12 +53,38 @@ describe("episode investigate selection", () => {
   it("wires Investigate on Libraries, not ConfigPage, with LAN stills copy", () => {
     assert.match(libraries, /data-testid="episode-investigate-card"/);
     assert.match(libraries, /InvestigatePanel/);
+    assert.match(libraries, /InvestigateShowCombobox/);
     assert.match(libraries, /STILLS_LEAVE_LAN/);
     assert.match(libraries, /IDENTIFY_LEAVES_LAN/);
     assert.match(libraries, /SCENE_NAMES_NOT_EVIDENCE/);
     assert.match(libraries, /\/admin\/investigate\/start/);
     assert.equal(STILLS_LEAVE_LAN.includes("leave the LAN"), true);
     assert.equal(SCENE_NAMES_NOT_EVIDENCE.includes("not evidence"), true);
+  });
+
+  it("uses a searchable show combobox, not a scroll-only native select", () => {
+    assert.match(showCombobox, /role="combobox"/);
+    assert.match(showCombobox, /data-testid="investigate-show"/);
+    assert.match(showCombobox, /data-testid="investigate-show-list"/);
+    assert.match(showCombobox, /filterInvestigateShows/);
+    assert.match(showCombobox, /moveTypeaheadIndex/);
+    assert.doesNotMatch(libraries, /<select[\s\S]*data-testid="investigate-show"/);
+    assert.match(libraries, /data-testid="investigate-season"/);
+
+    const shows = [
+      { id: 1, title: "Expedition Unknown", year: 2015 },
+      { id: 2, title: "The Expanse", year: 2015 },
+      { id: 3, title: "Unknown", year: 2011 },
+      { id: 4, title: "Better Call Saul", year: 2015 },
+    ];
+    assert.equal(formatInvestigateShowLabel(shows[0]), "Expedition Unknown (2015)");
+    const hits = filterInvestigateShows(shows, "exp");
+    assert.deepEqual(
+      hits.map((item) => item.id),
+      [1, 2],
+    );
+    assert.equal(filterInvestigateShows(shows, "zzzz").length, 0);
+    assert.equal(filterInvestigateShows(shows, "", { limit: 2 }).length, 2);
   });
 
   it("says Identify leaves the LAN and that a test miss does not rename", () => {
