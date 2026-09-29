@@ -5,6 +5,9 @@ const FONT_SIZES = {
 };
 
 export const UI_THEME_STORAGE_KEY = "projectionist.ui_theme";
+/** Opt-in: soft-pause /watch when the tab or Space is backgrounded. Default off = keep playing. */
+export const PAUSE_WHEN_BACKGROUNDED_KEY = "projectionist.pause_when_backgrounded";
+export const UI_PREFS_CHANGED_EVENT = "projectionist:ui-prefs";
 
 const THEME_PREFS = new Set(["lights_up", "lights_down", "system"]);
 
@@ -119,4 +122,37 @@ export function themeControlIcon(pref, media) {
   const preference = normalizeUiTheme(pref);
   if (preference === "system") return "brightness_auto";
   return resolveEffectiveTheme(preference, media) === "lights_up" ? "light_mode" : "dark_mode";
+}
+
+function notifyUiPrefsChanged(detail = {}) {
+  try {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(UI_PREFS_CHANGED_EVENT, { detail }));
+    }
+  } catch {
+    // Non-DOM / test environments
+  }
+}
+
+/**
+ * Device-local playback pref. Default false: Mac Spaces / tab hide keep /watch playing.
+ * Opt-in true: soft-pause when backgrounded (HDMI kiosk / battery savers).
+ */
+export function loadPauseWhenBackgrounded(storage = globalThis.localStorage) {
+  try {
+    return storage?.getItem?.(PAUSE_WHEN_BACKGROUNDED_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+export function persistPauseWhenBackgrounded(enabled, storage = globalThis.localStorage) {
+  const value = Boolean(enabled);
+  try {
+    storage?.setItem?.(PAUSE_WHEN_BACKGROUNDED_KEY, value ? "true" : "false");
+  } catch {
+    // localStorage unavailable
+  }
+  notifyUiPrefsChanged({ pauseWhenBackgrounded: value });
+  return value;
 }
