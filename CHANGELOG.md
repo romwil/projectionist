@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.37.17] — 2026-09-29
+
+Play’s scrubber ignored drag-to-seek, and Unraid compose/rollout dropped ACRCloud / OpenSubtitles keys so Identify and Investigate hash lanes stayed dark after kit sync.
+
+### Highlights
+- **Drag the Play scrubber to seek.** On `/watch`, pulling the progress thumb jumps to that spot — buffered ranges seek in-place; the rest restart the Plex stream at the new offset.
+- **Identify and OpenSubtitles keys survive rollout.** Compose and `rollout.sh` forward ACRCloud and OpenSubtitles env into the container so Automat kit `.env` actually reaches the app.
+
+### Fixed
+- Library Play scrubber: controlled range (`SCRUB_MAX`), `scrubPctFromMs` / `msFromScrubPct`, buffered local seek via `canLocalSeekTo`, otherwise VOD session restart at offset.
+- Unraid / compose env forwarding for `ACRCLOUD_*`, `PROJECTIONIST_ACRCLOUD_*`, `PROJECTIONIST_OPENSUBTITLES_API_KEY`, and `OPENSUBTITLES_API_KEY` (`docker-compose.yml`, `docker-compose.unraid.yml`, `scripts/unraid-rollout.sh`, `scripts/unraid.env.example`).
+
+### Verification
+- Focused: `frontend/src/lib/theaterPlayer.test.mjs` (scrub pct ↔ ms, `canLocalSeekTo`).
+- Env keys listed in compose/rollout match kit `.env` names (secrets stay out of git).
+
 ## [1.37.16] — 2026-09-29
 
 Investigate Season 16 all-Uncertain runs showed vision confirming the show from generic dive stills without an episode vote, while OpenSubtitles/Identify were off on Automat.
