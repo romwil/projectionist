@@ -2107,3 +2107,20 @@ class SchemaMigrationsMixin:
             """
         )
 
+    def _migrate_library_episodes_added_at(self, conn: sqlite3.Connection) -> None:
+        """Ensure ``library_episodes.added_at`` exists on DBs that already ran phase4.
+
+        1.37.11 added ``added_at`` to ``_migrate_phase4_tables`` after migration 10
+        had already applied on long-lived installs, so Explore's fresh-episodes rail
+        (and the whole ``/api/library/feeds/hub`` aggregate) 500'd with
+        ``no such column: e.added_at``.
+        """
+        episode_cols = self._table_columns(conn, "library_episodes")
+        if not episode_cols:
+            return
+        if "added_at" not in episode_cols:
+            conn.execute("ALTER TABLE library_episodes ADD COLUMN added_at INTEGER")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_episodes_added_at ON library_episodes(added_at)"
+        )
+
