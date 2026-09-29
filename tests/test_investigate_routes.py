@@ -111,7 +111,7 @@ class InvestigateRoutesTests(unittest.TestCase):
             "seasons_with_files": [1, 17],
         }
         with patch(
-            "projectionist.library.episode_investigate.catalog.list_episode_files",
+            "projectionist.library.episode_investigate.catalog.list_seasons_with_files",
             return_value=fake,
         ):
             resp = self.client.get(f"/api/admin/investigate/seasons?show_id={show_id}")

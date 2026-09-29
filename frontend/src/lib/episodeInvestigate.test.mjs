@@ -18,7 +18,9 @@ import {
   RUNTIME_ONLY_LIKELY_BANNER,
   SCENE_NAMES_NOT_EVIDENCE,
   STILLS_LEAVE_LAN,
+  VISION_CATALOG_TRUNCATED,
   VISION_SERIES_ONLY_TIP,
+  VISION_STILL_COUNT,
   applyButtonClass,
   confidenceLabel,
   defaultRowSelected,
@@ -123,7 +125,10 @@ describe("episode investigate selection", () => {
     assert.match(libraries, /IDENTIFY_LEAVES_LAN/);
     assert.match(libraries, /SCENE_NAMES_NOT_EVIDENCE/);
     assert.match(libraries, /\/admin\/investigate\/start/);
-    assert.equal(STILLS_LEAVE_LAN.includes("leave the LAN"), true);
+    assert.equal(VISION_STILL_COUNT, 5);
+    assert.match(STILLS_LEAVE_LAN, /five stills leave the LAN/);
+    assert.match(VISION_CATALOG_TRUNCATED, /truncated/);
+    assert.match(libraries, /VISION_CATALOG_TRUNCATED/);
     assert.equal(SCENE_NAMES_NOT_EVIDENCE.includes("not evidence"), true);
   });
 
