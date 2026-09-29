@@ -1,21 +1,33 @@
-"""Additive craft filters + exclusion for Live Channels recipe fill.
+"""Craft filters + exclusion for Live Channels recipe fill.
 
-AND-stack genres, decade/year, motif/theme, and optional content rating on a
-base pool (media_scope / collection / taste). Exclusion collection
-titles (default Plex name ``NoLive``) are skipped during fill and starters.
+Composition model (DNF — disjunctive normal form):
+  - One or more **groups**. A title matches if **any** group matches (OR).
+  - Inside a group, dimensions combine with **AND** (genre ∩ decade ∩ theme…).
+  - Multi-value within one dimension (e.g. two genres) is **OR** within that dim.
+
+Legacy flat ``station_meta.craft_filters`` (no ``groups`` / ``version``) normalizes
+to a single AND-group and still round-trips as the flat dict.
+
+Exclusion collection titles (default Plex name ``NoLive``) are skipped during
+fill and starters.
 """
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Set
+from dataclasses import dataclass
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 from projectionist.live_channels.recipes import MediaScope, normalize_media_scope
 
 
 @dataclass(frozen=True)
 class CraftFilters:
-    """AND-combined craft filters persisted on ``station_meta`` / recipes."""
+    """Craft filter set: OR of AND-groups (see module docstring).
+
+    Flat fields describe the **primary** group so existing call sites
+    (``CraftFilters(genres=("Horror",), decade=1970)``) keep working.
+    Additional OR groups live in ``or_groups`` (each a flat filter dict).
+    """
 
     genres: tuple[str, ...] = ()
     decade: Optional[int] = None  # e.g. 1970 for the 1970s
@@ -24,16 +36,20 @@ class CraftFilters:
     motifs: tuple[str, ...] = ()
     themes: tuple[str, ...] = ()
     content_ratings: tuple[str, ...] = ()
+    # Extra AND-groups OR'd with the primary flat fields (version-2 payloads).
+    or_groups: tuple[Dict[str, Any], ...] = ()
 
     def to_dict(self) -> Dict[str, Any]:
-        payload = asdict(self)
-        payload["genres"] = list(self.genres)
-        payload["motifs"] = list(self.motifs)
-        payload["themes"] = list(self.themes)
-        payload["content_ratings"] = list(self.content_ratings)
-        return payload
+        groups = list(self.iter_group_dicts())
+        if len(groups) <= 1:
+            return groups[0] if groups else _empty_group_dict()
+        return {"version": 2, "groups": groups}
 
     def is_empty(self) -> bool:
+        return all(normalize_craft_filters(g).is_empty_primary() for g in self.iter_group_dicts())
+
+    def is_empty_primary(self) -> bool:
+        """True when the flat primary fields alone are empty (ignore or_groups)."""
         return not (
             self.genres
             or self.decade is not None
@@ -43,6 +59,51 @@ class CraftFilters:
             or self.themes
             or self.content_ratings
         )
+
+    def primary_dict(self) -> Dict[str, Any]:
+        return {
+            "genres": list(self.genres),
+            "decade": self.decade,
+            "year_from": self.year_from,
+            "year_to": self.year_to,
+            "motifs": list(self.motifs),
+            "themes": list(self.themes),
+            "content_ratings": list(self.content_ratings),
+        }
+
+    def iter_group_dicts(self) -> List[Dict[str, Any]]:
+        groups: List[Dict[str, Any]] = []
+        if not self.is_empty_primary():
+            groups.append(self.primary_dict())
+        for raw in self.or_groups:
+            if isinstance(raw, Mapping) and not _group_mapping_empty(raw):
+                groups.append(dict(raw))
+        return groups
+
+    def iter_groups(self) -> Tuple["CraftFilters", ...]:
+        """Normalized single-group CraftFilters (no nested or_groups) for matching."""
+        out: List[CraftFilters] = []
+        for raw in self.iter_group_dicts():
+            g = _normalize_flat_group(raw)
+            if not g.is_empty_primary():
+                out.append(g)
+        return tuple(out)
+
+
+def _empty_group_dict() -> Dict[str, Any]:
+    return {
+        "genres": [],
+        "decade": None,
+        "year_from": None,
+        "year_to": None,
+        "motifs": [],
+        "themes": [],
+        "content_ratings": [],
+    }
+
+
+def _group_mapping_empty(raw: Mapping[str, Any]) -> bool:
+    return _normalize_flat_group(raw).is_empty_primary()
 
 
 def _parse_str_tuple(value: Any) -> tuple[str, ...]:
@@ -74,9 +135,8 @@ def _optional_int(value: Any) -> Optional[int]:
         return None
 
 
-def normalize_craft_filters(data: Any = None) -> CraftFilters:
-    """Normalize API / station_meta filter payloads."""
-    raw = data if isinstance(data, Mapping) else {}
+def _normalize_flat_group(raw: Mapping[str, Any]) -> CraftFilters:
+    """Parse one AND-group (never reads version/groups/or_groups)."""
     decade = _optional_int(raw.get("decade"))
     if decade is not None:
         # Accept 70 / 1970 / "1970s"
@@ -98,6 +158,54 @@ def normalize_craft_filters(data: Any = None) -> CraftFilters:
         content_ratings=_parse_str_tuple(
             raw.get("content_ratings") or raw.get("content_rating")
         ),
+        or_groups=(),
+    )
+
+
+def normalize_craft_filters(data: Any = None) -> CraftFilters:
+    """Normalize API / station_meta filter payloads (legacy flat or version-2 groups)."""
+    if isinstance(data, CraftFilters):
+        return data
+    raw = data if isinstance(data, Mapping) else {}
+    groups_raw = raw.get("groups")
+    version = raw.get("version")
+    if isinstance(groups_raw, (list, tuple)) and (
+        version == 2 or (groups_raw and not _has_flat_filter_keys(raw))
+    ):
+        parsed = [_normalize_flat_group(g) for g in groups_raw if isinstance(g, Mapping)]
+        parsed = [g for g in parsed if not g.is_empty_primary()]
+        if not parsed:
+            return CraftFilters()
+        primary = parsed[0]
+        extras = tuple(g.primary_dict() for g in parsed[1:])
+        return CraftFilters(
+            genres=primary.genres,
+            decade=primary.decade,
+            year_from=primary.year_from,
+            year_to=primary.year_to,
+            motifs=primary.motifs,
+            themes=primary.themes,
+            content_ratings=primary.content_ratings,
+            or_groups=extras,
+        )
+    return _normalize_flat_group(raw)
+
+
+def _has_flat_filter_keys(raw: Mapping[str, Any]) -> bool:
+    return any(
+        key in raw
+        for key in (
+            "genres",
+            "decade",
+            "year_from",
+            "year_to",
+            "motifs",
+            "motif",
+            "themes",
+            "theme",
+            "content_ratings",
+            "content_rating",
+        )
     )
 
 
@@ -106,6 +214,21 @@ def _titleish(value: str) -> str:
     if not text:
         return ""
     return text.title() if text.islower() else text
+
+
+def _group_label(group: CraftFilters) -> str:
+    bits: List[str] = []
+    if group.motifs:
+        bits.append(_titleish(group.motifs[0]))
+    if group.genres:
+        bits.append(_titleish(group.genres[0]))
+    if group.decade is not None:
+        bits.append(f"{int(group.decade)}s")
+    if group.themes:
+        bits.append(_titleish(group.themes[0]))
+    if group.content_ratings:
+        bits.append(str(group.content_ratings[0]).strip().upper())
+    return " ∩ ".join(bits) if bits else ""
 
 
 def craft_filters_station_name(
@@ -124,6 +247,11 @@ def craft_filters_station_name(
         if isinstance(filters, CraftFilters)
         else normalize_craft_filters(filters)
     )
+    groups = craft.iter_groups()
+    if len(groups) > 1:
+        labels = [lab for lab in (_group_label(g) for g in groups) if lab]
+        if labels:
+            return " / ".join(labels)[:48]
     bits: List[str] = []
     motif_label = _titleish(motif) or (
         _titleish(craft.motifs[0]) if craft.motifs else ""
@@ -218,9 +346,60 @@ def library_items_matching_filters(
     media_scope: str = MediaScope.BOTH.value,
     limit: int = 500,
 ) -> Dict[str, Any]:
-    """Query Projectionist library for titles matching the AND filter stack."""
-    if db is None or filters.is_empty():
+    """Query Projectionist library for titles matching the filter set (OR of groups)."""
+    craft = (
+        filters
+        if isinstance(filters, CraftFilters)
+        else normalize_craft_filters(filters)
+    )
+    if db is None or craft.is_empty():
         return {"total_matched": 0, "items": [], "rating_keys": []}
+
+    groups = craft.iter_groups()
+    if len(groups) <= 1:
+        return _library_items_matching_one_group(
+            db,
+            groups[0] if groups else CraftFilters(),
+            media_scope=media_scope,
+            limit=limit,
+        )
+
+    # Union OR-groups; preserve first-seen order.
+    seen: Set[str] = set()
+    items: List[Dict[str, Any]] = []
+    keys: List[str] = []
+    total = 0
+    per_group_limit = max(limit, 100)
+    for group in groups:
+        part = _library_items_matching_one_group(
+            db, group, media_scope=media_scope, limit=per_group_limit
+        )
+        total += int(part.get("total_matched") or 0)
+        for item in part.get("items") or []:
+            key = str(item.get("rating_key") or "").strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            items.append(item)
+            keys.append(key)
+            if len(keys) >= limit:
+                break
+        if len(keys) >= limit:
+            break
+    return {
+        "total_matched": max(total, len(keys)),
+        "items": items[:limit],
+        "rating_keys": keys[:limit],
+    }
+
+
+def _library_items_matching_one_group(
+    db: Any,
+    filters: CraftFilters,
+    *,
+    media_scope: str,
+    limit: int,
+) -> Dict[str, Any]:
     from projectionist.library.query import LibraryFilters, query_library
 
     media_type = _media_type_for_scope(media_scope)
@@ -348,6 +527,13 @@ def preview_craft_match_count(
     total = int(lib.get("total_matched") or before_excl)
     if collection_keys is not None:
         total = before_excl
+    group_n = len(craft.iter_groups())
+    note = (
+        f"Matched {len(keys)} title(s)"
+        + (f" across {group_n} pools" if group_n > 1 else "")
+        + (f" · skipped {excluded_n} excluded" if excluded_n else "")
+        + "."
+    )
     return _with_honesty(
         {
             "matched": len(keys),
@@ -356,11 +542,7 @@ def preview_craft_match_count(
             "filters": craft.to_dict(),
             "collection_id": cid or None,
             "rating_keys_sample": keys[:12],
-            "note": (
-                f"Matched {len(keys)} title(s)"
-                + (f" · skipped {excluded_n} excluded" if excluded_n else "")
-                + "."
-            ),
+            "note": note,
         },
         matched=len(keys),
     )
@@ -394,16 +576,13 @@ def _rating_from_program(item: Mapping[str, Any]) -> str:
     return ""
 
 
-def program_matches_tunarr_filters(
-    item: Mapping[str, Any],
-    filters: CraftFilters,
-) -> bool:
-    """Best-effort Tunarr-row filter when library ratingKeys are unavailable."""
-    if filters.is_empty():
+def _program_matches_one_group(item: Mapping[str, Any], filters: CraftFilters) -> bool:
+    """Tunarr-row match for a single AND-group (multi-value dims are OR)."""
+    if filters.is_empty_primary():
         return True
     if filters.genres:
         blob = " ".join(_genres_from_program(item)).casefold()
-        if not all(g.casefold() in blob for g in filters.genres):
+        if not any(g.casefold() in blob for g in filters.genres):
             return False
     year = _year_from_program(item)
     if filters.year_from is not None:
@@ -423,6 +602,24 @@ def program_matches_tunarr_filters(
     return True
 
 
+def program_matches_tunarr_filters(
+    item: Mapping[str, Any],
+    filters: CraftFilters,
+) -> bool:
+    """Best-effort Tunarr-row filter when library ratingKeys are unavailable."""
+    craft = (
+        filters
+        if isinstance(filters, CraftFilters)
+        else normalize_craft_filters(filters)
+    )
+    if craft.is_empty():
+        return True
+    groups = craft.iter_groups()
+    if not groups:
+        return True
+    return any(_program_matches_one_group(item, g) for g in groups)
+
+
 def apply_craft_filters_to_pool(
     pool: Sequence[Mapping[str, Any]],
     filters: CraftFilters,
@@ -431,6 +628,11 @@ def apply_craft_filters_to_pool(
     excluded_rating_keys: Optional[Set[str]] = None,
 ) -> List[Dict[str, Any]]:
     """Filter a Tunarr program pool by craft filters + exclusion keys."""
+    craft = (
+        filters
+        if isinstance(filters, CraftFilters)
+        else normalize_craft_filters(filters)
+    )
     excluded = excluded_rating_keys or set()
     out: List[Dict[str, Any]] = []
     for item in pool:
@@ -446,8 +648,8 @@ def apply_craft_filters_to_pool(
         if allowed_rating_keys is not None:
             if not plex_keys or not (plex_keys & allowed_rating_keys):
                 continue
-        elif not filters.is_empty():
-            if not program_matches_tunarr_filters(item, filters):
+        elif not craft.is_empty():
+            if not program_matches_tunarr_filters(item, craft):
                 continue
         out.append(dict(item))
     return out
@@ -529,4 +731,132 @@ def craft_filter_options(db: Any = None) -> Dict[str, Any]:
         "motifs": motifs,
         "themes": themes,
         "content_ratings": ratings,
+    }
+
+
+def maintain_live_channel_lineups(
+    client: Any,
+    settings: Any = None,
+    *,
+    min_programs: int = 5,
+    min_duration_ms: int = 60_000,
+    limit: int = 40,
+    should_stop: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """Refill stations whose Tunarr lineups are empty or below threshold.
+
+    Used by the ``live_channels_feed`` idle task so Admin Refill is not a
+    daily ritual. Skips when Live Channels / Tunarr are off. Only stations with
+    a stored ``station_meta`` recipe are refilled.
+    """
+    from projectionist.live_channels.publish import (
+        recipe_from_station_meta,
+        refill_channel_lineup,
+    )
+
+    if settings is None or client is None:
+        return {
+            "ok": False,
+            "refilled": [],
+            "skipped": [],
+            "errors": [],
+            "note": "No settings or Tunarr client.",
+        }
+    features = getattr(settings, "features", None)
+    if not bool(getattr(features, "live_channels_enabled", False)):
+        return {
+            "ok": True,
+            "refilled": [],
+            "skipped": [],
+            "errors": [],
+            "skipped_reason": "live_channels_disabled",
+            "note": "Live Channels off.",
+        }
+
+    listed = [ch for ch in client.list_channels() if isinstance(ch, Mapping)]
+    refilled: List[Dict[str, Any]] = []
+    skipped: List[Dict[str, Any]] = []
+    errors: List[Dict[str, Any]] = []
+    threshold = max(1, int(min_programs or 5))
+    min_dur = max(0, int(min_duration_ms or 0))
+
+    for ch in listed[: max(1, min(int(limit or 40), 80))]:
+        if should_stop is not None:
+            try:
+                if should_stop():
+                    break
+            except Exception:  # noqa: BLE001
+                pass
+        cid = str(ch.get("id") or ch.get("uuid") or "").strip()
+        if not cid:
+            continue
+        name = str(ch.get("name") or "").strip() or f"Channel {ch.get('number')}"
+        try:
+            program_count = int(ch.get("programCount") or 0)
+        except (TypeError, ValueError):
+            program_count = 0
+        try:
+            duration_ms = int(ch.get("duration") or 0)
+        except (TypeError, ValueError):
+            duration_ms = 0
+        thin = program_count < threshold or (min_dur and duration_ms < min_dur)
+        if not thin:
+            skipped.append(
+                {
+                    "channel_id": cid,
+                    "name": name,
+                    "program_count": program_count,
+                    "reason": "healthy",
+                }
+            )
+            continue
+        stored = recipe_from_station_meta(
+            settings,
+            cid,
+            name=name,
+            number=int(ch.get("number") or 0) or 100,
+        )
+        if stored is None:
+            skipped.append(
+                {
+                    "channel_id": cid,
+                    "name": name,
+                    "program_count": program_count,
+                    "reason": "no_recipe",
+                }
+            )
+            continue
+        try:
+            result = refill_channel_lineup(
+                client,
+                cid,
+                settings=settings,
+                pad_lineups=True,
+                attach_continuity=True,
+            )
+            refilled.append(
+                {
+                    "channel_id": cid,
+                    "name": name,
+                    "previous_program_count": program_count,
+                    "program_count": int(result.get("program_count") or 0),
+                    "ok": bool(result.get("ok")),
+                    "note": str(result.get("note") or "")[:160],
+                }
+            )
+        except Exception as error:  # noqa: BLE001
+            errors.append({"channel_id": cid, "name": name, "error": str(error)[:200]})
+
+    return {
+        "ok": not errors or bool(refilled),
+        "refilled": refilled,
+        "skipped": skipped,
+        "errors": errors,
+        "count_refilled": len(refilled),
+        "count_errors": len(errors),
+        "note": (
+            f"Auto-fed {len(refilled)} thin/empty station(s)"
+            + (f" · {len(errors)} error(s)" if errors else "")
+            + "."
+        ),
     }

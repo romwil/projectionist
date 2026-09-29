@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  buildCraftFiltersPayload,
   collectionPublishButtonLabel,
   craftDraftFromStation,
+  filterGroupsFromCraftFilters,
   filterLiveCollections,
   findLiveCollection,
+  withSelectedOption,
 } from "./liveChannelsCraft.js";
 
 describe("liveChannelsCraft", () => {
@@ -57,15 +60,72 @@ describe("liveChannelsCraft", () => {
     );
   });
 
-  it("seeds station Settings draft with the Tunarr channel name", () => {
+  it("seeds station Settings draft with the Tunarr channel name and filters", () => {
     const draft = craftDraftFromStation({
       name: "Mystery",
       media_scope: "movies",
-      craft_filters: { genres: ["Thriller"], decade: 1970 },
+      craft_filters: { genres: ["Thriller"], decade: 1970, themes: ["noir"] },
     });
     assert.equal(draft.name, "Mystery");
     assert.equal(draft.media_scope, "movies");
     assert.deepEqual(draft.genres, ["Thriller"]);
     assert.equal(draft.decade, "1970");
+    assert.equal(draft.theme, "noir");
+    assert.equal(draft.filter_groups.length, 1);
+    assert.equal(draft.filter_groups[0].theme, "noir");
+  });
+
+  it("loads craft_filters.motifs into the filter group (edit-load)", () => {
+    const draft = craftDraftFromStation({
+      name: "Drive In",
+      craft_filters: { motifs: ["alien"], decade: 1950 },
+    });
+    assert.equal(draft.filter_groups[0].motif, "alien");
+    assert.equal(draft.filter_groups[0].decade, "1950");
+  });
+
+  it("loads version-2 OR groups from station_meta", () => {
+    const groups = filterGroupsFromCraftFilters({
+      version: 2,
+      groups: [
+        { genres: ["Horror"], decade: 1970 },
+        { genres: ["Science Fiction"], themes: ["space"] },
+      ],
+    });
+    assert.equal(groups.length, 2);
+    assert.equal(groups[0].genres[0], "Horror");
+    assert.equal(groups[1].theme, "space");
+  });
+
+  it("serializes OR groups as version-2 craft_filters", () => {
+    const payload = buildCraftFiltersPayload({
+      filter_groups: [
+        { genres: ["Horror"], decade: "1970", theme: "", motif: "", content_rating: "" },
+        { genres: ["Science Fiction"], decade: "", theme: "space", motif: "", content_rating: "" },
+      ],
+    });
+    assert.equal(payload.version, 2);
+    assert.equal(payload.groups.length, 2);
+    assert.equal(payload.groups[0].decade, 1970);
+    assert.deepEqual(payload.groups[1].themes, ["space"]);
+  });
+
+  it("keeps single-group payloads legacy-flat for migration", () => {
+    const payload = buildCraftFiltersPayload({
+      filter_groups: [
+        { genres: ["Crime"], decade: "", theme: "", motif: "", content_rating: "" },
+      ],
+    });
+    assert.equal(payload.version, undefined);
+    assert.deepEqual(payload.genres, ["Crime"]);
+  });
+
+  it("injects a saved select value missing from facet options", () => {
+    const rows = withSelectedOption(
+      [{ value: "Action", label: "Action", count: 3 }],
+      "martial arts",
+    );
+    assert.equal(rows[0].value, "martial arts");
+    assert.equal(rows.length, 2);
   });
 });

@@ -1482,6 +1482,30 @@ button.ghost.inline-link {
   border-top: 1px solid var(--border-subtle);
 }
 
+.live-channels-filter-group {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+  background: var(--surface-raised, transparent);
+}
+
+.live-channels-filter-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.live-channels-filter-or {
+  margin: 0.15rem 0 0;
+  text-align: center;
+  letter-spacing: 0.04em;
+  opacity: 0.8;
+}
+
 .live-channels-checkbox {
   display: flex;
   align-items: flex-start;

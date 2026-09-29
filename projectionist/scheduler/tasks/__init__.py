@@ -24,6 +24,7 @@ def register_all(scheduler: IdleScheduler) -> None:
         gap_analysis,
         health_metrics,
         keyword_theme_tagging,
+        live_channels_feed,
         llm_logline_enrichment,
         long_synopsis_enrichment,
         metadata_enrichment,
@@ -65,6 +66,7 @@ def register_all(scheduler: IdleScheduler) -> None:
     long_synopsis_enrichment.register(scheduler)
     title_relations_refresh.register(scheduler)
     keyword_theme_tagging.register(scheduler)
+    live_channels_feed.register(scheduler)
     purge_candidates.register(scheduler)
     weekly_digest.register(scheduler)
     member_newsletter.register(scheduler)
