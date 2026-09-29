@@ -22,7 +22,7 @@
   <Requires>Plex Media Server on your LAN. Optional: Radarr, Sonarr, Tautulli, Fanart.tv, and an LLM API key or Ollama on the Unraid host.</Requires>
   <Changes>
 ### 1.37.15
-Investigate show typeahead and honest empty-season copy when Sonarr has no files.
+Investigate show typeahead, honest empty seasons, and review guidance (runtime-only Likely unchecked).
 
 ### 1.37.14
 Fix Explore hub 500 on upgraded DBs missing library_episodes.added_at.
