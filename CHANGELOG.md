@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [1.37.7] — 2026-09-28
+
+Play keeps going when you slide to another Mac Space, and living-room keys get Minecraft A/S/D aliases.
+
+### Highlights
+- **Spaces no longer kill Play.** Fullscreen `/watch` keeps buffering when Chrome loses focus or you switch Spaces. Prefer pause-on-background for a kiosk? **Settings → Profile → Pause when backgrounded** (this browser only; off by default).
+- **A / S / D on the theater.** Same as J / K / L — skip back, play/pause, skip forward — so WASD hands stay home.
+
+### Fixed
+- `LibraryPlayer` no longer calls `stopSession` + clears `stream_url` on `visibilitychange` / tab hide (that left a dead paused stage after Mac Space switches).
+- Soft-pause on hide is gated behind `projectionist.pause_when_backgrounded` (default false). When on, remember `wasPlaying` and auto-resume on visible; `pagehide` / unmount still frees the transcoder.
+
+### Changed
+- `theaterKeyAction` maps `a`/`s`/`d` (case-insensitive) alongside `j`/`k`/`l`, Space, and arrows.
+- Profile Playback panel + HELP / DESIGN / WEB_UI shortcut copy.
+
+### Verification
+- Frontend unit: `theaterPlayer.test.mjs` (key map + pause-on-hide gate); `uiPrefs.test.mjs` (pause-when-backgrounded default false).
+
 ## [1.37.6] — 2026-09-28
 
 Library Play actually streams again — episode (and movie) HLS no longer dies on the first child playlist with a silent 502.

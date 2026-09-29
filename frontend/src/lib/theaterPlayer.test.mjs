@@ -4,17 +4,22 @@ import test from "node:test";
 import {
   RESUME_THRESHOLD_MS,
   SKIP_SECONDS,
+  canResumeAttachedStream,
   clampTime,
   createStageGesture,
   formatClockMs,
   libraryWatchPath,
   libraryWatchPopoutPath,
   libraryWatchTo,
+  notePlayingBeforeHide,
+  shouldAutoResumePlayback,
+  shouldPauseOnVisibilityHide,
   shouldResumeFromOffset,
   shouldSendProgress,
   skipDeltaForZone,
   skipZoneFromClientX,
   theaterHlsConfig,
+  theaterKeyAction,
 } from "./theaterPlayer.js";
 
 test("libraryWatchPath encodes the rating key", () => {
@@ -84,6 +89,27 @@ test("clampTime stays inside duration", () => {
   assert.equal(clampTime(140, 100), 100);
 });
 
+test("theaterKeyAction maps J/K/L and Minecraft A/S/D aliases", () => {
+  assert.equal(theaterKeyAction(" "), "toggle");
+  assert.equal(theaterKeyAction("k"), "toggle");
+  assert.equal(theaterKeyAction("K"), "toggle");
+  assert.equal(theaterKeyAction("s"), "toggle");
+  assert.equal(theaterKeyAction("S"), "toggle");
+  assert.equal(theaterKeyAction("j"), "skipBack");
+  assert.equal(theaterKeyAction("a"), "skipBack");
+  assert.equal(theaterKeyAction("A"), "skipBack");
+  assert.equal(theaterKeyAction("ArrowLeft"), "skipBack");
+  assert.equal(theaterKeyAction("l"), "skipForward");
+  assert.equal(theaterKeyAction("d"), "skipForward");
+  assert.equal(theaterKeyAction("D"), "skipForward");
+  assert.equal(theaterKeyAction("ArrowRight"), "skipForward");
+  assert.equal(theaterKeyAction("m"), "mute");
+  assert.equal(theaterKeyAction("c"), "captions");
+  assert.equal(theaterKeyAction("f"), "fullscreen");
+  assert.equal(theaterKeyAction("Escape"), "escape");
+  assert.equal(theaterKeyAction("x"), null);
+});
+
 test("stage gesture ignores the click that completes a double-tap", async () => {
   const singles = [];
   const doubles = [];
@@ -101,4 +127,45 @@ test("stage gesture ignores the click that completes a double-tap", async () => 
   handle({});
   await new Promise((resolve) => setTimeout(resolve, 60));
   assert.equal(singles.length, 1);
+});
+
+test("pause-on-hide is opt-in only; default keeps playing", () => {
+  assert.equal(
+    shouldPauseOnVisibilityHide({ pauseWhenBackgrounded: false, visibilityState: "hidden" }),
+    false,
+  );
+  assert.equal(
+    shouldPauseOnVisibilityHide({ pauseWhenBackgrounded: true, visibilityState: "hidden" }),
+    true,
+  );
+  assert.equal(
+    shouldPauseOnVisibilityHide({ pauseWhenBackgrounded: true, visibilityState: "visible" }),
+    false,
+  );
+});
+
+test("visibility hide remembers wasPlaying; visible resumes only when remembered", () => {
+  assert.equal(notePlayingBeforeHide({ playing: true, visibilityState: "hidden" }), true);
+  assert.equal(notePlayingBeforeHide({ playing: false, visibilityState: "hidden" }), false);
+  assert.equal(notePlayingBeforeHide({ playing: true, visibilityState: "visible" }), null);
+  assert.equal(shouldAutoResumePlayback({ wasPlaying: true, visibilityState: "visible" }), true);
+  assert.equal(shouldAutoResumePlayback({ wasPlaying: true, visibilityState: "hidden" }), false);
+  assert.equal(shouldAutoResumePlayback({ wasPlaying: false, visibilityState: "visible" }), false);
+});
+
+test("canResumeAttachedStream requires stream URL and media src", () => {
+  assert.equal(canResumeAttachedStream({ video: { currentSrc: "x" }, streamUrl: "" }), false);
+  assert.equal(canResumeAttachedStream({ video: null, streamUrl: "/api/stream" }), false);
+  assert.equal(
+    canResumeAttachedStream({ video: { currentSrc: "", src: "" }, streamUrl: "/api/stream" }),
+    false,
+  );
+  assert.equal(
+    canResumeAttachedStream({ video: { currentSrc: "blob:1" }, streamUrl: "/api/stream" }),
+    true,
+  );
+  assert.equal(
+    canResumeAttachedStream({ video: { currentSrc: "", src: "blob:2" }, streamUrl: "/api/stream" }),
+    true,
+  );
 });
