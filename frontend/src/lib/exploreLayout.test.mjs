@@ -65,8 +65,9 @@ describe("explore and recommendations responsive layout", () => {
   it("places unfinished leftover runtime and afterglow review rails on Explore", () => {
     assert.match(explorePage, /id="unfinished"/);
     assert.match(explorePage, /id="afterglow"/);
-    assert.match(explorePage, /getExploreFeedUnfinished/);
-    assert.match(explorePage, /getExploreFeedAfterglow/);
+    assert.match(explorePage, /getExploreHub/);
+    assert.match(explorePage, /"unfinished"/);
+    assert.match(explorePage, /"afterglow"/);
     assert.match(explorePage, /Leftover runtime you can still finish/);
     assert.match(explorePage, /Still warm — a few questions while the credits fade/);
     assert.match(explorePage, /Review while it's warm/);
@@ -75,7 +76,6 @@ describe("explore and recommendations responsive layout", () => {
     const revisitIdx = explorePage.indexOf('id="revisit-these"');
     assert.ok(unfinishedIdx > 0 && afterglowIdx > unfinishedIdx);
     assert.ok(revisitIdx > afterglowIdx);
-    assert.match(explorePage, /idleDays: 60/);
     const unfinishedBlock = explorePage.slice(unfinishedIdx, afterglowIdx);
     assert.match(unfinishedBlock, /Leftover runtime you can still finish/);
     assert.doesNotMatch(unfinishedBlock, /haven.t touched in over two months/);
@@ -85,7 +85,7 @@ describe("explore and recommendations responsive layout", () => {
 
   it("places tonight's table after continue watching and before leftover rails", () => {
     assert.match(explorePage, /id="tonight-table"/);
-    assert.match(explorePage, /getExploreFeedTonightTable/);
+    assert.match(explorePage, /"tonight_table"/);
     assert.match(explorePage, /two unwatched seats and one comfort/);
     const continueIdx = explorePage.indexOf('id="continue-watching"');
     const tonightIdx = explorePage.indexOf('id="tonight-table"');
@@ -101,24 +101,17 @@ describe("explore and recommendations responsive layout", () => {
     assert.doesNotMatch(tonightBlock, /Leftover runtime you can still finish/);
   });
 
-  it("puts tonight's double feature after the seasonal rail and omits Live", () => {
+  it("omits Live habits and Double Feature from Explore", () => {
     assert.doesNotMatch(explorePage, /WhatsOnTonightHabit/);
+    assert.doesNotMatch(explorePage, /TonightDoubleFeatureHabit/);
     assert.doesNotMatch(explorePage, /liveWatchHref/);
     assert.doesNotMatch(explorePage, /anniversaryLiveStarter/);
-    const seasonalIdx = explorePage.indexOf('id="seasonal-spotlight"');
-    const doubleIdx = explorePage.indexOf("<TonightDoubleFeatureHabit");
-    assert.ok(seasonalIdx > 0 && doubleIdx > seasonalIdx);
+    assert.doesNotMatch(styles, /\.tonight-double-feature\s*\{/);
   });
 
-  it("keeps tonight's double feature a compact pair", () => {
-    assert.match(styles, /\.tonight-double-feature \.double-feature-slot\s*\{[^}]*max-width:\s*9\.5rem/s);
-    assert.match(
-      styles,
-      /\.tonight-double-feature \.title-card\.compact \.poster-wrap\s*\{[^}]*max-height:\s*148px/s,
-    );
-    assert.match(
-      styles,
-      /\.tonight-double-feature \.double-feature-slot\s*\{[^}]*max-width:\s*7rem/s,
-    );
+  it("loads Explore from the hub payload and surfaces episode arrivals", () => {
+    assert.match(explorePage, /getExploreHub/);
+    assert.match(explorePage, /id="recently-added-episodes"/);
+    assert.match(explorePage, /Recently added episodes/);
   });
 });

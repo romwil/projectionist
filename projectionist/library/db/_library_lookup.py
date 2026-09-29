@@ -461,8 +461,8 @@ class LibraryLookupMixin:
                 INSERT INTO library_episodes (
                     show_item_id, rating_key, season_number, episode_number, title,
                     runtime_minutes, view_count, last_viewed_at, file_size, aired_at,
-                    view_offset_ms, duration_ms, plex_user_rating_stars
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    view_offset_ms, duration_ms, plex_user_rating_stars, added_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(rating_key) DO UPDATE SET
                     show_item_id=excluded.show_item_id,
                     season_number=excluded.season_number,
@@ -475,7 +475,8 @@ class LibraryLookupMixin:
                     aired_at=excluded.aired_at,
                     view_offset_ms=excluded.view_offset_ms,
                     duration_ms=excluded.duration_ms,
-                    plex_user_rating_stars=excluded.plex_user_rating_stars
+                    plex_user_rating_stars=excluded.plex_user_rating_stars,
+                    added_at=excluded.added_at
                 """
 
     @staticmethod
@@ -494,6 +495,7 @@ class LibraryLookupMixin:
             episode.get("view_offset_ms"),
             episode.get("duration_ms"),
             episode.get("plex_user_rating_stars"),
+            episode.get("added_at"),
         )
 
     def delete_episodes_for_show(self, show_item_id: int) -> None:

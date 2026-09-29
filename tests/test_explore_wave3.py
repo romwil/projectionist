@@ -18,6 +18,10 @@ from fastapi.testclient import TestClient
 from projectionist.agent.tools import ToolRegistry
 from projectionist.config_store import Settings
 from projectionist.library.db import DEFAULT_LENS_ID, Database
+from projectionist.library.explore_hub import (
+    get_explore_hub,
+    invalidate_explore_hub_cache,
+)
 from projectionist.library.feeds import (
     feed_afterglow,
     feed_continue_watching,
@@ -26,6 +30,7 @@ from projectionist.library.feeds import (
     feed_on_this_day,
     feed_recent_releases,
     feed_recently_added,
+    feed_recently_added_episodes,
     feed_revisit_these,
     feed_seasonal_spotlight,
     feed_unfinished,
@@ -153,6 +158,130 @@ class FeedHelperTests(unittest.TestCase):
             keys = [item["rating_key"] for item in payload["items"]]
             self.assertEqual(len(keys), len(set(keys)))
             self.assertEqual(set(keys), {"dup-a", "dup-b"})
+
+    def test_recently_added_episodes_prefers_freshest_episode_per_show(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            now = int(time.time())
+            show_a = db.upsert_library_item(
+                {
+                    "rating_key": "show-a",
+                    "media_type": "show",
+                    "title": "Severance",
+                    "year": 2022,
+                    "added_at": now - 90 * 86400,
+                }
+            )
+            show_b = db.upsert_library_item(
+                {
+                    "rating_key": "show-b",
+                    "media_type": "show",
+                    "title": "The Bear",
+                    "year": 2022,
+                    "added_at": now - 90 * 86400,
+                }
+            )
+            db.upsert_library_episodes(
+                [
+                    {
+                        "show_item_id": show_a,
+                        "rating_key": "ep-a-old",
+                        "season_number": 1,
+                        "episode_number": 1,
+                        "title": "Good News About Hell",
+                        "added_at": now - 20 * 86400,
+                    },
+                    {
+                        "show_item_id": show_a,
+                        "rating_key": "ep-a-new",
+                        "season_number": 2,
+                        "episode_number": 1,
+                        "title": "Hello, Ms. Cobel",
+                        "added_at": now - 3600,
+                    },
+                    {
+                        "show_item_id": show_b,
+                        "rating_key": "ep-b",
+                        "season_number": 3,
+                        "episode_number": 2,
+                        "title": "Tomorrow",
+                        "added_at": now - 7200,
+                    },
+                ]
+            )
+            payload = feed_recently_added_episodes(db, limit=12, days=30)
+            self.assertEqual(payload["feed"], "recently-added-episodes")
+            self.assertEqual(payload["total"], 2)
+            titles = [item["title"] for item in payload["items"]]
+            self.assertEqual(titles, ["Severance", "The Bear"])
+            self.assertEqual(payload["items"][0]["episode_label"], "S2E1 · Hello, Ms. Cobel")
+            self.assertEqual(payload["items"][0]["play_rating_key"], "ep-a-new")
+
+    def test_episode_added_at_sort_orders_shows_by_freshest_episode(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            now = int(time.time())
+            older_show = db.upsert_library_item(
+                {
+                    "rating_key": "older-show",
+                    "media_type": "show",
+                    "title": "Older Ep",
+                    "year": 2020,
+                    "added_at": now,
+                }
+            )
+            newer_show = db.upsert_library_item(
+                {
+                    "rating_key": "newer-show",
+                    "media_type": "show",
+                    "title": "Newer Ep",
+                    "year": 2020,
+                    "added_at": now - 10,
+                }
+            )
+            db.upsert_library_episodes(
+                [
+                    {
+                        "show_item_id": older_show,
+                        "rating_key": "ep-older",
+                        "season_number": 1,
+                        "episode_number": 1,
+                        "title": "Pilot",
+                        "added_at": now - 10_000,
+                    },
+                    {
+                        "show_item_id": newer_show,
+                        "rating_key": "ep-newer",
+                        "season_number": 1,
+                        "episode_number": 1,
+                        "title": "Pilot",
+                        "added_at": now - 100,
+                    },
+                ]
+            )
+            result = query_library(
+                db,
+                LibraryFilters(media_type="show", sort="episode_added_at", sort_dir="desc", limit=10),
+            )
+            self.assertEqual(
+                [item["title"] for item in result["items"]],
+                ["Newer Ep", "Older Ep"],
+            )
+
+    def test_explore_hub_caches_and_includes_episode_rail(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            invalidate_explore_hub_cache()
+            settings = Settings()
+            first = get_explore_hub(db, settings, rail_limit=8)
+            self.assertEqual(first["feed"], "explore-hub")
+            self.assertFalse(first.get("cached"))
+            self.assertIn("recently_added_episodes", first["rails"])
+            second = get_explore_hub(db, settings, rail_limit=8)
+            self.assertTrue(second.get("cached"))
+            invalidate_explore_hub_cache()
+            third = get_explore_hub(db, settings, rail_limit=8, bypass_cache=True)
+            self.assertFalse(third.get("cached"))
 
     def test_recent_releases_honest_empty_without_dates(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -1,20 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  getExploreFeedAfterglow,
-  getExploreFeedContinueWatching,
-  getExploreFeedDirectorSpotlight,
-  getExploreFeedGenreSpotlight,
-  getExploreFeedOnThisDay,
-  getExploreFeedRecentReleases,
-  getExploreFeedRecentlyAdded,
-  getExploreFeedRevisitThese,
-  getExploreFeedSeasonalSpotlight,
-  getExploreFeedTonightTable,
-  getExploreFeedUnfinished,
+  getExploreHub,
   getPickForMeFeed,
-  getLibraryHealth,
-  getLibraryOverview,
   queryLibrary,
 } from "../api/client";
 import HelpHint from "../components/HelpHint";
@@ -23,7 +11,6 @@ import LibrarySearchBar from "../components/LibrarySearchBar.jsx";
 import LibraryMediaCard from "../components/LibraryMediaCard";
 import MediaBrowseControls from "../components/MediaBrowseControls";
 import MediaBrowseResults from "../components/MediaBrowseResults";
-import TonightDoubleFeatureHabit from "../components/TonightDoubleFeatureHabit";
 import OwnerEmptyStateCta from "../components/OwnerEmptyStateCta";
 import PosterRailLoader from "../components/PosterRailLoader";
 import RecommendModal from "../components/RecommendModal";
@@ -33,6 +20,11 @@ import { chatFromRailHref } from "../lib/backNav.js";
 import { ROUTES, decadeYearRange, exploreSectionPath, libraryBrowsePath } from "../lib/browseLinks.js";
 import { formatLanguageName } from "../lib/languageNames.js";
 import { buildPulseStats, normalizeFeed } from "../lib/exploreFeeds.js";
+import {
+  hubRailState,
+  readExploreHubCache,
+  writeExploreHubCache,
+} from "../lib/exploreHubCache.js";
 import {
   buildMediaBrowseParams,
   mediaBrowseRowsToCsv,
@@ -156,7 +148,7 @@ function FeedRail({
             meta={
               cardMeta
                 ? cardMeta(item)
-                : item.resume_label || item.anniversary_context || item.why || null
+                : item.resume_label || item.anniversary_context || item.episode_label || item.why || null
             }
             onSeed={onSeed}
             onRecommend={onRecommend}
@@ -176,6 +168,40 @@ function matchesFacetBrowse(item, browse) {
 function exploreFacetPath(key, value) {
   const params = new URLSearchParams([[key, value]]);
   return `${ROUTES.explore}?${params}`;
+}
+
+function useExploreHub() {
+  const cached = typeof sessionStorage !== "undefined" ? readExploreHubCache() : null;
+  const [hub, setHub] = useState(() => ({
+    loading: !cached?.payload,
+    payload: cached?.payload || null,
+    error: "",
+    fromCache: Boolean(cached?.payload),
+  }));
+
+  useEffect(() => {
+    let cancelled = false;
+    getExploreHub({ limit: 12 })
+      .then((payload) => {
+        if (cancelled) return;
+        writeExploreHubCache(payload);
+        setHub({ loading: false, payload, error: "", fromCache: false });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setHub((prev) => ({
+          loading: false,
+          payload: prev.payload,
+          error: prev.payload ? "" : err.message || "Could not load Explore.",
+          fromCache: prev.fromCache,
+        }));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return hub;
 }
 
 function useFeed(loader, deps = []) {
@@ -220,42 +246,45 @@ export default function ExplorePage() {
   const [recommendItem, setRecommendItem] = useState(null);
   const [facetColumns, setFacetColumns] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const continueWatching = useFeed(() => getExploreFeedContinueWatching({ limit: 12 }), []);
-  const tonightTable = useFeed(() => getExploreFeedTonightTable({ limit: 3 }), []);
-  const unfinished = useFeed(() => getExploreFeedUnfinished({ limit: 12, idleDays: 60 }), []);
-  const afterglow = useFeed(() => getExploreFeedAfterglow({ limit: 12, days: 14 }), []);
-  const pickForMe = useFeed(() => getPickForMeFeed({ limit: 8 }), []);
-  const recentlyAdded = useFeed(() => getExploreFeedRecentlyAdded({ limit: 12, days: 30 }), []);
-  const recentReleases = useFeed(() => getExploreFeedRecentReleases({ limit: 12, days: 90 }), []);
-  const revisitThese = useFeed(() => getExploreFeedRevisitThese({ limit: 20, idleDays: 60 }), []);
-  const onThisDay = useFeed(() => getExploreFeedOnThisDay({ limit: 12 }), []);
-  const directorSpotlight = useFeed(() => getExploreFeedDirectorSpotlight({ limit: 12 }), []);
-  const genreSpotlight = useFeed(() => getExploreFeedGenreSpotlight({ limit: 12 }), []);
-  const seasonalSpotlight = useFeed(() => getExploreFeedSeasonalSpotlight({ limit: 12 }), []);
+  const hub = useExploreHub();
+  const continueWatching = hubRailState(hub.payload, "continue_watching", { loading: hub.loading, error: hub.error });
+  const tonightTable = hubRailState(hub.payload, "tonight_table", { loading: hub.loading, error: hub.error });
+  const unfinished = hubRailState(hub.payload, "unfinished", { loading: hub.loading, error: hub.error });
+  const afterglow = hubRailState(hub.payload, "afterglow", { loading: hub.loading, error: hub.error });
+  const recentlyAdded = hubRailState(hub.payload, "recently_added", { loading: hub.loading, error: hub.error });
+  const recentlyAddedEpisodes = hubRailState(hub.payload, "recently_added_episodes", {
+    loading: hub.loading,
+    error: hub.error,
+  });
+  const recentReleases = hubRailState(hub.payload, "recent_releases", { loading: hub.loading, error: hub.error });
+  const revisitThese = hubRailState(hub.payload, "revisit_these", { loading: hub.loading, error: hub.error });
+  const onThisDay = hubRailState(hub.payload, "on_this_day", { loading: hub.loading, error: hub.error });
+  const directorSpotlight = hubRailState(hub.payload, "director_spotlight", { loading: hub.loading, error: hub.error });
+  const genreSpotlight = hubRailState(hub.payload, "genre_spotlight", { loading: hub.loading, error: hub.error });
+  const seasonalSpotlight = hubRailState(hub.payload, "seasonal_spotlight", { loading: hub.loading, error: hub.error });
+  const pickForMe = useFeed(
+    () => (isYouth ? getPickForMeFeed({ limit: 8 }) : Promise.resolve({ items: [] })),
+    [isYouth],
+  );
   const facetBrowse = useMemo(() => parseMediaBrowse(searchParams), [searchParams]);
 
-  const [pulse, setPulse] = useState({ loading: true, stats: [], error: "" });
-  const [facetWall, setFacetWall] = useState({ loading: false, items: [], note: null, error: "", label: "" });
-
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([getLibraryOverview(), getLibraryHealth()])
-      .then(([overview, health]) => {
-        if (cancelled) return;
-        setPulse({ loading: false, stats: buildPulseStats(overview, health), error: "" });
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setPulse({
-          loading: false,
-          stats: [],
-          error: err.message || "Could not load library pulse.",
-        });
-      });
-    return () => {
-      cancelled = true;
+  const pulse = useMemo(() => {
+    if (hub.loading && !hub.payload) {
+      return { loading: true, stats: [], error: "" };
+    }
+    if (hub.error && !hub.payload) {
+      return { loading: false, stats: [], error: hub.error };
+    }
+    const overview = hub.payload?.overview;
+    const health = hub.payload?.health;
+    return {
+      loading: false,
+      stats: buildPulseStats(overview, health),
+      error: "",
     };
-  }, []);
+  }, [hub]);
+
+  const [facetWall, setFacetWall] = useState({ loading: false, items: [], note: null, error: "", label: "" });
 
   useEffect(() => {
     const genre = String(searchParams.get("genre") || "").trim();
@@ -397,7 +426,7 @@ export default function ExplorePage() {
             data-testid="explore-hub-browse-tv"
           >
             <h2>TV</h2>
-            <p>Page through every series with sort, filters, and columns</p>
+            <p>Fresh episodes first — then sort, filter, and page the rest</p>
           </Link>
           <Link
             to={ROUTES.relatedTitles}
@@ -558,7 +587,7 @@ export default function ExplorePage() {
         <ExploreSection
           id="recently-added"
           title="Recently Added"
-          subtitle="Fresh arrivals from the last 30 days"
+          subtitle="Fresh movie and show arrivals from the last 30 days"
           titleHref={exploreSectionPath("recently-added")}
           isOwner={isOwner}
           mediaTypeLinks={[
@@ -569,7 +598,7 @@ export default function ExplorePage() {
             },
             {
               mediaType: "show",
-              label: "TV",
+              label: "TV shows",
               href: exploreSectionPath("recently-added", { mediaType: "show" }),
             },
           ]}
@@ -585,6 +614,36 @@ export default function ExplorePage() {
             chatHref={
               recentlyAdded.items.length
                 ? chatFromRailHref({ railTitle: "Recently Added", items: recentlyAdded.items })
+                : null
+            }
+            {...recommendProps}
+          />
+        </ExploreSection>
+
+        <ExploreSection
+          id="recently-added-episodes"
+          title="Recently added episodes"
+          subtitle="Fresh episodes that just landed — not whole shows"
+          titleHref={libraryBrowsePath({ mediaType: "show" })}
+          isOwner={isOwner}
+          empty={
+            recentlyAddedEpisodes.error ||
+            (!recentlyAddedEpisodes.loading && !recentlyAddedEpisodes.items.length
+              ? recentlyAddedEpisodes.note
+              : null)
+          }
+        >
+          <FeedRail
+            testId="explore-recently-added-episodes-rail"
+            items={recentlyAddedEpisodes.items}
+            loading={recentlyAddedEpisodes.loading}
+            cardMeta={(item) => item.episode_label || null}
+            chatHref={
+              recentlyAddedEpisodes.items.length
+                ? chatFromRailHref({
+                    railTitle: "Recently added episodes",
+                    items: recentlyAddedEpisodes.items,
+                  })
                 : null
             }
             {...recommendProps}
@@ -708,8 +767,6 @@ export default function ExplorePage() {
             />
           </ExploreSection>
         ) : null}
-
-        {!isYouth ? <TonightDoubleFeatureHabit /> : null}
 
         <div className="explore-footer" data-testid="explore-footer">
         <ExploreSection
