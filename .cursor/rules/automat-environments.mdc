@@ -1,36 +1,57 @@
 ---
-description: Automat Unraid LAN hosts, rollout paths, UI verification — never trust the public hostname for version/health truth
+description: Automat Unraid LAN hosts + NON-NEGOTIABLE Hub→prod rollout via ssh automat (not Mac mount / not root@IP)
 alwaysApply: true
 ---
 
 # Automat environments (maintainer LAN)
 
-Authoritative hosts for the Automat Unraid deployment. Full human runbook:
+Authoritative hosts + prod rollout for the Automat Unraid stack. Full human runbook:
 [docs/ops/AUTOMAT.md](../../docs/ops/AUTOMAT.md).
 
 ## Source of truth (version / health / admin UI)
 
 | Role | URL | Notes |
 |------|-----|--------|
-| **Prod** | `http://10.10.1.202:8788` | Authoritative for version, health, and admin UI checks |
-| **smartmap** | `http://10.10.1.202:8790` | Household service. **Never stop it** for Projectionist QA. |
-| **QA sidecar** | `http://10.10.1.202:8792` | Ephemeral maintainer QA; Path B Hub pull, not host build. **Never bind `:8790`.** |
-| **Not truth** | `https://projectionist.automat.vip` (or ad-hoc SSH tunnels) | CDN/proxy lag; agents wrongly read stale versions here |
+| **Prod** | `http://10.10.1.202:8788` | Authoritative version, health, admin UI |
+| **Prod theater** | `http://10.10.1.202:8791` | Lobby lightbox (LAN only) — not for QA |
+| **smartmap** | `http://10.10.1.202:8790` | Household service. **Never stop** for Projectionist QA. |
+| **QA sidecar** | `http://10.10.1.202:8792` | Ephemeral; Path B Hub pull only. **Never bind `:8790`.** |
+| **Not truth** | `https://projectionist.automat.vip` (or ad-hoc SSH tunnels) | CDN/proxy lag; agents read stale versions here |
 
 - Local `localhost:8788` is often an **SSH tunnel to prod** — not local dev; never use for e2e (see [e2e-port-8788.mdc](e2e-port-8788.mdc)).
-- Appdata / rollout kit: `/mnt/user/appdata/projectionist` (Unraid); often mounted as `/Volumes/appdata/projectionist`.
-- Rollout: `cd /mnt/user/appdata/projectionist && ./rollout.sh X.Y.Z` (Hub **pull-only** — not a host build) — keep `rollout.sh` synced from `scripts/unraid-rollout.sh`.
+- Appdata kit: `/mnt/user/appdata/projectionist` on Unraid; macOS SMB mirror `/Volumes/appdata/projectionist` is for **editing kit files only**.
+
+## Agent prod rollout (NON-NEGOTIABLE)
+
+When the user asks to promote Automat prod after Hub has `romwil/projectionist:X.Y.Z`, run **exactly** this — do not rediscover from shell history:
+
+```bash
+ssh automat 'cd /mnt/user/appdata/projectionist && ./rollout.sh X.Y.Z'
+curl -s http://10.10.1.202:8788/api/health
+```
+
+`rollout.sh` is **Hub pull-only** (sync from `scripts/unraid-rollout.sh`). Never Path A host `docker build` for prod / CA proof.
+
+| Do | Do not |
+|----|--------|
+| SSH host alias **`automat`** | `root@10.10.1.202` (publickey denied) |
+| Run `rollout.sh` **on the Unraid host** via that SSH | `./rollout.sh` from `/Volumes/appdata/…` on the Mac (no `docker.sock`) |
+| Verify LAN `:8788/api/health` | Trust VIP CDN / random tunnels for version |
+| QA on `:8792` Path B Hub pull when needed | Stop smartmap / bind anything to `:8790` |
+| Prod promote **only when asked** | Stop prod `:8788` while iterating QA |
+
+Hub-first ship order: [release.mdc](release.mdc) / [docs/RELEASE.md](../../docs/RELEASE.md). Docs-only PRs do **not** need Automat pull.
 
 ## UI verification
 
 When the user reports UI missing/broken — **especially with a screenshot** — verify with **cursor-ide-browser** against the correct LAN host above. Do **not** argue from bundle string greps or “you didn’t scroll.” Trust scrolled-to-bottom + screenshot reports.
 
-Interactive UI QA campaigns: [interactive-ui-qa skill](../skills/interactive-ui-qa/SKILL.md) → target **QA `:8792`**, never prod `:8788`, never smartmap `:8790`. Adversarial UI proofs: [ui-testing-architecture.mdc](ui-testing-architecture.mdc).
+Interactive UI QA: [interactive-ui-qa skill](../skills/interactive-ui-qa/SKILL.md) → **QA `:8792`**, never prod `:8788`, never smartmap `:8790`. Adversarial UI proofs: [ui-testing-architecture.mdc](ui-testing-architecture.mdc).
 
 ## Ops UI (post-1.32.2)
 
-Weekly newsletter + Year in Review admin: **Admin → Ops → Newsletters** (`/admin/newsletters`). Mail = SMTP/Resend/Apprise transport only. See runbook for the historical Mail sticky-bar / iPad Safari footgun and YIR year defaults.
+Weekly newsletter + Year in Review: **Admin → Ops → Newsletters** (`/admin/newsletters`). Mail = SMTP/Resend/Apprise transport only. See runbook for Mail sticky-bar / iPad Safari footgun and YIR year defaults.
 
-## Release lifecycle
+## Release lifecycle (pointer)
 
-Follow [release.mdc](release.mdc) / [docs/RELEASE.md](../../docs/RELEASE.md) (**Hub-first**). CA proof = pull Hub tag onto QA **`:8792`** (Path B), not Path A host `docker build`. After Hub publish, spin down QA unless a campaign is active. **Never** stop prod `projectionist` / `:8788`. **Never** stop smartmap / `:8790` to free a port.
+Follow [release.mdc](release.mdc). CA proof = Hub pull onto QA **`:8792`** (Path B), not Path A host build. After Hub publish, spin down QA unless a campaign is active. **Never** stop prod / `:8788`. **Never** stop smartmap / `:8790`.

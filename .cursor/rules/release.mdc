@@ -18,7 +18,7 @@ A version is **not released** until Hub has `romwil/projectionist:X.Y.Z`. Order:
 2. **Hub** — `./scripts/docker-release.sh X.Y.Z`
 3. **GitHub** — merge PR → `main`, then tag `vX.Y.Z`, `gh release create`
 4. **CA proof** — pull Hub tag (Path B); **not** Path A host `docker build` on Automat
-5. **Prod** — only when asked: `rollout.sh X.Y.Z` (pull-only)
+5. **Prod** — only when asked: `ssh automat 'cd /mnt/user/appdata/projectionist && ./rollout.sh X.Y.Z'` (Hub pull-only; see [automat-environments.mdc](automat-environments.mdc) — not Mac mount, not `root@10.10.1.202`)
 
 
 ## Hard rules
