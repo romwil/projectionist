@@ -30,9 +30,69 @@ export const FFMPEG_MISSING =
 export const UNREADABLE_MEDIA =
   "Sonarr's files are not visible inside this container after mapping configured TV/Sonarr roots and Plex library locations.";
 
+/** Short legend above the Investigate review table. */
+export const REVIEW_GUIDANCE_INTRO =
+  "Filename SxxEyy is a claim. Fusion ranks rows from independent evidence only.";
+
+export const REVIEW_GUIDANCE_CERTAIN =
+  "Certain — two independent signals agree (runtime, OpenSubtitles hash, and/or vision episode). Safe default for Apply.";
+
+export const REVIEW_GUIDANCE_LIKELY =
+  "Likely — one strong signal (OpenSubtitles hash or confident vision). Starts selected unless it is runtime-only.";
+
+export const REVIEW_GUIDANCE_UNCERTAIN =
+  "Uncertain — not enough evidence. Stays off; expand Open stills and compare to TMDB before checking Apply.";
+
+export const REVIEW_GUIDANCE_APPLY =
+  "Apply remaps the same show only. Deselect any row you do not trust.";
+
+export const RUNTIME_ONLY_LIKELY_BANNER =
+  "Runtime-only Likely — verify stills before Apply (docu series often share runtimes). These rows start unchecked.";
+
+export const ALL_UNCERTAIN_NEXT_STEPS =
+  "Next steps: confirm an OpenSubtitles API key, leave vision on with a chat LLM that accepts images, expand Open stills and compare to TMDB, and do not Apply blindly.";
+
+export const OPEN_STILLS_LABEL = "Open stills";
+
+export function isRuntimeOnlyLikely(row) {
+  if (!row) return false;
+  if (String(row.confidence || "").toLowerCase() !== "likely") return false;
+  const signals = row.signals && typeof row.signals === "object" ? row.signals : null;
+  if (signals && typeof signals.runtime_only === "boolean") {
+    return signals.runtime_only;
+  }
+  if (signals) {
+    const hasRuntime = Boolean(signals.runtime_key);
+    const hasOshash = Boolean(signals.oshash_key);
+    const hasVision = Boolean(signals.vision_key);
+    if (hasRuntime && !hasOshash && !hasVision) return true;
+  }
+  const reasons = Array.isArray(row.reasons) ? row.reasons : [];
+  if (!reasons.length) return false;
+  const runtimeHit = reasons.some((item) => /runtime matches/i.test(String(item)));
+  const oshashHit = reasons.some((item) => /OpenSubtitles/i.test(String(item)));
+  const visionEpisode = reasons.some((item) => /vision says this series/i.test(String(item)));
+  return runtimeHit && !oshashHit && !visionEpisode;
+}
+
+export function hasRuntimeOnlyLikelyRows(rows) {
+  return (Array.isArray(rows) ? rows : []).some(isRuntimeOnlyLikely);
+}
+
+export function isAllUncertainBatch(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  if (!list.length) return false;
+  return list.every((row) => confidenceLabel(row.confidence) === "Uncertain");
+}
+
+export function rowHasReviewStills(row) {
+  return Boolean((row?.stills || []).length || (row?.tmdb_stills || []).length);
+}
+
 export function defaultRowSelected(row) {
   if (!row) return false;
   if (row.same_show === false) return false;
+  if (isRuntimeOnlyLikely(row)) return false;
   if (typeof row.selected_default === "boolean") return row.selected_default;
   const confidence = String(row.confidence || "").toLowerCase();
   return confidence === "certain" || confidence === "likely";
@@ -174,5 +234,8 @@ export function reviewEvidenceSummary(rows, options = {}) {
     bits.push("Identify did not return a match.");
   }
   bits.push("Fusion is done — not still running.");
+  if (uncertain === list.length) {
+    bits.push(ALL_UNCERTAIN_NEXT_STEPS);
+  }
   return bits.join(" ");
 }
