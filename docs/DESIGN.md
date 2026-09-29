@@ -135,6 +135,8 @@ These surfaces share one bar: **picture first, one gold primary, quiet chrome, L
 | **Keep playing when backgrounded** | Mac Spaces / tab hide must not kill the reel. Default: keep buffering. Opt-in **Pause when backgrounded** (Settings → Profile, browser-local) soft-pauses for kiosks. |
 | **Keyboard** | Space/`K`/`S` play-pause; `J`/`A`/← −15s; `L`/`D`/→ +15s; `F` fullscreen; `M` mute; `C` captions. |
 | **Mobile 390** | ≥44px primaries, safe-area insets, no Pop-out in the primary row, landscape immersive. |
+| **Phone landscape** | Detect phone by short/long edge (not width alone) so rotating to ~844×390 keeps `--phone` chrome. OSD uses `(orientation: landscape) and (max-height: 500px)` — compact title, hidden episode line, transport fully inside the shell with `env(safe-area-inset-*)`. |
+| **Fullscreen** | Prefer Fullscreen API on the theater root (video + OSD together). When the API is unavailable (common iOS Safari), CSS `theater-player--immersive` keeps custom controls; do not prefer `video.webkitEnterFullscreen` (it drops the OSD). |
 | **Honest empty / loading / error** | “warming the reel”, Resume/Start over, Try again + Open in Plex — never a blank stall or dead Play. |
 
 Implementation lives in `LibraryWatchPage` / `TheaterPlayer` / `LibraryPlayer` + `frontend/src/styles/13-watch.css`. Live TV keeps its cable-box OSD language; library Play borrows the dark stage and quiet transport.

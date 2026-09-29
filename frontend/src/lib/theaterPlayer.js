@@ -224,3 +224,67 @@ export function canResumeAttachedStream({ video, streamUrl } = {}) {
   if (!video) return false;
   return Boolean(video.currentSrc || video.src);
 }
+
+/** True when the document (or webkit) reports an active fullscreen element. */
+export function isDocumentFullscreen() {
+  if (typeof document === "undefined") return false;
+  return Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+}
+
+/**
+ * Enter/exit theater fullscreen on the shell that owns video + OSD.
+ * iOS Safari often rejects element Fullscreen API — fall back to a CSS
+ * immersive class on the root. Prefer that over `video.webkitEnterFullscreen`,
+ * which would hide custom OSD controls.
+ * @returns {"exit"|"enter"|"immersive"|"noop"}
+ */
+export function toggleTheaterFullscreen(root, { immersiveClass = "theater-player--immersive" } = {}) {
+  if (!root) return "noop";
+  const hasDocument = typeof document !== "undefined";
+  const immersive = Boolean(immersiveClass && root.classList?.contains?.(immersiveClass));
+
+  if (hasDocument && isDocumentFullscreen()) {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if (typeof exit === "function") {
+      try {
+        const result = exit.call(document);
+        if (result?.catch) result.catch(() => {});
+      } catch {
+        // ignore
+      }
+    }
+    if (immersiveClass) root.classList?.remove?.(immersiveClass);
+    return "exit";
+  }
+
+  if (immersive && immersiveClass) {
+    root.classList.remove(immersiveClass);
+    return "exit";
+  }
+
+  const request = root.requestFullscreen || root.webkitRequestFullscreen;
+  if (hasDocument && typeof request === "function") {
+    try {
+      const result = request.call(root);
+      if (result?.then) {
+        result.catch(() => {
+          if (immersiveClass) root.classList?.add?.(immersiveClass);
+        });
+        return "enter";
+      }
+      return "enter";
+    } catch {
+      if (immersiveClass) {
+        root.classList?.add?.(immersiveClass);
+        return "immersive";
+      }
+    }
+  }
+
+  if (immersiveClass) {
+    root.classList?.add?.(immersiveClass);
+    return "immersive";
+  }
+  return "noop";
+}
+

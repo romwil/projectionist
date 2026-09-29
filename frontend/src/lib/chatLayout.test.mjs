@@ -6,8 +6,11 @@ import {
   CHAT_SCROLL_REGION_CLASS,
   MESSAGE_CONTAINMENT_CLASSES,
   NEW_REPLY_CHIP_CLASS,
+  PHONE_PLAY_MAX_LONG_EDGE,
+  PHONE_PLAY_MAX_SHORT_EDGE,
   PHONE_PLAY_MAX_WIDTH,
   holdableShelfPages,
+  isCompactPlayViewport,
   isHorizontallyContained,
   isPhonePlayViewport,
   messageTextContainmentStyle,
@@ -86,11 +89,21 @@ describe("new reply chip placement", () => {
 });
 
 describe("1.36.5 whisper/tonight chat home", () => {
-  it("treats 390 as a phone Play viewport and wider panes as desktop", () => {
+  it("treats phone portrait and landscape as phone Play viewports", () => {
     assert.equal(PHONE_PLAY_MAX_WIDTH, 390);
+    assert.equal(PHONE_PLAY_MAX_SHORT_EDGE, 500);
+    assert.equal(PHONE_PLAY_MAX_LONG_EDGE, 932);
+    // Legacy one-arg width-only (portrait reference / unknown height).
     assert.equal(isPhonePlayViewport(390), true);
     assert.equal(isPhonePlayViewport(844), false);
     assert.equal(isPhonePlayViewport(1024), false);
+    // Explicit WxH: portrait and landscape iPhone-class stay phone.
+    assert.equal(isPhonePlayViewport(390, 844), true);
+    assert.equal(isPhonePlayViewport(844, 390), true);
+    assert.equal(isPhonePlayViewport(932, 430), true);
+    assert.equal(isPhonePlayViewport(1024, 768), false);
+    assert.equal(isCompactPlayViewport(1024, 768), true);
+    assert.equal(isCompactPlayViewport(1440, 900), false);
   });
 
   it("picks a resume chip for the latest other thread", () => {

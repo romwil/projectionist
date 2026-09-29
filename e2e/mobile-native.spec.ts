@@ -8,6 +8,7 @@ import {
 } from "./fixtures/api-mocks";
 import { completeOnboardingViaApi } from "./fixtures/helpers";
 import {
+  NATIVE_LANDSCAPE_VIEWPORT,
   NATIVE_VIEWPORT,
   assertMinTapSize,
   assertNoHorizontalPageOverflow,
@@ -367,6 +368,63 @@ test.describe("Native mobile — member living-room", () => {
     await page.goto("/chat");
     await expect(page.getByTestId("composer-input")).toBeVisible();
     await assertPinnedNearViewportBottom(page.locator("form.composer"), NATIVE_VIEWPORT.height);
+  });
+
+  test("phone landscape Play keeps ±15 and play inside the shell", async ({ page }) => {
+    await page.route("**/api/library/playback/**", async (route) => {
+      const url = new URL(route.request().url());
+      if (route.request().method() === "POST" && url.pathname.endsWith("/start")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            session_id: "sess-mobile-land",
+            stream_url: "/api/library/playback/sess-mobile-land/index.m3u8",
+            duration_ms: 3_600_000,
+            view_offset_ms: 0,
+            title: "Alien",
+            can_resume: false,
+            next_episode: null,
+            poster_url: "",
+            rating_key: "plex-348",
+            plex_watch_url: "https://app.plex.tv/desktop/#!/server/mock/details?key=x",
+          }),
+        });
+        return;
+      }
+      if (url.pathname.endsWith(".m3u8")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/vnd.apple.mpegurl",
+          body: "#EXTM3U\n#EXTINF:10.0,\nseg0.ts\n#EXT-X-ENDLIST\n",
+        });
+        return;
+      }
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+    });
+
+    await page.setViewportSize(NATIVE_LANDSCAPE_VIEWPORT);
+    await page.goto("/watch/plex-348");
+    await expect(page.getByTestId("library-player")).toBeVisible();
+    await expect(page.locator(".library-watch")).toHaveAttribute("data-play-phone", "true");
+    await page.mouse.move(40, 40);
+    const skipForward = page.getByTestId("library-skip-forward");
+    const playToggle = page.getByTestId("library-play-toggle");
+    await expect(skipForward).toBeVisible();
+    await expect(playToggle).toBeVisible();
+    await assertMinTapSize(skipForward);
+    await assertMinTapSize(playToggle);
+    await assertNoHorizontalPageOverflow(page);
+
+    const inside = await page.evaluate(() => {
+      const shell = document.querySelector("[data-testid='watch-theater-shell']");
+      const transport = document.querySelector("[data-testid='library-osd-transport']");
+      if (!shell || !transport) return false;
+      const s = shell.getBoundingClientRect();
+      const t = transport.getBoundingClientRect();
+      return t.top >= s.top - 1 && t.bottom <= s.bottom + 1 && t.left >= s.left - 1 && t.right <= s.right + 1;
+    });
+    expect(inside).toBe(true);
   });
 
   test("Live watch chrome is thumb-reachable and does not bounce horizontally", async ({ page }) => {

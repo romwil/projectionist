@@ -160,13 +160,66 @@ test.describe("In-app library Play", () => {
         videoH: video.getBoundingClientRect().height,
         docScrollH: document.documentElement.scrollHeight,
         innerH: window.innerHeight,
+        phone: document.querySelector(".library-watch")?.getAttribute("data-play-phone"),
       };
     });
     expect(metrics).not.toBeNull();
     expect(metrics!.shellH).toBeLessThanOrEqual(metrics!.innerH + 1);
     expect(metrics!.videoH).toBeLessThanOrEqual(metrics!.innerH + 1);
     expect(metrics!.docScrollH).toBeLessThanOrEqual(metrics!.innerH + 2);
+    expect(metrics!.phone).toBe("true");
     await expect(page.getByTestId("library-osd-more")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Pop-out" })).toHaveCount(0);
+  });
+
+  test("phone landscape keeps OSD transport inside the safe viewport", async ({ page }) => {
+    // iPhone-class landscape — width is the long edge (unreachable under old max-width:390 rules).
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.goto("/watch/plex-949");
+    await expect(page.getByTestId("library-player")).toBeVisible();
+    await expect(page.locator(".library-watch")).toHaveAttribute("data-play-phone", "true");
+
+    // Nudge OSD visible (idle may hide it).
+    await page.getByTestId("library-player").click({ position: { x: 40, y: 40 } });
+    const transport = page.getByTestId("library-osd-transport");
+    await expect(transport).toBeVisible();
+    await expect(page.getByTestId("library-skip-forward")).toBeVisible();
+    await expect(page.getByTestId("library-play-toggle")).toBeVisible();
+
+    const layout = await page.evaluate(() => {
+      const shell = document.querySelector("[data-testid='watch-theater-shell']");
+      const osd = document.querySelector("[data-testid='library-player-osd']");
+      const transportEl = document.querySelector("[data-testid='library-osd-transport']");
+      const skip = document.querySelector("[data-testid='library-skip-forward']");
+      const play = document.querySelector("[data-testid='library-play-toggle']");
+      if (!shell || !osd || !transportEl || !skip || !play) return null;
+      const shellBox = shell.getBoundingClientRect();
+      const osdBox = osd.getBoundingClientRect();
+      const transportBox = transportEl.getBoundingClientRect();
+      const skipBox = skip.getBoundingClientRect();
+      const playBox = play.getBoundingClientRect();
+      return {
+        shellBottom: shellBox.bottom,
+        osdBottom: osdBox.bottom,
+        transportBottom: transportBox.bottom,
+        skipH: skipBox.height,
+        skipW: skipBox.width,
+        playH: playBox.height,
+        playW: playBox.width,
+        transportFullyInShell:
+          transportBox.top >= shellBox.top - 1 &&
+          transportBox.bottom <= shellBox.bottom + 1 &&
+          transportBox.left >= shellBox.left - 1 &&
+          transportBox.right <= shellBox.right + 1,
+      };
+    });
+    expect(layout).not.toBeNull();
+    expect(layout!.transportFullyInShell).toBe(true);
+    expect(layout!.osdBottom).toBeLessThanOrEqual(layout!.shellBottom + 1);
+    expect(layout!.skipH).toBeGreaterThanOrEqual(43);
+    expect(layout!.skipW).toBeGreaterThanOrEqual(43);
+    expect(layout!.playH).toBeGreaterThanOrEqual(43);
+    expect(layout!.playW).toBeGreaterThanOrEqual(43);
     await expect(page.getByRole("button", { name: "Pop-out" })).toHaveCount(0);
   });
 
