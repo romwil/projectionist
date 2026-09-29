@@ -320,6 +320,54 @@ def _prefer_real_titles_over_flex(
     }
 
 
+def clamp_flex_progress_to_next(
+    slots: Mapping[str, Optional[Dict[str, Any]]],
+    *,
+    now: Optional[float] = None,
+) -> Dict[str, Optional[Dict[str, Any]]]:
+    """Clamp Continuity/flex ``ends_at`` to the next real program's start.
+
+    Tunarr often synthesizes a ~6-hour ``{Station} · Up next`` guideFlexTitle
+    window. Movie channels then show multi-hour "left" countdowns while the
+    next title is only minutes away. Progress / remaining must follow the
+    upcoming content edge, not the placeholder block.
+    """
+    now_prog = slots.get("now") if isinstance(slots.get("now"), Mapping) else None
+    next_prog = slots.get("next") if isinstance(slots.get("next"), Mapping) else None
+    if not now_prog or not now_prog.get("is_flex") or not next_prog:
+        return {
+            "now": dict(now_prog) if now_prog else None,
+            "next": dict(next_prog) if next_prog else None,
+        }
+    if next_prog.get("is_flex"):
+        return {
+            "now": dict(now_prog),
+            "next": dict(next_prog),
+        }
+    next_start = _to_epoch_seconds(next_prog.get("start") or next_prog.get("started_at"))
+    if next_start is None:
+        return {"now": dict(now_prog), "next": dict(next_prog)}
+    ends_at = _to_epoch_seconds(now_prog.get("ends_at") or now_prog.get("stop"))
+    start = _to_epoch_seconds(now_prog.get("started_at") or now_prog.get("start"))
+    if ends_at is not None and float(ends_at) <= float(next_start) + 1.0:
+        return {"now": dict(now_prog), "next": dict(next_prog)}
+    ts = time.time() if now is None else float(now)
+    clamped = dict(now_prog)
+    clamped["stop"] = float(next_start)
+    progress = program_airing_progress(
+        start,
+        float(next_start),
+        now=ts,
+        is_paused=bool(clamped.get("is_paused")),
+    )
+    clamped["started_at"] = progress["started_at"]
+    clamped["ends_at"] = progress["ends_at"]
+    clamped["seconds_elapsed"] = progress["seconds_elapsed"]
+    clamped["seconds_remaining"] = progress["seconds_remaining"]
+    clamped["percent"] = progress["percent"]
+    return {"now": clamped, "next": dict(next_prog)}
+
+
 def _relabel_flex_program_placeholders(programs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Keep guideFlexTitle pads labeled as flex (do not steal the next episode).
 
@@ -597,10 +645,21 @@ def pick_now_and_next(
         airing.sort(key=lambda row: row[0])
         _start, index, program = airing[-1]
         now_prog = _normalize_program(program, now=ts)
+        # Prefer the next real title — skip chained flex / guideFlexTitle pads
+        # so OSD "Up next" and countdowns are not stuck on another placeholder.
+        flex_fallback: Optional[Dict[str, Any]] = None
         for j in range(index + 1, len(ordered)):
-            next_prog = _normalize_program(ordered[j], now=ts)
-            if next_prog:
-                break
+            candidate = _normalize_program(ordered[j], now=ts)
+            if not candidate:
+                continue
+            if candidate.get("is_flex"):
+                if flex_fallback is None:
+                    flex_fallback = candidate
+                continue
+            next_prog = candidate
+            break
+        if next_prog is None:
+            next_prog = flex_fallback
     elif first_future is not None:
         next_prog = _normalize_program(first_future, now=ts)
     if now_prog is None and next_prog is None and ordered:
@@ -608,7 +667,7 @@ def pick_now_and_next(
         now_prog = _normalize_program(ordered[0], now=ts)
         if len(ordered) > 1:
             next_prog = _normalize_program(ordered[1], now=ts)
-    return {"now": now_prog, "next": next_prog}
+    return clamp_flex_progress_to_next({"now": now_prog, "next": next_prog}, now=ts)
 
 
 def _youth_allows_program(
@@ -828,6 +887,7 @@ def build_on_now_snapshot(
                     if guide_next and not guide_next.get("is_flex"):
                         slots["next"] = guide_next
         slots = _prefer_real_titles_over_flex(slots)
+        slots = clamp_flex_progress_to_next(slots, now=ts)
         channels.append(
             _channel_row_from_guide(
                 cid,

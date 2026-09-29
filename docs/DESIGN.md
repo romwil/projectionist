@@ -145,9 +145,11 @@ Implementation lives in `LibraryWatchPage` / `TheaterPlayer` / `LibraryPlayer` +
 |----------|-----|
 | **Cable OSD motion-reveal** | Ch± / CC / Fullscreen stay behind idle hide — living-room chrome, not a permanent HUD. |
 | **Flex lower-third (persistent)** | While Continuity/pad fills the air (`osd.isFlex`), a quiet strip shows **Up next on {channel}**, the next title (`nextDisplay`), and a soft countdown from `seconds_remaining`. It is **not** gated on OSD idle hide; it vanishes when flex clears. No buttons on the strip. |
+| **Flex countdown = next content edge** | Tunarr’s synthetic ~6h `· Up next` guideFlexTitle block must not drive “left” / lower-third timers. Clamp flex `ends_at` to the next non-flex program’s start (skip chained flex pads). |
+| **Cable OSD fits the player** | Full OSD (channel, progress, Next, actions) sizes within the player below Live chrome — no viewport clipping of the Next line; safe-area bottom inset; inner scroll only if still too tall. |
 | **Fraunces / DM Sans + amber** | Same live theater type and accent as the rest of Lights Down — delightful, not noisy. |
 
-Implementation: `LivePlayer` + `buildFlexLowerThird` / `buildOsdModel` in `liveChannels.js` + `frontend/src/styles/12-live.css`.
+Implementation: `LivePlayer` + `buildFlexLowerThird` / `buildOsdModel` / `clamp_flex_progress_to_next` in `liveChannels.js` + `guide.py` + `frontend/src/styles/12-live.css`.
 
 ### Title surfaces (full page + mini sheet)
 

@@ -300,14 +300,16 @@
   left: max(1rem, env(safe-area-inset-left));
   right: max(1rem, env(safe-area-inset-right));
   bottom: max(1.35rem, env(safe-area-inset-bottom));
-  z-index: 2;
+  /* Above idle-hidden OSD (visibility/opacity) so the strip stays readable. */
+  z-index: 4;
   pointer-events: none;
   transition: bottom 220ms ease, opacity 280ms ease;
   animation: live-flex-l3-in 420ms ease both;
 }
 
 .live-flex-l3.is-osd-up {
-  bottom: max(10.5rem, min(32%, 14rem));
+  bottom: max(11.5rem, min(38%, 16rem));
+  z-index: 2;
 }
 
 .live-flex-l3-inner {
@@ -392,29 +394,42 @@
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 0 max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom))
+  /* Fit inside the player (below Live chrome), not a 28% slice that clips Next/actions. */
+  max-height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 0 max(1rem, env(safe-area-inset-right)) max(1.25rem, env(safe-area-inset-bottom))
     max(1rem, env(safe-area-inset-left));
   transform: translateY(110%);
   opacity: 0;
-  transition: transform 220ms ease, opacity 220ms ease;
+  visibility: hidden;
+  transition: transform 220ms ease, opacity 220ms ease, visibility 0s linear 220ms;
   pointer-events: none;
-  max-height: 28%;
   z-index: 3;
 }
 
 .live-osd.is-visible {
   transform: translateY(0);
   opacity: 1;
+  visibility: visible;
   pointer-events: auto;
+  transition: transform 220ms ease, opacity 220ms ease, visibility 0s linear 0s;
 }
 
 .live-osd-inner {
   background: linear-gradient(180deg, rgba(10, 12, 18, 0.55), rgba(8, 9, 14, 0.92));
   border: 1px solid var(--live-line);
   border-radius: 14px 14px 10px 10px;
-  padding: 0.85rem 1rem 0.75rem;
+  padding: 0.85rem 1rem max(0.85rem, env(safe-area-inset-bottom));
   box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(12px);
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
 }
 
 .live-osd-channel {
@@ -503,12 +518,13 @@
 .live-osd-next {
   margin: 0.45rem 0 0;
   font-size: var(--text-sm);
+  line-height: 1.35;
   color: var(--muted);
   cursor: default;
   width: fit-content;
   max-width: 100%;
   border-radius: 6px;
-  padding: 0.1rem 0.2rem;
+  padding: 0.15rem 0.25rem 0.2rem;
   margin-left: -0.2rem;
   transition: color 140ms ease, background 140ms ease;
 }

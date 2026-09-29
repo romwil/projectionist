@@ -782,10 +782,12 @@ export default function LivePlayer({
         </div>
       ) : null}
 
+      {/* Flex strip mounts on isFlex alone — never nested under showOsd / osdVisible. */}
       {flexL3 ? (
         <aside
           className={`live-flex-l3${showOsd ? " is-osd-up" : ""}`}
           data-testid="live-flex-lower-third"
+          data-osd-up={showOsd ? "1" : "0"}
           aria-live="polite"
         >
           <div className="live-flex-l3-inner">
