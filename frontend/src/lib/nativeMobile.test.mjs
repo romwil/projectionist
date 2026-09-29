@@ -141,6 +141,18 @@ describe("native mobile member contract (phone 768)", () => {
       /\.title-detail-drawer-close\s*\{[^}]*min-height:\s*var\(--tap-min\)/s,
     );
   });
+
+  it("keeps library Play landscape OSD reachable via short-edge media query", () => {
+    assert.match(
+      styles,
+      /@media \(orientation: landscape\) and \(max-height: 500px\)[\s\S]*?\.library-watch--phone/s,
+    );
+    assert.match(styles, /\.theater-player--immersive/);
+    assert.doesNotMatch(
+      styles,
+      /@media \(max-width: 390px\) and \(orientation: landscape\)/,
+    );
+  });
 });
 
 describe("native mobile admin contract (phone 768)", () => {

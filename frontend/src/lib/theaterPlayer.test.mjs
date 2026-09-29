@@ -25,6 +25,8 @@ import {
   skipZoneFromClientX,
   theaterHlsConfig,
   theaterKeyAction,
+  toggleTheaterFullscreen,
+  isDocumentFullscreen,
 } from "./theaterPlayer.js";
 
 test("libraryWatchPath encodes the rating key", () => {
@@ -209,4 +211,27 @@ test("canResumeAttachedStream requires stream URL and media src", () => {
     canResumeAttachedStream({ video: { currentSrc: "", src: "blob:2" }, streamUrl: "/api/stream" }),
     true,
   );
+});
+
+test("toggleTheaterFullscreen uses immersive CSS when requestFullscreen is missing", () => {
+  const root = {
+    classList: {
+      _set: new Set(),
+      contains(name) {
+        return this._set.has(name);
+      },
+      add(name) {
+        this._set.add(name);
+      },
+      remove(name) {
+        this._set.delete(name);
+      },
+    },
+  };
+  assert.equal(isDocumentFullscreen(), false);
+  assert.equal(toggleTheaterFullscreen(root), "immersive");
+  assert.equal(root.classList.contains("theater-player--immersive"), true);
+  assert.equal(toggleTheaterFullscreen(root), "exit");
+  assert.equal(root.classList.contains("theater-player--immersive"), false);
+  assert.equal(toggleTheaterFullscreen(null), "noop");
 });
