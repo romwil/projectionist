@@ -1,6 +1,36 @@
 {
-  "generated_at": "2026-09-29T00:09:44Z",
+  "generated_at": "2026-09-29T00:19:04Z",
   "releases": [
+    {
+      "version": "1.37.8",
+      "date": "2026-09-28",
+      "summary": "Coming back to chat lands at the bottom of the thread — no more scroll-through of the whole history.",
+      "highlights": [
+        "**Chat opens already at the bottom.** Leaving for Explore/Admin and returning (or switching threads) jumps straight to the latest messages instead of animating from the top of a long transcript.",
+        "**Smooth scroll stays for live replies.** The “new reply” chip and in-conversation turn pins still ease into place; only restore / remount jumps are instant."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "`useChatScroll` treated an async thread hydrate (`prevCount` 0 → N) as a live new turn and called `scrollToLatestTurn(\"smooth\")` from `scrollTop = 0`, so returning to `/chat` visually scrolled the entire history.",
+            "Session switches reset the restore counter and jump with `scrollTop` assignment (`applyChatScroll` instant path) instead of smooth `scrollTo`."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "`isTranscriptRestore` / `applyChatScroll` helpers in `chatScroll.js`; restore and streaming stick-bottom use instant scroll; NewReplyChip keeps smooth."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Frontend unit: `chatScroll.test.mjs` — `isTranscriptRestore`, `applyChatScroll` instant vs smooth."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.7",
       "date": "2026-09-28",

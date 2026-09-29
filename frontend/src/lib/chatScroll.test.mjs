@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   CHAT_SCROLL_PADDING,
+  applyChatScroll,
   computeFollowScrollTop,
   isScrolledAwayFromBottom,
+  isTranscriptRestore,
   resolveAutoScroll,
   resolveLatestTurnAnchorIndex,
 } from "./chatScroll.js";
@@ -168,5 +170,55 @@ describe("resolveLatestTurnAnchorIndex", () => {
   it("returns -1 for an empty transcript", () => {
     assert.equal(resolveLatestTurnAnchorIndex([]), -1);
     assert.equal(resolveLatestTurnAnchorIndex(null), -1);
+  });
+});
+
+describe("isTranscriptRestore", () => {
+  it("treats empty→populated as restore (remount / navigate back / thread load)", () => {
+    assert.equal(isTranscriptRestore({ prevCount: 0, nextCount: 12 }), true);
+    assert.equal(isTranscriptRestore({ prevCount: 0, nextCount: 1 }), true);
+  });
+
+  it("does not treat live incremental turns as restore", () => {
+    assert.equal(isTranscriptRestore({ prevCount: 4, nextCount: 5 }), false);
+    assert.equal(isTranscriptRestore({ prevCount: 12, nextCount: 12 }), false);
+  });
+
+  it("does not treat an empty transcript as restore", () => {
+    assert.equal(isTranscriptRestore({ prevCount: 0, nextCount: 0 }), false);
+    assert.equal(isTranscriptRestore({ prevCount: 3, nextCount: 0 }), false);
+  });
+});
+
+describe("applyChatScroll", () => {
+  it("assigns scrollTop instantly for restore (no smooth scrollTo)", () => {
+    const calls = [];
+    const el = {
+      scrollTop: 0,
+      scrollTo(opts) {
+        calls.push(opts);
+      },
+    };
+    applyChatScroll(el, 2400, "instant");
+    assert.equal(el.scrollTop, 2400);
+    assert.equal(calls.length, 0);
+  });
+
+  it("assigns scrollTop for auto the same as instant", () => {
+    const el = { scrollTop: 0, scrollTo() {} };
+    applyChatScroll(el, 900, "auto");
+    assert.equal(el.scrollTop, 900);
+  });
+
+  it("uses smooth scrollTo only when explicitly requested", () => {
+    const calls = [];
+    const el = {
+      scrollTop: 0,
+      scrollTo(opts) {
+        calls.push(opts);
+      },
+    };
+    applyChatScroll(el, 1800, "smooth");
+    assert.deepEqual(calls, [{ top: 1800, behavior: "smooth" }]);
   });
 });
