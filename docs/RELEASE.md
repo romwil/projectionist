@@ -18,7 +18,7 @@ A version is **not released** until Docker Hub has `romwil/projectionist:X.Y.Z` 
 | **1. Hub** | `./scripts/docker-release.sh X.Y.Z` → `romwil/projectionist:{X.Y.Z,X.Y,latest}` | `docker buildx imagetools inspect romwil/projectionist:X.Y.Z` succeeds |
 | **2. GitHub** | Merge PR → `main`, annotated tag `vX.Y.Z`, `gh release create` | Tag + release match Hub version |
 | **3. CA proof** | On Automat (or equivalent), **pull** that Hub tag onto QA / a disposable container — same path Unraid CA will use | Running image digest matches Hub; **not** a Path A host `docker build` |
-| **4. Prod** | `cd …/appdata/projectionist && ./rollout.sh X.Y.Z` (pull-only) | `/api/health` + `/app/.build-info` show `X.Y.Z` |
+| **4. Prod** | `ssh automat 'cd /mnt/user/appdata/projectionist && ./rollout.sh X.Y.Z'` (pull-only; not Mac mount) | LAN `http://10.10.1.202:8788/api/health` + `/app/.build-info` show `X.Y.Z` |
 
 Order notes:
 
@@ -84,7 +84,7 @@ Historical note: git has **no record of a deleted patch-release script** — onl
 ./scripts/docker-release.sh X.Y.Z
 # PR merge → tag vX.Y.Z on main → gh release create
 # CA proof: pull Hub tag (Path B) — not Automat host build
-# Prod if asked: cd …/appdata/projectionist && ./rollout.sh X.Y.Z
+# Prod if asked: ssh automat 'cd /mnt/user/appdata/projectionist && ./rollout.sh X.Y.Z'
 ```
 
 Recent dot line on `1.33.x`: `1.33.1` (fail-safe watcher), `1.33.2` (feed param), `1.33.3` (static header captions) — each with full CHANGELOG Highlights, not version-only tag churn.
@@ -304,9 +304,10 @@ docker buildx imagetools inspect romwil/projectionist:latest --format '{{.Manife
 # GitHub
 gh release view "vX.Y.Z"
 
-# Optional Unraid host (config preserved)
-# cd /mnt/user/appdata/projectionist && ./rollout.sh X.Y.Z
-# docker exec projectionist cat /app/.build-info
+# Optional Unraid host (config preserved) — from laptop use ssh automat (not Mac SMB mount)
+# ssh automat 'cd /mnt/user/appdata/projectionist && ./rollout.sh X.Y.Z'
+# curl -s http://10.10.1.202:8788/api/health
+# ssh automat 'docker exec projectionist cat /app/.build-info'
 ```
 
 Confirm About / What’s New shows the new version after the container runs the new image (`/release-notes.json` includes `X.Y.Z`).

@@ -61,7 +61,8 @@ When checking the live Automat Unraid stack, use LAN hosts — **not** the publi
 | QA sidecar | `http://10.10.1.202:8792` (ephemeral; never bind `:8790`) |
 
 Do **not** treat `https://projectionist.automat.vip` (or ad-hoc SSH tunnels / `localhost:8788` tunnels)
-as authoritative for version or admin UI. Rollout kit: `/mnt/user/appdata/projectionist` (often
-`/Volumes/appdata/projectionist`). Full runbook: [docs/ops/AUTOMAT.md](docs/ops/AUTOMAT.md).
+as authoritative for version or admin UI. Prod promote (when asked):  
+`ssh automat 'cd /mnt/user/appdata/projectionist && ./rollout.sh X.Y.Z'` — not the Mac SMB mount
+(no `docker.sock`), not `root@10.10.1.202`. Full runbook: [docs/ops/AUTOMAT.md](docs/ops/AUTOMAT.md).
 Agent rule: `.cursor/rules/automat-environments.mdc`. Interactive UI QA → `:8792` only
 (`.cursor/skills/interactive-ui-qa/SKILL.md`).
