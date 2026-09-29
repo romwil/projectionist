@@ -18,6 +18,7 @@ import {
   RUNTIME_ONLY_LIKELY_BANNER,
   SCENE_NAMES_NOT_EVIDENCE,
   STILLS_LEAVE_LAN,
+  VISION_SERIES_ONLY_TIP,
   applyButtonClass,
   confidenceLabel,
   defaultRowSelected,
@@ -29,6 +30,7 @@ import {
   investigateSeasonOptions,
   isAllUncertainBatch,
   isRuntimeOnlyLikely,
+  isVisionSeriesOnly,
   reviewEvidenceSummary,
   selectedFileIds,
   selectionMap,
@@ -102,6 +104,15 @@ describe("episode investigate selection", () => {
     assert.match(RUNTIME_ONLY_LIKELY_BANNER, /Runtime-only Likely/);
     assert.match(RUNTIME_ONLY_LIKELY_BANNER, /docu series/);
     assert.equal(OPEN_STILLS_LABEL, "Open stills");
+    assert.equal(
+      isVisionSeriesOnly({
+        vision: { scope: "this_series", season: null, episode: null },
+        signals: { vision_series_only: true },
+      }),
+      true,
+    );
+    assert.match(VISION_SERIES_ONLY_TIP, /not the episode/);
+    assert.match(libraries, /VISION_SERIES_ONLY_TIP/);
   });
 
   it("wires Investigate on Libraries, not ConfigPage, with LAN stills copy", () => {
@@ -204,9 +215,11 @@ describe("episode investigate selection", () => {
       ffmpegReady: true,
       visionOn: true,
       identifyConfigured: true,
+      opensubtitlesConfigured: false,
     });
     assert.match(allUncertain, /All 2 rows are Uncertain/);
     assert.match(allUncertain, /No stills were extracted/);
+    assert.match(allUncertain, /OpenSubtitles is not configured/);
     assert.match(allUncertain, /Identify did not return a match/);
     assert.match(allUncertain, /Fusion is done/);
     assert.match(allUncertain, new RegExp(ALL_UNCERTAIN_NEXT_STEPS.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));

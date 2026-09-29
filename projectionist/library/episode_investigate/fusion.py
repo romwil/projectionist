@@ -9,6 +9,10 @@ LIKELY = "likely"
 UNCERTAIN = "uncertain"
 RUNTIME_ABS_SLACK = 90.0
 RUNTIME_REL_SLACK = 0.08
+VISION_SERIES_ONLY_REASON = (
+    "Vision confirmed the show but not the episode — stills alone aren’t enough; "
+    "try OpenSubtitles or manual stills vs TMDB."
+)
 
 
 def runtime_matches(file_seconds: Optional[float], episode_minutes: Optional[int]) -> bool:
@@ -138,11 +142,15 @@ def fuse_row(
     vision_map = vision if isinstance(vision, Mapping) else {}
     vision_scope = str(vision_map.get("scope") or "unknown")
     vision_key = _se_key(vision_map.get("season"), vision_map.get("episode"))
+    if vision_key and vision_key not in catalog_by_se:
+        # Do not accept invented SxxExx outside the Sonarr/TMDB catalog.
+        vision_key = None
     try:
         vision_conf = float(vision_map.get("confidence") or 0)
     except (TypeError, ValueError):
         vision_conf = 0.0
     vision_this = vision_scope == "this_series" and vision_key is not None
+    vision_series_only = vision_scope == "this_series" and vision_key is None
 
     votes: List[Tuple[str, Tuple[int, int]]] = []
     reasons: List[str] = []
@@ -154,7 +162,7 @@ def fuse_row(
         reasons.append(f"OpenSubtitles hash points at {_label(*os_key)}")
     if vision_this and vision_key:
         votes.append(("vision", vision_key))
-        reasons.append("vision says this series")
+        reasons.append(f"vision proposes {_label(*vision_key)}")
 
     agreed = _majority_key(votes)
     confidence = UNCERTAIN
@@ -180,7 +188,18 @@ def fuse_row(
         scope = "household"
         confidence = UNCERTAIN
         reasons.append("vision matched a household show, not this series")
+    elif vision_series_only:
+        scope = "this_series"
+        confidence = UNCERTAIN
+        reasons.append(VISION_SERIES_ONLY_REASON)
+        if vision_map.get("reason"):
+            reasons.append(str(vision_map.get("reason")))
     else:
+        if vision_this and vision_key and vision_conf < 0.6:
+            reasons.append(
+                f"vision guessed {_label(*vision_key)} with low confidence — "
+                "expand stills and compare to TMDB before Apply"
+            )
         if vision_scope == "unknown" and vision_map.get("reason"):
             reasons.append(str(vision_map.get("reason")))
         if not reasons:
@@ -210,6 +229,10 @@ def fuse_row(
         proposed["sonarr_episode_id"] = catalog_hit.get("sonarr_episode_id")
     elif vision_this:
         proposed["title"] = str(vision_map.get("episode_title") or "")
+    elif vision_series_only:
+        proposed["series_title"] = series_title
+        proposed["tmdb_id"] = show.get("tmdb_id")
+        proposed["tvdb_id"] = show.get("tvdb_id")
 
     identify_map = identify if isinstance(identify, Mapping) else {}
     new_show = False
@@ -286,6 +309,7 @@ def fuse_row(
             "oshash_key": list(os_key) if os_same_show and os_key else None,
             "vision_key": list(vision_key) if vision_this and vision_key else None,
             "runtime_only": runtime_only,
+            "vision_series_only": vision_series_only,
             "identify_same_show": identify_same,
             "identify_title": str(identify_map.get("title") or "") or None,
         },

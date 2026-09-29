@@ -22,12 +22,14 @@ import {
   RUNTIME_ONLY_LIKELY_BANNER,
   SCENE_NAMES_NOT_EVIDENCE,
   STILLS_LEAVE_LAN,
+  VISION_SERIES_ONLY_TIP,
   applyButtonClass,
   confidenceLabel,
   hasRuntimeOnlyLikelyRows,
   identifyTestHonestyLine,
   investigateSeasonOptions,
   isRuntimeOnlyLikely,
+  isVisionSeriesOnly,
   reviewEvidenceSummary,
   rowHasReviewStills,
   selectedFileIds,
@@ -838,6 +840,7 @@ function InvestigatePanel({ focusHint }) {
     ffmpegReady,
     visionOn: visionAvailable && useVision,
     identifyConfigured: health?.acrcloud?.available !== false,
+    opensubtitlesConfigured: health?.opensubtitles?.available !== false,
   });
   const runtimeOnlyBanner = hasRuntimeOnlyLikelyRows(rows);
 
@@ -1071,10 +1074,11 @@ function InvestigateReviewRow({ row, checked, onToggle }) {
           row.proposed?.title ? ` ${row.proposed.title}` : ""
         }`
       : "";
-  const stills = (row.stills || []).slice(0, 3);
-  const tmdbStills = (row.tmdb_stills || []).slice(0, 3);
+  const stills = (row.stills || []).slice(0, 5);
+  const tmdbStills = (row.tmdb_stills || []).slice(0, 5);
   const hasStills = rowHasReviewStills(row);
   const runtimeOnly = isRuntimeOnlyLikely(row);
+  const seriesOnlyVision = isVisionSeriesOnly(row);
   return (
     <tr data-testid={`investigate-row-${row.id}`}>
       <td>
@@ -1109,10 +1113,16 @@ function InvestigateReviewRow({ row, checked, onToggle }) {
               : ""}
             {reasons.length ? ` · ${reasons[0]}` : ""}
             {runtimeOnly ? " · runtime-only — verify stills" : ""}
+            {seriesOnlyVision ? " · show only, not episode" : ""}
             {hasStills ? ` · ${OPEN_STILLS_LABEL}` : ""}
             {tmdbStills.length ? " · compare TMDB" : ""}
           </summary>
           {reasons.length > 1 ? <p className="wizard-note">{reasons.join(" · ")}</p> : null}
+          {seriesOnlyVision ? (
+            <p className="status status-secondary" data-testid={`investigate-series-only-${row.id}`}>
+              {VISION_SERIES_ONLY_TIP}
+            </p>
+          ) : null}
           {runtimeOnly ? (
             <p className="status status-secondary" data-testid={`investigate-runtime-only-${row.id}`}>
               Runtime is the only vote. Docu series often share runtimes — check stills before Apply.

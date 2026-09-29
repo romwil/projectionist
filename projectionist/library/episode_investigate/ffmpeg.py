@@ -1,4 +1,4 @@
-"""Extract three stills and probe runtime via ffmpeg/ffprobe on PATH."""
+"""Extract stills and probe runtime via ffmpeg/ffprobe on PATH."""
 
 from __future__ import annotations
 
@@ -11,7 +11,10 @@ from projectionist.library.episode_investigate.capabilities import resolve_ffmpe
 
 logger = logging.getLogger(__name__)
 
-STILL_FRACTIONS = (0.18, 0.50, 0.78)
+# Cold-open after titles, early act, mid, late act, pre-credits — mid-show B-roll
+# alone (old 18/50/78%) is often useless for docu series.
+STILL_FRACTIONS = (0.10, 0.22, 0.40, 0.62, 0.85)
+STILL_COUNT = len(STILL_FRACTIONS)
 RunFn = Callable[..., subprocess.CompletedProcess]
 
 
@@ -58,13 +61,13 @@ def extract_stills(
     path: str,
     dest_dir: Path,
     *,
-    count: int = 3,
+    count: int = STILL_COUNT,
     fractions: Sequence[float] = STILL_FRACTIONS,
     ffmpeg: Optional[str] = None,
     runtime_seconds: Optional[float] = None,
     runner: RunFn = subprocess.run,
 ) -> List[Path]:
-    """Grab ``count`` JPEGs at mid-episode fractions. Empty list if ffmpeg missing."""
+    """Grab ``count`` JPEGs at episode timeline fractions. Empty list if ffmpeg missing."""
     binary = ffmpeg or resolve_ffmpeg()
     dest = Path(dest_dir)
     dest.mkdir(parents=True, exist_ok=True)
