@@ -3,13 +3,16 @@ import test from "node:test";
 import {
   applyUiTheme,
   cycleUiTheme,
+  loadPauseWhenBackgrounded,
   loadStoredUiTheme,
   normalizeUiFontSize,
   normalizeUiTheme,
+  persistPauseWhenBackgrounded,
   resolveEffectiveTheme,
   themeControlIcon,
   themePreferenceLabel,
   themeToDataAttr,
+  PAUSE_WHEN_BACKGROUNDED_KEY,
 } from "./uiPrefs.js";
 
 test("normalizeUiFontSize accepts small medium large", () => {
@@ -89,4 +92,19 @@ test("loadStoredUiTheme defaults to system when unset", () => {
     setItem: (k, v) => store.set(k, v),
   };
   assert.equal(loadStoredUiTheme(storage), "system");
+});
+
+test("pauseWhenBackgrounded defaults false and persists true", () => {
+  const store = new Map();
+  const storage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, v),
+  };
+  assert.equal(loadPauseWhenBackgrounded(storage), false);
+  assert.equal(persistPauseWhenBackgrounded(true, storage), true);
+  assert.equal(store.get(PAUSE_WHEN_BACKGROUNDED_KEY), "true");
+  assert.equal(loadPauseWhenBackgrounded(storage), true);
+  assert.equal(persistPauseWhenBackgrounded(false, storage), false);
+  assert.equal(store.get(PAUSE_WHEN_BACKGROUNDED_KEY), "false");
+  assert.equal(loadPauseWhenBackgrounded(storage), false);
 });

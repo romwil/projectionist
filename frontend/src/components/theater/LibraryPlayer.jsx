@@ -10,14 +10,23 @@ import { isPhonePlayViewport } from "../../lib/chatLayout.js";
 import {
   SKIP_SECONDS,
   bufferedRanges,
+  canResumeAttachedStream,
   clampTime,
   formatClockMs,
   libraryWatchPath,
   libraryWatchPopoutPath,
+  notePlayingBeforeHide,
+  shouldAutoResumePlayback,
+  shouldPauseOnVisibilityHide,
   shouldResumeFromOffset,
   shouldSendProgress,
   skipDeltaForZone,
+  theaterKeyAction,
 } from "../../lib/theaterPlayer.js";
+import {
+  UI_PREFS_CHANGED_EVENT,
+  loadPauseWhenBackgrounded,
+} from "../../lib/uiPrefs.js";
 import { plexPlayRatingKey } from "../../lib/titleLinks.js";
 import TheaterPlayer from "./TheaterPlayer.jsx";
 
@@ -52,6 +61,8 @@ export default function LibraryPlayer({
   const sessionRef = useRef(null);
   const lastProgressAtRef = useRef(null);
   const startingRef = useRef(false);
+  const wasPlayingBeforeHideRef = useRef(false);
+  const pauseWhenBackgroundedRef = useRef(loadPauseWhenBackgrounded());
   const [session, setSession] = useState(null);
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
@@ -89,14 +100,6 @@ export default function LibraryPlayer({
       // Best-effort — unmount / hide still tears down local state.
     }
     sessionRef.current = null;
-  }, []);
-
-  const disarmStream = useCallback(() => {
-    sessionRef.current = null;
-    // Keep poster/title for the shell, but drop the dead stream URL so TheaterPlayer
-    // detaches HLS and Play can begin() again instead of calling play() on nothing.
-    setSession((prev) => (prev ? { ...prev, stream_url: "", session_id: "" } : prev));
-    setStatus("paused");
   }, []);
 
   const handlePlayerStatus = useCallback((next) => {
@@ -196,18 +199,87 @@ export default function LibraryPlayer({
   }, [key, stopSession]);
 
   useEffect(() => {
-    function onHide() {
-      if (document.visibilityState === "hidden") {
-        stopSession().finally(() => disarmStream());
+    function refreshPref() {
+      pauseWhenBackgroundedRef.current = loadPauseWhenBackgrounded();
+    }
+    refreshPref();
+    window.addEventListener("storage", refreshPref);
+    window.addEventListener(UI_PREFS_CHANGED_EVENT, refreshPref);
+    return () => {
+      window.removeEventListener("storage", refreshPref);
+      window.removeEventListener(UI_PREFS_CHANGED_EVENT, refreshPref);
+    };
+  }, []);
+
+  useEffect(() => {
+    async function resumeAfterVisible() {
+      const video = videoRef.current;
+      const streamUrl = sessionRef.current?.stream_url || session?.stream_url || "";
+      if (!canResumeAttachedStream({ video, streamUrl })) {
+        await begin({ startOver: false });
+        return;
+      }
+      try {
+        hlsRef.current?.startLoad?.();
+        await video.play();
+        setStatus("playing");
+      } catch {
+        setStatus("paused");
       }
     }
-    document.addEventListener("visibilitychange", onHide);
-    window.addEventListener("pagehide", onHide);
+
+    function onVisibility() {
+      const state = document.visibilityState;
+      const pausePref = pauseWhenBackgroundedRef.current;
+      const video = videoRef.current;
+      const playing = Boolean(video && !video.paused && !video.ended);
+
+      if (state === "hidden") {
+        const remembered = notePlayingBeforeHide({ playing, visibilityState: state });
+        if (remembered != null) wasPlayingBeforeHideRef.current = remembered;
+        // Default: keep buffering/playing through Mac Spaces / tab hide.
+        // Opt-in: soft-pause without killing the Plex session.
+        if (shouldPauseOnVisibilityHide({ pauseWhenBackgrounded: pausePref, visibilityState: state })) {
+          if (video && !video.paused) {
+            video.pause();
+            hlsRef.current?.stopLoad?.();
+            setStatus("paused");
+            sendProgress("paused", video);
+          }
+        }
+        return;
+      }
+
+      if (
+        shouldAutoResumePlayback({
+          wasPlaying: wasPlayingBeforeHideRef.current,
+          visibilityState: state,
+        })
+      ) {
+        // Recover when opt-in paused us, or when the browser forced a pause.
+        if (pausePref || (video && video.paused)) {
+          wasPlayingBeforeHideRef.current = false;
+          resumeAfterVisible();
+        } else {
+          wasPlayingBeforeHideRef.current = false;
+        }
+      }
+    }
+
+    function onPageHide() {
+      // Real navigation / close — free the transcoder. Do not disarm on mere hide.
+      stopSession();
+    }
+
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", onPageHide);
     return () => {
-      document.removeEventListener("visibilitychange", onHide);
-      window.removeEventListener("pagehide", onHide);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", onPageHide);
     };
-  }, [stopSession, disarmStream]);
+    // begin / sendProgress / session are stable enough via refs for this lifecycle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- visibility controller
+  }, [stopSession]);
 
   async function sendProgress(state, video) {
     const current = sessionRef.current;
@@ -274,8 +346,8 @@ export default function LibraryPlayer({
   async function togglePlayback() {
     if (status === "loading" || status === "error" || resumeOpen) return;
     const video = videoRef.current;
-    // Tab-hide stopSession clears the server session + stream_url. Play must
-    // re-arm via begin() instead of no-op play() on an empty <video>.
+    // If the stream was cleared (pagehide / failed attach), Play re-arms via begin()
+    // instead of no-op play() on an empty <video>.
     if (!video || (!video.currentSrc && !session?.stream_url && !sessionRef.current?.stream_url)) {
       await begin({ startOver: false });
       return;
@@ -351,24 +423,25 @@ export default function LibraryPlayer({
   }
 
   function handleKeyDown(event, { toggleFullscreen: fs, video }) {
-    const key = event.key;
-    if (key === " " || key === "k" || key === "K") {
+    const action = theaterKeyAction(event.key);
+    if (!action) return;
+    if (action === "toggle") {
       event.preventDefault();
       togglePlayback();
-    } else if (key === "j" || key === "J" || key === "ArrowLeft") {
+    } else if (action === "skipBack") {
       event.preventDefault();
       skipBy(-SKIP_SECONDS);
-    } else if (key === "l" || key === "L" || key === "ArrowRight") {
+    } else if (action === "skipForward") {
       event.preventDefault();
       skipBy(SKIP_SECONDS);
-    } else if (key === "m" || key === "M") {
+    } else if (action === "mute") {
       event.preventDefault();
       if (video) video.muted = !video.muted;
-    } else if (key === "c" || key === "C") {
+    } else if (action === "captions") {
       event.preventDefault();
       setCcOpen((open) => !open);
       setMoreOpen(false);
-    } else if (key === "Escape") {
+    } else if (action === "escape") {
       event.preventDefault();
       if (moreOpen) {
         setMoreOpen(false);
@@ -383,7 +456,7 @@ export default function LibraryPlayer({
         return;
       }
       leaveWatch();
-    } else if (key === "f" || key === "F") {
+    } else if (action === "fullscreen") {
       fs?.();
     }
   }

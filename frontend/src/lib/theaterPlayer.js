@@ -143,3 +143,50 @@ export function clampTime(seconds, duration) {
   if (!Number.isFinite(d) || d <= 0) return Math.max(0, t);
   return Math.max(0, Math.min(d, t));
 }
+
+/**
+ * Map a keydown key to a theater action.
+ * Includes YouTube-style J/K/L and Minecraft-style A/S/D aliases (case-insensitive).
+ * @returns {"toggle"|"skipBack"|"skipForward"|"mute"|"captions"|"fullscreen"|"escape"|null}
+ */
+export function theaterKeyAction(key) {
+  const k = String(key ?? "");
+  if (k === " " || k === "k" || k === "K" || k === "s" || k === "S") return "toggle";
+  if (k === "j" || k === "J" || k === "a" || k === "A" || k === "ArrowLeft") return "skipBack";
+  if (k === "l" || k === "L" || k === "d" || k === "D" || k === "ArrowRight") return "skipForward";
+  if (k === "m" || k === "M") return "mute";
+  if (k === "c" || k === "C") return "captions";
+  if (k === "f" || k === "F") return "fullscreen";
+  if (k === "Escape") return "escape";
+  return null;
+}
+
+/**
+ * Visibility lifecycle for VOD theater (`/watch`).
+ *
+ * Default product: keep playing through Mac Spaces / tab hide / brief focus loss.
+ * Opt-in `pauseWhenBackgrounded` (uiPrefs, default false) soft-pauses on hide and
+ * resumes when visible again if the user had been playing.
+ * Real leave still uses pagehide / unmount stopSession — never kill the session
+ * solely because visibility flipped to hidden.
+ */
+export function shouldPauseOnVisibilityHide({ pauseWhenBackgrounded, visibilityState }) {
+  return Boolean(pauseWhenBackgrounded) && visibilityState === "hidden";
+}
+
+export function notePlayingBeforeHide({ playing, visibilityState }) {
+  if (visibilityState !== "hidden") return null;
+  return Boolean(playing);
+}
+
+export function shouldAutoResumePlayback({ wasPlaying, visibilityState }) {
+  return visibilityState === "visible" && Boolean(wasPlaying);
+}
+
+/** True when local media is still attached and can try play() without re-arm. */
+export function canResumeAttachedStream({ video, streamUrl } = {}) {
+  const url = String(streamUrl || "").trim();
+  if (!url) return false;
+  if (!video) return false;
+  return Boolean(video.currentSrc || video.src);
+}
