@@ -1,6 +1,30 @@
 {
-  "generated_at": "2026-09-29T00:52:19Z",
+  "generated_at": "2026-09-29T01:03:58Z",
   "releases": [
+    {
+      "version": "1.37.12",
+      "date": "2026-09-28",
+      "summary": "Live Channels motif / taste Refill was leaving Mystery, Sci-Fi, and Creature Double Feature empty even though the library still matched titles — Tunarr’s catalog stopped exposing legacy `externalKey`, so craft rating-key intersects always missed.",
+      "highlights": [
+        "**Motif / taste Refill fills again.** Stations that sample ~30–80 titles from genre / decade / motif craft (Mystery, Sci-Fi, Creature Double Feature, …) rebuild a lineup instead of staying Empty after Refill.",
+        "**Same soft-cap honesty.** Collection / show stations stay full-run; motif craft still soft-caps — this only restores the Plex id join Tunarr 1.3+ needs."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "`_extract_plex_rating_keys` (and guide dig-in helpers) read Tunarr `externalId` + `identifiers[{type: plex}]`, including nested show ids so TV craft (library show keys) intersects episode catalog rows.",
+            "Regression: motif craft Refill against an `externalId`-only catalog no longer returns an empty lineup."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Focused: `tests/test_live_channels.py` — `TunarrExternalIdPlexKeyTests` + craft / collection match suites."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.11",
       "date": "2026-09-28",

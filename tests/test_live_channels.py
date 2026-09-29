@@ -8,6 +8,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from projectionist.config_store import FeatureFlags, Settings, TunarrSettings, load_merged_settings, save_settings
@@ -4720,6 +4721,145 @@ class ShowChannelPublishTests(unittest.TestCase):
         self.assertGreater(len(picked), 30)
         self.assertTrue(stats.get("full_run"))
         client.list_program_descendants.assert_called_with("show-uuid-dsn")
+
+
+class TunarrExternalIdPlexKeyTests(unittest.TestCase):
+    """Tunarr 1.3+ library programs use externalId / identifiers, not externalKey.
+
+    Motif/taste Refill intersects library ratingKeys against catalog plex_keys.
+    When extraction misses the new fields, craft stations refill to an empty lineup.
+    """
+
+    def test_extract_movie_external_id_and_plex_identifier(self) -> None:
+        from projectionist.live_channels.publish import _extract_plex_rating_keys
+
+        row = {
+            "type": "content",
+            "duration": 6_000_000,
+            "id": "u-movie",
+            "program": {
+                "uuid": "u-movie",
+                "type": "movie",
+                "title": "The Matrix",
+                "externalId": "41155",
+                "identifiers": [
+                    {"id": "plex://movie/abc", "type": "plex-guid"},
+                    {"id": "41155", "sourceId": "ms1", "type": "plex"},
+                ],
+            },
+        }
+        keys = _extract_plex_rating_keys(row)
+        self.assertIn("41155", keys)
+
+    def test_extract_episode_includes_show_plex_key(self) -> None:
+        from projectionist.live_channels.publish import _extract_plex_rating_keys
+
+        row = {
+            "type": "content",
+            "duration": 2_500_000,
+            "id": "u-ep",
+            "program": {
+                "uuid": "u-ep",
+                "type": "episode",
+                "title": "Pilot",
+                "externalId": "90001",
+                "identifiers": [
+                    {"id": "90001", "sourceId": "ms1", "type": "plex"},
+                ],
+                "show": {
+                    "uuid": "u-show",
+                    "type": "show",
+                    "title": "Breaking Bad",
+                    "identifiers": [
+                        {"id": "163807", "sourceId": "ms1", "type": "plex"},
+                    ],
+                },
+            },
+        }
+        keys = _extract_plex_rating_keys(row)
+        self.assertIn("90001", keys)
+        self.assertIn("163807", keys)
+
+    def test_motif_craft_refill_matches_external_id_pool(self) -> None:
+        from projectionist.live_channels.filters import normalize_craft_filters
+        from projectionist.live_channels.publish import collect_programs_for_recipe
+        from projectionist.live_channels.recipes import ChannelRecipe, ProgrammingMode
+
+        catalog = [
+            {
+                "type": "content",
+                "duration": 5_400_000,
+                "id": f"m{i}",
+                "program": {
+                    "uuid": f"m{i}",
+                    "type": "movie",
+                    "title": f"Sci Fi {i}",
+                    "year": 1999 + i,
+                    "externalId": str(41000 + i),
+                    "identifiers": [
+                        {"id": str(41000 + i), "sourceId": "ms1", "type": "plex"},
+                    ],
+                    "tags": [],
+                },
+            }
+            for i in range(12)
+        ]
+        # No legacy externalKey — mirrors live Tunarr 1.3+ payloads.
+        for row in catalog:
+            self.assertIsNone(row["program"].get("externalKey"))
+
+        allowed = {str(41000 + i) for i in range(12)}
+        craft = normalize_craft_filters({"genres": ["Science Fiction"]})
+
+        with patch(
+            "projectionist.live_channels.filters.library_items_matching_filters",
+            return_value={
+                "total_matched": len(allowed),
+                "items": [],
+                "rating_keys": sorted(allowed),
+            },
+        ), patch(
+            "projectionist.web.jobs.get_job_manager",
+            return_value=SimpleNamespace(db=object()),
+        ):
+            recipe = ChannelRecipe(
+                name="Sci-Fi",
+                number=101,
+                source="motif",
+                programming_mode=ProgrammingMode.SHUFFLE,
+                media_scope="movies",
+                motif="space",
+                craft_filters=craft.to_dict(),
+            )
+            stats: dict = {}
+            picked = collect_programs_for_recipe(
+                MagicMock(),
+                recipe,
+                catalog=catalog,
+                media_scope="movies",
+                settings=SimpleNamespace(),
+                match_stats=stats,
+            )
+        self.assertGreaterEqual(len(picked), 8)
+        self.assertEqual(stats.get("filter_matched"), 12)
+        self.assertFalse(stats.get("full_run"))
+
+    def test_legacy_external_key_still_works(self) -> None:
+        from projectionist.live_channels.publish import _extract_plex_rating_keys
+
+        keys = _extract_plex_rating_keys(
+            {
+                "id": "u1",
+                "duration": 5_000_000,
+                "program": {
+                    "uuid": "u1",
+                    "type": "movie",
+                    "externalKey": "plex|ms1|1001",
+                },
+            }
+        )
+        self.assertIn("plex|ms1|1001", keys)
+        self.assertIn("1001", keys)
 
 
 class CraftFiltersTests(unittest.TestCase):

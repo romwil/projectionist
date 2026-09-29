@@ -142,22 +142,37 @@ def _channel_icon_url(meta: Mapping[str, Any]) -> str:
 def _plex_keys_from_mapping(source: Mapping[str, Any]) -> List[str]:
     """Collect bare + ``plex|…|key`` tails from common Tunarr/Plex id fields."""
     keys: List[str] = []
+
+    def _add(raw: Any) -> None:
+        text = str(raw or "").strip()
+        if not text:
+            return
+        keys.append(text)
+        if "|" in text:
+            tail = text.rsplit("|", 1)[-1].strip()
+            if tail:
+                keys.append(tail)
+
     for key in (
         "externalKey",
+        "externalId",
+        "external_id",
         "plexRatingKey",
         "ratingKey",
         "plex_rating_key",
         "grandparentRatingKey",
         "grandparentExternalKey",
     ):
-        text = str(source.get(key) or "").strip()
-        if not text:
-            continue
-        keys.append(text)
-        if "|" in text:
-            tail = text.rsplit("|", 1)[-1].strip()
-            if tail:
-                keys.append(tail)
+        _add(source.get(key))
+    identifiers = source.get("identifiers")
+    if isinstance(identifiers, list):
+        for ident in identifiers:
+            if not isinstance(ident, Mapping):
+                continue
+            itype = str(ident.get("type") or "").strip().lower()
+            if itype not in {"plex", "plex-rating-key", "plex_rating_key"}:
+                continue
+            _add(ident.get("id") or ident.get("key"))
     return keys
 
 
