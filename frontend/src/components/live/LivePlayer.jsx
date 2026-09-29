@@ -6,6 +6,7 @@ import {
   tuneLiveChannel,
 } from "../../api/client";
 import {
+  buildFlexLowerThird,
   buildOsdModel,
   classifyLiveStreamHealth,
   formatClock,
@@ -716,6 +717,7 @@ export default function LivePlayer({
   });
   const showOsd =
     osdVisible || ccOpen || status === "loading" || status === "error" || streamHealth !== "ok";
+  const flexL3 = buildFlexLowerThird(osd);
   const showTapHint = status === "ready" || status === "paused";
   const showHealthChip =
     Boolean(healthCopy) && status !== "loading" && status !== "error" && !error;
@@ -778,6 +780,32 @@ export default function LivePlayer({
         >
           <p>{status === "paused" ? "Paused · tap to play" : "Tap to play"}</p>
         </div>
+      ) : null}
+
+      {flexL3 ? (
+        <aside
+          className={`live-flex-l3${showOsd ? " is-osd-up" : ""}`}
+          data-testid="live-flex-lower-third"
+          aria-live="polite"
+        >
+          <div className="live-flex-l3-inner">
+            <div className="live-flex-l3-copy">
+              <p className="live-flex-l3-eyebrow" data-testid="live-flex-l3-eyebrow">
+                {flexL3.eyebrow}
+              </p>
+              {flexL3.title ? (
+                <p className="live-flex-l3-title" data-testid="live-flex-l3-title">
+                  {flexL3.title}
+                </p>
+              ) : null}
+            </div>
+            {flexL3.countdown ? (
+              <p className="live-flex-l3-countdown" data-testid="live-flex-l3-countdown">
+                {flexL3.countdown}
+              </p>
+            ) : null}
+          </div>
+        </aside>
       ) : null}
 
       <div

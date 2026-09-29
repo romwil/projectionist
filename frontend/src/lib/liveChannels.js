@@ -628,6 +628,26 @@ export function buildOsdModel(channel, nowMs = Date.now(), { selectedProgram = n
 }
 
 /**
+ * Quiet persistent lower-third while Continuity/flex fills the air.
+ * Independent of cable OSD idle hide — vanishes when ``isFlex`` clears.
+ * @param {ReturnType<typeof buildOsdModel>|null|undefined} osd
+ * @returns {{ eyebrow: string, title: string, countdown: string }|null}
+ */
+export function buildFlexLowerThird(osd) {
+  if (!osd || typeof osd !== "object" || !osd.isFlex) return null;
+  const channelName = String(osd.name || "Channel").trim() || "Channel";
+  const title = String(osd.nextDisplay || osd.nextTitle || "").trim();
+  const remaining = osd.secondsRemaining;
+  const countdown =
+    remaining != null && Number.isFinite(Number(remaining)) ? formatClock(remaining) : "";
+  return {
+    eyebrow: `Up next on ${channelName}`,
+    title,
+    countdown,
+  };
+}
+
+/**
  * Map a guide/on-now program into the EPG cell shape (episode title + dig-in fields).
  * @param {object} program
  */
