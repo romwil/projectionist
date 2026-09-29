@@ -232,12 +232,13 @@ Explore is a **hub** with primary children:
 
 | Hub section | Role |
 |-------------|------|
-| **Recently Added** | `/api/library/feeds/recently-added` (`added_at` window) |
+| **Recently Added** | Movies/shows by `added_at` (`/api/library/feeds/recently-added`) |
+| **Recently added episodes** | Fresh episode arrivals (`/api/library/feeds/recently-added-episodes`) — not whole shows |
 | **Recent Releases** | `/api/library/feeds/recent-releases` — honest empty until ISO dates enriched |
 | **Library Pulse** | Compact stats from overview + health (not a second dashboard) |
 | **On This Day** | `/api/library/feeds/on-this-day` (calendar mode or milestone fallback) |
 
-Explore is browse-first; chat remains the primary curation loop. Empty rails show API `note` text (sync hasn’t recorded dates, neighbors not materialized yet) rather than inventing filler. Person pages (`/person/:id`) and title detail sit under the same AppShell chrome.
+Explore home loads via **`GET /api/library/feeds/hub`** (one payload, short server TTL + client session cache) so rails paint without a request waterfall. TV library browse defaults to **`sort=episode_added_at`** (freshest episode per show). Empty rails show API `note` text (sync hasn’t recorded dates, neighbors not materialized yet) rather than inventing filler. Person pages (`/person/:id`) and title detail sit under the same AppShell chrome. Double-feature pairing stays a Chat agent tool — not an Explore rail.
 
 ---
 
@@ -369,7 +370,7 @@ Shipped alongside the idle scheduler (1.6+):
 | **On This Day** | Anniversary prompts above the welcome panel |
 | **Library at a Glance** | One-time post-sync summary (genres, decade range, hidden gems) |
 | **Night Owl** | After evening hours, softer top-bar palette + runtime-aware tonight picks |
-| **Double Feature** | Agent tool + `DoubleFeatureCard` pairing UI |
+| **Double Feature** | Chat agent tool + `DoubleFeatureCard` (not an Explore rail) |
 | **Surprise Me** | Dice button → `QuickPickCard` reveal |
 | **Streaks** | Top-bar chip after 3+ conversations in 30 days |
 
@@ -471,7 +472,7 @@ Folded from the original curator-memory design note; these are the load-bearing 
 |------|-----------|
 | Chat | `POST /api/chat`, `GET /api/chat/stream` (SSE tokens) |
 | Library | sync, stats, health, purge, aggregates, quick-pick, anniversaries, overview, query, facets |
-| Explore feeds | `GET /api/library/feeds/recently-added`, `…/recent-releases`, `…/on-this-day` |
+| Explore feeds | `GET /api/library/feeds/hub` (home), `…/recently-added`, `…/recently-added-episodes`, `…/recent-releases`, `…/on-this-day` |
 | Neighbors / motifs | `GET /api/library/neighbors/{item_id}`, `GET /api/library/motifs` |
 | Title | `GET /api/title/{media_type}/{id}`, `GET /api/title/{media_type}/{id}/neighbors` |
 | Setup | wizard, certifications, settings, service tests |

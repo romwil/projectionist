@@ -82,6 +82,7 @@ from projectionist.library.episodes import (
     summarize_tv_progress,
 )
 from projectionist.library.facets import library_facet_catalog
+from projectionist.library.explore_hub import get_explore_hub
 from projectionist.library.feeds import (
     feed_afterglow,
     feed_continue_watching,
@@ -90,6 +91,7 @@ from projectionist.library.feeds import (
     feed_on_this_day,
     feed_recent_releases,
     feed_recently_added,
+    feed_recently_added_episodes,
     feed_revisit_these,
     feed_seasonal_spotlight,
     feed_tonight_table,
@@ -2269,6 +2271,39 @@ def library_anniversaries_endpoint(
     return {"items": items, "count": len(items)}
 
 
+@app.get("/api/library/feeds/hub")
+def library_feed_explore_hub(
+    limit: int = 12,
+    refresh: bool = False,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Single Explore home payload (rails + pulse) with a short server TTL cache."""
+    user_id = None
+    if user is not None and getattr(user, "id", None):
+        user_id = str(user.id)
+    payload = get_explore_hub(
+        _db(),
+        _settings(),
+        is_youth=bool(getattr(user, "is_youth", False)),
+        user_id=user_id,
+        rail_limit=limit,
+        bypass_cache=bool(refresh),
+    )
+    # Sanitize nested rail items the same way individual feed routes do.
+    rails = payload.get("rails") or {}
+    sanitized_rails = {
+        key: _sanitize_library_payload(value, user) if isinstance(value, dict) else value
+        for key, value in rails.items()
+    }
+    payload = {
+        **payload,
+        "rails": sanitized_rails,
+        "overview": _sanitize_library_payload(payload.get("overview") or {}, user),
+        "health": _sanitize_library_payload(payload.get("health") or {}, user),
+    }
+    return payload
+
+
 @app.get("/api/library/feeds/recently-added")
 def library_feed_recently_added(
     limit: int = 12,
@@ -2285,6 +2320,25 @@ def library_feed_recently_added(
             days=days,
             offset=offset,
             media_type=media_type,
+        ),
+        user,
+    )
+
+
+@app.get("/api/library/feeds/recently-added-episodes")
+def library_feed_recently_added_episodes(
+    limit: int = 12,
+    days: int = 30,
+    offset: int = 0,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Explore rail: recently added TV *episodes* (fresh arrivals), not shows."""
+    return _sanitize_library_payload(
+        feed_recently_added_episodes(
+            _db(),
+            limit=limit,
+            days=days,
+            offset=offset,
         ),
         user,
     )
@@ -2453,28 +2507,6 @@ def library_feed_pick_for_me(
             except Exception:  # noqa: BLE001
                 payload["live_station"] = None
     return _sanitize_library_payload(payload, user)
-
-
-@app.get("/api/library/feeds/tonight-double-feature")
-def library_feed_tonight_double_feature(
-    theme: str = "",
-    user=Depends(get_current_user_dep),
-) -> Dict[str, Any]:
-    """Companion/Concierge-style pairing of two owned titles with a why."""
-    from projectionist.library.double_feature import suggest_tonight_double_feature
-    from projectionist.youth.rating_gate import resolve_youth_max_rating, youth_gate_active
-
-    youth_ceiling = None
-    if youth_gate_active(user):
-        youth_ceiling = resolve_youth_max_rating(_settings())
-    return _sanitize_library_payload(
-        suggest_tonight_double_feature(
-            _db(),
-            theme=theme,
-            youth_max_rating=youth_ceiling,
-        ),
-        user,
-    )
 
 
 @app.get("/api/library/feeds/on-this-day")

@@ -75,11 +75,20 @@ export function decadeYearRange(decadeLabel) {
 /**
  * Deep-link to top-level Search (library + beyond). Pass `mediaType` (movie/show)
  * and/or a free-text `q` search; omit both for the full library.
+ * TV defaults to recently-added-episodes sort (fresh episode browsing).
  */
-export function libraryBrowsePath({ mediaType, q } = {}) {
+export function libraryBrowsePath({ mediaType, q, sort, sortDir } = {}) {
   const params = new URLSearchParams();
   if (mediaType === "movie" || mediaType === "show") {
     params.set("media_type", mediaType);
+  }
+  if (mediaType === "show") {
+    // Explicit so shared links and hub cards land on episode-fresh order.
+    params.set("sort", sort || "episode_added_at");
+    params.set("sort_dir", sortDir || "desc");
+  } else if (sort) {
+    params.set("sort", sort);
+    if (sortDir) params.set("sort_dir", sortDir);
   }
   const query = String(q || "").trim();
   if (query) params.set("q", query);

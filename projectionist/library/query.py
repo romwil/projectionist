@@ -34,10 +34,19 @@ SortField = Literal[
     "vote_average",
     "runtime_minutes",
     "added_at",
+    "episode_added_at",
     "last_viewed_at",
     "unwatched_episode_count",
     "total_episode_count",
 ]
+
+# Freshest episode arrival for a show; movies fall back to title added_at.
+EPISODE_ADDED_AT_EXPR = (
+    "COALESCE("
+    "(SELECT MAX(e.added_at) FROM library_episodes e WHERE e.show_item_id = library_items.id), "
+    "CASE WHEN media_type = 'movie' THEN added_at END"
+    ")"
+)
 GroupBy = Literal[
     "decade",
     "year",
@@ -132,6 +141,7 @@ def filters_from_mapping(data: Mapping[str, Any]) -> LibraryFilters:
         "vote_average",
         "runtime_minutes",
         "added_at",
+        "episode_added_at",
         "last_viewed_at",
         "unwatched_episode_count",
         "total_episode_count",
@@ -615,6 +625,11 @@ def _build_where(filters: LibraryFilters) -> Tuple[str, List[Any]]:
 
 
 def _sort_clause(sort: SortField, sort_dir: Literal["asc", "desc"] | None = None) -> str:
+    if sort == "episode_added_at":
+        direction = (sort_dir or "desc").upper()
+        if direction not in {"ASC", "DESC"}:
+            direction = "DESC"
+        return f"{EPISODE_ADDED_AT_EXPR} IS NULL, {EPISODE_ADDED_AT_EXPR} {direction}, title ASC"
     if sort_dir:
         direction = sort_dir.upper()
         nullable = {
@@ -1459,6 +1474,12 @@ def compute_library_overview(db: Database) -> Dict[str, Any]:
 
 
 def refresh_library_overview_cache(db: Database) -> Dict[str, Any]:
+    try:
+        from projectionist.library.explore_hub import invalidate_explore_hub_cache
+
+        invalidate_explore_hub_cache()
+    except Exception:  # noqa: BLE001 — cache invalidation must not block sync
+        pass
     overview = compute_library_overview(db)
     db.set_sync_state(OVERVIEW_CACHE_KEY, json.dumps(overview))
     return overview

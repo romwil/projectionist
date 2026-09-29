@@ -1,6 +1,45 @@
 {
-  "generated_at": "2026-09-29T00:40:54Z",
+  "generated_at": "2026-09-29T00:52:19Z",
   "releases": [
+    {
+      "version": "1.37.11",
+      "date": "2026-09-28",
+      "summary": "Explore loads like a home page again — one cached hub request, a dedicated fresh-episodes rail, and TV browse that defaults to the newest episode arrival. Tonight’s double feature leaves the Explore page (Chat can still pair titles when you ask).",
+      "highlights": [
+        "**Explore feels like home.** One hub request (plus a short cache) paints the shelves instead of a dozen waterfalls — bounce back from Chat and rails are already there.",
+        "**Fresh episodes, not whole shows.** A dedicated **Recently added episodes** rail, and TV browse defaults to the show whose newest episode just landed.",
+        "**Double Feature leaves Explore.** Pairings stay in Chat when you ask; the page keeps space for shelves that get used."
+      ],
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "`GET /api/library/feeds/hub` — aggregate Explore rails + pulse with ~45s server TTL; client session stale-while-revalidate.",
+            "`GET /api/library/feeds/recently-added-episodes` + Explore rail (show poster, episode label, Play targets episode).",
+            "`library_episodes.added_at` synced from Plex; library sort `episode_added_at` (TV default)."
+          ]
+        },
+        {
+          "title": "Removed",
+          "bullets": [
+            "Explore **Tonight’s double feature** habit, `/api/library/feeds/tonight-double-feature`, and related CSS. Chat `suggest_double_feature` + `DoubleFeatureCard` remain."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "DESIGN / HELP Explore hub copy; TV hub card and browse subtitle emphasize fresh-episode order."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend: `tests/test_explore_wave3.py` — recently-added-episodes feed + hub cache.",
+            "Frontend unit: `exploreHubCache.test.mjs`, `exploreLayout.test.mjs`, `mediaBrowse.test.mjs`, `browseLinks.test.mjs`."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.10",
       "date": "2026-09-28",

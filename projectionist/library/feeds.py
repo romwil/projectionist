@@ -700,6 +700,123 @@ def feed_recently_added(
     }
 
 
+def _episode_arrival_label(
+    *,
+    season_number: Optional[int],
+    episode_number: Optional[int],
+    episode_title: str,
+) -> str:
+    parts: List[str] = []
+    if season_number is not None and episode_number is not None:
+        parts.append(f"S{int(season_number)}E{int(episode_number)}")
+    title = str(episode_title or "").strip()
+    if title:
+        parts.append(title)
+    return " · ".join(parts) if parts else "New episode"
+
+
+def feed_recently_added_episodes(
+    db: Database,
+    *,
+    limit: int = DEFAULT_FEED_LIMIT,
+    days: int = 30,
+    offset: int = 0,
+) -> Dict[str, Any]:
+    """Explore rail: recently added *episodes* (fresh arrivals), not whole shows.
+
+    Cards use the show poster/title; Play targets the episode rating key.
+    One card per show — the freshest episode in the window wins.
+    """
+    capped = _cap_limit(limit, max_limit=MAX_PAGE_LIMIT)
+    off = _cap_offset(offset)
+    window = _cap_days(days)
+    cutoff = int(time.time()) - window * 86400
+    with db.connect() as conn:
+        # Prefer episode.added_at; fall back to show.added_at when episode sync
+        # has not yet recorded per-episode arrival times.
+        count_row = conn.execute(
+            """
+            SELECT COUNT(*) AS cnt FROM (
+                SELECT e.show_item_id
+                FROM library_episodes e
+                JOIN library_items s ON s.id = e.show_item_id
+                WHERE COALESCE(e.added_at, s.added_at) IS NOT NULL
+                  AND COALESCE(e.added_at, s.added_at) >= ?
+                GROUP BY e.show_item_id
+            )
+            """,
+            (cutoff,),
+        ).fetchone()
+        total = int(count_row["cnt"] or 0)
+        rows = conn.execute(
+            """
+            SELECT
+                s.*,
+                e.rating_key AS episode_rating_key,
+                e.title AS episode_title,
+                e.season_number AS episode_season,
+                e.episode_number AS episode_number,
+                COALESCE(e.added_at, s.added_at) AS episode_added_at
+            FROM library_episodes e
+            JOIN library_items s ON s.id = e.show_item_id
+            INNER JOIN (
+                SELECT
+                    e2.show_item_id AS show_item_id,
+                    MAX(COALESCE(e2.added_at, s2.added_at)) AS max_added
+                FROM library_episodes e2
+                JOIN library_items s2 ON s2.id = e2.show_item_id
+                WHERE COALESCE(e2.added_at, s2.added_at) IS NOT NULL
+                  AND COALESCE(e2.added_at, s2.added_at) >= ?
+                GROUP BY e2.show_item_id
+            ) latest ON latest.show_item_id = e.show_item_id
+                AND COALESCE(e.added_at, s.added_at) = latest.max_added
+            WHERE s.media_type = 'show'
+            GROUP BY e.show_item_id
+            ORDER BY episode_added_at DESC, s.title ASC
+            LIMIT ? OFFSET ?
+            """,
+            (cutoff, capped, off),
+        ).fetchall()
+    items: List[Dict[str, Any]] = []
+    for row in rows:
+        season = int(row["episode_season"]) if row["episode_season"] is not None else None
+        episode_num = int(row["episode_number"]) if row["episode_number"] is not None else None
+        episode_title = str(row["episode_title"] or "")
+        play_key = str(row["episode_rating_key"] or "").strip()
+        label = _episode_arrival_label(
+            season_number=season,
+            episode_number=episode_num,
+            episode_title=episode_title,
+        )
+        extra: Dict[str, Any] = {
+            "card_kind": "recently_added_episode",
+            "episode_label": label,
+            "continue_episode_title": episode_title or None,
+            "continue_season": season,
+            "continue_episode": episode_num,
+            "added_at": int(row["episode_added_at"]) if row["episode_added_at"] is not None else None,
+        }
+        if play_key:
+            extra["play_rating_key"] = play_key
+        items.append(_feed_item(row, **extra))
+    note = None
+    if not items:
+        note = (
+            "No episodes added in this window — or episode sync has not recorded "
+            "arrivals yet."
+        )
+    return {
+        "feed": "recently-added-episodes",
+        "days": window,
+        "items": items,
+        "total": total,
+        "offset": off,
+        "limit": capped,
+        "has_more": off + len(items) < total,
+        "note": note,
+    }
+
+
 def feed_revisit_these(
     db: Database,
     *,
