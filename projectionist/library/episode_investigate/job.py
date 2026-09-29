@@ -17,6 +17,7 @@ from projectionist.library.episode_investigate.apply import apply_rows, undo_app
 from projectionist.library.episode_investigate.capabilities import llm_accepts_images
 from projectionist.library.episode_investigate.acrcloud import identify_file
 from projectionist.library.episode_investigate.catalog import (
+    empty_files_message,
     household_series,
     list_episode_files,
     load_show,
@@ -86,11 +87,14 @@ def start_investigate_job(
         return {"accepted": False, "ok": False, "error": message, "message": message}
     files = list(inventory.get("files") or [])
     if not files:
+        with_files = inventory.get("seasons_with_files") or inventory.get("seasons") or []
+        message = empty_files_message(season=season, seasons_with_files=with_files)
         return {
             "accepted": False,
             "ok": False,
-            "error": "No episode files found for that show or season.",
-            "message": "No episode files found for that show or season.",
+            "error": message,
+            "message": message,
+            "seasons_with_files": list(with_files),
         }
     vision_on = llm_accepts_images(settings) if use_vision is None else bool(use_vision)
     items = [

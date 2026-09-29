@@ -17,6 +17,7 @@ import {
   formatInvestigateShowLabel,
   identifyTestHonestyLine,
   identifyTestRenamed,
+  investigateSeasonOptions,
   reviewEvidenceSummary,
   selectedFileIds,
   selectionMap,
@@ -70,6 +71,8 @@ describe("episode investigate selection", () => {
     assert.match(showCombobox, /moveTypeaheadIndex/);
     assert.doesNotMatch(libraries, /<select[\s\S]*data-testid="investigate-show"/);
     assert.match(libraries, /data-testid="investigate-season"/);
+    assert.match(libraries, /\/admin\/investigate\/seasons/);
+    assert.match(libraries, /investigateSeasonOptions/);
 
     const shows = [
       { id: 1, title: "Expedition Unknown", year: 2015 },
@@ -85,6 +88,10 @@ describe("episode investigate selection", () => {
     );
     assert.equal(filterInvestigateShows(shows, "zzzz").length, 0);
     assert.equal(filterInvestigateShows(shows, "", { limit: 2 }).length, 2);
+    assert.deepEqual(investigateSeasonOptions([0, 17, 1], 18), [0, 1, 17]);
+    assert.deepEqual(investigateSeasonOptions([], 18), []);
+    assert.deepEqual(investigateSeasonOptions(null, 3), [1, 2, 3]);
+    assert.deepEqual(investigateSeasonOptions(null, 0), []);
   });
 
   it("says Identify leaves the LAN and that a test miss does not rename", () => {

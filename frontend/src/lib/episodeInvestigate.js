@@ -91,6 +91,25 @@ export function formatInvestigateShowLabel(show) {
 }
 
 /**
+ * Season options for Investigate: prefer Sonarr seasons that have files.
+ * `null`/`undefined` = Sonarr has not answered yet → brief Plex season_count fallback.
+ * `[]` = Sonarr answered with no file seasons → do not invent empty Plex seasons.
+ */
+export function investigateSeasonOptions(seasonsWithFiles, plexSeasonCount) {
+  if (seasonsWithFiles == null) {
+    const count = Number(plexSeasonCount) || 0;
+    if (count <= 0) return [];
+    const out = [];
+    for (let n = 1; n <= count; n += 1) out.push(n);
+    return out;
+  }
+  const withFiles = (Array.isArray(seasonsWithFiles) ? seasonsWithFiles : [])
+    .map((n) => Number(n))
+    .filter((n) => Number.isFinite(n) && n >= 0);
+  return [...new Set(withFiles)].sort((a, b) => a - b);
+}
+
+/**
  * Filter Investigate shows by title/year substring (case-insensitive).
  * Prefers title prefix matches, then caps the list for typeahead.
  */
