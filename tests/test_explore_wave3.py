@@ -283,6 +283,46 @@ class FeedHelperTests(unittest.TestCase):
             third = get_explore_hub(db, settings, rail_limit=8, bypass_cache=True)
             self.assertFalse(third.get("cached"))
 
+    def test_hub_survives_legacy_db_missing_episode_added_at(self) -> None:
+        """Prod footgun: migration 10 ran before 1.37.11 stuffed added_at into phase4."""
+        from projectionist.library.db.migrations import CURRENT_SCHEMA_VERSION
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "legacy.db"
+            # Bootstrap a fully-migrated DB, then strip episode.added_at and
+            # rewind schema_version so migration 50 re-applies on reopen.
+            db = Database(db_path)
+            db.close()
+            raw = sqlite3.connect(db_path)
+            raw.execute("DROP INDEX IF EXISTS idx_episodes_added_at")
+            raw.execute("ALTER TABLE library_episodes DROP COLUMN added_at")
+            raw.execute("DELETE FROM schema_version WHERE version = ?", (50,))
+            cols = {
+                str(r[1]) for r in raw.execute("PRAGMA table_info(library_episodes)")
+            }
+            self.assertNotIn("added_at", cols)
+            raw.commit()
+            raw.close()
+
+            reopened = Database(db_path)
+            with reopened.connect() as conn:
+                cols = {
+                    str(r["name"])
+                    for r in conn.execute("PRAGMA table_info(library_episodes)")
+                }
+                ver = conn.execute(
+                    "SELECT MAX(version) AS v FROM schema_version"
+                ).fetchone()
+            self.assertIn("added_at", cols)
+            self.assertEqual(int(ver["v"]), CURRENT_SCHEMA_VERSION)
+
+            invalidate_explore_hub_cache()
+            payload = get_explore_hub(reopened, Settings(), rail_limit=8, bypass_cache=True)
+            self.assertEqual(payload["feed"], "explore-hub")
+            self.assertIn("recently_added_episodes", payload["rails"])
+            # Must not 500 — empty rail is fine on a barren legacy DB.
+            self.assertIn("items", payload["rails"]["recently_added_episodes"])
+
     def test_recent_releases_honest_empty_without_dates(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")

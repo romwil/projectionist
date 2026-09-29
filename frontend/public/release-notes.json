@@ -1,6 +1,31 @@
 {
-  "generated_at": "2026-09-29T01:03:58Z",
+  "generated_at": "2026-09-29T02:54:38Z",
   "releases": [
+    {
+      "version": "1.37.14",
+      "date": "2026-09-28",
+      "summary": "Explore’s home hub crashed on long-lived Automat DBs after 1.37.11 — every rail showed Internal Server Error because migration 10 had already run before `library_episodes.added_at` was stuffed into phase4.",
+      "highlights": [
+        "**Explore shelves load again.** Continue Watching, Tonight’s table, Unfinished, Afterglow, and the fresh-episodes rail stop 500’ing on upgraded installs.",
+        "**No resync required.** Opening 1.37.14 applies a one-shot column migration; existing episode rows keep working (fresh arrivals fill in on the next library sync)."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "Schema migration **50** `library_episodes_added_at` — `ALTER TABLE` + `idx_episodes_added_at` when phase4 already applied without the column (prod footgun from editing an applied migration in 1.37.11).",
+            "Regression: hub build against a DB missing `e.added_at` migrates and returns rails instead of `sqlite3.OperationalError`."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Focused: `tests/test_explore_wave3.py` — `test_hub_survives_legacy_db_missing_episode_added_at`.",
+            "LAN: `GET /api/library/feeds/hub` 200 after Automat `rollout.sh 1.37.14`; `/explore` rails render."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.12",
       "date": "2026-09-28",
