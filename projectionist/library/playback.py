@@ -441,7 +441,8 @@ def fetch_plex_bytes(
             body = response.read() if method != "HEAD" else b""
             return body, content_type, status, final_url
     except HTTPError as error:
-        detail = error.read() if hasattr(error, "read") else b""
+        if hasattr(error, "read"):
+            error.read()
         raise PlaybackError(
             f"Plex HTTP {error.code}",
             status_code=502,
