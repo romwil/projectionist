@@ -1,5 +1,11 @@
 import { expect, test } from "@playwright/test";
-import { mockCuratorApis, mockFeatures, mockLiveChannelsHousehold, resetMockCertifications } from "./fixtures/api-mocks";
+import {
+  mockCuratorApis,
+  mockExploreHubPayload,
+  mockFeatures,
+  mockLiveChannelsHousehold,
+  resetMockCertifications,
+} from "./fixtures/api-mocks";
 import { completeOnboardingViaApi } from "./fixtures/helpers";
 import {
   NATIVE_VIEWPORT,
@@ -198,16 +204,22 @@ test.describe("Native mobile — member living-room", () => {
   });
 
   test("explore card rails swipe horizontally without nested vertical scroll", async ({ page }) => {
-    await page.route("**/api/library/feeds/continue-watching**", async (route) => {
+    await page.route("**/api/library/feeds/hub**", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({
-          feed: "continue-watching",
-          total: RAIL_TITLES.length,
-          note: null,
-          items: RAIL_TITLES,
-        }),
+        body: JSON.stringify(
+          mockExploreHubPayload({
+            rails: {
+              continue_watching: {
+                feed: "continue-watching",
+                total: RAIL_TITLES.length,
+                note: null,
+                items: RAIL_TITLES,
+              },
+            },
+          }),
+        ),
       });
     });
 
@@ -337,7 +349,9 @@ test.describe("Native mobile — member living-room", () => {
     await expect(page.getByTestId("title-detail-drawer")).toHaveCount(0);
     await expect(page.getByTestId("library-player")).toBeVisible();
     await expect(page.getByRole("button", { name: "Pop-out" })).toHaveCount(0);
-    await assertMinTapSize(page.getByRole("button", { name: "+15s" }));
+    const skipForward = page.getByTestId("library-skip-forward");
+    await expect(skipForward).toBeVisible();
+    await assertMinTapSize(skipForward);
     await assertNoHorizontalPageOverflow(page);
 
     const player = page.getByTestId("library-player");
@@ -435,12 +449,22 @@ test.describe("Native mobile — admin pass", () => {
 
   test("completed chat poster strips do not nest a vertical scrollbar", async ({ page }) => {
     await page.route("**/api/chat/stream**", async (route) => {
-      if (route.request().method() !== "GET") {
+      const req = route.request();
+      if (req.method() !== "POST" && req.method() !== "GET") {
         await route.continue();
         return;
       }
-      const url = new URL(route.request().url());
-      const sessionId = url.searchParams.get("session_id") || "mobile-admin-cards";
+      let sessionId = "";
+      if (req.method() === "POST") {
+        try {
+          sessionId = String(req.postDataJSON()?.session_id || "");
+        } catch {
+          sessionId = "";
+        }
+      } else {
+        sessionId = new URL(req.url()).searchParams.get("session_id") || "";
+      }
+      sessionId = sessionId || "mobile-admin-cards";
       const payload = {
         type: "done",
         session_id: sessionId,

@@ -53,13 +53,23 @@ test.describe("Chat workspace", () => {
 
   test("shows typing indicator while waiting for response", async ({ page }) => {
     await page.route("**/api/chat/stream**", async (route) => {
-      if (route.request().method() !== "GET") {
+      const method = route.request().method();
+      if (method !== "POST" && method !== "GET") {
         await route.continue();
         return;
       }
       await new Promise((resolve) => setTimeout(resolve, 500));
-      const url = new URL(route.request().url());
-      const sessionId = url.searchParams.get("session_id") || crypto.randomUUID().replace(/-/g, "");
+      let sessionId = "";
+      if (method === "POST") {
+        try {
+          sessionId = String(route.request().postDataJSON()?.session_id || "");
+        } catch {
+          sessionId = "";
+        }
+      } else {
+        sessionId = new URL(route.request().url()).searchParams.get("session_id") || "";
+      }
+      sessionId = sessionId || crypto.randomUUID().replace(/-/g, "");
       const payload = {
         type: "done",
         session_id: sessionId,
@@ -89,12 +99,22 @@ test.describe("Chat workspace", () => {
 
   test("thinking indicator expands agent activity log from tool events", async ({ page }) => {
     await page.route("**/api/chat/stream**", async (route) => {
-      if (route.request().method() !== "GET") {
+      const method = route.request().method();
+      if (method !== "POST" && method !== "GET") {
         await route.continue();
         return;
       }
-      const url = new URL(route.request().url());
-      const sessionId = url.searchParams.get("session_id") || crypto.randomUUID().replace(/-/g, "");
+      let sessionId = "";
+      if (method === "POST") {
+        try {
+          sessionId = String(route.request().postDataJSON()?.session_id || "");
+        } catch {
+          sessionId = "";
+        }
+      } else {
+        sessionId = new URL(route.request().url()).searchParams.get("session_id") || "";
+      }
+      sessionId = sessionId || crypto.randomUUID().replace(/-/g, "");
       const toolStart = { name: "search_library", status: "start", args: { query: "noir" } };
       const toolDone = {
         name: "search_library",
