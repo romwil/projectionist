@@ -16,8 +16,10 @@ import UserAvatar from "../../components/UserAvatar";
 import {
   applyUiFontSize,
   applyUiTheme,
+  loadPauseWhenBackgrounded,
   normalizeUiFontSize,
   normalizeUiTheme,
+  persistPauseWhenBackgrounded,
 } from "../../lib/uiPrefs.js";
 
 const FONT_OPTIONS = [
@@ -38,6 +40,9 @@ export default function ProfilePage() {
   const [preferredName, setPreferredName] = useState("");
   const [fontSize, setFontSize] = useState("medium");
   const [uiTheme, setUiTheme] = useState("system");
+  const [pauseWhenBackgrounded, setPauseWhenBackgrounded] = useState(() =>
+    loadPauseWhenBackgrounded(),
+  );
   const [status, setStatus] = useState(null);
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -339,6 +344,29 @@ export default function ProfilePage() {
               </label>
             ))}
           </div>
+        </SettingsPanel>
+
+        <SettingsPanel
+          title="Playback"
+          lead="Play keeps going when you switch Mac Spaces or hide the tab. Turn this on only if you want the reel to pause whenever Projectionist is in the background."
+          testId="playback-prefs-fieldset"
+        >
+          <label className="settings-toggle-row">
+            <input
+              type="checkbox"
+              checked={pauseWhenBackgrounded}
+              data-testid="pause-when-backgrounded"
+              onChange={(event) => {
+                const next = event.target.checked;
+                setPauseWhenBackgrounded(next);
+                persistPauseWhenBackgrounded(next);
+              }}
+            />
+            <span>Pause when backgrounded</span>
+          </label>
+          <span className="field-help">
+            Stored in this browser only (`projectionist.pause_when_backgrounded`). Off by default.
+          </span>
         </SettingsPanel>
 
         <div className="settings-actions">

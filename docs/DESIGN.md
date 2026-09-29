@@ -132,8 +132,10 @@ These surfaces share one bar: **picture first, one gold primary, quiet chrome, L
 | **Cover poster behind contain video** | Atmosphere without lying about the frame. Video letterboxes honestly; art is backdrop only. |
 | **OSD hierarchy** | Primary = Play/Pause + scrubber + clock. ±15 is discreet (double-tap thirds remain the living-room skip). CC + Fullscreen secondary. PiP, Pop-out, Open in Plex, Back under **More**. |
 | **Large center play when paused** | One clear invitation; auto-hide OSD on idle; mouse move / tap reveals chrome. |
+| **Keep playing when backgrounded** | Mac Spaces / tab hide must not kill the reel. Default: keep buffering. Opt-in **Pause when backgrounded** (Settings → Profile, browser-local) soft-pauses for kiosks. |
+| **Keyboard** | Space/`K`/`S` play-pause; `J`/`A`/← −15s; `L`/`D`/→ +15s; `F` fullscreen; `M` mute; `C` captions. |
 | **Mobile 390** | ≥44px primaries, safe-area insets, no Pop-out in the primary row, landscape immersive. |
-| **Honest empty / loading / error** | “warming the reel”, Resume/Start over, Try again + Open in Plex — never a blank stall or dead Play after tab-hide. |
+| **Honest empty / loading / error** | “warming the reel”, Resume/Start over, Try again + Open in Plex — never a blank stall or dead Play. |
 
 Implementation lives in `LibraryWatchPage` / `TheaterPlayer` / `LibraryPlayer` + `frontend/src/styles/13-watch.css`. Live TV keeps its cable-box OSD language; library Play borrows the dark stage and quiet transport.
 
