@@ -250,6 +250,7 @@ def _build_migrations() -> List[Migration]:
         (47, "persona_nicknames", wrap("_migrate_persona_nicknames")),
         (48, "drop_guest_role", wrap("_migrate_drop_guest_role")),
         (49, "session_revocation", wrap("_migrate_session_revocation")),
+        (50, "library_episodes_added_at", wrap("_migrate_library_episodes_added_at")),
     ]
 
 
