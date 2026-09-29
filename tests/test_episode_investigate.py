@@ -121,6 +121,25 @@ class FusionTests(unittest.TestCase):
         )
         self.assertEqual(fused["confidence"], "likely")
         self.assertEqual(fused["proposed"]["title"], "Braciole")
+        # Runtime-only Likely is a footgun on homogeneous-runtime series — leave off.
+        self.assertTrue(fused["signals"]["runtime_only"])
+        self.assertFalse(fused["selected_default"])
+
+    def test_oshash_likely_still_auto_selected(self) -> None:
+        fused = fuse_row(
+            show=_show(),
+            catalog=_catalog(),
+            runtime_seconds=None,
+            opensubtitles={
+                "found": True,
+                "season": 1,
+                "episode": 7,
+                "series_title": "The Bear",
+            },
+            vision=None,
+        )
+        self.assertEqual(fused["confidence"], "likely")
+        self.assertFalse(fused["signals"]["runtime_only"])
         self.assertTrue(fused["selected_default"])
 
 

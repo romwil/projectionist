@@ -13,13 +13,23 @@ import {
   FFMPEG_MISSING,
   IDENTIFY_LEAVES_LAN,
   IDENTIFY_TEST_NO_RENAME,
+  OPEN_STILLS_LABEL,
+  REVIEW_GUIDANCE_APPLY,
+  REVIEW_GUIDANCE_CERTAIN,
+  REVIEW_GUIDANCE_INTRO,
+  REVIEW_GUIDANCE_LIKELY,
+  REVIEW_GUIDANCE_UNCERTAIN,
+  RUNTIME_ONLY_LIKELY_BANNER,
   SCENE_NAMES_NOT_EVIDENCE,
   STILLS_LEAVE_LAN,
   applyButtonClass,
   confidenceLabel,
+  hasRuntimeOnlyLikelyRows,
   identifyTestHonestyLine,
   investigateSeasonOptions,
+  isRuntimeOnlyLikely,
   reviewEvidenceSummary,
+  rowHasReviewStills,
   selectedFileIds,
   selectionMap,
 } from "../../lib/episodeInvestigate.js";
@@ -829,6 +839,7 @@ function InvestigatePanel({ focusHint }) {
     visionOn: visionAvailable && useVision,
     identifyConfigured: health?.acrcloud?.available !== false,
   });
+  const runtimeOnlyBanner = hasRuntimeOnlyLikelyRows(rows);
 
   async function handleStart() {
     setError("");
@@ -981,10 +992,20 @@ function InvestigatePanel({ focusHint }) {
       ) : null}
       {reviewOpen && rows.length && !investigating ? (
         <div className="investigate-review" data-testid="investigate-review">
-          <p className="wizard-note">
-            Certain and Likely start selected. Uncertain stays off. Deselect any row. Apply remaps
-            the same show only.
-          </p>
+          <div className="investigate-review-guidance" data-testid="investigate-review-guidance">
+            <p className="wizard-note">{REVIEW_GUIDANCE_INTRO}</p>
+            <ul className="investigate-review-legend wizard-note">
+              <li>{REVIEW_GUIDANCE_CERTAIN}</li>
+              <li>{REVIEW_GUIDANCE_LIKELY}</li>
+              <li>{REVIEW_GUIDANCE_UNCERTAIN}</li>
+            </ul>
+            <p className="wizard-note">{REVIEW_GUIDANCE_APPLY}</p>
+          </div>
+          {runtimeOnlyBanner ? (
+            <p className="status status-error" data-testid="investigate-runtime-only-banner">
+              {RUNTIME_ONLY_LIKELY_BANNER}
+            </p>
+          ) : null}
           {evidenceSummary ? (
             <p className="status status-secondary" data-testid="investigate-evidence-summary">
               {evidenceSummary}
@@ -1052,6 +1073,8 @@ function InvestigateReviewRow({ row, checked, onToggle }) {
       : "";
   const stills = (row.stills || []).slice(0, 3);
   const tmdbStills = (row.tmdb_stills || []).slice(0, 3);
+  const hasStills = rowHasReviewStills(row);
+  const runtimeOnly = isRuntimeOnlyLikely(row);
   return (
     <tr data-testid={`investigate-row-${row.id}`}>
       <td>
@@ -1085,8 +1108,16 @@ function InvestigateReviewRow({ row, checked, onToggle }) {
               ? " · other show (not this sprint)"
               : ""}
             {reasons.length ? ` · ${reasons[0]}` : ""}
+            {runtimeOnly ? " · runtime-only — verify stills" : ""}
+            {hasStills ? ` · ${OPEN_STILLS_LABEL}` : ""}
+            {tmdbStills.length ? " · compare TMDB" : ""}
           </summary>
           {reasons.length > 1 ? <p className="wizard-note">{reasons.join(" · ")}</p> : null}
+          {runtimeOnly ? (
+            <p className="status status-secondary" data-testid={`investigate-runtime-only-${row.id}`}>
+              Runtime is the only vote. Docu series often share runtimes — check stills before Apply.
+            </p>
+          ) : null}
           <div className="investigate-review-stills" data-testid={`investigate-stills-${row.id}`}>
             {stills.map((src, index) => (
               <img key={`file-${index}`} src={src} alt={`File still ${index + 1}`} />
@@ -1094,6 +1125,9 @@ function InvestigateReviewRow({ row, checked, onToggle }) {
             {tmdbStills.map((src, index) => (
               <img key={`tmdb-${index}`} src={src} alt={`TMDB still ${index + 1}`} />
             ))}
+            {!hasStills ? (
+              <p className="status status-secondary">No file or TMDB stills for this row.</p>
+            ) : null}
           </div>
         </details>
       </td>

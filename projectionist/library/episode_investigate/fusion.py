@@ -38,6 +38,27 @@ def default_selected(confidence: str) -> bool:
     return str(confidence or "").strip().lower() in {CERTAIN, LIKELY}
 
 
+def is_runtime_only_likely(
+    *,
+    confidence: str,
+    runtime_key: Optional[Tuple[int, int]],
+    os_key: Optional[Tuple[int, int]],
+    os_same_show: bool,
+    vision_this: bool,
+    vision_key: Optional[Tuple[int, int]],
+) -> bool:
+    """Likely from a unique runtime hit alone — weak on homogeneous-runtime series."""
+    if str(confidence or "").strip().lower() != LIKELY:
+        return False
+    if not runtime_key:
+        return False
+    if os_same_show and os_key:
+        return False
+    if vision_this and vision_key:
+        return False
+    return True
+
+
 def same_show_proposal(show: Mapping[str, Any], proposed: Mapping[str, Any]) -> bool:
     """Apply this sprint is same-show only."""
     if str(proposed.get("scope") or "") != "this_series":
@@ -241,11 +262,21 @@ def fuse_row(
                 confidence = UNCERTAIN
 
     same = same_show_proposal(show, proposed)
+    runtime_only = is_runtime_only_likely(
+        confidence=confidence,
+        runtime_key=runtime_key,
+        os_key=os_key,
+        os_same_show=os_same_show,
+        vision_this=vision_this,
+        vision_key=vision_key,
+    )
     return {
         "proposed": proposed,
         "confidence": confidence,
         "reasons": reasons,
-        "selected_default": default_selected(confidence) and same and not new_show,
+        "selected_default": (
+            default_selected(confidence) and same and not new_show and not runtime_only
+        ),
         "same_show": same,
         "new_show": new_show,
         "create_attach": create_attach,
@@ -254,6 +285,7 @@ def fuse_row(
             "runtime_key": list(runtime_key) if runtime_key else None,
             "oshash_key": list(os_key) if os_same_show and os_key else None,
             "vision_key": list(vision_key) if vision_this and vision_key else None,
+            "runtime_only": runtime_only,
             "identify_same_show": identify_same,
             "identify_title": str(identify_map.get("title") or "") or None,
         },
