@@ -466,10 +466,20 @@ export function pickNowAndNext(programs, nowSec, { selectedProgram = null } = {}
     airing.sort((a, b) => a.start - b.start);
     const chosen = airing[airing.length - 1];
     nowProg = toOsdProgram(chosen.program);
+    // Prefer next real title — skip chained flex / guideFlexTitle pads so
+    // countdowns are not stuck on Tunarr's ~6h placeholder block.
+    let flexFallback = null;
     for (let j = chosen.index + 1; j < ordered.length; j += 1) {
-      nextProg = toOsdProgram(ordered[j]);
-      if (nextProg) break;
+      const candidate = toOsdProgram(ordered[j]);
+      if (!candidate) continue;
+      if (candidate.is_flex) {
+        if (!flexFallback) flexFallback = candidate;
+        continue;
+      }
+      nextProg = candidate;
+      break;
     }
+    if (!nextProg) nextProg = flexFallback;
   } else if (firstFuture) {
     nextProg = toOsdProgram(firstFuture);
   }
@@ -568,11 +578,24 @@ export function buildOsdModel(channel, nowMs = Date.now(), { selectedProgram = n
     }
   }
 
+  const isFlex = Boolean(now?.is_flex);
   let secondsElapsed = now?.seconds_elapsed ?? null;
   let secondsRemaining = now?.seconds_remaining ?? null;
   let percent = now?.percent ?? null;
   const start = now?.started_at ?? now?.start ?? null;
-  const end = now?.ends_at ?? now?.stop ?? null;
+  let end = now?.ends_at ?? now?.stop ?? null;
+  // Tunarr guideFlexTitle pads are often a synthetic ~6h block. During flex,
+  // clamp the progress edge to the next real program's start so movie channels
+  // do not show multi-hour "left" countdowns.
+  if (isFlex && next && !next.is_flex) {
+    const nextStart = Number(next.started_at ?? next.start);
+    if (Number.isFinite(nextStart) && (end == null || Number(end) > nextStart + 1)) {
+      end = nextStart;
+      if (now && typeof now === "object") {
+        now = { ...now, ends_at: nextStart, stop: nextStart };
+      }
+    }
+  }
   if (start != null && end != null && Number.isFinite(Number(start)) && Number.isFinite(Number(end))) {
     const duration = Math.max(0, Number(end) - Number(start));
     if (duration > 0) {
@@ -589,7 +612,6 @@ export function buildOsdModel(channel, nowMs = Date.now(), { selectedProgram = n
   }
   const durationSeconds =
     start != null && end != null ? Math.max(0, Number(end) - Number(start)) : null;
-  const isFlex = Boolean(now?.is_flex);
   const nextTitle = String(next?.title || "").trim();
   const nextEpisode = formatProgramEpisodeLabel(next) || String(next?.episode_title || "").trim();
   const nextDisplay = formatProgramDisplayTitle(next) || nextTitle;
