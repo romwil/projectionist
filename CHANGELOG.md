@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.37.14] — 2026-09-28
+
+Explore’s home hub crashed on long-lived Automat DBs after 1.37.11 — every rail showed Internal Server Error because migration 10 had already run before `library_episodes.added_at` was stuffed into phase4.
+
+### Highlights
+- **Explore shelves load again.** Continue Watching, Tonight’s table, Unfinished, Afterglow, and the fresh-episodes rail stop 500’ing on upgraded installs.
+- **No resync required.** Opening 1.37.14 applies a one-shot column migration; existing episode rows keep working (fresh arrivals fill in on the next library sync).
+
+### Fixed
+- Schema migration **50** `library_episodes_added_at` — `ALTER TABLE` + `idx_episodes_added_at` when phase4 already applied without the column (prod footgun from editing an applied migration in 1.37.11).
+- Regression: hub build against a DB missing `e.added_at` migrates and returns rails instead of `sqlite3.OperationalError`.
+
+### Verification
+- Focused: `tests/test_explore_wave3.py` — `test_hub_survives_legacy_db_missing_episode_added_at`.
+- LAN: `GET /api/library/feeds/hub` 200 after Automat `rollout.sh 1.37.14`; `/explore` rails render.
+
 ## [1.37.12] — 2026-09-28
 
 Live Channels motif / taste Refill was leaving Mystery, Sci-Fi, and Creature Double Feature empty even though the library still matched titles — Tunarr’s catalog stopped exposing legacy `externalKey`, so craft rating-key intersects always missed.
