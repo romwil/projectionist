@@ -719,9 +719,13 @@ class SchemaMigrationsMixin:
             "view_offset_ms": "INTEGER",
             "duration_ms": "INTEGER",
             "plex_user_rating_stars": "INTEGER",
+            "added_at": "INTEGER",
         }.items():
             if name not in episode_cols:
                 conn.execute(f"ALTER TABLE library_episodes ADD COLUMN {name} {typedef}")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_episodes_added_at ON library_episodes(added_at)"
+        )
 
         conn.executescript(
             """

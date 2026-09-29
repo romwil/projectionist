@@ -41,7 +41,10 @@ describe("browseLinks", () => {
   it("builds unified Search deep-links", () => {
     assert.equal(libraryBrowsePath(), "/search");
     assert.equal(libraryBrowsePath({ mediaType: "movie" }), "/search?media_type=movie");
-    assert.equal(libraryBrowsePath({ mediaType: "show" }), "/search?media_type=show");
+    assert.equal(
+      libraryBrowsePath({ mediaType: "show" }),
+      "/search?media_type=show&sort=episode_added_at&sort_dir=desc",
+    );
     // Unknown media types are dropped rather than forwarded.
     assert.equal(libraryBrowsePath({ mediaType: "episode" }), "/search");
     assert.equal(libraryBrowsePath({ q: "blade runner" }), "/search?q=blade+runner");

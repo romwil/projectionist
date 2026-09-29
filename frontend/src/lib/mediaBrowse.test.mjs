@@ -70,6 +70,18 @@ test("browse query and export preserve current filters", () => {
   assert.match(libraryExportHref(state, ["title", "year"]), /columns=title%2Cyear/);
 });
 
+test("TV browse defaults to recently added episodes", () => {
+  const state = parseMediaBrowse(new URLSearchParams("media_type=show"));
+  assert.equal(state.media_type, "show");
+  assert.equal(state.sort, "episode_added_at");
+  assert.equal(state.sort_dir, "desc");
+  // Defaults stay out of the URL when building from TV defaults.
+  const params = buildMediaBrowseParams(state);
+  assert.equal(params.get("media_type"), "show");
+  assert.equal(params.get("sort"), null);
+  assert.equal(params.get("sort_dir"), null);
+});
+
 test("unwatched excludes watched and in-progress titles", () => {
   assert.equal(matchesMediaBrowseWatchState({ watched: false }, "unwatched"), true);
   assert.equal(matchesMediaBrowseWatchState({ watched: true }, "unwatched"), false);

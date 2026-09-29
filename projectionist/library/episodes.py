@@ -236,6 +236,7 @@ def _episode_row(
         "runtime_minutes": episode.runtime_minutes,
         "view_count": episode.view_count,
         "last_viewed_at": episode.last_viewed_at,
+        "added_at": episode.added_at,
         "file_size": episode.file_size,
         "aired_at": episode.aired_at,
         "view_offset_ms": episode.view_offset_ms,

@@ -98,11 +98,13 @@ Saved pages preserve the structured text, title cards, reply chips, and any quot
 **[Explore](/explore) is cinema browse** over the same SQLite feeds the curator uses. Open it to skim:
 
 - **Continue Watching** — in-progress titles from Plex On Deck (resume + Play), not a live "now playing" session list
-- **Recently Added** and **Recent Releases**
+- **Recently Added** (movies and shows) and **Recently added episodes** (fresh episode arrivals, not whole series)
+- **Recent Releases**
 - **Revisit These** — partially watched TV that's been idle 60+ days
 - **On This Day**
 - A daily-rotating **director filmography** and **genre**, plus a nearby calendar-occasion rail (holidays and observances, including Arbor Day) or a gentle season-of-the-year fallback
-- **Tonight’s double feature** — a compact pair of owned movies with a why, after the seasonal rail. Ask Companion or Concierge in Chat for another pair. Live Channels live on **[Live](/live)**, not this page.
+
+Want a double-feature pairing? Ask Companion or Concierge in **Chat**. Live Channels live on **[Live](/live)**, not this page.
 
 **Chat about a rail.** Most Explore rails offer **Chat about these** — it opens a new conversation seeded with that rail's titles, stable library identities, and the persona *why* when present, so the curator discusses those same in-library picks (not outside search replacements). Posters and title detail also offer **Chat about this** for a single title — same Chat deep link, with a *Let's discuss* opener.
 

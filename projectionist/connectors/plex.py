@@ -142,6 +142,7 @@ class PlexEpisode:
     duration_ms: Optional[int] = None
     view_count: int = 0
     last_viewed_at: Optional[int] = None
+    added_at: Optional[int] = None
     file_size: int = 0
     aired_at: str = ""
     user_rating_stars: Optional[float] = None
@@ -669,6 +670,7 @@ class PlexClient:
                     duration_ms=duration_ms,
                     view_count=int(element.attrib.get("viewCount") or 0),
                     last_viewed_at=optional_int(element.attrib.get("lastViewedAt")),
+                    added_at=optional_int(element.attrib.get("addedAt")),
                     file_size=file_size,
                     aired_at=aired,
                     user_rating_stars=plex_rating_to_stars(

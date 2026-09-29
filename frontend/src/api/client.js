@@ -895,11 +895,11 @@ export async function getPickForMeFeed({ limit = 8 } = {}) {
   return api(`/library/feeds/pick-for-me?${search}`);
 }
 
-export async function getTonightDoubleFeature({ theme = "" } = {}) {
-  const search = new URLSearchParams();
-  if (theme) search.set("theme", theme);
-  const qs = search.toString();
-  return api(`/library/feeds/tonight-double-feature${qs ? `?${qs}` : ""}`);
+/** Single Explore home payload (rails + pulse). Prefer over per-rail fetches. */
+export async function getExploreHub({ limit = 12, refresh = false } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (refresh) params.set("refresh", "true");
+  return api(`/library/feeds/hub?${params}`);
 }
 
 export async function syllabusPublishHandoff(listId, { confirm = false, target = "plex" } = {}) {
@@ -1340,6 +1340,19 @@ export async function getLibraryAggregate(groupBy) {
 
 export async function getLibraryHealth() {
   return api("/library/health");
+}
+
+export async function getExploreFeedRecentlyAddedEpisodes({
+  limit = 12,
+  days = 30,
+  offset = 0,
+} = {}) {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    days: String(days),
+    offset: String(offset),
+  });
+  return api(`/library/feeds/recently-added-episodes?${params}`);
 }
 
 export async function getExploreFeedRecentlyAdded({
