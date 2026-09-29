@@ -22,6 +22,7 @@ import {
   RUNTIME_ONLY_LIKELY_BANNER,
   SCENE_NAMES_NOT_EVIDENCE,
   STILLS_LEAVE_LAN,
+  VISION_CATALOG_TRUNCATED,
   VISION_SERIES_ONLY_TIP,
   applyButtonClass,
   confidenceLabel,
@@ -875,6 +876,15 @@ function InvestigatePanel({ focusHint }) {
     }
   }
 
+  async function handleCancelApply() {
+    try {
+      const snap = await api("/admin/investigate/apply/cancel", { method: "POST" });
+      setApplyJob(snap);
+    } catch (err) {
+      setError(err.message || "Could not cancel apply.");
+    }
+  }
+
   async function handleApply() {
     setError("");
     try {
@@ -985,6 +995,7 @@ function InvestigatePanel({ focusHint }) {
         job={applyJob}
         testId="investigate-apply-progress"
         phaseLabels={{ running: "Applying", queued: "Queued" }}
+        onCancel={handleCancelApply}
       />
       {applyJob?.result?.apply_id && !applyJob?.busy && !applyJob?.result?.undo ? (
         <div className="config-actions">
@@ -1004,6 +1015,12 @@ function InvestigatePanel({ focusHint }) {
             </ul>
             <p className="wizard-note">{REVIEW_GUIDANCE_APPLY}</p>
           </div>
+          {job?.result?.vision_catalog_truncated ||
+          rows.some((row) => row?.vision?.vision_catalog_truncated) ? (
+            <p className="status status-secondary" data-testid="investigate-vision-catalog-truncated">
+              {VISION_CATALOG_TRUNCATED}
+            </p>
+          ) : null}
           {runtimeOnlyBanner ? (
             <p className="status status-error" data-testid="investigate-runtime-only-banner">
               {RUNTIME_ONLY_LIKELY_BANNER}

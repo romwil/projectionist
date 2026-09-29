@@ -70,40 +70,15 @@ def _posix_path(value: str) -> str:
 
 def identify_media_roots(settings: Any) -> List[Path]:
     """Plex section paths, Radarr/Sonarr, tv_root/movies_root, /tv, /movies."""
-    from projectionist.library.episode_investigate.path_map import (
-        discover_media_roots,
-        plex_library_locations,
-    )
+    from projectionist.library.episode_investigate.path_map import identify_media_roots as _roots
 
-    raw_roots = list(discover_media_roots(settings))
-    raw_roots.extend(plex_library_locations(settings, section_type="movie"))
-    roots: List[Path] = []
-    seen: set[str] = set()
-    for raw in raw_roots:
-        try:
-            resolved = Path(str(raw)).resolve()
-        except OSError:
-            continue
-        key = str(resolved)
-        if key in seen:
-            continue
-        seen.add(key)
-        roots.append(resolved)
-    return roots
+    return _roots(settings)
 
 
 def path_is_under_media_root(path: Path, roots: List[Path]) -> bool:
-    try:
-        resolved = path.resolve()
-    except OSError:
-        return False
-    for root in roots:
-        try:
-            if resolved.is_relative_to(root):
-                return True
-        except (OSError, ValueError):
-            continue
-    return False
+    from projectionist.library.episode_investigate.path_map import path_is_under_media_root as _under
+
+    return _under(path, roots)
 
 
 def _snapshot_rows(snapshot: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -208,14 +183,14 @@ def investigate_shows(user=Depends(require_role("owner"))) -> Dict[str, Any]:
 def investigate_seasons(show_id: int, user=Depends(require_role("owner"))) -> Dict[str, Any]:
     """Seasons that actually have Sonarr episode files (not Plex season_count)."""
     del user
-    from projectionist.library.episode_investigate.catalog import list_episode_files, load_show
+    from projectionist.library.episode_investigate.catalog import list_seasons_with_files, load_show
 
     if show_id < 1:
         raise HTTPException(status_code=400, detail="Show not found.")
     show = load_show(_db(), int(show_id))
     if show is None:
         raise HTTPException(status_code=400, detail="Show not found.")
-    inventory = list_episode_files(_settings(), show, season=None, limit=1)
+    inventory = list_seasons_with_files(_settings(), show)
     if not inventory.get("ok"):
         raise HTTPException(
             status_code=400,

@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.37.18] — 2026-09-29
+
+Investigate deep-review hardening: stuck admin jobs, Identify silent drops, unbounded stills cache, and honesty gaps on vision catalog / egress docs.
+
+### Highlights
+- **Investigate jobs don’t wedge busy forever.** A failed worker start rolls back; a dead worker is reclaimed so you can start again.
+- **Re-Investigate can Identify again.** Claims clear per job; a within-job duplicate returns an honest `skipped` payload instead of silently dropping ACRCloud.
+- **Old stills and Identify clips are purged.** Only the current job’s cache stays for review UI.
+- **Privacy and Help name the egress.** Five vision stills, Identify clips, and OpenSubtitles hash lookups are documented honestly.
+
+### Fixed
+- `AdminExecutionStore.begin` reclaim when the worker is dead; `rollback_begin` after failed `start_worker` (Investigate + Apply).
+- Identify process-global claims cleared on new job (`begin_identify_job`); duplicate claim returns `skipped: true`.
+- `purge_old_investigate_jobs` on Investigate start (keeps current job + identify-test scratch).
+- Apply cooperative cancel between rows (no more `del cancel` theater); Apply progress card can Cancel remaining.
+- Apply rename/undo re-checks paths under media roots (`path_map.identify_media_roots` / `path_is_under_media_root`).
+- Light `list_seasons_with_files` for the season dropdown (no full episode-file inventory).
+- Play scrub session-restarts debounced (`SEEK_RESTART_DEBOUNCE_MS`).
+- Vision titles sanitized (`_prompt_safe`); `vision_catalog_truncated` on results + UI note when the catalog exceeds the prompt limit.
+- Still-count contract: `STILL_COUNT == VISION_STILL_LIMIT`; frontend `VISION_STILL_COUNT` drives LAN copy.
+
+### Changed
+- PRIVACY / HELP Investigate egress (five stills, Identify clip, OpenSubtitles hash).
+- Media-root helpers live in `path_map.py` (routes re-export; avoids web←library cycle).
+
+### Verification
+- Focused: `tests/test_episode_investigate.py`, `tests/test_admin_execution.py`, `tests/test_investigate_routes.py`; `frontend/src/lib/episodeInvestigate.test.mjs`, `theaterPlayer.test.mjs`.
+
 ## [1.37.17] — 2026-09-29
 
 Play’s scrubber ignored drag-to-seek, and Unraid compose/rollout dropped ACRCloud / OpenSubtitles keys so Identify and Investigate hash lanes stayed dark after kit sync.

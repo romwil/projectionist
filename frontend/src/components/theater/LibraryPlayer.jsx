@@ -9,6 +9,7 @@ import {
 import { isPhonePlayViewport } from "../../lib/chatLayout.js";
 import {
   SCRUB_MAX,
+  SEEK_RESTART_DEBOUNCE_MS,
   SKIP_SECONDS,
   bufferedRanges,
   canLocalSeekTo,
@@ -69,6 +70,9 @@ export default function LibraryPlayer({
   const pauseWhenBackgroundedRef = useRef(loadPauseWhenBackgrounded());
   /** True while the user is dragging the scrubber — blocks timeupdate from stealing the thumb. */
   const scrubbingRef = useRef(false);
+  /** Collapses rapid scrub-end session restarts into one seek. */
+  const seekRestartTimerRef = useRef(null);
+  const seekRestartPendingMsRef = useRef(null);
   const [session, setSession] = useState(null);
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
@@ -92,7 +96,13 @@ export default function LibraryPlayer({
     const onResize = () => setPhone(isPhonePlayViewport());
     window.addEventListener("resize", onResize);
     setPipSupported(Boolean(document.pictureInPictureEnabled));
-    return () => window.removeEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      if (seekRestartTimerRef.current) {
+        window.clearTimeout(seekRestartTimerRef.current);
+        seekRestartTimerRef.current = null;
+      }
+    };
   }, []);
 
   const stopSession = useCallback(async (extra = {}) => {
@@ -321,7 +331,7 @@ export default function LibraryPlayer({
     window.setTimeout(() => setSkipChip(""), 900);
   }
 
-  async function applySeekRestart(offsetMs) {
+  async function applySeekRestartNow(offsetMs) {
     const current = sessionRef.current;
     if (!current?.session_id) return;
     try {
@@ -334,6 +344,21 @@ export default function LibraryPlayer({
     }
   }
 
+  /** Debounce Plex session-restart seeks from scrub / skip spam. */
+  function applySeekRestart(offsetMs) {
+    seekRestartPendingMsRef.current = offsetMs;
+    if (seekRestartTimerRef.current) {
+      window.clearTimeout(seekRestartTimerRef.current);
+    }
+    seekRestartTimerRef.current = window.setTimeout(() => {
+      seekRestartTimerRef.current = null;
+      const pending = seekRestartPendingMsRef.current;
+      seekRestartPendingMsRef.current = null;
+      if (pending == null) return;
+      void applySeekRestartNow(pending);
+    }, SEEK_RESTART_DEBOUNCE_MS);
+  }
+
   /** Local currentTime when buffered; otherwise Plex session restart at offset. */
   function seekToOffsetMs(offsetMs) {
     const video = videoRef.current;
@@ -341,6 +366,11 @@ export default function LibraryPlayer({
     const target = clampTime(offsetMs / 1000, durationS);
     const targetMs = Math.round(target * 1000);
     if (video && canLocalSeekTo(video, target)) {
+      if (seekRestartTimerRef.current) {
+        window.clearTimeout(seekRestartTimerRef.current);
+        seekRestartTimerRef.current = null;
+        seekRestartPendingMsRef.current = null;
+      }
       try {
         video.currentTime = target;
       } catch {

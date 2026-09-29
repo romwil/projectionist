@@ -1,7 +1,23 @@
 /** Selection defaults and copy for Admin → Libraries Investigate (v1.36.0). */
 
+/** Match projectionist.library.episode_investigate.ffmpeg.STILL_COUNT / vision.VISION_STILL_LIMIT. */
+export const VISION_STILL_COUNT = 5;
+
+const STILL_COUNT_WORDS = {
+  1: "one",
+  2: "two",
+  3: "three",
+  4: "four",
+  5: "five",
+  6: "six",
+};
+
+function stillCountWord(count = VISION_STILL_COUNT) {
+  return STILL_COUNT_WORDS[count] || String(count);
+}
+
 export const STILLS_LEAVE_LAN =
-  "When vision is on, three stills leave the LAN so the chat LLM can look at them.";
+  `When vision is on, ${stillCountWord(VISION_STILL_COUNT)} stills leave the LAN so the chat LLM can look at them.`;
 
 /** Match projectionist.library.episode_investigate.ffmpeg.IDENTIFY_CLIP_SECONDS. */
 export const IDENTIFY_CLIP_SECONDS = 12;
@@ -10,6 +26,9 @@ export const IDENTIFY_LEAVES_LAN =
   `When Identify is on, a ${IDENTIFY_CLIP_SECONDS}-second clip leaves the LAN so ACRCloud can listen. A miss does not rename files.`;
 
 export const IDENTIFY_TEST_NO_RENAME = "This test does not rename files.";
+
+export const VISION_CATALOG_TRUNCATED =
+  "Vision only saw a truncated episode catalog — pick a season for long series so stills can vote on SxxExx.";
 
 export function identifyTestRenamed(result) {
   void result;

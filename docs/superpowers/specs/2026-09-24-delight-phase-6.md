@@ -116,7 +116,7 @@ Owner picks a show (optional season) → **Investigate**. Scene names are not ev
 
 **Always:** ffmpeg stills vs TMDB episode stills; OSHash → OpenSubtitles; runtime. Filename / Sonarr `SxxEyy` = left column only.
 
-**Vision default (fusion):** if the chat LLM accepts images, fusion includes vision unless the owner toggles it off. Three stills, constrained JSON (`this series` → household shows → `unknown`). Stills **leave the LAN**; copy says so.
+**Vision default (fusion):** if the chat LLM accepts images, fusion includes vision unless the owner toggles it off. Five stills, constrained JSON (`this series` → household shows → `unknown`). Stills **leave the LAN**; copy says so.
 
 **UI:** side-by-side, stills pair, Certain / Likely selected, Uncertain off, deselect, Apply or Cancel. Apply this sprint: **same show only** (Sonarr episode-file remap + Plex-proper names + Plex refresh + undo). Job progress like missing-search.
 
