@@ -6,7 +6,7 @@ import {
   startLibraryPlayback,
   stopLibraryPlayback,
 } from "../../api/client";
-import { isPhonePlayViewport } from "../../lib/chatLayout.js";
+import { isCompactPlayViewport, isPhonePlayViewport } from "../../lib/chatLayout.js";
 import {
   SCRUB_MAX,
   SEEK_RESTART_DEBOUNCE_MS,
@@ -16,6 +16,7 @@ import {
   canResumeAttachedStream,
   clampTime,
   formatClockMs,
+  isDocumentFullscreen,
   libraryWatchPath,
   libraryWatchPopoutPath,
   msFromScrubPct,
@@ -27,6 +28,7 @@ import {
   shouldSendProgress,
   skipDeltaForZone,
   theaterKeyAction,
+  toggleTheaterFullscreen,
 } from "../../lib/theaterPlayer.js";
 import {
   UI_PREFS_CHANGED_EVENT,
@@ -87,17 +89,25 @@ export default function LibraryPlayer({
   const [scrubPct, setScrubPct] = useState(null);
   const [bufferedEndS, setBufferedEndS] = useState(0);
   const [phone, setPhone] = useState(() => isPhonePlayViewport());
+  const [compact, setCompact] = useState(() => isCompactPlayViewport());
   const [pipSupported, setPipSupported] = useState(false);
   const [startBusy, setStartBusy] = useState(false);
 
   const key = String(ratingKey || "").trim();
 
   useEffect(() => {
-    const onResize = () => setPhone(isPhonePlayViewport());
+    const syncViewport = () => {
+      setPhone(isPhonePlayViewport());
+      setCompact(isCompactPlayViewport());
+    };
+    const onResize = () => syncViewport();
     window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
     setPipSupported(Boolean(document.pictureInPictureEnabled));
+    syncViewport();
     return () => {
       window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
       if (seekRestartTimerRef.current) {
         window.clearTimeout(seekRestartTimerRef.current);
         seekRestartTimerRef.current = null;
@@ -499,11 +509,7 @@ export default function LibraryPlayer({
 
   function toggleFullscreen() {
     const root = document.querySelector("[data-testid='library-player']");
-    if (document.fullscreenElement) {
-      document.exitFullscreen?.().catch(() => {});
-    } else {
-      root?.requestFullscreen?.().catch(() => {});
-    }
+    toggleTheaterFullscreen(root);
   }
 
   function handleStageActivate(_event, _zone) {
@@ -548,9 +554,17 @@ export default function LibraryPlayer({
         setCcOpen(false);
         return;
       }
-      if (document.fullscreenElement) {
-        document.exitFullscreen?.().catch(() => {});
+      if (isDocumentFullscreen()) {
+        const root = document.querySelector("[data-testid='library-player']");
+        toggleTheaterFullscreen(root);
         return;
+      }
+      {
+        const root = document.querySelector("[data-testid='library-player']");
+        if (root?.classList.contains("theater-player--immersive")) {
+          toggleTheaterFullscreen(root);
+          return;
+        }
       }
       leaveWatch();
     } else if (action === "fullscreen") {
@@ -713,7 +727,11 @@ export default function LibraryPlayer({
   ) : null;
 
   return (
-    <div className={`library-watch ${phone ? "library-watch--phone" : ""} ${className}`.trim()}>
+    <div
+      className={`library-watch ${phone ? "library-watch--phone" : ""} ${compact ? "library-watch--compact" : ""} ${className}`.trim()}
+      data-play-phone={phone ? "true" : "false"}
+      data-play-compact={compact ? "true" : "false"}
+    >
       <TheaterPlayer
         src={resumeOpen || ended || !session?.stream_url ? "" : session.stream_url}
         poster={session?.poster_url || ""}

@@ -6,6 +6,7 @@ import {
   isTheaterChromeTarget,
   skipZoneFromClientX,
   theaterHlsConfig,
+  toggleTheaterFullscreen,
 } from "../../lib/theaterPlayer.js";
 
 /**
@@ -134,8 +135,8 @@ export default function TheaterPlayer({
       onStatusRef.current?.("error");
     }
 
-    if (autoFullscreen && rootRef.current?.requestFullscreen) {
-      rootRef.current.requestFullscreen().catch(() => {});
+    if (autoFullscreen && rootRef.current) {
+      toggleTheaterFullscreen(rootRef.current);
     }
 
     return () => {
@@ -151,13 +152,7 @@ export default function TheaterPlayer({
   }, [src, autoFullscreen]);
 
   function toggleFullscreen() {
-    const root = rootRef.current;
-    if (!root) return;
-    if (document.fullscreenElement) {
-      document.exitFullscreen?.().catch(() => {});
-    } else {
-      root.requestFullscreen?.().catch(() => {});
-    }
+    toggleTheaterFullscreen(rootRef.current);
     bumpOsd();
   }
 
@@ -287,11 +282,7 @@ export default function TheaterPlayer({
   );
 }
 
+/** @deprecated Prefer {@link toggleTheaterFullscreen} from theaterPlayer.js */
 export function requestTheaterFullscreen(root) {
-  if (!root) return;
-  if (document.fullscreenElement) {
-    document.exitFullscreen?.().catch(() => {});
-  } else {
-    root.requestFullscreen?.().catch(() => {});
-  }
+  toggleTheaterFullscreen(root);
 }

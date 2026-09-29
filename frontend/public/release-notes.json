@@ -1,6 +1,41 @@
 {
-  "generated_at": "2026-09-29T21:14:24Z",
+  "generated_at": "2026-09-29T23:02:48Z",
   "releases": [
+    {
+      "version": "1.37.19",
+      "date": "2026-09-29",
+      "summary": "Phone and tablet Play landscape/fullscreen: OSD stays inside the safe viewport so ±15, play/pause, and the scrubber stay tappable on the go.",
+      "highlights": [
+        "**Landscape Play keeps controls on-screen.** Rotate a phone to watch — the transport no longer slides under the home indicator or off the short edge.",
+        "**Fullscreen still shows Projectionist controls.** When Safari ignores the Fullscreen API, Play uses an immersive CSS fallback so custom OSD stays with the video.",
+        "**iPad theater respects safe areas** in both orientations, not desktop-only chrome."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "`isPhonePlayViewport` now uses short/long edges so landscape (~844×390) keeps phone Play chrome (width-alone dropped `--phone` after rotate).",
+            "Landscape OSD media query is `(orientation: landscape) and (max-height: 500px)` — replaces unreachable `(max-width: 390px) and (orientation: landscape)`.",
+            "Compact landscape OSD (tighter padding, hide episode/CC note); single safe-area pad on the OSD host; `100svh`/`100dvh` theater shell.",
+            "`toggleTheaterFullscreen` on the theater root with CSS `theater-player--immersive` fallback (avoids `webkitEnterFullscreen` dropping OSD)."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "HELP / DESIGN: phone landscape + iOS fullscreen limits documented for owners/members."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Unit: `chatLayout.test.mjs`, `theaterPlayer.test.mjs`, `nativeMobile.test.mjs`.",
+            "Playwright: `e2e/library-watch.spec.ts` (phone 390 + landscape), `e2e/mobile-native.spec.ts` landscape Play.",
+            "`cd frontend && npm run lint` — 0 errors (pre-existing warnings only)."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.18",
       "date": "2026-09-29",
