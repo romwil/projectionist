@@ -139,6 +139,16 @@ These surfaces share one bar: **picture first, one gold primary, quiet chrome, L
 
 Implementation lives in `LibraryWatchPage` / `TheaterPlayer` / `LibraryPlayer` + `frontend/src/styles/13-watch.css`. Live TV keeps its cable-box OSD language; library Play borrows the dark stage and quiet transport.
 
+### Live theater (`/live` Watch)
+
+| Decision | Why |
+|----------|-----|
+| **Cable OSD motion-reveal** | Ch± / CC / Fullscreen stay behind idle hide — living-room chrome, not a permanent HUD. |
+| **Flex lower-third (persistent)** | While Continuity/pad fills the air (`osd.isFlex`), a quiet strip shows **Up next on {channel}**, the next title (`nextDisplay`), and a soft countdown from `seconds_remaining`. It is **not** gated on OSD idle hide; it vanishes when flex clears. No buttons on the strip. |
+| **Fraunces / DM Sans + amber** | Same live theater type and accent as the rest of Lights Down — delightful, not noisy. |
+
+Implementation: `LivePlayer` + `buildFlexLowerThird` / `buildOsdModel` in `liveChannels.js` + `frontend/src/styles/12-live.css`.
+
 ### Title surfaces (full page + mini sheet)
 
 Shared implementation: `TitleCtaBar` + `frontend/src/lib/titleCta.js`. Mini sheet, full title page, episode detail, and poster overlay must not invent parallel labels or icons.
