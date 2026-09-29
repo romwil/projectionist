@@ -1799,29 +1799,59 @@ def resolve_collection_icon_url(
 
 
 def _extract_plex_rating_keys(item: Mapping[str, Any]) -> List[str]:
-    """Collect Plex ratingKey forms from a Tunarr library-program / program row."""
+    """Collect Plex ratingKey forms from a Tunarr library-program / program row.
+
+    Tunarr 1.3+ library program payloads often omit legacy ``externalKey`` and
+    instead expose the Plex rating key as ``externalId`` and/or
+    ``identifiers[{type: plex, id}]``. Nested ``show`` objects use the same
+    shape — important so TV craft (library indexes *shows*) intersects episode
+    catalog rows.
+    """
     prog = item.get("program") if isinstance(item.get("program"), Mapping) else item
     if not isinstance(prog, Mapping):
         prog = item
     keys: List[str] = []
-    for raw in (
-        prog.get("externalKey"),
-        item.get("externalKey"),
-        prog.get("plexRatingKey"),
-        item.get("plexRatingKey"),
-        prog.get("ratingKey"),
-        item.get("ratingKey"),
-    ):
+
+    def _add(raw: Any) -> None:
         text = str(raw or "").strip()
-        if not text:
-            continue
+        if not text or text in keys:
+            return
         keys.append(text)
         # Tunarr often stores ``plex|{sourceId}|{ratingKey}``.
         if "|" in text:
             tail = text.rsplit("|", 1)[-1].strip()
             if tail and tail not in keys:
                 keys.append(tail)
-        # Bare digit also matches ``plex|*|{key}`` tails.
+
+    sources: List[Mapping[str, Any]] = []
+    for candidate in (prog, item):
+        if isinstance(candidate, Mapping) and candidate not in sources:
+            sources.append(candidate)
+    # Nested show (episode rows) — library craft matches show ratingKeys.
+    for base in list(sources):
+        show = base.get("show") if isinstance(base.get("show"), Mapping) else None
+        if isinstance(show, Mapping) and show not in sources:
+            sources.append(show)
+
+    for source in sources:
+        for field in (
+            "externalKey",
+            "externalId",
+            "external_id",
+            "plexRatingKey",
+            "ratingKey",
+        ):
+            _add(source.get(field))
+        identifiers = source.get("identifiers")
+        if not isinstance(identifiers, list):
+            continue
+        for ident in identifiers:
+            if not isinstance(ident, Mapping):
+                continue
+            itype = str(ident.get("type") or "").strip().lower()
+            if itype not in {"plex", "plex-rating-key", "plex_rating_key"}:
+                continue
+            _add(ident.get("id") or ident.get("key"))
     return keys
 
 

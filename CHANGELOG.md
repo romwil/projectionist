@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.37.12] — 2026-09-28
+
+Live Channels motif / taste Refill was leaving Mystery, Sci-Fi, and Creature Double Feature empty even though the library still matched titles — Tunarr’s catalog stopped exposing legacy `externalKey`, so craft rating-key intersects always missed.
+
+### Highlights
+- **Motif / taste Refill fills again.** Stations that sample ~30–80 titles from genre / decade / motif craft (Mystery, Sci-Fi, Creature Double Feature, …) rebuild a lineup instead of staying Empty after Refill.
+- **Same soft-cap honesty.** Collection / show stations stay full-run; motif craft still soft-caps — this only restores the Plex id join Tunarr 1.3+ needs.
+
+### Fixed
+- `_extract_plex_rating_keys` (and guide dig-in helpers) read Tunarr `externalId` + `identifiers[{type: plex}]`, including nested show ids so TV craft (library show keys) intersects episode catalog rows.
+- Regression: motif craft Refill against an `externalId`-only catalog no longer returns an empty lineup.
+
+### Verification
+- Focused: `tests/test_live_channels.py` — `TunarrExternalIdPlexKeyTests` + craft / collection match suites.
+
 ## [1.37.11] — 2026-09-28
 
 Explore loads like a home page again — one cached hub request, a dedicated fresh-episodes rail, and TV browse that defaults to the newest episode arrival. Tonight’s double feature leaves the Explore page (Chat can still pair titles when you ask).
