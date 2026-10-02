@@ -8,6 +8,7 @@ import {
 import LiveGuide from "../components/live/LiveGuide";
 import LivePlayer from "../components/live/LivePlayer";
 import LiveTuneShare from "../components/live/LiveTuneShare";
+import WeatherChannelPlayer from "../components/live/WeatherChannelPlayer";
 import { useAuthGate } from "../components/UserMenu";
 import { ROUTES } from "../lib/backNav.js";
 import {
@@ -30,6 +31,7 @@ export default function LivePage({ popout = false }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const channelParam = String(searchParams.get("channel") || "").trim();
   const modeParam = String(searchParams.get("mode") || "").trim().toLowerCase();
+  const weatherMode = channelParam === "weather" || modeParam === "weather";
 
   const [featureReady, setFeatureReady] = useState(false);
   const [featureOn, setFeatureOn] = useState(false);
@@ -268,6 +270,29 @@ export default function LivePage({ popout = false }) {
 
           <div className="live-chrome-secondary" role="group" aria-label="Also watch">
             {!popout ? (
+              <button
+                type="button"
+                className={`live-chrome-icon-btn${weatherMode ? " is-active" : ""}`}
+                data-testid="live-weather-channel"
+                aria-label="Weather Channel"
+                data-tooltip="Weather Channel"
+                title="Weather Channel"
+                onClick={() => {
+                  setSearchParams((prev) => {
+                    const next = new URLSearchParams(prev);
+                    next.set("channel", "weather");
+                    next.set("mode", "watch");
+                    return next;
+                  });
+                  setMode("watch");
+                }}
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">
+                  partly_cloudy_day
+                </span>
+              </button>
+            ) : null}
+            {!popout ? (
               <LiveTuneShare
                 channelId={activeChannel?.id || activeChannelId}
                 channelName={activeChannel?.name || ""}
@@ -310,7 +335,19 @@ export default function LivePage({ popout = false }) {
 
       {error ? <p className="live-page-error">{error}</p> : null}
 
-      {mode === "guide" && !popout ? (
+      {weatherMode ? (
+        <WeatherChannelPlayer
+          onClose={() => {
+            setSearchParams((prev) => {
+              const next = new URLSearchParams(prev);
+              next.delete("channel");
+              next.set("mode", "guide");
+              return next;
+            });
+            setMode("guide");
+          }}
+        />
+      ) : mode === "guide" && !popout ? (
         <LiveGuide
           guide={guide}
           selectedChannelId={activeChannel?.id || ""}

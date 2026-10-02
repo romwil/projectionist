@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.37.20] — 2026-10-02
+
+Play + Live delight: tuning interstitial while you wait, optional host preroll bumpers, a clear pause-past-program choice on Live, and a Weather Channel cable experience.
+
+### Highlights
+- **Tuning while you wait.** Scrubbing Play or tuning Live shows fuzzy TV static and a short wry line, then the picture when frames arrive.
+- **Movie and Live bumpers.** Host preroll files can play before a movie or a Live session — each browser gets its own bumper, not one shared clock.
+- **Pause past the program.** If Live ends while you’re paused, choose **Rejoin live** or **Finish this, then rejoin live**.
+- **Weather Channel.** A cable-style extras channel with real forecast graphics, optional local muzak, and a spoken readout.
+
+### Added
+- `TuningInterstitial` for Play seek/start waits and Live tune-in.
+- Preroll API (`GET /api/preroll/next`, progressive `/api/preroll/asset/{id}`) scanning `/preroll` (`PROJECTIONIST_PREROLL_MEDIA`, Automat default `/mnt/user/data/media/preroll`). Compose + `rollout.sh` + Unraid template bind the folder.
+- Live pause-boundary dialog (rejoin vs finish-then-catch-live).
+- Weather Channel (`/live?channel=weather`) via Open-Meteo + browser TTS; muzak from preroll audio when present.
+- Playback start payload includes `media_type` so movie prerolls stay off episodes.
+
+### Privacy
+- Weather forecast egress to `api.open-meteo.com` documented in Privacy / Help.
+
+### Verification
+- Unit: `tuningCopy`, `prerollClient`, `livePauseBoundary` + `tests/test_theater_delight.py`.
+- Frontend lint 0 errors; `npm run build`.
+- E2e mocks return 204 for preroll so existing Play/Live specs stay stable.
+
 ## [1.37.19] — 2026-09-29
 
 Phone and tablet Play landscape/fullscreen: OSD stays inside the safe viewport so ±15, play/pause, and the scrubber stay tappable on the go.

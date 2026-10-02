@@ -88,6 +88,7 @@ class PlaybackSession:
     show_title: str = ""
     season: Optional[int] = None
     episode: Optional[int] = None
+    media_type: str = ""
     poster_url: str = ""
     content_rating: str = ""
     next_episode: Optional[Dict[str, Any]] = None
@@ -757,6 +758,7 @@ def session_public_payload(session: PlaybackSession, *, can_resume: Optional[boo
         "show_title": session.show_title,
         "season": session.season,
         "episode": session.episode,
+        "media_type": session.media_type or "",
         "can_resume": resume,
         "next_episode": session.next_episode,
         "poster_url": session.poster_url,
@@ -818,6 +820,7 @@ def start_playback(
         show_title=str(playable.get("show_title") or ""),
         season=playable.get("season"),
         episode=playable.get("episode"),
+        media_type=str(playable.get("media_type") or ""),
         poster_url=str(playable.get("poster_url") or ""),
         content_rating=str(playable.get("content_rating") or ""),
         next_episode=next_ep,

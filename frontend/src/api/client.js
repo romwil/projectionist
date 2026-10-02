@@ -1013,6 +1013,17 @@ export async function stopLibraryPlayback(sessionId, payload = {}) {
   });
 }
 
+/** Independent preroll bumper for this browser (204 → null when none). */
+export async function fetchNextPreroll(context = "movie") {
+  const params = new URLSearchParams({ context: String(context || "movie") });
+  return api(`/preroll/next?${params}`);
+}
+
+/** Weather Channel cable experience (Open-Meteo egress + optional local muzak). */
+export async function getLiveWeatherChannel() {
+  return api("/live/weather");
+}
+
 /** Owner-only: assemble and store the digest for the current week on demand. */
 export async function generateWeeklyDigest() {
   return api("/admin/weekly-digest/generate", { method: "POST" });

@@ -54,6 +54,7 @@ CONFIG_DIR="$SCRIPT_DIR/config"
 # Host media libraries — rw so Investigate Apply can rename files. Automat defaults.
 TV_MEDIA="${PROJECTIONIST_TV_MEDIA:-/mnt/user/data/media/tv}"
 MOVIE_MEDIA="${PROJECTIONIST_MOVIE_MEDIA:-/mnt/user/data/media/movies}"
+PREROLL_MEDIA="${PROJECTIONIST_PREROLL_MEDIA:-/mnt/user/data/media/preroll}"
 # Optional Live Channels managed Tunarr (root-equivalent). Set in .env:
 #   MOUNT_DOCKER_SOCK=1
 # or DOCKER_SOCK=/var/run/docker.sock
@@ -113,8 +114,8 @@ ENV_KEYS=(
   PROJECTIONIST_HOST_IP HOST_IP
   PROJECTIONIST_TUNARR_PUBLIC_URL PROJECTIONIST_TUNARR_HOST_PORT PROJECTIONIST_TUNARR_HDHR_PORT
   PROJECTIONIST_TUNARR_MEDIA_BINDS
-  PROJECTIONIST_TV_MEDIA PROJECTIONIST_MOVIE_MEDIA
-  TV_ROOT MOVIES_ROOT
+  PROJECTIONIST_TV_MEDIA PROJECTIONIST_MOVIE_MEDIA PROJECTIONIST_PREROLL_MEDIA
+  TV_ROOT MOVIES_ROOT PREROLL_ROOT
   CURATORX_OWNER_USERNAME CURATORX_OWNER_PASSWORD
   CURATORX_SESSION_SECRET CURATORX_WEBHOOK_SECRET
   CURATORX_MCP_API_KEY CURATORX_MCP_FULL_API_KEY
@@ -155,9 +156,11 @@ run_plain_docker() {
   }
   _mount_media_rw "$TV_MEDIA" /tv "TV library"
   _mount_media_rw "$MOVIE_MEDIA" /movies "Movie library"
+  _mount_media_rw "$PREROLL_MEDIA" /preroll "Preroll bumpers"
   run_args+=(
     -e "PROJECTIONIST_TV_MEDIA=${TV_MEDIA}"
     -e "PROJECTIONIST_MOVIE_MEDIA=${MOVIE_MEDIA}"
+    -e "PROJECTIONIST_PREROLL_MEDIA=${PREROLL_MEDIA}"
     -e DATA_DIR=/config
     -e PORT=8788
     -e PROJECTIONIST_THEATER_PORT=8791
@@ -288,6 +291,7 @@ fi
 log "Config bind: $CONFIG_DIR → /config (preserved)"
 log "TV library (rw): $TV_MEDIA → /tv (and same-path when host dir exists)"
 log "Movie library (rw): $MOVIE_MEDIA → /movies (and same-path when host dir exists)"
+log "Preroll bumpers (rw): $PREROLL_MEDIA → /preroll (and same-path when host dir exists)"
 log "Host data dir (Tunarr binds): PROJECTIONIST_HOST_DATA_DIR=$CONFIG_DIR"
 
 # Compose reference YAML keeps docker.sock commented (opt-in). When the host

@@ -66,6 +66,7 @@ services:
       # Read-write — Investigate Apply os.rename()s episode files. Do not add :ro.
       - ${PROJECTIONIST_TV_MEDIA:-./media/tv}:/tv
       - ${PROJECTIONIST_MOVIE_MEDIA:-./media/movies}:/movies
+      - ${PROJECTIONIST_PREROLL_MEDIA:-./media/preroll}:/preroll
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8788/api/health')"]
       interval: 30s

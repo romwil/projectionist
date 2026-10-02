@@ -36,6 +36,7 @@ async function mockLibraryPlayback(page: import("@playwright/test").Page, extras
           show_title: "",
           season: null,
           episode: null,
+          media_type: extras.media_type ?? "movie",
           can_resume: Boolean(extras.can_resume),
           next_episode: extras.next_episode ?? null,
           poster_url: hugePoster,
