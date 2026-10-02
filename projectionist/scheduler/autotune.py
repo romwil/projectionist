@@ -155,6 +155,7 @@ def evaluate_autotune(
     items_processed: Optional[int],
     remaining_items: Optional[int],
     has_more: bool = False,
+    catchup_gap_seconds: Optional[int] = None,
 ) -> AutotuneDecision:
     """Compute a safe batch/interval adjustment without writing it.
 
@@ -216,7 +217,13 @@ def evaluate_autotune(
     horizon = TARGET_HORIZON_SECONDS.get(name, 7 * 86400)
     if backlog > 0 and new_batch > 0:
         cycles = int(math.ceil(backlog / float(new_batch)))
-        eta_seconds = cycles * new_interval
+        # While a backlog is draining the scheduler re-runs after the (shorter)
+        # catch-up gap, so the ETA must use it — otherwise the interval would be
+        # shortened for a delay that never happens.
+        eta_interval = new_interval
+        if has_more and catchup_gap_seconds:
+            eta_interval = min(new_interval, max(60, int(catchup_gap_seconds)))
+        eta_seconds = cycles * eta_interval
         detail["autotune_eta_seconds"] = eta_seconds
         detail["autotune_target_horizon_seconds"] = horizon
         if eta_seconds > horizon * 1.25:

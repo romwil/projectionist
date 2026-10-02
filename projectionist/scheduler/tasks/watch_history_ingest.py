@@ -175,6 +175,7 @@ def register(scheduler: IdleScheduler) -> None:
             name="watch_history_ingest",
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
+            off_loop=True,
             run_fn=run,
             description=(
                 "Ingests Plex watch history into the per-user watch ledger "

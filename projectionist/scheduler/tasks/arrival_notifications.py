@@ -36,6 +36,7 @@ def register(scheduler: IdleScheduler) -> None:
             name="arrival_notifications",
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
+            off_loop=True,
             run_fn=run,
             description=(
                 "Notifies members when gap-analysis or watchlist titles land in the "

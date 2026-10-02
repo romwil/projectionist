@@ -50,6 +50,7 @@ def register(scheduler: IdleScheduler) -> None:
             name="weekly_digest",
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
+            off_loop=True,
             run_fn=run,
             description=(
                 "Snapshots a weekly 'This week in your library' digest (new additions, "

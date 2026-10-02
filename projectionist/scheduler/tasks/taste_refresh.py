@@ -190,6 +190,7 @@ async def run(
             WHERE media_type = 'show'
             """
         ).fetchall()
+        reviewed_item_ids = {int(r["item_id"]) for r in review_rows}
         for row in show_rows:
             item_id = int(row["id"])
             if item_id not in show_multipliers:
@@ -198,8 +199,7 @@ async def run(
             # Mild contribution from episode curve alone (0.25 scale).
             # Reviews path already counted when present; detect via multiplier use
             # only when there was no review for this id.
-            reviewed = any(int(r["item_id"]) == item_id for r in review_rows)
-            if reviewed:
+            if item_id in reviewed_item_ids:
                 continue
             mult = float(show_multipliers[item_id])
             if mult <= 0:
@@ -272,6 +272,7 @@ def register(scheduler: IdleScheduler) -> None:
             name="taste_refresh",
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
+            off_loop=True,
             run_fn=run,
             description=(
                 "Recomputes taste-profile weights from reviews, preference facts, "

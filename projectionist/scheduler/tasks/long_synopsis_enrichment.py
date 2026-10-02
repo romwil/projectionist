@@ -29,6 +29,8 @@ from projectionist.scheduler.tasks.coverage_signals import emit_synopsis_backlog
 logger = logging.getLogger(__name__)
 
 INTERVAL_SECONDS = 43200  # 12 hours
+# Paced follow-up while a backlog is draining (see scheduler/cadence.py).
+CATCHUP_GAP_SECONDS = 1800
 DEFAULT_BATCH_SIZE = 10
 REQUEST_PAUSE_SECONDS = 1.5
 _MAX_SYNOPSIS_CHARS = 4000
@@ -252,6 +254,7 @@ def register(scheduler: IdleScheduler) -> None:
             name=TASK_NAME,
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
+            off_loop=True,
             run_fn=run,
             description=(
                 "Longer plot text from Wikipedia (default) or OMDb into long_synopsis "
@@ -259,6 +262,7 @@ def register(scheduler: IdleScheduler) -> None:
                 "set long_synopsis_source=off to disable, or omdb/auto when preferred."
             ),
             items_per_cycle=DEFAULT_BATCH_SIZE,
+            catchup_gap_seconds=CATCHUP_GAP_SECONDS,
             progress_scope="long_synopsis_backlog",
         )
     )

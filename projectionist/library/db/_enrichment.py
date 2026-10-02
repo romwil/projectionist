@@ -319,6 +319,18 @@ class EnrichmentMixin:
             row = conn.execute("SELECT COUNT(*) AS cnt FROM embeddings").fetchone()
             return int(row["cnt"] if row else 0)
 
+    def embedding_item_ids(self) -> List[int]:
+        """Return stored embedding item ids, ascending — **without** decoding vectors.
+
+        ``get_embeddings()`` JSON-decodes every vector; callers that only need the
+        id set (e.g. the neighbor refresh rotation) must use this instead.
+        """
+        with self.connect() as conn:
+            rows = conn.execute(
+                "SELECT item_id FROM embeddings ORDER BY item_id ASC"
+            ).fetchall()
+            return [int(row["item_id"]) for row in rows]
+
     def count_items_missing_neighbors(self) -> int:
         """Count embedded titles that still have no ``item_neighbors`` rows.
 

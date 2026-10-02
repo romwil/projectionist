@@ -3,9 +3,41 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, Optional, Protocol
+import threading
+import time
+from typing import Any, Callable, Dict, Optional, Protocol, Tuple
 
 from projectionist.library.db import Database
+
+
+# Admin → Tasks polls the list every 1.2–5s; each poll recounts backlogs with
+# ``NOT EXISTS`` scans over library_items / embeddings / item_neighbors. Those
+# counts only move at batch granularity, so a short TTL keeps the page honest
+# without rescanning a large library on every tick. Set to 0 to disable.
+PROGRESS_CACHE_TTL_SECONDS = 10.0
+_progress_cache: Dict[Tuple[str, str], Tuple[float, Any]] = {}
+_progress_cache_lock = threading.Lock()
+
+
+def clear_progress_cache() -> None:
+    with _progress_cache_lock:
+        _progress_cache.clear()
+
+
+def _cached(db: Database, key: str, compute: Callable[[], Any]) -> Any:
+    ttl = float(PROGRESS_CACHE_TTL_SECONDS)
+    if ttl <= 0:
+        return compute()
+    cache_key = (str(getattr(db, "path", id(db))), key)
+    now = time.monotonic()
+    with _progress_cache_lock:
+        hit = _progress_cache.get(cache_key)
+        if hit is not None and now - hit[0] < ttl:
+            return hit[1]
+    value = compute()
+    with _progress_cache_lock:
+        _progress_cache[cache_key] = (time.monotonic(), value)
+    return value
 
 
 class _HasProgress(Protocol):
@@ -96,8 +128,14 @@ def progress_for_definition(
     batch = items_per_cycle if items_per_cycle is not None else defn.items_per_cycle
     if batch is None:
         return None
-    library_size = int(db.library_counts().get("items") or 0)
-    remaining = count_remaining(db, defn.progress_scope)
+    library_size = int(
+        _cached(db, "library_items", lambda: db.library_counts().get("items") or 0)
+    )
+    remaining = _cached(
+        db,
+        f"remaining:{defn.progress_scope}",
+        lambda: count_remaining(db, defn.progress_scope),
+    )
     return estimate_progress(
         remaining=remaining,
         items_per_cycle=batch,
