@@ -1,5 +1,22 @@
 # Changelog
 
+## [Unreleased]
+
+## [1.37.21] — 2026-10-02
+
+Live bumpers play through, and the pause-past-program choice can appear again the next time you pause.
+
+### Highlights
+- **Bumpers play through.** A Live clock tick no longer restarts the preroll from the beginning.
+- **Pause past the program can ask again.** After Rejoin or Finish, the next pause can show the choice instead of staying silent.
+
+### Fixed
+- `PrerollStage` keeps `onDone` in a ref so OSD re-renders do not reload the bumper.
+- Live pause-boundary dismissal clears when playback resumes and at the next pause gesture.
+
+### Verification
+- `cd frontend && node --test src/lib/livePauseBoundary.test.mjs src/lib/prerollClient.test.mjs`
+
 ## [1.37.20] — 2026-10-02
 
 Play + Live delight: tuning interstitial while you wait, optional host preroll bumpers, a clear pause-past-program choice on Live, and a Weather Channel cable experience.
