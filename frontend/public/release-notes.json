@@ -1,6 +1,30 @@
 {
-  "generated_at": "2026-10-02T17:57:31Z",
+  "generated_at": "2026-10-02T18:54:05Z",
   "releases": [
+    {
+      "version": "1.37.21",
+      "date": "2026-10-02",
+      "summary": "Live bumpers play through, and the pause-past-program choice can appear again the next time you pause.",
+      "highlights": [
+        "**Bumpers play through.** A Live clock tick no longer restarts the preroll from the beginning.",
+        "**Pause past the program can ask again.** After Rejoin or Finish, the next pause can show the choice instead of staying silent."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "`PrerollStage` keeps `onDone` in a ref so OSD re-renders do not reload the bumper.",
+            "Live pause-boundary dismissal clears when playback resumes and at the next pause gesture."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "`cd frontend && node --test src/lib/livePauseBoundary.test.mjs src/lib/prerollClient.test.mjs`"
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.20",
       "date": "2026-10-02",

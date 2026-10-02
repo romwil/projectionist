@@ -31,6 +31,9 @@ import { theaterHlsConfig } from "../../lib/theaterPlayer.js";
 import { formatLiveStreamError, liveStreamHealthCopy } from "../../lib/liveChannelsCopy.js";
 import { pickLiveSoftStallPhrase } from "../../lib/liveStreamSoftStallCopy.js";
 import {
+  isPauseBoundaryDismissed,
+  pauseBoundaryForPlaybackStatus,
+  pauseBoundaryOnPauseGesture,
   programEndSecFromOsd,
   shouldPromptPausePastBoundary,
 } from "../../lib/livePauseBoundary.js";
@@ -312,7 +315,7 @@ export default function LivePlayer({
           paused: true,
           programEndsAtSec: pauseProgramEndRef.current,
           nowSec: Date.now() / 1000,
-          dismissed: Boolean(pauseBoundary && pauseBoundary.open === false),
+          dismissed: isPauseBoundaryDismissed(pauseBoundary),
         })
       ) {
         setPauseBoundary((prev) => (prev?.open ? prev : { open: true }));
@@ -322,6 +325,17 @@ export default function LivePlayer({
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
   }, [status, osdTick, pauseBoundary, osd]);
+
+  // Rejoin/Finish sets `{ open: false }` so this pause does not immediately
+  // re-prompt. Resume bypasses togglePlayback, which used to leave that
+  // dismissal stuck. Drop it once playback leaves pause.
+  useEffect(() => {
+    if (status === "paused") return;
+    setPauseBoundary((prev) => {
+      const next = pauseBoundaryForPlaybackStatus(prev, status);
+      return next === prev ? prev : next;
+    });
+  }, [status]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -738,11 +752,17 @@ export default function LivePlayer({
       hlsRef.current?.stopLoad?.();
       clearStallSignals();
       pauseProgramEndRef.current = programEndSecFromOsd(osd);
+      setPauseBoundary((prev) => {
+        const nextBoundary = pauseBoundaryOnPauseGesture(prev);
+        return nextBoundary === prev ? prev : nextBoundary;
+      });
     }
     setStatus(next);
   }
 
   function rejoinLiveNow() {
+    // Suppress only for the rest of this pause. Cleared when playback resumes
+    // and again at the start of the next pause gesture.
     setPauseBoundary({ open: false });
     pauseProgramEndRef.current = null;
     finishThenLiveRef.current = false;
@@ -756,6 +776,8 @@ export default function LivePlayer({
 
   function finishThenRejoinLive() {
     finishThenLiveRef.current = true;
+    // Same dismissal window as Rejoin: stay shut inside this boundary, then
+    // allow a later pause to prompt again.
     setPauseBoundary({ open: false });
     const video = videoRef.current;
     if (video) {
