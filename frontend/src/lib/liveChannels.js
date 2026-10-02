@@ -1,6 +1,7 @@
 /** Pure helpers for Projectionist `/live` watch + guide. */
 
 import { ROUTES } from "./backNav.js";
+import { normalizeSubtitleTracks } from "./subtitleCues.js";
 import {
   formatProgramDisplayTitle,
   formatProgramEpisodeLabel,
@@ -17,14 +18,7 @@ export const LIVE_CC_EMPTY_AIRING = "No captions available for this airing";
 export function mergeLiveCcTracks(streamTracks = [], plexPayload = null) {
   const stream = Array.isArray(streamTracks) ? streamTracks : [];
   const plexRows = Array.isArray(plexPayload?.plex_streams) ? plexPayload.plex_streams : [];
-  const plex = plexRows.map((row, index) => ({
-    index: `plex-${row.id || index}`,
-    label: row.label || row.display_title || row.language || `Plex ${index + 1}`,
-    language: row.language_code || row.language || "",
-    viaPlex: true,
-    proxyUrl: row.proxy_url || "",
-    streamId: row.id || "",
-  }));
+  const plex = normalizeSubtitleTracks(plexRows).map((track) => ({ ...track, viaPlex: true, streamId: track.id }));
   const hasAny = stream.length > 0 || plex.length > 0;
   let emptyMessage = "";
   if (!hasAny) {
