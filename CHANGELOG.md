@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+Intended patch: next after 1.37.30 (likely 1.37.31) — version files intentionally not bumped; the release thread owns lockstep.
+
+### Added
+- **Subtitles you already have, drawn in the player.** Live and Play share one CC menu: Off plus every real Plex track (embedded or sidecar) for the airing or title. Picking one renders cues in Projectionist — no more "turn on station captions in Admin or watch in Plex" dead end.
+- Same control on Live (`/live`, pop-out `/live/watch`) and Play (`/watch`, pop-out, phone). Includes a ±0.5s sync nudge.
+- `GET /api/library/items/{rating_key}/subtitles/{stream_id}/file` now serves embedded text tracks as WebVTT (Plex `/library/streams/{id}`), not just sidecar files. Plex tokens stay server-side.
+
+### Fixed
+- Embedded Plex tracks (no sidecar `key`) were listed as "in Plex" and never fetchable; they now carry a `proxy_url`.
+- Picture-based tracks (PGS/VobSub) stay listed but disabled with an honest reason; fetch failures say so instead of silently showing nothing.
+- SRT→VTT conversion no longer drops cue text that is only a number.
+
+### Verification
+- `pytest tests/test_subtitle_player_proxy.py tests/test_plex_subtitles.py`; `node --test frontend/src/lib/subtitleCues.test.mjs`; frontend lint 0 errors; `npm run build`.
+
 ## [1.37.24] — 2026-10-02
 
 Explore home loads from a precached hub again — rails recompute in the background instead of blocking first paint.
