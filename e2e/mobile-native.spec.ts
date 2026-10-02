@@ -296,21 +296,22 @@ test.describe("Native mobile — member living-room", () => {
         await route.fulfill({
           status: 200,
           contentType: "application/json",
-          body: JSON.stringify({
-            session_id: "sess-mobile",
-            stream_url: "/api/library/playback/sess-mobile/index.m3u8",
-            duration_ms: 3_600_000,
-            view_offset_ms: 0,
-            title: "Alien",
-            can_resume: false,
-            next_episode: null,
-            poster_url: "",
-            rating_key: "plex-348",
-            plex_watch_url: "https://app.plex.tv/desktop/#!/server/mock/details?key=x",
-          }),
-        });
-        return;
-      }
+        body: JSON.stringify({
+          session_id: "sess-mobile",
+          stream_url: "/api/library/playback/sess-mobile/index.m3u8",
+          duration_ms: 3_600_000,
+          view_offset_ms: 0,
+          title: "Alien",
+          media_type: "episode",
+          can_resume: false,
+          next_episode: null,
+          poster_url: "",
+          rating_key: "plex-348",
+          plex_watch_url: "https://app.plex.tv/desktop/#!/server/mock/details?key=x",
+        }),
+      });
+      return;
+    }
       if (url.pathname.endsWith(".m3u8")) {
         await route.fulfill({
           status: 200,
@@ -383,6 +384,7 @@ test.describe("Native mobile — member living-room", () => {
             duration_ms: 3_600_000,
             view_offset_ms: 0,
             title: "Alien",
+            media_type: "episode",
             can_resume: false,
             next_episode: null,
             poster_url: "",

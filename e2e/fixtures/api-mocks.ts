@@ -1049,6 +1049,32 @@ export async function mockLiveChannelsHousehold(
       body: JSON.stringify({ machine_id: "mock-plex-machine" }),
     });
   });
+
+  // Delight package: no shared preroll in mocks; weather channel stays local.
+  await page.route("**/api/preroll/next**", async (route: Route) => {
+    await route.fulfill({ status: 204, body: "" });
+  });
+  await page.route("**/api/live/weather**", async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        enabled: true,
+        place: "Testville",
+        latitude: 41.88,
+        longitude: -87.63,
+        egress: { provider: "Open-Meteo", host: "api.open-meteo.com", purpose: "test" },
+        error: "",
+        current: { temperature_2m: 70, weather_code: 0, wind_speed_10m: 5 },
+        daily: {},
+        ticker: ["NOW Clear 70°"],
+        voiceover: "Test forecast.",
+        muzak: null,
+        preroll_root_found: false,
+        intro_preroll: null,
+      }),
+    });
+  });
 }
 
 export async function mockSetupStatus(
