@@ -118,6 +118,18 @@ If you enable voice input:
 - Transcripts become normal chat text and then follow the usual chat → LLM path.
 - Optional "speak replies" uses the browser's `speechSynthesis` for assistant text.
 
+### Weather Channel (Live)
+
+When someone opens the **Weather Channel** from Live:
+
+| Signal | What leaves the LAN | When |
+|--------|---------------------|------|
+| **Forecast** | Latitude/longitude (owner-configured or default) to **Open-Meteo** (`api.open-meteo.com`) for current + daily conditions | Weather Channel is opened |
+| **Voiceover** | Spoken in-browser via `speechSynthesis` — does not leave Projectionist’s server | Weather Channel is opened |
+| **Muzak** | Stays on LAN — streamed from the host preroll bind | Audio files exist under the preroll folder |
+
+No API key is sent to Open-Meteo. Owners can set `PROJECTIONIST_WEATHER_LAT` / `PROJECTIONIST_WEATHER_LON` / `PROJECTIONIST_WEATHER_PLACE`.
+
 ### Preferred name
 
 You can set a **preferred conversation name** on your profile. Projectionist stores it on your user record and uses it when addressing you. Fallback: Plex display name, then a neutral greeting.

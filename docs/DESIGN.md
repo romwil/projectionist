@@ -137,9 +137,10 @@ These surfaces share one bar: **picture first, one gold primary, quiet chrome, L
 | **Mobile 390** | ≥44px primaries, safe-area insets, no Pop-out in the primary row, landscape immersive. |
 | **Phone landscape** | Detect phone by short/long edge (not width alone) so rotating to ~844×390 keeps `--phone` chrome. OSD uses `(orientation: landscape) and (max-height: 500px)` — compact title, hidden episode line, transport fully inside the shell with `env(safe-area-inset-*)`. |
 | **Fullscreen** | Prefer Fullscreen API on the theater root (video + OSD together). When the API is unavailable (common iOS Safari), CSS `theater-player--immersive` keeps custom controls; do not prefer `video.webkitEnterFullscreen` (it drops the OSD). |
-| **Honest empty / loading / error** | “warming the reel”, Resume/Start over, Try again + Open in Plex — never a blank stall or dead Play. |
+| **Honest empty / loading / error** | Tuning interstitial (CRT static + wry copy) while seeking/starting; Resume/Start over; Try again + Open in Plex — never a blank stall or dead Play. |
+| **Movie preroll** | Optional host bumper from `/preroll` before the feature; each browser session picks independently (no shared preroll clock). |
 
-Implementation lives in `LibraryWatchPage` / `TheaterPlayer` / `LibraryPlayer` + `frontend/src/styles/13-watch.css`. Live TV keeps its cable-box OSD language; library Play borrows the dark stage and quiet transport.
+Implementation lives in `LibraryWatchPage` / `TheaterPlayer` / `LibraryPlayer` / `TuningInterstitial` / `PrerollStage` + `frontend/src/styles/13-watch.css`. Live TV keeps its cable-box OSD language; library Play borrows the dark stage and quiet transport.
 
 ### Live theater (`/live` Watch)
 
@@ -150,8 +151,11 @@ Implementation lives in `LibraryWatchPage` / `TheaterPlayer` / `LibraryPlayer` +
 | **Flex countdown = next content edge** | Tunarr’s synthetic ~6h `· Up next` guideFlexTitle block must not drive “left” / lower-third timers. Clamp flex `ends_at` to the next non-flex program’s start (skip chained flex pads). |
 | **Cable OSD fits the player** | Full OSD (channel, progress, Next, actions) sizes within the player below Live chrome — no viewport clipping of the Next line; safe-area bottom inset; inner scroll only if still too tall. |
 | **Fraunces / DM Sans + amber** | Same live theater type and accent as the rest of Lights Down — delightful, not noisy. |
+| **Tuning + independent preroll** | Same interstitial language as Play; each client’s Live start can play its own bumper. |
+| **Pause past program boundary** | Ask **Rejoin live** vs **Finish this, then rejoin live** — Projectionist owns the schedule and may stretch reality to finish the paused piece. |
+| **Weather Channel** | Cable-style extras (`?channel=weather`): Open-Meteo forecast + optional local muzak from preroll; spoken via browser TTS. |
 
-Implementation: `LivePlayer` + `buildFlexLowerThird` / `buildOsdModel` / `clamp_flex_progress_to_next` in `liveChannels.js` + `guide.py` + `frontend/src/styles/12-live.css`.
+Implementation: `LivePlayer` + `WeatherChannelPlayer` + `buildFlexLowerThird` / `buildOsdModel` / `clamp_flex_progress_to_next` in `liveChannels.js` + `guide.py` + `frontend/src/styles/12-live.css`.
 
 ### Title surfaces (full page + mini sheet)
 

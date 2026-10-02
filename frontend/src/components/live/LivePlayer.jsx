@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
 import {
   downloadLiveChannelSubtitles,
+  fetchNextPreroll,
   getLiveChannelSubtitles,
   tuneLiveChannel,
 } from "../../api/client";
@@ -29,7 +30,14 @@ import {
 import { theaterHlsConfig } from "../../lib/theaterPlayer.js";
 import { formatLiveStreamError, liveStreamHealthCopy } from "../../lib/liveChannelsCopy.js";
 import { pickLiveSoftStallPhrase } from "../../lib/liveStreamSoftStallCopy.js";
+import {
+  programEndSecFromOsd,
+  shouldPromptPausePastBoundary,
+} from "../../lib/livePauseBoundary.js";
+import { normalizePrerollPayload } from "../../lib/prerollClient.js";
 import LiveProgramHoverCard from "./LiveProgramHoverCard.jsx";
+import TuningInterstitial from "../theater/TuningInterstitial.jsx";
+import PrerollStage from "../theater/PrerollStage.jsx";
 
 /**
  * Fullscreen-capable HLS player with cable-box OSD + subtitle picker.
@@ -73,6 +81,11 @@ export default function LivePlayer({
   const [ccDownloadBusy, setCcDownloadBusy] = useState(false);
   const [ccDownloadNote, setCcDownloadNote] = useState("");
   const plexTrackElRef = useRef(null);
+  const [preroll, setPreroll] = useState(null); // null = none/ready; object = playing; undefined = resolving
+  const [pauseBoundary, setPauseBoundary] = useState(null);
+  const pauseProgramEndRef = useRef(null);
+  const finishThenLiveRef = useRef(false);
+  const remountLiveRef = useRef(null);
 
   const channelId = channel?.id || "";
   const osd = buildOsdModel(channel, osdTick, { selectedProgram });
@@ -263,9 +276,56 @@ export default function LivePlayer({
     };
   }, [channelId, nowPlexKey]);
 
+  // Independent Live bumper per client before HLS attaches.
+  useEffect(() => {
+    if (!channelId) {
+      setPreroll(null);
+      return undefined;
+    }
+    let cancelled = false;
+    setPreroll(null);
+    finishThenLiveRef.current = false;
+    setPauseBoundary(null);
+    pauseProgramEndRef.current = null;
+    (async () => {
+      try {
+        const bumper = normalizePrerollPayload(await fetchNextPreroll("live"));
+        if (!cancelled) setPreroll(bumper);
+      } catch {
+        if (!cancelled) setPreroll(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [channelId]);
+
+  // While paused, ask when wall-clock crosses the program that was airing.
+  useEffect(() => {
+    if (status !== "paused") return undefined;
+    if (pauseProgramEndRef.current == null) {
+      pauseProgramEndRef.current = programEndSecFromOsd(osd);
+    }
+    const tick = () => {
+      if (
+        shouldPromptPausePastBoundary({
+          paused: true,
+          programEndsAtSec: pauseProgramEndRef.current,
+          nowSec: Date.now() / 1000,
+          dismissed: Boolean(pauseBoundary && pauseBoundary.open === false),
+        })
+      ) {
+        setPauseBoundary((prev) => (prev?.open ? prev : { open: true }));
+      }
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [status, osdTick, pauseBoundary, osd]);
+
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !channelId) return undefined;
+    if (!video || !channelId || preroll) return undefined;
 
     const url = liveStreamUrl(channelId);
     lastMediaUrlRef.current = url;
@@ -459,8 +519,15 @@ export default function LivePlayer({
       startPlayback();
     })();
 
+    remountLiveRef.current = () => {
+      if (destroyed) return;
+      finishThenLiveRef.current = false;
+      attachHls();
+    };
+
     return () => {
       destroyed = true;
+      remountLiveRef.current = null;
       if (recoverTimer) clearTimeout(recoverTimer);
       if (stallNudgeTimer) clearTimeout(stallNudgeTimer);
       clearStallUiTimer();
@@ -473,7 +540,7 @@ export default function LivePlayer({
     };
     // activeTrack intentionally omitted — applied in separate effect
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelId, autoFullscreen]);
+  }, [channelId, autoFullscreen, preroll]);
 
   // Detect buffer underruns / frozen playhead while status stays "playing".
   useEffect(() => {
@@ -656,20 +723,45 @@ export default function LivePlayer({
 
   async function togglePlayback() {
     const video = videoRef.current;
-    if (!video || status === "loading" || status === "error") return;
+    if (!video || status === "loading" || status === "error" || pauseBoundary?.open) return;
     bumpOsd();
     const wasPaused = video.paused;
     if (wasPaused) {
       // Resume segment fetching after a live pause.
       hlsRef.current?.startLoad?.();
       clearStallSignals();
+      pauseProgramEndRef.current = null;
+      setPauseBoundary(null);
     }
     const next = await toggleLiveVideoPlayback(video);
     if (next === "paused") {
       hlsRef.current?.stopLoad?.();
       clearStallSignals();
+      pauseProgramEndRef.current = programEndSecFromOsd(osd);
     }
     setStatus(next);
+  }
+
+  function rejoinLiveNow() {
+    setPauseBoundary({ open: false });
+    pauseProgramEndRef.current = null;
+    finishThenLiveRef.current = false;
+    remountLiveRef.current?.();
+    const video = videoRef.current;
+    if (video) {
+      hlsRef.current?.startLoad?.();
+      tryPlayLiveVideo(video).then((next) => setStatus(next));
+    }
+  }
+
+  function finishThenRejoinLive() {
+    finishThenLiveRef.current = true;
+    setPauseBoundary({ open: false });
+    const video = videoRef.current;
+    if (video) {
+      hlsRef.current?.startLoad?.();
+      tryPlayLiveVideo(video).then((next) => setStatus(next));
+    }
   }
 
   function onStageClick(event) {
@@ -745,12 +837,48 @@ export default function LivePlayer({
         muted={false}
         controls={false}
         data-testid="live-player-video"
+        onEnded={() => {
+          if (finishThenLiveRef.current) {
+            finishThenLiveRef.current = false;
+            setPauseBoundary(null);
+            pauseProgramEndRef.current = null;
+            remountLiveRef.current?.();
+          }
+        }}
       />
 
-      {status === "loading" ? (
-        <div className="live-player-status" data-testid="live-player-loading">
-          <span className="live-player-spinner" aria-hidden="true" />
-          <p>Tuning…</p>
+      {preroll ? (
+        <PrerollStage
+          src={preroll.url}
+          title={preroll.title}
+          onDone={() => setPreroll(null)}
+          onSkip={() => setPreroll(null)}
+          testId="live-preroll"
+        />
+      ) : null}
+
+      <TuningInterstitial
+        active={!preroll && status === "loading"}
+        testId="live-player-tuning"
+      />
+
+      {pauseBoundary?.open ? (
+        <div className="live-pause-boundary" data-testid="live-pause-boundary" role="dialog" aria-modal="true">
+          <div className="live-pause-boundary-card">
+            <p className="live-pause-boundary-kicker">Program ended while you were paused</p>
+            <h2 className="live-pause-boundary-title">What now?</h2>
+            <p className="live-pause-boundary-copy muted">
+              Projectionist can stretch the schedule: finish this piece, then catch wherever live is.
+            </p>
+            <div className="live-pause-boundary-actions">
+              <button type="button" className="primary" data-testid="live-rejoin-live" onClick={rejoinLiveNow}>
+                Rejoin live
+              </button>
+              <button type="button" className="ghost" data-testid="live-finish-then-live" onClick={finishThenRejoinLive}>
+                Finish this, then rejoin live
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
 

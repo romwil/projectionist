@@ -66,6 +66,7 @@ services:
       # Host media paths (env wins in settings). Bind-mounted rw at /tv and /movies.
       PROJECTIONIST_TV_MEDIA: ${PROJECTIONIST_TV_MEDIA:-/mnt/user/data/media/tv}
       PROJECTIONIST_MOVIE_MEDIA: ${PROJECTIONIST_MOVIE_MEDIA:-/mnt/user/data/media/movies}
+      PROJECTIONIST_PREROLL_MEDIA: ${PROJECTIONIST_PREROLL_MEDIA:-/mnt/user/data/media/preroll}
     volumes:
       # Host appdata config — do not use docker volume rm / wipe this path
       - ./config:/config
@@ -74,6 +75,9 @@ services:
       - ${PROJECTIONIST_TV_MEDIA:-/mnt/user/data/media/tv}:${PROJECTIONIST_TV_MEDIA:-/mnt/user/data/media/tv}
       - ${PROJECTIONIST_MOVIE_MEDIA:-/mnt/user/data/media/movies}:/movies
       - ${PROJECTIONIST_MOVIE_MEDIA:-/mnt/user/data/media/movies}:${PROJECTIONIST_MOVIE_MEDIA:-/mnt/user/data/media/movies}
+      # Optional host preroll bumpers (Play movies + Live tune-in) + weather muzak.
+      - ${PROJECTIONIST_PREROLL_MEDIA:-/mnt/user/data/media/preroll}:/preroll
+      - ${PROJECTIONIST_PREROLL_MEDIA:-/mnt/user/data/media/preroll}:${PROJECTIONIST_PREROLL_MEDIA:-/mnt/user/data/media/preroll}
       # OPTIONAL — Live Channels managed Tunarr (root-equivalent). Off by default.
       # Uncomment only if you want Projectionist to pull/start/stop a Tunarr sibling.
       # Same opt-in as Unraid CA template path "Docker Socket".

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
+  fetchNextPreroll,
   progressLibraryPlayback,
   seekLibraryPlayback,
   startLibraryPlayback,
@@ -35,7 +36,9 @@ import {
   loadPauseWhenBackgrounded,
 } from "../../lib/uiPrefs.js";
 import { plexPlayRatingKey } from "../../lib/titleLinks.js";
+import { normalizePrerollPayload, shouldPlayMoviePreroll } from "../../lib/prerollClient.js";
 import TheaterPlayer from "./TheaterPlayer.jsx";
+import PrerollStage from "./PrerollStage.jsx";
 
 function displayHeadline(session) {
   if (!session) return "Play";
@@ -92,6 +95,10 @@ export default function LibraryPlayer({
   const [compact, setCompact] = useState(() => isCompactPlayViewport());
   const [pipSupported, setPipSupported] = useState(false);
   const [startBusy, setStartBusy] = useState(false);
+  /** True while scrub/skip is waiting on a Plex session restart. */
+  const [seeking, setSeeking] = useState(false);
+  /** Client-local movie bumper before the feature. */
+  const [preroll, setPreroll] = useState(null);
 
   const key = String(ratingKey || "").trim();
 
@@ -132,10 +139,12 @@ export default function LibraryPlayer({
 
   const handlePlayerStatus = useCallback((next) => {
     setStatus(next);
-    if (next === "error") {
-      setError((prev) => prev || "Playback stalled. Try Resume, refresh, or Open in Plex.");
-    } else if (next === "playing" || next === "ready") {
+    if (next === "playing" || next === "ready") {
+      setSeeking(false);
       setError("");
+    } else if (next === "error") {
+      setSeeking(false);
+      setError((prev) => prev || "Playback stalled. Try Resume, refresh, or Open in Plex.");
     }
   }, []);
 
@@ -176,6 +185,17 @@ export default function LibraryPlayer({
         setDurationMs(Number(payload.duration_ms) || 0);
         setNowMs(startOver ? 0 : Number(payload.view_offset_ms) || 0);
         setResumeOpen(false);
+        // Movie start-over (or cold start without resume gate) gets a host bumper.
+        if (shouldPlayMoviePreroll(payload) && (startOver || !Number(payload.view_offset_ms))) {
+          try {
+            const bumper = normalizePrerollPayload(await fetchNextPreroll("movie"));
+            setPreroll(bumper);
+          } catch {
+            setPreroll(null);
+          }
+        } else {
+          setPreroll(null);
+        }
         setStatus("ready");
       } catch (err) {
         setError(err?.message || "This title couldn’t start in Projectionist.");
@@ -211,6 +231,14 @@ export default function LibraryPlayer({
           setResumeOpen(true);
           setStatus("paused");
         } else {
+          if (shouldPlayMoviePreroll(payload) && !Number(payload.view_offset_ms)) {
+            try {
+              const bumper = normalizePrerollPayload(await fetchNextPreroll("movie"));
+              if (!cancelled) setPreroll(bumper);
+            } catch {
+              if (!cancelled) setPreroll(null);
+            }
+          }
           setStatus("ready");
         }
       } catch (err) {
@@ -344,12 +372,14 @@ export default function LibraryPlayer({
   async function applySeekRestartNow(offsetMs) {
     const current = sessionRef.current;
     if (!current?.session_id) return;
+    setSeeking(true);
     try {
       const next = await seekLibraryPlayback(current.session_id, offsetMs);
       sessionRef.current = next;
       setSession(next);
       setNowMs(offsetMs);
     } catch (err) {
+      setSeeking(false);
       setError(err?.message || "Couldn’t jump in this title.");
     }
   }
@@ -357,6 +387,7 @@ export default function LibraryPlayer({
   /** Debounce Plex session-restart seeks from scrub / skip spam. */
   function applySeekRestart(offsetMs) {
     seekRestartPendingMsRef.current = offsetMs;
+    setSeeking(true);
     if (seekRestartTimerRef.current) {
       window.clearTimeout(seekRestartTimerRef.current);
     }
@@ -733,12 +764,13 @@ export default function LibraryPlayer({
       data-play-compact={compact ? "true" : "false"}
     >
       <TheaterPlayer
-        src={resumeOpen || ended || !session?.stream_url ? "" : session.stream_url}
+        src={resumeOpen || ended || preroll || !session?.stream_url ? "" : session.stream_url}
         poster={session?.poster_url || ""}
         className="library-player"
         testId="library-player"
         videoTestId="library-player-video"
-        loading={status === "loading" && !resumeOpen}
+        loading={(status === "loading" || seeking) && !resumeOpen && !preroll}
+        tuning={seeking}
         loadingCopy="warming the reel"
         error=""
         osd={osd}
@@ -764,6 +796,14 @@ export default function LibraryPlayer({
         onStageDoubleActivate={handleStageDoubleActivate}
         onKeyDown={handleKeyDown}
       >
+        {preroll ? (
+          <PrerollStage
+            src={preroll.url}
+            title={preroll.title}
+            onDone={() => setPreroll(null)}
+            onSkip={() => setPreroll(null)}
+          />
+        ) : null}
         {showCenterPlay ? (
           <button
             type="button"
