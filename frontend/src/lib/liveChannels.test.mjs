@@ -26,6 +26,9 @@ import {
   popoutHandoff,
   programAiringBounds,
   programCellStyle,
+  guideGridBounds,
+  guideTimeScale,
+  GUIDE_SLOT_SECONDS,
   recordLivePlaybackDiag,
   shouldBumpOsdFromPointerMove,
   stepLiveStreamHealthUi,
@@ -544,8 +547,12 @@ describe("liveChannels helpers", () => {
     assert.equal(weather.number, 109);
     assert.equal(weather.programs.length, 1);
     assert.equal(weather.programs[0].title, "Local forecast");
-    assert.equal(weather.programs[0].start, model.windowStart);
-    assert.equal(weather.programs[0].stop, model.windowEnd);
+    // Weather spans the half-hour-aligned grid, same edges as the header ticks.
+    const { gridStart, gridEnd } = guideGridBounds(model.windowStart, model.windowEnd);
+    assert.equal(weather.programs[0].start, gridStart);
+    assert.equal(weather.programs[0].stop, gridEnd);
+    assert.ok(weather.programs[0].start <= model.windowStart);
+    assert.ok(weather.programs[0].stop >= model.windowEnd);
     assert.equal(appendWeatherChannel(withWeather).channels.length, 3);
     assert.equal(appendWeatherChannel(null), null);
   });
@@ -559,5 +566,128 @@ describe("liveChannels helpers", () => {
     );
     assert.match(String(style.left), /px$/);
     assert.match(String(style.width), /px$/);
+  });
+
+  describe("guide time scale (header / cells / now-line share one x)", () => {
+    const PX = 220;
+    // 00:19:37 local-ish: deliberately NOT on a half hour.
+    const generatedAt = 1_700_000_000 + 1177;
+    const windowEnd = generatedAt + 6 * 3600;
+
+    it("snaps the grid out to equal half-hour columns", () => {
+      const { gridStart, gridEnd, slotCount } = guideGridBounds(generatedAt, windowEnd);
+      assert.equal(gridStart % GUIDE_SLOT_SECONDS, 0);
+      assert.equal(gridEnd % GUIDE_SLOT_SECONDS, 0);
+      assert.ok(gridStart <= generatedAt && gridEnd >= windowEnd);
+      assert.equal((gridEnd - gridStart) / GUIDE_SLOT_SECONDS, slotCount);
+      assert.ok(Number.isInteger(slotCount));
+    });
+
+    it("places every tick on an exact multiple of the column width (no drift)", () => {
+      const scale = guideTimeScale(generatedAt, windowEnd, PX);
+      assert.equal(scale.pxPerSlot, PX / 2);
+      assert.equal(scale.marks.length, scale.slotCount);
+      scale.marks.forEach((mark, i) => {
+        assert.equal(scale.xForTime(mark), i * scale.pxPerSlot);
+      });
+      assert.equal(scale.width, scale.slotCount * scale.pxPerSlot);
+      assert.equal(scale.xForTime(scale.gridEnd), scale.width);
+    });
+
+    it("puts a program starting on a tick exactly at that tick's x", () => {
+      const scale = guideTimeScale(generatedAt, windowEnd, PX);
+      const tick = scale.marks[4]; // e.g. the "1:00" column
+      const style = programCellStyle(
+        { start: tick, stop: tick + 1800 },
+        scale.gridStart,
+        scale.gridEnd,
+        PX,
+      );
+      assert.equal(style.left, `${scale.xForTime(tick)}px`);
+      assert.equal(style.width, `${scale.pxPerSlot}px`);
+    });
+
+    it("sizes width to duration: a 2h film spans four half-hour columns", () => {
+      const scale = guideTimeScale(generatedAt, windowEnd, PX);
+      const tick = scale.marks[2];
+      const style = programCellStyle(
+        { start: tick, stop: tick + 7200 },
+        scale.gridStart,
+        scale.gridEnd,
+        PX,
+      );
+      assert.equal(parseFloat(style.width), 4 * scale.pxPerSlot);
+    });
+
+    it("never inflates short blocks (no 48px minimum) so neighbours do not overlap", () => {
+      const scale = guideTimeScale(generatedAt, windowEnd, PX);
+      const t = scale.marks[1];
+      const short = programCellStyle(
+        { start: t, stop: t + 300 }, // 5 min
+        scale.gridStart,
+        scale.gridEnd,
+        PX,
+      );
+      assert.ok(Math.abs(parseFloat(short.width) - (300 / 3600) * PX) < 1e-6);
+      const next = programCellStyle(
+        { start: t + 300, stop: t + 900 },
+        scale.gridStart,
+        scale.gridEnd,
+        PX,
+      );
+      assert.ok(Math.abs(parseFloat(short.left) + parseFloat(short.width) - parseFloat(next.left)) < 1e-6);
+    });
+
+    it("keeps back-to-back programs flush across the whole window", () => {
+      const scale = guideTimeScale(generatedAt, windowEnd, PX);
+      const durations = [1500, 2700, 5400, 600, 1800, 3600];
+      let t = scale.gridStart;
+      let prevRight = 0;
+      for (const d of durations) {
+        const style = programCellStyle({ start: t, stop: t + d }, scale.gridStart, scale.gridEnd, PX);
+        assert.ok(Math.abs(parseFloat(style.left) - prevRight) < 1e-6);
+        prevRight = parseFloat(style.left) + parseFloat(style.width);
+        t += d;
+      }
+      assert.ok(Math.abs(prevRight - scale.xForTime(t)) < 1e-6);
+    });
+
+    it("clamps a program that began before the grid to x=0 and one running past it to the right edge", () => {
+      const scale = guideTimeScale(generatedAt, windowEnd, PX);
+      const early = programCellStyle(
+        { start: scale.gridStart - 3600, stop: scale.gridStart + 1800 },
+        scale.gridStart,
+        scale.gridEnd,
+        PX,
+      );
+      assert.equal(early.left, "0px");
+      assert.equal(parseFloat(early.width), scale.pxPerSlot);
+      const late = programCellStyle(
+        { start: scale.gridEnd - 1800, stop: scale.gridEnd + 7200 },
+        scale.gridStart,
+        scale.gridEnd,
+        PX,
+      );
+      assert.ok(Math.abs(parseFloat(late.left) + parseFloat(late.width) - scale.width) < 1e-6);
+    });
+
+    it("puts the now-line on the same scale as the header (now = fraction through its column)", () => {
+      const scale = guideTimeScale(generatedAt, windowEnd, PX);
+      const now = generatedAt; // 19m37s past the half hour boundary
+      const col = Math.floor((now - scale.gridStart) / GUIDE_SLOT_SECONDS);
+      const intoCol = (now - scale.marks[col]) / GUIDE_SLOT_SECONDS;
+      assert.ok(Math.abs(scale.xForTime(now) - (col + intoCol) * scale.pxPerSlot) < 1e-6);
+      assert.ok(scale.xForTime(now) >= 0 && scale.xForTime(now) <= scale.width);
+    });
+
+    it("rejects hostile input without NaN geometry", () => {
+      for (const bad of [null, undefined, NaN, "x", Infinity]) {
+        const { gridStart, gridEnd, slotCount } = guideGridBounds(bad, bad);
+        assert.ok(Number.isFinite(gridStart) && Number.isFinite(gridEnd));
+        assert.ok(slotCount >= 1);
+      }
+      assert.deepEqual(programCellStyle({ start: "x", stop: 5 }, 0, 100, PX), { display: "none" });
+      assert.deepEqual(programCellStyle({ start: 10, stop: 10 }, 0, 100, PX), { display: "none" });
+    });
   });
 });
