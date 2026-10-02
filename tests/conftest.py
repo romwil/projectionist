@@ -234,3 +234,27 @@ def _reset_host_circuits():
     reset_host_circuits()
     yield
     reset_host_circuits()
+
+
+@pytest.fixture(autouse=True)
+def _reset_swr_caches():
+    """Process-global SWR caches must not leak payloads between tests."""
+    from projectionist.journey import exploration
+    from projectionist.library import derived_caches
+    from projectionist.live_channels import guide_cache, status_cache
+
+    caches = (
+        guide_cache.GUIDE_CACHE,
+        guide_cache.ON_NOW_CACHE,
+        status_cache.STATUS_CACHE,
+        status_cache.CRAFT_CACHE,
+        exploration.JOURNEY_CACHE,
+        derived_caches.COVERAGE_CACHE,
+        derived_caches.HEALTH_CACHE,
+    )
+    for cache in caches:
+        cache.wait_idle(2.0)
+        cache.clear()
+    yield
+    for cache in caches:
+        cache.wait_idle(2.0)

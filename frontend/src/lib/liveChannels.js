@@ -798,6 +798,9 @@ export function normalizeGuide(snapshot) {
   return {
     enabled: true,
     ready: Boolean(snapshot.ready) && channels.length > 0,
+    // Server is still building the first guide (SWR cold start) — poll, don't show "not ready".
+    warming: Boolean(snapshot.warming),
+    stale: Boolean(snapshot.stale),
     reason: String(snapshot.reason || ""),
     generatedAt,
     windowStart: generatedAt,
