@@ -273,15 +273,103 @@ class FeedHelperTests(unittest.TestCase):
             db = Database(Path(tmp) / "test.db")
             invalidate_explore_hub_cache()
             settings = Settings()
-            first = get_explore_hub(db, settings, rail_limit=8)
+            # Explicit rebuild fills memory + disk (cold path is non-blocking).
+            first = get_explore_hub(db, settings, rail_limit=8, bypass_cache=True)
             self.assertEqual(first["feed"], "explore-hub")
             self.assertFalse(first.get("cached"))
+            self.assertFalse(first.get("warming"))
             self.assertIn("recently_added_episodes", first["rails"])
             second = get_explore_hub(db, settings, rail_limit=8)
             self.assertTrue(second.get("cached"))
+            self.assertFalse(second.get("stale"))
             invalidate_explore_hub_cache()
             third = get_explore_hub(db, settings, rail_limit=8, bypass_cache=True)
             self.assertFalse(third.get("cached"))
+
+    def test_explore_hub_swr_serves_stale_without_blocking(self) -> None:
+        """Soft-expired hub must return immediately; recompute stays off-request."""
+        from projectionist.library import explore_hub as hub_mod
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            invalidate_explore_hub_cache()
+            settings = Settings()
+            seeded = get_explore_hub(db, settings, rail_limit=8, bypass_cache=True)
+            self.assertFalse(seeded.get("warming"))
+
+            # Expire soft TTL while keeping the hard window.
+            with hub_mod._LOCK:
+                soft, hard, payload = hub_mod._CACHE[
+                    "youth=0|uid=|limit=8"
+                ]
+                hub_mod._CACHE["youth=0|uid=|limit=8"] = (
+                    time.monotonic() - 1.0,
+                    hard,
+                    payload,
+                )
+
+            build_calls = {"n": 0}
+            real_build = hub_mod.build_explore_hub
+
+            def counting_build(*args, **kwargs):
+                build_calls["n"] += 1
+                time.sleep(0.35)  # prove request path does not wait
+                return real_build(*args, **kwargs)
+
+            with patch.object(hub_mod, "build_explore_hub", side_effect=counting_build):
+                t0 = time.perf_counter()
+                stale = get_explore_hub(db, settings, rail_limit=8)
+                elapsed = time.perf_counter() - t0
+            self.assertTrue(stale.get("cached"))
+            self.assertTrue(stale.get("stale"))
+            self.assertLess(elapsed, 0.2, f"SWR request blocked for {elapsed:.3f}s")
+            # Background refresh was scheduled (may still be running).
+            deadline = time.time() + 2.0
+            while build_calls["n"] < 1 and time.time() < deadline:
+                time.sleep(0.05)
+            self.assertGreaterEqual(build_calls["n"], 1)
+
+    def test_explore_hub_cold_miss_returns_warming_immediately(self) -> None:
+        from projectionist.library import explore_hub as hub_mod
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            invalidate_explore_hub_cache()
+            # Drop durable cache too.
+            with hub_mod._LOCK:
+                hub_mod._CACHE.clear()
+            settings = Settings()
+
+            build_calls = {"n": 0}
+            real_build = hub_mod.build_explore_hub
+
+            def slow_build(*args, **kwargs):
+                build_calls["n"] += 1
+                time.sleep(0.4)
+                return real_build(*args, **kwargs)
+
+            with patch.object(hub_mod, "build_explore_hub", side_effect=slow_build):
+                t0 = time.perf_counter()
+                cold = get_explore_hub(db, settings, rail_limit=8)
+                elapsed = time.perf_counter() - t0
+            self.assertTrue(cold.get("warming"))
+            self.assertFalse(cold.get("cached"))
+            self.assertLess(elapsed, 0.2, f"cold hub blocked for {elapsed:.3f}s")
+            self.assertIn("recently_added_episodes", cold["rails"])
+            deadline = time.time() + 2.0
+            while build_calls["n"] < 1 and time.time() < deadline:
+                time.sleep(0.05)
+            self.assertGreaterEqual(build_calls["n"], 1)
+            # Wait for background fill, then a normal hit should be cached.
+            deadline = time.time() + 2.0
+            while time.time() < deadline:
+                warm = get_explore_hub(db, settings, rail_limit=8)
+                if not warm.get("warming"):
+                    self.assertTrue(warm.get("cached") or not warm.get("stale"))
+                    break
+                time.sleep(0.05)
+            else:
+                self.fail("background hub refresh never completed")
 
     def test_hub_survives_legacy_db_missing_episode_added_at(self) -> None:
         """Prod footgun: migration 10 ran before 1.37.11 stuffed added_at into phase4."""
