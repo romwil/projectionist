@@ -303,7 +303,9 @@
   /* Above idle-hidden OSD (visibility/opacity) so the strip stays readable. */
   z-index: 4;
   pointer-events: none;
-  transition: bottom 220ms ease, opacity 280ms ease;
+  transition:
+    bottom 220ms ease,
+    opacity 280ms ease;
   animation: live-flex-l3-in 420ms ease both;
 }
 
@@ -405,7 +407,10 @@
   transform: translateY(110%);
   opacity: 0;
   visibility: hidden;
-  transition: transform 220ms ease, opacity 220ms ease, visibility 0s linear 220ms;
+  transition:
+    transform 220ms ease,
+    opacity 220ms ease,
+    visibility 0s linear 220ms;
   pointer-events: none;
   z-index: 3;
 }
@@ -415,7 +420,10 @@
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
-  transition: transform 220ms ease, opacity 220ms ease, visibility 0s linear 0s;
+  transition:
+    transform 220ms ease,
+    opacity 220ms ease,
+    visibility 0s linear 0s;
 }
 
 .live-osd-inner {
@@ -526,7 +534,9 @@
   border-radius: 6px;
   padding: 0.15rem 0.25rem 0.2rem;
   margin-left: -0.2rem;
-  transition: color 140ms ease, background 140ms ease;
+  transition:
+    color 140ms ease,
+    background 140ms ease;
 }
 
 .live-osd-next:hover,
@@ -729,7 +739,10 @@
   cursor: pointer;
   overflow: hidden;
   font: inherit;
-  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
 }
 
 .live-guide-cell:hover,
@@ -967,7 +980,8 @@
 .weather-channel-now,
 .weather-channel-status,
 .weather-channel-ticker,
-.weather-channel-egress {
+.weather-channel-egress,
+.weather-place-picker--channel {
   position: relative;
   z-index: 1;
 }
@@ -1020,8 +1034,12 @@
   letter-spacing: 0.04em;
 }
 @keyframes weather-ticker {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
 }
 .weather-channel-egress {
   margin: 0;
@@ -1029,4 +1047,37 @@
 }
 .weather-channel-status--error {
   color: #ffb4a8;
+}
+.weather-place-picker {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0.25rem 0 1rem;
+}
+.weather-place-search {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+.weather-place-search label {
+  flex: 1 1 12rem;
+}
+.weather-place-search input {
+  width: 100%;
+}
+.weather-place-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+.weather-place-result {
+  width: 100%;
+  text-align: left;
+}
+.weather-place-picker--channel .field-help,
+.weather-place-picker--channel .weather-place-status,
+.weather-place-picker--channel .weather-place-current {
+  color: #d5e6f7;
 }

@@ -1,8 +1,9 @@
 """Host preroll bumpers for Play movies + Live tune-in.
 
 Media lives on the host (Automat default ``/mnt/user/data/media/preroll``),
-bind-mounted into the container at ``/preroll``. Each browser session picks
-independently — there is no shared preroll clock across clients.
+bind-mounted into the container at ``/preroll``. Every movie play draws a
+**random** trailer from that library. Live draws its own random bumper per
+client. There is no shared preroll clock.
 """
 
 from __future__ import annotations
@@ -114,6 +115,29 @@ def list_preroll_audio(root: Optional[Path] = None) -> List[Dict[str, Any]]:
     return out
 
 
+def choose_preroll_video(
+    items: Sequence[Dict[str, Any]],
+    *,
+    rng: Optional[random.Random] = None,
+    exclude_ids: Optional[Sequence[str]] = None,
+) -> Optional[Dict[str, Any]]:
+    """Uniform random bumper. Never pinned to the first file or a shared clock."""
+    pool_src = [item for item in items if item.get("id")]
+    if not pool_src:
+        return None
+    exclude = {str(x) for x in (exclude_ids or []) if x}
+    pool = [item for item in pool_src if str(item["id"]) not in exclude] or list(pool_src)
+    picker = rng if rng is not None else random.SystemRandom()
+    chosen = picker.choice(pool)
+    return {
+        "id": chosen["id"],
+        "title": chosen.get("title") or "Preroll",
+        "media_type": "video",
+        "url": f"/api/preroll/asset/{chosen['id']}",
+        "content_type": chosen.get("content_type") or "video/mp4",
+    }
+
+
 def pick_preroll(
     *,
     context: str = "movie",
@@ -121,33 +145,47 @@ def pick_preroll(
     rng: Optional[random.Random] = None,
     exclude_ids: Optional[Sequence[str]] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Pick one video bumper for this client (independent of other viewers)."""
-    _ = context  # reserved for future movie-vs-live folders
-    items = list_preroll_videos(root)
-    if not items:
-        return None
-    exclude = {str(x) for x in (exclude_ids or []) if x}
-    pool = [i for i in items if i["id"] not in exclude] or items
-    picker = rng if rng is not None else random.Random()
-    chosen = picker.choice(pool)
-    return {
-        "id": chosen["id"],
-        "title": chosen["title"],
-        "media_type": "video",
-        "url": f"/api/preroll/asset/{chosen['id']}",
-        "content_type": chosen["content_type"],
-    }
+    """Random video bumper for this client.
+
+    ``movie`` and ``live`` both draw from the whole preroll video library.
+    Each call is independent — a later play of the same title can lead with
+    a different trailer.
+    """
+    _ = context
+    return choose_preroll_video(
+        list_preroll_videos(root),
+        rng=rng,
+        exclude_ids=exclude_ids,
+    )
 
 
-def resolve_asset(asset_id: str, *, root: Optional[Path] = None) -> Optional[Dict[str, Any]]:
+def resolve_asset(
+    asset_id: str,
+    *,
+    root: Optional[Path] = None,
+    extra_roots: Optional[Sequence[Path]] = None,
+) -> Optional[Dict[str, Any]]:
     aid = str(asset_id or "").strip().lower()
     if not _SAFE_ID.match(aid):
         return None
+    bases: List[Path] = []
     base = root or resolve_preroll_root()
-    if base is None:
+    if base is not None:
+        bases.append(base)
+    for extra in extra_roots or []:
+        if extra is None:
+            continue
+        try:
+            resolved = Path(extra).resolve()
+        except OSError:
+            continue
+        if resolved.is_dir() and resolved not in bases:
+            bases.append(resolved)
+    if not bases:
         return None
-    for collection in (list_preroll_videos(base), list_preroll_audio(base)):
-        for item in collection:
-            if item["id"] == aid:
-                return item
+    for scan_root in bases:
+        for collection in (list_preroll_videos(scan_root), list_preroll_audio(scan_root)):
+            for item in collection:
+                if item["id"] == aid:
+                    return item
     return None

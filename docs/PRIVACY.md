@@ -124,11 +124,12 @@ When someone opens the **Weather Channel** from Live:
 
 | Signal | What leaves the LAN | When |
 |--------|---------------------|------|
-| **Forecast** | Latitude/longitude (owner-configured or default) to **Open-Meteo** (`api.open-meteo.com`) for current + daily conditions | Weather Channel is opened |
+| **Place search** | The text you type (ZIP, city and state, or city and country) to **Open-Meteo geocoding** (`geocoding-api.open-meteo.com`) | You search for a weather place |
+| **Forecast** | Latitude/longitude — your saved profile place, or the household default — to **Open-Meteo** (`api.open-meteo.com`) for current + daily conditions | Weather Channel is opened |
 | **Voiceover** | Spoken in-browser via `speechSynthesis` — does not leave Projectionist’s server | Weather Channel is opened |
-| **Muzak** | Stays on LAN — streamed from the host preroll bind | Audio files exist under the preroll folder |
+| **Music** | Stays on LAN — streamed from the owner-chosen music folder when one is set | That folder contains audio |
 
-No API key is sent to Open-Meteo. Owners can set `PROJECTIONIST_WEATHER_LAT` / `PROJECTIONIST_WEATHER_LON` / `PROJECTIONIST_WEATHER_PLACE`.
+No API key is sent to Open-Meteo. The household default is `PROJECTIONIST_WEATHER_LAT` / `PROJECTIONIST_WEATHER_LON` / `PROJECTIONIST_WEATHER_PLACE`. A saved profile place stores the label and coordinates in the user record and is reused on later forecasts — Projectionist does not geocode again while those coordinates are saved.
 
 ### Preferred name
 

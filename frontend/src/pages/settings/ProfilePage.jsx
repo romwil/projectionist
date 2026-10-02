@@ -12,6 +12,7 @@ import {
 } from "../../api/client";
 import SettingsPageHeader from "../../components/settings/SettingsPageHeader";
 import SettingsPanel from "../../components/settings/SettingsPanel";
+import WeatherLocationPicker from "../../components/weather/WeatherLocationPicker";
 import UserAvatar from "../../components/UserAvatar";
 import {
   applyUiFontSize,
@@ -153,7 +154,10 @@ export default function ProfilePage() {
       setLinkPinId(null);
       setLinkAuthUrl("");
       setLinkPassword("");
-      setStatus({ type: "success", message: "Plex is linked. Watch history can now map to this account." });
+      setStatus({
+        type: "success",
+        message: "Plex is linked. Watch history can now map to this account.",
+      });
     } catch (error) {
       setStatus({ type: "error", message: error.message || "Could not link Plex." });
     } finally {
@@ -291,11 +295,30 @@ export default function ProfilePage() {
         </SettingsPanel>
 
         <SettingsPanel
+          title="Weather place"
+          lead="Used by the Weather Channel. The household default applies until you save a place."
+          testId="settings-weather-place"
+        >
+          <WeatherLocationPicker
+            savedPlace={user.weather_place || ""}
+            source={user.weather_place && user.weather_lat != null ? "profile" : "household"}
+            householdPlace=""
+            onSaved={(next) => {
+              if (next) setUser((prev) => ({ ...(prev || {}), ...next }));
+            }}
+          />
+        </SettingsPanel>
+
+        <SettingsPanel
           title="Appearance"
           lead="Lights Up is gallery paper; Lights Down is the cinema chamber. Match system follows your OS preference."
           testId="ui-theme-fieldset"
         >
-          <div className="settings-ui-theme-options" role="radiogroup" aria-label="Appearance theme">
+          <div
+            className="settings-ui-theme-options"
+            role="radiogroup"
+            aria-label="Appearance theme"
+          >
             {THEME_OPTIONS.map((option) => (
               <label
                 key={option.value}
@@ -377,7 +400,10 @@ export default function ProfilePage() {
       </form>
 
       {status ? (
-        <p className={`status ${status.type === "error" ? "status-error" : ""}`} data-testid="profile-status">
+        <p
+          className={`status ${status.type === "error" ? "status-error" : ""}`}
+          data-testid="profile-status"
+        >
           {status.message}
         </p>
       ) : null}
@@ -438,7 +464,12 @@ export default function ProfilePage() {
                   required
                 />
               </label>
-              <button type="submit" className="primary" data-testid="link-plex-submit" disabled={linkBusy || !linkPassword}>
+              <button
+                type="submit"
+                className="primary"
+                data-testid="link-plex-submit"
+                disabled={linkBusy || !linkPassword}
+              >
                 {linkBusy ? "Linking…" : "Confirm and link Plex"}
               </button>
             </form>
@@ -446,12 +477,19 @@ export default function ProfilePage() {
         </SettingsPanel>
       ) : (
         <SettingsPanel title="Plex" testId="settings-plex-linked">
-          <p className="status status-secondary">Plex account linked. Watch history maps to this household member.</p>
+          <p className="status status-secondary">
+            Plex account linked. Watch history maps to this household member.
+          </p>
         </SettingsPanel>
       )}
 
       <div className="settings-actions">
-        <button type="button" className="ghost" data-testid="settings-sign-out" onClick={handleSignOut}>
+        <button
+          type="button"
+          className="ghost"
+          data-testid="settings-sign-out"
+          onClick={handleSignOut}
+        >
           Sign out
         </button>
       </div>

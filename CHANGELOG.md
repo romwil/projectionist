@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+## [1.37.22] — 2026-10-02
+
+Movie trailers are a random bumper each play, weather place is yours to set, and the owner picks the Weather Channel music folder.
+
+### Highlights
+- **A different trailer each movie.** Every movie play picks a random bumper from the preroll library. The next play can lead with another one.
+- **Your weather place.** Search a ZIP, city and state, or city and country from the Weather Channel or your profile. The household default stays until you save one.
+- **Music folder you choose.** The owner points Weather Channel music at a folder this container can see. Shared-in mounts are marked. If the folder is empty, the forecast says so.
+
+### Added
+- Movie and Live preroll selection is an explicit uniform random draw (`choose_preroll_video`). Each client still picks on its own.
+- Profile weather location (`weather_place`, `weather_lat`, `weather_lon`) via `PATCH /api/auth/me`. `GET /api/weather/places` searches Open-Meteo geocoding. Saved coordinates are reused on the forecast.
+- Owner Live admin: Weather Channel music folder (`tunarr.muzak_folder`) with `GET /api/admin/live/media-browser` and `PUT /api/admin/live/muzak-folder`. Docker bind mounts are highlighted. Paths must stay inside allowed media roots.
+
+### Changed
+- Weather music no longer guesses from preroll filenames. An unset or empty folder is an honest note.
+- Help and Privacy describe random bumpers, place-search egress, and the music folder.
+
+### Verification
+- `pytest tests/test_theater_delight.py tests/test_play_live_limits.py`
+- Frontend lint: 0 errors on touched files.
+
 ## [1.37.21] — 2026-10-02
 
 Live bumpers play through, and the pause-past-program choice can appear again the next time you pause.
