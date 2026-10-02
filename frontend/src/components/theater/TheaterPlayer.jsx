@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
+import TuningInterstitial from "./TuningInterstitial.jsx";
 import {
   OSD_IDLE_MS,
   createStageGesture,
@@ -23,6 +24,8 @@ export default function TheaterPlayer({
   autoFullscreen = false,
   loading = false,
   loadingCopy = "warming the reel",
+  /** When true, show CRT static interstitial (Play seek / start waits). */
+  tuning = false,
   error = "",
   errorNode = null,
   healthNode = null,
@@ -63,6 +66,7 @@ export default function TheaterPlayer({
   });
   const [internalOsd, setInternalOsd] = useState(true);
   const osdVisible = osdVisibleProp ?? internalOsd;
+  const showTuning = Boolean(tuning || loading);
 
   function bumpOsd() {
     setInternalOsd(true);
@@ -253,11 +257,10 @@ export default function TheaterPlayer({
         onWaiting={() => onWaiting?.()}
       />
 
-      {loading ? (
-        <div className="live-player-status theater-player-loading" data-testid={`${testId}-loading`}>
-          <p>{loadingCopy}</p>
-        </div>
-      ) : null}
+      <TuningInterstitial
+        active={showTuning}
+        testId={`${testId}-tuning`}
+      />
 
       {healthNode}
       {error ? (
