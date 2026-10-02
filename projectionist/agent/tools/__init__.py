@@ -2690,8 +2690,11 @@ class ToolRegistry:
         return json.dumps(
             {
                 "confirmation_token": token,
+                "scope": "plex_only",
                 "message": (
-                    f"Awaiting user confirmation to create Plex collection '{title}'. "
+                    f"Awaiting user confirmation to create Plex collection '{title}' "
+                    "(Plex only — this will NOT create a Projectionist collection or course; "
+                    "use create_list for that). "
                     f"{_PENDING_CONFIRM_HINT}"
                 ),
             }
@@ -2933,6 +2936,21 @@ class ToolRegistry:
         name = str(args.get("name") or "").strip()
         if not name:
             return json.dumps({"error": "name is required"})
+        list_kind = str(args.get("list_kind") or "list").strip().lower() or "list"
+        if list_kind not in {"list", "playlist", "course"}:
+            return json.dumps({"error": "list_kind must be list, playlist, or course"})
+        publish = bool(args.get("publish"))
+        if (
+            publish
+            and self.settings.features.multi_user_enabled
+            and (self.user_role or "") != "owner"
+        ):
+            return json.dumps(
+                {"error": "Only the household owner can publish a collection or course."}
+            )
+        raw_items = args.get("items") or []
+        if not isinstance(raw_items, list):
+            return json.dumps({"error": "items must be an array"})
         user_id = self.user_id if self.settings.features.multi_user_enabled else None
         try:
             created = self.db.create_curated_list(
@@ -2940,10 +2958,74 @@ class ToolRegistry:
                 user_id=user_id,
                 name=name,
                 description=str(args.get("description") or ""),
+                list_kind=list_kind,
             )
         except ValueError as error:
             return json.dumps({"error": str(error)})
-        return json.dumps({"list": created})
+        list_id = str(created["id"])
+
+        # Every step reports its own outcome: a partially built list must say so
+        # instead of looking like a success (or a blank failure).
+        added: List[Dict[str, Any]] = []
+        failed: List[Dict[str, Any]] = []
+        for raw in raw_items:
+            entry = raw if isinstance(raw, Mapping) else {}
+            title = str(entry.get("title") or "").strip()
+            tmdb_id = entry.get("tmdb_id")
+            tvdb_id = entry.get("tvdb_id")
+            if not title or (tmdb_id is None and tvdb_id is None):
+                failed.append({"title": title, "error": "title and tmdb_id or tvdb_id are required"})
+                continue
+            try:
+                added.append(
+                    self.db.add_curated_list_item(
+                        item_id=str(uuid.uuid4()),
+                        list_id=list_id,
+                        user_id=user_id,
+                        tmdb_id=int(tmdb_id) if tmdb_id is not None else None,
+                        tvdb_id=int(tvdb_id) if tvdb_id is not None else None,
+                        media_type=str(entry.get("media_type") or "movie"),
+                        title=title,
+                    )
+                )
+            except (ValueError, TypeError) as error:
+                failed.append({"title": title, "error": str(error)})
+
+        published = False
+        publish_error: Optional[str] = None
+        if publish:
+            try:
+                updated = self.db.set_curated_list_visibility(
+                    list_id, user_id=user_id, visibility="published"
+                )
+                published = updated is not None
+                if updated is not None:
+                    created = updated
+                else:
+                    publish_error = "List not found when publishing"
+            except ValueError as error:
+                publish_error = str(error)
+
+        payload: Dict[str, Any] = {
+            "list": created,
+            "list_kind": list_kind,
+            "scope": "projectionist",
+            "published": published,
+            "items_added": len(added),
+        }
+        if failed:
+            payload["items_failed"] = failed
+        if publish and not published:
+            payload["error"] = (
+                f"List '{name}' was created but could not be published: "
+                f"{publish_error or 'unknown error'}. It is still private."
+            )
+        elif failed:
+            payload["warning"] = (
+                f"{len(failed)} of {len(raw_items)} item(s) could not be added; "
+                "tell the user which ones."
+            )
+        return json.dumps(payload)
 
     async def _tool_add_to_list(self, args: Mapping[str, Any]) -> str:
         denied = self._deny_personal_mutation_if_gated()
@@ -3490,6 +3572,20 @@ def resolve_arr_removal_target(
     }
 
 
+def _restore_pending_action(
+    db: Database,
+    token: str,
+    payload: Mapping[str, Any],
+    *,
+    user_id: Optional[str],
+) -> None:
+    """Re-queue a popped proposal after a failed side effect (best effort)."""
+    try:
+        db.save_pending_action(token, str(payload.get("action") or ""), dict(payload), user_id=user_id)
+    except Exception:  # noqa: BLE001
+        logger.warning("Could not restore pending action after failure", exc_info=True)
+
+
 async def execute_confirmed_action(
     db: Database,
     settings: Settings,
@@ -3668,35 +3764,63 @@ async def execute_confirmed_action(
             str(payload["title"]),
             prefix=EPHEMERAL_COLLECTION_PREFIX,
         )
-        collection = create_collection(
-            client,
-            section_id=str(payload["section_id"]),
-            title=titled,
-            media_type=str(payload["media_type"]),
-            rating_keys=list(payload.get("rating_keys") or []),
-        )
+        try:
+            collection = create_collection(
+                client,
+                section_id=str(payload["section_id"]),
+                title=titled,
+                media_type=str(payload["media_type"]),
+                rating_keys=list(payload.get("rating_keys") or []),
+            )
+        except Exception as error:
+            # Nothing was confirmed as created: keep the proposal redeemable so
+            # "try again" works instead of "Invalid or expired confirmation token".
+            _restore_pending_action(db, token, payload, user_id=user_id)
+            raise RuntimeError(
+                f"Plex collection '{titled}' was not created: {error}. "
+                "The proposal is still pending — confirm again to retry."
+            ) from error
         ttl_hours = int(
             getattr(settings, "ephemeral_collection_ttl_hours", None)
             or DEFAULT_EPHEMERAL_TTL_HOURS
         )
-        db.record_ephemeral_plex_collection(
-            plex_rating_key=collection.rating_key,
-            section_id=collection.section_id,
-            title=collection.title,
-            media_type=collection.media_type,
-            ttl_hours=ttl_hours,
-            created_by_user_id=user_id,
-        )
-        return {
-            "action": action,
-            "result": {
-                "rating_key": collection.rating_key,
-                "title": collection.title,
-                "section_id": collection.section_id,
-                "ephemeral": True,
-                "ttl_hours": ttl_hours,
-            },
+        warning = None
+        try:
+            db.record_ephemeral_plex_collection(
+                plex_rating_key=collection.rating_key,
+                section_id=collection.section_id,
+                title=collection.title,
+                media_type=collection.media_type,
+                ttl_hours=ttl_hours,
+                created_by_user_id=user_id,
+            )
+        except Exception:  # noqa: BLE001 — Plex write already succeeded; never report failure
+            logger.exception(
+                "Plex collection %s created but TTL registry write failed",
+                collection.rating_key,
+            )
+            warning = (
+                "Plex collection was created, but Projectionist could not register it "
+                "for automatic cleanup."
+            )
+        result = {
+            "rating_key": collection.rating_key,
+            "title": collection.title,
+            "section_id": collection.section_id,
+            "ephemeral": warning is None,
+            "ttl_hours": ttl_hours,
+            # Explicit scope so the agent never reports this as a Projectionist
+            # collection/course — it exists only as a Plex collection.
+            "scope": "plex_only",
+            "projectionist_collection": False,
+            "note": (
+                "Created in Plex only. It is not a Projectionist collection or course; "
+                "use create_list (publish=true; list_kind=course for a course) for that."
+            ),
         }
+        if warning:
+            result["warning"] = warning
+        return {"action": action, "result": result}
     if action == "add_to_plex_collection":
         from projectionist.connectors.plex import PlexClient
         from projectionist.connectors.plex_collections import add_items_to_collection, find_collection_by_title
@@ -3713,9 +3837,20 @@ async def execute_confirmed_action(
                 str(payload.get("collection_title") or ""),
             )
             if match is None:
-                raise RuntimeError("Plex collection not found")
+                _restore_pending_action(db, token, payload, user_id=user_id)
+                raise RuntimeError(
+                    "Plex collection not found — check the title or pass collection_rating_key. "
+                    "The proposal is still pending."
+                )
             collection_key = match.rating_key
-        add_items_to_collection(client, collection_key, list(payload.get("rating_keys") or []))
+        try:
+            add_items_to_collection(client, collection_key, list(payload.get("rating_keys") or []))
+        except Exception as error:
+            _restore_pending_action(db, token, payload, user_id=user_id)
+            raise RuntimeError(
+                f"Titles were not added to the Plex collection: {error}. "
+                "The proposal is still pending — confirm again to retry."
+            ) from error
         return {"action": action, "result": {"collection_rating_key": collection_key, "added": True}}
     raise RuntimeError(f"Unknown action {action}")
 
@@ -3948,6 +4083,13 @@ def build_system_prompt(
         "and what to purge to save drive space. Use tools to ground recommendations in their actual library. "
         "Never add or remove titles without confirmation tokens. "
         "Plex collection create/add actions also require confirmation tokens. "
+        "Collection routing: when the user asks for a collection or course in Projectionist "
+        "(or does not say Plex), call create_list — publish=true for a household-visible collection, "
+        "list_kind=course for a course, with items when you already have tmdb_id/tvdb_id — "
+        "NOT create_plex_collection. create_plex_collection makes a Plex-only shelf and never a "
+        "Projectionist collection or course; use it only when the user explicitly asks for Plex "
+        "(and also call create_list when they want both). Always tell the user which kind you made, "
+        "and relay any error text from a tool result verbatim instead of going silent. "
         "When a propose tool returns confirmation_token and the user affirms "
         "(yes, go for it, confirm, do it, etc.), immediately call confirm_pending_action "
         "with that exact confirmation_token. Do not ask for another verbal confirmation, "

@@ -1159,6 +1159,9 @@ export async function sendChatStream(
   const decoder = new TextDecoder();
   let buffer = "";
   let currentEvent = "message";
+  // A stream that closes without `done` or `error` (proxy cut, server crash
+  // after a tool side effect) must not leave a blank assistant bubble.
+  let sawTerminalEvent = false;
 
   for (;;) {
     const { done, value } = await reader.read();
@@ -1198,9 +1201,11 @@ export async function sendChatStream(
           onToolCall?.(parsed);
           break;
         case "done":
+          sawTerminalEvent = true;
           onDone?.(parsed);
           break;
         case "error":
+          sawTerminalEvent = true;
           onError?.(parsed);
           break;
         default:
@@ -1208,6 +1213,14 @@ export async function sendChatStream(
       }
       currentEvent = "message";
     }
+  }
+
+  if (!sawTerminalEvent && !signal?.aborted) {
+    onError?.({
+      error:
+        "The response stopped before it finished. If you asked me to create or change something, " +
+        "check whether it went through before retrying.",
+    });
   }
 }
 
