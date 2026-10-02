@@ -19,6 +19,7 @@ import {
   actDescriptionForStagedItem,
   actLabelForStagedItem,
   canActOnStagedItem,
+  retrievalFailureSummary,
   stagedItemDisplayTitle,
 } from "../lib/knowledgeOpsActions.js";
 import {
@@ -30,7 +31,7 @@ import {
 const TABS = [
   { id: "taxonomy", label: "Name mappings" },
   { id: "demand", label: "Requested details" },
-  { id: "coverage", label: "Missing knowledge" },
+  { id: "coverage", label: "Couldn't fill in" },
   { id: "activity", label: "Activity" },
   { id: "all", label: "All exceptions" },
 ];
@@ -234,6 +235,12 @@ function ContextPanel({ item, onClose }) {
             <dd>{candidate.reason}</dd>
           </div>
         ) : null}
+        {retrievalFailureSummary(item) ? (
+          <div>
+            <dt>Why it is here</dt>
+            <dd>{retrievalFailureSummary(item)}</dd>
+          </div>
+        ) : null}
         {candidate.name && candidate.name !== displayTitle ? (
           <div>
             <dt>Name</dt>
@@ -312,6 +319,11 @@ function StagedRow({
           {(Number(item.confidence_score) || 0).toFixed(2)}
           {suggested ? ` · suggested ${suggested}` : ""}
         </p>
+        {retrievalFailureSummary(item) ? (
+          <p className="status status-secondary" data-testid={`taxonomy-failure-${item.id}`}>
+            Why it is here: {retrievalFailureSummary(item)}
+          </p>
+        ) : null}
         <small>
           {item.status}
           {candidate.context_source ? ` · ${candidate.context_source}` : ""}
@@ -526,17 +538,20 @@ export default function StagedAugmentationsPage() {
   return (
     <div className="settings-stack knowledge-ops-page" data-testid="admin-taxonomy">
       <SettingsPageHeader title="Library knowledge">
-        Save name mappings when genres or tags are unrecognized. Missing synopses and plot details
-        usually fill in during idle enrichment — only stuck exceptions need a force refresh here.
+        Save name mappings when genres or tags are unrecognized. Missing plots and title details are
+        fetched automatically in the background (paced, with retries) — only titles where automatic
+        lookup tried and gave up are listed here.
       </SettingsPageHeader>
 
       <SectionHelp label="How library knowledge improves" testId="knowledge-ops-loop-help">
         <p>
           <strong>Name mappings are the human review queue.</strong> Unrecognized genre and tag
           names wait under Name mappings so you can save an overlay for this installation (built-in
-          definitions stay unchanged). Requested details and Missing knowledge are titled
-          exceptions — idle enrichment fills most gaps; use Refresh synopsis or Reject when
-          something is stuck.
+          definitions stay unchanged). A plot or title detail that is simply not fetched yet is
+          not an exception: the scheduled tasks retrieve it on their own, paced so large
+          libraries do not flood upstream sources. A title shows up under Couldn't fill in only
+          after automatic lookup was tried, retried, and failed; Try again now looks once more,
+          and Reject clears it.
         </p>
       </SectionHelp>
 
@@ -619,11 +634,11 @@ export default function StagedAugmentationsPage() {
       {tab === "demand" ? (
         <SettingsPanel
           title="Requested title details"
-          lead="Exceptions only — idle enrichment usually fills these on its own."
+          lead="Exceptions only — missing details are fetched automatically."
           testId="knowledge-ops-demand-panel"
         >
           <p className="status status-secondary">
-            Rows below are titled exceptions that still need a forced lookup. Use{" "}
+            Rows below were requested for a title but could not be filled automatically. Use{" "}
             <strong>Refresh synopsis</strong> to look again, or Reject to clear the exception
             without changing the title.
           </p>
@@ -633,7 +648,7 @@ export default function StagedAugmentationsPage() {
       {tab === "coverage" ? (
         <SettingsPanel
           title="Missing library knowledge"
-          lead="Coverage snapshot plus titled exceptions you can force-refresh or dismiss."
+          lead="Coverage snapshot, plus titles automatic lookup could not fill in. Gaps that are only waiting their turn are not listed."
           testId="knowledge-ops-coverage-panel"
         >
           {coverageSummary ? (
@@ -689,6 +704,7 @@ export default function StagedAugmentationsPage() {
               <option value="pending">Pending</option>
               <option value="approved">Approved</option>
               <option value="rejected">Rejected</option>
+              <option value="resolved">Filled automatically</option>
               <option value="all">All</option>
             </select>
           </label>
@@ -702,16 +718,16 @@ export default function StagedAugmentationsPage() {
                     ? "Name mappings"
                     : tab === "demand"
                       ? "Requested details"
-                      : "Missing knowledge"
+                      : "Couldn't fill in"
               }
               lead={
                 tab === "taxonomy"
                   ? "Primary review: match each unrecognized name to a known group, then Save mapping."
                   : tab === "demand"
-                    ? "Titled exceptions — Refresh synopsis or Reject. Idle enrichment handles most requests."
+                    ? "Requested details that could not be filled — Refresh synopsis or Reject."
                     : tab === "all"
-                      ? "Name mappings need review; other rows are titled exceptions for refresh or reject."
-                      : "Titled coverage exceptions — Refresh synopsis or Reject; background fill is primary."
+                      ? "Name mappings need review; other rows are titles where automatic lookup gave up."
+                      : "Titles where automatic lookup was tried and failed — Try again now or Reject."
               }
               testId="taxonomy-staged-panel"
             >
@@ -720,7 +736,7 @@ export default function StagedAugmentationsPage() {
                 <p className="status status-secondary" data-testid="taxonomy-empty">
                   {tab === "taxonomy"
                     ? "No name mappings waiting. Unrecognized genres and tags appear here after they are noticed often enough to merit review."
-                    : "No titled exceptions for this filter. Idle enrichment fills most gaps; stuck items appear here for a force refresh or reject."}
+                    : "Nothing needs attention. Missing plots and details are fetched automatically; a title appears here only if that lookup failed."}
                 </p>
               ) : null}
               <ul className="media-issues-list" data-testid="taxonomy-staged-list">

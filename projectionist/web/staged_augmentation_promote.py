@@ -9,7 +9,9 @@ from typing import Any, Callable, Dict, Optional
 from fastapi import HTTPException
 
 from projectionist.config_store import Settings
+from projectionist.library import knowledge_fetch
 from projectionist.library.db import Database
+from projectionist.library.knowledge_fetch import KIND_EMBEDDING, KIND_METADATA, KIND_SYNOPSIS
 from projectionist.scheduler.tasks.entity_memory_enrichment import (
     TASK_NAME as ENTITY_MEMORY_TASK,
     _enrich_entity,
@@ -216,6 +218,21 @@ async def _enrich_library_embedding(
     return {"action": "embedding_written", "item_id": int(item_id)}
 
 
+def _record_manual_retry(db: Database, item_id: int, kind: str, *, filled: bool) -> None:
+    """Owner "try again now" outcome.
+
+    Success clears the retry ledger. A retry that still comes up empty is final
+    until the title changes: it stays exhausted (visible), without restarting the
+    automatic backoff ladder.
+    """
+    if filled:
+        knowledge_fetch.clear(db, [item_id], kind)
+        return
+    knowledge_fetch.record_failure(
+        db, item_id, kind, knowledge_fetch.OUTCOME_HARD, "owner retry found nothing"
+    )
+
+
 async def promote_staged_row(
     row: Dict[str, Any],
     *,
@@ -279,11 +296,30 @@ async def promote_staged_row(
             if deficit_kind == "motif":
                 return await _enrich_library_motifs(db, item_id)
             if deficit_kind == "metadata":
-                return await _enrich_library_metadata(db, settings, item_id)
+                result = await _enrich_library_metadata(db, settings, item_id)
+                _record_manual_retry(
+                    db, item_id, KIND_METADATA, filled=not db.item_still_needs_metadata(item_id)
+                )
+                return result
             if deficit_kind == "synopsis":
-                return await _enrich_library_synopsis(db, settings, item_id)
+                try:
+                    result = await _enrich_library_synopsis(db, settings, item_id)
+                except RuntimeError as exc:
+                    # Upstream unreachable: not a verdict on the title, keep the row retryable.
+                    raise HTTPException(
+                        status_code=502, detail=f"Synopsis source unreachable: {exc}"
+                    ) from exc
+                _record_manual_retry(
+                    db,
+                    item_id,
+                    KIND_SYNOPSIS,
+                    filled=result.get("action") == "synopsis_written",
+                )
+                return result
             if deficit_kind == "embedding":
-                return await _enrich_library_embedding(db, settings, item_id)
+                result = await _enrich_library_embedding(db, settings, item_id)
+                _record_manual_retry(db, item_id, KIND_EMBEDDING, filled=True)
+                return result
 
         raise HTTPException(
             status_code=400,

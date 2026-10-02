@@ -36,8 +36,13 @@ def fetch_extract(
     year: Optional[int] = None,
     media_type: str = "movie",
     timeout: int = 20,
+    strict: bool = False,
 ) -> str:
     """Return a plain-text intro extract for *title*, or empty string.
+
+    With ``strict=True`` a title that could not be looked up at all (every request
+    failed) raises ``RuntimeError`` instead of looking like "Wikipedia has no
+    page" — the retrieval task needs to tell an outage from a genuine miss.
 
     Tries the bare title first, then a disambiguated film/series form when year
     is known (e.g. ``Kill Bill: Volume 1 (2003 film)``).
@@ -53,6 +58,8 @@ def fetch_extract(
         candidates.append(f"{cleaned} ({int(year)} film)")
 
     headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+    answered = False
+    last_error: Optional[RuntimeError] = None
     for candidate in candidates:
         params = {
             "action": "query",
@@ -66,11 +73,15 @@ def fetch_extract(
         url = f"{API}?{urllib.parse.urlencode(params)}"
         try:
             payload = request_json(url, headers=headers, timeout=timeout)
-        except RuntimeError:
+        except RuntimeError as error:
+            last_error = error
             continue
         if not isinstance(payload, dict):
             continue
+        answered = True
         extract = _extract_from_payload(payload)
         if extract:
             return extract
+    if strict and not answered and last_error is not None:
+        raise last_error
     return ""
