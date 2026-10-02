@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
@@ -56,19 +57,33 @@ def plex_watch_url(machine_id: str, rating_key: str) -> str:
 
 
 _cached_plex_identity: Optional[tuple[str, str]] = None  # (machine_id, friendly_name)
+# Failures are negative-cached: /api/library/stats (every app-shell load) and
+# /api/plex/machine-id used to re-hit a slow/down Plex with a multi-second timeout
+# on *every* request.
+_PLEX_IDENTITY_RETRY_SECONDS = 60.0
+_plex_identity_failed: Optional[tuple[str, float]] = None  # (base_url, monotonic failed_at)
 
 
 def cached_plex_identity(base_url: str, token: str, *, timeout: int = 30) -> tuple[str, str]:
     """Return process-cached (machineIdentifier, friendlyName) when the server is reachable."""
-    global _cached_plex_identity
+    global _cached_plex_identity, _plex_identity_failed
     if _cached_plex_identity is not None:
         return _cached_plex_identity
     if not str(base_url or "").strip() or not str(token or "").strip():
         return ("", "")
+    failed = _plex_identity_failed
+    if (
+        failed is not None
+        and failed[0] == base_url
+        and time.monotonic() - failed[1] < _PLEX_IDENTITY_RETRY_SECONDS
+    ):
+        return ("", "")
     try:
         identity = PlexClient(base_url, token, timeout=timeout).server_identity()
     except Exception:
+        _plex_identity_failed = (base_url, time.monotonic())
         return ("", "")
+    _plex_identity_failed = None
     _cached_plex_identity = identity
     return identity
 

@@ -2,6 +2,36 @@
 
 ## [Unreleased]
 
+## [1.37.25] — 2026-10-02
+
+Live, My Journey, and Admin open from precached snapshots — recompute and upstream probes (Tunarr, Plex) stay off first paint.
+
+### Highlights
+- **Live opens fast.** The guide you see is the last good one we built; Projectionist refreshes it in the background and keeps "now / next" accurate while it does.
+- **My Journey opens fast.** Directors, cinematographers, composers, and shelf threads come from a cache that survives restarts, instead of rescanning your library each visit.
+- **Admin stops hanging.** Live Channels status, the craft form, and the library dashboards paint immediately and update a moment later.
+
+### Fixed
+- `GET /api/live-channels/guide`, `/on-now`, and Live subtitles rebuilt the whole guide against Tunarr on every request (channel list, guide window, up to two sequential `now_playing` calls per channel, 8s timeouts). A slow or sleeping Tunarr hung `/live`, On Now widgets, and the youth "pick for me" station. They now use a shared stale-while-revalidate cache (30s soft, 2h hard); stale rows re-derive now/next from cached programs; an unreachable Tunarr never overwrites a good cached guide; a cold start returns `warming: true` quickly.
+- `/live` waited on the Plex machine-id probe (5s timeout) before painting. It is now fetched after first paint and only feeds a secondary link.
+- `GET /api/journey/exploration` ran `engagement_summary` on the request path, which **writes** (challenge progress + badge awards) through SQLite's single writer; behind library sync or batch jobs those writes waited up to the 30s busy timeout. Journey is now read-only on GET. Library-derived rails (people, insights) are an SWR cache backed by `sync_state`, rebuilt after library sync and at startup. Director lookups use the indexed exact-name match before falling back to a wildcard scan.
+- `GET /api/admin/live-channels/status` ran dozens of sequential Tunarr / Plex / XMLTV / Docker probes (5–20s timeouts each) every time Admin opened. It is now SWR with a durable snapshot, a probe-free warming skeleton, and the cheap `job` block always overlaid live. Mutating Live / settings routes mark it stale (the payload is kept), and Admin re-polls while `stale` / `warming`. `?fresh=1` forces a synchronous probe.
+- `GET /api/admin/live-channels/craft-options` gathered Tunarr channel numbers and Plex occupied numbers inline. It now serves from SWR; the form ignores provisional (warming) numbers.
+- `GET /api/library/stats` (every app-shell load), `/api/library/health`, and `/api/library/knowledge-coverage` recomputed whole-library aggregates per request. Coverage and health are now durable SWR caches rebuilt after library sync (counts stay live).
+- Plex identity (`friendlyName` / `machineIdentifier`) lookups were never negative-cached: with Plex down or slow, every stats and machine-id call paid the full timeout. Failures are now remembered for 60s.
+- Startup prewarms the Live guide, Live status, and library dashboards in a background thread so the first visit after a deploy rarely sees `warming`.
+
+### Changed
+- New shared `projectionist/swr_cache.py` (soft / hard TTL, durable `sync_state`, single-flight background refresh, retry backoff, `invalidate()` that keeps payloads). Explore hub keeps its own 1.37.24 implementation.
+- Audited (no change needed): Explore hub (1.37.24), purge candidates (already cache-only), setup wizard, settings, persona, users, jobs, scheduled tasks, telemetry summary, knowledge-ops summary, holidays schedule, Radarr owned-not-indexed, newsletter / year-in-review status.
+- Deferred: `GET /api/engagement/summary` still performs challenge / badge sync writes (Engagement page only), and `GET /api/admin/live-channels/lifecycle-status` still probes Docker + Tunarr live (progress poll; only when Docker orchestration is on).
+
+### Verification
+- `tests/test_swr_first_paint.py` — cold skeleton < 250ms with a 0.5–0.6s forced rebuild; stale served < 250ms with Tunarr / rails / dashboards hanging; durable restart paint; single-flight; unreachable Tunarr keeps the last good guide; Journey GET performs no engagement writes; Plex failure negative cache.
+- Local repro with an unroutable Tunarr: guide 8.07s → 0.8s (first-ever hit; 4ms after), on-now 8.0s → 0.76s, Admin Live status 16.0s → 7ms (durable) / 1.0s cold, My Journey 421ms → 28ms (6ms warm).
+- Automat prod data (5.5k titles, 288k credits, 170k people), builders timed inside the 1.37.24 container: knowledge coverage 3.2s and library health 1.2s (both on app-shell `/library/stats` / Admin before); Journey directors 2.9s + cinematographers 0.56s + composers 0.6s per visit; Admin Live status 0.7–1.3s even when Tunarr is healthy; Live guide 0.08s healthy (the hang is Tunarr slow/cold plus threadpool / GIL contention from the above). New Journey director lookup: 2.9s → 0.16s, and the whole rails build now runs off the request path.
+- Frontend lint: 0 errors. Backend `ruff check .` and `mypy`: clean.
+
 ## [1.37.24] — 2026-10-02
 
 Explore home loads from a precached hub again — rails recompute in the background instead of blocking first paint.
