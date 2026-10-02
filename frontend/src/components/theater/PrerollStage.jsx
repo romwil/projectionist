@@ -20,7 +20,9 @@ export default function PrerollStage({
   // this effect: cleanup strips `src`, then the effect loads and plays again,
   // which restarts the bumper from 0. onSkip is click-only (not an effect dep).
   const onDoneRef = useRef(onDone);
-  onDoneRef.current = onDone;
+  useEffect(() => {
+    onDoneRef.current = onDone;
+  }, [onDone]);
 
   useEffect(() => {
     const video = videoRef.current;
