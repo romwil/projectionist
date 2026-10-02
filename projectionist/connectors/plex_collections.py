@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import urllib.parse
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import List, Optional, Sequence
 
@@ -10,6 +11,20 @@ from projectionist.connectors.http import request_empty, request_xml
 from projectionist.connectors.plex import PlexClient, PLEX_LIBRARY_IDENTIFIER
 
 _MEDIA_TYPE_TO_PLEX = {"movie": 1, "show": 2}
+
+
+def _first_element(root, *paths: str):
+    """Return the first element matched by ``paths``.
+
+    ElementTree elements are falsy when they have no child elements, so
+    ``root.find(a) or root.find(b)`` silently skips a childless ``<Directory/>``
+    — which is exactly what Plex returns for a freshly created collection.
+    """
+    for path in paths:
+        found = root.find(path)
+        if found is not None:
+            return found
+    return None
 
 
 @dataclass
@@ -153,7 +168,9 @@ def collection_art_url(
         root = client._request_xml(f"/library/collections/{key}")
     except Exception:  # noqa: BLE001
         return ""
-    element = root.find(".//Directory") or root.find(".//Collection") or root
+    element = _first_element(root, ".//Directory", ".//Collection")
+    if element is None:
+        element = root
     thumb = ""
     if element is not None:
         thumb = str(element.attrib.get("thumb") or element.attrib.get("art") or "").strip()
@@ -191,13 +208,30 @@ def create_collection(
         params["uri"] = _metadata_uri(client, keys)
 
     query = urllib.parse.urlencode(params)
-    root = request_xml(_auth_url(client, f"/library/collections?{query}"), method="POST")
-    element = root.find(".//Directory") or root.find(".//Collection")
-    if element is None:
-        raise RuntimeError("Plex did not return a collection rating key")
-    rating_key = str(element.attrib.get("ratingKey") or "").strip()
+    root = None
+    try:
+        root = request_xml(_auth_url(client, f"/library/collections?{query}"), method="POST")
+    except ET.ParseError:
+        # Plex accepted the POST but sent an unparseable/empty body — the
+        # collection may exist already. Recover below instead of failing.
+        root = None
+    element = _first_element(root, ".//Directory", ".//Collection") if root is not None else None
+    rating_key = str(element.attrib.get("ratingKey") or "").strip() if element is not None else ""
     if not rating_key:
-        raise RuntimeError("Plex did not return a collection rating key")
+        # The write already happened server-side; look the collection up by
+        # title rather than reporting failure for something that now exists.
+        existing = find_collection_by_title(client, section, collection_title)
+        if existing is not None:
+            return PlexCollection(
+                rating_key=existing.rating_key,
+                title=collection_title,
+                section_id=section,
+                media_type=str(media_type),
+            )
+        raise RuntimeError(
+            "Plex did not return a collection rating key and no collection named "
+            f"'{collection_title}' was found afterwards"
+        )
     return PlexCollection(
         rating_key=rating_key,
         title=collection_title,
