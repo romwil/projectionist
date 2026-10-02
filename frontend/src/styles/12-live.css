@@ -594,10 +594,15 @@
 }
 
 .live-guide-scroll {
+  /* Shared vertical metrics: rail stations and grid rows MUST use the same height. */
+  --guide-head-h: 2.5rem;
+  --guide-row-h: 4.5rem;
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(8.5rem, 11rem) 1fr;
+  /* Second column is exactly the grid's px width (set inline), never 1fr. */
+  grid-template-columns: minmax(8.5rem, 11rem) max-content;
+  align-content: start;
   overflow: auto;
 }
 
@@ -610,7 +615,9 @@
 }
 
 .live-guide-rail-corner {
-  height: 2.5rem;
+  box-sizing: border-box;
+  flex: none;
+  height: var(--guide-head-h);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -640,9 +647,13 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 0.1rem;
+  box-sizing: border-box;
   width: 100%;
-  min-height: 4.25rem;
-  padding: 0.55rem 0.75rem;
+  /* Fixed (not min-) height so a long channel name can never push later rows
+     out of step with the grid rows. */
+  height: var(--guide-row-h);
+  overflow: hidden;
+  padding: 0.4rem 0.75rem;
   border: 0;
   border-bottom: 1px solid var(--live-line);
   background: transparent;
@@ -666,10 +677,12 @@
   font-family: var(--font-display);
   color: var(--accent);
   font-size: 1.05rem;
+  line-height: 1.15;
 }
 
 .live-guide-station-name {
   font-size: var(--text-xs);
+  line-height: 1.2;
   color: var(--muted);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -680,21 +693,30 @@
 .live-guide-grid-wrap {
   position: relative;
   min-width: 0;
+  flex: none;
 }
 
 .live-guide-timeline {
   position: sticky;
   top: 0;
   z-index: 2;
-  height: 2.5rem;
+  box-sizing: border-box;
+  height: var(--guide-head-h);
   background: rgba(8, 9, 14, 0.96);
   border-bottom: 1px solid var(--live-line);
 }
 
+/* A tick is a COLUMN: its left edge (the rule) is the time, its label is left-aligned
+   to that edge so "1:00 AM" reads as "starts here", not "centred somewhere". */
 .live-guide-tick {
   position: absolute;
-  top: 0.7rem;
-  transform: translateX(-50%);
+  top: 0;
+  bottom: 0;
+  box-sizing: border-box;
+  padding: 0.7rem 0 0 0.4rem;
+  border-left: 1px solid rgba(230, 226, 214, 0.22);
+  white-space: nowrap;
+  overflow: hidden;
   font-size: var(--text-xs);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
@@ -702,6 +724,14 @@
 
 .live-guide-rows {
   position: relative;
+  /* Half-hour hairlines (faint) + hour lines (stronger), same px as the header ticks. */
+  background-image:
+    linear-gradient(to right, rgba(230, 226, 214, 0.2) 0 1px, transparent 1px),
+    linear-gradient(to right, rgba(230, 226, 214, 0.07) 0 1px, transparent 1px);
+  background-size:
+    var(--guide-hour-px) 100%,
+    var(--guide-slot-px) 100%;
+  background-repeat: repeat-x;
 }
 
 .live-guide-now-line {
@@ -709,6 +739,7 @@
   top: 0;
   bottom: 0;
   width: 2px;
+  margin-left: -1px; /* centre the 2px line on the exact "now" x */
   background: var(--accent);
   box-shadow: 0 0 12px rgba(255, 184, 0, 0.45);
   z-index: 1;
@@ -717,7 +748,8 @@
 
 .live-guide-row {
   position: relative;
-  height: 4.25rem;
+  box-sizing: border-box;
+  height: var(--guide-row-h);
   border-bottom: 1px solid var(--live-line);
   background: rgba(255, 255, 255, 0.015);
 }
@@ -895,7 +927,7 @@
 
 @media (max-width: 720px) {
   .live-guide-scroll {
-    grid-template-columns: minmax(6.5rem, 8.5rem) 1fr;
+    grid-template-columns: minmax(6.5rem, 8.5rem) max-content;
   }
   .live-chrome-actions .live-chrome-link {
     display: none;
