@@ -2,23 +2,21 @@ import { useEffect, useRef, useState } from "react";
 import TuningInterstitial from "./TuningInterstitial.jsx";
 
 /**
- * Progressive preroll bumper staged before movie / Live start.
- * Each mount fetches its own bumper — no shared playhead across clients.
+ * Progressive preroll bumper. Plays through with no title and no skip control.
+ * Each mount owns its own video — no shared playhead across clients.
  */
 export default function PrerollStage({
   src = "",
-  title = "Preroll",
   onDone,
-  onSkip,
   testId = "preroll-stage",
 }) {
   const videoRef = useRef(null);
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
   // LivePlayer re-renders about once a second for the OSD clock, and both
-  // players pass inline onDone/onSkip. Those identities must not retrigger
-  // this effect: cleanup strips `src`, then the effect loads and plays again,
-  // which restarts the bumper from 0. onSkip is click-only (not an effect dep).
+  // players pass inline onDone. That identity must not retrigger this effect:
+  // cleanup strips `src`, then the effect loads and plays again, which
+  // restarts the bumper from 0.
   const onDoneRef = useRef(onDone);
   useEffect(() => {
     onDoneRef.current = onDone;
@@ -37,7 +35,7 @@ export default function PrerollStage({
     const play = video.play?.();
     if (play && typeof play.then === "function") {
       play.then(() => setStatus("playing")).catch(() => {
-        setError("Preroll couldn’t autoplay — tap skip or wait.");
+        setError("Tap the picture to start the bumper.");
         setStatus("paused");
       });
     }
@@ -48,7 +46,19 @@ export default function PrerollStage({
   }, [src]);
 
   return (
-    <div className="preroll-stage" data-testid={testId} data-status={status}>
+    <div
+      className="preroll-stage"
+      data-testid={testId}
+      data-status={status}
+      onClick={() => {
+        if (status !== "paused") return;
+        const video = videoRef.current;
+        video?.play?.().then(() => {
+          setError("");
+          setStatus("playing");
+        }).catch(() => {});
+      }}
+    >
       <video
         ref={videoRef}
         className="preroll-stage-video"
@@ -58,26 +68,16 @@ export default function PrerollStage({
         data-testid={`${testId}-video`}
         onPlaying={() => setStatus("playing")}
         onWaiting={() => setStatus("loading")}
-        onEnded={() => onDone?.()}
+        onEnded={() => onDoneRef.current?.()}
         onError={() => {
-          setError("Preroll skipped — jumping to the show.");
-          window.setTimeout(() => onDone?.(), 400);
+          setError("Bumper unavailable — continuing to the show.");
+          window.setTimeout(() => onDoneRef.current?.(), 400);
         }}
       />
       <TuningInterstitial active={status === "loading"} testId={`${testId}-tuning`} />
-      <div className="preroll-stage-chrome" data-theater-chrome="true">
-        <p className="preroll-stage-kicker">Coming up</p>
-        <p className="preroll-stage-title">{title}</p>
-        {error ? <p className="preroll-stage-error muted">{error}</p> : null}
-        <button
-          type="button"
-          className="preroll-stage-skip"
-          data-testid={`${testId}-skip`}
-          onClick={() => (onSkip || onDone)?.()}
-        >
-          Skip bumper
-        </button>
-      </div>
+      {error ? (
+        <p className="preroll-stage-error" data-theater-chrome="true">{error}</p>
+      ) : null}
     </div>
   );
 }

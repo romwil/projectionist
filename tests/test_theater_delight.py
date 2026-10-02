@@ -15,7 +15,12 @@ from projectionist.theater.preroll import (
     pick_preroll,
     resolve_asset,
 )
-from projectionist.theater.weather import build_voiceover_script, weather_channel_payload, wmo_label
+from projectionist.theater.weather import (
+    build_ticker_lines,
+    build_voiceover_script,
+    weather_channel_payload,
+    wmo_label,
+)
 
 
 class PrerollTests(unittest.TestCase):
@@ -91,6 +96,20 @@ class WeatherTests(unittest.TestCase):
         script = build_voiceover_script(payload, place_name="Chicago")
         self.assertIn("Chicago", script)
         self.assertIn("72", script)
+        lines = build_ticker_lines(
+            payload["current"],
+            {
+                "time": ["2026-10-02"],
+                "precipitation_probability_max": [30],
+                "temperature_2m_max": [80],
+                "temperature_2m_min": [60],
+            },
+        )
+        joined = " ".join(lines)
+        self.assertIn("Humidity 40%", joined)
+        self.assertIn("rain chance 30%", joined)
+        self.assertNotIn("72", joined)
+        self.assertNotIn("Hi ", joined)
 
     def test_payload_uses_fetch_and_muzak(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -131,6 +150,11 @@ class WeatherTests(unittest.TestCase):
             self.assertEqual(data["muzak_note"], "")
             self.assertIn("open-meteo", data["egress"]["host"])
             self.assertTrue(data["ticker"])
+            joined = " ".join(data["ticker"])
+            self.assertIn("Humidity", joined)
+            self.assertNotIn("NOW", joined)
+            self.assertNotIn("55", joined)
+            self.assertNotIn("Hi ", joined)
 
     def test_saved_coords_skip_geocode_and_empty_music_is_honest(self):
         calls = []
@@ -156,6 +180,33 @@ class WeatherTests(unittest.TestCase):
         self.assertIn("No music folder", data["muzak_note"])
         self.assertTrue(calls)
         self.assertTrue(all("geocoding-api" not in url for url in calls))
+
+    def test_profile_place_does_not_replace_unset_household_default(self):
+        def fake_fetch(_url: str):
+            return {
+                "current": {"temperature_2m": 70, "weather_code": 0},
+                "daily": {
+                    "time": [],
+                    "temperature_2m_max": [],
+                    "temperature_2m_min": [],
+                    "weather_code": [],
+                },
+            }
+
+        data = weather_channel_payload(
+            environ={},
+            place_name="Chicago",
+            latitude=41.8781,
+            longitude=-87.6298,
+            location_source="profile",
+            fetch_json=fake_fetch,
+            muzak_folder="",
+        )
+        self.assertEqual(data["household_place"], "your area")
+        self.assertEqual(data["place"], "Chicago")
+        self.assertEqual(data["location_source"], "profile")
+        self.assertIn("Chicago", data["voiceover"])
+        self.assertNotIn("your area", data["voiceover"])
 
 
 if __name__ == "__main__":

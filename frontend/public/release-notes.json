@@ -1,6 +1,36 @@
 {
-  "generated_at": "2026-10-02T19:30:10Z",
+  "generated_at": "2026-10-02T20:39:25Z",
   "releases": [
+    {
+      "version": "1.37.23",
+      "date": "2026-10-02",
+      "summary": "Live trailers only when a movie is starting, the Weather Channel looks like a cable board, and Weather sits at the end of the guide.",
+      "highlights": [
+        "**Trailers when a movie is coming on.** Live plays a random trailer only as a movie starts — not on every tune, and not before a show. It plays through, with no title and no skip. Movies in Play still get a random trailer.",
+        "**Weather you can read across the room.** Current conditions, then the days ahead (high over low), flipping like a cable board. The sky behind the type follows the forecast.",
+        "**Tune from the channel name.** Click the station on the left of the guide to start watching. Weather is the last channel on the dial."
+      ],
+      "sections": [
+        {
+          "title": "Changed",
+          "bullets": [
+            "Live preroll is gated on the guide: a movie starting now (within three minutes) or about to air. Shows, episodes, and movies already underway do not request a bumper.",
+            "Preroll playback has no on-screen title and no skip control.",
+            "Weather Channel boards: current conditions (temperature, condition, wind) and a days-ahead grid for each day the forecast returned. They crossfade about every 10 seconds. The ticker is humidity and rain chance, not the current temperature or the daily highs and lows.",
+            "Sky background follows the WMO weather code (clear, cloudy, rain, storm, snow).",
+            "`household_place` stays the server default (`PROJECTIONIST_WEATHER_PLACE` or “your area”). A profile place overrides the forecast only.",
+            "Guide channel headers tune that station. Weather is appended as the last guide row (`channel=weather`) with an all-day Local forecast block, and opens the Weather Channel instead of a live stream. The toolbar weather button is gone."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Frontend unit, lint (0 errors), and production build.",
+            "`pytest tests/` — 2391 passed, coverage 76.9%. One local failure in `test_vision_default_openai` when ACRCloud keys are in the environment (unrelated to this release)."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.22",
       "date": "2026-10-02",
