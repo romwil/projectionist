@@ -320,7 +320,10 @@ class PlexClient:
 
     def get_metadata(self, rating_key: str) -> PlexLibraryItem:
         root = self._request_xml(f"/library/metadata/{rating_key}?includeGuids=1")
-        video = root.find(".//Video") or root.find(".//Directory")
+        # Elements with no children are falsy — never chain ``find() or find()``.
+        video = root.find(".//Video")
+        if video is None:
+            video = root.find(".//Directory")
         if video is None:
             raise RuntimeError(f"No metadata for rating key {rating_key}")
         media_type = "show" if video.tag == "Directory" else "movie"

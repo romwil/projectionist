@@ -525,10 +525,10 @@ class CuratorAgent:
             for call in tool_calls:
                 fn = call.get("function") or {}
                 name = fn.get("name")
-                args = json.loads(fn.get("arguments") or "{}")
+                args, args_error = _parse_tool_arguments(fn.get("arguments"))
                 logger.debug("Agent tool call name=%s args=%s", name, args)
                 _t0 = __import__("time").time()
-                result = await registry.execute(str(name), args)
+                result = await _execute_tool_safely(registry, str(name), args, args_error)
                 _duration_ms = int((__import__("time").time() - _t0) * 1000)
                 if _tool_result_requests_stop(result):
                     stop_retrying = True
@@ -638,6 +638,46 @@ class CuratorAgent:
             "pending_tokens": registry.pending_tokens,
             "context_label": context_label,
         }
+
+
+def _parse_tool_arguments(raw: Any) -> tuple[Dict[str, Any], Optional[str]]:
+    """Parse model-supplied tool arguments without ever raising.
+
+    Truncated / malformed JSON (long ``rating_keys`` lists are a classic) must
+    surface as a tool error the model can report — not abort the whole turn.
+    """
+    try:
+        parsed = json.loads(raw or "{}")
+    except (TypeError, ValueError):
+        return {}, "Tool arguments were not valid JSON; retry with a smaller, well-formed call."
+    if not isinstance(parsed, dict):
+        return {}, "Tool arguments must be a JSON object."
+    return parsed, None
+
+
+async def _execute_tool_safely(
+    registry: Any,
+    name: str,
+    args: Dict[str, Any],
+    args_error: Optional[str] = None,
+) -> str:
+    """Run one tool call; any failure becomes an ``{"error": …}`` tool result.
+
+    An escaped exception used to kill the stream/turn, leaving the chat blank
+    after side effects (e.g. a Plex collection) had already happened.
+    """
+    if args_error:
+        return json.dumps({"error": args_error, "ok": False})
+    try:
+        return await registry.execute(name, args)
+    except Exception as error:  # noqa: BLE001
+        logger.exception("Agent tool %s raised", name)
+        return json.dumps(
+            {
+                "error": f"{name} failed: {str(error)[:300] or type(error).__name__}",
+                "ok": False,
+            }
+        )
 
 
 async def stream_agent(
@@ -839,14 +879,14 @@ async def stream_agent(
             for call in tool_calls_list:
                 fn = call.get("function") or {}
                 name = fn.get("name", "")
-                args = json.loads(fn.get("arguments") or "{}")
+                args, args_error = _parse_tool_arguments(fn.get("arguments"))
                 logger.debug("Stream agent tool call name=%s args=%s", name, args)
 
                 brief_args = args if isinstance(args, dict) else {"value": args}
                 yield json.dumps({"type": "tool_start", "name": name, "args": brief_args}) + "\n"
                 _t0 = __import__("time").time()
                 # Tool handlers that hit sqlite/cosine already offload via run_db.
-                result = await registry.execute(str(name), args)
+                result = await _execute_tool_safely(registry, str(name), args, args_error)
                 _duration_ms = int((__import__("time").time() - _t0) * 1000)
                 if _tool_result_requests_stop(result):
                     stop_retrying = True

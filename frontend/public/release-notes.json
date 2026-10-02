@@ -1,6 +1,42 @@
 {
-  "generated_at": "2026-10-02T22:31:02Z",
+  "generated_at": "2026-10-02T22:39:44Z",
   "releases": [
+    {
+      "version": "1.37.25",
+      "date": "2026-10-02",
+      "summary": "Asking the curator for a collection or course now lands in Projectionist, and a Plex hiccup can no longer leave the chat blank.",
+      "highlights": [
+        "**Collections and courses go where you asked.** The curator can now build a Projectionist collection or course (optionally published to the household shelves) in one step. Plex-only shelves happen only when you ask for Plex, and the curator tells you which one it made.",
+        "**No more silent stops.** If a step fails, the curator says what failed. A reply that is cut off now shows a clear message instead of an empty bubble.",
+        "**Retry just works.** If Plex rejects a create, say “try again” — the pending proposal is still there."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "Plex collection create reported “Plex did not return a collection rating key” even though Plex had already created the collection. A childless `<Directory/>` is falsy in ElementTree, so `find(a) or find(b)` skipped it. The response is now read with explicit `is not None` checks (also in `collection_art_url` and `PlexClient.get_metadata`). If Plex answers with an empty body, the collection is found by title instead of failing. Because the confirmation token is spent before the write, that false failure used to leave an untracked Plex collection with no retry.",
+            "A failed Plex create or add now re-queues the pending proposal, and a failed cleanup-registry write after a successful create is reported as a warning rather than a failure.",
+            "The chat agent (streaming and buffered) turned a malformed tool-argument payload or a tool exception into an aborted turn. These are now returned to the model as an error result it can explain.",
+            "`sendChatStream` called neither `onDone` nor `onError` when the connection closed early, leaving an empty assistant bubble. It now raises a visible error."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "`create_list` accepts `list_kind` (`list`, `playlist`, `course`), `publish` (owner only) and `items`, and reports `items_added`, `items_failed` and `published`.",
+            "`create_plex_collection` is labeled Plex-only in its schema, proposal and result (`scope: plex_only`, `projectionist_collection: false`). The system prompt routes unspecified “collection” and “course” asks to `create_list`."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "`pytest tests/test_agent_collection_create.py` — childless Directory, empty body recovery, retryable token, registry-failure warning, published course with items, malformed arguments.",
+            "`node --test src/lib/chatStreamClient.test.mjs` — stream closed with no terminal event surfaces an error; normal `done` and server `error` do not double-report.",
+            "Frontend unit 879/879; lint 0 errors; `npm run build` OK."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.24",
       "date": "2026-10-02",
