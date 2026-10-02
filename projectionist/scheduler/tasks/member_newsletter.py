@@ -35,6 +35,7 @@ def register(scheduler: IdleScheduler) -> None:
             name="member_newsletter",
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
+            off_loop=True,
             run_fn=run,
             description=(
                 "Sends the opt-in weekly member newsletter (persona-voiced) to inbox "

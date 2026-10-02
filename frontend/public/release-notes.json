@@ -1,6 +1,52 @@
 {
-  "generated_at": "2026-10-02T22:31:02Z",
+  "generated_at": "2026-10-02T23:12:37Z",
   "releases": [
+    {
+      "version": "1.37.28",
+      "date": "2026-10-03",
+      "summary": "Background tasks stop freezing the server, catch up faster on any library size, and two tasks that nothing read are gone.",
+      "highlights": [
+        "**Background work no longer stalls the app.** Library-wide tasks (plot patterns, themes, anniversaries, title connections, mail, Plex history, and more) now run on a worker thread. Before, a single plot-patterns pass froze every page and stream for ~2.5 seconds at 20,000 titles (several times longer on a small box) — including right after startup, when first-run setup fires it automatically.",
+        "**Backlogs drain at a steady pace instead of one slice a day.** When a catch-up task (TMDB details, plot-similarity index, similar titles, optional synopses) finishes a full batch and still has more to do, the next run follows in minutes rather than waiting out the full interval. A 300-title backlog finishes in about an hour, not days; a huge library is still bounded by small paced batches and per-task limits. Paid LLM loglines keep their gentle one-batch-per-interval pace.",
+        "**Interrupted and failing tasks recover sensibly.** A run stopped by a chat request is retried at the next idle window (it used to wait a full interval — up to a week for the weekly mail tasks). A dependency that keeps failing (e.g. Plex down) is retried with growing delays instead of every 15 minutes, and tasks with nothing to do (integration not configured) stop logging an empty run every 15 minutes.",
+        "**Two tasks that nothing used are retired.** **Recommendation warmup** and **Health metrics** only wrote caches that no page, API, or agent tool ever read, while scanning the whole library on a timer. Admin → Tasks no longer lists them. Library health is still computed on demand."
+      ],
+      "sections": [
+        {
+          "title": "Changed",
+          "bullets": [
+            "`IdleScheduler`: `TaskDefinition.off_loop` runs `run_fn` in a private event loop on a worker thread (context-propagating, so run-log events still stream). Applied to 24 sync-heavy tasks; `semantic_embeddings` and `llm_logline_enrichment` stay on the main loop (they await provider clients).",
+            "`TaskDefinition.catchup_gap_seconds` + `scheduler/cadence.py`: effective next-run interval for catch-up (`metadata_enrichment` 5 min, `plot_neighbors` 3 min, `semantic_embeddings` 5 min, `long_synopsis_enrichment` 30 min), interrupted retry (5 min), failure backoff (×2 per consecutive `degraded`/`error`, max ×8, capped at 6h or the configured interval), and a 1h floor for `skipped` runs. A catch-up run must process at least half its batch, so a batch that keeps re-hitting unresolvable titles never triggers fast follow-ups. The configured interval is untouched; `GET /api/admin/scheduled-tasks` adds `effective_run_interval_seconds` and `schedule_reason`, and Admin → Tasks shows e.g. “Due now (catching up)”.",
+            "Run metrics now persist `has_more` / `catching_up`. (`has_more` was previously dropped from stored metrics, so **Optimize rates** never saw backlog state.)",
+            "Auto-tune ETA uses the catch-up gap while a backlog is draining, so it no longer shortens a task's interval to compensate for a delay that no longer exists.",
+            "`GET /api/admin/scheduled-tasks` memoizes backlog counts for 10s (the page polls every 1.2–5s and each poll recounted `NOT EXISTS` scans over the library); the Tasks page pauses polling in a hidden tab."
+          ]
+        },
+        {
+          "title": "Fixed",
+          "bullets": [
+            "`plot_neighbors` JSON-decoded **every stored embedding vector** every run just to count and sort ids (hundreds of MB on a large library). It now reads ids only.",
+            "`taste_refresh` re-scanned all reviews once per show (quadratic); now a set lookup.",
+            "`semantic_embeddings` reads/writes via worker threads and yields every 250 titles, so its steady-state full-library scan can't hold the event loop and honors “stop” mid-scan.",
+            "Watchdog timeouts now flip `should_stop()` for worker-thread tasks (a thread can't be hard-cancelled), so a timed-out task winds down instead of racing the next one."
+          ]
+        },
+        {
+          "title": "Removed",
+          "bullets": [
+            "`recommendation_warmup` (wrote `cached_recommendations`, never read) and `health_metrics` (wrote `cached_health_metrics`, never read; `/api/library/health` computes on demand). On upgrade their `scheduled_tasks` rows and run history are deleted so Admin doesn't show ghost rows. No setting or API depended on them."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "`pytest tests/test_scheduler_cadence.py` (31 tests): cadence rules, due-time with persisted state, productive-run guard, off-loop responsiveness (blocking task stalls the loop ~0.4s on-loop, <0.15s off-loop), worker-thread context + error + watchdog, retired-task cleanup, registry invariants, plot_neighbors never decodes vectors, progress memoization.",
+            "Synthetic 20,000-title library, worst event-loop stall while the task ran (before → after): `summary_motifs` 2519ms → 38ms; `keyword_theme_tagging` 774ms → 14ms; `anniversary_scanner` 126ms → 13ms; `title_relations_refresh` 116ms → 13ms.",
+            "Scheduler / admin / bootstrap / run-history suites and frontend `scheduledTasks` unit tests pass; frontend lint 0 errors."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.24",
       "date": "2026-10-02",

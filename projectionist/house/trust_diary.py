@@ -16,7 +16,6 @@ DIARY_LIMIT = 40
 TRUST_TASK_NAMES = frozenset(
     {
         "purge_candidates",
-        "health_metrics",
         "seasonal_rail",
         "enthusiast_nudge",
         "member_newsletter",

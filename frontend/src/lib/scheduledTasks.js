@@ -8,12 +8,10 @@ export const TASK_LABELS = {
   coverage_deficit_audit: "Find missing plot knowledge",
   entity_memory_enrichment: "Research missing title details",
   gap_analysis: "Gap analysis",
-  health_metrics: "Health metrics",
   llm_logline_enrichment: "LLM logline enrichment",
   metadata_enrichment: "Metadata enrichment",
   plot_neighbors: "Refresh similar titles",
   purge_candidates: "Purge candidates",
-  recommendation_warmup: "Recommendation warmup",
   semantic_embeddings: "Plot similarity index",
   summary_motifs: "Find plot patterns",
   taste_refresh: "Taste refresh",
@@ -443,15 +441,29 @@ export function sortScheduledTasks(items, mode, now = Date.now() / 1000) {
   return sortTasksByNextRun(items, now);
 }
 
+const SCHEDULE_REASON_LABELS = {
+  catching_up: "catching up",
+  retry_after_interrupt: "retrying after interruption",
+  backoff: "backing off",
+  skipped_idle: "nothing to do",
+};
+
+/** Why the next run is sooner/later than the configured interval (or ""). */
+export function scheduleReasonLabel(task) {
+  return SCHEDULE_REASON_LABELS[task?.schedule_reason] || "";
+}
+
 /** Owner-facing next-run label for list rows. */
 export function formatTaskNextRun(task, now = Date.now() / 1000) {
   if (!task) return "—";
   if (!task.enabled) return "—";
   if (isTaskRunning(task)) return "Running now";
+  const reason = scheduleReasonLabel(task);
+  const withReason = (label) => (reason ? `${label} (${reason})` : label);
   const next = Number(task.next_run_at);
   if (Number.isFinite(next)) {
-    if (next <= now || task.overdue) return "Due now";
-    return formatEpoch(next);
+    if (next <= now || task.overdue) return withReason("Due now");
+    return withReason(formatEpoch(next));
   }
   if (task.overdue || task.last_run_at == null) return "Due now";
   return "—";
