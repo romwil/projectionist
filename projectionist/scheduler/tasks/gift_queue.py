@@ -36,6 +36,7 @@ def register(scheduler: IdleScheduler) -> None:
             name="gift_queue",
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
+            off_loop=True,
             run_fn=run,
             description=(
                 "Delivers owner-queued house gifts (inbox + optional email) on the "

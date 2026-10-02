@@ -38,6 +38,7 @@ def register(scheduler: IdleScheduler) -> None:
             name="seasonal_rail",
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
+            off_loop=True,
             run_fn=run,
             description=(
                 "Publishes today's seasonal Explore rail from the household holiday "

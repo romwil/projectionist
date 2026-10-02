@@ -174,6 +174,27 @@ Other tasks (taste, health, anniversary, retention, …) support ops and taste �
 
 Embeddings and neighbor rebuilds are expensive. Per-cycle caps (e.g. embeddings batch limits) finish a slice, exit with `cycle_limit`, and continue next idle window. That keeps the box responsive and avoids one runaway job blocking the queue.
 
+### Catch-up, retry, and backoff (when is a task next due?)
+
+The **run interval** you set is the steady-state cadence. Four situations change the *effective* next run without changing your setting (Admin → Scheduled Tasks shows the reason, e.g. “Due now (catching up)”; the API exposes `effective_run_interval_seconds` and `schedule_reason`):
+
+| Situation | Next run | Why |
+|-----------|----------|-----|
+| **Catching up** — a trickle task finished a full batch (≥ half) and still reports backlog | After the task's catch-up gap: `metadata_enrichment` 5 min, `semantic_embeddings` 5 min, `plot_neighbors` 3 min, `long_synopsis_enrichment` 30 min (never longer than your interval) | Small libraries finish in about an hour instead of days; huge libraries stay bounded by the paced batch size and gap. `llm_logline_enrichment` never accelerates (paid calls). |
+| **Interrupted** by a chat request | Next idle window (≤ 5 min) | Waiting a full interval would drop the work (up to a week for weekly mail). |
+| **Failing** (`degraded` / `error`, e.g. Plex down) | Interval × 2 per consecutive failure, max × 8, capped at 6h (never past a longer configured interval) | Don't hammer a dead dependency; quarantine still applies after 3 errors. |
+| **Skipped** (integration not configured) | At least 1h | Stop logging an empty run every 15 minutes. |
+
+A catch-up run that only handled a sliver of its batch (the same unresolvable titles again) does **not** trigger a fast follow-up. All of this still only runs while the server is idle.
+
+### Off the event loop
+
+Tasks that do synchronous library scans, SQLite, or HTTP (`summary_motifs`, `keyword_theme_tagging`, `taste_refresh`, `title_relations_refresh`, `anniversary_scanner`, `purge_candidates`, `gap_analysis`, `watch_history_ingest`, the mail/digest tasks, …) are registered `off_loop=True` and run on a worker thread so a large pass cannot freeze pages or streams — including the first-start bootstrap. `semantic_embeddings` and `llm_logline_enrichment` stay on the main loop because they await provider clients.
+
+### Retired tasks
+
+`recommendation_warmup` and `health_metrics` were removed in 1.37.28: they wrote caches (`cached_recommendations`, `cached_health_metrics`) that nothing read. Their scheduler rows and run history are deleted on upgrade. `/api/library/health` computes on demand.
+
 ### Why auto-tune matters
 
 Owners can set **run interval** and **items per run** in Admin → Scheduled Tasks. Every finished run is also written to durable **`scheduled_task_runs`** (survives restart). When enough productive history exists, ETA prefers **measured items/hour**; otherwise it falls back to theoretical backlog × cadence.

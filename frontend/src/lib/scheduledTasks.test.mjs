@@ -16,6 +16,7 @@ import {
   formatTaskLastRun,
   formatTaskLastRunDetail,
   formatTaskNextRun,
+  scheduleReasonLabel,
   formatThroughputEstimate,
   isTaskRunning,
   mergeExecutionLogRuns,
@@ -34,7 +35,9 @@ import {
 
 describe("scheduledTasks helpers", () => {
   it("formats known and unknown task names", () => {
-    assert.equal(taskDisplayName("health_metrics"), "Health metrics");
+    assert.equal(taskDisplayName("taste_refresh"), "Taste refresh");
+    // Retired tasks fall back to a generic title (no stale hand-written label).
+    assert.equal(taskDisplayName("recommendation_warmup"), "Recommendation Warmup");
     assert.equal(taskDisplayName("custom_thing"), "Custom Thing");
   });
 
@@ -128,7 +131,7 @@ describe("scheduledTasks helpers", () => {
     assert.deepEqual(
       resolveWarmExploreTasks([
         { name: "plot_neighbors" },
-        { name: "health_metrics" },
+        { name: "taste_refresh" },
         { name: "metadata_enrichment" },
       ]),
       ["metadata_enrichment", "plot_neighbors"],
@@ -233,6 +236,15 @@ describe("scheduledTasks helpers", () => {
       formatTaskNextRun({ enabled: true, next_run_at: now - 1, overdue: true }, now),
       "Due now",
     );
+    assert.equal(
+      formatTaskNextRun(
+        { enabled: true, next_run_at: now - 1, overdue: true, schedule_reason: "catching_up" },
+        now,
+      ),
+      "Due now (catching up)",
+    );
+    assert.equal(scheduleReasonLabel({ schedule_reason: "backoff" }), "backing off");
+    assert.equal(scheduleReasonLabel({ schedule_reason: null }), "");
   });
 
   it("scores and sorts by duty cycle (duration ÷ cadence)", () => {
@@ -264,14 +276,14 @@ describe("scheduledTasks helpers", () => {
   it("formats and merges unified execution log rows", () => {
     assert.match(
       formatExecutionLogLine({
-        name: "health_metrics",
+        name: "taste_refresh",
         status: "completed",
         started_at: 1_700_000_000,
         finished_at: 1_700_000_010,
         duration_ms: 10000,
         summary_line: "ok",
       }),
-      /Health metrics · Succeeded/,
+      /Taste refresh · Succeeded/,
     );
     const merged = mergeExecutionLogRuns(
       [{ id: 1, name: "a", status: "completed" }],
