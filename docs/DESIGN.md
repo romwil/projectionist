@@ -138,7 +138,7 @@ These surfaces share one bar: **picture first, one gold primary, quiet chrome, L
 | **Phone landscape** | Detect phone by short/long edge (not width alone) so rotating to ~844×390 keeps `--phone` chrome. OSD uses `(orientation: landscape) and (max-height: 500px)` — compact title, hidden episode line, transport fully inside the shell with `env(safe-area-inset-*)`. |
 | **Fullscreen** | Prefer Fullscreen API on the theater root (video + OSD together). When the API is unavailable (common iOS Safari), CSS `theater-player--immersive` keeps custom controls; do not prefer `video.webkitEnterFullscreen` (it drops the OSD). |
 | **Honest empty / loading / error** | Tuning interstitial (CRT static + wry copy) while seeking/starting; Resume/Start over; Try again + Open in Plex — never a blank stall or dead Play. |
-| **Movie preroll** | Every movie play draws a random trailer from `/preroll`. Episodes skip it. Each browser picks independently (no shared preroll clock). |
+| **Movie preroll** | Every movie play draws a random trailer from `/preroll`. Episodes skip it. The bumper plays through: no on-screen title, no skip control. Each browser picks independently (no shared preroll clock). |
 
 Implementation lives in `LibraryWatchPage` / `TheaterPlayer` / `LibraryPlayer` / `TuningInterstitial` / `PrerollStage` + `frontend/src/styles/13-watch.css`. Live TV keeps its cable-box OSD language; library Play borrows the dark stage and quiet transport.
 
@@ -151,9 +151,10 @@ Implementation lives in `LibraryWatchPage` / `TheaterPlayer` / `LibraryPlayer` /
 | **Flex countdown = next content edge** | Tunarr’s synthetic ~6h `· Up next` guideFlexTitle block must not drive “left” / lower-third timers. Clamp flex `ends_at` to the next non-flex program’s start (skip chained flex pads). |
 | **Cable OSD fits the player** | Full OSD (channel, progress, Next, actions) sizes within the player below Live chrome — no viewport clipping of the Next line; safe-area bottom inset; inner scroll only if still too tall. |
 | **Fraunces / DM Sans + amber** | Same live theater type and accent as the rest of Lights Down — delightful, not noisy. |
-| **Tuning + independent preroll** | Same interstitial language as Play; each client’s Live start can play its own random bumper from the preroll library. |
+| **Tuning + movie-start preroll** | Same interstitial language as Play. A Live bumper plays only when the OSD says a movie is starting or about to air — not on every tune, and not before a show. No title, no skip. |
 | **Pause past program boundary** | Ask **Rejoin live** vs **Finish this, then rejoin live** — Projectionist owns the schedule and may stretch reality to finish the paused piece. |
-| **Weather Channel** | Cable-style extras (`?channel=weather`): Open-Meteo forecast for the household default or a per-profile place; optional music from the owner-chosen folder; spoken via browser TTS. |
+| **Guide station tune** | The left-column channel header is a button. Click or Enter tunes that station. Show cells keep their own tune. |
+| **Weather Channel** | Last guide row (`?channel=weather`), not a toolbar icon and not a Tunarr stream. All-day **Local forecast** block. Current-conditions board and a days-ahead grid (one column per returned day) flip about every 10s. Sky follows the WMO code. Ticker is humidity and rain chance, not the current temperature. Open-Meteo for the household default or a per-profile place; optional music from the owner-chosen folder; spoken via browser TTS. |
 
 Implementation: `LivePlayer` + `WeatherChannelPlayer` + `buildFlexLowerThird` / `buildOsdModel` / `clamp_flex_progress_to_next` in `liveChannels.js` + `guide.py` + `frontend/src/styles/12-live.css`.
 

@@ -37,7 +37,7 @@ import {
   programEndSecFromOsd,
   shouldPromptPausePastBoundary,
 } from "../../lib/livePauseBoundary.js";
-import { normalizePrerollPayload } from "../../lib/prerollClient.js";
+import { livePrerollCueId, normalizePrerollPayload } from "../../lib/prerollClient.js";
 import LiveProgramHoverCard from "./LiveProgramHoverCard.jsx";
 import TuningInterstitial from "../theater/TuningInterstitial.jsx";
 import PrerollStage from "../theater/PrerollStage.jsx";
@@ -92,6 +92,17 @@ export default function LivePlayer({
 
   const channelId = channel?.id || "";
   const osd = buildOsdModel(channel, osdTick, { selectedProgram });
+  const liveCue = livePrerollCueId(osd, osdTick);
+  const prerollCueRef = useRef("");
+  const [prerollEpoch, setPrerollEpoch] = useState(channelId);
+  if (prerollEpoch !== channelId) {
+    setPrerollEpoch(channelId);
+    setPreroll(null);
+    setPauseBoundary(null);
+    prerollCueRef.current = "";
+    finishThenLiveRef.current = false;
+    pauseProgramEndRef.current = null;
+  }
   const nowPlexKey = osd?.plexRatingKey || channel?.now?.plex_rating_key || "";
   const ccMerged = mergeLiveCcTracks(textTracks, plexCc);
 
@@ -279,17 +290,13 @@ export default function LivePlayer({
     };
   }, [channelId, nowPlexKey]);
 
-  // Independent Live bumper per client before HLS attaches.
+  // Requests a bumper only when a movie is starting or about to air.
   useEffect(() => {
-    if (!channelId) {
-      setPreroll(null);
-      return undefined;
-    }
+    if (!channelId || !liveCue) return undefined;
+    const token = `${channelId}:${liveCue}`;
+    if (prerollCueRef.current === token) return undefined;
+    prerollCueRef.current = token;
     let cancelled = false;
-    setPreroll(null);
-    finishThenLiveRef.current = false;
-    setPauseBoundary(null);
-    pauseProgramEndRef.current = null;
     (async () => {
       try {
         const bumper = normalizePrerollPayload(await fetchNextPreroll("live"));
@@ -301,7 +308,7 @@ export default function LivePlayer({
     return () => {
       cancelled = true;
     };
-  }, [channelId]);
+  }, [channelId, liveCue]);
 
   // While paused, ask when wall-clock crosses the program that was airing.
   useEffect(() => {
@@ -872,9 +879,7 @@ export default function LivePlayer({
       {preroll ? (
         <PrerollStage
           src={preroll.url}
-          title={preroll.title}
           onDone={() => setPreroll(null)}
-          onSkip={() => setPreroll(null)}
           testId="live-preroll"
         />
       ) : null}

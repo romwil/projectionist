@@ -1,9 +1,10 @@
-"""Host preroll bumpers for Play movies + Live tune-in.
+"""Host preroll bumpers for Play movies and Live movie starts.
 
 Media lives on the host (Automat default ``/mnt/user/data/media/preroll``),
 bind-mounted into the container at ``/preroll``. Every movie play draws a
-**random** trailer from that library. Live draws its own random bumper per
-client. There is no shared preroll clock.
+**random** trailer from that library. Live draws one only when the guide says
+a movie is starting or about to air — not on every tune, and not before a
+show. Each client picks on its own. There is no shared preroll clock.
 """
 
 from __future__ import annotations
@@ -148,6 +149,7 @@ def pick_preroll(
     """Random video bumper for this client.
 
     ``movie`` and ``live`` both draw from the whole preroll video library.
+    Callers decide whether Live should ask: only when a movie is starting.
     Each call is independent — a later play of the same title can lead with
     a different trailer.
     """
