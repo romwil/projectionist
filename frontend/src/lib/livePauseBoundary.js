@@ -4,6 +4,42 @@
  */
 
 /**
+ * `{ open: false }` is a Rejoin/Finish choice on the current pause.
+ * It suppresses the prompt until playback leaves pause or the next pause
+ * gesture clears it. An open dialog and a missing boundary are not dismissed.
+ * @param {{ open?: boolean } | null | undefined} pauseBoundary
+ * @returns {boolean}
+ */
+export function isPauseBoundaryDismissed(pauseBoundary) {
+  return Boolean(pauseBoundary && pauseBoundary.open === false);
+}
+
+/**
+ * Keep a Rejoin/Finish dismissal while this pause is still active so the
+ * dialog does not reopen inside the old boundary. Once playback leaves
+ * pause, drop it so a later pause can arm a new program end.
+ * An open dialog is left alone.
+ * @param {{ open?: boolean } | null | undefined} pauseBoundary
+ * @param {string} status
+ * @returns {{ open?: boolean } | null | undefined}
+ */
+export function pauseBoundaryForPlaybackStatus(pauseBoundary, status) {
+  if (status !== "paused" && isPauseBoundaryDismissed(pauseBoundary)) return null;
+  return pauseBoundary;
+}
+
+/**
+ * A new pause gesture starts clean. Leftover `{ open: false }` from the
+ * previous choice must not suppress the prompt for this pause.
+ * @param {{ open?: boolean } | null | undefined} pauseBoundary
+ * @returns {{ open?: boolean } | null | undefined}
+ */
+export function pauseBoundaryOnPauseGesture(pauseBoundary) {
+  if (isPauseBoundaryDismissed(pauseBoundary)) return null;
+  return pauseBoundary;
+}
+
+/**
  * @param {{
  *   paused: boolean,
  *   pauseWallSec?: number|null,

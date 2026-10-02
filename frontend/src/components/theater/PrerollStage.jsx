@@ -15,11 +15,17 @@ export default function PrerollStage({
   const videoRef = useRef(null);
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
+  // LivePlayer re-renders about once a second for the OSD clock, and both
+  // players pass inline onDone/onSkip. Those identities must not retrigger
+  // this effect: cleanup strips `src`, then the effect loads and plays again,
+  // which restarts the bumper from 0. onSkip is click-only (not an effect dep).
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !src) {
-      onDone?.();
+      onDoneRef.current?.();
       return undefined;
     }
     setStatus("loading");
@@ -37,7 +43,7 @@ export default function PrerollStage({
       video.removeAttribute("src");
       video.load();
     };
-  }, [src, onDone]);
+  }, [src]);
 
   return (
     <div className="preroll-stage" data-testid={testId} data-status={status}>
