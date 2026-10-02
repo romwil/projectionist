@@ -204,6 +204,9 @@ The curator can also propose **Plex collection** create/add actions; those requi
 | GET | `/api/library/health` | Unwatched %, stale adds, rating coverage |
 | GET | `/api/library/purge-candidates` | Purge candidate title cards for `/purge` |
 | GET | `/api/admin/export/training-corpus` | Owner-only JSON export of taste-training tables |
+| GET / PUT | `/api/admin/weekly-letter` | Owner: weekly household letter switches (`weekly`, `email`) plus this week's text; `email` only sticks when mail is configured |
+| POST | `/api/admin/weekly-letter/send` | Owner: drop this week's letter in the owner inbox now |
+| PUT | `/api/admin/holidays/{id}/rail/order` | Owner: pin titles to the front of a seasonal shelf in exactly this order; returns the refreshed preview |
 | GET | `/api/title/{media_type}/{id}` | Title detail (`id_type` query) |
 | GET | `/api/context/active` | Inferred ambient context label |
 

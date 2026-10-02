@@ -8,6 +8,7 @@ import {
   dedupeNotifications,
   dedupeRecommendations,
   digestBlurb,
+  isHouseLetter,
   digestPicks,
   eventPrimaryCta,
   formatUnreadBadge,
@@ -166,4 +167,14 @@ test("recommendationMediaTitle strips legacy precomposed notification titles", (
     }).leadText,
     "qa-member recommended Family Guy (1999) for you",
   );
+});
+
+test("isHouseLetter recognises only the weekly household letter digest", () => {
+  assert.equal(
+    isHouseLetter({ kind: "digest", payload: { newsletter: "house-letter", week: "2026-W40" } }),
+    true,
+  );
+  assert.equal(isHouseLetter({ kind: "digest", payload: { newsletter: "monthly-owner" } }), false);
+  assert.equal(isHouseLetter({ kind: "nudge", payload: { newsletter: "house-letter" } }), false);
+  assert.equal(isHouseLetter(null), false);
 });

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
+from projectionist.live_channels.queue_padding import queue_pad_options
 from projectionist.live_channels.recipes import (
     ChannelRecipe,
     MediaScope,
@@ -346,6 +347,7 @@ def build_craft_options(
         "filter_options": filter_opts,
         "exclusion_collection_name": exclusion_name,
         "pad_flex_max_minutes": pad_minutes,
+        "queue_pad": queue_pad_options(),
         "empty_library": not bool(motifs or clusters or collections),
         "soft_default": 30,
         "soft_cap": 80,
@@ -477,5 +479,6 @@ def recipe_from_craft_payload(
             "item_hints": payload.get("item_hints") or (),
             "item_rating_keys": payload.get("item_rating_keys") or (),
             "craft_filters": craft_filters.to_dict(),
+            "queue_pad": payload.get("queue_pad") or {},
         }
     )

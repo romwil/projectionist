@@ -558,6 +558,7 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
                             "programming_mode": craft.get("programming_mode") or "",
                             "craft_filters": dict(craft.get("craft_filters") or {}),
                             "youth_safe": bool(craft.get("youth_safe")),
+                            "queue_pad": dict(craft.get("queue_pad") or {}),
                         }
                     )
             except Exception:  # noqa: BLE001

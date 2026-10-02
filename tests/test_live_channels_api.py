@@ -812,6 +812,58 @@ class LiveChannelsApiTests(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 400)
 
+    def test_from_show_forwards_queue_pad(self) -> None:
+        self._enable()
+        with patch(
+            "projectionist.web.live_channels_routes._finalize_live_channels_publish",
+            side_effect=lambda _settings, result, **_kw: result,
+        ), patch(
+            "projectionist.live_channels.publish.publish_show_channel",
+            return_value={"ok": True, "count_published": 1, "note": "matched"},
+        ) as publish_show, patch(
+            "projectionist.live_channels.publish.tunarr_client_from_settings",
+            return_value=MagicMock(),
+        ):
+            resp = self.client.post(
+                "/api/admin/live-channels/channels/from-show",
+                json={
+                    "confirm": True,
+                    "sync": True,
+                    "show_rating_key": "4242",
+                    "show_title": "Deep Space Nine",
+                    "queue_pad": {"up_to": 4, "feed": "recently_released"},
+                },
+            )
+        self.assertEqual(resp.status_code, 200, resp.text)
+        self.assertEqual(
+            publish_show.call_args.kwargs["queue_pad"],
+            {"up_to": 4, "feed": "recently_released"},
+        )
+
+    def test_station_settings_saves_queue_pad(self) -> None:
+        from pathlib import Path
+
+        from projectionist.config_store import load_merged_settings, save_settings
+        from projectionist.live_channels.publish import set_station_meta
+
+        self._enable()
+        settings = load_merged_settings(Path(self._tmpdir.name))
+        set_station_meta(settings, "ch-107", media_scope="both", source="show")
+        save_settings(Path(self._tmpdir.name), settings)
+        client = MagicMock()
+        client.list_channels.return_value = [{"id": "ch-107", "name": "Block", "number": 107}]
+        client.get_channel.return_value = {"id": "ch-107", "name": "Block", "number": 107}
+        with patch("projectionist.live_channels.publish.TunarrClient", return_value=client):
+            resp = self.client.patch(
+                "/api/admin/live-channels/channels/ch-107/settings",
+                json={"confirm": True, "queue_pad": {"up_to": 3, "feed": "recently_added"}},
+            )
+        self.assertEqual(resp.status_code, 200, resp.text)
+        self.assertEqual(resp.json()["queue_pad"], {"up_to": 3, "feed": "recently_added"})
+        reloaded = load_merged_settings(Path(self._tmpdir.name))
+        meta = (reloaded.tunarr.station_meta or {}).get("ch-107") or {}
+        self.assertEqual(meta.get("queue_pad"), {"up_to": 3, "feed": "recently_added"})
+
     def test_station_settings_craft_filters_round_trip(self) -> None:
         """PATCH settings persists decade/genre; Save does not refill lineup."""
         from pathlib import Path

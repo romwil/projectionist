@@ -3,7 +3,7 @@ import InlineAlert from "../../components/InlineAlert";
 import SectionHelp from "../../components/SectionHelp";
 import { buildHouseholdHealthChips } from "../../lib/householdHealth.js";
 import { liveOnboardingTip, liveOverviewLine } from "../../lib/liveChannelsCopy.js";
-import { LiveJobRail } from "./LiveChannelsSection";
+import { LiveJobRail } from "./LiveChannelsParts.jsx";
 
 /**
  * Admin Overview — household health, Live echo, taste export, snapshot.

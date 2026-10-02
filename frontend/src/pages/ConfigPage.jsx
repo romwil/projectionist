@@ -51,6 +51,7 @@ import {
 import AdvancedSettings from "../components/AdvancedSettings";
 import PersonaSection from "../components/PersonaSection";
 import LiveChannelsSection, { isLiveChannelsLaunched } from "./admin/LiveChannelsSection";
+import { ownerLiveText } from "../lib/liveChannelsOwnerCopy.js";
 import HouseholdSection from "./admin/HouseholdSection";
 import LibrariesSection from "./admin/LibrariesSection";
 import OverviewSection from "./admin/OverviewSection";
@@ -1182,8 +1183,8 @@ export default function ConfigPage() {
     return (
       <InlineAlert
         type={fb.type}
-        message={fb.message}
-        details={fb.details}
+        message={ownerLiveText(fb.message)}
+        details={Array.isArray(fb.details) ? fb.details.map(ownerLiveText) : fb.details}
         testId={`live-channels-${block}-alert`}
       />
     );

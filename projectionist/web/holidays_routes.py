@@ -188,6 +188,34 @@ def reorder_holiday_rail_pins(
     return {"curation": curation}
 
 
+@router.put("/api/admin/holidays/{observance_id}/rail/order")
+def set_holiday_rail_order(
+    observance_id: str,
+    payload: RailPinOrderPayload,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Order the shelf: pin these titles to the front, in this exact order.
+
+    Used by the Live setup's seasonal shelf editor. Works for titles that were
+    only keyword matches (they become pins), unlike ``rail/pins`` which only
+    renumbers titles that are already pinned. Returns the refreshed preview.
+    """
+    del user
+    db = _db()
+    if db.get_holiday_observance(observance_id) is None and not observance_id.startswith(
+        "season:"
+    ):
+        raise HTTPException(status_code=404, detail="Holiday not found")
+    try:
+        curation = db.set_holiday_rail_order(observance_id, payload.library_item_ids)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    from projectionist.library.feeds import preview_holiday_rail
+
+    preview = preview_holiday_rail(db, observance_id, limit=12)
+    return {"curation": curation, "preview": preview}
+
+
 @router.get("/api/admin/holidays-library-search")
 def holiday_library_search(
     q: str = "",
