@@ -123,8 +123,8 @@ export default function MyJourneyPage() {
   const [syllabusBusy, setSyllabusBusy] = useState("");
   const [syllabusNote, setSyllabusNote] = useState("");
 
-  function reload() {
-    setState((prev) => ({ ...prev, loading: true }));
+  function reload({ silent = false } = {}) {
+    if (!silent) setState((prev) => ({ ...prev, loading: true }));
     getJourneyExploration()
       .then((data) => setState({ loading: false, data, error: "" }))
       .catch((err) =>
@@ -135,6 +135,23 @@ export default function MyJourneyPage() {
         }),
       );
   }
+
+  // Server precaches the library rails (SWR). A brand-new install may answer
+  // warming:true once while it builds — re-poll quietly instead of showing empty rails.
+  const journeyWarming = Boolean(state.data?.warming);
+  useEffect(() => {
+    if (!journeyWarming) return undefined;
+    let tries = 0;
+    const timer = setInterval(() => {
+      tries += 1;
+      if (tries > 30) {
+        clearInterval(timer);
+        return;
+      }
+      reload({ silent: true });
+    }, 1500);
+    return () => clearInterval(timer);
+  }, [journeyWarming]);
 
   useEffect(() => {
     if (!authReady || guestDeepLinkBlocked({ role, multiUserEnabled, authReady })) return;
@@ -220,6 +237,11 @@ export default function MyJourneyPage() {
 
         {state.loading ? <p className="status status-secondary">Loading your cinema map…</p> : null}
         {state.error ? <p className="status status-error">{state.error}</p> : null}
+        {journeyWarming ? (
+          <p className="status status-secondary" data-testid="journey-warming">
+            Mapping your collection for the first time…
+          </p>
+        ) : null}
 
         {!state.loading && data ? (
           <>

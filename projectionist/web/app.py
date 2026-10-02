@@ -73,6 +73,10 @@ from projectionist.library.external_search import (
     external_tmdb_search,
 )
 from projectionist.memory import MemoryAccessError, UserMemoryService
+from projectionist.library.derived_caches import (
+    get_knowledge_coverage as get_cached_knowledge_coverage,
+    get_library_health as get_cached_library_health,
+)
 from projectionist.library.health import compute_library_health
 from projectionist.library.facets import ensure_library_facet_index
 from projectionist.library.episodes import (
@@ -422,6 +426,33 @@ async def lifespan(_app: FastAPI):
         name="watch-identity-repair",
     ).start()
 
+    def _prewarm_first_paint_caches() -> None:
+        """Precompute SWR payloads off the request path (Live, Journey, Admin)."""
+        try:
+            from projectionist.library.derived_caches import rebuild_after_library_change
+
+            # Durable payloads from before the restart already paint instantly;
+            # this refreshes them (and seeds a brand-new install) in the background.
+            rebuild_after_library_change(manager.db)
+        except Exception:  # noqa: BLE001
+            logger.debug("Startup: library dashboard prewarm skipped", exc_info=True)
+        try:
+            settings = _settings()
+            from projectionist.live_channels.guide_cache import prewarm_live_guide
+            from projectionist.live_channels.status_cache import prewarm_live_channels_status
+
+            prewarm_live_guide(settings)
+            prewarm_live_channels_status(settings, manager.db)
+            logger.info("Startup: first-paint caches prewarmed")
+        except Exception:  # noqa: BLE001
+            logger.debug("Startup: live prewarm skipped", exc_info=True)
+
+    threading.Thread(
+        target=_prewarm_first_paint_caches,
+        daemon=True,
+        name="first-paint-prewarm",
+    ).start()
+
     # Bind closed-loop miss telemetry so facet resolve can fire-and-forget P1 events.
     try:
         from projectionist.facets.closed_loop import bind_closed_loop_database
@@ -522,6 +553,37 @@ async def security_headers_middleware(request: Request, call_next):
             "Strict-Transport-Security",
             "max-age=31536000; includeSubDomains",
         )
+    return response
+
+
+_SWR_INVALIDATING_PREFIXES = ("/api/admin/live-channels", "/api/live-channels", "/api/settings")
+
+
+@app.middleware("http")
+async def swr_invalidation_middleware(request: Request, call_next):
+    """Mark Live / Admin SWR snapshots soft-stale after a successful mutation.
+
+    Payloads are kept (so the next read still paints instantly) and refreshed in
+    the background; clients re-poll while ``stale`` / ``warming`` is true.
+    """
+    response = await call_next(request)
+    if (
+        request.method in {"POST", "PUT", "PATCH", "DELETE"}
+        and response.status_code < 400
+        and request.url.path.startswith(_SWR_INVALIDATING_PREFIXES)
+    ):
+        try:
+            from projectionist.live_channels.guide_cache import invalidate_live_guide_cache
+            from projectionist.live_channels.status_cache import (
+                CRAFT_CACHE,
+                invalidate_live_status_cache,
+            )
+
+            invalidate_live_guide_cache()
+            invalidate_live_status_cache()
+            CRAFT_CACHE.invalidate()
+        except Exception:  # noqa: BLE001
+            logger.debug("SWR invalidation skipped", exc_info=True)
     return response
 
 
@@ -1435,7 +1497,8 @@ def library_stats(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
         "last_sync": db.get_sync_state("last_sync"),
         "plex_server_name": plex_server_name or None,
         # Phase A data surface for Admin/Explore knowledge-depth UI (Phase D).
-        "knowledge_coverage": compute_knowledge_coverage(db),
+        # SWR: coverage scans the whole library — never on the app-shell request path.
+        "knowledge_coverage": get_cached_knowledge_coverage(db),
     }
     return _sanitize_library_payload(payload, user)
 
@@ -1443,12 +1506,12 @@ def library_stats(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
 @app.get("/api/library/knowledge-coverage")
 def library_knowledge_coverage(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
     """Dedicated coverage stats for Admin / Explore knowledge-depth panels."""
-    return _sanitize_library_payload(compute_knowledge_coverage(_db()), user)
+    return _sanitize_library_payload(get_cached_knowledge_coverage(_db()), user)
 
 
 @app.get("/api/library/health")
 def library_health(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
-    return _sanitize_library_payload(compute_library_health(_db()), user)
+    return _sanitize_library_payload(get_cached_library_health(_db()), user)
 
 
 @app.get("/api/library/purge-candidates")
@@ -2503,10 +2566,10 @@ def library_feed_pick_for_me(
         if bool(getattr(settings.features, "live_channels_enabled", False)):
             try:
                 from projectionist.live_channels.airing_why import pick_youth_safe_live_station
-                from projectionist.live_channels.guide import build_on_now_snapshot
+                from projectionist.live_channels.guide_cache import get_on_now_snapshot
                 from projectionist.youth.rating_gate import resolve_youth_max_rating
 
-                snap = build_on_now_snapshot(
+                snap = get_on_now_snapshot(
                     settings,
                     youth_max_rating=resolve_youth_max_rating(settings),
                 )
@@ -4620,10 +4683,11 @@ def get_engagement_summary(user=Depends(get_current_user_dep)) -> Dict[str, Any]
 
 @app.get("/api/journey/exploration")
 def get_journey_exploration(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
-    from projectionist.journey.exploration import journey_exploration
+    from projectionist.journey.exploration import get_journey_exploration
 
     youth = bool(getattr(user, "is_youth", False))
-    return journey_exploration(_db(), user_id=str(user.id), youth_safe_only=youth)
+    # SWR: library rails come from cache (durable); recompute runs in the background.
+    return get_journey_exploration(_db(), user_id=str(user.id), youth_safe_only=youth)
 
 
 @app.post("/api/engagement/courses/{list_id}/progress")
