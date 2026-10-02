@@ -78,6 +78,14 @@ export default function LiveGuide({
     onTune?.(channel.id, program);
   }
 
+  function tuneStation(row) {
+    const channel = channels[row];
+    if (!channel) return;
+    setFocusRow(row);
+    onSelectChannel?.(channel.id);
+    onTune?.(channel.id, null);
+  }
+
   function placeHover(program, event, kind = "guide") {
     cancelHoverLeave();
     if (!program || program.isFlex) {
@@ -144,11 +152,12 @@ export default function LiveGuide({
             <button
               key={channel.id}
               type="button"
-              className={`live-guide-station${channel.id === selectedChannelId || row === focusRow ? " is-active" : ""}`}
-              onClick={() => {
-                setFocusRow(row);
-                onSelectChannel?.(channel.id);
+              className={`live-guide-station${channel.kind === "weather" ? " live-guide-station--weather" : ""}${channel.id === selectedChannelId || row === focusRow ? " is-active" : ""}`}
+              onClick={() => tuneStation(row)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") event.stopPropagation();
               }}
+              aria-label={`Tune ${channel.number != null ? `${channel.number} ` : ""}${channel.name}`}
               data-testid="live-guide-station"
             >
               <span className="live-guide-station-num">{channel.number ?? "—"}</span>

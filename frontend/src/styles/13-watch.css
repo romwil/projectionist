@@ -663,41 +663,18 @@ html:has([data-theater-mode="true"]) #root {
   object-fit: contain;
   background: #000;
 }
-.preroll-stage-chrome {
+.preroll-stage-error {
   position: absolute;
   left: 50%;
   bottom: max(1.25rem, env(safe-area-inset-bottom));
   transform: translateX(-50%);
   z-index: 2;
-  display: grid;
-  gap: 0.35rem;
-  justify-items: center;
-  text-align: center;
-  color: #f4efe4;
-}
-.preroll-stage-kicker {
   margin: 0;
-  font-size: 0.75rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  opacity: 0.8;
-}
-.preroll-stage-title {
-  margin: 0;
-  font-family: var(--font-display, "Fraunces", Georgia, serif);
-  font-size: 1.15rem;
-}
-.preroll-stage-skip {
-  margin-top: 0.35rem;
-  min-height: var(--tap-min, 44px);
-  padding: 0.45rem 1rem;
+  max-width: min(28rem, calc(100% - 2rem));
+  padding: 0.45rem 0.8rem;
   border-radius: 999px;
-  border: 1px solid rgba(244, 239, 228, 0.35);
   background: rgba(0, 0, 0, 0.55);
   color: #f4efe4;
-  cursor: pointer;
-}
-.preroll-stage-error {
-  margin: 0;
   font-size: 0.85rem;
+  text-align: center;
 }

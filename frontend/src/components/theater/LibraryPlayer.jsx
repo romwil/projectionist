@@ -799,9 +799,7 @@ export default function LibraryPlayer({
         {preroll ? (
           <PrerollStage
             src={preroll.url}
-            title={preroll.title}
             onDone={() => setPreroll(null)}
-            onSkip={() => setPreroll(null)}
           />
         ) : null}
         {showCenterPlay ? (
