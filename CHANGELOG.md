@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [1.37.24] — 2026-10-02
+
+Explore home loads from a precached hub again — rails recompute in the background instead of blocking first paint.
+
+### Highlights
+- **Explore opens fast.** The home rails come from a cached hub. When it is time to refresh, you still see the last good shelves while Projectionist rebuilds in the background.
+- **No hang on a cold start.** If nothing is cached yet, Explore shows a short warm-up instead of waiting on a full recompute (including Plex On Deck).
+
+### Fixed
+- `GET /api/library/feeds/hub` used a 45s hard TTL and rebuilt every rail (including Plex On Deck) on the request path after expiry or library sync invalidation. That made Explore feel stuck after short absences.
+- Hub now uses stale-while-revalidate: soft TTL 120s, hard retention 6h, durable `sync_state` snapshot across process restarts, single-flight background refresh. Cold miss returns `warming: true` immediately.
+- Library sync marks the hub soft-stale instead of wiping it, so the next visit can still paint from the last payload.
+- Explore client polls briefly while `warming` is true and keeps session-cached rails on screen when available.
+
+### Verification
+- `pytest tests/test_explore_wave3.py::FeedHelperTests -k "explore_hub or hub_survives"` — SWR stale <200ms with a forced 350ms rebuild; cold warming <200ms with a forced 400ms rebuild.
+- Local microbench (empty Plex): full build ~26ms; fresh hit ~0.1ms; soft-stale SWR ~0.2ms; cold warming ~0.6ms.
+- Frontend lint: 0 errors.
+
 ## [1.37.23] — 2026-10-02
 
 Live trailers only when a movie is starting, the Weather Channel looks like a cable board, and Weather sits at the end of the guide.
