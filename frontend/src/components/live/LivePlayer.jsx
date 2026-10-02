@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
 import {
   downloadLiveChannelSubtitles,
@@ -28,6 +28,7 @@ import {
   tryPlayLiveVideo,
 } from "../../lib/liveChannels.js";
 import { theaterHlsConfig } from "../../lib/theaterPlayer.js";
+import { clampSubtitleDelay, liveProgramClockSec } from "../../lib/subtitleCues.js";
 import { formatLiveStreamError, liveStreamHealthCopy } from "../../lib/liveChannelsCopy.js";
 import { pickLiveSoftStallPhrase } from "../../lib/liveStreamSoftStallCopy.js";
 import {
@@ -41,6 +42,9 @@ import { livePrerollCueId, normalizePrerollPayload } from "../../lib/prerollClie
 import LiveProgramHoverCard from "./LiveProgramHoverCard.jsx";
 import TuningInterstitial from "../theater/TuningInterstitial.jsx";
 import PrerollStage from "../theater/PrerollStage.jsx";
+import SubtitleOverlay from "../theater/SubtitleOverlay.jsx";
+import SubtitlePicker from "../theater/SubtitlePicker.jsx";
+import useSubtitleCues from "../theater/useSubtitleCues.js";
 
 /**
  * Fullscreen-capable HLS player with cable-box OSD + subtitle picker.
@@ -83,7 +87,7 @@ export default function LivePlayer({
   const [plexCc, setPlexCc] = useState(null);
   const [ccDownloadBusy, setCcDownloadBusy] = useState(false);
   const [ccDownloadNote, setCcDownloadNote] = useState("");
-  const plexTrackElRef = useRef(null);
+  const [subDelay, setSubDelay] = useState(0);
   const [preroll, setPreroll] = useState(null); // null = none/ready; object = playing; undefined = resolving
   const [pauseBoundary, setPauseBoundary] = useState(null);
   const pauseProgramEndRef = useRef(null);
@@ -105,6 +109,13 @@ export default function LivePlayer({
   }
   const nowPlexKey = osd?.plexRatingKey || channel?.now?.plex_rating_key || "";
   const ccMerged = mergeLiveCcTracks(textTracks, plexCc);
+  // Plex tracks (embedded or sidecar) are drawn by Projectionist itself, so they work
+  // whether or not the Live encode carries captions.
+  const activePlexTrack = ccMerged.plexTracks.find((track) => track.index === activeTrack) || null;
+  const plexSubs = useSubtitleCues(activePlexTrack?.proxyUrl || "");
+  const osdRef = useRef(osd);
+  osdRef.current = osd;
+  const getSubtitleTimeSec = useCallback(() => liveProgramClockSec(osdRef.current, Date.now()), []);
 
   useEffect(() => {
     statusRef.current = status;
@@ -269,6 +280,12 @@ export default function LivePlayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reveal OSD on channel change only
   }, [channelId]);
 
+  // A Plex track belongs to one airing — drop it when the title behind the channel changes.
+  useEffect(() => {
+    setActiveTrack((current) => (typeof current === "string" ? -1 : current));
+    setSubDelay(0);
+  }, [channelId, nowPlexKey]);
+
   // Richer CC: when now-playing maps to a Plex rating key, list attached tracks.
   useEffect(() => {
     if (!channelId) {
@@ -357,14 +374,6 @@ export default function LivePlayer({
     lastProgressTimeRef.current = null;
     setTextTracks([]);
     setActiveTrack(-1);
-    if (plexTrackElRef.current) {
-      try {
-        video.removeChild(plexTrackElRef.current);
-      } catch {
-        // ignore
-      }
-      plexTrackElRef.current = null;
-    }
     recordLivePlaybackDiag("tune-start", {
       channelId,
       mediaUrl: url,
@@ -646,57 +655,17 @@ export default function LivePlayer({
   }, [activeTrack]);
 
   function selectCcTrack(track) {
-    const video = videoRef.current;
     if (!track || track.index === -1) {
       setActiveTrack(-1);
-      if (video && plexTrackElRef.current) {
-        try {
-          video.removeChild(plexTrackElRef.current);
-        } catch {
-          // ignore
-        }
-        plexTrackElRef.current = null;
-      }
-      bumpOsd();
-      return;
-    }
-    if (track.viaPlex) {
-      if (!video || !track.proxyUrl) {
-        setActiveTrack(-1);
-        setCcDownloadNote(
-          "This track is on the title in Plex. Turn on station captions in Admin so Live can carry it, or watch in Plex.",
-        );
-        bumpOsd();
-        return;
-      }
-      if (plexTrackElRef.current) {
-        try {
-          video.removeChild(plexTrackElRef.current);
-        } catch {
-          // ignore
-        }
-        plexTrackElRef.current = null;
-      }
-      const el = document.createElement("track");
-      el.kind = "subtitles";
-      el.label = "projectionist-plex-cc";
-      el.srclang = track.language || "en";
-      el.src = track.proxyUrl;
-      el.default = true;
-      video.appendChild(el);
-      plexTrackElRef.current = el;
-      setActiveTrack(track.index);
       setCcDownloadNote("");
       bumpOsd();
       return;
     }
-    if (video && plexTrackElRef.current) {
-      try {
-        video.removeChild(plexTrackElRef.current);
-      } catch {
-        // ignore
-      }
-      plexTrackElRef.current = null;
+    if (track.viaPlex && !track.proxyUrl) {
+      setActiveTrack(-1);
+      setCcDownloadNote(track.unavailableReason || "This track can’t be drawn as text here.");
+      bumpOsd();
+      return;
     }
     setActiveTrack(track.index);
     setCcDownloadNote("");
@@ -875,6 +844,15 @@ export default function LivePlayer({
           }
         }}
       />
+
+      {activePlexTrack && plexSubs.state === "ready" ? (
+        <SubtitleOverlay
+          cues={plexSubs.cues}
+          getTimeSec={getSubtitleTimeSec}
+          delaySec={subDelay}
+          testId="live-subtitle-overlay"
+        />
+      ) : null}
 
       {preroll ? (
         <PrerollStage
@@ -1080,15 +1058,18 @@ export default function LivePlayer({
           </div>
 
           {ccOpen ? (
-            <div className="live-cc-picker" data-testid="live-cc-picker">
-              <button
-                type="button"
-                className={`ghost live-cc-option${activeTrack === -1 ? " is-active" : ""}`}
-                onClick={() => selectCcTrack({ index: -1 })}
-              >
-                Off
-              </button>
-              {ccMerged.streamTracks.map((track) => (
+            <SubtitlePicker
+              testId="live-cc-picker"
+              tracks={ccMerged.plexTracks}
+              activeId={activeTrack}
+              onSelect={selectCcTrack}
+              state={activePlexTrack ? plexSubs.state : "idle"}
+              error={plexSubs.error}
+              note={ccDownloadNote}
+              emptyMessage={ccMerged.hasAny ? "" : ccMerged.emptyMessage || LIVE_CC_EMPTY_STREAM}
+              delaySec={subDelay}
+              onDelayChange={(value) => setSubDelay(clampSubtitleDelay(value))}
+              leading={ccMerged.streamTracks.map((track) => (
                 <button
                   key={`stream-${track.index}`}
                   type="button"
@@ -1098,40 +1079,20 @@ export default function LivePlayer({
                   {track.label}
                 </button>
               ))}
-              {ccMerged.plexTracks.map((track) => (
-                <button
-                  key={track.index}
-                  type="button"
-                  className={`ghost live-cc-option${activeTrack === track.index ? " is-active" : ""}`}
-                  data-testid="live-cc-plex-track"
-                  onClick={() => selectCcTrack(track)}
-                >
-                  {track.label}
-                  {track.proxyUrl ? "" : " · in Plex"}
-                </button>
-              ))}
-              {!ccMerged.hasAny ? (
-                <p className="live-cc-empty" data-testid="live-cc-unavailable">
-                  {ccMerged.emptyMessage || LIVE_CC_EMPTY_STREAM}
-                </p>
-              ) : null}
-              {ccMerged.canDownload ? (
-                <button
-                  type="button"
-                  className="ghost live-cc-option"
-                  data-testid="live-cc-ask-plex"
-                  disabled={ccDownloadBusy}
-                  onClick={askPlexForSubtitles}
-                >
-                  {ccDownloadBusy ? "Asking Plex…" : "Ask Plex for subtitles"}
-                </button>
-              ) : null}
-              {ccDownloadNote ? (
-                <p className="live-cc-empty" data-testid="live-cc-download-note">
-                  {ccDownloadNote}
-                </p>
-              ) : null}
-            </div>
+              trailing={
+                ccMerged.canDownload ? (
+                  <button
+                    type="button"
+                    className="ghost live-cc-option"
+                    data-testid="live-cc-ask-plex"
+                    disabled={ccDownloadBusy}
+                    onClick={askPlexForSubtitles}
+                  >
+                    {ccDownloadBusy ? "Asking Plex…" : "Ask Plex for subtitles"}
+                  </button>
+                ) : null
+              }
+            />
           ) : null}
         </div>
       </div>

@@ -4,13 +4,14 @@
 
 ## [1.37.30] — 2026-10-03
 
-One combined patch that rolls up seven reviewed changes: a faster first paint for Live, My Journey, and Admin; a native "start a station" Live Channels studio with queue padding and editable seasonal shelves; a weekly letter in place of Admin → House; missing plots that fill themselves; a quieter background scheduler; Sonarr "Search selected"; curator collections that land in Projectionist; and an aligned Live Guide. Hub `romwil/projectionist:1.37.25` was a one-off publish of the first-paint change alone; it was never merged, git-tagged, or promoted to prod, and its content is included here. Nothing was published as 1.37.26–1.37.29.
+One combined patch that rolls up eight reviewed changes: subtitle tracks you already have, drawn in the Live and Play players; a faster first paint for Live, My Journey, and Admin; a native "start a station" Live Channels studio with queue padding and editable seasonal shelves; a weekly letter in place of Admin → House; missing plots that fill themselves; a quieter background scheduler; Sonarr "Search selected"; curator collections that land in Projectionist; and an aligned Live Guide. Hub `romwil/projectionist:1.37.25` was a one-off publish of the first-paint change alone; it was never merged, git-tagged, or promoted to prod, and its content is included here. Nothing was published as 1.37.26–1.37.29.
 
 ### Highlights
 - **Live, My Journey, and Admin open fast.** They paint from the last good snapshot and refresh in the background, so a slow Tunarr or Plex no longer hangs the page.
 - **Start a Live station in four steps.** Pick what's on it, name it, and go on air. Channels can keep 1–5 titles on rotation topped up from recently added or released, and you can edit seasonal shelves right on the Live page.
 - **Weekly letter in your inbox.** Admin → House is gone; the household letter now arrives once a week in the owner inbox (email stays off unless you turn it on).
 - **Missing plots fill themselves.** Library knowledge lists only titles where automatic lookup tried and failed, and the button becomes "Try again now". Background tasks also stop freezing the server and catch up faster.
+- **Subtitles in the player.** Live and Play share one CC menu with every real Plex subtitle track (embedded or sidecar), rendered in Projectionist with a ±0.5s sync nudge — no more "turn on station captions in Admin or watch in Plex" dead end.
 - **Better admin tools.** Sonarr **Find all missing** lets you search only the shows you tick, the curator builds collections and courses inside Projectionist, and the Live Guide grid lines up.
 
 ### Added
@@ -19,6 +20,11 @@ _native Live admin (#88)_
 - `PUT /api/admin/holidays/{id}/rail/order` — durable ordered pins for a seasonal shelf (same `holiday_rail_titles` store).
 - `GET/PUT /api/admin/weekly-letter`, `POST /api/admin/weekly-letter/send`, scheduler task `weekly_letter` (notification kind `digest`, one per ISO week). Optional email through the newsletter mail transport, only when mail is configured and the owner opts in.
 - Live studio UI (`/admin/live-channels`): Channels and Setup tabs, create flow, Seasonal shelves block, rotation control.
+
+_Subtitle tracks in the player (#91)_
+- **Subtitles you already have, drawn in the player.** Live and Play share one CC menu: Off plus every real Plex track (embedded or sidecar) for the airing or title. Picking one renders cues in Projectionist — no more "turn on station captions in Admin or watch in Plex" dead end.
+- Same control on Live (`/live`, pop-out `/live/watch`) and Play (`/watch`, pop-out, phone). Includes a ±0.5s sync nudge.
+- `GET /api/library/items/{rating_key}/subtitles/{stream_id}/file` now serves embedded text tracks as WebVTT (Plex `/library/streams/{id}`), not just sidecar files. Plex tokens stay server-side.
 
 ### Changed
 _first-paint SWR (#86)_
@@ -80,6 +86,11 @@ _scheduler audit (#89)_
 _Live Guide time scale (#90)_
 - **Live Guide lines up.** The time header, program blocks, now-line, and Weather row now share one half-hour-aligned time scale (equal 110px columns, ticks are column edges with left-aligned labels and visible hour/half-hour gridlines). Short blocks keep their true duration width (the old 48px minimum is gone), Weather spans the same grid as every other row, and channel-rail rows have a fixed height so a long channel name can no longer push later rows out of step.
 
+_Subtitle tracks in the player (#91)_
+- Embedded Plex tracks (no sidecar `key`) were listed as "in Plex" and never fetchable; they now carry a `proxy_url`.
+- Picture-based tracks (PGS/VobSub) stay listed but disabled with an honest reason; fetch failures say so instead of silently showing nothing.
+- SRT→VTT conversion no longer drops cue text that is only a number.
+
 ### Removed
 _native Live admin (#88)_
 - **Admin → House**: the `/admin/house` page, nav item, and `/api/admin/house/*` routes, plus gift queue, seasonal preview/veto, and trust diary. No redirect or stub. The letter is the one surviving feature (above); seasonal editing lives on Live Channels.
@@ -124,6 +135,7 @@ Per-change verification (from each PR, run by its author):
 - Scheduler / admin / bootstrap / run-history suites and frontend `scheduledTasks` unit tests pass; frontend lint 0 errors.
 
 **#90 (Live Guide alignment).** `liveChannels.test.mjs` guide time-scale unit tests; `e2e/live-guide-alignment.spec.ts` asserts real bounding boxes (ticks, cells, now-line, Weather, rail rows, scroll).
+- **#91 (subtitles).** `pytest tests/test_subtitle_player_proxy.py tests/test_plex_subtitles.py`; `node --test frontend/src/lib/subtitleCues.test.mjs`; frontend lint 0 errors; `npm run build`. Embedded Plex text-track fetch is mocked only — no live Plex proof for embedded tracks yet.
 
 ## [1.37.24] — 2026-10-02
 
