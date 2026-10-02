@@ -12,6 +12,8 @@ import WeatherChannelPlayer from "../components/live/WeatherChannelPlayer";
 import { useAuthGate } from "../components/UserMenu";
 import { ROUTES } from "../lib/backNav.js";
 import {
+  appendWeatherChannel,
+  isWeatherChannelId,
   liveGuideHref,
   liveProgramKey,
   normalizeGuide,
@@ -31,7 +33,7 @@ export default function LivePage({ popout = false }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const channelParam = String(searchParams.get("channel") || "").trim();
   const modeParam = String(searchParams.get("mode") || "").trim().toLowerCase();
-  const weatherMode = channelParam === "weather" || modeParam === "weather";
+  const weatherMode = isWeatherChannelId(channelParam) || modeParam === "weather";
 
   const [featureReady, setFeatureReady] = useState(false);
   const [featureOn, setFeatureOn] = useState(false);
@@ -66,7 +68,7 @@ export default function LivePage({ popout = false }) {
         getLiveChannelsGuide({ hours: 6 }),
         getPlexMachineId().catch(() => ""),
       ]);
-      const model = normalizeGuide(snapshot);
+      const model = appendWeatherChannel(normalizeGuide(snapshot));
       setGuide(model);
       setPlexUrl(plexLiveTvUrl(machineId));
       setError("");
@@ -269,29 +271,6 @@ export default function LivePage({ popout = false }) {
           )}
 
           <div className="live-chrome-secondary" role="group" aria-label="Also watch">
-            {!popout ? (
-              <button
-                type="button"
-                className={`live-chrome-icon-btn${weatherMode ? " is-active" : ""}`}
-                data-testid="live-weather-channel"
-                aria-label="Weather Channel"
-                data-tooltip="Weather Channel"
-                title="Weather Channel"
-                onClick={() => {
-                  setSearchParams((prev) => {
-                    const next = new URLSearchParams(prev);
-                    next.set("channel", "weather");
-                    next.set("mode", "watch");
-                    return next;
-                  });
-                  setMode("watch");
-                }}
-              >
-                <span className="material-symbols-outlined" aria-hidden="true">
-                  partly_cloudy_day
-                </span>
-              </button>
-            ) : null}
             {!popout ? (
               <LiveTuneShare
                 channelId={activeChannel?.id || activeChannelId}

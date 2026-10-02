@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 USER_AGENT = "ProjectionistWeather/1.0 (+https://github.com/romwil/projectionist)"
+_DEFAULT_PLACE = "your area"
 
 
 def _default_coords(environ: Optional[Any] = None) -> Tuple[float, float]:
@@ -97,7 +98,7 @@ def wmo_label(code: Any) -> str:
         return "Mixed skies"
 
 
-def build_voiceover_script(payload: Dict[str, Any], *, place_name: str = "your area") -> str:
+def build_voiceover_script(payload: Dict[str, Any], *, place_name: str = _DEFAULT_PLACE) -> str:
     current = payload.get("current") if isinstance(payload.get("current"), dict) else {}
     daily = payload.get("daily") if isinstance(payload.get("daily"), dict) else {}
     temp = current.get("temperature_2m")
@@ -134,9 +135,36 @@ def build_voiceover_script(payload: Dict[str, Any], *, place_name: str = "your a
     return " ".join(parts)
 
 
-def _household_place(environ: Optional[Any], place_name: str) -> str:
+def build_ticker_lines(current: Dict[str, Any], daily: Dict[str, Any]) -> List[str]:
+    """Crawl lines that are not the current-temperature headline or daily highs/lows.
+
+    Those belong on the current-conditions board and the days-ahead columns.
+    """
+    lines: List[str] = []
+    humidity = current.get("relative_humidity_2m") if isinstance(current, dict) else None
+    if isinstance(humidity, (int, float)) and not isinstance(humidity, bool):
+        lines.append(f"Humidity {humidity:.0f}%")
+    times = daily.get("time") if isinstance(daily, dict) and isinstance(daily.get("time"), list) else []
+    precip = (
+        daily.get("precipitation_probability_max")
+        if isinstance(daily, dict) and isinstance(daily.get("precipitation_probability_max"), list)
+        else []
+    )
+    for i, day in enumerate(times):
+        chance = precip[i] if i < len(precip) else None
+        if isinstance(chance, (int, float)) and not isinstance(chance, bool):
+            lines.append(f"{day} rain chance {chance:.0f}%")
+    return lines
+
+
+def _household_place(environ: Optional[Any] = None) -> str:
+    """Household label from the server env only.
+
+    A signed-in profile place is an override for the forecast, never this field.
+    """
     env = environ if environ is not None else os.environ
-    return str(env.get("PROJECTIONIST_WEATHER_PLACE") or place_name).strip() or place_name
+    configured = str(env.get("PROJECTIONIST_WEATHER_PLACE") or "").strip()
+    return configured or _DEFAULT_PLACE
 
 
 def select_muzak(
@@ -187,7 +215,7 @@ def weather_channel_payload(
     *,
     environ: Optional[Any] = None,
     fetch_json=None,
-    place_name: str = "your area",
+    place_name: str = _DEFAULT_PLACE,
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
     location_source: str = "household",
@@ -197,7 +225,7 @@ def weather_channel_payload(
     rng: Any = None,
     mountinfo_text: Optional[str] = None,
 ) -> Dict[str, Any]:
-    household_place = _household_place(environ, place_name)
+    household_place = _household_place(environ)
     if latitude is not None and longitude is not None:
         lat, lon = float(latitude), float(longitude)
         place = str(place_name or "").strip() or household_place
@@ -229,19 +257,7 @@ def weather_channel_payload(
     )
     current = forecast.get("current") if isinstance(forecast.get("current"), dict) else {}
     daily = forecast.get("daily") if isinstance(forecast.get("daily"), dict) else {}
-    ticker: List[str] = []
-    if current:
-        ticker.append(
-            f"NOW {wmo_label(current.get('weather_code'))} "
-            f"{current.get('temperature_2m', '—')}°"
-        )
-    times = daily.get("time") if isinstance(daily.get("time"), list) else []
-    tmax = daily.get("temperature_2m_max") if isinstance(daily.get("temperature_2m_max"), list) else []
-    tmin = daily.get("temperature_2m_min") if isinstance(daily.get("temperature_2m_min"), list) else []
-    for i, day in enumerate(times[:3]):
-        hi = tmax[i] if i < len(tmax) else "—"
-        lo = tmin[i] if i < len(tmin) else "—"
-        ticker.append(f"{day}  Hi {hi}° / Lo {lo}°")
+    ticker = build_ticker_lines(current, daily)
 
     return {
         "enabled": True,

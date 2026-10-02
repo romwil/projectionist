@@ -709,6 +709,59 @@ function normalizeGuideProgram(program) {
   };
 }
 
+/** Synthetic last-dial station. Not a Tunarr channel. */
+export const WEATHER_CHANNEL_ID = "weather";
+
+/**
+ * Cable extra at the end of a ready guide: one all-day Local forecast block.
+ * Does not invent a schedule of shows.
+ * @param {ReturnType<typeof normalizeGuide>} guide
+ */
+export function appendWeatherChannel(guide) {
+  if (!guide?.ready || !Array.isArray(guide.channels) || !guide.channels.length) return guide;
+  if (guide.channels.some((channel) => channel?.id === WEATHER_CHANNEL_ID || channel?.kind === "weather")) {
+    return guide;
+  }
+  const numbers = guide.channels
+    .map((channel) => Number(channel?.number))
+    .filter((n) => Number.isFinite(n));
+  const number = numbers.length ? Math.max(...numbers) + 1 : null;
+  const start = guide.windowStart;
+  const stop = guide.windowEnd;
+  return {
+    ...guide,
+    channels: [
+      ...guide.channels,
+      {
+        id: WEATHER_CHANNEL_ID,
+        kind: "weather",
+        name: "Weather",
+        number,
+        iconUrl: "",
+        now: null,
+        next: null,
+        programs: [
+          {
+            title: "Local forecast",
+            episode: "",
+            episode_title: "",
+            start,
+            stop,
+            media_type: "",
+            isFlex: false,
+            is_flex: false,
+            rating: "",
+          },
+        ],
+      },
+    ],
+  };
+}
+
+export function isWeatherChannelId(channelId) {
+  return String(channelId || "").trim() === WEATHER_CHANNEL_ID;
+}
+
 /**
  * Normalize guide API into EPG rows with programs.
  * @param {object|null|undefined} snapshot

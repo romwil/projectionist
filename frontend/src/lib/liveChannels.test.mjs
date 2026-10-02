@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   adjacentChannelId,
+  appendWeatherChannel,
+  WEATHER_CHANNEL_ID,
   buildFlexLowerThird,
   buildOsdModel,
   classifyLiveStreamHealth,
@@ -515,6 +517,37 @@ describe("liveChannels helpers", () => {
     assert.equal(model.channels.length, 1);
     assert.equal(model.channels[0].programs[0].title, "Heat");
     assert.equal(adjacentChannelId(model.channels, "c1", 1), "c1");
+  });
+
+  it("appends Weather as the last guide row with one all-day forecast block", () => {
+    const model = normalizeGuide({
+      enabled: true,
+      ready: true,
+      generated_at: 1_700_000_000,
+      window_seconds: 7200,
+      channels: [
+        {
+          id: "c1",
+          name: "Mystery",
+          number: 100,
+          programs: [{ title: "Heat", start: 1_700_000_000, stop: 1_700_003_600 }],
+        },
+        { id: "c2", name: "Sci-Fi", number: 108, programs: [] },
+      ],
+    });
+    const withWeather = appendWeatherChannel(model);
+    assert.equal(withWeather.channels.length, 3);
+    const weather = withWeather.channels[2];
+    assert.equal(weather.id, WEATHER_CHANNEL_ID);
+    assert.equal(weather.kind, "weather");
+    assert.equal(weather.name, "Weather");
+    assert.equal(weather.number, 109);
+    assert.equal(weather.programs.length, 1);
+    assert.equal(weather.programs[0].title, "Local forecast");
+    assert.equal(weather.programs[0].start, model.windowStart);
+    assert.equal(weather.programs[0].stop, model.windowEnd);
+    assert.equal(appendWeatherChannel(withWeather).channels.length, 3);
+    assert.equal(appendWeatherChannel(null), null);
   });
 
   it("lays out EPG cells inside the window", () => {
