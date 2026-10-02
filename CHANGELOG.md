@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+## [1.37.29] — 2026-10-03
+
+Missing plots are fetched automatically — Admin → Library knowledge now lists only titles where automatic lookup tried and failed.
+
+### Highlights
+- **No more "exceptions" for plots that just haven't been fetched yet.** Library knowledge used to park any title with a missing synopsis, TMDB detail, or plot-similarity entry as an exception you had to refresh by hand. Those gaps now fill themselves on the normal scheduled pass; you only see a title after lookup was tried, retried with backoff, and gave up.
+- **"Try again now" replaces "Refresh synopsis" for real failures.** Each row says why it is there (for example "nothing found upstream after 3 tries") and the button forces one more look.
+- **Safe for any library size.** Fetching stays paced by the existing per-run batch size, so a huge library ramps up gradually and a tiny one fills in on its first pass. A stubborn title can no longer block the queue, and an upstream outage pauses the run instead of marking titles as failed.
+
+### Why exceptions existed
+- `long_synopsis_enrichment` / `metadata_enrichment` / `semantic_embeddings` emitted a `coverage_deficit` for every title still missing data, *before or regardless of* fetching it. `coverage_deficit_audit` staged anything seen twice. So "not fetched yet" looked identical to "failed", and the Refresh button (which calls the same fetchers) was the only visible way to clear it.
+- The long-synopsis trickle also had no memory: titles Wikipedia has no page for stayed at the head of the oldest-first queue and were re-asked every 12h, starving the rest.
+- Wikipedia/OMDb outages were swallowed into empty results, indistinguishable from "no plot exists".
+
+### Changed
+- New `knowledge_fetch_state` ledger (migration 52, `projectionist/library/knowledge_fetch.py`): per-title attempts, backoff (misses 1d/3d/7d, errors 1h→7d), and an `exhausted` flag. Exhausted titles get one automatic recheck after 30 days.
+- `long_synopsis_enrichment` and `metadata_enrichment` skip parked titles, record outcomes, and stop a run after 3 consecutive upstream errors (or rejected credentials). Errors during a blocked run defer titles without counting a strike. Batch size / autotune are unchanged, so upstream calls per run stay bounded.
+- Wikipedia `fetch_extract(strict=True)` and the OMDb fallback now raise when every request failed, so outages are errors, not misses.
+- `coverage_deficit_audit` stages `synopsis` / `metadata` / `embedding` gaps **only** when retrieval is exhausted and the gap is still open, ignores stale telemetry for gaps that are merely unfetched or already filled, and marks leftover pending rows from older versions `resolved` ("Filled automatically" in the status filter). Rows you dismiss or retry are not re-listed until retrieval fails again.
+- Per-title motif gaps are no longer exceptions: motifs are derived locally from plot text already in the library; there is nothing to fetch.
+- Name mappings (unrecognized genres/tags) and theme-keyword reviews are unchanged: they still need a human.
+- Metadata backlog now only counts movie/show rows with a TMDB id (the trickle could not process anything else).
+- Owner "Try again now" clears the ledger on success; a retry that still finds nothing stays exhausted.
+
+### Verification
+- `tests/test_knowledge_auto_retrieval.py` — plot fetched with no button; unfetched ≠ exception (including old double-sighting telemetry); legacy backlog rows resolved; misses back off then surface; TMDB 404 is an exception; gap closing removes it; dismissals stick; batch cap bounds calls on a 200-title gap; stubborn titles don't starve the queue; outage trips the breaker without blame; rejected credentials stop at once; owner retry success/failure.
+
 ## [1.37.24] — 2026-10-02
 
 Explore home loads from a precached hub again — rails recompute in the background instead of blocking first paint.

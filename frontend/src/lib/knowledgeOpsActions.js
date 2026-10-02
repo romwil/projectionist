@@ -23,6 +23,8 @@ export function actLabelForStagedItem(item) {
   }
   if (task === "coverage_deficit_audit") {
     const kind = candidate.deficit_kind;
+    // Automatic lookup already ran and gave up; this is an explicit second try.
+    if (candidate.retrieval_exhausted) return "Try again now";
     if (kind === "theme_keyword") return "Refresh themes";
     if (kind === "motif") return "Find plot patterns";
     if (kind === "embedding") return "Update plot similarity";
@@ -31,10 +33,27 @@ export function actLabelForStagedItem(item) {
   return null;
 }
 
+/** One-line reason an automatic lookup gave up, for owner-facing rows. */
+export function retrievalFailureSummary(item) {
+  const candidate = item?.candidate || {};
+  if (!candidate.retrieval_exhausted) return "";
+  const tries = Number(candidate.attempts) || 0;
+  const triesText = tries > 1 ? `after ${tries} tries` : "";
+  const detail = String(candidate.failure_detail || "").trim();
+  let reason = "automatic lookup could not fill this in";
+  if (candidate.failure === "miss") reason = "nothing found upstream";
+  else if (candidate.failure === "hard") reason = detail || "the source rejected this title";
+  else if (candidate.failure === "error") reason = detail || "the source kept failing";
+  return [reason, triesText].filter(Boolean).join(" ");
+}
+
 export function actDescriptionForStagedItem(item) {
   const task = item?.task_name;
   const candidate = item?.candidate || {};
   const label = stagedItemDisplayTitle(item) || "this item";
+  if (task === "coverage_deficit_audit" && candidate.retrieval_exhausted) {
+    return `Look up “${label}” again right now. Automatic lookup already tried and gave up.`;
+  }
   if (task === "entity_memory_enrichment") {
     return `Refresh trusted title details for “${label}”.`;
   }

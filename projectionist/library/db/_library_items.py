@@ -391,6 +391,7 @@ class LibraryItemsMixin:
 
     _METADATA_ENRICHMENT_WHERE = """
         tmdb_id IS NOT NULL
+        AND media_type IN ('movie', 'show')
         AND (
           (media_type = 'movie' AND (release_date IS NULL OR release_date = ''))
           OR (media_type = 'show' AND (first_air_date IS NULL OR first_air_date = ''))
@@ -398,8 +399,19 @@ class LibraryItemsMixin:
         )
     """
 
-    def items_needing_metadata_enrichment(self, *, limit: int = 25) -> List[sqlite3.Row]:
-        """Library rows with a TMDB id but missing dates and/or plot text (trickle backlog)."""
+    def items_needing_metadata_enrichment(
+        self, *, limit: int = 25, skip_parked: bool = True, now: Optional[float] = None
+    ) -> List[sqlite3.Row]:
+        """Library rows with a TMDB id but missing dates and/or plot text (trickle backlog).
+
+        Skips titles in a retry backoff window or with exhausted retries unless
+        ``skip_parked=False``.
+        """
+        from projectionist.library.knowledge_fetch import KIND_METADATA, parked_sql
+
+        park_sql, park_params = (
+            parked_sql(KIND_METADATA, now=now) if skip_parked else ("", ())
+        )
         with self.connect() as conn:
             return list(
                 conn.execute(
@@ -409,18 +421,40 @@ class LibraryItemsMixin:
                            tmdb_overview, tagline
                     FROM library_items
                     WHERE {self._METADATA_ENRICHMENT_WHERE}
+                    {park_sql}
                     ORDER BY updated_at ASC
                     LIMIT ?
                     """,
-                    (max(1, int(limit)),),
+                    (*park_params, max(1, int(limit))),
                 ).fetchall()
             )
 
-    def count_items_needing_metadata_enrichment(self) -> int:
-        """Count titles still waiting on the metadata enrichment trickle."""
+    def item_still_needs_metadata(self, item_id: int) -> bool:
+        """True when *item_id* still matches the metadata-gap predicate."""
         with self.connect() as conn:
             row = conn.execute(
-                f"SELECT COUNT(*) AS cnt FROM library_items WHERE {self._METADATA_ENRICHMENT_WHERE}"
+                f"SELECT 1 FROM library_items WHERE id = ? AND {self._METADATA_ENRICHMENT_WHERE}",
+                (int(item_id),),
+            ).fetchone()
+            return row is not None
+
+    def count_items_needing_metadata_enrichment(
+        self, *, include_exhausted: bool = False, now: Optional[float] = None
+    ) -> int:
+        """Count titles still waiting on the metadata enrichment trickle.
+
+        Exhausted titles are owner-visible exceptions, not "waiting"; pass
+        ``include_exhausted=True`` for the raw gap.
+        """
+        from projectionist.library.knowledge_fetch import KIND_METADATA, exhausted_sql
+
+        ex_sql, ex_params = (
+            ("", ()) if include_exhausted else exhausted_sql(KIND_METADATA, now=now)
+        )
+        with self.connect() as conn:
+            row = conn.execute(
+                f"SELECT COUNT(*) AS cnt FROM library_items "
+                f"WHERE {self._METADATA_ENRICHMENT_WHERE} {ex_sql}",
+                tuple(ex_params),
             ).fetchone()
             return int(row["cnt"] if row else 0)
-

@@ -338,13 +338,13 @@ Identify is usually **show-level** (theme or score). It does **not** pick season
 1. Run **Sync library** from **Admin → Libraries** (`/admin/libraries`) — library sources and the refresh control live on the same page. Bookmarks to `/admin/sync` redirect there. (Or type `/sync` in chat when multi-user is off.)
 2. Leave the server **idle** so scheduled tasks can refresh title details, plot-similarity data, plot patterns, and similar-title links.
 3. Open **Admin → Scheduled Tasks** (`/admin/tasks`) — confirm knowledge tasks are enabled; adjust cadence after large imports.
-4. Open **Admin → Library knowledge** (`/admin/taxonomy`) — start with **name mappings**; treat missing knowledge / requested details as titled exceptions.
+4. Open **Admin → Library knowledge** (`/admin/taxonomy`) — start with **name mappings**; a title appears under **Couldn't fill in** only after automatic lookup failed.
 
 ### Library knowledge
 
 **Name mappings are the human queue.** When Chat or Explore repeatedly sees an unrecognized genre or tag name, Projectionist queues it for your review without interrupting the request. Rows lead with the **human title** (never a bare library id). **Save mapping** teaches this installation the recognized name; **Reject** clears the suggestion without changing built-in definitions.
 
-**Missing knowledge** and **Requested details** are titled exceptions — idle enrichment fills most gaps in the background. Use **Refresh synopsis** (or the matching verb for themes / plot patterns / similarity) when a title is stuck, or **Reject** to clear the exception. Built-in definitions are never changed automatically.
+A plot or title detail that is simply **not fetched yet** is not an exception — the scheduled tasks retrieve it in the background, paced (and retried with backoff) so big libraries do not flood TMDB, Wikipedia, or OMDb, and small ones fill in on the first pass. A title appears under **Couldn't fill in** only after lookup was tried, retried, and failed (for example nothing found upstream, or an unknown TMDB id); the row says why. **Try again now** looks once more; **Reject** clears it. **Requested details** are titles you or a member asked about that still could not be filled. Built-in definitions are never changed automatically.
 
 Related titles lets owners mark a surprising match as **Not similar**; Activity shows that event as **Marked not similar**. This removes the saved similarity link so a future refresh can learn from the correction.
 
