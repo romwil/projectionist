@@ -414,7 +414,7 @@ The same live card (phase, queued / running / completed / failed, current item, 
 
 ### Find all missing (Sonarr)
 
-Sonarr’s **Wanted** list is not the source of truth here. **Find all missing** on **Admin → Libraries** (`/admin/libraries`) re-derives gaps from every monitored series’ episode records: aired, monitored, no file. Specials (S00) stay off unless you turn **Include specials** on. The card compares “Library scan found M; Sonarr Wanted lists N”, then **Search these** submits Sonarr `EpisodeSearch` commands in batches of about 50 — it does not fire `MissingEpisodeSearch` (that uses Wanted).
+Sonarr’s **Wanted** list is not the source of truth here. **Find all missing** on **Admin → Libraries** (`/admin/libraries`) re-derives gaps from every monitored series’ episode records: aired, monitored, no file. Specials (S00) stay off unless you turn **Include specials** on. The card compares “Library scan found M; Sonarr Wanted lists N”, then you **pick which shows to search**: tick the checkbox on each show row (or **Select all** / **Deselect all**) and press **Search selected (N)**. Nothing is ticked after a scan, and the button stays disabled at zero, so a stray click cannot queue the whole backlog. Only the ticked shows’ episodes are submitted as Sonarr `EpisodeSearch` commands in batches of about 50 — it does not fire `MissingEpisodeSearch` (that uses Wanted). **Search all missing…** is the deliberate whole-scan path and asks for confirmation first.
 
 Submitting to Sonarr is only the first step. Sonarr then runs those commands from its own command queue, often a few at a time — many EpisodeSearch commands can rate-limit Sonarr, which is why the card watches that queue instead of firing Wanted’s MissingEpisodeSearch. Counts are queued, running, completed, and failed (command-level — not SABnzbd / download-client aborts). **Cancel remaining** stops Projectionist from sending more batches and deletes queued (not yet started) EpisodeSearch commands. A command that is already running is left to finish.
 
@@ -422,7 +422,9 @@ Submitting to Sonarr is only the first step. Sonarr then runs those commands fro
 # Owner host — scan, watch status (including Sonarr command counts), search, optional cancel
 curl -s -X POST http://localhost:8788/api/admin/sonarr/missing/scan -H 'Content-Type: application/json' -d '{"include_specials":false}'
 curl -s http://localhost:8788/api/admin/sonarr/missing/status
-curl -s -X POST http://localhost:8788/api/admin/sonarr/missing/search -H 'Content-Type: application/json' -d '{"search_all":true}'
+curl -s -X POST http://localhost:8788/api/admin/sonarr/missing/search -H 'Content-Type: application/json' -d '{"episode_ids":[101,102,103]}'
+# Whole last scan must be explicit; an empty body is rejected (400), never "all"
+# curl -s -X POST .../api/admin/sonarr/missing/search -H 'Content-Type: application/json' -d '{"search_all":true}'
 # After submit, status.phase is "executing" until Sonarr finishes the commands
 curl -s -X POST http://localhost:8788/api/admin/sonarr/missing/cancel
 ```
