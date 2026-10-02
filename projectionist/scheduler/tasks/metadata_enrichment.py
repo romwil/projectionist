@@ -23,6 +23,7 @@ from typing import Any, Callable, Dict
 from projectionist.config_store import Settings
 from projectionist.connectors.tmdb import TMDBClient
 from projectionist.library.db import Database
+from projectionist.library.knowledge_fetch import KIND_METADATA, FetchRunTracker
 from projectionist.library.sync import apply_tmdb_details_to_library_row
 from projectionist.scheduler.autotune import resolve_batch_size
 from projectionist.scheduler.engine import IdleScheduler, TaskDefinition
@@ -49,26 +50,32 @@ async def run(
         return {"status": "skipped", "reason": "no_tmdb_api_key", "enriched": 0}
 
     batch_size = resolve_batch_size(db, TASK_NAME, DEFAULT_BATCH_SIZE)
+    # Parked titles (retry backoff / exhausted) are skipped, so ``batch_size``
+    # bounds TMDB calls per run regardless of how big the gap is.
     backlog = db.items_needing_metadata_enrichment(limit=batch_size)
-    coverage_signals = emit_metadata_backlog_signals(db, limit=batch_size)
     if not backlog:
-        return {"status": "completed", "enriched": 0, "remaining": 0}
+        coverage_signals = emit_metadata_backlog_signals(db, limit=batch_size)
+        return {
+            "status": "completed",
+            "enriched": 0,
+            "remaining": 0,
+            "coverage_signals": coverage_signals,
+        }
 
     tmdb = TMDBClient(api_key)
+    tracker = FetchRunTracker(db, KIND_METADATA)
     enriched = 0
-    errors = 0
     emit_task_event(f"Enriching metadata for {len(backlog)} titles", batch_size=len(backlog))
 
+    interrupted = False
     for idx, row in enumerate(backlog):
         if should_stop():
-            return {
-                "status": "interrupted",
-                "enriched": enriched,
-                "errors": errors,
-            }
+            interrupted = True
+            break
 
         tmdb_id = row["tmdb_id"]
         media_type = str(row["media_type"] or "")
+        item_id = int(row["id"])
         if not tmdb_id or media_type not in {"movie", "show"}:
             continue
 
@@ -78,13 +85,14 @@ async def run(
             else:
                 details = tmdb.tv_details(int(tmdb_id))
         except RuntimeError as error:
-            errors += 1
             logger.debug(
                 "Metadata trickle: TMDB fetch failed id=%s tmdb_id=%s: %s",
                 row["id"],
                 tmdb_id,
                 error,
             )
+            if tracker.error(item_id, error):
+                break
             await asyncio.sleep(REQUEST_PAUSE_SECONDS)
             continue
 
@@ -126,27 +134,49 @@ async def run(
         # Re-upsert by rating_key so COALESCE paths keep prior non-empty fields.
         db.upsert_library_item(patch)
         enriched += 1
+        # TMDB answered. If the title is *still* missing dates/plot, TMDB simply
+        # does not have them: that is a strike (backoff, then an owner-visible
+        # exception), not something to re-ask every cycle.
+        if db.item_still_needs_metadata(item_id):
+            tracker.miss(item_id, "TMDB has no release date or overview for this title")
+        else:
+            tracker.success(item_id)
         if enriched == 1 or enriched % 5 == 0:
             emit_task_event(
                 f"Enriched {enriched}/{len(backlog)}",
                 enriched=enriched,
-                errors=errors,
+                errors=tracker.errors,
             )
 
         if idx + 1 < len(backlog):
             await asyncio.sleep(REQUEST_PAUSE_SECONDS)
 
-    remaining = len(db.items_needing_metadata_enrichment(limit=1))
+    run_stats = tracker.finish()
+    if run_stats["breaker_tripped"]:
+        emit_task_event(
+            f"Pausing TMDB metadata fetch: {run_stats['breaker_reason']}",
+            enriched=enriched,
+            errors=run_stats["errors"],
+        )
+
+    # Only exhausted retries reach the owner; "not fetched yet" is backlog.
+    coverage_signals = emit_metadata_backlog_signals(db, limit=batch_size)
+
+    remaining = db.count_items_needing_metadata_enrichment()
     logger.info(
-        "Metadata enrichment trickle: enriched=%s errors=%s remaining_sample=%s",
+        "Metadata enrichment trickle: enriched=%s errors=%s misses=%s remaining=%s",
         enriched,
-        errors,
+        run_stats["errors"],
+        run_stats["misses"],
         remaining,
     )
     return {
-        "status": "completed",
+        "status": "interrupted" if interrupted else "completed",
         "enriched": enriched,
-        "errors": errors,
+        "errors": run_stats["errors"],
+        "misses": run_stats["misses"],
+        "exhausted": run_stats["newly_exhausted"],
+        "breaker_tripped": run_stats["breaker_tripped"],
         "batch_size": batch_size,
         "has_more": remaining > 0,
         "coverage_signals": coverage_signals,
