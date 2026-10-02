@@ -37,6 +37,7 @@ def register(scheduler: IdleScheduler) -> None:
             name="member_weekly_rail",
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
+            off_loop=True,
             run_fn=run,
             description=(
                 "Builds each member's personalized weekly For-you rail with persona-voiced "

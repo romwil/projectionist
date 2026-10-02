@@ -27,6 +27,7 @@ from typing import Any, Callable, Dict
 
 from projectionist.config_store import Settings
 from projectionist.library.db import Database
+from projectionist.library.db_io import run_db
 from projectionist.library.embeddings import (
     build_item_embedding_text,
     content_hash_for_text,
@@ -40,22 +41,25 @@ from projectionist.scheduler.tasks.coverage_signals import emit_embedding_backlo
 logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 10
+SCAN_YIELD_EVERY = 250
 MAX_ITEMS_PER_CYCLE = 50
 INTERVAL_SECONDS = 86400  # 24 hours
+# Paced follow-up while a backlog is draining (see scheduler/cadence.py).
+CATCHUP_GAP_SECONDS = 300
 TASK_NAME = "semantic_embeddings"
 
 
 async def run(
     db: Database, settings: Settings, should_stop: Callable[[], bool]
 ) -> Dict[str, Any]:
-    rows = list(db.all_library_items())
+    rows = list(await run_db(db.all_library_items))
     total = len(rows)
     if total == 0:
         return {"status": "completed", "embedded": 0, "skipped": 0}
 
     cycle_cap = resolve_batch_size(db, TASK_NAME, MAX_ITEMS_PER_CYCLE)
-    coverage_signals = emit_embedding_backlog_signals(db, limit=cycle_cap)
-    existing_hashes = db.embedding_content_hashes()
+    coverage_signals = await run_db(emit_embedding_backlog_signals, db, limit=cycle_cap)
+    existing_hashes = await run_db(db.embedding_content_hashes)
     embedded = 0
     skipped = 0
     pending_rows: list[Any] = []
@@ -71,13 +75,26 @@ async def run(
             (int(row["id"]), vector, content_hash)
             for row, vector, content_hash in zip(pending_rows, vectors, pending_hashes)
         ]
-        db.set_embeddings(pairs, embedding_model=embedding_model_label(settings))
+        await run_db(
+            db.set_embeddings, pairs, embedding_model=embedding_model_label(settings)
+        )
         embedded += len(pending_rows)
         pending_rows.clear()
         pending_texts.clear()
         pending_hashes.clear()
 
-    for row in rows:
+    for scanned, row in enumerate(rows, start=1):
+        # The steady-state scan (nothing pending) walks the whole library; yield so
+        # a 100k-title pass cannot hold the event loop, and honor ``should_stop``.
+        if scanned % SCAN_YIELD_EVERY == 0:
+            await asyncio.sleep(0)
+            if should_stop():
+                return {
+                    "status": "interrupted",
+                    "embedded": embedded,
+                    "skipped": skipped,
+                    "total": total,
+                }
         if embedded >= cycle_cap:
             remaining = total - skipped - embedded
             logger.info(
@@ -143,7 +160,7 @@ async def run(
         "skipped": skipped,
         "total": total,
         "batch_size": cycle_cap,
-        "has_more": db.count_items_needing_embeddings() > 0,
+        "has_more": (await run_db(db.count_items_needing_embeddings)) > 0,
         "coverage_signals": coverage_signals,
     }
 
@@ -161,6 +178,7 @@ def register(scheduler: IdleScheduler) -> None:
                 "catch up gradually without overwhelming the server."
             ),
             items_per_cycle=MAX_ITEMS_PER_CYCLE,
+            catchup_gap_seconds=CATCHUP_GAP_SECONDS,
             progress_scope="embeddings_pending",
         )
     )

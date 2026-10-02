@@ -33,6 +33,8 @@ from projectionist.scheduler.tasks.coverage_signals import emit_metadata_backlog
 logger = logging.getLogger(__name__)
 
 INTERVAL_SECONDS = 21600  # 6 hours
+# Paced follow-up while a backlog is draining (see scheduler/cadence.py).
+CATCHUP_GAP_SECONDS = 300
 DEFAULT_BATCH_SIZE = 25
 # Pause between TMDB detail calls (~40 req/min with headroom for other traffic).
 REQUEST_PAUSE_SECONDS = 1.5
@@ -189,6 +191,7 @@ def register(scheduler: IdleScheduler) -> None:
             name=TASK_NAME,
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
+            off_loop=True,
             run_fn=run,
             description=(
                 "Trickles through titles that have a TMDB id but still lack release/air "
@@ -197,6 +200,7 @@ def register(scheduler: IdleScheduler) -> None:
                 "(batch auto-tunes from measured history)."
             ),
             items_per_cycle=DEFAULT_BATCH_SIZE,
+            catchup_gap_seconds=CATCHUP_GAP_SECONDS,
             progress_scope="metadata_backlog",
         )
     )

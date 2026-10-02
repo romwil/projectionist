@@ -497,7 +497,7 @@ Plot patterns are materialized rows, not live query results. When a release impr
 
 ### Telemetry & tuning
 
-Admin shows last-run outcome, durable run history, measured items/hour, owner-set intervals/batch, and ETA (measured when history exists). Auto-tune may adjust batch/interval for trickle tasks within safe caps — you can still override. See [CURATOR_KNOWLEDGE.md — Idle tasks](CURATOR_KNOWLEDGE.md#idle-tasks--purpose-trickle-auto-tune).
+Admin shows last-run outcome, durable run history, measured items/hour, owner-set intervals/batch, and ETA (measured when history exists). Auto-tune may adjust batch/interval for trickle tasks within safe caps — you can still override. **Next run** can read “catching up” (a trickle task that finished a full batch with backlog left runs again in minutes, not a full interval), “retrying after interruption” (a chat request stopped it), or “backing off” (a dependency like Plex keeps failing); your configured interval is unchanged. Heavy library-wide tasks run on a worker thread, so they no longer freeze pages while they work. See [CURATOR_KNOWLEDGE.md — Idle tasks](CURATOR_KNOWLEDGE.md#idle-tasks--purpose-trickle-auto-tune).
 
 ### Issue queue and repair policy
 

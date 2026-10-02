@@ -128,6 +128,7 @@ def register(scheduler: IdleScheduler) -> None:
             name=TASK_NAME,
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
+            off_loop=True,
             run_fn=run,
             description=(
                 "Prunes expired CuratorX movie-night / agent Plex collections "

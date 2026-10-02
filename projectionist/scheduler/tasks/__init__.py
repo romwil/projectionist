@@ -12,6 +12,18 @@ if TYPE_CHECKING:
     from projectionist.scheduler.engine import IdleScheduler
 
 
+# Tasks removed from the registry because nothing consumed their output.
+# ``register_all`` deletes their persisted state/history so Admin → Tasks does
+# not keep showing an unregistered ghost row forever.
+#
+# * ``recommendation_warmup`` — wrote ``cached_recommendations``; no API, agent
+#   tool, or UI ever read it, yet it loaded the whole library every 12h.
+# * ``health_metrics`` — wrote ``cached_health_metrics``; ``/api/library/health``
+#   never read it (it computes live / via the SWR cache), so each run only
+#   duplicated that scan.
+RETIRED_TASKS: tuple[str, ...] = ("health_metrics", "recommendation_warmup")
+
+
 def register_all(scheduler: IdleScheduler) -> None:
     """Register every built-in task with the scheduler."""
     from projectionist.scheduler.tasks import (
@@ -22,14 +34,12 @@ def register_all(scheduler: IdleScheduler) -> None:
         entity_memory_enrichment,
         facet_taxonomy_audit,
         gap_analysis,
-        health_metrics,
         keyword_theme_tagging,
         llm_logline_enrichment,
         long_synopsis_enrichment,
         metadata_enrichment,
         plot_neighbors,
         purge_candidates,
-        recommendation_warmup,
         semantic_embeddings,
         summary_motifs,
         taste_refresh,
@@ -49,9 +59,7 @@ def register_all(scheduler: IdleScheduler) -> None:
 
     semantic_embeddings.register(scheduler)
     taste_refresh.register(scheduler)
-    health_metrics.register(scheduler)
     anniversary_scanner.register(scheduler)
-    recommendation_warmup.register(scheduler)
     gap_analysis.register(scheduler)
     data_retention.register(scheduler)
     collection_gc.register(scheduler)
@@ -77,3 +85,5 @@ def register_all(scheduler: IdleScheduler) -> None:
     seasonal_rail.register(scheduler)
     watch_history_ingest.register(scheduler)
     year_in_review.register(scheduler)
+
+    scheduler.retire_tasks(RETIRED_TASKS)
