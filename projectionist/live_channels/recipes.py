@@ -130,6 +130,9 @@ class ChannelRecipe:
     item_rating_keys: tuple[str, ...] = ()
     # Additive AND filters (genres ∩ decade ∩ motif/theme ∩ rating).
     craft_filters: Dict[str, Any] = field(default_factory=dict)
+    # Rotational queue padding: {"up_to": 1-5, "feed": recently_added|recently_released}.
+    # Empty = not set (existing channels keep their old loop behaviour).
+    queue_pad: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         payload = asdict(self)
@@ -138,6 +141,7 @@ class ChannelRecipe:
         payload["item_hints"] = list(self.item_hints)
         payload["item_rating_keys"] = list(self.item_rating_keys)
         payload["craft_filters"] = dict(self.craft_filters or {})
+        payload["queue_pad"] = dict(self.queue_pad or {})
         return payload
 
 
@@ -216,6 +220,7 @@ def recipe_from_mapping(data: Mapping[str, Any]) -> ChannelRecipe:
     else:
         key_tuple = tuple(str(k) for k in keys if str(k).strip())
     from projectionist.live_channels.filters import normalize_craft_filters
+    from projectionist.live_channels.queue_padding import normalize_queue_pad
 
     craft_filters = normalize_craft_filters(
         data.get("craft_filters") or data.get("filters")
@@ -242,4 +247,5 @@ def recipe_from_mapping(data: Mapping[str, Any]) -> ChannelRecipe:
         item_hints=hint_tuple,
         item_rating_keys=key_tuple,
         craft_filters=craft_filters,
+        queue_pad=normalize_queue_pad(data.get("queue_pad")),
     )

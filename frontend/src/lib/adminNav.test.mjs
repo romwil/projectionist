@@ -35,8 +35,11 @@ describe("adminNav", () => {
     );
     assert.equal(adminNavLinks().find((item) => item.id === "holidays")?.label, "Holidays");
     assert.equal(adminNavLinks().find((item) => item.id === "holidays")?.to, "/admin/holidays");
-    assert.equal(adminNavLinks().find((item) => item.id === "house")?.label, "House");
-    assert.equal(adminNavLinks().find((item) => item.id === "house")?.to, "/admin/house");
+    assert.equal(
+      adminNavLinks().some((item) => item.id === "house" || item.to === "/admin/house"),
+      false,
+      "Admin → House is removed (the weekly letter lives in Newsletters)",
+    );
     assert.equal(adminNavLinks().find((item) => item.id === "lobby")?.label, "Lobby");
     assert.equal(adminNavLinks().find((item) => item.id === "lobby")?.to, "/admin/lobby");
     assert.equal(
@@ -48,7 +51,7 @@ describe("adminNav", () => {
       adminNavLinks().some((item) => item.id === "dashboard" || item.id === "usage" || item.id === "issues"),
       false,
     );
-    assert.equal(adminNavLinks().length, 19);
+    assert.equal(adminNavLinks().length, 18);
   });
 
   it("groups the dense rail with Setup / Experience / Platform / Communications / System headings", () => {
@@ -68,7 +71,7 @@ describe("adminNav", () => {
     );
     assert.equal(
       groups.reduce((sum, group) => sum + group.links.length, 0),
-      19,
+      18,
     );
     assert.deepEqual(
       groups[0].links.map((item) => item.id),
@@ -76,7 +79,7 @@ describe("adminNav", () => {
     );
     assert.deepEqual(
       groups[1].links.map((item) => item.id),
-      ["live-channels", "lobby", "holidays", "house", "seerr"],
+      ["live-channels", "lobby", "holidays", "seerr"],
     );
     assert.ok(groups[2].links.some((item) => item.id === "health"));
     assert.ok(groups[3].links.some((item) => item.id === "mail"));
@@ -139,7 +142,7 @@ describe("adminNav", () => {
     assert.match(String(groups[1].subtitle || ""), /On the wall/i);
     assert.deepEqual(
       groups[1].links.map((item) => item.id),
-      ["lobby", "live-channels", "house"],
+      ["lobby", "live-channels"],
     );
   });
 

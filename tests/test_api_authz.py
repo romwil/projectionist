@@ -334,10 +334,15 @@ class ApiAuthzTests(unittest.TestCase):
         self.assertEqual(self.client.get("/api/admin/rematch/scan").status_code, 403)
         self.assertEqual(self.client.post("/api/admin/rematch/skip", json={"item_id": 1}).status_code, 403)
         self.assertEqual(self.client.post("/api/admin/rematch/retry", json={"item_id": 1}).status_code, 403)
-        self.assertEqual(self.client.get("/api/admin/house/letter").status_code, 403)
-        self.assertEqual(self.client.get("/api/admin/house/seasonal-preview").status_code, 403)
-        self.assertEqual(self.client.get("/api/admin/house/gifts").status_code, 403)
-        self.assertEqual(self.client.get("/api/admin/house/trust-diary").status_code, 403)
+        self.assertEqual(self.client.get("/api/admin/weekly-letter").status_code, 403)
+        self.assertEqual(self.client.put("/api/admin/weekly-letter", json={"weekly": False}).status_code, 403)
+        self.assertEqual(self.client.post("/api/admin/weekly-letter/send").status_code, 403)
+        self.assertEqual(
+            self.client.put("/api/admin/holidays/halloween/rail/order", json={"library_item_ids": [1]}).status_code,
+            403,
+        )
+        # The old House admin surface is gone — no stub left behind.
+        self.assertEqual(self.client.get("/api/admin/house/letter").status_code, 404)
 
     def test_guest_role_patch_rejected(self) -> None:
         self._enable_multi_user_via_api()

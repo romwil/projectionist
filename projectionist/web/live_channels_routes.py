@@ -113,6 +113,8 @@ class LiveChannelsFromCollectionPayload(BaseModel):
     programming_mode: str = "sequential"
     media_scope: str = "both"
     craft_filters: Dict[str, Any] = Field(default_factory=dict)
+    # Rotational queue padding {"up_to": 1-5, "feed": recently_added|recently_released}.
+    queue_pad: Optional[Dict[str, Any]] = None
     confirm: bool = False
     # sync=true only for tests / diagnostics (default = background job).
     sync: bool = False
@@ -128,6 +130,7 @@ class LiveChannelsFromShowPayload(BaseModel):
     channel_number: int = 0
     name: str = ""
     programming_mode: str = "sequential"
+    queue_pad: Optional[Dict[str, Any]] = None
     confirm: bool = False
     # sync=true only for tests / diagnostics (default = background job).
     sync: bool = False
@@ -149,6 +152,7 @@ class LiveChannelsPublishChannelPayload(BaseModel):
     youth_safe: bool = False
     summary: str = ""
     craft_filters: Dict[str, Any] = Field(default_factory=dict)
+    queue_pad: Optional[Dict[str, Any]] = None
     wire_plex: bool = True
     fill_programming: bool = True
     confirm: bool = False
@@ -189,6 +193,8 @@ class LiveChannelsStationSettingsPayload(BaseModel):
     motif: Optional[str] = None
     cluster_tag: Optional[str] = None
     craft_filters: Optional[Dict[str, Any]] = None
+    # Rotational queue padding. Omit to leave unchanged; {} clears it.
+    queue_pad: Optional[Dict[str, Any]] = None
     confirm: bool = False
 
 
@@ -593,6 +599,7 @@ def live_channels_from_collection_endpoint(
             programming_mode=payload.programming_mode,
             craft_filters=payload.craft_filters or {},
             media_scope=payload.media_scope or "both",
+            queue_pad=payload.queue_pad,
             settings=settings_obj,
         )
         on_phase("warming", "Preparing streams…")
@@ -695,6 +702,7 @@ def live_channels_from_show_endpoint(
             channel_number=payload.channel_number,
             name=payload.name,
             programming_mode=payload.programming_mode,
+            queue_pad=payload.queue_pad,
             settings=settings_obj,
         )
         on_phase("warming", "Preparing streams…")
@@ -893,11 +901,14 @@ def live_channels_publish_channel_endpoint(
             "youth_safe": payload.youth_safe,
             "summary": payload.summary,
             "craft_filters": payload.craft_filters or {},
+            "queue_pad": payload.queue_pad or {},
         }
     elif payload.media_scope and not recipe_body.get("media_scope"):
         recipe_body["media_scope"] = payload.media_scope
     if payload.craft_filters and not recipe_body.get("craft_filters"):
         recipe_body["craft_filters"] = payload.craft_filters
+    if payload.queue_pad and not recipe_body.get("queue_pad"):
+        recipe_body["queue_pad"] = payload.queue_pad
 
     def _run(settings_obj: Settings, on_phase: Any) -> Dict[str, Any]:
         client = tunarr_client_from_settings(settings_obj)
@@ -1113,6 +1124,9 @@ def live_channels_station_settings_endpoint(
             cluster_tag=payload.cluster_tag,
         )
         notes.append("Craft filters saved.")
+    if payload.queue_pad is not None:
+        set_station_meta(settings, cid, queue_pad=payload.queue_pad)
+        notes.append("Queue padding saved.")
     notes.append("Refill to apply filters and scope to the lineup.")
     subtitles_enabled = None
     if payload.subtitles_enabled is not None:
@@ -1170,6 +1184,7 @@ def live_channels_station_settings_endpoint(
         "cluster_tag": craft.get("cluster_tag") or "",
         "craft_filters": dict(craft.get("craft_filters") or {}),
         "source": craft.get("source") or "",
+        "queue_pad": dict(craft.get("queue_pad") or {}),
         "refill_required": True,
         "message": " ".join(notes),
     }

@@ -1,15 +1,29 @@
-"""Compose the owner house letter — prose, not dashboard tiles."""
+"""The weekly household letter — prose, not dashboard tiles.
+
+Composed from the library index, delivered once a week to the owner's existing
+notifications inbox (kind ``digest``), and optionally emailed over the same mail
+transport as the newsletters when the owner opts in.
+"""
 
 from __future__ import annotations
 
 import time
+import uuid
+import json
+import logging
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from projectionist.config_store import Settings
 from projectionist.library.db import Database
 from projectionist.library.health import STALE_ADD_DAYS
 
 DEAD_WEIGHT_LIMIT = 6
 LETTER_TITLE = "A letter about the house"
+LETTER_CONFIG_KEY = "weekly_letter_settings"
+LETTER_NEWSLETTER_ID = "house-letter"
+
+logger = logging.getLogger(__name__)
 
 
 def _as_int(value: Any, default: int = 0) -> int:
@@ -241,8 +255,8 @@ def _paragraphs_for(stats: Dict[str, Any]) -> List[Dict[str, str]]:
         )
 
     close = (
-        "When you are ready, the seasonal preview and the gift queue are below. "
-        "Nothing publishes, and nobody is gifted, until you say so."
+        "Nothing here changes on its own. Open Health when you want the house lighter, "
+        "or Live to put something on air for the week."
     )
     return [
         {"kind": "hours", "text": watch_text},
@@ -252,7 +266,7 @@ def _paragraphs_for(stats: Dict[str, Any]) -> List[Dict[str, str]]:
     ]
 
 
-def compose_house_letter(db: Database, *, now: Optional[float] = None) -> Dict[str, Any]:
+def compose_weekly_letter(db: Database, *, now: Optional[float] = None) -> Dict[str, Any]:
     """Owner letter: unwatched hours, dead weight, disk — story, not tiles."""
     stats = gather_house_stats(db, now=now)
     paragraphs = _paragraphs_for(stats)
@@ -266,3 +280,140 @@ def compose_house_letter(db: Database, *, now: Optional[float] = None) -> Dict[s
         "stats": stats,
         "generated_at": stats["generated_at"],
     }
+
+
+# ---------------------------------------------------------------------------
+# Weekly delivery (owner inbox, optional email)
+# ---------------------------------------------------------------------------
+
+
+def default_letter_settings() -> Dict[str, Any]:
+    return {"weekly": True, "email": False, "last_week": ""}
+
+
+def load_letter_settings(db: Database) -> Dict[str, Any]:
+    """Owner toggles: weekly delivery on/off + opt-in email (default: inbox only)."""
+    out = default_letter_settings()
+    raw = db.get_config(LETTER_CONFIG_KEY) if hasattr(db, "get_config") else None
+    if raw:
+        try:
+            stored = json.loads(raw)
+        except (TypeError, ValueError):
+            stored = {}
+        if isinstance(stored, dict):
+            if "weekly" in stored:
+                out["weekly"] = bool(stored["weekly"])
+            if "email" in stored:
+                out["email"] = bool(stored["email"])
+            out["last_week"] = str(stored.get("last_week") or "")
+    return out
+
+
+def save_letter_settings(
+    db: Database,
+    *,
+    weekly: Optional[bool] = None,
+    email: Optional[bool] = None,
+    last_week: Optional[str] = None,
+) -> Dict[str, Any]:
+    current = load_letter_settings(db)
+    if weekly is not None:
+        current["weekly"] = bool(weekly)
+    if email is not None:
+        current["email"] = bool(email)
+    if last_week is not None:
+        current["last_week"] = str(last_week)
+    db.set_config(LETTER_CONFIG_KEY, json.dumps(current, separators=(",", ":")))
+    return current
+
+
+def week_bucket(now: Optional[float] = None) -> str:
+    ts = time.time() if now is None else float(now)
+    iso = datetime.fromtimestamp(ts, tz=timezone.utc).isocalendar()
+    return f"{iso[0]:04d}-W{iso[1]:02d}"
+
+
+def _owners(db: Database) -> List[Dict[str, Any]]:
+    owners = [
+        u for u in db.list_users(limit=100) if u.get("role") == "owner" and not u.get("disabled")
+    ]
+    if not owners:
+        owners = [u for u in db.list_users(limit=20) if not u.get("disabled")][:1]
+    return owners
+
+
+def deliver_weekly_letter(
+    db: Database,
+    settings: Settings,
+    *,
+    now: Optional[float] = None,
+    force: bool = False,
+) -> Dict[str, Any]:
+    """Drop this week's letter in the owner inbox (and email it if opted in).
+
+    The scheduler calls this with ``force=False``: it is a no-op when weekly
+    delivery is off, when this ISO week was already sent, or when there is no
+    library index yet. "Send now" from Admin passes ``force=True``.
+    Email is only attempted when the owner opted in *and* outbound mail is
+    configured; inbox delivery never depends on mail.
+    """
+    from projectionist.mail import MailSendError, mail_configured, send_mail
+    from projectionist.notifications.service import resolve_notification_email
+
+    state = load_letter_settings(db)
+    bucket = week_bucket(now)
+    result: Dict[str, Any] = {
+        "delivered": 0,
+        "emailed": 0,
+        "week": bucket,
+        "skipped": "",
+    }
+    if not force:
+        if not state["weekly"]:
+            result["skipped"] = "weekly_off"
+            return result
+        if state["last_week"] == bucket:
+            result["skipped"] = "already_sent"
+            return result
+    letter = compose_weekly_letter(db, now=now)
+    if not force and int(letter["stats"].get("total") or 0) <= 0:
+        result["skipped"] = "empty_library"
+        return result
+
+    body = f"{letter['salutation']}\n\n{letter['body']}\n\n{letter['signoff']}"
+    want_email = bool(state["email"]) and mail_configured(settings)
+    for owner in _owners(db):
+        user_id = str(owner["id"])
+        note = db.create_notification(
+            notification_id=str(uuid.uuid4()),
+            user_id=user_id,
+            kind="digest",
+            title=letter["title"],
+            body=body,
+            payload={
+                "newsletter": LETTER_NEWSLETTER_ID,
+                "week": bucket,
+                "paragraphs": letter["paragraphs"],
+                "blurb": "Your weekly letter about the house.",
+            },
+            related_id=f"{LETTER_NEWSLETTER_ID}-{bucket}",
+        )
+        if note:
+            result["delivered"] += 1
+        if want_email:
+            to_email = resolve_notification_email(owner)
+            if to_email:
+                try:
+                    send_mail(
+                        settings,
+                        to_email=to_email,
+                        subject=f"{letter['title']} — {bucket}",
+                        body_text=body,
+                    )
+                    result["emailed"] += 1
+                except MailSendError as exc:
+                    logger.warning("Weekly letter email failed for %s: %s", user_id, exc)
+                    result["email_error"] = str(exc)
+    if not force and result["delivered"]:
+        save_letter_settings(db, last_week=bucket)
+    return result

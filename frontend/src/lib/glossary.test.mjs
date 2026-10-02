@@ -12,8 +12,8 @@ import {
 describe("glossary", () => {
   it("resolves ops keys through the Live Admin glossary", () => {
     const entry = glossaryEntry("Broadcast engine");
-    assert.equal(entry.label, "TV engine");
-    assert.match(entry.help, /Tunarr/i);
+    assert.equal(entry.label, "Broadcast");
+    assert.doesNotMatch(entry.help, /tunarr|engine/i);
   });
 
   it("accepts craft labels directly", () => {
@@ -24,7 +24,7 @@ describe("glossary", () => {
 
   it("keeps help blurbs for every Live Admin glossary target", () => {
     for (const label of Object.values(LIVE_ADMIN_GLOSSARY)) {
-      if (label === "TV engine running" || label === "TV engine unreachable" || label === "TV healthy") {
+      if (label === "Broadcast running" || label === "Broadcast offline" || label === "On the air") {
         continue; // status chips, not section terms
       }
       assert.ok(GLOSSARY_HELP[label], `missing GLOSSARY_HELP for “${label}”`);
@@ -33,9 +33,9 @@ describe("glossary", () => {
 
 
   it("marks status-chip labels as known even without dedicated help blurbs", () => {
-    const entry = glossaryEntry("TV engine running");
+    const entry = glossaryEntry("Broadcast running");
     assert.equal(entry.known, true);
-    assert.equal(entry.label, "TV engine running");
+    assert.equal(entry.label, "Broadcast running");
     assert.equal(entry.help, null);
   });
 
@@ -47,18 +47,18 @@ describe("glossary", () => {
   });
 
   it("sectionHelpPlainBody keeps the (?) body for label-only known entries", () => {
-    assert.equal(sectionHelpPlainBody("TV engine running"), GLOSSARY_FALLBACK_HELP);
+    assert.equal(sectionHelpPlainBody("Broadcast running"), GLOSSARY_FALLBACK_HELP);
     assert.equal(sectionHelpPlainBody("Broadcast engine running"), GLOSSARY_FALLBACK_HELP);
   });
 
   it("sectionHelpPlainBody returns dedicated help when present", () => {
-    assert.match(sectionHelpPlainBody("Setup"), /Engine/);
-    assert.match(sectionHelpPlainBody("Installation"), /Engine/);
+    assert.match(sectionHelpPlainBody("Setup"), /Connection/);
+    assert.match(sectionHelpPlainBody("Installation"), /Connection/);
   });
 
   it("lists unique sorted labels", () => {
     const labels = glossaryLabels();
-    assert.ok(labels.includes("TV engine"));
+    assert.ok(labels.includes("Broadcast"));
     assert.ok(labels.includes("Setup"));
     assert.deepEqual(labels, [...labels].sort());
   });
