@@ -9,6 +9,7 @@ from unittest import mock
 
 from projectionist.theater.preroll import (
     asset_id_for_path,
+    choose_preroll_video,
     list_preroll_audio,
     list_preroll_videos,
     pick_preroll,
@@ -36,6 +37,28 @@ class PrerollTests(unittest.TestCase):
             resolved = resolve_asset(first["id"], root=root)
             self.assertIsNotNone(resolved)
             self.assertEqual(resolved["id"], first["id"])
+
+    def test_movie_preroll_is_random_not_pinned_to_first(self):
+        items = [
+            {"id": "aaa", "title": "Trailer A", "content_type": "video/mp4"},
+            {"id": "bbb", "title": "Trailer B", "content_type": "video/mp4"},
+            {"id": "ccc", "title": "Trailer C", "content_type": "video/mp4"},
+        ]
+        picks = {
+            choose_preroll_video(items, rng=__import__("random").Random(seed))["id"]
+            for seed in range(24)
+        }
+        self.assertGreater(len(picks), 1)
+        self.assertNotEqual(picks, {"aaa"})
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name in ("alpha.mp4", "bravo.mp4", "charlie.mp4"):
+                (root / name).write_bytes(b"x")
+            movie_picks = {
+                pick_preroll(context="movie", root=root, rng=__import__("random").Random(seed))["id"]
+                for seed in range(24)
+            }
+            self.assertGreater(len(movie_picks), 1)
 
     def test_asset_id_stable(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -98,11 +121,41 @@ class WeatherTests(unittest.TestCase):
                 data = weather_channel_payload(
                     environ={"PROJECTIONIST_WEATHER_PLACE": "Home"},
                     fetch_json=fake_fetch,
+                    muzak_folder=str(root),
+                    allowed_roots=[root],
+                    rng=__import__("random").Random(1),
                 )
             self.assertEqual(data["place"], "Home")
+            self.assertEqual(data["location_source"], "household")
             self.assertTrue(data["muzak"])
+            self.assertEqual(data["muzak_note"], "")
             self.assertIn("open-meteo", data["egress"]["host"])
             self.assertTrue(data["ticker"])
+
+    def test_saved_coords_skip_geocode_and_empty_music_is_honest(self):
+        calls = []
+
+        def fake_fetch(url: str):
+            calls.append(url)
+            return {
+                "current": {"temperature_2m": 70, "weather_code": 0, "wind_speed_10m": 3},
+                "daily": {"time": [], "temperature_2m_max": [], "temperature_2m_min": [], "weather_code": []},
+            }
+
+        data = weather_channel_payload(
+            place_name="Chicago, Illinois, United States",
+            latitude=41.88,
+            longitude=-87.63,
+            location_source="profile",
+            fetch_json=fake_fetch,
+            muzak_folder="",
+        )
+        self.assertEqual(data["location_source"], "profile")
+        self.assertEqual(data["latitude"], 41.88)
+        self.assertIsNone(data["muzak"])
+        self.assertIn("No music folder", data["muzak_note"])
+        self.assertTrue(calls)
+        self.assertTrue(all("geocoding-api" not in url for url in calls))
 
 
 if __name__ == "__main__":

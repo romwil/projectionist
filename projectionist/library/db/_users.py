@@ -231,6 +231,7 @@ class UsersAuthMixin:
         year_in_review_opt_in: Any = ...,
         notify_channel_apprise: Any = ...,
         apprise_urls: Any = ...,
+        weather_location: Any = ...,
     ) -> Dict[str, Any]:
         with self.connect() as conn:
             existing = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
@@ -289,6 +290,18 @@ class UsersAuthMixin:
                 cleaned_urls = (apprise_urls or "").strip() or None
                 updates.append("apprise_urls = ?")
                 params.append(cleaned_urls)
+            if weather_location is not ... and "weather_place" in cols:
+                if weather_location is None:
+                    updates.extend(
+                        ["weather_place = ?", "weather_lat = ?", "weather_lon = ?"]
+                    )
+                    params.extend([None, None, None])
+                else:
+                    place, lat, lon = weather_location
+                    updates.extend(
+                        ["weather_place = ?", "weather_lat = ?", "weather_lon = ?"]
+                    )
+                    params.extend([str(place), float(lat), float(lon)])
             if updates:
                 params.append(user_id)
                 conn.execute(
@@ -573,6 +586,15 @@ class UsersAuthMixin:
         apprise_urls = None
         if "apprise_urls" in keys and row["apprise_urls"] is not None:
             apprise_urls = str(row["apprise_urls"]).strip() or None
+        weather_place = None
+        weather_lat = None
+        weather_lon = None
+        if "weather_place" in keys and row["weather_place"] is not None:
+            weather_place = str(row["weather_place"]).strip() or None
+        if "weather_lat" in keys and row["weather_lat"] is not None:
+            weather_lat = float(row["weather_lat"])
+        if "weather_lon" in keys and row["weather_lon"] is not None:
+            weather_lon = float(row["weather_lon"])
         return {
             "id": str(row["id"]),
             "display_name": str(row["display_name"]),
@@ -588,6 +610,9 @@ class UsersAuthMixin:
             "year_in_review_opt_in": year_in_review_opt_in,
             "notify_channel_apprise": notify_channel_apprise,
             "apprise_urls": apprise_urls,
+            "weather_place": weather_place,
+            "weather_lat": weather_lat,
+            "weather_lon": weather_lon,
             "role": str(row["role"]),
             "disabled": disabled,
             "is_youth": is_youth,

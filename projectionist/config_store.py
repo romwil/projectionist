@@ -577,6 +577,9 @@ class TunarrSettings:
     # Env (wins when set): PROJECTIONIST_TUNARR_FILLER_BINDS (comma-separated).
     # Bare host paths auto-map to ``/data/filler/<basename>:ro``.
     filler_binds: List[str] = field(default_factory=list)
+    # Container path of the Weather Channel music folder (owner Live admin).
+    # Empty = no muzak. Must stay under a container-visible media root.
+    muzak_folder: str = ""
     # Cached Tunarr id for the shared ``Projectionist Continuity`` filler list.
     continuity_filler_list_id: str = ""
     # Max flex pad per gap toward :00/:30 (commercial-cut default 15 minutes).

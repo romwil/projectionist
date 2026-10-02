@@ -251,6 +251,7 @@ def _build_migrations() -> List[Migration]:
         (48, "drop_guest_role", wrap("_migrate_drop_guest_role")),
         (49, "session_revocation", wrap("_migrate_session_revocation")),
         (50, "library_episodes_added_at", wrap("_migrate_library_episodes_added_at")),
+        (51, "weather_location", wrap("_migrate_weather_location")),
     ]
 
 
