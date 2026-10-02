@@ -161,7 +161,9 @@
   background: var(--surface-2);
   color: var(--text);
   cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease;
 }
 
 .preset-card:hover {
@@ -1433,6 +1435,46 @@ button.ghost.inline-link {
   grid-column: 1 / -1;
 }
 
+.muzak-folder-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 0.55rem;
+  margin: 0.75rem 0 1rem;
+}
+.muzak-folder-title {
+  margin: 0;
+}
+.media-browser-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+.media-browser-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+.media-browser-row {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  text-align: left;
+}
+.media-browser-row.is-mount {
+  outline: 1px solid var(--gold, #c6a15b);
+  background: color-mix(in srgb, var(--gold, #c6a15b) 14%, transparent);
+}
+.media-browser-badge {
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .live-channels-filler-add {
   display: flex;
   flex-wrap: wrap;
@@ -1727,4 +1769,3 @@ button.ghost.inline-link {
     animation: none;
   }
 }
-

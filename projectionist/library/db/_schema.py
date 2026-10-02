@@ -2107,6 +2107,16 @@ class SchemaMigrationsMixin:
             """
         )
 
+    def _migrate_weather_location(self, conn: sqlite3.Connection) -> None:
+        """Per-user Weather Channel place (label + coordinates) on the profile."""
+        user_cols = self._table_columns(conn, "users")
+        if "weather_place" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN weather_place TEXT")
+        if "weather_lat" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN weather_lat REAL")
+        if "weather_lon" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN weather_lon REAL")
+
     def _migrate_library_episodes_added_at(self, conn: sqlite3.Connection) -> None:
         """Ensure ``library_episodes.added_at`` exists on DBs that already ran phase4.
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import MuzakFolderPanel from "../../components/admin/MuzakFolderPanel";
 import InlineAlert from "../../components/InlineAlert";
 import OwnerNowPlayingBreakdown from "../../components/OwnerNowPlayingBreakdown";
 import SectionHelp from "../../components/SectionHelp";
@@ -1193,6 +1194,10 @@ export default function LiveChannelsSection({
                       </button>
                       </div>
                     </div>
+                    <MuzakFolderPanel
+                      currentPath={settings?.tunarr?.muzak_folder || ""}
+                      onSaved={(path) => updateTunarrSettings({ muzak_folder: path })}
+                    />
                     <div className="service-fields" data-testid="live-channels-schedule-settings">
                       <label>
                         Gap fill (minutes)
