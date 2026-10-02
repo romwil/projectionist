@@ -1764,12 +1764,15 @@ def library_item_subtitle_file_endpoint(
     stream_id: str,
     user=Depends(get_current_user_dep),
 ) -> Response:
-    """Proxy an attached Plex subtitle file (SRT→VTT when needed) for Live sidecar CC."""
+    """Proxy a Plex subtitle track as WebVTT (sidecar or embedded text) for the player.
+
+    Plex tokens stay server-side; the browser only sees this authenticated route.
+    """
     del user
     from projectionist.library.subtitles import (
+        fetch_subtitle_vtt,
         list_item_subtitles,
         plex_client_from_settings,
-        srt_to_vtt,
     )
 
     settings = _settings()
@@ -1783,24 +1786,23 @@ def library_item_subtitle_file_endpoint(
         ),
         None,
     )
-    if not match or not match.get("key"):
+    if not match:
         raise HTTPException(status_code=404, detail="Subtitle track not found")
+    if not match.get("proxy_url"):
+        raise HTTPException(
+            status_code=415,
+            detail=str(match.get("unavailable_reason") or "This subtitle track can’t be rendered as text"),
+        )
     client = plex_client_from_settings(settings)
     if client is None:
         raise HTTPException(status_code=503, detail="Plex isn’t connected")
     try:
-        raw = client.fetch_subtitle_bytes(str(match.get("key")))
+        text = fetch_subtitle_vtt(client, match)
     except Exception as error:  # noqa: BLE001
         raise HTTPException(
             status_code=502,
             detail=_safe_error_detail(error, "Could not fetch subtitle file from Plex"),
         ) from error
-    text = raw.decode("utf-8", errors="replace")
-    fmt = str(match.get("format") or "").lower()
-    if fmt in {"", "srt", "subrip"} or (not text.lstrip().upper().startswith("WEBVTT") and "-->" in text):
-        text = srt_to_vtt(text)
-    elif not text.lstrip().upper().startswith("WEBVTT"):
-        text = srt_to_vtt(text)
     return Response(
         content=text.encode("utf-8"),
         media_type="text/vtt; charset=utf-8",

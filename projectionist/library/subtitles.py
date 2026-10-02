@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+import urllib.parse
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from projectionist.connectors.plex import PlexClient, PlexSubtitleStream
@@ -127,6 +128,102 @@ def plex_client_from_settings(settings: Any, *, timeout: int = 20) -> Optional[P
     return PlexClient(url, token, timeout=timeout)
 
 
+# Text-based formats Projectionist can render as cues. Image formats (PGS/VobSub/…)
+# cannot be turned into text without OCR, so they are listed honestly but not selectable.
+IMAGE_SUBTITLE_FORMATS = frozenset(
+    {
+        "pgs",
+        "hdmv_pgs_subtitle",
+        "hdmv_text_subtitle",
+        "vobsub",
+        "dvd_subtitle",
+        "dvdsub",
+        "dvb_subtitle",
+        "dvbsub",
+        "xsub",
+    }
+)
+IMAGE_SUBTITLE_NOTE = (
+    "This track is picture-based, so Projectionist can’t draw it as text. "
+    "Pick another track or watch in Plex."
+)
+_NATIVE_TEXT_FORMATS = frozenset({"srt", "subrip", "vtt", "webvtt"})
+
+
+def subtitle_is_renderable(stream: Mapping[str, Any]) -> bool:
+    """True when the track is text we can fetch and render (not PGS/VobSub bitmap)."""
+    fmt = str(stream.get("format") or "").strip().lower()
+    return fmt not in IMAGE_SUBTITLE_FORMATS
+
+
+def subtitle_fetch_paths(stream: Mapping[str, Any]) -> List[str]:
+    """Plex-relative paths to try, best first. Embedded tracks have no ``key``.
+
+    Sidecar files expose ``key`` (``/library/streams/<id>``). Embedded text tracks are
+    extracted by PMS from the same ``/library/streams/<id>`` route when asked for SRT.
+    """
+    key = str(stream.get("key") or "").strip()
+    stream_id = str(stream.get("id") or "").strip()
+    fmt = str(stream.get("format") or "").strip().lower()
+    base = key or (f"/library/streams/{stream_id}" if stream_id.isdigit() else "")
+    if not base:
+        return []
+    if not base.startswith("/"):
+        base = f"/{base}"
+    if "?" in base:
+        return [base]
+    paths: List[str] = []
+    if fmt not in _NATIVE_TEXT_FORMATS or not key:
+        paths.append(f"{base}?encoding=utf-8&format=srt")
+    paths.append(f"{base}?encoding=utf-8")
+    paths.append(base)
+    out: List[str] = []
+    for path in paths:
+        if path not in out:
+            out.append(path)
+    return out
+
+
+def decorate_subtitle_row(rating_key: str, row: Dict[str, Any]) -> Dict[str, Any]:
+    """Add the authenticated proxy URL + renderability. Never exposes Plex tokens."""
+    out = dict(row)
+    renderable = subtitle_is_renderable(out)
+    out["renderable"] = renderable
+    paths = subtitle_fetch_paths(out)
+    stream_id = str(out.get("id") or "").strip()
+    if renderable and paths and stream_id:
+        out["proxy_url"] = (
+            f"/api/library/items/{urllib.parse.quote(str(rating_key), safe='')}"
+            f"/subtitles/{urllib.parse.quote(stream_id, safe='')}/file"
+        )
+    else:
+        out["proxy_url"] = ""
+    out["unavailable_reason"] = (
+        "" if out["proxy_url"] else (IMAGE_SUBTITLE_NOTE if not renderable else "No file path for this track.")
+    )
+    return out
+
+
+def fetch_subtitle_vtt(client: PlexClient, stream: Mapping[str, Any]) -> str:
+    """Fetch one track from Plex (trying fallback paths) and return WebVTT text."""
+    paths = subtitle_fetch_paths(stream)
+    if not paths:
+        raise ValueError("Subtitle track has no fetchable path")
+    last: Optional[Exception] = None
+    for path in paths:
+        try:
+            raw = client.fetch_subtitle_bytes(path)
+        except Exception as error:  # noqa: BLE001
+            last = error
+            continue
+        text = raw.decode("utf-8-sig", errors="replace")
+        if not text.strip():
+            last = ValueError("Plex returned an empty subtitle file")
+            continue
+        return srt_to_vtt(text)
+    raise last or ValueError("Could not fetch subtitle track")
+
+
 def list_item_subtitles(
     settings: Any,
     rating_key: str,
@@ -169,7 +266,7 @@ def list_item_subtitles(
             "reason": "plex_error",
             "error": str(error)[:200],
         }
-    rows = [s.to_dict() for s in streams]
+    rows = [decorate_subtitle_row(key, s.to_dict()) for s in streams]
     return {
         "ok": True,
         "rating_key": key,
@@ -237,7 +334,7 @@ def download_preferred_subtitles(
             "rating_key": key,
             "message": "Subtitles for your preferred language are already on this title in Plex.",
             "reason": "already_present",
-            "streams": [s.to_dict() for s in existing],
+            "streams": [decorate_subtitle_row(key, s.to_dict()) for s in existing],
             "preferred_languages": languages,
         }
 
@@ -274,7 +371,7 @@ def download_preferred_subtitles(
                 "They’ll show up here (and in Plex) once the agent finishes."
             ),
             "reason": "download_started",
-            "streams": [s.to_dict() for s in refreshed],
+            "streams": [decorate_subtitle_row(key, s.to_dict()) for s in refreshed],
             "preferred_languages": languages,
             "picked": pick.to_dict(),
         }
@@ -286,27 +383,28 @@ def download_preferred_subtitles(
         "message": DOWNLOAD_SOFT_FAIL,
         "reason": "none_found",
         "error": last_error,
-        "streams": [s.to_dict() for s in existing],
+        "streams": [decorate_subtitle_row(key, s.to_dict()) for s in existing],
         "preferred_languages": languages,
     }
 
 
 def srt_to_vtt(raw: str) -> str:
-    """Minimal SRT → WebVTT conversion for Live sidecar tracks."""
-    text = raw.replace("\r\n", "\n").replace("\r", "\n").strip()
+    """Minimal SRT → WebVTT conversion for sidecar tracks (cue text left intact)."""
+    text = raw.replace("\r\n", "\n").replace("\r", "\n").lstrip("\ufeff").strip()
     if text.upper().startswith("WEBVTT"):
         return text if text.endswith("\n") else text + "\n"
-    # Strip numeric cue indexes; rewrite comma decimals to dots.
+    src = text.split("\n")
     lines: List[str] = ["WEBVTT", ""]
-    for line in text.split("\n"):
+    for i, line in enumerate(src):
         stripped = line.strip()
-        if re.fullmatch(r"\d+", stripped):
+        # Drop the numeric cue index only (the line right before a timing line),
+        # so cue text that is just a number (e.g. "42") survives.
+        if re.fullmatch(r"\d+", stripped) and i + 1 < len(src) and "-->" in src[i + 1]:
             continue
         if "-->" in stripped:
-            stripped = stripped.replace(",", ".")
+            stripped = re.sub(r"(\d),(\d{1,3})", r"\1.\2", stripped)
         lines.append(stripped)
-    body = "\n".join(lines).rstrip() + "\n"
-    return body
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def live_subtitles_payload(

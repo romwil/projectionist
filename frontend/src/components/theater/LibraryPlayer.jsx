@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   fetchNextPreroll,
+  getLibraryItemSubtitles,
   progressLibraryPlayback,
   seekLibraryPlayback,
   startLibraryPlayback,
@@ -36,6 +37,14 @@ import {
   loadPauseWhenBackgrounded,
 } from "../../lib/uiPrefs.js";
 import { plexPlayRatingKey } from "../../lib/titleLinks.js";
+import {
+  SUBTITLE_EMPTY_TRACKS,
+  clampSubtitleDelay,
+  normalizeSubtitleTracks,
+} from "../../lib/subtitleCues.js";
+import SubtitleOverlay from "./SubtitleOverlay.jsx";
+import SubtitlePicker from "./SubtitlePicker.jsx";
+import useSubtitleCues from "./useSubtitleCues.js";
 import { normalizePrerollPayload, shouldPlayMoviePreroll } from "../../lib/prerollClient.js";
 import TheaterPlayer from "./TheaterPlayer.jsx";
 import PrerollStage from "./PrerollStage.jsx";
@@ -101,6 +110,48 @@ export default function LibraryPlayer({
   const [preroll, setPreroll] = useState(null);
 
   const key = String(ratingKey || "").trim();
+
+  // One subtitle model: real Plex tracks (embedded + sidecar) for the item being played,
+  // fetched through the authenticated proxy and drawn by Projectionist.
+  const subtitleKey = String(session?.rating_key || "").trim();
+  const [subTracks, setSubTracks] = useState([]);
+  const [subListNote, setSubListNote] = useState("");
+  const [activeSub, setActiveSub] = useState(-1);
+  const [subDelay, setSubDelay] = useState(0);
+  const activeSubTrack = subTracks.find((track) => track.index === activeSub) || null;
+  const subs = useSubtitleCues(activeSubTrack?.proxyUrl || "");
+  const getSubtitleTimeSec = useCallback(() => videoRef.current?.currentTime ?? Number.NaN, []);
+
+  useEffect(() => {
+    setActiveSub(-1);
+    setSubDelay(0);
+    setSubTracks([]);
+    setSubListNote("");
+    if (!subtitleKey) return undefined;
+    let cancelled = false;
+    getLibraryItemSubtitles(subtitleKey)
+      .then((payload) => {
+        if (cancelled) return;
+        const tracks = normalizeSubtitleTracks(payload?.streams);
+        setSubTracks(tracks);
+        if (!tracks.length) setSubListNote(payload?.ok === false ? payload?.message || "" : SUBTITLE_EMPTY_TRACKS);
+      })
+      .catch(() => {
+        if (!cancelled) setSubListNote("Couldn’t read subtitle tracks for this title.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [subtitleKey]);
+
+  function selectSubtitle(track) {
+    if (!track || track.index === -1) {
+      setActiveSub(-1);
+      return;
+    }
+    if (!track.renderable) return;
+    setActiveSub(track.index);
+  }
 
   useEffect(() => {
     const syncViewport = () => {
@@ -750,9 +801,17 @@ export default function LibraryPlayer({
       </div>
 
       {ccOpen ? (
-        <div className="theater-cc-note" data-theater-chrome="true" data-testid="library-cc-note">
-          <p>Captions follow the Plex-selected track when the stream carries them.</p>
-        </div>
+        <SubtitlePicker
+          testId="library-cc-picker"
+          tracks={subTracks}
+          activeId={activeSub}
+          onSelect={selectSubtitle}
+          state={activeSubTrack ? subs.state : "idle"}
+          error={subs.error}
+          emptyMessage={subListNote}
+          delaySec={subDelay}
+          onDelayChange={(value) => setSubDelay(clampSubtitleDelay(value))}
+        />
       ) : null}
     </div>
   ) : null;
@@ -796,6 +855,14 @@ export default function LibraryPlayer({
         onStageDoubleActivate={handleStageDoubleActivate}
         onKeyDown={handleKeyDown}
       >
+        {activeSubTrack && subs.state === "ready" ? (
+          <SubtitleOverlay
+            cues={subs.cues}
+            getTimeSec={getSubtitleTimeSec}
+            delaySec={subDelay}
+            testId="library-subtitle-overlay"
+          />
+        ) : null}
         {preroll ? (
           <PrerollStage
             src={preroll.url}
