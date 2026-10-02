@@ -681,6 +681,8 @@ export default function ConfigPage() {
     getLiveChannelsCraftOptions()
       .then((opts) => {
         setLiveCraftOptions(opts);
+        // Provisional (warming) numbers must not seed the form — wait for the real ones.
+        if (opts?.warming) return;
         setLiveCraft((prev) => ({
           ...prev,
           number: prev.number || String(opts.next_channel_number || 100),
@@ -701,6 +703,43 @@ export default function ConfigPage() {
         .catch(() => {});
     }
   }, [showWizard, section, settings?.features?.live_channels_enabled, settings?.tunarr?.url, settings?.tunarr?.docker_orchestration]);
+
+  // Server serves Live status stale-while-revalidate (durable). While it is
+  // stale/warming, re-poll briefly so the real probes replace the cached snapshot.
+  const liveStatusRevalidating = Boolean(liveChannelsStatus?.warming || liveChannelsStatus?.stale);
+  const liveCraftWarming = Boolean(liveCraftOptions?.warming);
+  useEffect(() => {
+    if (showWizard || (section !== "live-channels" && section !== "overview")) return undefined;
+    if (!liveStatusRevalidating && !liveCraftWarming) return undefined;
+    let tries = 0;
+    const timer = setInterval(() => {
+      tries += 1;
+      if (tries > 12) {
+        clearInterval(timer);
+        return;
+      }
+      if (liveStatusRevalidating) {
+        getLiveChannelsStatus()
+          .then(setLiveChannelsStatus)
+          .catch(() => {});
+      }
+      if (liveCraftWarming) {
+        getLiveChannelsCraftOptions()
+          .then((opts) => {
+            setLiveCraftOptions(opts);
+            if (opts?.warming) return;
+            setLiveCraft((prev) => ({
+              ...prev,
+              number: prev.number || String(opts.next_channel_number || 100),
+              motif: prev.motif || opts.motifs?.[0]?.value || "",
+              cluster_tag: prev.cluster_tag || opts.taste_clusters?.[0]?.cluster_tag || "",
+            }));
+          })
+          .catch(() => {});
+      }
+    }, 2500);
+    return () => clearInterval(timer);
+  }, [showWizard, section, liveStatusRevalidating, liveCraftWarming]);
 
   const liveJobBusy = isLiveJobBusy(liveChannelsStatus?.job);
   useEffect(() => {

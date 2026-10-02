@@ -56,12 +56,21 @@ def _safe_error_detail(error: Exception, context: str = "") -> str:
 
 
 @router.get("/api/admin/live-channels/status")
-def live_channels_status_endpoint(user=Depends(require_role("owner"))) -> Dict[str, Any]:
-    """Owner-only Live Channels flag + Tunarr reachability snapshot."""
-    del user
-    from projectionist.live_channels.status import build_live_channels_status
+def live_channels_status_endpoint(
+    fresh: bool = False,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Owner-only Live Channels flag + Tunarr reachability snapshot.
 
-    return build_live_channels_status(_settings())
+    Stale-while-revalidate: Admin paints from the last good status (durable across
+    restarts) while Tunarr / Plex / XMLTV probes run in the background. ``stale`` or
+    ``warming`` in the body means the client should re-poll shortly. ``?fresh=1``
+    forces a synchronous probe (diagnostics only).
+    """
+    del user
+    from projectionist.live_channels.status_cache import get_live_channels_status
+
+    return get_live_channels_status(_settings(), _db(), fresh=bool(fresh))
 
 
 @router.get("/api/admin/live-channels/starter-pack")
@@ -833,26 +842,14 @@ def live_channels_engine_settings_endpoint(
 def live_channels_craft_options_endpoint(
     user=Depends(require_role("owner")),
 ) -> Dict[str, Any]:
-    """Motifs / taste / collections + next channel number for the craft form."""
-    from projectionist.live_channels.craft import build_craft_options
-    from projectionist.live_channels.publish import tunarr_client_from_settings
+    """Motifs / taste / collections + next channel number for the craft form.
 
-    settings = _settings()
-    existing_numbers: List[int] = []
-    if settings.features.live_channels_enabled and str(settings.tunarr.url or "").strip():
-        try:
-            client = tunarr_client_from_settings(settings)
-            for ch in client.list_channels():
-                if isinstance(ch, dict) and ch.get("number") is not None:
-                    existing_numbers.append(int(ch["number"]))
-        except Exception:  # noqa: BLE001
-            existing_numbers = []
-    return build_craft_options(
-        _db(),
-        settings=settings,
-        owner_user_id=str(user.id),
-        existing_channel_numbers=existing_numbers,
-    )
+    SWR: Tunarr channel numbers and Plex occupied numbers are gathered in the
+    background; ``warming`` means the numbers are provisional.
+    """
+    from projectionist.live_channels.status_cache import get_craft_options
+
+    return get_craft_options(_settings(), _db(), owner_user_id=str(user.id))
 
 
 @router.post("/api/admin/live-channels/channels/publish")
@@ -1569,7 +1566,7 @@ def live_channels_on_now_endpoint(user=Depends(get_current_user_dep)) -> Dict[st
     existing rating gate when Tunarr programs carry content ratings. Dual-watch
     CTA: Projectionist /live primary, Plex Live TV secondary.
     """
-    from projectionist.live_channels.guide import build_on_now_snapshot
+    from projectionist.live_channels.guide_cache import get_on_now_snapshot
     from projectionist.live_channels.nudges import maybe_deliver_live_channels_ready_nudge
     from projectionist.youth.rating_gate import resolve_youth_max_rating, youth_gate_active
 
@@ -1577,7 +1574,8 @@ def live_channels_on_now_endpoint(user=Depends(get_current_user_dep)) -> Dict[st
     youth_ceiling = None
     if youth_gate_active(user):
         youth_ceiling = resolve_youth_max_rating(settings)
-    snapshot = build_on_now_snapshot(settings, youth_max_rating=youth_ceiling)
+    # SWR: last good snapshot paints immediately; Tunarr is only asked in the background.
+    snapshot = get_on_now_snapshot(settings, youth_max_rating=youth_ceiling)
     # Soft, deduped ready nudge for opt-in members (never blocks the response).
     try:
         maybe_deliver_live_channels_ready_nudge(
@@ -1596,15 +1594,20 @@ def live_channels_guide_endpoint(
     hours: float = 6.0,
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
-    """Wider channel × time guide for the Projectionist `/live` EPG (1–12 hours)."""
-    from projectionist.live_channels.guide import build_guide_snapshot
+    """Wider channel × time guide for the Projectionist `/live` EPG (1–12 hours).
+
+    Stale-while-revalidate: the last good guide is served immediately (now/next
+    re-derived from cached programs) and Tunarr is refreshed in the background.
+    A true cold start returns ``warming: true`` instead of hanging first paint.
+    """
+    from projectionist.live_channels.guide_cache import get_guide_snapshot
     from projectionist.youth.rating_gate import resolve_youth_max_rating, youth_gate_active
 
     settings = _settings()
     youth_ceiling = None
     if youth_gate_active(user):
         youth_ceiling = resolve_youth_max_rating(settings)
-    return build_guide_snapshot(
+    return get_guide_snapshot(
         settings,
         youth_max_rating=youth_ceiling,
         hours=hours,
@@ -1617,7 +1620,7 @@ def live_channels_channel_subtitles_endpoint(
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
     """Richer `/live` CC metadata for the now-playing airing (Plex tracks when mapped)."""
-    from projectionist.live_channels.guide import build_on_now_snapshot
+    from projectionist.live_channels.guide_cache import get_on_now_snapshot
     from projectionist.library.subtitles import live_subtitles_payload
     from projectionist.youth.rating_gate import resolve_youth_max_rating, youth_gate_active
 
@@ -1630,7 +1633,7 @@ def live_channels_channel_subtitles_endpoint(
     youth_ceiling = None
     if youth_gate_active(user):
         youth_ceiling = resolve_youth_max_rating(settings)
-    snap = build_on_now_snapshot(settings, youth_max_rating=youth_ceiling)
+    snap = get_on_now_snapshot(settings, youth_max_rating=youth_ceiling)
     channel = next(
         (c for c in snap.get("channels") or [] if str(c.get("id")) == cid),
         None,
