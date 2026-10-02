@@ -1151,8 +1151,16 @@ def start_search_job(
     data_dir: Optional[Path] = None,
 ) -> Dict[str, Any]:
     store = progress_store()
-    ids = [int(value) for value in (episode_ids or []) if int(value) > 0]
-    if search_all or not ids:
+    ids = list(dict.fromkeys(int(value) for value in (episode_ids or []) if int(value) > 0))
+    if not search_all and not ids:
+        # An empty selection must never widen into "search the whole scan".
+        snap = build_status(data_dir=data_dir)
+        snap["accepted"] = False
+        snap["message"] = (
+            "Select at least one show to search, or pass search_all explicitly."
+        )
+        return snap
+    if search_all:
         result = store.snapshot().get("result")
         if not isinstance(result, dict) and data_dir is not None:
             result = load_last_scan(data_dir)
