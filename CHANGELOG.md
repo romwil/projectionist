@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Live Guide lines up.** The time header, program blocks, now-line, and Weather row now share one half-hour-aligned time scale (equal 110px columns, ticks are column edges with left-aligned labels and visible hour/half-hour gridlines). Short blocks keep their true duration width (the old 48px minimum is gone), Weather spans the same grid as every other row, and channel-rail rows have a fixed height so a long channel name can no longer push later rows out of step.
+- Verification: `liveChannels.test.mjs` guide time-scale unit tests; `e2e/live-guide-alignment.spec.ts` asserts real bounding boxes (ticks, cells, now-line, Weather, rail rows, scroll).
+
 ## [1.37.24] — 2026-10-02
 
 Explore home loads from a precached hub again — rails recompute in the background instead of blocking first paint.
