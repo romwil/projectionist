@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [1.37.26] — 2026-10-02
+
+Sonarr **Find all missing** now lets you search only the shows you tick — no more accidental deep search of the whole backlog.
+
+### Highlights
+- **Pick shows, then search.** Each show in the results has a checkbox, with **Select all** / **Deselect all** and a live “N of M shows · X episodes” summary.
+- **Search selected (N).** A sticky footer button queues EpisodeSearch only for the ticked shows. It is disabled at zero, and selection starts empty and clears on every new scan.
+- **Whole backlog is deliberate.** **Search all missing…** replaces the old one-click “Search these” and asks for confirmation.
+
+### Changed
+- `POST /api/admin/sonarr/missing/search` no longer falls back to the whole last scan when `episode_ids` is empty — it returns 400 unless `search_all: true` is sent explicitly. Admin Repair → Retry for Sonarr now sends `search_all` explicitly.
+- Existing scan, **Include specials**, progress, and **Cancel remaining** behavior are unchanged.
+
+### Verification
+- `node --test frontend/src/lib/sonarrMissing.test.mjs` (selection → `episode_ids` payload, select/deselect all, prune after rescan).
+- `pytest tests/test_sonarr_missing.py` (subset ids queue only those episodes; empty payload is rejected).
+
 ## [1.37.24] — 2026-10-02
 
 Explore home loads from a precached hub again — rails recompute in the background instead of blocking first paint.

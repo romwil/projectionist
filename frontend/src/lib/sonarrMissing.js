@@ -140,3 +140,52 @@ export function sonarrMissingSecondsAgo(seconds) {
   const minutes = Math.round(value / 60);
   return `${minutes}m since last completion`;
 }
+
+/** Series ids from the current scan that are still selectable (drops stale picks after a rescan). */
+export function sonarrPruneSelection(groups, selected) {
+  const valid = new Set((groups || []).map((group) => group.seriesId));
+  const next = new Set();
+  for (const id of selected || []) {
+    if (valid.has(id)) next.add(id);
+  }
+  return next;
+}
+
+export function sonarrToggleSeries(selected, seriesId) {
+  const next = new Set(selected || []);
+  if (next.has(seriesId)) next.delete(seriesId);
+  else next.add(seriesId);
+  return next;
+}
+
+export function sonarrSelectAllSeries(groups) {
+  return new Set((groups || []).map((group) => group.seriesId));
+}
+
+/** Episode ids (deduped, scan order) for the checked shows only. */
+export function sonarrSelectedEpisodeIds(groups, selected) {
+  const picked = selected instanceof Set ? selected : new Set(selected || []);
+  const ids = [];
+  const seen = new Set();
+  for (const group of groups || []) {
+    if (!picked.has(group.seriesId)) continue;
+    for (const episode of group.episodes || []) {
+      const id = Number(episode?.episodeId) || 0;
+      if (id > 0 && !seen.has(id)) {
+        seen.add(id);
+        ids.push(id);
+      }
+    }
+  }
+  return ids;
+}
+
+export function sonarrSearchSelectedLabel(selectedCount) {
+  return `Search selected (${Number(selectedCount) || 0})`;
+}
+
+/** Payload for POST /admin/sonarr/missing/search — explicit ids only, never search_all. */
+export function sonarrSearchSelectedPayload(groups, selected) {
+  const episodeIds = sonarrSelectedEpisodeIds(groups, selected);
+  return episodeIds.length ? { episode_ids: episodeIds } : null;
+}

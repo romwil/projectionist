@@ -46,7 +46,12 @@ import {
   sonarrMissingProgressLine,
   sonarrMissingScanReady,
   sonarrMissingSecondsAgo,
-  sonarrSearchMissingButtonClass,
+  sonarrPruneSelection,
+  sonarrSearchSelectedLabel,
+  sonarrSearchSelectedPayload,
+  sonarrSelectAllSeries,
+  sonarrSelectedEpisodeIds,
+  sonarrToggleSeries,
   sonarrWantedDeltaCopy,
 } from "../../lib/sonarrMissing.js";
 
@@ -94,6 +99,7 @@ export default function LibrariesSection({
   const [repairRetryingId, setRepairRetryingId] = useState("");
   const [repairSkippingId, setRepairSkippingId] = useState("");
   const [hiddenRepairs, setHiddenRepairs] = useState(() => new Set());
+  const [sonarrPicked, setSonarrPicked] = useState(() => new Set());
 
   function formatLastSync(lastSync) {
     return formatLastSyncRelative(lastSync);
@@ -115,7 +121,8 @@ export default function LibrariesSection({
 
   async function handleRepairRetry(item) {
     if (item?.source === "sonarr_missing") {
-      handleSonarrMissingSearch?.();
+      // Repair retry re-submits the whole last scan — explicit, not an implicit default.
+      handleSonarrMissingSearch?.({ search_all: true });
       return;
     }
     if (item?.id == null) return;
@@ -155,6 +162,47 @@ export default function LibrariesSection({
     );
     return { ...radarrRegister, items };
   }, [radarrRegister, hiddenRepairs]);
+
+  const sonarrGroups = useMemo(
+    () => sonarrMissingBySeries(sonarrMissing?.result),
+    [sonarrMissing?.result],
+  );
+  // Selection is intersected with the current scan so a rescan can never leave ghost picks.
+  const sonarrSelected = useMemo(
+    () => sonarrPruneSelection(sonarrGroups, sonarrPicked),
+    [sonarrGroups, sonarrPicked],
+  );
+  const sonarrSelectedEpisodes = useMemo(
+    () => sonarrSelectedEpisodeIds(sonarrGroups, sonarrSelected).length,
+    [sonarrGroups, sonarrSelected],
+  );
+  const sonarrBusy = Boolean(sonarrMissing?.busy);
+  const sonarrScanReady = sonarrMissingScanReady(sonarrMissing);
+  const sonarrCanSearch = sonarrScanReady && !sonarrBusy;
+
+  function handleSonarrScanClick() {
+    setSonarrPicked(new Set());
+    handleSonarrMissingScan?.();
+  }
+
+  function handleSonarrSearchSelected() {
+    const payload = sonarrSearchSelectedPayload(sonarrGroups, sonarrSelected);
+    if (!payload) return;
+    handleSonarrMissingSearch?.(payload);
+  }
+
+  function handleSonarrSearchAll() {
+    const total = Number(sonarrMissing?.result?.scan_count) || sonarrGroups.reduce((n, g) => n + g.count, 0);
+    if (
+      !window.confirm(
+        `Queue EpisodeSearch for all ${total} missing episodes across ${sonarrGroups.length} shows? ` +
+          "Sonarr will work through them for a long time. To search only some shows, cancel and check them instead.",
+      )
+    ) {
+      return;
+    }
+    handleSonarrMissingSearch?.({ search_all: true });
+  }
 
   const repairSonarr = hiddenRepairs.has("sonarr_missing-sonarr-miss")
     ? { ...sonarrMissing, execution: { ...(sonarrMissing?.execution || {}), failed: 0, last_error: "" }, error: "" }
@@ -315,7 +363,7 @@ export default function LibrariesSection({
               type="button"
               className={sonarrFindMissingButtonClass(sonarrMissing)}
               data-testid="sonarr-find-missing-button"
-              onClick={handleSonarrMissingScan}
+              onClick={handleSonarrScanClick}
               disabled={Boolean(sonarrMissing?.busy)}
             >
               {sonarrMissing?.busy && !["searching", "executing"].includes(String(sonarrMissing?.phase || ""))
@@ -324,16 +372,17 @@ export default function LibrariesSection({
             </button>
             <button
               type="button"
-              className={sonarrSearchMissingButtonClass(sonarrMissing)}
-              data-testid="sonarr-search-missing-button"
-              onClick={handleSonarrMissingSearch}
-              disabled={!sonarrMissingScanReady(sonarrMissing) || Boolean(sonarrMissing?.busy)}
+              className="ghost"
+              data-testid="sonarr-search-all-button"
+              onClick={handleSonarrSearchAll}
+              disabled={!sonarrCanSearch}
+              title="Queue every missing episode from the last scan — asks for confirmation"
             >
               {sonarrMissing?.phase === "searching"
                 ? "Submitting…"
                 : sonarrMissing?.phase === "executing"
                   ? "Sonarr searching…"
-                  : "Search these"}
+                  : "Search all missing…"}
             </button>
             {sonarrMissingCanCancel(sonarrMissing) ? (
               <button
@@ -413,23 +462,74 @@ export default function LibrariesSection({
               {sonarrWantedDeltaCopy(sonarrMissing.result)}
             </p>
           ) : null}
-          {sonarrMissingBySeries(sonarrMissing?.result).length ? (
+          {sonarrGroups.length ? (
             <div data-testid="sonarr-missing-by-series">
-              {sonarrMissingBySeries(sonarrMissing.result).map((group) => (
-                <details key={group.seriesId} className="config-advanced-details">
-                  <summary>
-                    {group.seriesTitle} · {group.count} missing
-                  </summary>
-                  <ul>
-                    {group.episodes.map((episode) => (
-                      <li key={episode.episodeId}>
-                        {`S${String(episode.season ?? 0).padStart(2, "0")}E${String(episode.episode ?? 0).padStart(2, "0")}`}
-                        {episode.title ? ` ${episode.title}` : ""}
-                      </li>
-                    ))}
-                  </ul>
-                </details>
+              <div className="sonarr-missing-select-bar" data-testid="sonarr-missing-select-bar">
+                <button
+                  type="button"
+                  className="ghost"
+                  data-testid="sonarr-select-all-button"
+                  onClick={() => setSonarrPicked(sonarrSelectAllSeries(sonarrGroups))}
+                  disabled={sonarrBusy || sonarrSelected.size === sonarrGroups.length}
+                >
+                  Select all
+                </button>
+                <button
+                  type="button"
+                  className="ghost"
+                  data-testid="sonarr-deselect-all-button"
+                  onClick={() => setSonarrPicked(new Set())}
+                  disabled={sonarrBusy || sonarrSelected.size === 0}
+                >
+                  Deselect all
+                </button>
+                <span className="wizard-note" data-testid="sonarr-selected-summary" aria-live="polite">
+                  {sonarrSelected.size
+                    ? `${sonarrSelected.size} of ${sonarrGroups.length} shows · ${sonarrSelectedEpisodes} episodes`
+                    : `Nothing selected — check shows to search`}
+                </span>
+              </div>
+              {sonarrGroups.map((group) => (
+                <div key={group.seriesId} className="sonarr-missing-row" data-testid="sonarr-missing-row">
+                  <input
+                    type="checkbox"
+                    className="sonarr-missing-check"
+                    data-testid={`sonarr-select-${group.seriesId}`}
+                    aria-label={`Select ${group.seriesTitle} (${group.count} missing)`}
+                    checked={sonarrSelected.has(group.seriesId)}
+                    disabled={sonarrBusy}
+                    onChange={() => setSonarrPicked(sonarrToggleSeries(sonarrSelected, group.seriesId))}
+                  />
+                  <details className="config-advanced-details">
+                    <summary>
+                      {group.seriesTitle} · {group.count} missing
+                    </summary>
+                    <ul>
+                      {group.episodes.map((episode) => (
+                        <li key={episode.episodeId}>
+                          {`S${String(episode.season ?? 0).padStart(2, "0")}E${String(episode.episode ?? 0).padStart(2, "0")}`}
+                          {episode.title ? ` ${episode.title}` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                </div>
               ))}
+              <div className="sonarr-missing-search-footer" data-testid="sonarr-missing-search-footer">
+                <button
+                  type="button"
+                  className={sonarrSelected.size && sonarrCanSearch ? "primary" : "ghost"}
+                  data-testid="sonarr-search-selected-button"
+                  onClick={handleSonarrSearchSelected}
+                  disabled={!sonarrCanSearch || sonarrSelected.size === 0}
+                >
+                  {sonarrMissing?.phase === "searching"
+                    ? "Submitting…"
+                    : sonarrMissing?.phase === "executing"
+                      ? "Sonarr searching…"
+                      : sonarrSearchSelectedLabel(sonarrSelected.size)}
+                </button>
+              </div>
             </div>
           ) : null}
           <InlineAlert
