@@ -2589,10 +2589,21 @@ export default function ConfigPage() {
     }
   }
 
-  async function handleSonarrMissingSearch() {
+  /**
+   * Queue EpisodeSearch. Pass `{ episode_ids }` for a checked subset; `{ search_all: true }`
+   * only from an explicit "Search all" confirm (or the Repair retry). No payload sends nothing.
+   */
+  async function handleSonarrMissingSearch(payload) {
+    if (!payload || (!payload.search_all && !(payload.episode_ids || []).length)) {
+      setActionFeedback("sonarr-missing", {
+        type: "error",
+        message: "Select at least one show to search.",
+      });
+      return;
+    }
     setActionFeedback("sonarr-missing", null);
     try {
-      const snap = await searchSonarrMissing({ search_all: true });
+      const snap = await searchSonarrMissing(payload);
       setSonarrMissing(snap);
     } catch (error) {
       setActionFeedback("sonarr-missing", {

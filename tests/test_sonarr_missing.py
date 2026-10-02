@@ -646,6 +646,29 @@ class SonarrMissingApiTests(unittest.TestCase):
         self.assertEqual(finished["execution"]["completed"], 1)
         self.assertFalse(finished.get("can_cancel"))
 
+    def test_search_with_episode_ids_only_queues_those_episodes(self) -> None:
+        self._login_owner()
+        fake = FakeSonarr()
+        with patch("projectionist.web.app.SonarrClient", return_value=fake):
+            self.client.post("/api/admin/sonarr/missing/scan", json={})
+            self._wait_idle()
+            resp = self.client.post("/api/admin/sonarr/missing/search", json={"episode_ids": [31]})
+            self.assertEqual(resp.status_code, 200, resp.text)
+            self._wait_until(lambda payload: payload.get("phase") in {"executing", "searched", "error"})
+        self.assertEqual(fake.search_calls, [[31]])
+
+    def test_empty_search_payload_never_widens_to_whole_scan(self) -> None:
+        self._login_owner()
+        fake = FakeSonarr()
+        with patch("projectionist.web.app.SonarrClient", return_value=fake):
+            self.client.post("/api/admin/sonarr/missing/scan", json={})
+            self._wait_idle()
+            for body in ({}, {"episode_ids": []}):
+                resp = self.client.post("/api/admin/sonarr/missing/search", json=body)
+                self.assertEqual(resp.status_code, 400, resp.text)
+                self.assertIn("Select at least one", resp.text)
+        self.assertEqual(fake.search_calls, [])
+
     def test_cancel_stops_queued_sonarr_commands_not_started(self) -> None:
         self._login_owner()
         fake = FakeSonarr()
