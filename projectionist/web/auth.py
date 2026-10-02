@@ -107,6 +107,9 @@ class CurrentUser:
     nudge_opt_in: bool = False
     notify_channel_apprise: bool = False
     apprise_urls: Optional[str] = None
+    weather_place: Optional[str] = None
+    weather_lat: Optional[float] = None
+    weather_lon: Optional[float] = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -128,6 +131,9 @@ class CurrentUser:
             "nudge_opt_in": self.nudge_opt_in,
             "notify_channel_apprise": self.notify_channel_apprise,
             "apprise_urls": self.apprise_urls,
+            "weather_place": self.weather_place,
+            "weather_lat": self.weather_lat,
+            "weather_lon": self.weather_lon,
         }
 
 
@@ -176,6 +182,15 @@ def row_to_current_user(row) -> CurrentUser:
     apprise_urls = None
     if "apprise_urls" in keys and row["apprise_urls"] is not None:
         apprise_urls = str(row["apprise_urls"]).strip() or None
+    weather_place = None
+    weather_lat = None
+    weather_lon = None
+    if "weather_place" in keys and row["weather_place"] is not None:
+        weather_place = str(row["weather_place"]).strip() or None
+    if "weather_lat" in keys and row["weather_lat"] is not None:
+        weather_lat = float(row["weather_lat"])
+    if "weather_lon" in keys and row["weather_lon"] is not None:
+        weather_lon = float(row["weather_lon"])
     user_id = str(row["id"])
     return CurrentUser(
         id=user_id,
@@ -196,6 +211,9 @@ def row_to_current_user(row) -> CurrentUser:
         nudge_opt_in=nudge_opt_in,
         notify_channel_apprise=notify_channel_apprise,
         apprise_urls=apprise_urls,
+        weather_place=weather_place,
+        weather_lat=weather_lat,
+        weather_lon=weather_lon,
     )
 
 
@@ -1097,6 +1115,9 @@ def row_to_current_user_from_dict(d: dict) -> CurrentUser:
         ui_font_size=font,
         ui_theme=theme,
         is_youth=bool(d.get("is_youth", False)),
+        weather_place=d.get("weather_place"),
+        weather_lat=d.get("weather_lat"),
+        weather_lon=d.get("weather_lon"),
     )
 
 

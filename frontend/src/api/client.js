@@ -427,10 +427,9 @@ export async function getThreadFeedback(sessionId) {
 export async function submitMessageFeedback(messageId, sessionId, feedback) {
   if (!feedback) {
     const query = new URLSearchParams({ session_id: sessionId });
-    return api(
-      `/chat/messages/${encodeURIComponent(messageId)}/feedback?${query.toString()}`,
-      { method: "DELETE" },
-    );
+    return api(`/chat/messages/${encodeURIComponent(messageId)}/feedback?${query.toString()}`, {
+      method: "DELETE",
+    });
   }
   return api(`/chat/messages/${encodeURIComponent(messageId)}/feedback`, {
     method: "POST",
@@ -1006,9 +1005,12 @@ export async function stopLibraryPlayback(sessionId, payload = {}) {
   return api(`/library/playback/${encodeURIComponent(sessionId)}/stop`, {
     method: "POST",
     body: JSON.stringify({
-      time_ms: payload.time_ms == null ? undefined : Math.max(0, Math.floor(Number(payload.time_ms) || 0)),
+      time_ms:
+        payload.time_ms == null ? undefined : Math.max(0, Math.floor(Number(payload.time_ms) || 0)),
       duration_ms:
-        payload.duration_ms == null ? undefined : Math.max(0, Math.floor(Number(payload.duration_ms) || 0)),
+        payload.duration_ms == null
+          ? undefined
+          : Math.max(0, Math.floor(Number(payload.duration_ms) || 0)),
     }),
   });
 }
@@ -1022,6 +1024,29 @@ export async function fetchNextPreroll(context = "movie") {
 /** Weather Channel cable experience (Open-Meteo egress + optional local muzak). */
 export async function getLiveWeatherChannel() {
   return api("/live/weather");
+}
+
+/** Open-Meteo place search (ZIP, city/state, or city/country). */
+export async function searchWeatherPlaces(query) {
+  const params = new URLSearchParams({ q: String(query || "").trim() });
+  return api(`/weather/places?${params}`);
+}
+
+/** Owner folder browser rooted at container-visible media mounts. */
+export async function browseLiveMedia(path = "") {
+  const params = new URLSearchParams();
+  const cleaned = String(path || "").trim();
+  if (cleaned) params.set("path", cleaned);
+  const suffix = params.toString() ? `?${params}` : "";
+  return api(`/admin/live/media-browser${suffix}`);
+}
+
+/** Save the Weather Channel music folder (empty clears it). */
+export async function saveLiveMuzakFolder(path) {
+  return api("/admin/live/muzak-folder", {
+    method: "PUT",
+    body: JSON.stringify({ path: String(path || "") }),
+  });
 }
 
 /** Owner-only: assemble and store the digest for the current week on demand. */
@@ -1075,7 +1100,11 @@ export async function listJobs() {
   return api("/jobs");
 }
 
-export async function sendChat(message, lensId, { timeoutMs = CHAT_TIMEOUT_MS, sessionId: explicitSessionId, personaId } = {}) {
+export async function sendChat(
+  message,
+  lensId,
+  { timeoutMs = CHAT_TIMEOUT_MS, sessionId: explicitSessionId, personaId } = {},
+) {
   const body = { message, session_id: explicitSessionId || sessionId() };
   if (lensId) body.lens_id = lensId;
   if (personaId) body.persona_id = personaId;
@@ -1106,7 +1135,10 @@ export async function sendChat(message, lensId, { timeoutMs = CHAT_TIMEOUT_MS, s
  * @param {function} [options.onError]    - ({error}) on stream error
  * @param {AbortSignal} [options.signal]  - abort controller signal
  */
-export async function sendChatStream(message, { sessionId: sid, personaId, onToken, onToolCall, onDone, onError, signal } = {}) {
+export async function sendChatStream(
+  message,
+  { sessionId: sid, personaId, onToken, onToolCall, onDone, onError, signal } = {},
+) {
   const body = { message, session_id: sid || sessionId() };
   if (personaId) body.persona_id = personaId;
 
@@ -1254,12 +1286,17 @@ const ANTHROPIC_DATED_MODEL = /^claude-[a-z0-9.-]+-\d{8}$/i;
 const OPENAI_MODEL_PREFIXES = ["gpt-", "o1", "o3", "o4", "text-embedding", "chatgpt-"];
 
 export function modelLooksOpenai(model) {
-  const cleaned = String(model || "").toLowerCase().trim();
+  const cleaned = String(model || "")
+    .toLowerCase()
+    .trim();
   return OPENAI_MODEL_PREFIXES.some((prefix) => cleaned.startsWith(prefix));
 }
 
 export function modelLooksAnthropic(model) {
-  return String(model || "").toLowerCase().trim().startsWith("claude");
+  return String(model || "")
+    .toLowerCase()
+    .trim()
+    .startsWith("claude");
 }
 
 export function normalizeAnthropicModel(model) {
@@ -1306,11 +1343,7 @@ export const LLM_PROVIDER_OPTIONS = [
   { value: "custom_openai_compatible", label: "Custom OpenAI-compatible" },
 ];
 
-export const WIZARD_STEPS = [
-  "identity_seed",
-  "infrastructure",
-  "dropdown_mapping",
-];
+export const WIZARD_STEPS = ["identity_seed", "infrastructure", "dropdown_mapping"];
 
 export const AUTO_CERTIFY_SERVICES = [
   "llm",
@@ -1504,7 +1537,10 @@ export async function queryLibrary(filters = {}) {
   for (const [key, value] of Object.entries(filters)) {
     if (value == null || value === "") continue;
     if (Array.isArray(value)) {
-      const joined = value.map((v) => String(v).trim()).filter(Boolean).join(",");
+      const joined = value
+        .map((v) => String(v).trim())
+        .filter(Boolean)
+        .join(",");
       if (joined) params.set(key, joined);
       continue;
     }

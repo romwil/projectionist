@@ -1,7 +1,9 @@
 """Weather Channel–style cable experience — real forecast + optional local muzak.
 
-Forecast egress uses Open-Meteo (no API key). See docs/PRIVACY.md.
-Muzak is scanned from the preroll bind (and weather/ sibling folders when present).
+Forecast egress uses Open-Meteo (no API key). A saved profile lat/lon is sent
+as-is; place search is a separate call (see weather_geo). See docs/PRIVACY.md.
+Muzak plays from the owner-chosen folder under Live admin when that folder
+has audio. An empty or unset folder is reported honestly.
 """
 
 from __future__ import annotations
@@ -9,11 +11,13 @@ from __future__ import annotations
 import json
 import logging
 import os
+import random
 import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
 
+from projectionist.theater.media_browser import confine_muzak_folder
 from projectionist.theater.preroll import list_preroll_audio, pick_preroll, resolve_preroll_root
 
 logger = logging.getLogger(__name__)
@@ -130,15 +134,78 @@ def build_voiceover_script(payload: Dict[str, Any], *, place_name: str = "your a
     return " ".join(parts)
 
 
+def _household_place(environ: Optional[Any], place_name: str) -> str:
+    env = environ if environ is not None else os.environ
+    return str(env.get("PROJECTIONIST_WEATHER_PLACE") or place_name).strip() or place_name
+
+
+def select_muzak(
+    folder: str,
+    *,
+    settings: Any = None,
+    environ: Optional[Any] = None,
+    allowed_roots: Optional[List[Any]] = None,
+    rng: Any = None,
+    mountinfo_text: Optional[str] = None,
+) -> Tuple[Optional[Dict[str, Any]], str]:
+    """Pick one audio file from the configured folder, or explain why there is none."""
+    text = str(folder or "").strip()
+    if not text:
+        return None, "No music folder is set. The owner can choose one under Admin → Live Channels → Setup."
+    if allowed_roots is not None:
+        from projectionist.theater.media_browser import resolve_within_roots
+
+        resolved = resolve_within_roots(text, allowed_roots)
+        if resolved is None or not resolved.is_dir():
+            return None, "The music folder isn’t available in this container."
+    else:
+        resolved = confine_muzak_folder(
+            text,
+            settings=settings,
+            environ=environ,
+            mountinfo_text=mountinfo_text,
+        )
+        if resolved is None:
+            return None, "The music folder isn’t available in this container."
+    audio_items = list_preroll_audio(resolved)
+    if not audio_items:
+        return None, "That music folder is empty, so the forecast plays without music."
+    picker = rng if rng is not None else random.SystemRandom()
+    chosen = picker.choice(audio_items)
+    return (
+        {
+            "id": chosen["id"],
+            "title": chosen["title"],
+            "url": f"/api/preroll/asset/{chosen['id']}",
+            "content_type": chosen["content_type"],
+        },
+        "",
+    )
+
+
 def weather_channel_payload(
     *,
     environ: Optional[Any] = None,
     fetch_json=None,
     place_name: str = "your area",
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+    location_source: str = "household",
+    muzak_folder: str = "",
+    settings: Any = None,
+    allowed_roots: Optional[List[Any]] = None,
+    rng: Any = None,
+    mountinfo_text: Optional[str] = None,
 ) -> Dict[str, Any]:
-    lat, lon = _default_coords(environ)
-    env = environ if environ is not None else os.environ
-    place = str(env.get("PROJECTIONIST_WEATHER_PLACE") or place_name).strip() or place_name
+    household_place = _household_place(environ, place_name)
+    if latitude is not None and longitude is not None:
+        lat, lon = float(latitude), float(longitude)
+        place = str(place_name or "").strip() or household_place
+        source = location_source if location_source in {"profile", "household"} else "profile"
+    else:
+        lat, lon = _default_coords(environ)
+        place = household_place
+        source = "household"
     error = ""
     forecast: Dict[str, Any] = {}
     try:
@@ -148,23 +215,14 @@ def weather_channel_payload(
         error = "Weather is temporarily unavailable — check LAN egress to api.open-meteo.com."
 
     root = resolve_preroll_root(environ)
-    audio_items = list_preroll_audio(root) if root else []
-    # Prefer paths that look like weather/muzak beds.
-    preferred = [
-        a
-        for a in audio_items
-        if any(tok in str(a["path"]).lower() for tok in ("weather", "muzak", "elevator", "easy listening", "soft rock"))
-    ]
-    bed = (preferred or audio_items)
-    muzak = None
-    if bed:
-        chosen = bed[0]
-        muzak = {
-            "id": chosen["id"],
-            "title": chosen["title"],
-            "url": f"/api/preroll/asset/{chosen['id']}",
-            "content_type": chosen["content_type"],
-        }
+    muzak, muzak_note = select_muzak(
+        muzak_folder,
+        settings=settings,
+        environ=environ,
+        allowed_roots=allowed_roots,
+        rng=rng,
+        mountinfo_text=mountinfo_text,
+    )
 
     script = build_voiceover_script(forecast, place_name=place) if forecast else (
         "Projectionist Weather Channel. Forecast is offline for the moment."
@@ -190,6 +248,8 @@ def weather_channel_payload(
         "place": place,
         "latitude": lat,
         "longitude": lon,
+        "location_source": source,
+        "household_place": household_place,
         "egress": {
             "provider": "Open-Meteo",
             "host": "api.open-meteo.com",
@@ -201,7 +261,8 @@ def weather_channel_payload(
         "ticker": ticker,
         "voiceover": script,
         "muzak": muzak,
+        "muzak_note": muzak_note,
         "preroll_root_found": root is not None,
         # Optional bumper before weather graphics (same independent picker).
-        "intro_preroll": pick_preroll(context="live", root=root) if root else None,
+        "intro_preroll": pick_preroll(context="live", root=root, rng=rng) if root else None,
     }

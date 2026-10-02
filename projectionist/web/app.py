@@ -683,6 +683,10 @@ class AuthMeUpdatePayload(BaseModel):
     year_in_review_opt_in: Optional[bool] = None
     notify_channel_apprise: Optional[bool] = None
     apprise_urls: Optional[str] = Field(default=None, max_length=4000)
+    weather_place: Optional[str] = Field(default=None, max_length=160)
+    weather_lat: Optional[float] = Field(default=None, ge=-90, le=90)
+    weather_lon: Optional[float] = Field(default=None, ge=-180, le=180)
+    clear_weather_location: Optional[bool] = None
 
 
 class LibraryItemWatchedPayload(BaseModel):

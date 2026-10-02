@@ -170,6 +170,24 @@ def register_auth_routes(app):
             updates["notify_channel_apprise"] = payload.notify_channel_apprise
         if "apprise_urls" in fields_set:
             updates["apprise_urls"] = payload.apprise_urls
+        if payload.clear_weather_location:
+            updates["weather_location"] = None
+        elif any(key in fields_set for key in ("weather_place", "weather_lat", "weather_lon")):
+            if not all(key in fields_set for key in ("weather_place", "weather_lat", "weather_lon")):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Save a place together with its map coordinates.",
+                )
+            from projectionist.theater.weather_geo import normalize_saved_location
+
+            try:
+                updates["weather_location"] = normalize_saved_location(
+                    payload.weather_place,
+                    payload.weather_lat,
+                    payload.weather_lon,
+                )
+            except ValueError as error:
+                raise HTTPException(status_code=400, detail=str(error)) from error
         if not updates:
             return {"user": user.to_dict(), "authenticated": True}
         try:
