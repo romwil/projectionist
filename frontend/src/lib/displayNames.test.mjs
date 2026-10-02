@@ -9,6 +9,7 @@ import {
 import {
   actDescriptionForStagedItem,
   actLabelForStagedItem,
+  retrievalFailureSummary,
   stagedItemDisplayTitle,
 } from "./knowledgeOpsActions.js";
 import { taskDisplayName } from "./scheduledTasks.js";
@@ -58,6 +59,22 @@ test("knowledge actions describe outcomes without backend jargon", () => {
   };
   assert.equal(stagedItemDisplayTitle(coverage), "Heat");
   assert.equal(actLabelForStagedItem(coverage), "Refresh synopsis");
+
+  // Automatic lookup already gave up: the button is an explicit second try.
+  const exhausted = {
+    task_name: "coverage_deficit_audit",
+    status: "pending",
+    candidate: {
+      title: "Heat",
+      deficit_kind: "synopsis",
+      retrieval_exhausted: true,
+      failure: "miss",
+      attempts: 3,
+    },
+  };
+  assert.equal(actLabelForStagedItem(exhausted), "Try again now");
+  assert.equal(retrievalFailureSummary(exhausted), "nothing found upstream after 3 tries");
+  assert.equal(retrievalFailureSummary(coverage), "");
 
   // Prefer human title fields; never fall back to bare library item ids.
   assert.equal(
