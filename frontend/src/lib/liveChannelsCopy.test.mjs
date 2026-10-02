@@ -30,13 +30,13 @@ describe("liveChannelsCopy", () => {
   });
 
   it("maps Admin glossary labels", () => {
-    assert.equal(liveAdminLabel("Broadcast engine"), "TV engine");
+    assert.equal(liveAdminLabel("Broadcast engine"), "Broadcast");
     assert.equal(liveAdminLabel("Filler programming paths"), "Between-show breaks");
     assert.equal(liveAdminLabel("Pad flex max"), "Gap fill (minutes)");
     assert.equal(liveAdminLabel("Programming"), "Play order");
     assert.equal(liveAdminLabel("Recipe"), "Station source");
     assert.equal(liveAdminLabel("Continuity ready"), "Breaks ready");
-    assert.equal(liveAdminLabel("Remounting Tunarr"), "Restarting TV engine");
+    assert.equal(liveAdminLabel("Remounting Tunarr"), "Restarting the broadcast");
     assert.equal(liveAdminLabel("Plex Tunarr map"), "Plex channel map");
     assert.equal(liveAdminLabel("Installation"), "Setup");
   });
@@ -48,8 +48,8 @@ describe("liveChannelsCopy", () => {
       airing: [{ id: "a" }, { id: "b" }],
       last_publish_at: "2026-08-01",
     });
-    assert.match(sentence, /TV engine running/);
-    assert.match(sentence, /3 stations/);
+    assert.match(sentence, /Broadcast running/);
+    assert.match(sentence, /3 channels/);
     assert.match(sentence, /2 airing now/);
     assert.doesNotMatch(sentence, /XMLTV/);
   });
@@ -64,13 +64,13 @@ describe("liveChannelsCopy", () => {
       },
       stream_warm: { kept_hot: 1 },
     });
-    assert.equal(facts.engineLabel, "Tunarr up");
-    assert.equal(facts.tunerLabel, "Tuner dead");
+    assert.equal(facts.engineLabel, "Broadcast running");
+    assert.equal(facts.tunerLabel, "Plex tuner not responding");
     assert.equal(facts.guideOk, true);
     assert.match(facts.guideLabel, /Plex map unknown|Plex guide/);
     assert.match(facts.lastAttachLabel, /Last attach/);
     assert.equal(facts.xmltvError, "timeout");
-    assert.equal(facts.streamWarmLabel, "1 channel kept hot");
+    assert.equal(facts.streamWarmLabel, "1 channel kept warm");
   });
 
   it("uses live mapped/expected for guide, not last-attach receipt", () => {
@@ -109,25 +109,25 @@ describe("liveChannelsCopy", () => {
         plex_livetv: { mapping_ok: true, mapped: 6, expected: 6, tuner_alive: true },
       },
     });
-    assert.match(line, /TV engine running/);
-    assert.match(line, /6 stations/);
+    assert.match(line, /Broadcast running/);
+    assert.match(line, /6 channels/);
     assert.match(line, /Plex map 6\/6/);
-    assert.match(line, /Tuner alive/);
+    assert.match(line, /Plex tuner connected/);
     assert.doesNotMatch(line, /last ingest|Last attach/);
   });
 
-  it("labels zero or missing kept_hot as no channels kept hot", () => {
+  it("labels zero or missing kept_hot as no channels kept warm", () => {
     const zero = liveInfrastructureFacts({ stream_warm: { kept_hot: 0 } });
-    assert.equal(zero.streamWarmLabel, "No channels kept hot");
+    assert.equal(zero.streamWarmLabel, "No channels kept warm");
 
     const missing = liveInfrastructureFacts({ stream_warm: {} });
-    assert.equal(missing.streamWarmLabel, "No channels kept hot");
+    assert.equal(missing.streamWarmLabel, "No channels kept warm");
 
     const absent = liveInfrastructureFacts({});
-    assert.equal(absent.streamWarmLabel, "No channels kept hot");
+    assert.equal(absent.streamWarmLabel, "No channels kept warm");
 
     const plural = liveInfrastructureFacts({ stream_warm: { kept_hot: 2 } });
-    assert.equal(plural.streamWarmLabel, "2 channels kept hot");
+    assert.equal(plural.streamWarmLabel, "2 channels kept warm");
   });
 
   it("numbers Setup steps stably with and without Docker orch", () => {

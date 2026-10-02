@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+## [1.37.27] — 2026-10-02
+
+Live Channels is a native "start a station" flow, channels can keep a rotation topped up, seasonal shelves are editable on the Live page, and Admin → House is gone — its weekly letter now arrives in your inbox.
+
+### Highlights
+- **Start a station in four steps.** Pick what's on it (a show, a collection, a mood, or "suggest some"), name it, and press **Go on air**. Projectionist checks your setup, starts the broadcast, builds the lineup, and adds the channel to Plex Live TV. Anything that blocks the launch is named in plain words.
+- **Channels that don't loop right back.** Keep up to 1–5 titles on rotation. What's playing fills the slots first; spare slots are topped up from **Recently added** or **Recently released**, and those play after the playing block instead of restarting it.
+- **Edit seasonal shelves where you set up Live.** See each holiday shelf's real library titles, reorder them, drop a bad match, add one of your own, and retitle or re-date the shelf — saved in the same place Explore reads.
+- **Weekly letter in your inbox.** The household letter now lands once a week in the owner inbox. Email is a separate switch that stays off unless mail is set up.
+- **Less jargon.** The owner Live page talks about channels, lineup, and what's on — not the engine behind them.
+
+### Added
+- Rotational queue padding: recipe field `queue_pad` (`up_to` 1–5, `feed` `recently_added` | `recently_released`), `live_channels/queue_padding.py`, accepted by from-collection, from-show, publish-channel, and station-settings payloads; stored with station meta and reapplied on Refill. Padded lineups are an ordered manual lineup (pad rows flagged `queue_pad`); youth gate and exclusions apply. Slot math: `max(0, up_to − playing)`.
+- `PUT /api/admin/holidays/{id}/rail/order` — durable ordered pins for a seasonal shelf (same `holiday_rail_titles` store).
+- `GET/PUT /api/admin/weekly-letter`, `POST /api/admin/weekly-letter/send`, scheduler task `weekly_letter` (notification kind `digest`, one per ISO week). Optional email through the newsletter mail transport, only when mail is configured and the owner opts in.
+- Live studio UI (`/admin/live-channels`): Channels and Setup tabs, create flow, Seasonal shelves block, rotation control.
+
+### Changed
+- Owner Live copy no longer names Tunarr, XMLTV, Docker, or starter packs; the engine and its APIs are unchanged and the SWR `warming` / `stale` states are preserved.
+
+### Removed
+- **Admin → House**: the `/admin/house` page, nav item, and `/api/admin/house/*` routes, plus gift queue, seasonal preview/veto, and trust diary. No redirect or stub. The letter is the one surviving feature (above); seasonal editing lives on Live Channels.
+
+### Verification
+- Backend (focused): `pytest tests/test_live_channels_api.py tests/test_live_channels.py tests/test_api_authz.py tests/test_live_queue_padding.py tests/test_weekly_letter.py` — 243 passed.
+- Frontend: unit 900 passed, lint 0 errors, production build.
+- Full pytest / e2e deferred to the release thread.
+
 ## [1.37.24] — 2026-10-02
 
 Explore home loads from a precached hub again — rails recompute in the background instead of blocking first paint.

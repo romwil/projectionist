@@ -2080,47 +2080,27 @@ export async function refreshHolidaySchedule() {
   return api("/admin/holidays-schedule/refresh", { method: "POST" });
 }
 
-export async function getHouseLetter() {
-  return api("/admin/house/letter");
-}
-
-export async function getHouseSeasonalPreview() {
-  return api("/admin/house/seasonal-preview");
-}
-
-export async function vetoHouseSeasonalTitle(payload) {
-  return api("/admin/house/seasonal-preview/veto", {
-    method: "POST",
-    body: JSON.stringify(payload),
+/** Owner: order a seasonal shelf — pins these titles to the front, in this order. */
+export async function setHolidayRailOrder(observanceId, libraryItemIds) {
+  return api(`/admin/holidays/${encodeURIComponent(observanceId)}/rail/order`, {
+    method: "PUT",
+    body: JSON.stringify({ library_item_ids: libraryItemIds }),
   });
 }
 
-export async function restoreHouseSeasonalVeto(scopeId, libraryItemId) {
-  return api(
-    `/admin/house/seasonal-preview/veto/${encodeURIComponent(scopeId)}/${encodeURIComponent(libraryItemId)}`,
-    { method: "DELETE" },
-  );
+/** Owner: weekly household letter — toggles + this week's text. */
+export async function getWeeklyLetter() {
+  return api("/admin/weekly-letter");
 }
 
-export async function listHouseGifts() {
-  return api("/admin/house/gifts");
-}
-
-export async function enqueueHouseGift(payload) {
-  return api("/admin/house/gifts", {
-    method: "POST",
-    body: JSON.stringify(payload),
+export async function saveWeeklyLetterSettings(payload) {
+  return api("/admin/weekly-letter", {
+    method: "PUT",
+    body: JSON.stringify(payload || {}),
   });
 }
 
-export async function removeHouseGift(giftId) {
-  return api(`/admin/house/gifts/${encodeURIComponent(giftId)}`, { method: "DELETE" });
+export async function sendWeeklyLetterNow() {
+  return api("/admin/weekly-letter/send", { method: "POST" });
 }
 
-export async function deliverHouseGift(giftId) {
-  return api(`/admin/house/gifts/${encodeURIComponent(giftId)}/deliver`, { method: "POST" });
-}
-
-export async function getHouseTrustDiary() {
-  return api("/admin/house/trust-diary");
-}

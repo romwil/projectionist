@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getFeatures } from "../api/client";
+import WeeklyLetterPanel from "../components/admin/WeeklyLetterPanel";
 import WeeklyNewsletterPanel from "../components/admin/WeeklyNewsletterPanel";
 import YearInReviewAdminPanel from "../components/admin/YearInReviewAdminPanel";
 import SettingsPageHeader from "../components/settings/SettingsPageHeader";
@@ -29,7 +30,7 @@ export default function NewslettersPage() {
   return (
     <div className="settings-stack" data-testid="admin-newsletters">
       <SettingsPageHeader title="Newsletters">
-        Push the weekly member newsletter and generate a Year in Review test reel. Outbound email
+        Control your weekly household letter, push the weekly member newsletter, and generate a Year in Review test reel. Outbound email
         transport is configured under <Link to="/admin/mail">Mail</Link>. Member opt-in lives under{" "}
         <Link to="/settings/notifications">Settings → Notifications</Link>.
       </SettingsPageHeader>
@@ -42,6 +43,7 @@ export default function NewslettersPage() {
         </p>
       ) : null}
 
+      <WeeklyLetterPanel />
       <WeeklyNewsletterPanel mailConfigured={mailConfigured} />
       <YearInReviewAdminPanel testIdPrefix="newsletters" mailConfigured={mailConfigured} />
     </div>
