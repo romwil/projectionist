@@ -170,6 +170,14 @@ function exploreFacetPath(key, value) {
   return `${ROUTES.explore}?${params}`;
 }
 
+function hubHasRailItems(payload) {
+  const rails = payload?.rails;
+  if (!rails || typeof rails !== "object") return false;
+  return Object.values(rails).some(
+    (rail) => rail && typeof rail === "object" && Array.isArray(rail.items) && rail.items.length > 0,
+  );
+}
+
 function useExploreHub() {
   const cached = typeof sessionStorage !== "undefined" ? readExploreHubCache() : null;
   const [hub, setHub] = useState(() => ({
@@ -181,23 +189,55 @@ function useExploreHub() {
 
   useEffect(() => {
     let cancelled = false;
-    getExploreHub({ limit: 12 })
-      .then((payload) => {
-        if (cancelled) return;
-        writeExploreHubCache(payload);
-        setHub({ loading: false, payload, error: "", fromCache: false });
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setHub((prev) => ({
-          loading: false,
-          payload: prev.payload,
-          error: prev.payload ? "" : err.message || "Could not load Explore.",
-          fromCache: prev.fromCache,
-        }));
-      });
+    let pollTimer = null;
+    const WARMING_POLL_MS = 1200;
+    const WARMING_MAX_ATTEMPTS = 12;
+    const sessionPayload = cached?.payload || null;
+
+    const fetchHub = (attempt = 0) => {
+      getExploreHub({ limit: 12 })
+        .then((payload) => {
+          if (cancelled) return;
+          const warming = Boolean(payload?.warming) && !hubHasRailItems(payload);
+          if (warming) {
+            // Keep session cache / prior payload on screen while the server builds.
+            setHub((prev) => {
+              const keep =
+                (hubHasRailItems(prev.payload) && prev.payload) ||
+                (hubHasRailItems(sessionPayload) && sessionPayload) ||
+                null;
+              return {
+                loading: !keep,
+                payload: keep || payload,
+                error: "",
+                fromCache: Boolean(keep),
+              };
+            });
+            if (attempt < WARMING_MAX_ATTEMPTS) {
+              pollTimer = window.setTimeout(() => fetchHub(attempt + 1), WARMING_POLL_MS);
+            } else {
+              setHub((prev) => ({ ...prev, loading: false }));
+            }
+            return;
+          }
+          writeExploreHubCache(payload);
+          setHub({ loading: false, payload, error: "", fromCache: false });
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          setHub((prev) => ({
+            loading: false,
+            payload: prev.payload,
+            error: prev.payload ? "" : err.message || "Could not load Explore.",
+            fromCache: prev.fromCache,
+          }));
+        });
+    };
+
+    fetchHub(0);
     return () => {
       cancelled = true;
+      if (pollTimer) window.clearTimeout(pollTimer);
     };
   }, []);
 
