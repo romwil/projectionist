@@ -14,10 +14,11 @@ import {
 import { readAllStyles } from "./readStyles.mjs";
 
 const styles = readAllStyles();
-const liveSection = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "../pages/admin/LiveChannelsSection.jsx"),
-  "utf8",
-);
+const adminDir = join(dirname(fileURLToPath(import.meta.url)), "../pages/admin");
+// The owner studio + the behind-the-scenes panels together are "the Live section".
+const liveSection = ["LiveChannelsStudio.jsx", "LiveChannelsAdvanced.jsx"]
+  .map((file) => readFileSync(join(adminDir, file), "utf8"))
+  .join("\n");
 
 describe("liveChannelsJob", () => {
   it("treats idle / done / error as not busy", () => {
@@ -37,7 +38,8 @@ describe("liveChannelsJob", () => {
     });
     assert.match(copy, /Working: Refreshing Plex map/);
     assert.match(copy, /Don’t start another Live job/);
-    assert.match(copy, /Scanning Tunarr/);
+    assert.match(copy, /Scanning Projectionist channels/);
+    assert.doesNotMatch(copy, /Tunarr/i);
     assert.equal(liveJobRailCopy(idleLiveJob()), "");
   });
 

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import {
   dedupeNotifications,
   digestBlurb,
+  isHouseLetter,
   digestPicks,
   eventPrimaryCta,
   inboxHeadline,
@@ -166,6 +167,40 @@ function DigestCardBody({ rec, onDismiss }) {
   const [openNote, setOpenNote] = useState(false);
   const primaryPick = picks[0] || null;
   const chatHref = primaryPick ? chatAboutTitleHref(primaryPick) : null;
+
+  if (isHouseLetter(rec)) {
+    // The weekly household letter reads as a letter, not a curator quote.
+    return (
+      <>
+        <details
+          className="recommendation-curator-note recommendation-house-letter"
+          data-testid={`recommendation-house-letter-${rec.id}`}
+          open={openNote}
+          onToggle={(event) => setOpenNote(event.currentTarget.open)}
+        >
+          <summary>Read this week&apos;s letter</summary>
+          {fullNote.split(/\n{2,}/).map((para, index) => (
+            <p key={index} className="recommendation-card-note recommendation-card-note--full">
+              {para}
+            </p>
+          ))}
+        </details>
+        <div className="recommendation-card-actions">
+          <Link to="/admin/health" className="btn-link" onClick={() => onDismiss?.(rec)}>
+            Open Health
+          </Link>
+          <button
+            type="button"
+            className="ghost"
+            data-testid={`recommendation-dismiss-${rec.id}`}
+            onClick={() => onDismiss?.(rec)}
+          >
+            Dismiss
+          </button>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>

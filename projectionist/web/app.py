@@ -219,8 +219,8 @@ from projectionist.web.library_privacy import (
 from projectionist.web.webhooks import register_webhook_routes
 from projectionist.web.augmentation_routes import register_augmentation_routes
 from projectionist.web.knowledge_ops_routes import register_knowledge_ops_routes
+from projectionist.web.weekly_letter_routes import register_weekly_letter_routes
 from projectionist.web.holidays_routes import register_holidays_routes
-from projectionist.web.house_routes import register_house_routes
 from projectionist.web.live_channels_routes import register_live_channels_routes
 from projectionist.web.playback_routes import register_playback_routes
 from projectionist.web.theater_delight_routes import register_theater_delight_routes
@@ -1374,7 +1374,7 @@ def _scheduler_trigger_background(name: str) -> Dict[str, Any]:
 
 
 register_holidays_routes(app, db_factory=_db)
-register_house_routes(app, db_factory=_db, settings_factory=_settings)
+register_weekly_letter_routes(app, db_factory=_db, settings_factory=_settings)
 register_augmentation_routes(
     app,
     db_factory=_db,
