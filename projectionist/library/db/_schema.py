@@ -2117,6 +2117,31 @@ class SchemaMigrationsMixin:
         if "weather_lon" not in user_cols:
             conn.execute("ALTER TABLE users ADD COLUMN weather_lon REAL")
 
+    def _migrate_knowledge_fetch_state(self, conn: sqlite3.Connection) -> None:
+        """Per-title retry/backoff ledger for automatic knowledge retrieval.
+
+        A missing plot/metadata/embedding is *work to do*, not an exception. The
+        scheduled trickle tasks record failed attempts here so they can back off
+        and only escalate to Admin → Library knowledge once retries are exhausted.
+        """
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS knowledge_fetch_state (
+                item_id INTEGER NOT NULL,
+                kind TEXT NOT NULL,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                last_outcome TEXT NOT NULL DEFAULT '',
+                last_detail TEXT,
+                last_attempt_at REAL NOT NULL DEFAULT 0,
+                next_retry_at REAL NOT NULL DEFAULT 0,
+                exhausted INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (item_id, kind)
+            );
+            CREATE INDEX IF NOT EXISTS idx_knowledge_fetch_kind
+                ON knowledge_fetch_state(kind, exhausted, next_retry_at);
+            """
+        )
+
     def _migrate_library_episodes_added_at(self, conn: sqlite3.Connection) -> None:
         """Ensure ``library_episodes.added_at`` exists on DBs that already ran phase4.
 

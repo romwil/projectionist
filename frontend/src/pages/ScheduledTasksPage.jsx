@@ -324,12 +324,25 @@ export default function ScheduledTasksPage() {
   useEffect(() => {
     const active = Boolean(running) || Boolean(currentRun) || Boolean(executionCurrent);
     const delay = active ? POLL_ACTIVE_MS : POLL_IDLE_MS;
-    const timer = setInterval(() => {
+    const tick = () => {
       refreshList();
       refreshLog();
       refreshExecutionLog();
+    };
+    // Each list poll recounts backlogs server-side; a hidden tab should not keep
+    // doing that every 1.2–5s. Catch up immediately when the tab returns.
+    const timer = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      tick();
     }, delay);
-    return () => clearInterval(timer);
+    const onVisible = () => {
+      if (typeof document !== "undefined" && !document.hidden) tick();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [running, currentRun, executionCurrent, refreshList, refreshLog, refreshExecutionLog]);
 
   useEffect(() => {

@@ -356,7 +356,7 @@ class ScheduledTasksAdminApiTests(unittest.TestCase):
     def test_run_background_and_poll_log(self) -> None:
         self._write_settings(multi_user=False)
         listed = self.client.get("/api/admin/scheduled-tasks")
-        name = "health_metrics"
+        name = "taste_refresh"
         names = {item["name"] for item in listed.json()["items"]}
         self.assertIn(name, names)
 
@@ -401,9 +401,9 @@ class ScheduledTasksAdminApiTests(unittest.TestCase):
         bare.cookies.set(SESSION_COOKIE_NAME, create_session_token("local-member1"))
         denied = bare.get("/api/admin/scheduled-tasks")
         self.assertEqual(denied.status_code, 403)
-        denied_run = bare.post("/api/admin/scheduled-tasks/health_metrics/run")
+        denied_run = bare.post("/api/admin/scheduled-tasks/taste_refresh/run")
         self.assertEqual(denied_run.status_code, 403)
-        denied_log = bare.get("/api/admin/scheduled-tasks/health_metrics/log")
+        denied_log = bare.get("/api/admin/scheduled-tasks/taste_refresh/log")
         self.assertEqual(denied_log.status_code, 403)
 
     def test_list_includes_description_and_interval_update(self) -> None:
@@ -434,7 +434,7 @@ class ScheduledTasksAdminApiTests(unittest.TestCase):
 
     def test_history_and_rate_endpoints_after_run(self) -> None:
         self._write_settings(multi_user=False)
-        name = "health_metrics"
+        name = "taste_refresh"
         with patch.object(
             self.app_mod.app.state.idle_scheduler._definitions[name],
             "run_fn",
@@ -465,11 +465,11 @@ class ScheduledTasksAdminApiTests(unittest.TestCase):
 
     def test_unified_history_endpoint_across_tasks(self) -> None:
         self._write_settings(multi_user=False)
-        for name in ("health_metrics", "metadata_enrichment"):
+        for name in ("taste_refresh", "metadata_enrichment"):
             with patch.object(
                 self.app_mod.app.state.idle_scheduler._definitions[name],
                 "run_fn",
-                _metrics_task if name == "health_metrics" else _noop_task,
+                _metrics_task if name == "taste_refresh" else _noop_task,
             ):
                 run = self.client.post(f"/api/admin/scheduled-tasks/{name}/run?wait=true")
                 self.assertEqual(run.status_code, 200, run.text)
@@ -479,7 +479,7 @@ class ScheduledTasksAdminApiTests(unittest.TestCase):
         body = unified.json()
         self.assertGreaterEqual(body["count"], 2)
         names = {row["name"] for row in body["runs"]}
-        self.assertIn("health_metrics", names)
+        self.assertIn("taste_refresh", names)
         self.assertIn("metadata_enrichment", names)
         # Newest-first: first row finished at or after the second.
         if len(body["runs"]) >= 2:

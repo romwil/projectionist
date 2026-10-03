@@ -1,7 +1,7 @@
 /**
  * Living-room copy + Admin Live Channels glossary helpers (persona UX Phase 1).
- * Keep Tunarr / operator jargon out of household empty states; Admin may
- * mention Tunarr in help text only.
+ * Keep scheduler / operator jargon out of every owner and household surface.
+ * See liveChannelsOwnerCopy.js for the native Live studio vocabulary.
  */
 
 import { pickLiveSoftStallPhrase } from "./liveStreamSoftStallCopy.js";
@@ -89,17 +89,17 @@ export function liveStreamHealthCopy(health, options = {}) {
 
 /** Admin glossary: ops label → craft-facing label. */
 export const LIVE_ADMIN_GLOSSARY = {
-  "Broadcast engine": "TV engine",
+  "Broadcast engine": "Broadcast",
   "Filler programming paths": "Between-show breaks",
   "Pad flex max": "Gap fill (minutes)",
   Programming: "Play order",
   Recipe: "Station source",
   "Continuity ready": "Breaks ready",
-  "Remounting Tunarr": "Restarting TV engine",
+  "Remounting Tunarr": "Restarting the broadcast",
   "Plex Tunarr map": "Plex channel map",
-  "Broadcast engine running": "TV engine running",
-  "Broadcast engine unreachable": "TV engine unreachable",
-  "Broadcast healthy": "TV healthy",
+  "Broadcast engine running": "Broadcast running",
+  "Broadcast engine unreachable": "Broadcast offline",
+  "Broadcast healthy": "On the air",
   Installation: "Setup",
 };
 
@@ -120,14 +120,14 @@ export function liveHealthSentence(status) {
   const stations = Number(status.channel_count ?? 0);
   const airing = Array.isArray(status.airing) ? status.airing.length : 0;
   const parts = [
-    engineUp ? "TV engine running" : "TV engine unreachable",
-    `${stations} station${stations === 1 ? "" : "s"}`,
+    engineUp ? "Broadcast running" : "Broadcast offline",
+    `${stations} channel${stations === 1 ? "" : "s"}`,
   ];
   if (airing > 0) parts.push(`${airing} airing now`);
   if (status.last_publish_at) {
-    parts.push(`Last lineup publish ${status.last_publish_at}`);
+    parts.push(`Lineup last updated ${status.last_publish_at}`);
   } else {
-    parts.push("No lineup published yet");
+    parts.push("Nothing on the lineup yet");
   }
   return parts.join(" · ");
 }
@@ -149,9 +149,9 @@ export function liveInfrastructureFacts(status) {
   const expected = Number(plex.expected);
   const hasMap = Number.isFinite(mapped) && Number.isFinite(expected) && expected > 0;
   const mappingOk = plex.mapping_ok ?? plex.guide_ok ?? (hasMap && mapped >= expected && tunerAlive);
-  const xmltvError = xmltv.ok === false ? String(xmltv.error || "XMLTV error") : "";
+  const xmltvError = xmltv.ok === false ? String(xmltv.error || "Guide error") : "";
   const keptHot = Number(warm.kept_hot) || 0;
-  let guideLabel = "Plex guide not attached";
+  let guideLabel = "Plex guide not connected";
   if (hasMap) {
     guideLabel = `Plex map ${mapped}/${expected}${mappingOk ? "" : " · incomplete"}`;
   } else if (plex.device_present) {
@@ -159,19 +159,19 @@ export function liveInfrastructureFacts(status) {
   }
   return {
     engineUp,
-    engineLabel: engineUp ? "Tunarr up" : "Tunarr down",
+    engineLabel: engineUp ? "Broadcast running" : "Broadcast offline",
     guideOk: Boolean(mappingOk),
     guideLabel,
     lastAttachLabel: lastAttach.at
       ? `Last attach ${lastAttach.at}${lastAttach.ok === false ? " · failed" : ""}`
       : "",
     tunerAlive: Boolean(tunerAlive),
-    tunerLabel: tunerAlive ? "Tuner alive" : "Tuner dead",
+    tunerLabel: tunerAlive ? "Plex tuner connected" : "Plex tuner not responding",
     xmltvError,
     streamWarmLabel:
       keptHot > 0
-        ? `${keptHot} channel${keptHot === 1 ? "" : "s"} kept hot`
-        : "No channels kept hot",
+        ? `${keptHot} channel${keptHot === 1 ? "" : "s"} kept warm`
+        : "No channels kept warm",
   };
 }
 
@@ -181,8 +181,8 @@ export function liveOverviewLine(status) {
   const facts = liveInfrastructureFacts(status);
   const stations = Number(status.channel_count ?? 0);
   return [
-    facts.engineUp ? "TV engine running" : "TV engine unreachable",
-    `${stations} station${stations === 1 ? "" : "s"}`,
+    facts.engineUp ? "Broadcast running" : "Broadcast offline",
+    `${stations} channel${stations === 1 ? "" : "s"}`,
     facts.guideLabel,
     facts.tunerLabel,
   ].join(" · ");

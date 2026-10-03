@@ -2,6 +2,145 @@
 
 ## [Unreleased]
 
+## [1.37.30] — 2026-10-03
+
+One combined patch that rolls up eight reviewed changes: subtitle tracks you already have, drawn in the Live and Play players; a faster first paint for Live, My Journey, and Admin; a native "start a station" Live Channels studio with queue padding and editable seasonal shelves; a weekly letter in place of Admin → House; missing plots that fill themselves; a quieter background scheduler; Sonarr "Search selected"; curator collections that land in Projectionist; and an aligned Live Guide. Hub `romwil/projectionist:1.37.25` was a one-off publish of the first-paint change alone; it was never merged, git-tagged, or promoted to prod, and its content is included here. Nothing was published as 1.37.26–1.37.29.
+
+### Highlights
+- **Live, My Journey, and Admin open fast.** They paint from the last good snapshot and refresh in the background, so a slow Tunarr or Plex no longer hangs the page.
+- **Start a Live station in four steps.** Pick what's on it, name it, and go on air. Channels can keep 1–5 titles on rotation topped up from recently added or released, and you can edit seasonal shelves right on the Live page.
+- **Weekly letter in your inbox.** Admin → House is gone; the household letter now arrives once a week in the owner inbox (email stays off unless you turn it on).
+- **Missing plots fill themselves.** Library knowledge lists only titles where automatic lookup tried and failed, and the button becomes "Try again now". Background tasks also stop freezing the server and catch up faster.
+- **Subtitles in the player.** Live and Play share one CC menu with every real Plex subtitle track (embedded or sidecar), rendered in Projectionist with a ±0.5s sync nudge — no more "turn on station captions in Admin or watch in Plex" dead end.
+- **Better admin tools.** Sonarr **Find all missing** lets you search only the shows you tick, the curator builds collections and courses inside Projectionist, and the Live Guide grid lines up.
+
+### Added
+_native Live admin (#88)_
+- Rotational queue padding: recipe field `queue_pad` (`up_to` 1–5, `feed` `recently_added` | `recently_released`), `live_channels/queue_padding.py`, accepted by from-collection, from-show, publish-channel, and station-settings payloads; stored with station meta and reapplied on Refill. Padded lineups are an ordered manual lineup (pad rows flagged `queue_pad`); youth gate and exclusions apply. Slot math: `max(0, up_to − playing)`.
+- `PUT /api/admin/holidays/{id}/rail/order` — durable ordered pins for a seasonal shelf (same `holiday_rail_titles` store).
+- `GET/PUT /api/admin/weekly-letter`, `POST /api/admin/weekly-letter/send`, scheduler task `weekly_letter` (notification kind `digest`, one per ISO week). Optional email through the newsletter mail transport, only when mail is configured and the owner opts in.
+- Live studio UI (`/admin/live-channels`): Channels and Setup tabs, create flow, Seasonal shelves block, rotation control.
+
+_Subtitle tracks in the player (#91)_
+- **Subtitles you already have, drawn in the player.** Live and Play share one CC menu: Off plus every real Plex track (embedded or sidecar) for the airing or title. Picking one renders cues in Projectionist — no more "turn on station captions in Admin or watch in Plex" dead end.
+- Same control on Live (`/live`, pop-out `/live/watch`) and Play (`/watch`, pop-out, phone). Includes a ±0.5s sync nudge.
+- `GET /api/library/items/{rating_key}/subtitles/{stream_id}/file` now serves embedded text tracks as WebVTT (Plex `/library/streams/{id}`), not just sidecar files. Plex tokens stay server-side.
+
+### Changed
+_first-paint SWR (#86)_
+- New shared `projectionist/swr_cache.py` (soft / hard TTL, durable `sync_state`, single-flight background refresh, retry backoff, `invalidate()` that keeps payloads). Explore hub keeps its own 1.37.24 implementation.
+- Audited (no change needed): Explore hub (1.37.24), purge candidates (already cache-only), setup wizard, settings, persona, users, jobs, scheduled tasks, telemetry summary, knowledge-ops summary, holidays schedule, Radarr owned-not-indexed, newsletter / year-in-review status.
+- Deferred: `GET /api/engagement/summary` still performs challenge / badge sync writes (Engagement page only), and `GET /api/admin/live-channels/lifecycle-status` still probes Docker + Tunarr live (progress poll; only when Docker orchestration is on).
+
+_agent collections (#85)_
+- `create_list` accepts `list_kind` (`list`, `playlist`, `course`), `publish` (owner only) and `items`, and reports `items_added`, `items_failed` and `published`.
+- `create_plex_collection` is labeled Plex-only in its schema, proposal and result (`scope: plex_only`, `projectionist_collection: false`). The system prompt routes unspecified “collection” and “course” asks to `create_list`.
+
+_Sonarr search selected (#84)_
+- `POST /api/admin/sonarr/missing/search` no longer falls back to the whole last scan when `episode_ids` is empty — it returns 400 unless `search_all: true` is sent explicitly. Admin Repair → Retry for Sonarr now sends `search_all` explicitly.
+- Existing scan, **Include specials**, progress, and **Cancel remaining** behavior are unchanged.
+
+_auto plots (#87)_
+- New `knowledge_fetch_state` ledger (migration 52, `projectionist/library/knowledge_fetch.py`): per-title attempts, backoff (misses 1d/3d/7d, errors 1h→7d), and an `exhausted` flag. Exhausted titles get one automatic recheck after 30 days.
+- `long_synopsis_enrichment` and `metadata_enrichment` skip parked titles, record outcomes, and stop a run after 3 consecutive upstream errors (or rejected credentials). Errors during a blocked run defer titles without counting a strike. Batch size / autotune are unchanged, so upstream calls per run stay bounded.
+- Wikipedia `fetch_extract(strict=True)` and the OMDb fallback now raise when every request failed, so outages are errors, not misses.
+- `coverage_deficit_audit` stages `synopsis` / `metadata` / `embedding` gaps **only** when retrieval is exhausted and the gap is still open, ignores stale telemetry for gaps that are merely unfetched or already filled, and marks leftover pending rows from older versions `resolved` ("Filled automatically" in the status filter). Rows you dismiss or retry are not re-listed until retrieval fails again.
+- Per-title motif gaps are no longer exceptions: motifs are derived locally from plot text already in the library; there is nothing to fetch.
+- Name mappings (unrecognized genres/tags) and theme-keyword reviews are unchanged: they still need a human.
+- Metadata backlog now only counts movie/show rows with a TMDB id (the trickle could not process anything else).
+- Owner "Try again now" clears the ledger on success; a retry that still finds nothing stays exhausted.
+
+_native Live admin (#88)_
+- Owner Live copy no longer names Tunarr, XMLTV, Docker, or starter packs; the engine and its APIs are unchanged and the SWR `warming` / `stale` states are preserved.
+
+_scheduler audit (#89)_
+- `IdleScheduler`: `TaskDefinition.off_loop` runs `run_fn` in a private event loop on a worker thread (context-propagating, so run-log events still stream). Applied to 24 sync-heavy tasks; `semantic_embeddings` and `llm_logline_enrichment` stay on the main loop (they await provider clients).
+- `TaskDefinition.catchup_gap_seconds` + `scheduler/cadence.py`: effective next-run interval for catch-up (`metadata_enrichment` 5 min, `plot_neighbors` 3 min, `semantic_embeddings` 5 min, `long_synopsis_enrichment` 30 min), interrupted retry (5 min), failure backoff (×2 per consecutive `degraded`/`error`, max ×8, capped at 6h or the configured interval), and a 1h floor for `skipped` runs. A catch-up run must process at least half its batch, so a batch that keeps re-hitting unresolvable titles never triggers fast follow-ups. The configured interval is untouched; `GET /api/admin/scheduled-tasks` adds `effective_run_interval_seconds` and `schedule_reason`, and Admin → Tasks shows e.g. “Due now (catching up)”.
+- Run metrics now persist `has_more` / `catching_up`. (`has_more` was previously dropped from stored metrics, so **Optimize rates** never saw backlog state.)
+- Auto-tune ETA uses the catch-up gap while a backlog is draining, so it no longer shortens a task's interval to compensate for a delay that no longer exists.
+- `GET /api/admin/scheduled-tasks` memoizes backlog counts for 10s (the page polls every 1.2–5s and each poll recounted `NOT EXISTS` scans over the library); the Tasks page pauses polling in a hidden tab.
+
+### Fixed
+_first-paint SWR (#86)_
+- `GET /api/live-channels/guide`, `/on-now`, and Live subtitles rebuilt the whole guide against Tunarr on every request (channel list, guide window, up to two sequential `now_playing` calls per channel, 8s timeouts). A slow or sleeping Tunarr hung `/live`, On Now widgets, and the youth "pick for me" station. They now use a shared stale-while-revalidate cache (30s soft, 2h hard); stale rows re-derive now/next from cached programs; an unreachable Tunarr never overwrites a good cached guide; a cold start returns `warming: true` quickly.
+- `/live` waited on the Plex machine-id probe (5s timeout) before painting. It is now fetched after first paint and only feeds a secondary link.
+- `GET /api/journey/exploration` ran `engagement_summary` on the request path, which **writes** (challenge progress + badge awards) through SQLite's single writer; behind library sync or batch jobs those writes waited up to the 30s busy timeout. Journey is now read-only on GET. Library-derived rails (people, insights) are an SWR cache backed by `sync_state`, rebuilt after library sync and at startup. Director lookups use the indexed exact-name match before falling back to a wildcard scan.
+- `GET /api/admin/live-channels/status` ran dozens of sequential Tunarr / Plex / XMLTV / Docker probes (5–20s timeouts each) every time Admin opened. It is now SWR with a durable snapshot, a probe-free warming skeleton, and the cheap `job` block always overlaid live. Mutating Live / settings routes mark it stale (the payload is kept), and Admin re-polls while `stale` / `warming`. `?fresh=1` forces a synchronous probe.
+- `GET /api/admin/live-channels/craft-options` gathered Tunarr channel numbers and Plex occupied numbers inline. It now serves from SWR; the form ignores provisional (warming) numbers.
+- `GET /api/library/stats` (every app-shell load), `/api/library/health`, and `/api/library/knowledge-coverage` recomputed whole-library aggregates per request. Coverage and health are now durable SWR caches rebuilt after library sync (counts stay live).
+- Plex identity (`friendlyName` / `machineIdentifier`) lookups were never negative-cached: with Plex down or slow, every stats and machine-id call paid the full timeout. Failures are now remembered for 60s.
+- Startup prewarms the Live guide, Live status, and library dashboards in a background thread so the first visit after a deploy rarely sees `warming`.
+
+_agent collections (#85)_
+- Plex collection create reported “Plex did not return a collection rating key” even though Plex had already created the collection. A childless `<Directory/>` is falsy in ElementTree, so `find(a) or find(b)` skipped it. The response is now read with explicit `is not None` checks (also in `collection_art_url` and `PlexClient.get_metadata`). If Plex answers with an empty body, the collection is found by title instead of failing. Because the confirmation token is spent before the write, that false failure used to leave an untracked Plex collection with no retry.
+- A failed Plex create or add now re-queues the pending proposal, and a failed cleanup-registry write after a successful create is reported as a warning rather than a failure.
+- The chat agent (streaming and buffered) turned a malformed tool-argument payload or a tool exception into an aborted turn. These are now returned to the model as an error result it can explain.
+- `sendChatStream` called neither `onDone` nor `onError` when the connection closed early, leaving an empty assistant bubble. It now raises a visible error.
+
+_scheduler audit (#89)_
+- `plot_neighbors` JSON-decoded **every stored embedding vector** every run just to count and sort ids (hundreds of MB on a large library). It now reads ids only.
+- `taste_refresh` re-scanned all reviews once per show (quadratic); now a set lookup.
+- `semantic_embeddings` reads/writes via worker threads and yields every 250 titles, so its steady-state full-library scan can't hold the event loop and honors “stop” mid-scan.
+- Watchdog timeouts now flip `should_stop()` for worker-thread tasks (a thread can't be hard-cancelled), so a timed-out task winds down instead of racing the next one.
+
+_Live Guide time scale (#90)_
+- **Live Guide lines up.** The time header, program blocks, now-line, and Weather row now share one half-hour-aligned time scale (equal 110px columns, ticks are column edges with left-aligned labels and visible hour/half-hour gridlines). Short blocks keep their true duration width (the old 48px minimum is gone), Weather spans the same grid as every other row, and channel-rail rows have a fixed height so a long channel name can no longer push later rows out of step.
+
+_Subtitle tracks in the player (#91)_
+- Embedded Plex tracks (no sidecar `key`) were listed as "in Plex" and never fetchable; they now carry a `proxy_url`.
+- Picture-based tracks (PGS/VobSub) stay listed but disabled with an honest reason; fetch failures say so instead of silently showing nothing.
+- SRT→VTT conversion no longer drops cue text that is only a number.
+
+### Removed
+_native Live admin (#88)_
+- **Admin → House**: the `/admin/house` page, nav item, and `/api/admin/house/*` routes, plus gift queue, seasonal preview/veto, and trust diary. No redirect or stub. The letter is the one surviving feature (above); seasonal editing lives on Live Channels.
+
+_scheduler audit (#89)_
+- `recommendation_warmup` (wrote `cached_recommendations`, never read) and `health_metrics` (wrote `cached_health_metrics`, never read; `/api/library/health` computes on demand). On upgrade their `scheduled_tasks` rows and run history are deleted so Admin doesn't show ghost rows. No setting or API depended on them.
+
+### Migration
+- Schema migration 52 (`knowledge_fetch_state`) from the auto-plot change is the only new migration in this release; the other changes add none. On upgrade, the retired `recommendation_warmup` and `health_metrics` scheduler rows are deleted.
+
+### Verification
+- Combined stack (#84–#91), one full run on the merged tree: backend `pytest tests/` — 2522 passed, 6 skipped, coverage 77.16% (floor 74%), run with `PROJECTIONIST_SKIP_DOTENV=1` so a maintainer `.env` cannot leak ACRCloud keys into the Investigate capability tests.
+- Frontend unit 924/924; lint 0 errors (152 pre-existing warnings); `npm run build` OK.
+- Playwright e2e (mocked, port 8799, theater port moved off 8791): 107 passed, 8 skipped.
+- Stack fix: `tests/test_circuit_breaker.py::test_reset_allows_task_to_run_again` assumed a 1s task interval and a real sleep; the scheduler audit (#89) floors the effective interval at 60s and backs off failing tasks, so the test now advances the clock instead.
+- Embedded Plex subtitle text-track fetch is mocked only — no live Plex proof for embedded tracks yet.
+
+Per-change verification (from each PR, run by its author):
+
+**#86 (first-paint SWR).**
+- `tests/test_swr_first_paint.py` — cold skeleton < 250ms with a 0.5–0.6s forced rebuild; stale served < 250ms with Tunarr / rails / dashboards hanging; durable restart paint; single-flight; unreachable Tunarr keeps the last good guide; Journey GET performs no engagement writes; Plex failure negative cache.
+- Local repro with an unroutable Tunarr: guide 8.07s → 0.8s (first-ever hit; 4ms after), on-now 8.0s → 0.76s, Admin Live status 16.0s → 7ms (durable) / 1.0s cold, My Journey 421ms → 28ms (6ms warm).
+- Automat prod data (5.5k titles, 288k credits, 170k people), builders timed inside the 1.37.24 container: knowledge coverage 3.2s and library health 1.2s (both on app-shell `/library/stats` / Admin before); Journey directors 2.9s + cinematographers 0.56s + composers 0.6s per visit; Admin Live status 0.7–1.3s even when Tunarr is healthy; Live guide 0.08s healthy (the hang is Tunarr slow/cold plus threadpool / GIL contention from the above). New Journey director lookup: 2.9s → 0.16s, and the whole rails build now runs off the request path.
+- Frontend lint: 0 errors. Backend `ruff check .` and `mypy`: clean.
+
+**#85 (agent collections).**
+- `pytest tests/test_agent_collection_create.py` — childless Directory, empty body recovery, retryable token, registry-failure warning, published course with items, malformed arguments.
+- `node --test src/lib/chatStreamClient.test.mjs` — stream closed with no terminal event surfaces an error; normal `done` and server `error` do not double-report.
+- Frontend unit 879/879; lint 0 errors; `npm run build` OK.
+
+**#84 (Sonarr search selected).**
+- `node --test frontend/src/lib/sonarrMissing.test.mjs` (selection → `episode_ids` payload, select/deselect all, prune after rescan).
+- `pytest tests/test_sonarr_missing.py` (subset ids queue only those episodes; empty payload is rejected).
+
+**#87 (auto plots).**
+- `tests/test_knowledge_auto_retrieval.py` — plot fetched with no button; unfetched ≠ exception (including old double-sighting telemetry); legacy backlog rows resolved; misses back off then surface; TMDB 404 is an exception; gap closing removes it; dismissals stick; batch cap bounds calls on a 200-title gap; stubborn titles don't starve the queue; outage trips the breaker without blame; rejected credentials stop at once; owner retry success/failure.
+
+**#88 (native Live admin).**
+- Backend (focused): `pytest tests/test_live_channels_api.py tests/test_live_channels.py tests/test_api_authz.py tests/test_live_queue_padding.py tests/test_weekly_letter.py` — 243 passed.
+- Frontend: unit 900 passed, lint 0 errors, production build.
+- Full pytest / e2e deferred to the release thread.
+
+**#89 (scheduler audit).**
+- `pytest tests/test_scheduler_cadence.py` (31 tests): cadence rules, due-time with persisted state, productive-run guard, off-loop responsiveness (blocking task stalls the loop ~0.4s on-loop, <0.15s off-loop), worker-thread context + error + watchdog, retired-task cleanup, registry invariants, plot_neighbors never decodes vectors, progress memoization.
+- Synthetic 20,000-title library, worst event-loop stall while the task ran (before → after): `summary_motifs` 2519ms → 38ms; `keyword_theme_tagging` 774ms → 14ms; `anniversary_scanner` 126ms → 13ms; `title_relations_refresh` 116ms → 13ms.
+- Scheduler / admin / bootstrap / run-history suites and frontend `scheduledTasks` unit tests pass; frontend lint 0 errors.
+
+**#90 (Live Guide alignment).** `liveChannels.test.mjs` guide time-scale unit tests; `e2e/live-guide-alignment.spec.ts` asserts real bounding boxes (ticks, cells, now-line, Weather, rail rows, scroll).
+- **#91 (subtitles).** `pytest tests/test_subtitle_player_proxy.py tests/test_plex_subtitles.py`; `node --test frontend/src/lib/subtitleCues.test.mjs`; frontend lint 0 errors; `npm run build`. Embedded Plex text-track fetch is mocked only — no live Plex proof for embedded tracks yet.
+
 ## [1.37.24] — 2026-10-02
 
 Explore home loads from a precached hub again — rails recompute in the background instead of blocking first paint.

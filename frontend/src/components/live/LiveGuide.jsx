@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { formatWallTime, programCellStyle } from "../../lib/liveChannels.js";
+import { formatWallTime, guideTimeScale, programCellStyle } from "../../lib/liveChannels.js";
 import { liveGuideEmptyCopy } from "../../lib/liveChannelsCopy.js";
 import {
   formatProgramEpisodeLabel,
@@ -11,6 +11,15 @@ const PX_PER_HOUR = 220;
 
 /**
  * Newspaper-style channel × time EPG grid.
+ *
+ * Layout contract (one time scale, see `guideTimeScale` in lib/liveChannels.js):
+ * - The grid is snapped OUT to half-hour boundaries, so every column is exactly
+ *   `PX_PER_HOUR / 2` px and the first/last tick are column edges.
+ * - Time-header ticks, program cells, the now-line and the row gridlines all take
+ *   their x from `scale.xForTime` (left edge = start, width = true duration).
+ * - Header and rows live in ONE horizontally scrolling box (`.live-guide-scroll`),
+ *   so they scroll together; the channel rail is sticky-left with row/header heights
+ *   pinned to the same CSS variables as the grid rows.
  */
 export default function LiveGuide({
   guide,
@@ -44,18 +53,11 @@ export default function LiveGuide({
   const channels = guide?.channels || [];
   const windowStart = guide?.windowStart ?? Date.now() / 1000;
   const windowEnd = guide?.windowEnd ?? windowStart + 6 * 3600;
-  const hours = Math.max(1, (windowEnd - windowStart) / 3600);
-  const gridWidth = hours * PX_PER_HOUR;
-
-  const timeMarks = useMemo(() => {
-    const marks = [];
-    const startAligned = Math.floor(windowStart / 1800) * 1800;
-    for (let t = startAligned; t <= windowEnd; t += 1800) {
-      if (t < windowStart - 60) continue;
-      marks.push(t);
-    }
-    return marks;
-  }, [windowStart, windowEnd]);
+  const scale = useMemo(
+    () => guideTimeScale(windowStart, windowEnd, PX_PER_HOUR),
+    [windowStart, windowEnd],
+  );
+  const gridWidth = scale.width;
 
   useEffect(() => {
     const timer = setInterval(() => setNowMs(Date.now()), 30000);
@@ -68,7 +70,7 @@ export default function LiveGuide({
     if (idx >= 0) setFocusRow(idx);
   }, [selectedChannelId, channels]);
 
-  const nowLineLeft = ((nowMs / 1000 - windowStart) / 3600) * PX_PER_HOUR;
+  const nowLineLeft = scale.xForTime(nowMs / 1000);
 
   function tuneAt(row, col) {
     const channel = channels[row];
@@ -166,20 +168,28 @@ export default function LiveGuide({
           ))}
         </div>
 
-        <div className="live-guide-grid-wrap">
+        <div className="live-guide-grid-wrap" style={{ width: gridWidth }}>
           <div className="live-guide-timeline" style={{ width: gridWidth }}>
-            {timeMarks.map((mark) => (
+            {scale.marks.map((mark) => (
               <span
                 key={mark}
                 className="live-guide-tick"
-                style={{ left: `${((mark - windowStart) / 3600) * PX_PER_HOUR}px` }}
+                style={{ left: `${scale.xForTime(mark)}px`, width: `${scale.pxPerSlot}px` }}
               >
                 {formatWallTime(mark)}
               </span>
             ))}
           </div>
 
-          <div className="live-guide-rows" style={{ width: gridWidth }}>
+          <div
+            className="live-guide-rows"
+            style={{
+              width: gridWidth,
+              "--guide-slot-px": `${scale.pxPerSlot}px`,
+              "--guide-hour-px": `${scale.pxPerHour}px`,
+            }}
+            data-testid="live-guide-rows"
+          >
             {nowLineLeft >= 0 && nowLineLeft <= gridWidth ? (
               <div
                 className="live-guide-now-line"
@@ -194,7 +204,7 @@ export default function LiveGuide({
                 data-testid="live-guide-row"
               >
                 {(channel.programs || []).map((program, col) => {
-                  const style = programCellStyle(program, windowStart, windowEnd, PX_PER_HOUR);
+                  const style = programCellStyle(program, scale.gridStart, scale.gridEnd, PX_PER_HOUR);
                   const title = programTitle(program) || program.title;
                   const episodeLabel =
                     formatProgramEpisodeLabel(program) || program.episode || "";

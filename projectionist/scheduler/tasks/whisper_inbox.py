@@ -36,6 +36,7 @@ def register(scheduler: IdleScheduler) -> None:
             name="whisper_inbox",
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
+            off_loop=True,
             run_fn=run,
             description=(
                 "Leaves each named household member a whisper with a 12-word why "

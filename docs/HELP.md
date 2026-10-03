@@ -338,13 +338,13 @@ Identify is usually **show-level** (theme or score). It does **not** pick season
 1. Run **Sync library** from **Admin → Libraries** (`/admin/libraries`) — library sources and the refresh control live on the same page. Bookmarks to `/admin/sync` redirect there. (Or type `/sync` in chat when multi-user is off.)
 2. Leave the server **idle** so scheduled tasks can refresh title details, plot-similarity data, plot patterns, and similar-title links.
 3. Open **Admin → Scheduled Tasks** (`/admin/tasks`) — confirm knowledge tasks are enabled; adjust cadence after large imports.
-4. Open **Admin → Library knowledge** (`/admin/taxonomy`) — start with **name mappings**; treat missing knowledge / requested details as titled exceptions.
+4. Open **Admin → Library knowledge** (`/admin/taxonomy`) — start with **name mappings**; a title appears under **Couldn't fill in** only after automatic lookup failed.
 
 ### Library knowledge
 
 **Name mappings are the human queue.** When Chat or Explore repeatedly sees an unrecognized genre or tag name, Projectionist queues it for your review without interrupting the request. Rows lead with the **human title** (never a bare library id). **Save mapping** teaches this installation the recognized name; **Reject** clears the suggestion without changing built-in definitions.
 
-**Missing knowledge** and **Requested details** are titled exceptions — idle enrichment fills most gaps in the background. Use **Refresh synopsis** (or the matching verb for themes / plot patterns / similarity) when a title is stuck, or **Reject** to clear the exception. Built-in definitions are never changed automatically.
+A plot or title detail that is simply **not fetched yet** is not an exception — the scheduled tasks retrieve it in the background, paced (and retried with backoff) so big libraries do not flood TMDB, Wikipedia, or OMDb, and small ones fill in on the first pass. A title appears under **Couldn't fill in** only after lookup was tried, retried, and failed (for example nothing found upstream, or an unknown TMDB id); the row says why. **Try again now** looks once more; **Reject** clears it. **Requested details** are titles you or a member asked about that still could not be filled. Built-in definitions are never changed automatically.
 
 Related titles lets owners mark a surprising match as **Not similar**; Activity shows that event as **Marked not similar**. This removes the saved similarity link so a future refresh can learn from the correction.
 
@@ -383,22 +383,17 @@ Movies already in Plex but missing from Radarr (by TMDB id) can be registered wi
 
 **Rematch studio** on the same page compares Plex GUID, Radarr TMDB, and the folder (Presence / Savages). Same title vs path conflict stays honest — FileBot, Plex Match, and Gracenote are not investigators. Failed register or Sonarr search rows offer **Rematch**, **Skip**, **Retry**, or **Investigate** with human copy, not a JSON dump.
 
-### House letter
+### Weekly household letter
 
-**Admin → House** (`/admin/house`) is a letter about the house — not a dashboard of tiles. It names unwatched hours, dead weight that has sat more than 90 days, and what the disks hold. The letter will not start a purge. If you want the house lighter, open **Health** and confirm each title.
+Once a week a short **letter about the house** lands in the owner’s inbox — the same inbox as every other notification. It names unwatched hours, dead weight that has sat more than 90 days, and what the disks hold. It never starts a purge. If you want the house lighter, open **Health** and confirm each title.
 
-Upcoming seasonal rails (the same calendar as **Admin → Holidays**) can be previewed here. **Veto** keeps one title off that rail before it publishes; **Restore** puts it back.
+Turn the letter on or off under **Admin → Newsletters → Weekly household letter**. It is on by default. **Also email it to me** is a separate switch: it stays off, and cannot be turned on, until outbound mail is set up under **Mail**. With mail off the letter still arrives in your inbox. **Put this week’s letter in my inbox now** sends one on demand, and **Preview** shows this week’s text first. The scheduled send skips a week when the library has not been synced yet.
 
-The **gift queue** is one member, one owned title, a short why. Queue it for the weekly gift task (same cadence as the member newsletter and enthusiast nudge) or **Deliver now** after you confirm. This is not a household blast.
-
-The **trust diary** links rematch skips and repairs, Investigate job cards, and recent house-care tasks so you can see what the house already decided.
+The old **Admin → House** page is gone. Its gift queue, seasonal preview/veto, and trust diary are not coming back as a page: edit seasonal shelves from **Admin → Live Channels** (see below), and use **Health** and **Tasks** for care and history.
 
 ```bash
-# Owner host — letter, upcoming rails, gift queue, trust diary
-curl -s http://localhost:8788/api/admin/house/letter | python3 -m json.tool
-curl -s http://localhost:8788/api/admin/house/seasonal-preview | python3 -m json.tool
-curl -s http://localhost:8788/api/admin/house/gifts | python3 -m json.tool
-curl -s http://localhost:8788/api/admin/house/trust-diary | python3 -m json.tool
+# Owner host — this week's letter text and the two switches
+curl -s http://localhost:8788/api/admin/weekly-letter | python3 -m json.tool
 ```
 
 ```bash
@@ -414,7 +409,7 @@ The same live card (phase, queued / running / completed / failed, current item, 
 
 ### Find all missing (Sonarr)
 
-Sonarr’s **Wanted** list is not the source of truth here. **Find all missing** on **Admin → Libraries** (`/admin/libraries`) re-derives gaps from every monitored series’ episode records: aired, monitored, no file. Specials (S00) stay off unless you turn **Include specials** on. The card compares “Library scan found M; Sonarr Wanted lists N”, then **Search these** submits Sonarr `EpisodeSearch` commands in batches of about 50 — it does not fire `MissingEpisodeSearch` (that uses Wanted).
+Sonarr’s **Wanted** list is not the source of truth here. **Find all missing** on **Admin → Libraries** (`/admin/libraries`) re-derives gaps from every monitored series’ episode records: aired, monitored, no file. Specials (S00) stay off unless you turn **Include specials** on. The card compares “Library scan found M; Sonarr Wanted lists N”, then you **pick which shows to search**: tick the checkbox on each show row (or **Select all** / **Deselect all**) and press **Search selected (N)**. Nothing is ticked after a scan, and the button stays disabled at zero, so a stray click cannot queue the whole backlog. Only the ticked shows’ episodes are submitted as Sonarr `EpisodeSearch` commands in batches of about 50 — it does not fire `MissingEpisodeSearch` (that uses Wanted). **Search all missing…** is the deliberate whole-scan path and asks for confirmation first.
 
 Submitting to Sonarr is only the first step. Sonarr then runs those commands from its own command queue, often a few at a time — many EpisodeSearch commands can rate-limit Sonarr, which is why the card watches that queue instead of firing Wanted’s MissingEpisodeSearch. Counts are queued, running, completed, and failed (command-level — not SABnzbd / download-client aborts). **Cancel remaining** stops Projectionist from sending more batches and deletes queued (not yet started) EpisodeSearch commands. A command that is already running is left to finish.
 
@@ -422,7 +417,9 @@ Submitting to Sonarr is only the first step. Sonarr then runs those commands fro
 # Owner host — scan, watch status (including Sonarr command counts), search, optional cancel
 curl -s -X POST http://localhost:8788/api/admin/sonarr/missing/scan -H 'Content-Type: application/json' -d '{"include_specials":false}'
 curl -s http://localhost:8788/api/admin/sonarr/missing/status
-curl -s -X POST http://localhost:8788/api/admin/sonarr/missing/search -H 'Content-Type: application/json' -d '{"search_all":true}'
+curl -s -X POST http://localhost:8788/api/admin/sonarr/missing/search -H 'Content-Type: application/json' -d '{"episode_ids":[101,102,103]}'
+# Whole last scan must be explicit; an empty body is rejected (400), never "all"
+# curl -s -X POST .../api/admin/sonarr/missing/search -H 'Content-Type: application/json' -d '{"search_all":true}'
 # After submit, status.phase is "executing" until Sonarr finishes the commands
 curl -s -X POST http://localhost:8788/api/admin/sonarr/missing/cancel
 ```
@@ -495,7 +492,7 @@ Plot patterns are materialized rows, not live query results. When a release impr
 
 ### Telemetry & tuning
 
-Admin shows last-run outcome, durable run history, measured items/hour, owner-set intervals/batch, and ETA (measured when history exists). Auto-tune may adjust batch/interval for trickle tasks within safe caps — you can still override. See [CURATOR_KNOWLEDGE.md — Idle tasks](CURATOR_KNOWLEDGE.md#idle-tasks--purpose-trickle-auto-tune).
+Admin shows last-run outcome, durable run history, measured items/hour, owner-set intervals/batch, and ETA (measured when history exists). Auto-tune may adjust batch/interval for trickle tasks within safe caps — you can still override. **Next run** can read “catching up” (a trickle task that finished a full batch with backlog left runs again in minutes, not a full interval), “retrying after interruption” (a chat request stopped it), or “backing off” (a dependency like Plex keeps failing); your configured interval is unchanged. Heavy library-wide tasks run on a worker thread, so they no longer freeze pages while they work. See [CURATOR_KNOWLEDGE.md — Idle tasks](CURATOR_KNOWLEDGE.md#idle-tasks--purpose-trickle-auto-tune).
 
 ### Issue queue and repair policy
 
@@ -605,7 +602,7 @@ curl -s http://localhost:8788/api/collections | python3 -m json.tool
 
 Projectionist assembles an in-app **weekly digest** — new additions, library counts, knowledge coverage, open issues, and purge-candidate pressure — as a snapshot you can read on the Dashboard. A scheduled `weekly_digest` task refreshes it once per weekly bucket; you can also **Generate now**.
 
-Members who opt in under **Settings → Notifications** also get a personalized **weekly newsletter** (inbox + email when mail is configured). Owners can push that newsletter early from **Admin → Newsletters → Weekly newsletter** (just me / selected members / everyone opted in), or send a self-only copy from **Settings → Notifications**. A separate **monthly collection-curation** update goes to owners on the same transport. Gap / watchlist **arrival** notifications fire when matching titles land in the library. Opt-in **enthusiast nudges** ride a weekly `enthusiast_nudge` task (same transport; requires `nudge_opt_in`). Opt-in **Year in Review** rides late-December tease / early-January drop tasks (`year_in_review_tease`, `year_in_review_drop`); members turn opt-in on under **Settings → Notifications**, and owners can generate a self-only test reel from **Admin → Newsletters → Year in Review** (or the same generate control under Settings → Notifications). The **member weekly For-you rail** rides the same weekly cadence (`member_weekly_rail`); owners can force a rebuild:
+Members who opt in under **Settings → Notifications** also get a personalized **weekly newsletter** (inbox + email when mail is configured). Owners can push that newsletter early from **Admin → Newsletters → Weekly newsletter** (the owner’s own **weekly household letter** is controlled on the same page) (just me / selected members / everyone opted in), or send a self-only copy from **Settings → Notifications**. A separate **monthly collection-curation** update goes to owners on the same transport. Gap / watchlist **arrival** notifications fire when matching titles land in the library. Opt-in **enthusiast nudges** ride a weekly `enthusiast_nudge` task (same transport; requires `nudge_opt_in`). Opt-in **Year in Review** rides late-December tease / early-January drop tasks (`year_in_review_tease`, `year_in_review_drop`); members turn opt-in on under **Settings → Notifications**, and owners can generate a self-only test reel from **Admin → Newsletters → Year in Review** (or the same generate control under Settings → Notifications). The **member weekly For-you rail** rides the same weekly cadence (`member_weekly_rail`); owners can force a rebuild:
 
 ```bash
 curl -s -X POST http://localhost:8788/api/admin/weekly-rail/generate | python3 -m json.tool
@@ -794,37 +791,35 @@ When `header_mode` is **dynamic**, idle boards show **RECENTLY ADDED**, **RECENT
 
 ## Live Channels (owners)
 
-When Live Channels is on, Projectionist can publish library-aware stations through Tunarr into **Plex Live TV**. You never need Tunarr’s own admin UI. Household members watch in Projectionist **[Live](/live)** **and** Plex Live TV — both are first-class (see **Live** above for the member how-to).
+Live turns your library into always-on channels. They show up in Projectionist **[Live](/live)** **and** in **Plex Live TV**, beside any antenna channels you already have. You pick what’s on a channel; Projectionist builds and runs the lineup. Household members watch in either place (see **Live** above for the member how-to).
+
+**Turn it on and make a channel (Admin → Live Channels):**
+1. **Turn on Live.** One button; you can turn it off any time and your channels are kept.
+2. **What’s on it.** Pick one: a **show, nonstop**; a **collection or list**; a **mood or taste** (a story mood, your taste, or family-safe); or **Suggest some for me**.
+3. **Make it yours.** Name, channel number, play order (**In order** or **Shuffled**), and whether it includes movies, TV, or both. Under **Fine-tune what qualifies** you can narrow by genre, decade, and rating, and ask how many titles match. Titles in your **NoLive** Plex collection are always skipped.
+4. **Go on air.** Projectionist checks your setup (including that you have **Plex Pass**, which Plex needs for Live TV), starts the broadcast if it isn’t running, builds the lineup, and adds the channel to Plex Live TV. Anything that blocks the launch is named in plain words.
+
+**Keep up to N on rotation.** Each channel has one setting: **Keep on rotation — No padding, or up to 1–5 titles** — and **Fill spare slots from — Recently added or Recently released**. What’s playing fills the slots first; any spare slots (N minus what’s playing) are filled from the feed you picked, and the padded titles play *after* the playing block, so the channel doesn’t snap back to the start the moment it ends. Four playing with up to 5 adds one title; five or more adds none; nothing playing with up to 3 fills three from the feed. New channels default to **up to 5, Recently added**. Change it later from the channel’s **Settings**, then **Rebuild lineup**. Padded channels keep their order (they don’t use the random shuffle schedule), and a feed title is never one that’s already playing.
+
+**Channels tab.** One board for every channel: number and name, what’s on now and next, and health (**Airing**, **Empty lineup**, **Idle**, **Not reachable**), with links to Watch, the Guide, and the channel’s **Settings**. Settings lets you rename the channel, change what qualifies, switch captions, set rotation padding, and delete it. **Rebuild lineup** re-applies it. Placeholder slots read **Between programs**.
+
+**Seasonal shelves.** Under the board, **Seasonal shelves** lists the holidays Explore shelves are built around — the same shelves as **Admin → Holidays**, not a second system. Open one to see the titles from your library that Explore will show for that season. **↑ / ↓** reorders them, **Not a fit** takes a bad match off the shelf, and **Add a title from your library** puts one at the front. **Name, date & window** retitles the shelf, moves its date, widens or narrows the days before and after, edits the matching keywords, and switches it on or off. Edits are saved as you make them in the same store Explore reads. Adding or deleting whole holidays stays on **Admin → Holidays**.
+
+**Setup tab (after launch).** **Health** shows whether the broadcast is running, whether Plex sees every channel, and whether the Plex tuner is responding, with **Refresh Plex lineup**, **Rebuild in Plex** (a full recreate; it briefly freezes Plex Media Server and drops Plex Live TV — antenna channels stay), and **Refresh status**. **Advanced** holds the connection address, the ready check, **Between-show breaks** and gap fill, Plex Live TV hookup, and broadcast logs. Before the first launch the same panels sit under **Connection & health** at the bottom of the page.
 
 **Preroll bumpers (Play + Live):** Bind a host folder of short videos at `/preroll` — Automat default `/mnt/user/data/media/preroll`. Unraid CA / Compose / `rollout.sh` all accept `PROJECTIONIST_PREROLL_MEDIA`. Each movie play draws a random video from that library. Live draws one only when the guide says a movie is starting now or about to air (within a few minutes); a show or a movie already underway does not. Bumpers are not skippable and do not show a title. Each browser picks on its own (there is no shared bumper clock). Missing folder → the picture starts with no bumper (HTTP 204).
 
 **Weather place:** Household default is `PROJECTIONIST_WEATHER_PLACE` / `PROJECTIONIST_WEATHER_LAT` / `PROJECTIONIST_WEATHER_LON`. Anyone can override it from the Weather Channel (**Change place**) or **Settings → Profile**. Search accepts a ZIP, city and state, or city and country and calls Open-Meteo geocoding once (see Privacy). Saving stores the label and coordinates on that user’s profile. Later forecasts reuse those coordinates.
 
-**Weather Channel music:** Admin → **Live Channels → Setup → Weather Channel music**. Pick a folder this container can see. **Shared in** marks Docker bind mounts (for example `/preroll`, `/movies`, `/tv`, and any other mount the process can detect). The browser does not offer the rest of the container filesystem. When the folder is unset or empty, the channel says so and plays the forecast without music.
+**Weather Channel music:** Admin → **Live Channels → Setup → Advanced → Weather Channel music**. Pick a folder this container can see. **Shared in** marks Docker bind mounts (for example `/preroll`, `/movies`, `/tv`, and any other mount the process can detect). The browser does not offer the rest of the container filesystem. When the folder is unset or empty, the channel says so and plays the forecast without music.
 
-**What’s currently playing:** Admin **Overview** and **Live Channels → Stations** show one honest board for every station — channel # / name, now + next, health (**Airing** / **Empty lineup** / **Idle** / **TV unreachable**), and dig-ins to Watch, Guide, or station settings. Empty lineups say **No lineup** (not Tunarr’s fake “Up next” placeholder) with a **Refill** button on the row. Placeholder slots show **Between programs**. Stream-warm **keepalive** is a separate chip — it does not make an empty station look like someone is watching. It refreshes while the page is open and is richer than the household **What’s on tonight** strip.
+**Break length and shuffle.** Under **Advanced → Between-show breaks**, set gap fill toward :00/:30 cuts; **0** means back-to-back. After a library sync, channels with a stored recipe refill automatically when auto-refresh is on. Shuffled channels reshuffle within their full resolved pool across days; show and collection channels fill with every episode, not a short loop. A channel with rotation padding keeps its order instead.
 
-**Infrastructure vs stations:** The **Infrastructure** strip above the board is engine / Plex guide / tuner / stream-warm health — not a second list of channels. After launch, **Add station** stays collapsed so craft does not duplicate the board.
+If you already have an antenna / HDHomeRun DVR, keep it — Plex supports multiple tuners. Projectionist adds its own tuner and channel guide and never deletes your existing ones. Virtual channels use numbers from 100 up.
 
-**Rename a station:** Open settings from the board, change the name, and save — it writes to Tunarr immediately. Craft, filters, and scope still need **Refill** to rebuild the lineup.
+While a Live job is running, a sticky rail says what is working and other mutating Live buttons stay off — you can still refresh status, copy addresses, switch tabs, and edit forms. Admin **Overview** echoes the Plex lineup and the same rail if a job is in flight.
 
-**Craft and publish (Admin → Live Channels):**
-1. Turn Live Channels on, run preflight, and start the broadcast engine (when Docker management is available).
-2. Under **Add station** (collapsed after launch), either **Craft a custom station** (name, number, motif / taste cluster / Plex or published collection / youth-safe), publish a **collection**, or **Propose starters** and publish the pack. Stack **additive filters** (genre ∩ decade ∩ theme ∩ rating) on any recipe — use **Preview match count** before publish. The same filters can subfilter a collection. Filters persist on the station for Refill. Programming modes are **Sequential** (collection order) and **Shuffle** (full resolved pool).
-3. Check the **Stations** board for lineup honesty — use **Refill** if a station is empty after a library scan, or **Delete** to remove it from the tuner. Re-running **Propose starters** / publish is additive: existing channel numbers keep their stations.
-4. Click **Refresh Plex map** — Projectionist writes the Tunarr tuner and XMLTV guide in Plex. Open **Plex didn’t see the tuner** only if Plex never discovered the device.
-
-**Exclusion list:** Create a Plex collection named **NoLive** (or change the name under **Schedule pad & exclusion**). Titles in that collection are skipped when Projectionist fills recipes and starter packs.
-
-**Pad flex:** Under **Schedule pad & exclusion**, set pad minutes toward :00/:30 commercial cuts. **0** means back-to-back (no pad). After a library sync, stations with stored recipes refill automatically when auto-refresh is on.
-
-**Shuffle scheduling:** Shuffle prefers Tunarr’s random-slot programming so the station reshuffles within its resolved pool across days. **Collection / show stations fill the full ID-resolved pool** (every episode for a show like Gilligan’s Island — not a ~30-title loop). Motif / taste / filtered craft may use a softer default sample. Sequential still uses an ordered manual lineup. Residual limit: Tunarr random slots schedule movies and per-show episode pools; if a pool has neither movies nor show IDs, Projectionist falls back to a shuffled manual lineup until Refill.
-
-If you already have an OTA antenna / HDHomeRun DVR, keep it — Plex supports multiple tuners. **Projectionist writes the tuner and guide** via **Refresh Plex map** (inject / remap; it never deletes the XMLTV DVR). If Plex marks the tuner **dead**, Refresh re-registers it and keeps the existing guide. Use advanced **Rebuild tuner in Plex** only when you intentionally need a full recreate — that hangs Plex Media Server briefly and drops Tunarr Live TV; over-the-air stays. Open **Plex didn’t see the tuner** only if Plex never discovered Tunarr (add the device once, any ZIP to unlock Next, commercial EPG is temporary). Virtual stations use channel numbers from 100+. Watch in **Plex Live TV** or in Projectionist’s **/live** guide (when enabled) — both are first-class.
-
-While a Live job is running, a sticky rail says what is working and other mutating Live buttons stay off — you can still Refresh status, copy URLs, switch tabs, and edit forms. Admin **Overview** echoes the live Plex map (not the last-attach receipt) and the same rail if a job is in flight.
-
-**If play fails with “This live TV session has ended”:** Prefer **Plex Web** (`http://your-plex:32400/web`) over the Windows/Linux desktop app. Desktop clients often hit a known Direct Stream quirk ([Tunarr#718](https://github.com/chrisbenincasa/tunarr/issues/718)) — in that client, open Settings → Debug (or Video) and **disable Direct Stream**, then retry. Also confirm Admin attach used the Tunarr HTTP address (same port as the Admin copy URL), not a dead leftover tuner.
+**If play fails with “This live TV session has ended”:** Prefer **Plex Web** (`http://your-plex:32400/web`) over the Windows/Linux desktop app. Desktop clients often hit a known Direct Stream quirk ([Tunarr#718](https://github.com/chrisbenincasa/tunarr/issues/718)) — in that client, open Settings → Debug (or Video) and **disable Direct Stream**, then retry. Also confirm the Plex hookup used the broadcast’s LAN address (the one Setup → Advanced shows), not a dead leftover tuner.
 
 ---
 

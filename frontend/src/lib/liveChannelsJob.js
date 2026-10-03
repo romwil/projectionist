@@ -1,12 +1,14 @@
 /** Unified Live Channels job rail + mutating-button helpers (approach B). */
 
+import { ownerLiveText } from "./liveChannelsOwnerCopy.js";
+
 export const LIVE_JOB_KIND_LABELS = {
   plex_refresh: "Refreshing Plex map",
   plex_rebuild: "Rebuilding tuner in Plex",
-  engine: "Starting TV engine",
-  continuity: "Rescanning filler",
-  publish: "Publishing station",
-  refill: "Refilling station",
+  engine: "Starting the broadcast",
+  continuity: "Rescanning breaks",
+  publish: "Building channel",
+  refill: "Refilling channel",
 };
 
 export const LIVE_JOB_ALLOWED_BUSY = new Set(["status", "attach"]);
@@ -41,7 +43,7 @@ export function liveJobRailCopy(job) {
   if (!isLiveJobBusy(job)) return "";
   const label = liveJobKindLabel(job.kind) || "Working";
   const bits = [`Working: ${label}`];
-  const extra = String(job.message || "").trim();
+  const extra = ownerLiveText(job.message).trim();
   if (extra && extra !== label) bits.push(extra);
   const pct = Number(job.percent);
   if (Number.isFinite(pct) && pct > 0 && !extra.includes("%")) {
@@ -73,8 +75,8 @@ export function isLiveMutatingDisabled(job, liveBusy) {
 
 export function plexRebuildConfirmMessage() {
   return (
-    "Rebuild tuner in Plex? This deletes and recreates the Tunarr device and XMLTV DVR "
-    + "in Plex (OTA / antenna stays). Plex Media Server may hang briefly, and Tunarr Live "
-    + "TV sessions drop. Over-the-air Live TV is not removed."
+    "Rebuild tuner in Plex? This removes and recreates the Projectionist tuner and guide "
+    + "in Plex (OTA / antenna stays). Plex Media Server may hang briefly, and Projectionist "
+    + "Live TV sessions drop. Over-the-air Live TV is not removed."
   );
 }

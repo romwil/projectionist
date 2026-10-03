@@ -1,0 +1,502 @@
+/* Admin → Live: native studio (create, go on air, seasonal shelves). */
+
+.live-studio {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.live-studio-hero {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 38rem;
+  padding: var(--space-5) 0 var(--space-2);
+}
+
+.live-studio-hero h2,
+.live-studio-banner h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.45rem, 2.4vw, 1.85rem);
+  letter-spacing: -0.03em;
+}
+
+.live-studio-lede {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+  max-width: 36rem;
+}
+
+.live-studio-lede[data-tone="warn"] {
+  color: var(--accent);
+}
+
+.live-studio-lede[data-tone="ok"] {
+  color: var(--success);
+}
+
+.live-studio-promises {
+  margin: 0;
+  padding-left: 1.2em;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.live-studio-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.live-studio-banner-copy {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.live-studio-banner-actions,
+.live-studio-card-actions,
+.live-create-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.live-studio-banner-actions button,
+.live-studio-card-actions button,
+.live-create-actions button {
+  min-height: var(--tap-min);
+}
+
+.live-studio-fresh {
+  margin: 0;
+  color: var(--success);
+  font-size: 14px;
+}
+
+.live-studio-stack {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.live-studio-card {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.live-studio-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.live-studio-card-head h3 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-lg);
+}
+
+.live-studio-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.live-studio-note {
+  margin: 0;
+  font-size: 14px;
+}
+
+.live-studio-note--error {
+  color: var(--danger);
+}
+
+.live-studio-note--success {
+  color: var(--success);
+}
+
+.live-studio-check {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.live-studio-check input {
+  margin-top: 0.25em;
+}
+
+.live-studio-details > summary {
+  cursor: pointer;
+  min-height: var(--tap-min);
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+}
+
+/* Create flow */
+
+.live-create-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.live-create-steps li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.live-create-steps li.is-current {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.live-create-steps li.is-done {
+  color: var(--success);
+}
+
+.live-create-step-num {
+  display: inline-grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.live-create-steps li.is-current .live-create-step-num {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.live-create-body,
+.live-create-detail {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.live-create-detail {
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.live-create-detail label,
+.live-create-fields label,
+.live-queue-pad label,
+.live-shelf-form label,
+.live-shelf-add label {
+  display: grid;
+  gap: var(--space-1);
+  font-size: 14px;
+}
+
+.live-create-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: var(--space-3);
+}
+
+.live-kind-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--space-3);
+}
+
+.live-kind {
+  display: grid;
+  gap: var(--space-1);
+  text-align: left;
+  min-height: var(--tap-min);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.live-kind span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.live-kind.is-selected {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  background: var(--accent-soft);
+}
+
+.live-create-search {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: flex-end;
+}
+
+.live-create-search label {
+  flex: 1 1 14rem;
+}
+
+.live-pick-list,
+.live-suggest-list,
+.live-shelf-list,
+.live-shelf-titles,
+.live-shelf-hits {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.live-pick {
+  width: 100%;
+  min-height: var(--tap-min);
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.live-pick.is-selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.live-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.live-chip {
+  min-height: var(--tap-min);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.live-chip.is-selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.live-create-summary {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+}
+
+.live-ready {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.live-ready h4 {
+  margin: 0;
+}
+
+.live-launch-phases {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.live-launch-phases li::before {
+  content: "○ ";
+}
+
+.live-launch-phases li.is-done {
+  color: var(--success);
+}
+
+.live-launch-phases li.is-done::before {
+  content: "✓ ";
+}
+
+.live-launch-phases li.is-current {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.live-launch-phases li.is-current::before {
+  content: "● ";
+  color: var(--accent);
+}
+
+.live-launch-phases li.is-failed {
+  color: var(--danger);
+}
+
+.live-launch-phases li.is-failed::before {
+  content: "✗ ";
+}
+
+/* Queue padding */
+
+.live-queue-pad {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.live-queue-pad-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--space-3);
+}
+
+/* Seasonal shelves */
+
+.live-shelf {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.live-shelf-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--tap-min);
+  padding: var(--space-2) var(--space-4);
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.live-shelf-name {
+  flex: 1 1 auto;
+  font-weight: 600;
+}
+
+.live-shelf-date-label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.live-shelf-pill {
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.live-shelf-pill.is-on {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.live-shelf-editor {
+  display: grid;
+  gap: var(--space-3);
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+.live-shelf-titles li,
+.live-shelf-hits li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.live-shelf-title-name {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.live-shelf-title-role {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.live-shelf-title-actions {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.live-shelf-title-actions button {
+  min-height: var(--tap-min);
+  min-width: var(--tap-min);
+}
+
+.live-shelf-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: flex-end;
+}
+
+.live-shelf-add label {
+  flex: 1 1 14rem;
+}
+
+.live-shelf-form,
+.live-shelf-date {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.live-shelf-date {
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+}
+
+@media (max-width: 640px) {
+  .live-studio-banner,
+  .live-studio-card {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .live-create-actions button,
+  .live-studio-banner-actions button {
+    flex: 1 1 auto;
+  }
+}

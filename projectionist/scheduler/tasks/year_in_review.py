@@ -53,6 +53,7 @@ def register(scheduler: IdleScheduler) -> None:
             name="year_in_review_tease",
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
+            off_loop=True,
             run_fn=run_tease,
             description=(
                 "Late December soft tease for opted-in members with enough "
@@ -65,6 +66,7 @@ def register(scheduler: IdleScheduler) -> None:
             name="year_in_review_drop",
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
+            off_loop=True,
             run_fn=run_drop,
             description=(
                 "Early January Year in Review drop for the prior calendar year "

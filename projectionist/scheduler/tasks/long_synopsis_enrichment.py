@@ -20,6 +20,7 @@ from projectionist.config_store import Settings
 from projectionist.connectors.omdb import OMDbClient
 from projectionist.connectors.wikipedia import fetch_extract
 from projectionist.library.db import Database
+from projectionist.library.knowledge_fetch import KIND_SYNOPSIS, FetchRunTracker
 from projectionist.scheduler.autotune import resolve_batch_size
 from projectionist.scheduler.engine import IdleScheduler, TaskDefinition
 from projectionist.scheduler.run_log import emit_task_event
@@ -28,6 +29,8 @@ from projectionist.scheduler.tasks.coverage_signals import emit_synopsis_backlog
 logger = logging.getLogger(__name__)
 
 INTERVAL_SECONDS = 43200  # 12 hours
+# Paced follow-up while a backlog is draining (see scheduler/cadence.py).
+CATCHUP_GAP_SECONDS = 1800
 DEFAULT_BATCH_SIZE = 10
 REQUEST_PAUSE_SECONDS = 1.5
 _MAX_SYNOPSIS_CHARS = 4000
@@ -81,31 +84,55 @@ def _fetch_for_row(
     if "imdb_id" in keys:
         imdb_id = str(row["imdb_id"] or "").strip()
 
+    # An outage must not look like "no plot exists": remember whether any source
+    # actually answered, and raise only when none did.
+    answered = False
+    last_error: Optional[BaseException] = None
+
     if source in {"wikipedia", "auto"}:
-        extract = _clean_synopsis(
-            fetch_extract(title, year=year if year is not None else None, media_type=media_type)
-        )
-        if extract:
-            return extract, "wikipedia"
+        try:
+            extract = _clean_synopsis(
+                fetch_extract(
+                    title,
+                    year=year if year is not None else None,
+                    media_type=media_type,
+                    strict=True,
+                )
+            )
+            answered = True
+            if extract:
+                return extract, "wikipedia"
+        except RuntimeError as error:
+            last_error = error
 
     if source in {"omdb", "auto"} and omdb is not None:
         plot = ""
+        omdb_errors = 0
+        omdb_calls = 0
         if imdb_id:
+            omdb_calls += 1
             try:
                 plot = omdb.plot_by_imdb(imdb_id)
-            except RuntimeError:
-                plot = ""
+            except RuntimeError as error:
+                omdb_errors += 1
+                last_error = error
         if not plot:
+            omdb_calls += 1
             try:
                 plot = omdb.plot_by_title(
                     title, year=int(year) if year is not None else None
                 )
-            except RuntimeError:
-                plot = ""
+            except RuntimeError as error:
+                omdb_errors += 1
+                last_error = error
+        if omdb_errors < omdb_calls:
+            answered = True
         plot = _clean_synopsis(plot)
         if plot:
             return plot, "omdb"
 
+    if not answered and last_error is not None:
+        raise last_error
     return "", ""
 
 
@@ -128,79 +155,92 @@ async def run(
         }
 
     batch_size = resolve_batch_size(db, TASK_NAME, DEFAULT_BATCH_SIZE)
+    # Parked titles (backoff / exhausted) are skipped, so the batch cap bounds
+    # upstream calls per run no matter how large the gap is.
     backlog = db.items_needing_long_synopsis(limit=batch_size)
     if not backlog:
-        return {"status": "completed", "enriched": 0, "remaining": 0}
+        coverage_signals = emit_synopsis_backlog_signals(db, limit=5)
+        return {
+            "status": "completed",
+            "enriched": 0,
+            "remaining": 0,
+            "coverage_signals": coverage_signals,
+        }
 
     omdb: Optional[OMDbClient] = None
     omdb_key = str(getattr(settings, "omdb_api_key", "") or "").strip()
     if source in {"omdb", "auto"} and omdb_key:
         omdb = OMDbClient(omdb_key)
 
+    tracker = FetchRunTracker(db, KIND_SYNOPSIS)
     enriched = 0
-    errors = 0
-    misses = 0
     emit_task_event(
         f"Fetching long synopsis for {len(backlog)} titles ({source})",
         batch_size=len(backlog),
         source=source,
     )
 
+    interrupted = False
     for idx, row in enumerate(backlog):
         if should_stop():
-            return {
-                "status": "interrupted",
-                "enriched": enriched,
-                "errors": errors,
-                "misses": misses,
-            }
+            interrupted = True
+            break
 
+        item_id = int(row["id"])
         try:
             synopsis, provenance = _fetch_for_row(row, source=source, omdb=omdb)
         except Exception as error:
-            errors += 1
-            logger.debug(
-                "Long synopsis fetch failed id=%s: %s",
-                row["id"],
-                error,
-            )
+            logger.debug("Long synopsis fetch failed id=%s: %s", item_id, error)
+            if tracker.error(item_id, error):
+                break
             await asyncio.sleep(REQUEST_PAUSE_SECONDS)
             continue
 
         if synopsis and provenance:
-            db.set_long_synopsis(int(row["id"]), synopsis, provenance)
+            db.set_long_synopsis(item_id, synopsis, provenance)
+            tracker.success(item_id)
             enriched += 1
             if enriched == 1 or enriched % 5 == 0:
                 emit_task_event(
                     f"Enriched {enriched}/{len(backlog)}",
                     enriched=enriched,
-                    errors=errors,
-                    misses=misses,
+                    errors=tracker.errors,
+                    misses=tracker.misses,
                 )
         else:
-            misses += 1
+            tracker.miss(item_id, "no plot text found upstream")
 
         if idx + 1 < len(backlog):
             await asyncio.sleep(REQUEST_PAUSE_SECONDS)
 
-    # Emitted after the writes so titles just enriched are no longer counted as
-    # deficits, and capped low so the signal never rivals the enrichment itself.
+    run_stats = tracker.finish()
+    if run_stats["breaker_tripped"]:
+        emit_task_event(
+            f"Pausing long-synopsis fetch: {run_stats['breaker_reason']}",
+            enriched=enriched,
+            errors=run_stats["errors"],
+        )
+
+    # Only titles whose automatic retrieval is *exhausted* are surfaced to the
+    # owner. A title that is merely "not fetched yet" is backlog, not an exception.
     coverage_signals = emit_synopsis_backlog_signals(db, limit=min(batch_size, 5))
 
     remaining = db.count_items_needing_long_synopsis()
     logger.info(
         "Long synopsis trickle: enriched=%s errors=%s misses=%s remaining=%s source=%s",
         enriched,
-        errors,
-        misses,
+        run_stats["errors"],
+        run_stats["misses"],
         remaining,
         source,
     )
     return {
-        "status": "completed",
+        "status": "interrupted" if interrupted else "completed",
         "enriched": enriched,
-        "errors": errors,
-        "misses": misses,
+        "errors": run_stats["errors"],
+        "misses": run_stats["misses"],
+        "exhausted": run_stats["newly_exhausted"],
+        "breaker_tripped": run_stats["breaker_tripped"],
         "batch_size": batch_size,
         "source": source,
         "has_more": remaining > 0,
@@ -214,6 +254,7 @@ def register(scheduler: IdleScheduler) -> None:
             name=TASK_NAME,
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
+            off_loop=True,
             run_fn=run,
             description=(
                 "Longer plot text from Wikipedia (default) or OMDb into long_synopsis "
@@ -221,6 +262,7 @@ def register(scheduler: IdleScheduler) -> None:
                 "set long_synopsis_source=off to disable, or omdb/auto when preferred."
             ),
             items_per_cycle=DEFAULT_BATCH_SIZE,
+            catchup_gap_seconds=CATCHUP_GAP_SECONDS,
             progress_scope="long_synopsis_backlog",
         )
     )

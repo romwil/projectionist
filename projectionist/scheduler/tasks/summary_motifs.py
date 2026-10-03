@@ -391,6 +391,7 @@ def register(scheduler: IdleScheduler) -> None:
             name="summary_motifs",
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
+            off_loop=True,
             run_fn=run,
             description=(
                 "Finds recurring plot patterns in available summaries across the whole "

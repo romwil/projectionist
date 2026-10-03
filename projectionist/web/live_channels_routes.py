@@ -56,12 +56,21 @@ def _safe_error_detail(error: Exception, context: str = "") -> str:
 
 
 @router.get("/api/admin/live-channels/status")
-def live_channels_status_endpoint(user=Depends(require_role("owner"))) -> Dict[str, Any]:
-    """Owner-only Live Channels flag + Tunarr reachability snapshot."""
-    del user
-    from projectionist.live_channels.status import build_live_channels_status
+def live_channels_status_endpoint(
+    fresh: bool = False,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Owner-only Live Channels flag + Tunarr reachability snapshot.
 
-    return build_live_channels_status(_settings())
+    Stale-while-revalidate: Admin paints from the last good status (durable across
+    restarts) while Tunarr / Plex / XMLTV probes run in the background. ``stale`` or
+    ``warming`` in the body means the client should re-poll shortly. ``?fresh=1``
+    forces a synchronous probe (diagnostics only).
+    """
+    del user
+    from projectionist.live_channels.status_cache import get_live_channels_status
+
+    return get_live_channels_status(_settings(), _db(), fresh=bool(fresh))
 
 
 @router.get("/api/admin/live-channels/starter-pack")
@@ -104,6 +113,8 @@ class LiveChannelsFromCollectionPayload(BaseModel):
     programming_mode: str = "sequential"
     media_scope: str = "both"
     craft_filters: Dict[str, Any] = Field(default_factory=dict)
+    # Rotational queue padding {"up_to": 1-5, "feed": recently_added|recently_released}.
+    queue_pad: Optional[Dict[str, Any]] = None
     confirm: bool = False
     # sync=true only for tests / diagnostics (default = background job).
     sync: bool = False
@@ -119,6 +130,7 @@ class LiveChannelsFromShowPayload(BaseModel):
     channel_number: int = 0
     name: str = ""
     programming_mode: str = "sequential"
+    queue_pad: Optional[Dict[str, Any]] = None
     confirm: bool = False
     # sync=true only for tests / diagnostics (default = background job).
     sync: bool = False
@@ -140,6 +152,7 @@ class LiveChannelsPublishChannelPayload(BaseModel):
     youth_safe: bool = False
     summary: str = ""
     craft_filters: Dict[str, Any] = Field(default_factory=dict)
+    queue_pad: Optional[Dict[str, Any]] = None
     wire_plex: bool = True
     fill_programming: bool = True
     confirm: bool = False
@@ -180,6 +193,8 @@ class LiveChannelsStationSettingsPayload(BaseModel):
     motif: Optional[str] = None
     cluster_tag: Optional[str] = None
     craft_filters: Optional[Dict[str, Any]] = None
+    # Rotational queue padding. Omit to leave unchanged; {} clears it.
+    queue_pad: Optional[Dict[str, Any]] = None
     confirm: bool = False
 
 
@@ -584,6 +599,7 @@ def live_channels_from_collection_endpoint(
             programming_mode=payload.programming_mode,
             craft_filters=payload.craft_filters or {},
             media_scope=payload.media_scope or "both",
+            queue_pad=payload.queue_pad,
             settings=settings_obj,
         )
         on_phase("warming", "Preparing streams…")
@@ -686,6 +702,7 @@ def live_channels_from_show_endpoint(
             channel_number=payload.channel_number,
             name=payload.name,
             programming_mode=payload.programming_mode,
+            queue_pad=payload.queue_pad,
             settings=settings_obj,
         )
         on_phase("warming", "Preparing streams…")
@@ -833,26 +850,14 @@ def live_channels_engine_settings_endpoint(
 def live_channels_craft_options_endpoint(
     user=Depends(require_role("owner")),
 ) -> Dict[str, Any]:
-    """Motifs / taste / collections + next channel number for the craft form."""
-    from projectionist.live_channels.craft import build_craft_options
-    from projectionist.live_channels.publish import tunarr_client_from_settings
+    """Motifs / taste / collections + next channel number for the craft form.
 
-    settings = _settings()
-    existing_numbers: List[int] = []
-    if settings.features.live_channels_enabled and str(settings.tunarr.url or "").strip():
-        try:
-            client = tunarr_client_from_settings(settings)
-            for ch in client.list_channels():
-                if isinstance(ch, dict) and ch.get("number") is not None:
-                    existing_numbers.append(int(ch["number"]))
-        except Exception:  # noqa: BLE001
-            existing_numbers = []
-    return build_craft_options(
-        _db(),
-        settings=settings,
-        owner_user_id=str(user.id),
-        existing_channel_numbers=existing_numbers,
-    )
+    SWR: Tunarr channel numbers and Plex occupied numbers are gathered in the
+    background; ``warming`` means the numbers are provisional.
+    """
+    from projectionist.live_channels.status_cache import get_craft_options
+
+    return get_craft_options(_settings(), _db(), owner_user_id=str(user.id))
 
 
 @router.post("/api/admin/live-channels/channels/publish")
@@ -896,11 +901,14 @@ def live_channels_publish_channel_endpoint(
             "youth_safe": payload.youth_safe,
             "summary": payload.summary,
             "craft_filters": payload.craft_filters or {},
+            "queue_pad": payload.queue_pad or {},
         }
     elif payload.media_scope and not recipe_body.get("media_scope"):
         recipe_body["media_scope"] = payload.media_scope
     if payload.craft_filters and not recipe_body.get("craft_filters"):
         recipe_body["craft_filters"] = payload.craft_filters
+    if payload.queue_pad and not recipe_body.get("queue_pad"):
+        recipe_body["queue_pad"] = payload.queue_pad
 
     def _run(settings_obj: Settings, on_phase: Any) -> Dict[str, Any]:
         client = tunarr_client_from_settings(settings_obj)
@@ -1116,6 +1124,9 @@ def live_channels_station_settings_endpoint(
             cluster_tag=payload.cluster_tag,
         )
         notes.append("Craft filters saved.")
+    if payload.queue_pad is not None:
+        set_station_meta(settings, cid, queue_pad=payload.queue_pad)
+        notes.append("Queue padding saved.")
     notes.append("Refill to apply filters and scope to the lineup.")
     subtitles_enabled = None
     if payload.subtitles_enabled is not None:
@@ -1173,6 +1184,7 @@ def live_channels_station_settings_endpoint(
         "cluster_tag": craft.get("cluster_tag") or "",
         "craft_filters": dict(craft.get("craft_filters") or {}),
         "source": craft.get("source") or "",
+        "queue_pad": dict(craft.get("queue_pad") or {}),
         "refill_required": True,
         "message": " ".join(notes),
     }
@@ -1569,7 +1581,7 @@ def live_channels_on_now_endpoint(user=Depends(get_current_user_dep)) -> Dict[st
     existing rating gate when Tunarr programs carry content ratings. Dual-watch
     CTA: Projectionist /live primary, Plex Live TV secondary.
     """
-    from projectionist.live_channels.guide import build_on_now_snapshot
+    from projectionist.live_channels.guide_cache import get_on_now_snapshot
     from projectionist.live_channels.nudges import maybe_deliver_live_channels_ready_nudge
     from projectionist.youth.rating_gate import resolve_youth_max_rating, youth_gate_active
 
@@ -1577,7 +1589,8 @@ def live_channels_on_now_endpoint(user=Depends(get_current_user_dep)) -> Dict[st
     youth_ceiling = None
     if youth_gate_active(user):
         youth_ceiling = resolve_youth_max_rating(settings)
-    snapshot = build_on_now_snapshot(settings, youth_max_rating=youth_ceiling)
+    # SWR: last good snapshot paints immediately; Tunarr is only asked in the background.
+    snapshot = get_on_now_snapshot(settings, youth_max_rating=youth_ceiling)
     # Soft, deduped ready nudge for opt-in members (never blocks the response).
     try:
         maybe_deliver_live_channels_ready_nudge(
@@ -1596,15 +1609,20 @@ def live_channels_guide_endpoint(
     hours: float = 6.0,
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
-    """Wider channel × time guide for the Projectionist `/live` EPG (1–12 hours)."""
-    from projectionist.live_channels.guide import build_guide_snapshot
+    """Wider channel × time guide for the Projectionist `/live` EPG (1–12 hours).
+
+    Stale-while-revalidate: the last good guide is served immediately (now/next
+    re-derived from cached programs) and Tunarr is refreshed in the background.
+    A true cold start returns ``warming: true`` instead of hanging first paint.
+    """
+    from projectionist.live_channels.guide_cache import get_guide_snapshot
     from projectionist.youth.rating_gate import resolve_youth_max_rating, youth_gate_active
 
     settings = _settings()
     youth_ceiling = None
     if youth_gate_active(user):
         youth_ceiling = resolve_youth_max_rating(settings)
-    return build_guide_snapshot(
+    return get_guide_snapshot(
         settings,
         youth_max_rating=youth_ceiling,
         hours=hours,
@@ -1617,7 +1635,7 @@ def live_channels_channel_subtitles_endpoint(
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
     """Richer `/live` CC metadata for the now-playing airing (Plex tracks when mapped)."""
-    from projectionist.live_channels.guide import build_on_now_snapshot
+    from projectionist.live_channels.guide_cache import get_on_now_snapshot
     from projectionist.library.subtitles import live_subtitles_payload
     from projectionist.youth.rating_gate import resolve_youth_max_rating, youth_gate_active
 
@@ -1630,7 +1648,7 @@ def live_channels_channel_subtitles_endpoint(
     youth_ceiling = None
     if youth_gate_active(user):
         youth_ceiling = resolve_youth_max_rating(settings)
-    snap = build_on_now_snapshot(settings, youth_max_rating=youth_ceiling)
+    snap = get_on_now_snapshot(settings, youth_max_rating=youth_ceiling)
     channel = next(
         (c for c in snap.get("channels") or [] if str(c.get("id")) == cid),
         None,

@@ -252,6 +252,7 @@ def _build_migrations() -> List[Migration]:
         (49, "session_revocation", wrap("_migrate_session_revocation")),
         (50, "library_episodes_added_at", wrap("_migrate_library_episodes_added_at")),
         (51, "weather_location", wrap("_migrate_weather_location")),
+        (52, "knowledge_fetch_state", wrap("_migrate_knowledge_fetch_state")),
     ]
 
 

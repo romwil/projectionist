@@ -28,6 +28,8 @@ from projectionist.scheduler.engine import IdleScheduler, TaskDefinition
 logger = logging.getLogger(__name__)
 
 INTERVAL_SECONDS = 43200  # 12 hours
+# Paced follow-up while a backlog is draining (see scheduler/cadence.py).
+CATCHUP_GAP_SECONDS = 180
 SEEDS_PER_CYCLE = 15
 CURSOR_KEY = "plot_neighbors_cursor"
 TASK_NAME = "plot_neighbors"
@@ -40,12 +42,13 @@ async def run(
     if should_stop():
         return {"status": "interrupted", "processed": 0}
 
-    embeddings = db.get_embeddings()
-    if len(embeddings) < 2:
+    # Ids only: ``db.get_embeddings()`` JSON-decodes every stored vector (hundreds
+    # of MB on a large library) just to be counted and sorted.
+    emb_ids = db.embedding_item_ids()
+    if len(emb_ids) < 2:
         return {"status": "completed", "processed": 0, "reason": "need_at_least_two_embeddings"}
 
     batch_size = resolve_batch_size(db, TASK_NAME, SEEDS_PER_CYCLE)
-    emb_ids = sorted(item_id for item_id, _ in embeddings)
     missing = db.item_ids_missing_neighbors(limit=batch_size)
 
     unique_seeds: List[int] = []
@@ -123,6 +126,7 @@ def register(scheduler: IdleScheduler) -> None:
             name=TASK_NAME,
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
+            off_loop=True,
             run_fn=run,
             description=(
                 "Refreshes similar-title links from plot-similarity data. Starts with titles "
@@ -130,6 +134,7 @@ def register(scheduler: IdleScheduler) -> None:
                 "run so large libraries catch up gradually."
             ),
             items_per_cycle=SEEDS_PER_CYCLE,
+            catchup_gap_seconds=CATCHUP_GAP_SECONDS,
             progress_scope="neighbors_backlog",
         )
     )

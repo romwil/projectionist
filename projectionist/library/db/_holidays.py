@@ -376,6 +376,66 @@ class HolidaysMixin:
 
         return self.run_write(_write, label="reorder_holiday_rail_pins") or []
 
+    def set_holiday_rail_order(
+        self, scope_id: str, library_item_ids: Sequence[int]
+    ) -> List[Dict[str, Any]]:
+        """Pin ``library_item_ids`` to the front of a shelf, in exactly this order.
+
+        Unlike :meth:`reorder_holiday_rail_pins` (which only re-numbers titles that
+        are already pinned), this upserts every id as a pin, so the owner can order
+        titles that were only keyword matches. Pins not mentioned keep their
+        relative order *after* the listed ones; excluded titles named here become
+        pins (an explicit owner choice wins).
+        """
+        ordered: List[int] = []
+        for raw in library_item_ids:
+            item_id = int(raw)
+            if item_id not in ordered:
+                ordered.append(item_id)
+
+        def _write() -> List[Dict[str, Any]]:
+            with self.connect() as conn:
+                if ordered:
+                    placeholders = ",".join("?" for _ in ordered)
+                    found = {
+                        int(row["id"])
+                        for row in conn.execute(
+                            f"SELECT id FROM library_items WHERE id IN ({placeholders})",
+                            tuple(ordered),
+                        ).fetchall()
+                    }
+                    missing = [item_id for item_id in ordered if item_id not in found]
+                    if missing:
+                        raise ValueError("Library title not found")
+                rest = [
+                    int(row["library_item_id"])
+                    for row in conn.execute(
+                        """
+                        SELECT library_item_id FROM holiday_rail_titles
+                        WHERE scope_id = ? AND curation = 'pin'
+                        ORDER BY COALESCE(pin_position, 0), library_item_id
+                        """,
+                        (scope_id,),
+                    ).fetchall()
+                    if int(row["library_item_id"]) not in ordered
+                ]
+                now = time.time()
+                for position, item_id in enumerate([*ordered, *rest]):
+                    conn.execute(
+                        """
+                        INSERT INTO holiday_rail_titles (
+                            scope_id, library_item_id, curation, pin_position, created_at
+                        ) VALUES (?, ?, 'pin', ?, ?)
+                        ON CONFLICT(scope_id, library_item_id) DO UPDATE SET
+                            curation = 'pin',
+                            pin_position = excluded.pin_position
+                        """,
+                        (scope_id, item_id, position, now),
+                    )
+            return self.list_holiday_rail_titles(scope_id)
+
+        return self.run_write(_write, label="set_holiday_rail_order") or []
+
     def holiday_rail_curation_maps(self, scope_id: str) -> Dict[str, Any]:
         """Return pin/include/exclude id lists for feed composition."""
         titles = self.list_holiday_rail_titles(scope_id)
