@@ -1,6 +1,56 @@
 {
-  "generated_at": "2026-10-03T00:06:48Z",
+  "generated_at": "2026-10-03T22:16:33Z",
   "releases": [
+    {
+      "version": "1.37.31",
+      "date": "2026-10-03",
+      "summary": "One patch on 1.37.30: the professor can curate every seasonal shelf, Admin no longer waits on Docker and Tunarr to paint, Weather Channel music has its own card, and Plex Live TV shows channel names when a station has no art.",
+      "highlights": [
+        "**Every season can be curated.** Ask the professor for a mix of familiar and lesser-known titles already in your library. Explore shows the staff-pick note under each poster, and **Chat about this** stays on the page.",
+        "**Admin opens without waiting on the broadcast.** The page paints from the last status and refreshes Docker and Tunarr in the background.",
+        "**Weather Channel music has its own card.** The folder picker sits beside Between-show breaks, not inside that grid.",
+        "**Plex shows the channel name.** Stations without their own art no longer publish a stock logo that hid the number and name. After this is installed, use **Refresh Plex map** (not **Rebuild tuner in Plex**)."
+      ],
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "**Agent-curated seasonal shelves for every grounded holiday.** Admin → Live Channels can ask the professor to propose an ordered mix (known + lesser-known) with staff-pick notes; confirming writes pins + notes for that season’s shelf (`POST /api/admin/holidays/{id}/rail/curate` + `/apply`). Manual reorder, Not a fit, and note edits remain.",
+            "**Durable curator notes** on `holiday_rail_titles` (migration 53). Notes travel on the member Explore seasonal rail as `curator_note` / `why` (no new auth surface — same hub / feed authz).",
+            "**Explore “Chat about this” sidebar** for seasonal picks: members open a docked conversation seeded with season + title + note; does not navigate away to `/chat`. Owner Live editor can still open the same pane while vetting."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "Curated seasonal pins beat anniversary dumps when a shelf has agent/owner picks, so staff-pick notes stay visible on Explore for every active season — not Halloween-only."
+          ]
+        },
+        {
+          "title": "Fixed",
+          "bullets": [
+            "**Admin `/admin` first paint no longer waits on Docker / Tunarr lifecycle probes.** `GET /api/admin/live-channels/lifecycle-status` (mounted when Docker orchestration is on) is now SWR: paint from a progress-store skeleton or last probe while Docker inspect + Tunarr HTTP refresh in the background; the cheap job/phase store stays overlaid live. The Live status warming skeleton is also truly probe-free (it no longer called `build_live_channels_status`, which still hit Docker even with blanked URLs). Docker status/log timeouts for polls are capped at 5s. Admin re-polls while lifecycle is `stale` / `warming`. `?fresh=1` still forces a synchronous probe.",
+            "**Weather Channel music is its own Live Channels section.** The folder picker was nested in Between-show breaks, so the heading and shared-in browser sat in the filler grid. It now has its own card; choosing and clearing the folder is unchanged.",
+            "**Plex Live TV channel names.** The guide's channel column shows the station logo and hides the number and name. Tunarr was still publishing its stock logo when a station had no art, and Plex often left that cell blank. Stations without their own art now publish no logo, so Plex shows the channel number and name. A real station icon is still used when one is set. After this is installed, use **Refresh Plex map** (not Rebuild) so the guide picks it up."
+          ]
+        },
+        {
+          "title": "Migration",
+          "bullets": [
+            "Schema migration 53 (`holiday_rail_curator_notes`) adds `curator_note` on `holiday_rail_titles`. The other changes add none."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Combined stack (#93–#96), one full run on the merged 1.37.31 tree: backend `pytest tests/` — 2531 passed, 6 skipped, coverage 77.08% (floor 74%), run with `PROJECTIONIST_SKIP_DOTENV=1`.",
+            "Frontend unit 929/929; lint 0 errors (151 pre-existing warnings); `npm run build` OK.",
+            "Playwright e2e (mocked, port 8799; theater port 8791 was free and used): 107 passed, 8 skipped.",
+            "Migration 53 (`holiday_rail_curator_notes`) did not collide with 52 on main."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.30",
       "date": "2026-10-03",
