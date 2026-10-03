@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Plex Live TV channel names.** The guide's channel column shows the station logo and hides the number and name. Tunarr was still publishing its stock logo when a station had no art, and Plex often left that cell blank. Stations without their own art now publish no logo, so Plex shows the channel number and name. A real station icon is still used when one is set. After this is installed, use **Refresh Plex map** (not Rebuild) so the guide picks it up.
+
 ## [1.37.30] — 2026-10-03
 
 One combined patch that rolls up eight reviewed changes: subtitle tracks you already have, drawn in the Live and Play players; a faster first paint for Live, My Journey, and Admin; a native "start a station" Live Channels studio with queue padding and editable seasonal shelves; a weekly letter in place of Admin → House; missing plots that fill themselves; a quieter background scheduler; Sonarr "Search selected"; curator collections that land in Projectionist; and an aligned Live Guide. Hub `romwil/projectionist:1.37.25` was a one-off publish of the first-paint change alone; it was never merged, git-tagged, or promoted to prod, and its content is included here. Nothing was published as 1.37.26–1.37.29.
