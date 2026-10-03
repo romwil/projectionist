@@ -595,10 +595,6 @@ export default function LiveChannelsAdvanced({
                       </button>
                       </div>
                     </div>
-                    <MuzakFolderPanel
-                      currentPath={settings?.tunarr?.muzak_folder || ""}
-                      onSaved={(path) => updateTunarrSettings({ muzak_folder: path })}
-                    />
                     <div className="service-fields" data-testid="live-channels-schedule-settings">
                       <label>
                         Gap fill (minutes)
@@ -726,7 +722,11 @@ export default function LiveChannelsAdvanced({
                     </div>
                   </div>
 
-                  
+                  <MuzakFolderPanel
+                    currentPath={settings?.tunarr?.muzak_folder || ""}
+                    onSaved={(path) => updateTunarrSettings({ muzak_folder: path })}
+                  />
+
                   <div
                     className={`service-card${
                       mappingOk ? " service-ok" : ""

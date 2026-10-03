@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Weather Channel music is its own Live Channels section.** The folder picker was nested in Between-show breaks, so the heading and shared-in browser sat in the filler grid. It now has its own card; choosing and clearing the folder is unchanged.
+
 ## [1.37.30] — 2026-10-03
 
 One combined patch that rolls up eight reviewed changes: subtitle tracks you already have, drawn in the Live and Play players; a faster first paint for Live, My Journey, and Admin; a native "start a station" Live Channels studio with queue padding and editable seasonal shelves; a weekly letter in place of Admin → House; missing plots that fill themselves; a quieter background scheduler; Sonarr "Search selected"; curator collections that land in Projectionist; and an aligned Live Guide. Hub `romwil/projectionist:1.37.25` was a one-off publish of the first-paint change alone; it was never merged, git-tagged, or promoted to prod, and its content is included here. Nothing was published as 1.37.26–1.37.29.
