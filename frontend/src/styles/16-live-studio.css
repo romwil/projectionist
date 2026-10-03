@@ -437,15 +437,59 @@
   padding: 0 var(--space-4) var(--space-4);
 }
 
-.live-shelf-titles li,
-.live-shelf-hits li {
+.live-shelf-editor--chat-open {
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
+  align-items: start;
+}
+
+.live-shelf-editor-main {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.live-shelf-curate-bar {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  gap: var(--space-2);
+}
+
+.live-shelf-proposal {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.live-shelf-proposal-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.live-shelf-proposal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.live-shelf-titles li,
+.live-shelf-hits li {
+  display: grid;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
   background: var(--surface);
+}
+
+.live-shelf-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .live-shelf-title-name {
@@ -460,12 +504,38 @@
 
 .live-shelf-title-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-1);
 }
 
 .live-shelf-title-actions button {
   min-height: var(--tap-min);
   min-width: var(--tap-min);
+}
+
+.live-shelf-note-field textarea,
+.live-shelf-editor .seasonal-pick-chat-composer textarea {
+  width: 100%;
+  min-height: 3.25rem;
+  resize: vertical;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+  font: inherit;
+}
+
+.live-shelf-title-note {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.live-shelf-editor .seasonal-pick-chat {
+  position: sticky;
+  top: var(--space-3);
 }
 
 .live-shelf-add {
@@ -487,6 +557,17 @@
 
 .live-shelf-date {
   grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+}
+
+@media (max-width: 900px) {
+  .live-shelf-editor--chat-open {
+    grid-template-columns: 1fr;
+  }
+
+  .live-shelf-editor .seasonal-pick-chat {
+    position: relative;
+    top: 0;
+  }
 }
 
 @media (max-width: 640px) {

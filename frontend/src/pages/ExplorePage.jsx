@@ -14,6 +14,7 @@ import MediaBrowseResults from "../components/MediaBrowseResults";
 import OwnerEmptyStateCta from "../components/OwnerEmptyStateCta";
 import PosterRailLoader from "../components/PosterRailLoader";
 import RecommendModal from "../components/RecommendModal";
+import SeasonalSpotlightRail from "../components/SeasonalSpotlightRail";
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { chatFromRailHref } from "../lib/backNav.js";
@@ -795,14 +796,20 @@ export default function ExplorePage() {
           <ExploreSection
             id="seasonal-spotlight"
             title={seasonalSpotlight.meta?.label || "Seasonal picks"}
-            subtitle={seasonalSpotlight.meta?.mode === "holiday" ? "A nearby calendar occasion, found in your library" : "A light seasonal turn through your library"}
+            subtitle={
+              seasonalSpotlight.meta?.mode === "holiday"
+                ? "Staff picks from your library for this season — why each one made the shelf, and room to chat"
+                : "A light seasonal turn through your library — staff-pick notes when the curator has weighed in"
+            }
             isOwner={isOwner}
             empty={seasonalSpotlight.error || (!seasonalSpotlight.loading && !seasonalSpotlight.items.length ? seasonalSpotlight.note : null)}
           >
-            <FeedRail
+            <SeasonalSpotlightRail
               testId="explore-seasonal-spotlight-rail"
               items={seasonalSpotlight.items}
               loading={seasonalSpotlight.loading}
+              seasonLabel={seasonalSpotlight.meta?.label || "Seasonal picks"}
+              scopeId={seasonalSpotlight.meta?.scope_id || ""}
               {...recommendProps}
             />
           </ExploreSection>

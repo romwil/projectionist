@@ -416,7 +416,12 @@ class TunarrDockerLifecycle:
                 image=self.image,
             )
         try:
-            code, body = self._engine_request("GET", f"/containers/{self.container_name}/json")
+            # Status is polled from Admin — never inherit the 120s pull/create timeout.
+            code, body = self._engine_request(
+                "GET",
+                f"/containers/{self.container_name}/json",
+                timeout=5.0,
+            )
         except Exception as error:  # noqa: BLE001
             return DockerLifecycleResult(
                 ok=False,
@@ -966,7 +971,7 @@ class TunarrDockerLifecycle:
             image=self.image,
         )
 
-    def container_logs(self, *, tail: int = 200) -> str:
+    def container_logs(self, *, tail: int = 200, timeout: float = 30.0) -> str:
         """Return recent stdout/stderr from the Tunarr container (Docker Engine API)."""
         if not self.available():
             raise RuntimeError(_socket_unavailable_message(self.socket_path))
@@ -977,7 +982,11 @@ class TunarrDockerLifecycle:
             f"?stdout=1&stderr=1&timestamps=1&tail={limit}"
         )
         status, body = self._engine_request(
-            "GET", path, expect_json=False, timeout=30.0, raw_text=True
+            "GET",
+            path,
+            expect_json=False,
+            timeout=max(1.0, float(timeout)),
+            raw_text=True,
         )
         if status == 404:
             raise RuntimeError(

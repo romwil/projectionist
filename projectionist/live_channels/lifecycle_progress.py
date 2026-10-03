@@ -7,6 +7,10 @@ ready). Progress is process-local — fine for single-owner Projectionist.
 Readiness is HTTP-first: the container log line ``Tunarr is ready!`` is a soft
 signal only. Transient Meilisearch / mid-scan / SIGTERM noise during recreate
 must not count as success or hard failure.
+
+Admin first paint must never wait on Docker inspect / Tunarr HTTP: those probes
+run via SWR (see :func:`get_lifecycle_status`). The cheap progress-store snapshot
+is always overlaid live so busy/phase never lag during ensure_running.
 """
 
 from __future__ import annotations
@@ -16,7 +20,21 @@ import threading
 import time
 from typing import Any, Callable, Dict, Mapping, Optional
 
+from projectionist.swr_cache import SwrCache
+
 logger = logging.getLogger(__name__)
+
+# Short soft TTL: Step 2 polls while starting; background refresh stays snappy.
+LIFECYCLE_SOFT_TTL_SECONDS = 5.0
+LIFECYCLE_HARD_TTL_SECONDS = 3600.0
+LIFECYCLE_COLD_WAIT_SECONDS = 0.0
+
+LIFECYCLE_CACHE = SwrCache(
+    "admin_live_lifecycle",
+    soft_ttl=LIFECYCLE_SOFT_TTL_SECONDS,
+    hard_ttl=LIFECYCLE_HARD_TTL_SECONDS,
+    durable=False,
+)
 
 READY_LOG_MARKER = "Tunarr is ready!"
 
@@ -156,6 +174,12 @@ def progress_store() -> LifecycleProgressStore:
 def reset_progress_for_tests() -> None:
     """Test helper — clear process-local progress between cases."""
     _STORE.reset()
+    LIFECYCLE_CACHE.clear()
+
+
+def invalidate_lifecycle_status_cache() -> None:
+    """Mark the probe snapshot soft-stale (payload kept for instant paint)."""
+    LIFECYCLE_CACHE.invalidate()
 
 
 def make_phase_callback(store: Optional[LifecycleProgressStore] = None) -> PhaseCallback:
@@ -180,7 +204,7 @@ def logs_look_transient(text: str) -> bool:
     return any(token in lowered for token in _TRANSIENT_LOG_NOISE)
 
 
-def probe_tunarr_http_ready(base_url: str, *, timeout: float = 4.0) -> bool:
+def probe_tunarr_http_ready(base_url: str, *, timeout: float = 2.0) -> bool:
     """True when Tunarr ``/api/version`` (or ``/api/system/health``) responds OK."""
     url = str(base_url or "").strip().rstrip("/")
     if not url:
@@ -306,8 +330,11 @@ def probe_ready_from_docker(lifecycle: Any) -> Dict[str, Any]:
         "transient_noise": False,
     }
     try:
+        # Status polls must not inherit the 120s pull/create Docker timeout.
         code, body = lifecycle._engine_request(  # noqa: SLF001 — intentional
-            "GET", f"/containers/{lifecycle.container_name}/json"
+            "GET",
+            f"/containers/{lifecycle.container_name}/json",
+            timeout=5.0,
         )
     except Exception as error:  # noqa: BLE001
         out["error"] = str(error)[:200]
@@ -319,7 +346,7 @@ def probe_ready_from_docker(lifecycle: Any) -> Dict[str, Any]:
     out["container_id"] = str(body.get("Id") or "")[:12]
     if out["container_running"]:
         try:
-            text = lifecycle.container_logs(tail=120)
+            text = lifecycle.container_logs(tail=80, timeout=5.0)
             out["log_snippet"] = text[-400:] if text else ""
             out["logs_ready"] = logs_indicate_ready(text)
             out["transient_noise"] = logs_look_transient(text)
@@ -459,6 +486,102 @@ def build_lifecycle_status(settings: Any) -> Dict[str, Any]:
         "determinate": True,
         "updated_at": snap.get("updated_at") or 0,
     }
+
+
+def _lifecycle_cache_key(settings: Any) -> str:
+    tunarr = getattr(settings, "tunarr", None)
+    url = str(getattr(tunarr, "url", "") or "").strip() if tunarr else ""
+    orch = bool(getattr(tunarr, "docker_orchestration", False)) if tunarr else False
+    return f"orch={int(orch)}|url={url}"
+
+
+def _warming_lifecycle_status(settings: Any) -> Dict[str, Any]:
+    """Probe-free skeleton from the in-process progress store only."""
+    from projectionist.live_channels.docker import lifecycle_from_settings
+
+    snap = progress_store().snapshot()
+    life = lifecycle_from_settings(settings)
+    url = _resolve_probe_url(settings, life)
+    return {
+        "phase": snap.get("phase") or "idle",
+        "percent": int(snap.get("percent") or 0),
+        "message": str(snap.get("message") or PHASE_META["idle"][1]),
+        "ready": bool(snap.get("ready")),
+        "busy": bool(snap.get("busy")),
+        "ok": bool(snap.get("ok", True)),
+        "error": str(snap.get("error") or ""),
+        "container_id": str(snap.get("container_id") or ""),
+        "container_name": str(snap.get("container_name") or life.container_name),
+        "http_ready": False,
+        "logs_ready": False,
+        "container_running": False,
+        "still_starting": False,
+        "tunarr_url": url,
+        "determinate": True,
+        "updated_at": snap.get("updated_at") or 0,
+        "warming": True,
+    }
+
+
+def _overlay_live_progress(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Keep busy/phase/percent live even when probe fields are stale."""
+    snap = progress_store().snapshot()
+    out = dict(payload)
+    for key in (
+        "phase",
+        "percent",
+        "message",
+        "ready",
+        "busy",
+        "ok",
+        "error",
+        "container_id",
+        "container_name",
+        "updated_at",
+    ):
+        if key in snap and snap[key] is not None and snap[key] != "":
+            out[key] = snap[key]
+    # Store ready wins when ensure_running just flipped; probe http_ready can lag.
+    if snap.get("ready"):
+        out["ready"] = True
+        out["still_starting"] = False
+    elif out.get("http_ready"):
+        out["ready"] = True
+        out["still_starting"] = False
+    return out
+
+
+def get_lifecycle_status(
+    settings: Any,
+    *,
+    fresh: bool = False,
+    cold_wait: float = LIFECYCLE_COLD_WAIT_SECONDS,
+) -> Dict[str, Any]:
+    """Cached lifecycle probes; progress-store fields always overlaid live.
+
+    ``fresh=True`` forces a synchronous Docker + Tunarr rebuild (diagnostics).
+    """
+    key = _lifecycle_cache_key(settings)
+    if fresh:
+        payload = LIFECYCLE_CACHE.refresh_now(key, lambda: build_lifecycle_status(settings))
+        out = _overlay_live_progress(payload)
+        out.update({"cached": False, "stale": False, "warming": False})
+        return out
+
+    # While ensure_running is in flight, prefer a short soft age so polls refresh
+    # probes in the background without blocking the request path.
+    snap = progress_store().snapshot()
+    if snap.get("busy"):
+        LIFECYCLE_CACHE.invalidate()
+
+    result = LIFECYCLE_CACHE.get(
+        key,
+        lambda: build_lifecycle_status(settings),
+        warming=lambda: _warming_lifecycle_status(settings),
+        cold_wait=cold_wait,
+    )
+    out = _overlay_live_progress(result.annotated())
+    return out
 
 
 def mark_waiting_after_lifecycle(result: Mapping[str, Any]) -> None:

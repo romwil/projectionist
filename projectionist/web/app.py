@@ -1435,7 +1435,7 @@ def _scheduler_trigger_background(name: str) -> Dict[str, Any]:
     return scheduler.trigger_task_background(name)
 
 
-register_holidays_routes(app, db_factory=_db)
+register_holidays_routes(app, db_factory=_db, settings_factory=_settings)
 register_weekly_letter_routes(app, db_factory=_db, settings_factory=_settings)
 register_augmentation_routes(
     app,
