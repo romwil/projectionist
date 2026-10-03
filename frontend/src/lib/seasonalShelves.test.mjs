@@ -5,6 +5,8 @@ import {
   addShelfIdFirst,
   inputToTerms,
   moveShelfId,
+  seasonalCardMeta,
+  seasonalPickChatSeed,
   shelfDateLabel,
   shelfFormFromItem,
   shelfPatchFromForm,
@@ -61,4 +63,32 @@ test("patch carries retitle, terms, shoulders, enabled; movable shelves keep the
 test("role labels are plain language", () => {
   assert.equal(shelfRoleLabel("pin"), "Picked by you");
   assert.equal(shelfRoleLabel(undefined), "Matches the season");
+  assert.equal(shelfRoleLabel("match", { hasNote: true }), "Staff pick");
+});
+
+test("seasonal pick chat seed carries season, title, and curator note", () => {
+  const seed = seasonalPickChatSeed({
+    seasonLabel: "Halloween",
+    scopeId: "halloween",
+    title: "Evil Dead Burn",
+    year: 2026,
+    curatorNote: "A lean gateway scream for newcomers.",
+    railRole: "pin",
+  });
+  assert.match(seed, /Halloween seasonal picks on Explore/);
+  assert.match(seed, /Evil Dead Burn/);
+  assert.match(seed, /2026/);
+  assert.match(seed, /lean gateway scream/);
+  assert.match(seed, /professor/);
+  assert.match(seed, /halloween/);
+});
+
+test("seasonal card meta prefers curator notes for Explore posters", () => {
+  assert.equal(
+    seasonalCardMeta({ curator_note: "Staff pick for spooky season.", why: "fallback" }),
+    "Staff pick for spooky season.",
+  );
+  assert.equal(seasonalCardMeta({ why: "Only why" }), "Only why");
+  assert.equal(seasonalCardMeta({ anniversary_text: "Released today" }), "Released today");
+  assert.equal(seasonalCardMeta({}), null);
 });

@@ -446,21 +446,44 @@ def ensure_media_libraries_enabled(
 
 
 def channel_icon_body(icon_url: str = "") -> Dict[str, Any]:
-    """Tunarr channel icon object. Empty path → generic/blank in some Plex clients."""
+    """Tunarr channel icon object for Plex's guide column.
+
+    Plex draws that column from the XMLTV ``<icon>`` and does not also draw
+    the call sign. Tunarr inserts ``/images/tunarr.png`` whenever ``path`` is
+    empty unless ``useDefaultIconFallback`` is false. That stock image
+    replaces the channel number and name, and Plex often fails to paint it,
+    so the column is a blank box. Publish real station art, or no icon.
+    """
     path = str(icon_url or "").strip()
-    if not path:
-        return {
-            "path": "",
-            "width": 0,
-            "duration": 0,
-            "position": "bottom-right",
-        }
+    if is_default_tunarr_icon(path):
+        path = ""
     return {
         "path": path,
-        "width": 256,
+        "width": 256 if path else 0,
         "duration": 0,
         "position": "bottom-right",
+        "useDefaultIconFallback": False,
     }
+
+
+def channel_icon_hides_plex_label(icon: Any) -> bool:
+    """True when Tunarr would emit an icon that replaces the Plex call sign."""
+    if not isinstance(icon, Mapping):
+        return True
+    path = str(icon.get("path") or "").strip()
+    if path and not is_default_tunarr_icon(path):
+        lowered = path.lower()
+        if (
+            lowered.startswith("http://127.0.0.1")
+            or lowered.startswith("http://localhost")
+            or lowered.startswith("https://127.0.0.1")
+            or lowered.startswith("https://localhost")
+            or "host.docker.internal" in lowered
+        ):
+            return True
+        return False
+    # Empty or stock path: Tunarr still emits /images/tunarr.png unless opted out.
+    return icon.get("useDefaultIconFallback") is not False
 
 
 def resolve_channel_icon_url(
@@ -472,8 +495,9 @@ def resolve_channel_icon_url(
     """LAN-facing icon URL for channel logos (Plex must be able to fetch it).
 
     Prefer ``preferred_url`` (collection / title art) when set. Do **not** fall
-    back to Tunarr's stock ``/images/tunarr.png`` — empty path keeps Plex from
-    showing default Tunarr marks when station art is missing.
+    back to Tunarr's stock ``/images/tunarr.png``. An empty path still publishes
+    that stock logo unless ``useDefaultIconFallback`` is false — see
+    ``channel_icon_body``.
     """
     _ = (settings, tunarr_base)  # signature kept for callers; stock Tunarr mark unused
     preferred = str(preferred_url or "").strip()
@@ -994,7 +1018,12 @@ def ensure_channel_labels(
     icon_url: str = "",
     channel_ids: Optional[Sequence[str]] = None,
 ) -> Dict[str, Any]:
-    """Ensure Tunarr stations have a non-empty name + LAN icon for Plex guide labels."""
+    """Ensure Tunarr stations have a name Plex can show in the guide column.
+
+    Real station art is kept. Stock, empty, and loopback icons are cleared
+    with ``useDefaultIconFallback`` off so XMLTV omits ``<icon>`` and Plex
+    draws the call sign (``100 Mystery``) instead of a blank logo cell.
+    """
     wanted = {str(cid).strip() for cid in (channel_ids or ()) if str(cid).strip()}
     updated: List[str] = []
     errors: List[str] = []
@@ -1012,25 +1041,14 @@ def ensure_channel_labels(
         if not name:
             name = f"Channel {number}" if number else "Station"
         current_icon = ch.get("icon") if isinstance(ch.get("icon"), Mapping) else {}
-        current_path = str(current_icon.get("path") or "").strip()
-        # Upgrade empty / loopback / generic Tunarr mark when a better LAN path is known.
-        generic_mark = current_path.endswith("/images/tunarr.png")
-        better = bool(icon.get("path")) and icon.get("path") != current_path and not str(
-            icon.get("path") or ""
-        ).endswith("/images/tunarr.png")
-        needs_icon = bool(icon.get("path")) and (
-            not current_path
-            or current_path.startswith("http://127.0.0.1")
-            or current_path.startswith("http://localhost")
-            or (generic_mark and better)
-        )
+        hides_label = channel_icon_hides_plex_label(current_icon)
         needs_name = not str(ch.get("name") or "").strip()
-        if not needs_icon and not needs_name:
+        if not hides_label and not needs_name:
             continue
         body = _channel_put_body(
             ch,
             name=name,
-            icon=dict(icon) if needs_icon else dict(current_icon or channel_icon_body("")),
+            icon=dict(icon) if hides_label else dict(current_icon or channel_icon_body("")),
         )
         if not body["transcodeConfigId"]:
             errors.append(f"{cid}: missing transcodeConfigId")
