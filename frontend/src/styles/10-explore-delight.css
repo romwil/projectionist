@@ -2672,6 +2672,139 @@ a.weekly-digest-stat:focus-visible {
 .explore-rail-chat-link:hover {
   text-decoration: underline;
 }
+
+.explore-seasonal-rail {
+  display: grid;
+  gap: var(--space-3, 0.75rem);
+}
+
+.explore-seasonal-rail--chat-open {
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
+  align-items: start;
+}
+
+.explore-seasonal-rail-main {
+  min-width: 0;
+}
+
+.explore-seasonal-card {
+  display: grid;
+  gap: 0.35rem;
+  align-content: start;
+}
+
+.explore-seasonal-chat-btn {
+  justify-self: start;
+  min-height: var(--tap-min, 2.75rem);
+  font-size: var(--text-sm);
+}
+
+.seasonal-pick-chat {
+  display: grid;
+  grid-template-rows: auto minmax(12rem, 1fr) auto auto;
+  gap: var(--space-2, 0.5rem);
+  min-height: 20rem;
+  max-height: min(70vh, 36rem);
+  padding: var(--space-3, 0.75rem);
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 8px);
+  background: var(--surface-2, var(--surface-raised));
+  position: sticky;
+  top: var(--space-3, 0.75rem);
+}
+
+.seasonal-pick-chat-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2, 0.5rem);
+}
+
+.seasonal-pick-chat-kicker {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.seasonal-pick-chat-title {
+  margin: 0.15rem 0 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.seasonal-pick-chat-season {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.seasonal-pick-chat-messages {
+  overflow: auto;
+  display: grid;
+  gap: var(--space-2, 0.5rem);
+  align-content: start;
+  min-height: 0;
+}
+
+.seasonal-pick-chat-bubble {
+  padding: var(--space-2, 0.5rem) var(--space-3, 0.75rem);
+  border-radius: var(--radius-sm, 6px);
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+.seasonal-pick-chat-bubble--user {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+}
+
+.seasonal-pick-chat-bubble--assistant {
+  background: color-mix(in srgb, var(--accent, #b08d57) 12%, var(--surface));
+  border: 1px solid var(--border-subtle);
+}
+
+.seasonal-pick-chat-composer {
+  display: grid;
+  gap: var(--space-2, 0.5rem);
+}
+
+.seasonal-pick-chat-composer textarea {
+  width: 100%;
+  min-height: 3.25rem;
+  resize: vertical;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 6px);
+  padding: var(--space-2, 0.5rem);
+  font: inherit;
+}
+
+@media (max-width: 900px) {
+  .explore-seasonal-rail--chat-open {
+    grid-template-columns: 1fr;
+  }
+
+  .seasonal-pick-chat {
+    position: relative;
+    top: 0;
+    max-height: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .explore-seasonal-rail--chat-open .seasonal-pick-chat,
+  .live-shelf-editor--chat-open .seasonal-pick-chat {
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 40;
+    max-height: min(75vh, 32rem);
+    border-radius: var(--radius, 8px) var(--radius, 8px) 0 0;
+    box-shadow: 0 -8px 24px color-mix(in srgb, #000 35%, transparent);
+  }
+}
+
 .engagement-card-list {
   list-style: none;
   margin: 0;

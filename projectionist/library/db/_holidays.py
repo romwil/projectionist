@@ -20,6 +20,13 @@ def _new_id(prefix: str = "hol") -> str:
     return f"{prefix}_{uuid.uuid4().hex[:12]}"
 
 
+def _clean_curator_note(raw: Any, *, max_len: int = 280) -> str:
+    text = " ".join(str(raw or "").split()).strip()
+    if len(text) > max_len:
+        text = text[: max_len - 1].rstrip() + "…"
+    return text
+
+
 class HolidaysMixin:
     """CRUD for holiday observances and per-scope rail title curation."""
 
@@ -297,11 +304,14 @@ class HolidaysMixin:
         *,
         curation: str,
         pin_position: Optional[int] = None,
+        curator_note: Optional[str] = None,
     ) -> Dict[str, Any]:
         role = str(curation or "").strip().lower()
         if role not in {"pin", "include", "exclude"}:
             raise ValueError("curation must be pin, include, or exclude")
         item_id = int(library_item_id)
+        note_provided = curator_note is not None
+        note = _clean_curator_note(curator_note) if note_provided else ""
 
         def _write() -> Dict[str, Any]:
             with self.connect() as conn:
@@ -325,17 +335,33 @@ class HolidaysMixin:
                     position = int(pos_row["next_pos"] or 0)
                 if role != "pin":
                     position = None
-                conn.execute(
-                    """
-                    INSERT INTO holiday_rail_titles (
-                        scope_id, library_item_id, curation, pin_position, created_at
-                    ) VALUES (?, ?, ?, ?, ?)
-                    ON CONFLICT(scope_id, library_item_id) DO UPDATE SET
-                        curation = excluded.curation,
-                        pin_position = excluded.pin_position
-                    """,
-                    (scope_id, item_id, role, position, now),
-                )
+                if note_provided:
+                    conn.execute(
+                        """
+                        INSERT INTO holiday_rail_titles (
+                            scope_id, library_item_id, curation, pin_position,
+                            curator_note, created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(scope_id, library_item_id) DO UPDATE SET
+                            curation = excluded.curation,
+                            pin_position = excluded.pin_position,
+                            curator_note = excluded.curator_note
+                        """,
+                        (scope_id, item_id, role, position, note, now),
+                    )
+                else:
+                    conn.execute(
+                        """
+                        INSERT INTO holiday_rail_titles (
+                            scope_id, library_item_id, curation, pin_position,
+                            curator_note, created_at
+                        ) VALUES (?, ?, ?, ?, '', ?)
+                        ON CONFLICT(scope_id, library_item_id) DO UPDATE SET
+                            curation = excluded.curation,
+                            pin_position = excluded.pin_position
+                        """,
+                        (scope_id, item_id, role, position, now),
+                    )
             titles = self.list_holiday_rail_titles(scope_id)
             for title in titles:
                 if int(title["library_item_id"]) == item_id:
@@ -343,6 +369,126 @@ class HolidaysMixin:
             raise ValueError("Could not save rail title curation")
 
         return self.run_write(_write, label="set_holiday_rail_title")
+
+    def set_holiday_rail_curator_note(
+        self, scope_id: str, library_item_id: int, curator_note: str
+    ) -> Dict[str, Any]:
+        """Upsert a staff-pick note for a shelf title (pins the title if new)."""
+        item_id = int(library_item_id)
+        note = _clean_curator_note(curator_note)
+
+        def _write() -> Dict[str, Any]:
+            with self.connect() as conn:
+                lib = conn.execute(
+                    "SELECT id FROM library_items WHERE id = ?",
+                    (item_id,),
+                ).fetchone()
+                if lib is None:
+                    raise ValueError("Library title not found")
+                now = time.time()
+                existing = conn.execute(
+                    """
+                    SELECT curation, pin_position FROM holiday_rail_titles
+                    WHERE scope_id = ? AND library_item_id = ?
+                    """,
+                    (scope_id, item_id),
+                ).fetchone()
+                if existing is None:
+                    pos_row = conn.execute(
+                        """
+                        SELECT COALESCE(MAX(pin_position), -1) + 1 AS next_pos
+                        FROM holiday_rail_titles
+                        WHERE scope_id = ? AND curation = 'pin'
+                        """,
+                        (scope_id,),
+                    ).fetchone()
+                    position = int(pos_row["next_pos"] or 0)
+                    conn.execute(
+                        """
+                        INSERT INTO holiday_rail_titles (
+                            scope_id, library_item_id, curation, pin_position,
+                            curator_note, created_at
+                        ) VALUES (?, ?, 'pin', ?, ?, ?)
+                        """,
+                        (scope_id, item_id, position, note, now),
+                    )
+                else:
+                    conn.execute(
+                        """
+                        UPDATE holiday_rail_titles
+                        SET curator_note = ?
+                        WHERE scope_id = ? AND library_item_id = ?
+                        """,
+                        (note, scope_id, item_id),
+                    )
+            titles = self.list_holiday_rail_titles(scope_id)
+            for title in titles:
+                if int(title["library_item_id"]) == item_id:
+                    return title
+            raise ValueError("Could not save curator note")
+
+        return self.run_write(_write, label="set_holiday_rail_curator_note")
+
+    def apply_holiday_rail_curation(
+        self, scope_id: str, picks: Sequence[Mapping[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """Pin ordered picks with curator notes (agent curation confirm path)."""
+        ordered: List[tuple[int, str]] = []
+        seen: set[int] = set()
+        for raw in picks:
+            try:
+                item_id = int(raw.get("library_item_id") or raw.get("id") or 0)
+            except (TypeError, ValueError):
+                continue
+            if item_id < 1 or item_id in seen:
+                continue
+            seen.add(item_id)
+            note = _clean_curator_note(raw.get("curator_note") or raw.get("note") or "")
+            ordered.append((item_id, note))
+        if not ordered:
+            raise ValueError("At least one pick is required")
+
+        def _write() -> List[Dict[str, Any]]:
+            with self.connect() as conn:
+                ids = [item_id for item_id, _ in ordered]
+                placeholders = ",".join("?" for _ in ids)
+                found = {
+                    int(row["id"])
+                    for row in conn.execute(
+                        f"SELECT id FROM library_items WHERE id IN ({placeholders})",
+                        tuple(ids),
+                    ).fetchall()
+                }
+                missing = [item_id for item_id in ids if item_id not in found]
+                if missing:
+                    raise ValueError("Library title not found")
+                # Drop prior pins for this scope so the shelf becomes the professor's list.
+                # Keep excludes so "Not a fit" choices survive a re-curate.
+                conn.execute(
+                    """
+                    DELETE FROM holiday_rail_titles
+                    WHERE scope_id = ? AND curation IN ('pin', 'include')
+                    """,
+                    (scope_id,),
+                )
+                now = time.time()
+                for position, (item_id, note) in enumerate(ordered):
+                    conn.execute(
+                        """
+                        INSERT INTO holiday_rail_titles (
+                            scope_id, library_item_id, curation, pin_position,
+                            curator_note, created_at
+                        ) VALUES (?, ?, 'pin', ?, ?, ?)
+                        ON CONFLICT(scope_id, library_item_id) DO UPDATE SET
+                            curation = 'pin',
+                            pin_position = excluded.pin_position,
+                            curator_note = excluded.curator_note
+                        """,
+                        (scope_id, item_id, position, note, now),
+                    )
+            return self.list_holiday_rail_titles(scope_id)
+
+        return self.run_write(_write, label="apply_holiday_rail_curation") or []
 
     def clear_holiday_rail_title(self, scope_id: str, library_item_id: int) -> bool:
         def _write() -> bool:
@@ -424,8 +570,9 @@ class HolidaysMixin:
                     conn.execute(
                         """
                         INSERT INTO holiday_rail_titles (
-                            scope_id, library_item_id, curation, pin_position, created_at
-                        ) VALUES (?, ?, 'pin', ?, ?)
+                            scope_id, library_item_id, curation, pin_position,
+                            curator_note, created_at
+                        ) VALUES (?, ?, 'pin', ?, '', ?)
                         ON CONFLICT(scope_id, library_item_id) DO UPDATE SET
                             curation = 'pin',
                             pin_position = excluded.pin_position
@@ -624,14 +771,19 @@ class HolidaysMixin:
         return payload
 
     def _row_to_rail_title(self, row) -> Dict[str, Any]:
+        keys = row.keys()
+        note = ""
+        if "curator_note" in keys and row["curator_note"] is not None:
+            note = str(row["curator_note"] or "").strip()
         return {
             "scope_id": str(row["scope_id"]),
             "library_item_id": int(row["library_item_id"]),
             "curation": str(row["curation"]),
             "pin_position": int(row["pin_position"]) if row["pin_position"] is not None else None,
+            "curator_note": note,
             "created_at": float(row["created_at"] or 0),
             "title": str(row["library_title"] or ""),
             "year": int(row["library_year"]) if row["library_year"] is not None else None,
             "media_type": str(row["library_media_type"] or ""),
-            "poster_url": str(row["library_poster_url"] or "") if "library_poster_url" in row.keys() else "",
+            "poster_url": str(row["library_poster_url"] or "") if "library_poster_url" in keys else "",
         }

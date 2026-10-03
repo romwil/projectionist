@@ -253,6 +253,7 @@ def _build_migrations() -> List[Migration]:
         (50, "library_episodes_added_at", wrap("_migrate_library_episodes_added_at")),
         (51, "weather_location", wrap("_migrate_weather_location")),
         (52, "knowledge_fetch_state", wrap("_migrate_knowledge_fetch_state")),
+        (53, "holiday_rail_curator_notes", wrap("_migrate_holiday_rail_curator_notes")),
     ]
 
 

@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+- **Agent-curated seasonal shelves for every grounded holiday.** Admin → Live Channels can ask the professor to propose an ordered mix (known + lesser-known) with staff-pick notes; confirming writes pins + notes for that season’s shelf (`POST /api/admin/holidays/{id}/rail/curate` + `/apply`). Manual reorder, Not a fit, and note edits remain.
+- **Durable curator notes** on `holiday_rail_titles` (migration 53). Notes travel on the member Explore seasonal rail as `curator_note` / `why` (no new auth surface — same hub / feed authz).
+- **Explore “Chat about this” sidebar** for seasonal picks: members open a docked conversation seeded with season + title + note; does not navigate away to `/chat`. Owner Live editor can still open the same pane while vetting.
+
+### Changed
+- Curated seasonal pins beat anniversary dumps when a shelf has agent/owner picks, so staff-pick notes stay visible on Explore for every active season — not Halloween-only.
+
 ### Fixed
 - **Admin `/admin` first paint no longer waits on Docker / Tunarr lifecycle probes.** `GET /api/admin/live-channels/lifecycle-status` (mounted when Docker orchestration is on) is now SWR: paint from a progress-store skeleton or last probe while Docker inspect + Tunarr HTTP refresh in the background; the cheap job/phase store stays overlaid live. The Live status warming skeleton is also truly probe-free (it no longer called `build_live_channels_status`, which still hit Docker even with blanked URLs). Docker status/log timeouts for polls are capped at 5s. Admin re-polls while lifecycle is `stale` / `warming`. `?fresh=1` still forces a synchronous probe.
 

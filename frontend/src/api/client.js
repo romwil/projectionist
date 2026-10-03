@@ -2101,6 +2101,33 @@ export async function setHolidayRailOrder(observanceId, libraryItemIds) {
   });
 }
 
+/** Owner: ask the professor to propose seasonal shelf picks + staff-pick notes. */
+export async function proposeHolidayRailCuration(observanceId, { limit = 10 } = {}) {
+  return api(`/admin/holidays/${encodeURIComponent(observanceId)}/rail/curate`, {
+    method: "POST",
+    body: JSON.stringify({ limit }),
+  });
+}
+
+/** Owner: confirm a professor proposal (replaces shelf order + notes). */
+export async function applyHolidayRailCuration(observanceId, picks) {
+  return api(`/admin/holidays/${encodeURIComponent(observanceId)}/rail/curate/apply`, {
+    method: "POST",
+    body: JSON.stringify({ picks }),
+  });
+}
+
+/** Owner: save a staff-pick curator note for one shelf title. */
+export async function setHolidayRailCuratorNote(observanceId, libraryItemId, curatorNote) {
+  return api(
+    `/admin/holidays/${encodeURIComponent(observanceId)}/rail/titles/${encodeURIComponent(libraryItemId)}/note`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ curator_note: curatorNote ?? "" }),
+    },
+  );
+}
+
 /** Owner: weekly household letter — toggles + this week's text. */
 export async function getWeeklyLetter() {
   return api("/admin/weekly-letter");

@@ -1942,6 +1942,7 @@ class SchemaMigrationsMixin:
                 library_item_id INTEGER NOT NULL,
                 curation TEXT NOT NULL,
                 pin_position INTEGER,
+                curator_note TEXT NOT NULL DEFAULT '',
                 created_at REAL NOT NULL,
                 PRIMARY KEY (scope_id, library_item_id)
             );
@@ -2158,4 +2159,14 @@ class SchemaMigrationsMixin:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_episodes_added_at ON library_episodes(added_at)"
         )
+
+    def _migrate_holiday_rail_curator_notes(self, conn: sqlite3.Connection) -> None:
+        """Staff-pick curator notes on seasonal shelf titles (Admin Live Channels)."""
+        cols = self._table_columns(conn, "holiday_rail_titles")
+        if not cols:
+            return
+        if "curator_note" not in cols:
+            conn.execute(
+                "ALTER TABLE holiday_rail_titles ADD COLUMN curator_note TEXT NOT NULL DEFAULT ''"
+            )
 

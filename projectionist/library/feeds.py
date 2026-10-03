@@ -374,6 +374,44 @@ def _match_seasonal_rows(
     return matches
 
 
+def _rail_curator_notes(db: Database, scope_id: str) -> Dict[int, str]:
+    """Map library_item_id → staff-pick note for a seasonal shelf scope."""
+    try:
+        titles = db.list_holiday_rail_titles(scope_id)
+    except Exception:  # noqa: BLE001
+        return {}
+    notes: Dict[int, str] = {}
+    for title in titles:
+        note = str(title.get("curator_note") or "").strip()
+        if not note:
+            continue
+        try:
+            notes[int(title["library_item_id"])] = note
+        except (TypeError, ValueError, KeyError):
+            continue
+    return notes
+
+
+def _attach_curator_notes(
+    items: List[Dict[str, Any]], notes: Mapping[int, str]
+) -> List[Dict[str, Any]]:
+    if not notes:
+        return items
+    for item in items:
+        try:
+            item_id = int(item.get("id"))
+        except (TypeError, ValueError):
+            continue
+        note = notes.get(item_id)
+        if not note:
+            continue
+        item["curator_note"] = note
+        # Explore FeedRail surfaces item.why under each poster.
+        if not str(item.get("why") or "").strip():
+            item["why"] = note
+    return items
+
+
 def _apply_rail_curation(
     db: Database,
     *,
@@ -382,6 +420,7 @@ def _apply_rail_curation(
     limit: int,
 ) -> List[Dict[str, Any]]:
     """pins → includes ∪ matches − excludes; year-sort the unpinned tail."""
+    notes = _rail_curator_notes(db, scope_id)
     try:
         curation = db.holiday_rail_curation_maps(scope_id)
     except Exception:  # noqa: BLE001
@@ -390,7 +429,7 @@ def _apply_rail_curation(
     include_ids = list(curation.get("includes") or [])
     exclude_ids = list(curation.get("excludes") or [])
     if not pin_ids and not include_ids and not exclude_ids:
-        return _sort_rail_items(matches, limit)
+        return _attach_curator_notes(_sort_rail_items(matches, limit), notes)
 
     needed_ids = list(dict.fromkeys([*pin_ids, *include_ids]))
     by_id = db.get_library_items_by_ids(needed_ids)
@@ -400,7 +439,7 @@ def _apply_rail_curation(
     def _feed(row: Mapping[str, Any], **extra: Any) -> Dict[str, Any]:
         return _feed_item(row, **extra)
 
-    return compose_rail_items(
+    items = compose_rail_items(
         pins=pin_rows,
         includes=include_rows,
         matches=matches,
@@ -409,6 +448,44 @@ def _apply_rail_curation(
         feed_item_fn=_feed,
         sort_unpinned_fn=_sort_rail_items,
     )
+    return _attach_curator_notes(items, notes)
+
+
+def _has_curated_seasonal_pins(db: Database, scope_id: str) -> bool:
+    """True when the owner/agent has pinned deliberate picks for this season."""
+    try:
+        curation = db.holiday_rail_curation_maps(scope_id)
+    except Exception:  # noqa: BLE001
+        return False
+    return bool(curation.get("pins"))
+
+
+def _seasonal_spotlight_payload(
+    *,
+    selected_day: date,
+    label: str,
+    mode: str,
+    scope_id: str,
+    context: Mapping[str, Any],
+    items: List[Dict[str, Any]],
+    total: int,
+    note: Optional[str] = None,
+    from_schedule: bool = False,
+) -> Dict[str, Any]:
+    return {
+        "feed": "seasonal-spotlight",
+        "date": selected_day.isoformat(),
+        "label": label,
+        "mode": mode,
+        "scope_id": scope_id,
+        "grounding_date": context.get("grounding_date"),
+        "pre_shoulder_days": context.get("pre_shoulder_days"),
+        "post_shoulder_days": context.get("post_shoulder_days"),
+        "items": items,
+        "total": total,
+        "note": note,
+        "from_schedule": from_schedule,
+    }
 
 
 def feed_seasonal_spotlight(
@@ -421,9 +498,9 @@ def feed_seasonal_spotlight(
     """Holiday-near matching with a modest, explicit season fallback.
 
     Observances + asymmetric shoulders come from the Admin holiday store.
-    Owner rail curation: pins (front) → includes ∪ keyword matches − excludes.
-    On weekends (and when a holiday window is active), prefer titles surfaced by
-    the anniversary scanner when available — no calendar connector required.
+    Agent/owner rail curation: pins (front) → includes ∪ keyword matches − excludes.
+    Curated pins win over anniversary dumps so staff-pick notes stay visible on Explore.
+    Without pins, weekends (and holiday windows) may use the anniversary scanner.
     """
     selected_day = today or date.today()
     capped = _cap_limit(limit)
@@ -433,8 +510,11 @@ def feed_seasonal_spotlight(
     mode = str(context["mode"])
     scope_id = str(context["scope_id"])
     is_weekend = selected_day.weekday() >= 5
+    curated_pins = _has_curated_seasonal_pins(db, scope_id)
 
     # B2: prefer today's scheduled snapshot when present (stable through the day).
+    # Skip anniversary snapshots when this scope already has agent/owner pins —
+    # those pins carry curator notes members should see on Explore.
     if prefer_snapshot:
         try:
             snapshot = db.get_seasonal_rail_snapshot(selected_day.isoformat())
@@ -443,47 +523,62 @@ def feed_seasonal_spotlight(
         if snapshot and isinstance(snapshot.get("items"), list) and snapshot["items"]:
             snap_label = str(snapshot.get("label") or label)
             snap_mode = str(snapshot.get("mode") or mode)
+            snap_scope = str(snapshot.get("scope_id") or scope_id)
             raw_items = list(snapshot["items"])
             # Anniversary snapshots can be poisoned by a stale year-only scanner;
             # re-validate against library release dates before serving.
             if _is_anniversary_rail_mode(snap_mode, snap_label):
-                items = _revalidate_anniversary_snapshot_items(
-                    db, raw_items, selected_day, limit=capped
-                )
-                if not items:
-                    # Fall through to live computation — do not return alpha dump.
-                    pass
+                if curated_pins:
+                    pass  # fall through to curated live rail
                 else:
-                    return {
-                        "feed": "seasonal-spotlight",
-                        "date": selected_day.isoformat(),
-                        "label": snap_label,
-                        "mode": snap_mode,
-                        "scope_id": str(snapshot.get("scope_id") or scope_id),
-                        "grounding_date": context.get("grounding_date"),
-                        "pre_shoulder_days": context.get("pre_shoulder_days"),
-                        "post_shoulder_days": context.get("post_shoulder_days"),
-                        "items": items,
-                        "total": len(items),
-                        "note": None,
-                        "from_schedule": True,
-                    }
+                    items = _revalidate_anniversary_snapshot_items(
+                        db, raw_items, selected_day, limit=capped
+                    )
+                    if not items:
+                        # Fall through to live computation — do not return alpha dump.
+                        pass
+                    else:
+                        return _seasonal_spotlight_payload(
+                            selected_day=selected_day,
+                            label=snap_label,
+                            mode=snap_mode,
+                            scope_id=snap_scope,
+                            context=context,
+                            items=_attach_curator_notes(
+                                items, _rail_curator_notes(db, snap_scope)
+                            ),
+                            total=len(items),
+                            from_schedule=True,
+                        )
             else:
-                items = raw_items[:capped]
-                return {
-                    "feed": "seasonal-spotlight",
-                    "date": selected_day.isoformat(),
-                    "label": snap_label,
-                    "mode": snap_mode,
-                    "scope_id": str(snapshot.get("scope_id") or scope_id),
-                    "grounding_date": context.get("grounding_date"),
-                    "pre_shoulder_days": context.get("pre_shoulder_days"),
-                    "post_shoulder_days": context.get("post_shoulder_days"),
-                    "items": items,
-                    "total": len(items),
-                    "note": None,
-                    "from_schedule": True,
-                }
+                items = _attach_curator_notes(
+                    raw_items[:capped], _rail_curator_notes(db, snap_scope)
+                )
+                return _seasonal_spotlight_payload(
+                    selected_day=selected_day,
+                    label=snap_label,
+                    mode=snap_mode,
+                    scope_id=snap_scope,
+                    context=context,
+                    items=items,
+                    total=len(items),
+                    from_schedule=True,
+                )
+
+    # Agent/owner curated shelves beat anniversary dumps for every grounded season.
+    if curated_pins:
+        matches = _match_seasonal_rows(db.all_library_items(), terms)
+        items = _apply_rail_curation(db, scope_id=scope_id, matches=matches, limit=capped)
+        return _seasonal_spotlight_payload(
+            selected_day=selected_day,
+            label=label,
+            mode=mode,
+            scope_id=scope_id,
+            context=context,
+            items=items,
+            total=len(matches),
+            note=None if items else f"No {label.lower()} matches in your library yet.",
+        )
 
     anniversary_items: List[Mapping[str, Any]] = []
     if is_weekend or mode == "holiday":
@@ -533,46 +628,38 @@ def feed_seasonal_spotlight(
             except (TypeError, KeyError, IndexError):
                 pass
         weekend_label = label
+        weekend_mode = mode
         if is_weekend and mode != "holiday":
             weekend_label = "Weekend anniversaries"
-            mode = "weekend_anniversary"
+            weekend_mode = "weekend_anniversary"
         elif mode == "holiday":
             weekend_label = f"{label} · On this day"
-            mode = "holiday_anniversary"
-        return {
-            "feed": "seasonal-spotlight",
-            "date": selected_day.isoformat(),
-            "label": weekend_label,
-            "mode": mode,
-            "scope_id": scope_id,
-            "grounding_date": context.get("grounding_date"),
-            "pre_shoulder_days": context.get("pre_shoulder_days"),
-            "post_shoulder_days": context.get("post_shoulder_days"),
-            "items": items,
-            "total": len(items),
-            "note": None,
-            "from_schedule": False,
-        }
+            weekend_mode = "holiday_anniversary"
+        return _seasonal_spotlight_payload(
+            selected_day=selected_day,
+            label=weekend_label,
+            mode=weekend_mode,
+            scope_id=scope_id,
+            context=context,
+            items=_attach_curator_notes(items, _rail_curator_notes(db, scope_id)),
+            total=len(items),
+        )
 
     matches = _match_seasonal_rows(db.all_library_items(), terms)
     items = _apply_rail_curation(db, scope_id=scope_id, matches=matches, limit=capped)
     if is_weekend and mode == "season":
         label = f"Weekend · {label}"
         mode = "weekend"
-    return {
-        "feed": "seasonal-spotlight",
-        "date": selected_day.isoformat(),
-        "label": label,
-        "mode": mode,
-        "scope_id": scope_id,
-        "grounding_date": context.get("grounding_date"),
-        "pre_shoulder_days": context.get("pre_shoulder_days"),
-        "post_shoulder_days": context.get("post_shoulder_days"),
-        "items": items,
-        "total": len(matches),
-        "note": None if items else f"No {label.lower()} matches in your library yet.",
-        "from_schedule": False,
-    }
+    return _seasonal_spotlight_payload(
+        selected_day=selected_day,
+        label=label,
+        mode=mode,
+        scope_id=scope_id,
+        context=context,
+        items=items,
+        total=len(matches),
+        note=None if items else f"No {label.lower()} matches in your library yet.",
+    )
 
 
 def build_seasonal_rail_snapshot(
