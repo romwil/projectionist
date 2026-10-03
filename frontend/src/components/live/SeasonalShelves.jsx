@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  clearHolidayRailTitle,
+  applyHolidayRailCuration,
   getHolidayRail,
   listHolidays,
+  proposeHolidayRailCuration,
   searchHolidayLibrary,
+  setHolidayRailCuratorNote,
   setHolidayRailOrder,
   setHolidayRailTitle,
   updateHoliday,
@@ -16,6 +18,7 @@ import {
   shelfPatchFromForm,
   shelfRoleLabel,
 } from "../../lib/seasonalShelves.js";
+import SeasonalPickChatPane from "../SeasonalPickChatPane";
 
 /**
  * Seasonal shelves — edit what Explore shows around each holiday, right where
@@ -30,6 +33,9 @@ function ShelfEditor({ item, onSaved }) {
   const [message, setMessage] = useState(null);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState(null);
+  const [proposal, setProposal] = useState(null);
+  const [noteDrafts, setNoteDrafts] = useState({});
+  const [chatTitle, setChatTitle] = useState(null);
 
   const loadRail = useCallback(async () => {
     try {
@@ -45,6 +51,7 @@ function ShelfEditor({ item, onSaved }) {
 
   const titles = rail?.items || [];
   const ids = titles.map((row) => Number(row.id));
+  const chatOpen = Boolean(chatTitle);
 
   async function run(task, success) {
     setBusy(true);
@@ -65,231 +72,383 @@ function ShelfEditor({ item, onSaved }) {
       if (result?.preview) setRail(result.preview);
     }, "Shelf order saved.");
 
-  return (
-    <div className="live-shelf-editor" data-testid={`live-shelf-editor-${item.id}`}>
-      <p className="live-studio-hint">
-        {rail?.note ||
-          "These are the titles Explore shows for this season. Reorder them, drop a bad fit, or add your own."}
-      </p>
-      {titles.length ? (
-        <ol className="live-shelf-titles" data-testid={`live-shelf-titles-${item.id}`}>
-          {titles.map((row, index) => (
-            <li key={row.id} data-testid={`live-shelf-title-${item.id}-${row.id}`}>
-              <span className="live-shelf-title-name">
-                {row.title}
-                {row.year ? ` (${row.year})` : ""}
-              </span>
-              <span className="live-shelf-title-role">{shelfRoleLabel(row.rail_role)}</span>
-              <span className="live-shelf-title-actions">
-                <button
-                  type="button"
-                  className="ghost"
-                  aria-label={`Move ${row.title} up`}
-                  disabled={busy || index === 0}
-                  data-testid={`live-shelf-up-${item.id}-${row.id}`}
-                  onClick={() => saveOrder(moveShelfId(ids, index, -1))}
-                >
-                  ↑
-                </button>
-                <button
-                  type="button"
-                  className="ghost"
-                  aria-label={`Move ${row.title} down`}
-                  disabled={busy || index === titles.length - 1}
-                  data-testid={`live-shelf-down-${item.id}-${row.id}`}
-                  onClick={() => saveOrder(moveShelfId(ids, index, 1))}
-                >
-                  ↓
-                </button>
-                <button
-                  type="button"
-                  className="ghost"
-                  disabled={busy}
-                  data-testid={`live-shelf-remove-${item.id}-${row.id}`}
-                  onClick={() =>
-                    run(async () => {
-                      await setHolidayRailTitle(item.id, {
-                        library_item_id: Number(row.id),
-                        curation: "exclude",
-                      });
-                      await loadRail();
-                    }, `${row.title} is off this shelf.`)
-                  }
-                >
-                  Not a fit
-                </button>
-              </span>
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <p className="live-studio-hint" data-testid={`live-shelf-empty-${item.id}`}>
-          Nothing in your library matches this season yet. Add a title below, or widen the
-          keywords.
-        </p>
-      )}
+  function noteFor(row) {
+    const id = Number(row.id);
+    if (Object.prototype.hasOwnProperty.call(noteDrafts, id)) return noteDrafts[id];
+    return String(row.curator_note || row.why || "");
+  }
 
-      <form
-        className="live-shelf-add"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          if (!query.trim()) return;
-          await run(async () => {
-            const result = await searchHolidayLibrary(query.trim(), { limit: 8 });
-            setHits(result?.items || []);
-          });
-        }}
-      >
-        <label>
-          <span>Add a title from your library</span>
-          <input
-            type="search"
-            value={query}
-            placeholder="Search your library"
-            data-testid={`live-shelf-search-${item.id}`}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
-        <button type="submit" className="ghost" disabled={busy || !query.trim()}>
-          Search
-        </button>
-      </form>
-      {hits ? (
-        <ul className="live-shelf-hits">
-          {hits.length === 0 ? <li className="live-studio-hint">No matches in your library.</li> : null}
-          {hits.map((hit) => (
-            <li key={hit.id}>
-              <span>
-                {hit.title}
-                {hit.year ? ` (${hit.year})` : ""}
-              </span>
+  return (
+    <div
+      className={`live-shelf-editor${chatOpen ? " live-shelf-editor--chat-open" : ""}`}
+      data-testid={`live-shelf-editor-${item.id}`}
+    >
+      <div className="live-shelf-editor-main">
+        <p className="live-studio-hint">
+          {rail?.note ||
+            "Household members see these picks on Explore with staff-pick notes and can chat about each title. Ask the professor to curate a mix, or reorder / veto by hand."}
+        </p>
+
+        <div className="live-shelf-curate-bar">
+          <button
+            type="button"
+            className="primary"
+            disabled={busy}
+            data-testid={`live-shelf-curate-${item.id}`}
+            onClick={() =>
+              run(async () => {
+                setProposal(null);
+                const result = await proposeHolidayRailCuration(item.id, { limit: 10 });
+                setProposal(result);
+              }, "Professor proposal ready — review below, then confirm.")
+            }
+          >
+            Ask the professor to curate
+          </button>
+        </div>
+
+        {proposal?.picks?.length ? (
+          <div
+            className="live-shelf-proposal"
+            data-testid={`live-shelf-proposal-${item.id}`}
+          >
+            <p className="live-studio-hint">
+              {proposal.note ||
+                "Review these staff picks. Confirming replaces the current shelf order (titles you marked Not a fit stay off)."}
+            </p>
+            <ol className="live-shelf-proposal-list">
+              {proposal.picks.map((pick) => (
+                <li key={pick.library_item_id}>
+                  <strong>
+                    {pick.title}
+                    {pick.year ? ` (${pick.year})` : ""}
+                  </strong>
+                  {pick.curator_note ? (
+                    <p className="live-shelf-title-note">{pick.curator_note}</p>
+                  ) : null}
+                </li>
+              ))}
+            </ol>
+            <div className="live-shelf-proposal-actions">
+              <button
+                type="button"
+                className="primary"
+                disabled={busy}
+                data-testid={`live-shelf-proposal-confirm-${item.id}`}
+                onClick={() =>
+                  run(async () => {
+                    const result = await applyHolidayRailCuration(
+                      item.id,
+                      proposal.picks.map((pick) => ({
+                        library_item_id: Number(pick.library_item_id),
+                        curator_note: String(pick.curator_note || ""),
+                      })),
+                    );
+                    if (result?.preview) setRail(result.preview);
+                    else await loadRail();
+                    setProposal(null);
+                    setNoteDrafts({});
+                  }, "Shelf curated.")
+                }
+              >
+                Use these picks
+              </button>
               <button
                 type="button"
                 className="ghost"
                 disabled={busy}
-                data-testid={`live-shelf-add-${item.id}-${hit.id}`}
-                onClick={() =>
-                  saveOrder(addShelfIdFirst(ids, hit.id)).then(() => {
-                    setHits(null);
-                    setQuery("");
-                  })
-                }
+                data-testid={`live-shelf-proposal-dismiss-${item.id}`}
+                onClick={() => setProposal(null)}
               >
-                Add to the front
+                Discard
               </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+            </div>
+          </div>
+        ) : null}
 
-      <details className="live-shelf-details">
-        <summary>Name, date &amp; window</summary>
-        <div className="live-shelf-form">
+        {titles.length ? (
+          <ol className="live-shelf-titles" data-testid={`live-shelf-titles-${item.id}`}>
+            {titles.map((row, index) => {
+              const note = noteFor(row);
+              const hasNote = Boolean(String(row.curator_note || row.why || "").trim());
+              return (
+                <li key={row.id} data-testid={`live-shelf-title-${item.id}-${row.id}`}>
+                  <div className="live-shelf-title-row">
+                    <span className="live-shelf-title-name">
+                      {row.title}
+                      {row.year ? ` (${row.year})` : ""}
+                    </span>
+                    <span className="live-shelf-title-role">
+                      {shelfRoleLabel(row.rail_role, { hasNote })}
+                    </span>
+                    <span className="live-shelf-title-actions">
+                      <button
+                        type="button"
+                        className="ghost"
+                        aria-label={`Move ${row.title} up`}
+                        disabled={busy || index === 0}
+                        data-testid={`live-shelf-up-${item.id}-${row.id}`}
+                        onClick={() => saveOrder(moveShelfId(ids, index, -1))}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost"
+                        aria-label={`Move ${row.title} down`}
+                        disabled={busy || index === titles.length - 1}
+                        data-testid={`live-shelf-down-${item.id}-${row.id}`}
+                        onClick={() => saveOrder(moveShelfId(ids, index, 1))}
+                      >
+                        ↓
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost"
+                        disabled={busy}
+                        data-testid={`live-shelf-chat-${item.id}-${row.id}`}
+                        onClick={() => setChatTitle(row)}
+                      >
+                        Chat about this
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost"
+                        disabled={busy}
+                        data-testid={`live-shelf-remove-${item.id}-${row.id}`}
+                        onClick={() =>
+                          run(async () => {
+                            await setHolidayRailTitle(item.id, {
+                              library_item_id: Number(row.id),
+                              curation: "exclude",
+                            });
+                            if (Number(chatTitle?.id) === Number(row.id)) setChatTitle(null);
+                            await loadRail();
+                          }, `${row.title} is off this shelf.`)
+                        }
+                      >
+                        Not a fit
+                      </button>
+                    </span>
+                  </div>
+                  <label className="live-shelf-note-field">
+                    <span className="sr-only">Curator note for {row.title}</span>
+                    <textarea
+                      rows={2}
+                      value={note}
+                      placeholder="Staff-pick note — why this title for this season"
+                      data-testid={`live-shelf-note-${item.id}-${row.id}`}
+                      disabled={busy}
+                      onChange={(event) =>
+                        setNoteDrafts((prev) => ({
+                          ...prev,
+                          [Number(row.id)]: event.target.value,
+                        }))
+                      }
+                      onBlur={() => {
+                        const next = String(noteDrafts[Number(row.id)] ?? note).trim();
+                        const saved = String(row.curator_note || row.why || "").trim();
+                        if (next === saved) return;
+                        void run(async () => {
+                          const result = await setHolidayRailCuratorNote(
+                            item.id,
+                            Number(row.id),
+                            next,
+                          );
+                          if (result?.preview) setRail(result.preview);
+                          else await loadRail();
+                          setNoteDrafts((prev) => {
+                            const copy = { ...prev };
+                            delete copy[Number(row.id)];
+                            return copy;
+                          });
+                        }, "Note saved.");
+                      }}
+                    />
+                  </label>
+                </li>
+              );
+            })}
+          </ol>
+        ) : (
+          <p className="live-studio-hint" data-testid={`live-shelf-empty-${item.id}`}>
+            Nothing in your library matches this season yet. Ask the professor after you widen
+            the keywords, or add a title below.
+          </p>
+        )}
+
+        <form
+          className="live-shelf-add"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            if (!query.trim()) return;
+            await run(async () => {
+              const result = await searchHolidayLibrary(query.trim(), { limit: 8 });
+              setHits(result?.items || []);
+            });
+          }}
+        >
           <label>
-            <span>Shelf name</span>
+            <span>Add a title from your library</span>
             <input
-              type="text"
-              value={form.name}
-              data-testid={`live-shelf-name-${item.id}`}
-              onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+              type="search"
+              value={query}
+              placeholder="Search your library"
+              data-testid={`live-shelf-search-${item.id}`}
+              onChange={(event) => setQuery(event.target.value)}
             />
           </label>
-          {item.kind === "movable" ? (
-            <p className="live-studio-hint">Date: {shelfDateLabel(item)} (moves each year).</p>
-          ) : (
+          <button type="submit" className="ghost" disabled={busy || !query.trim()}>
+            Search
+          </button>
+        </form>
+        {hits ? (
+          <ul className="live-shelf-hits">
+            {hits.length === 0 ? <li className="live-studio-hint">No matches in your library.</li> : null}
+            {hits.map((hit) => (
+              <li key={hit.id}>
+                <span>
+                  {hit.title}
+                  {hit.year ? ` (${hit.year})` : ""}
+                </span>
+                <button
+                  type="button"
+                  className="ghost"
+                  disabled={busy}
+                  data-testid={`live-shelf-add-${item.id}-${hit.id}`}
+                  onClick={() =>
+                    saveOrder(addShelfIdFirst(ids, hit.id)).then(() => {
+                      setHits(null);
+                      setQuery("");
+                    })
+                  }
+                >
+                  Add to the front
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        <details className="live-shelf-details">
+          <summary>Name, date &amp; window</summary>
+          <div className="live-shelf-form">
+            <label>
+              <span>Shelf name</span>
+              <input
+                type="text"
+                value={form.name}
+                data-testid={`live-shelf-name-${item.id}`}
+                onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+              />
+            </label>
+            {item.kind === "movable" ? (
+              <p className="live-studio-hint">Date: {shelfDateLabel(item)} (moves each year).</p>
+            ) : (
+              <div className="live-shelf-date">
+                <label>
+                  <span>Month</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={12}
+                    value={form.month}
+                    onChange={(event) => setForm((prev) => ({ ...prev, month: event.target.value }))}
+                  />
+                </label>
+                <label>
+                  <span>Day</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={form.day}
+                    onChange={(event) => setForm((prev) => ({ ...prev, day: event.target.value }))}
+                  />
+                </label>
+              </div>
+            )}
             <div className="live-shelf-date">
               <label>
-                <span>Month</span>
+                <span>Days before</span>
                 <input
                   type="number"
-                  min={1}
-                  max={12}
-                  value={form.month}
-                  onChange={(event) => setForm((prev) => ({ ...prev, month: event.target.value }))}
+                  min={0}
+                  max={90}
+                  value={form.pre_shoulder_days}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, pre_shoulder_days: event.target.value }))
+                  }
                 />
               </label>
               <label>
-                <span>Day</span>
+                <span>Days after</span>
                 <input
                   type="number"
-                  min={1}
-                  max={31}
-                  value={form.day}
-                  onChange={(event) => setForm((prev) => ({ ...prev, day: event.target.value }))}
+                  min={0}
+                  max={90}
+                  value={form.post_shoulder_days}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, post_shoulder_days: event.target.value }))
+                  }
                 />
               </label>
             </div>
-          )}
-          <div className="live-shelf-date">
             <label>
-              <span>Days before</span>
+              <span>Keywords that match this season</span>
               <input
-                type="number"
-                min={0}
-                max={90}
-                value={form.pre_shoulder_days}
+                type="text"
+                value={form.search_terms}
+                placeholder="horror, haunted, witch"
                 onChange={(event) =>
-                  setForm((prev) => ({ ...prev, pre_shoulder_days: event.target.value }))
+                  setForm((prev) => ({ ...prev, search_terms: event.target.value }))
                 }
               />
             </label>
-            <label>
-              <span>Days after</span>
+            <label className="live-studio-check">
               <input
-                type="number"
-                min={0}
-                max={90}
-                value={form.post_shoulder_days}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, post_shoulder_days: event.target.value }))
-                }
+                type="checkbox"
+                checked={form.enabled}
+                onChange={(event) => setForm((prev) => ({ ...prev, enabled: event.target.checked }))}
               />
+              <span>Show this shelf in Explore when its season comes round</span>
             </label>
-          </div>
-          <label>
-            <span>Keywords that match this season</span>
-            <input
-              type="text"
-              value={form.search_terms}
-              placeholder="horror, haunted, witch"
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, search_terms: event.target.value }))
+            <button
+              type="button"
+              className="primary"
+              disabled={busy || !form.name.trim()}
+              data-testid={`live-shelf-save-${item.id}`}
+              onClick={() =>
+                run(async () => {
+                  const saved = await updateHoliday(item.id, shelfPatchFromForm(form, item));
+                  onSaved?.(saved?.item || null);
+                  await loadRail();
+                }, "Shelf saved.")
               }
-            />
-          </label>
-          <label className="live-studio-check">
-            <input
-              type="checkbox"
-              checked={form.enabled}
-              onChange={(event) => setForm((prev) => ({ ...prev, enabled: event.target.checked }))}
-            />
-            <span>Show this shelf in Explore when its season comes round</span>
-          </label>
-          <button
-            type="button"
-            className="primary"
-            disabled={busy || !form.name.trim()}
-            data-testid={`live-shelf-save-${item.id}`}
-            onClick={() =>
-              run(async () => {
-                const saved = await updateHoliday(item.id, shelfPatchFromForm(form, item));
-                onSaved?.(saved?.item || null);
-                await loadRail();
-              }, "Shelf saved.")
-            }
+            >
+              Save shelf
+            </button>
+          </div>
+        </details>
+        {message ? (
+          <p
+            className={`live-studio-note live-studio-note--${message.type}`}
+            role={message.type === "error" ? "alert" : "status"}
+            data-testid={`live-shelf-message-${item.id}`}
           >
-            Save shelf
-          </button>
-        </div>
-      </details>
-      {message ? (
-        <p
-          className={`live-studio-note live-studio-note--${message.type}`}
-          role={message.type === "error" ? "alert" : "status"}
-          data-testid={`live-shelf-message-${item.id}`}
-        >
-          {message.text}
-        </p>
+            {message.text}
+          </p>
+        ) : null}
+      </div>
+
+      {chatOpen ? (
+        <SeasonalPickChatPane
+          seasonLabel={item.name}
+          scopeId={item.id}
+          title={chatTitle}
+          onClose={() => setChatTitle(null)}
+          testId={`live-shelf-chat-${item.id}`}
+        />
       ) : null}
     </div>
   );
@@ -320,8 +479,9 @@ export default function SeasonalShelves() {
         <div>
           <h3>Seasonal shelves</h3>
           <p className="live-studio-hint">
-            Titles from your library, grouped by season. They show up on Explore around each
-            holiday. Reorder them, drop a bad fit, or rename a shelf.
+            Owner tools for the shelves members browse on Explore. Ask the professor to curate any
+            season (not just Halloween), edit notes, reorder, or mark a bad fit. Members read the
+            notes and chat about picks on Explore.
           </p>
         </div>
       </header>
