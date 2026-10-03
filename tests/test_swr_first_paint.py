@@ -286,29 +286,23 @@ class AdminLiveStatusSwrTests(unittest.TestCase):
         settings = Settings()
         settings.features.live_channels_enabled = True
         settings.tunarr.url = "http://10.255.255.1:8000"
+        settings.tunarr.docker_orchestration = True
 
         def hang(_settings):
             time.sleep(0.6)
             return {"live_channels_enabled": True}
 
-        real = self.sc.build_live_channels_status
-        calls = {"n": 0}
-
-        def routed(s):
-            # Warming skeleton uses a url-blanked clone; the real build hangs.
-            calls["n"] += 1
-            if str(s.tunarr.url):
-                return hang(s)
-            return real(s)
-
-        with patch.object(self.sc, "build_live_channels_status", side_effect=routed):
+        with patch.object(self.sc, "build_live_channels_status", side_effect=hang) as build:
             out, took = _elapsed(
                 lambda: self.sc.get_live_channels_status(settings, None, cold_wait=0.0)
             )
         self.assertTrue(out["warming"])
         self.assertEqual(out["tunarr"]["url"], "http://10.255.255.1:8000")
-        self.assertLess(took, 1.0)
+        self.assertTrue(out["tunarr"]["reachability"].get("checking"))
+        # Warming must not call the probe builder on the request path.
+        self.assertLess(took, 0.25)
         self.sc.STATUS_CACHE.wait_idle(3)
+        self.assertEqual(build.call_count, 1)  # background only
 
 
 class JourneySwrTests(unittest.TestCase):
@@ -391,6 +385,174 @@ class JourneySwrTests(unittest.TestCase):
             self.assertTrue(body["stale"])
             self.assertLess(took, 0.25)
             self.ex.JOURNEY_CACHE.wait_idle(3)
+
+
+class AdminLifecycleSwrTests(unittest.TestCase):
+    def setUp(self) -> None:
+        from projectionist.live_channels import lifecycle_progress as lp
+
+        lp.reset_progress_for_tests()
+        self.lp = lp
+
+    def test_cold_lifecycle_status_is_instant_while_probes_hang(self) -> None:
+        settings = SimpleNamespace(
+            tunarr=SimpleNamespace(
+                url="http://tunarr.test:8000",
+                docker_orchestration=True,
+            )
+        )
+
+        def hang(_settings):
+            time.sleep(0.6)
+            return {
+                "phase": "ready",
+                "percent": 100,
+                "message": "Tunarr is ready",
+                "ready": True,
+                "busy": False,
+                "ok": True,
+                "error": "",
+                "container_id": "abc",
+                "container_name": "tunarr",
+                "http_ready": True,
+                "logs_ready": True,
+                "container_running": True,
+                "still_starting": False,
+                "tunarr_url": "http://tunarr.test:8000",
+                "determinate": True,
+                "updated_at": time.time(),
+            }
+
+        with patch.object(self.lp, "build_lifecycle_status", side_effect=hang):
+            out, took = _elapsed(
+                lambda: self.lp.get_lifecycle_status(settings, cold_wait=0.0)
+            )
+        self.assertTrue(out["warming"])
+        self.assertLess(took, 0.25)
+        self.assertFalse(out["http_ready"])
+        self.lp.LIFECYCLE_CACHE.wait_idle(3)
+
+    def test_stale_lifecycle_serves_while_refresh_hangs(self) -> None:
+        settings = SimpleNamespace(
+            tunarr=SimpleNamespace(
+                url="http://tunarr.test:8000",
+                docker_orchestration=True,
+            )
+        )
+        key = self.lp._lifecycle_cache_key(settings)
+        self.lp.LIFECYCLE_CACHE.put(
+            key,
+            {
+                "phase": "ready",
+                "percent": 100,
+                "message": "Tunarr is ready",
+                "ready": True,
+                "busy": False,
+                "ok": True,
+                "error": "",
+                "container_id": "old",
+                "container_name": "tunarr",
+                "http_ready": True,
+                "logs_ready": True,
+                "container_running": True,
+                "still_starting": False,
+                "tunarr_url": "http://tunarr.test:8000",
+                "determinate": True,
+                "updated_at": time.time(),
+            },
+        )
+        self.lp.LIFECYCLE_CACHE.invalidate()
+
+        def hang(_settings):
+            time.sleep(0.5)
+            return {
+                "phase": "ready",
+                "percent": 100,
+                "message": "Tunarr is ready",
+                "ready": True,
+                "busy": False,
+                "ok": True,
+                "error": "",
+                "container_id": "new",
+                "container_name": "tunarr",
+                "http_ready": True,
+                "logs_ready": True,
+                "container_running": True,
+                "still_starting": False,
+                "tunarr_url": "http://tunarr.test:8000",
+                "determinate": True,
+                "updated_at": time.time(),
+            }
+
+        with patch.object(self.lp, "build_lifecycle_status", side_effect=hang):
+            out, took = _elapsed(lambda: self.lp.get_lifecycle_status(settings))
+        self.assertLess(took, 0.25)
+        self.assertTrue(out["stale"])
+        self.assertEqual(out["container_id"], "old")
+        self.lp.LIFECYCLE_CACHE.wait_idle(3)
+        refreshed = self.lp.get_lifecycle_status(settings)
+        self.assertEqual(refreshed["container_id"], "new")
+
+    def test_busy_progress_store_overlays_stale_probe_payload(self) -> None:
+        settings = SimpleNamespace(
+            tunarr=SimpleNamespace(
+                url="http://tunarr.test:8000",
+                docker_orchestration=True,
+            )
+        )
+        key = self.lp._lifecycle_cache_key(settings)
+        self.lp.LIFECYCLE_CACHE.put(
+            key,
+            {
+                "phase": "idle",
+                "percent": 0,
+                "message": "Ready when you are",
+                "ready": False,
+                "busy": False,
+                "ok": True,
+                "error": "",
+                "container_id": "",
+                "container_name": "tunarr",
+                "http_ready": False,
+                "logs_ready": False,
+                "container_running": False,
+                "still_starting": False,
+                "tunarr_url": "http://tunarr.test:8000",
+                "determinate": True,
+                "updated_at": time.time(),
+            },
+        )
+        self.lp.progress_store().begin(container_name="tunarr-proj")
+        self.lp.progress_store().set_phase("waiting_ready", "Waiting for Tunarr HTTP", percent=80)
+
+        def hang(_settings):
+            time.sleep(0.4)
+            return {
+                "phase": "waiting_ready",
+                "percent": 85,
+                "message": "Waiting",
+                "ready": False,
+                "busy": True,
+                "ok": True,
+                "error": "",
+                "container_id": "abc",
+                "container_name": "tunarr-proj",
+                "http_ready": False,
+                "logs_ready": False,
+                "container_running": True,
+                "still_starting": True,
+                "tunarr_url": "http://tunarr.test:8000",
+                "determinate": True,
+                "updated_at": time.time(),
+            }
+
+        with patch.object(self.lp, "build_lifecycle_status", side_effect=hang):
+            out, took = _elapsed(lambda: self.lp.get_lifecycle_status(settings))
+        self.assertLess(took, 0.25)
+        self.assertTrue(out["busy"])
+        self.assertEqual(out["phase"], "waiting_ready")
+        self.assertEqual(out["percent"], 80)
+        self.lp.LIFECYCLE_CACHE.wait_idle(3)
 
 
 class LibraryDerivedCachesTests(unittest.TestCase):

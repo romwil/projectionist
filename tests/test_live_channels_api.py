@@ -294,7 +294,8 @@ class LiveChannelsApiTests(unittest.TestCase):
                 "log_snippet": "",
             },
         ):
-            resp = self.client.get("/api/admin/live-channels/lifecycle-status")
+            # fresh=1: assert synchronous probe semantics (SWR paints warming otherwise).
+            resp = self.client.get("/api/admin/live-channels/lifecycle-status?fresh=1")
         self.assertEqual(resp.status_code, 200, resp.text)
         body = resp.json()
         self.assertTrue(body["ready"])
@@ -321,7 +322,7 @@ class LiveChannelsApiTests(unittest.TestCase):
                 "transient_noise": False,
             },
         ):
-            resp = self.client.get("/api/admin/live-channels/lifecycle-status")
+            resp = self.client.get("/api/admin/live-channels/lifecycle-status?fresh=1")
         self.assertEqual(resp.status_code, 200, resp.text)
         body = resp.json()
         self.assertFalse(body["ready"])

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Admin `/admin` first paint no longer waits on Docker / Tunarr lifecycle probes.** `GET /api/admin/live-channels/lifecycle-status` (mounted when Docker orchestration is on) is now SWR: paint from a progress-store skeleton or last probe while Docker inspect + Tunarr HTTP refresh in the background; the cheap job/phase store stays overlaid live. The Live status warming skeleton is also truly probe-free (it no longer called `build_live_channels_status`, which still hit Docker even with blanked URLs). Docker status/log timeouts for polls are capped at 5s. Admin re-polls while lifecycle is `stale` / `warming`. `?fresh=1` still forces a synchronous probe.
+
 ## [1.37.30] — 2026-10-03
 
 One combined patch that rolls up eight reviewed changes: subtitle tracks you already have, drawn in the Live and Play players; a faster first paint for Live, My Journey, and Admin; a native "start a station" Live Channels studio with queue padding and editable seasonal shelves; a weekly letter in place of Admin → House; missing plots that fill themselves; a quieter background scheduler; Sonarr "Search selected"; curator collections that land in Projectionist; and an aligned Live Guide. Hub `romwil/projectionist:1.37.25` was a one-off publish of the first-paint change alone; it was never merged, git-tagged, or promoted to prod, and its content is included here. Nothing was published as 1.37.26–1.37.29.

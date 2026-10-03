@@ -705,13 +705,18 @@ export default function ConfigPage() {
     }
   }, [showWizard, section, settings?.features?.live_channels_enabled, settings?.tunarr?.url, settings?.tunarr?.docker_orchestration]);
 
-  // Server serves Live status stale-while-revalidate (durable). While it is
-  // stale/warming, re-poll briefly so the real probes replace the cached snapshot.
+  // Server serves Live status / craft / lifecycle stale-while-revalidate. While
+  // stale/warming, re-poll briefly so real probes replace the cached snapshot.
   const liveStatusRevalidating = Boolean(liveChannelsStatus?.warming || liveChannelsStatus?.stale);
   const liveCraftWarming = Boolean(liveCraftOptions?.warming);
+  const liveLifecycleRevalidating = Boolean(
+    liveEngineProgress?.warming || liveEngineProgress?.stale,
+  );
   useEffect(() => {
     if (showWizard || (section !== "live-channels" && section !== "overview")) return undefined;
-    if (!liveStatusRevalidating && !liveCraftWarming) return undefined;
+    if (!liveStatusRevalidating && !liveCraftWarming && !liveLifecycleRevalidating) {
+      return undefined;
+    }
     let tries = 0;
     const timer = setInterval(() => {
       tries += 1;
@@ -738,9 +743,14 @@ export default function ConfigPage() {
           })
           .catch(() => {});
       }
+      if (liveLifecycleRevalidating) {
+        getLiveChannelsLifecycleStatus()
+          .then(setLiveEngineProgress)
+          .catch(() => {});
+      }
     }, 2500);
     return () => clearInterval(timer);
-  }, [showWizard, section, liveStatusRevalidating, liveCraftWarming]);
+  }, [showWizard, section, liveStatusRevalidating, liveCraftWarming, liveLifecycleRevalidating]);
 
   const liveJobBusy = isLiveJobBusy(liveChannelsStatus?.job);
   useEffect(() => {
