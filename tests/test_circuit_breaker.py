@@ -4,6 +4,7 @@ import asyncio
 import tempfile
 import time
 import unittest
+from unittest import mock
 from pathlib import Path
 from typing import Any, Callable, Dict
 
@@ -270,15 +271,20 @@ class QuarantineResetTests(unittest.TestCase):
             db = _make_db(tmp)
             scheduler = IdleScheduler(db, Path(tmp), idle_threshold_minutes=0)
             scheduler.register(
-                TaskDefinition(name="bounced", run_interval_seconds=1, run_fn=_error_task)
+                TaskDefinition(name="bounced", run_interval_seconds=60, run_fn=_error_task)
             )
             for _ in range(QUARANTINE_THRESHOLD):
                 asyncio.run(scheduler.trigger_task("bounced"))
             self.assertEqual(len([d for d in scheduler._stale_tasks() if d.name == "bounced"]), 0)
 
             scheduler.reset_quarantine("bounced")
-            time.sleep(1.1)
-            stale_names = [d.name for d in scheduler._stale_tasks()]
+            # The effective interval floors at 60s and failures back off (up to
+            # x8), so jump the clock past that instead of sleeping.
+            with mock.patch(
+                "projectionist.scheduler.engine.time.time",
+                return_value=time.time() + 3600,
+            ):
+                stale_names = [d.name for d in scheduler._stale_tasks()]
             self.assertIn("bounced", stale_names)
 
 
