@@ -8,11 +8,14 @@ that on every open. Now:
 * the cheap, volatile ``job`` block is always overlaid live (progress polling),
 * a background worker recomputes; ``stale`` / ``warming`` tell the client to
   re-poll briefly.
+
+The warming skeleton is hand-built — it must never call ``build_live_channels_status``,
+even with blanked URLs, because that path still hits Docker inspect when
+orchestration is on.
 """
 
 from __future__ import annotations
 
-import copy
 import logging
 from typing import Any, Dict, Optional
 
@@ -45,29 +48,87 @@ def _key(settings: Any) -> str:
 
 
 def _warming_status(settings: Any) -> Dict[str, Any]:
-    """Probe-free skeleton with the same shape as the real status."""
+    """Probe-free skeleton with the same shape the Admin UI expects."""
+    from projectionist.live_channels.docker import orchestration_enabled
+
     tunarr = getattr(settings, "tunarr", None)
     real_url = str(getattr(tunarr, "url", "") or "").strip() if tunarr else ""
-    quiet = copy.deepcopy(settings)
-    try:
-        quiet.tunarr.url = ""
-        quiet.tunarr.public_url = ""
-        quiet.plex_url = ""
-        quiet.plex_token = ""
-    except Exception:  # noqa: BLE001
-        pass
-    skeleton = build_live_channels_status(quiet)
-    block = skeleton.get("tunarr")
-    if isinstance(block, dict):
-        block["url"] = real_url
-        block["url_configured"] = bool(real_url)
-        block["reachability"] = {
-            "reachable": False,
-            "error": "Checking Live Channels status…",
-            "checking": True,
-        }
-    skeleton["warming"] = True
-    return skeleton
+    enabled = bool(getattr(getattr(settings, "features", None), "live_channels_enabled", False))
+    image_tag = str(getattr(tunarr, "image_tag", "") or "").strip() if tunarr else ""
+    return {
+        "live_channels_enabled": enabled,
+        "broadcast": {
+            "sidecar_up": False,
+            "channel_count": 0,
+            "last_publish_at": None,
+            "last_error": "",
+            "airing_count": 0,
+            "stream_connections": 0,
+            "lineup_playable": False,
+            "xmltv_programme_count": 0,
+            "guide_ok": False,
+            "tuner_alive": False,
+        },
+        "channels": [],
+        "channel_count": 0,
+        "airing": [],
+        "now_playing": [],
+        "sessions": {"total_connections": 0, "channels": []},
+        "guide_status": {},
+        "guide_index": {
+            "xmltv_url": "",
+            "xmltv": {"ok": False},
+            "tunarr_guide_status": {},
+            "media_libraries": {"ok": False, "libraries": []},
+            "lineup": {
+                "channel_count": 0,
+                "filled_count": 0,
+                "empty_count": 0,
+                "channels": [],
+                "playable": False,
+            },
+            "plex_livetv": {},
+            "ready_for_plex": False,
+            "owner_hint": "Checking Live Channels status…",
+        },
+        "continuity": {"ok": False, "path_count": 0, "checks": []},
+        "last_publish_at": None,
+        "last_error": "",
+        "tunarr": {
+            "url": real_url,
+            "url_configured": bool(real_url),
+            "image_tag": image_tag or "chrisbenincasa/tunarr:1.3.9",
+            "docker_orchestration": orchestration_enabled(settings),
+            "docker_socket_available": False,
+            "reachability": {
+                "reachable": False,
+                "error": "Checking Live Channels status…",
+                "checking": True,
+            },
+            "docker": {"status": "checking", "ok": True, "message": "Checking…"},
+            "plex_pass_confirmed": bool(getattr(tunarr, "plex_pass_confirmed", False))
+            if tunarr
+            else False,
+            "volume_path": str(getattr(tunarr, "volume_path", "") or "tunarr") if tunarr else "tunarr",
+            "channel_number_base": int(getattr(tunarr, "channel_number_base", 100) or 100)
+            if tunarr
+            else 100,
+            "filler_binds": list(getattr(tunarr, "filler_binds", None) or []) if tunarr else [],
+            "media_binds": list(getattr(tunarr, "media_binds", None) or []) if tunarr else [],
+            "pad_flex_max_minutes": int(getattr(tunarr, "pad_flex_max_minutes", 15) or 15)
+            if tunarr
+            else 15,
+            "last_guide_attach_at": None,
+            "last_guide_attach_ok": False,
+            "last_guide_attach_message": "",
+            "last_guide_attach_dvr_key": None,
+        },
+        "icon_probe": {"ok": False, "url": "", "message": ""},
+        "plex_pass": {"ok": False, "confirmed": False},
+        "stream_warm": {"kept_hot": 0, "last_run_at": None, "ok": None, "message": ""},
+        "job": {"busy": False},
+        "warming": True,
+    }
 
 
 def get_live_channels_status(
