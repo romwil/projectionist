@@ -102,7 +102,11 @@ _scheduler audit (#89)_
 - Schema migration 52 (`knowledge_fetch_state`) from the auto-plot change is the only new migration in this release; the other changes add none. On upgrade, the retired `recommendation_warmup` and `health_metrics` scheduler rows are deleted.
 
 ### Verification
-VERIF_RELEASE
+- Combined stack (#84–#91), one full run on the merged tree: backend `pytest tests/` — 2522 passed, 6 skipped, coverage 77.16% (floor 74%), run with `PROJECTIONIST_SKIP_DOTENV=1` so a maintainer `.env` cannot leak ACRCloud keys into the Investigate capability tests.
+- Frontend unit 924/924; lint 0 errors (152 pre-existing warnings); `npm run build` OK.
+- Playwright e2e (mocked, port 8799, theater port moved off 8791): 107 passed, 8 skipped.
+- Stack fix: `tests/test_circuit_breaker.py::test_reset_allows_task_to_run_again` assumed a 1s task interval and a real sleep; the scheduler audit (#89) floors the effective interval at 60s and backs off failing tasks, so the test now advances the clock instead.
+- Embedded Plex subtitle text-track fetch is mocked only — no live Plex proof for embedded tracks yet.
 
 Per-change verification (from each PR, run by its author):
 

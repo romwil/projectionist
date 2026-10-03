@@ -1,15 +1,16 @@
 {
-  "generated_at": "2026-10-02T23:30:49Z",
+  "generated_at": "2026-10-03T00:06:48Z",
   "releases": [
     {
       "version": "1.37.30",
       "date": "2026-10-03",
-      "summary": "One combined patch that rolls up seven reviewed changes: a faster first paint for Live, My Journey, and Admin; a native \"start a station\" Live Channels studio with queue padding and editable seasonal shelves; a weekly letter in place of Admin → House; missing plots that fill themselves; a quieter background scheduler; Sonarr \"Search selected\"; curator collections that land in Projectionist; and an aligned Live Guide. Hub `romwil/projectionist:1.37.25` was a one-off publish of the first-paint change alone; it was never merged, git-tagged, or promoted to prod, and its content is included here. Nothing was published as 1.37.26–1.37.29.",
+      "summary": "One combined patch that rolls up eight reviewed changes: subtitle tracks you already have, drawn in the Live and Play players; a faster first paint for Live, My Journey, and Admin; a native \"start a station\" Live Channels studio with queue padding and editable seasonal shelves; a weekly letter in place of Admin → House; missing plots that fill themselves; a quieter background scheduler; Sonarr \"Search selected\"; curator collections that land in Projectionist; and an aligned Live Guide. Hub `romwil/projectionist:1.37.25` was a one-off publish of the first-paint change alone; it was never merged, git-tagged, or promoted to prod, and its content is included here. Nothing was published as 1.37.26–1.37.29.",
       "highlights": [
         "**Live, My Journey, and Admin open fast.** They paint from the last good snapshot and refresh in the background, so a slow Tunarr or Plex no longer hangs the page.",
         "**Start a Live station in four steps.** Pick what's on it, name it, and go on air. Channels can keep 1–5 titles on rotation topped up from recently added or released, and you can edit seasonal shelves right on the Live page.",
         "**Weekly letter in your inbox.** Admin → House is gone; the household letter now arrives once a week in the owner inbox (email stays off unless you turn it on).",
         "**Missing plots fill themselves.** Library knowledge lists only titles where automatic lookup tried and failed, and the button becomes \"Try again now\". Background tasks also stop freezing the server and catch up faster.",
+        "**Subtitles in the player.** Live and Play share one CC menu with every real Plex subtitle track (embedded or sidecar), rendered in Projectionist with a ±0.5s sync nudge — no more \"turn on station captions in Admin or watch in Plex\" dead end.",
         "**Better admin tools.** Sonarr **Find all missing** lets you search only the shows you tick, the curator builds collections and courses inside Projectionist, and the Live Guide grid lines up."
       ],
       "sections": [
@@ -19,7 +20,10 @@
             "Rotational queue padding: recipe field `queue_pad` (`up_to` 1–5, `feed` `recently_added` | `recently_released`), `live_channels/queue_padding.py`, accepted by from-collection, from-show, publish-channel, and station-settings payloads; stored with station meta and reapplied on Refill. Padded lineups are an ordered manual lineup (pad rows flagged `queue_pad`); youth gate and exclusions apply. Slot math: `max(0, up_to − playing)`.",
             "`PUT /api/admin/holidays/{id}/rail/order` — durable ordered pins for a seasonal shelf (same `holiday_rail_titles` store).",
             "`GET/PUT /api/admin/weekly-letter`, `POST /api/admin/weekly-letter/send`, scheduler task `weekly_letter` (notification kind `digest`, one per ISO week). Optional email through the newsletter mail transport, only when mail is configured and the owner opts in.",
-            "Live studio UI (`/admin/live-channels`): Channels and Setup tabs, create flow, Seasonal shelves block, rotation control."
+            "Live studio UI (`/admin/live-channels`): Channels and Setup tabs, create flow, Seasonal shelves block, rotation control.",
+            "**Subtitles you already have, drawn in the player.** Live and Play share one CC menu: Off plus every real Plex track (embedded or sidecar) for the airing or title. Picking one renders cues in Projectionist — no more \"turn on station captions in Admin or watch in Plex\" dead end.",
+            "Same control on Live (`/live`, pop-out `/live/watch`) and Play (`/watch`, pop-out, phone). Includes a ±0.5s sync nudge.",
+            "`GET /api/library/items/{rating_key}/subtitles/{stream_id}/file` now serves embedded text tracks as WebVTT (Plex `/library/streams/{id}`), not just sidecar files. Plex tokens stay server-side."
           ]
         },
         {
@@ -67,7 +71,10 @@
             "`taste_refresh` re-scanned all reviews once per show (quadratic); now a set lookup.",
             "`semantic_embeddings` reads/writes via worker threads and yields every 250 titles, so its steady-state full-library scan can't hold the event loop and honors “stop” mid-scan.",
             "Watchdog timeouts now flip `should_stop()` for worker-thread tasks (a thread can't be hard-cancelled), so a timed-out task winds down instead of racing the next one.",
-            "**Live Guide lines up.** The time header, program blocks, now-line, and Weather row now share one half-hour-aligned time scale (equal 110px columns, ticks are column edges with left-aligned labels and visible hour/half-hour gridlines). Short blocks keep their true duration width (the old 48px minimum is gone), Weather spans the same grid as every other row, and channel-rail rows have a fixed height so a long channel name can no longer push later rows out of step."
+            "**Live Guide lines up.** The time header, program blocks, now-line, and Weather row now share one half-hour-aligned time scale (equal 110px columns, ticks are column edges with left-aligned labels and visible hour/half-hour gridlines). Short blocks keep their true duration width (the old 48px minimum is gone), Weather spans the same grid as every other row, and channel-rail rows have a fixed height so a long channel name can no longer push later rows out of step.",
+            "Embedded Plex tracks (no sidecar `key`) were listed as \"in Plex\" and never fetchable; they now carry a `proxy_url`.",
+            "Picture-based tracks (PGS/VobSub) stay listed but disabled with an honest reason; fetch failures say so instead of silently showing nothing.",
+            "SRT→VTT conversion no longer drops cue text that is only a number."
           ]
         },
         {
@@ -86,6 +93,11 @@
         {
           "title": "Verification",
           "bullets": [
+            "Combined stack (#84–#91), one full run on the merged tree: backend `pytest tests/` — 2522 passed, 6 skipped, coverage 77.16% (floor 74%), run with `PROJECTIONIST_SKIP_DOTENV=1` so a maintainer `.env` cannot leak ACRCloud keys into the Investigate capability tests.",
+            "Frontend unit 924/924; lint 0 errors (152 pre-existing warnings); `npm run build` OK.",
+            "Playwright e2e (mocked, port 8799, theater port moved off 8791): 107 passed, 8 skipped.",
+            "Stack fix: `tests/test_circuit_breaker.py::test_reset_allows_task_to_run_again` assumed a 1s task interval and a real sleep; the scheduler audit (#89) floors the effective interval at 60s and backs off failing tasks, so the test now advances the clock instead.",
+            "Embedded Plex subtitle text-track fetch is mocked only — no live Plex proof for embedded tracks yet.",
             "`tests/test_swr_first_paint.py` — cold skeleton < 250ms with a 0.5–0.6s forced rebuild; stale served < 250ms with Tunarr / rails / dashboards hanging; durable restart paint; single-flight; unreachable Tunarr keeps the last good guide; Journey GET performs no engagement writes; Plex failure negative cache.",
             "Local repro with an unroutable Tunarr: guide 8.07s → 0.8s (first-ever hit; 4ms after), on-now 8.0s → 0.76s, Admin Live status 16.0s → 7ms (durable) / 1.0s cold, My Journey 421ms → 28ms (6ms warm).",
             "Automat prod data (5.5k titles, 288k credits, 170k people), builders timed inside the 1.37.24 container: knowledge coverage 3.2s and library health 1.2s (both on app-shell `/library/stats` / Admin before); Journey directors 2.9s + cinematographers 0.56s + composers 0.6s per visit; Admin Live status 0.7–1.3s even when Tunarr is healthy; Live guide 0.08s healthy (the hang is Tunarr slow/cold plus threadpool / GIL contention from the above). New Journey director lookup: 2.9s → 0.16s, and the whole rails build now runs off the request path.",
@@ -101,7 +113,8 @@
             "Full pytest / e2e deferred to the release thread.",
             "`pytest tests/test_scheduler_cadence.py` (31 tests): cadence rules, due-time with persisted state, productive-run guard, off-loop responsiveness (blocking task stalls the loop ~0.4s on-loop, <0.15s off-loop), worker-thread context + error + watchdog, retired-task cleanup, registry invariants, plot_neighbors never decodes vectors, progress memoization.",
             "Synthetic 20,000-title library, worst event-loop stall while the task ran (before → after): `summary_motifs` 2519ms → 38ms; `keyword_theme_tagging` 774ms → 14ms; `anniversary_scanner` 126ms → 13ms; `title_relations_refresh` 116ms → 13ms.",
-            "Scheduler / admin / bootstrap / run-history suites and frontend `scheduledTasks` unit tests pass; frontend lint 0 errors."
+            "Scheduler / admin / bootstrap / run-history suites and frontend `scheduledTasks` unit tests pass; frontend lint 0 errors.",
+            "**#91 (subtitles).** `pytest tests/test_subtitle_player_proxy.py tests/test_plex_subtitles.py`; `node --test frontend/src/lib/subtitleCues.test.mjs`; frontend lint 0 errors; `npm run build`. Embedded Plex text-track fetch is mocked only — no live Plex proof for embedded tracks yet."
           ]
         }
       ]
