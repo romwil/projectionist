@@ -237,13 +237,19 @@ def live_channels_preflight_endpoint(
 
 @router.get("/api/admin/live-channels/lifecycle-status")
 def live_channels_lifecycle_status_endpoint(
+    fresh: bool = False,
     user=Depends(require_role("owner")),
 ) -> Dict[str, Any]:
-    """Owner progress + ready probe for Step 2 (Start the broadcast engine)."""
-    del user
-    from projectionist.live_channels.lifecycle_progress import build_lifecycle_status
+    """Owner progress + ready probe for Step 2 (Start the broadcast engine).
 
-    return build_lifecycle_status(_settings())
+    Docker inspect + Tunarr HTTP run via SWR so Admin first paint never waits on
+    them. The cheap in-process progress store is always overlaid live. ``?fresh=1``
+    forces a synchronous probe (diagnostics only).
+    """
+    del user
+    from projectionist.live_channels.lifecycle_progress import get_lifecycle_status
+
+    return get_lifecycle_status(_settings(), fresh=bool(fresh))
 
 
 @router.post("/api/admin/live-channels/lifecycle")
@@ -258,6 +264,7 @@ def live_channels_lifecycle_endpoint(
         resolve_config_volume,
     )
     from projectionist.live_channels.lifecycle_progress import (
+        invalidate_lifecycle_status_cache,
         make_phase_callback,
         mark_waiting_after_lifecycle,
         progress_store,
@@ -286,6 +293,7 @@ def live_channels_lifecycle_endpoint(
         result = life.ensure_running(config_volume=volume, on_phase=on_phase)
     if action in {"ensure_running", "start", "pull"}:
         mark_waiting_after_lifecycle(result.to_dict())
+    invalidate_lifecycle_status_cache()
 
     detail = result.detail or {}
     url_hint = str(detail.get("url_hint") or "").strip()
