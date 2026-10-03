@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+- **Agent-curated seasonal shelves for every grounded holiday.** Admin → Live Channels can ask the professor to propose an ordered mix (known + lesser-known) with staff-pick notes; confirming writes pins + notes for that season’s shelf (`POST /api/admin/holidays/{id}/rail/curate` + `/apply`). Manual reorder, Not a fit, and note edits remain.
+- **Durable curator notes** on `holiday_rail_titles` (migration 53). Notes travel on the member Explore seasonal rail as `curator_note` / `why` (no new auth surface — same hub / feed authz).
+- **Explore “Chat about this” sidebar** for seasonal picks: members open a docked conversation seeded with season + title + note; does not navigate away to `/chat`. Owner Live editor can still open the same pane while vetting.
+
+### Changed
+- Curated seasonal pins beat anniversary dumps when a shelf has agent/owner picks, so staff-pick notes stay visible on Explore for every active season — not Halloween-only.
+
 ## [1.37.30] — 2026-10-03
 
 One combined patch that rolls up eight reviewed changes: subtitle tracks you already have, drawn in the Live and Play players; a faster first paint for Live, My Journey, and Admin; a native "start a station" Live Channels studio with queue padding and editable seasonal shelves; a weekly letter in place of Admin → House; missing plots that fill themselves; a quieter background scheduler; Sonarr "Search selected"; curator collections that land in Projectionist; and an aligned Live Guide. Hub `romwil/projectionist:1.37.25` was a one-off publish of the first-paint change alone; it was never merged, git-tagged, or promoted to prod, and its content is included here. Nothing was published as 1.37.26–1.37.29.

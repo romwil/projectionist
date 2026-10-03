@@ -114,4 +114,12 @@ describe("explore and recommendations responsive layout", () => {
     assert.match(explorePage, /id="recently-added-episodes"/);
     assert.match(explorePage, /Recently added episodes/);
   });
+
+  it("puts seasonal staff-pick notes and chat on Explore for members", () => {
+    assert.match(explorePage, /SeasonalSpotlightRail/);
+    assert.match(explorePage, /Staff picks from your library for this season/);
+    assert.match(styles, /\.explore-seasonal-rail--chat-open/);
+    assert.match(styles, /\.seasonal-pick-chat\s*\{/);
+    assert.match(styles, /\.explore-seasonal-chat-btn/);
+  });
 });
