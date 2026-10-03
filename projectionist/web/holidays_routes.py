@@ -14,12 +14,24 @@ from projectionist.web.auth import require_role
 router = APIRouter(tags=["holidays"])
 
 _db_factory: Optional[Callable[[], Any]] = None
+_settings_factory: Optional[Callable[[], Any]] = None
 
 
 def _db():
     if _db_factory is None:
         raise RuntimeError("holidays routes not registered")
     return _db_factory()
+
+
+def _settings():
+    if _settings_factory is None:
+        from pathlib import Path
+
+        from projectionist.config_store import load_merged_settings
+        from projectionist.web.jobs import get_job_manager
+
+        return load_merged_settings(Path(get_job_manager().data_dir))
+    return _settings_factory()
 
 
 class HolidayCreatePayload(BaseModel):
@@ -53,10 +65,28 @@ class RailTitlePayload(BaseModel):
     library_item_id: int = Field(ge=1)
     curation: Literal["pin", "include", "exclude"]
     pin_position: Optional[int] = Field(default=None, ge=0, le=500)
+    curator_note: Optional[str] = Field(default=None, max_length=280)
 
 
 class RailPinOrderPayload(BaseModel):
     library_item_ids: List[int] = Field(default_factory=list)
+
+
+class RailCuratorNotePayload(BaseModel):
+    curator_note: str = Field(default="", max_length=280)
+
+
+class RailCurateProposePayload(BaseModel):
+    limit: int = Field(default=10, ge=6, le=16)
+
+
+class RailCuratePick(BaseModel):
+    library_item_id: int = Field(ge=1)
+    curator_note: str = Field(default="", max_length=280)
+
+
+class RailCurateApplyPayload(BaseModel):
+    picks: List[RailCuratePick] = Field(default_factory=list)
 
 
 @router.get("/api/admin/holidays")
@@ -158,6 +188,7 @@ def set_holiday_rail_title(
             payload.library_item_id,
             curation=payload.curation,
             pin_position=payload.pin_position,
+            curator_note=payload.curator_note,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -175,6 +206,37 @@ def clear_holiday_rail_title(
     if not cleared:
         raise HTTPException(status_code=404, detail="Curation entry not found")
     return {"ok": True, "curation": _db().list_holiday_rail_titles(observance_id)}
+
+
+@router.patch("/api/admin/holidays/{observance_id}/rail/titles/{library_item_id}/note")
+def set_holiday_rail_title_note(
+    observance_id: str,
+    library_item_id: int,
+    payload: RailCuratorNotePayload,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Save a staff-pick curator note for one shelf title."""
+    del user
+    db = _db()
+    if db.get_holiday_observance(observance_id) is None and not observance_id.startswith(
+        "season:"
+    ):
+        raise HTTPException(status_code=404, detail="Holiday not found")
+    try:
+        title = db.set_holiday_rail_curator_note(
+            observance_id, library_item_id, payload.curator_note
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    from projectionist.library.explore_hub import invalidate_explore_hub_cache
+    from projectionist.library.feeds import preview_holiday_rail
+
+    invalidate_explore_hub_cache()
+    return {
+        "item": title,
+        "curation": db.list_holiday_rail_titles(observance_id),
+        "preview": preview_holiday_rail(db, observance_id, limit=12),
+    }
 
 
 @router.put("/api/admin/holidays/{observance_id}/rail/pins")
@@ -210,10 +272,62 @@ def set_holiday_rail_order(
         curation = db.set_holiday_rail_order(observance_id, payload.library_item_ids)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    from projectionist.library.explore_hub import invalidate_explore_hub_cache
     from projectionist.library.feeds import preview_holiday_rail
 
+    invalidate_explore_hub_cache()
     preview = preview_holiday_rail(db, observance_id, limit=12)
     return {"curation": curation, "preview": preview}
+
+
+@router.post("/api/admin/holidays/{observance_id}/rail/curate")
+async def propose_holiday_rail_curation(
+    observance_id: str,
+    payload: Optional[RailCurateProposePayload] = None,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Ask the professor to propose ordered shelf picks + staff-pick notes.
+
+    Does not write until ``POST …/rail/curate/apply``.
+    """
+    del user
+    from projectionist.library.seasonal_curation import propose_seasonal_shelf
+
+    body = payload or RailCurateProposePayload()
+    try:
+        return await propose_seasonal_shelf(
+            _db(), _settings(), observance_id, limit=body.limit
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=502, detail=f"Curator request failed: {exc}"
+        ) from exc
+
+
+@router.post("/api/admin/holidays/{observance_id}/rail/curate/apply")
+def apply_holiday_rail_curation(
+    observance_id: str,
+    payload: RailCurateApplyPayload,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Confirm a professor proposal: replace shelf order and curator notes."""
+    del user
+    from projectionist.library.seasonal_curation import apply_seasonal_shelf_proposal
+
+    try:
+        return apply_seasonal_shelf_proposal(
+            _db(),
+            observance_id,
+            [pick.model_dump() for pick in payload.picks],
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/api/admin/holidays-library-search")
@@ -249,7 +363,13 @@ def refresh_seasonal_rail_schedule(user=Depends(require_role("owner"))) -> Dict[
     return build_seasonal_rail_snapshot(_db(), limit=12)
 
 
-def register_holidays_routes(app, *, db_factory: Callable[[], Any]) -> None:
-    global _db_factory
+def register_holidays_routes(
+    app,
+    *,
+    db_factory: Callable[[], Any],
+    settings_factory: Optional[Callable[[], Any]] = None,
+) -> None:
+    global _db_factory, _settings_factory
     _db_factory = db_factory
+    _settings_factory = settings_factory
     app.include_router(router)

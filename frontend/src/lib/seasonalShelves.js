@@ -61,10 +61,55 @@ export function addShelfIdFirst(ids, id) {
 }
 
 /** Why a title sits where it does, in plain words. */
-export function shelfRoleLabel(role) {
+export function shelfRoleLabel(role, { hasNote = false } = {}) {
+  if (hasNote) return "Staff pick";
   if (role === "pin") return "Picked by you";
   if (role === "include") return "Added by you";
   return "Matches the season";
+}
+
+/** Staff-pick line under a seasonal Explore poster. */
+export function seasonalCardMeta(item) {
+  const note = String(item?.curator_note || item?.why || "").trim();
+  if (note) return note;
+  return item?.anniversary_text || item?.anniversary_context || null;
+}
+
+/**
+ * Opening user message when chatting about one seasonal pick (Explore members
+ * and Admin Live owner tools share the same seed shape).
+ */
+export function seasonalPickChatSeed({
+  seasonLabel,
+  shelfName,
+  scopeId,
+  title,
+  year,
+  curatorNote,
+  railRole,
+} = {}) {
+  const label = String(seasonLabel || shelfName || "this season").trim() || "this season";
+  const name = String(title || "this title").trim() || "this title";
+  const yearBit = year ? ` (${year})` : "";
+  const note = String(curatorNote || "").trim();
+  const role = String(railRole || "").trim();
+  const scope = String(scopeId || "").trim();
+  const parts = [
+    `We're looking at the ${label} seasonal picks on Explore.`,
+    `Focus title: "${name}"${yearBit}.`,
+  ];
+  if (scope) parts.push(`Season scope: ${scope}.`);
+  if (note) parts.push(`Curator note: ${note}`);
+  if (role) parts.push(`Shelf role: ${role}.`);
+  parts.push(
+    "Talk through why this belongs on the shelf this year, suggest library alternatives, or deepen the staff-pick note — keep the professor voice.",
+  );
+  return parts.join(" ");
+}
+
+/** @deprecated Prefer seasonalPickChatSeed — kept for older Admin call sites. */
+export function shelfChatSeedMessage(args = {}) {
+  return seasonalPickChatSeed(args);
 }
 
 /** Fields the owner edits per shelf (PATCH body for the existing holidays API). */
