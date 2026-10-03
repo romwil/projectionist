@@ -1435,14 +1435,13 @@ button.ghost.inline-link {
   grid-column: 1 / -1;
 }
 
-.muzak-folder-panel {
-  grid-column: 1 / -1;
-  display: grid;
-  gap: 0.55rem;
-  margin: 0.75rem 0 1rem;
+.live-channels-muzak-card {
+  margin-top: var(--space-4);
 }
-.muzak-folder-title {
-  margin: 0;
+.muzak-folder-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.55rem;
 }
 .media-browser-nav {
   display: flex;
