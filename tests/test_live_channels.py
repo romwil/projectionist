@@ -2712,18 +2712,32 @@ class PreflightAndPublishTests(unittest.TestCase):
         self.assertEqual(channel["offline"], {"mode": "pic"})
         self.assertEqual(
             channel["icon"],
-            {"path": "", "width": 0, "duration": 0, "position": "bottom-right"},
+            {
+                "path": "",
+                "width": 0,
+                "duration": 0,
+                "position": "bottom-right",
+                "useDefaultIconFallback": False,
+            },
         )
-        with_icon = channel_create_body(
+        stock = channel_create_body(
             recipe,
             transcode_config_id="ce5cfbdb-603d-47cd-85ff-6ddbe51f33c4",
             icon_url="http://10.10.1.202:18765/images/tunarr.png",
         )
+        self.assertEqual(stock["channel"]["icon"]["path"], "")
+        self.assertIs(stock["channel"]["icon"]["useDefaultIconFallback"], False)
+        with_icon = channel_create_body(
+            recipe,
+            transcode_config_id="ce5cfbdb-603d-47cd-85ff-6ddbe51f33c4",
+            icon_url="http://10.10.1.202:8788/posters/mystery.jpg",
+        )
         self.assertEqual(
             with_icon["channel"]["icon"]["path"],
-            "http://10.10.1.202:18765/images/tunarr.png",
+            "http://10.10.1.202:8788/posters/mystery.jpg",
         )
         self.assertEqual(with_icon["channel"]["icon"]["width"], 256)
+        self.assertIs(with_icon["channel"]["icon"]["useDefaultIconFallback"], False)
         with self.assertRaises(ValueError):
             channel_create_body(recipe, transcode_config_id="")
 
@@ -4194,6 +4208,69 @@ class CollectionIdMatchTests(unittest.TestCase):
         client.update_channel.assert_called_once()
         body = client.update_channel.call_args[0][1]
         self.assertEqual(body["icon"]["path"], "")
+        self.assertIs(body["icon"]["useDefaultIconFallback"], False)
+
+    def test_ensure_channel_labels_omits_stock_icon_for_plex_call_sign(self) -> None:
+        """Empty icon still makes Tunarr emit tunarr.png unless fallback is off."""
+        from projectionist.live_channels.publish import (
+            channel_icon_hides_plex_label,
+            ensure_channel_labels,
+        )
+
+        self.assertTrue(channel_icon_hides_plex_label({"path": ""}))
+        self.assertTrue(
+            channel_icon_hides_plex_label(
+                {"path": "http://10.10.1.202:18765/images/tunarr.png"}
+            )
+        )
+        self.assertTrue(
+            channel_icon_hides_plex_label(
+                {"path": "http://127.0.0.1:8000/images/uploads/mystery.png"}
+            )
+        )
+        self.assertFalse(
+            channel_icon_hides_plex_label(
+                {
+                    "path": "",
+                    "useDefaultIconFallback": False,
+                }
+            )
+        )
+        self.assertFalse(
+            channel_icon_hides_plex_label(
+                {"path": "http://10.10.1.202:8788/posters/mystery.jpg"}
+            )
+        )
+
+        client = MagicMock()
+        client.list_channels.return_value = [
+            {
+                "id": "ch-100",
+                "name": "Mystery",
+                "number": 100,
+                "transcodeConfigId": "tc-1",
+                "icon": {"path": "", "width": 0, "duration": 0, "position": "bottom-right"},
+            },
+            {
+                "id": "ch-101",
+                "name": "Sci-Fi",
+                "number": 101,
+                "transcodeConfigId": "tc-1",
+                "icon": {
+                    "path": "http://10.10.1.202:8788/posters/scifi.jpg",
+                    "width": 256,
+                    "duration": 0,
+                    "position": "bottom-right",
+                },
+            },
+        ]
+        result = ensure_channel_labels(client, icon_url="")
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["updated"], ["ch-100"])
+        body = client.update_channel.call_args[0][1]
+        self.assertEqual(body["icon"]["path"], "")
+        self.assertIs(body["icon"]["useDefaultIconFallback"], False)
+        self.assertEqual(body["name"], "Mystery")
 
     def test_parse_occupied_channel_tokens(self) -> None:
         from projectionist.live_channels.plex_attach import _parse_channel_number_token

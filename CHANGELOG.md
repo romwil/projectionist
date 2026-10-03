@@ -13,6 +13,7 @@
 ### Fixed
 - **Admin `/admin` first paint no longer waits on Docker / Tunarr lifecycle probes.** `GET /api/admin/live-channels/lifecycle-status` (mounted when Docker orchestration is on) is now SWR: paint from a progress-store skeleton or last probe while Docker inspect + Tunarr HTTP refresh in the background; the cheap job/phase store stays overlaid live. The Live status warming skeleton is also truly probe-free (it no longer called `build_live_channels_status`, which still hit Docker even with blanked URLs). Docker status/log timeouts for polls are capped at 5s. Admin re-polls while lifecycle is `stale` / `warming`. `?fresh=1` still forces a synchronous probe.
 - **Weather Channel music is its own Live Channels section.** The folder picker was nested in Between-show breaks, so the heading and shared-in browser sat in the filler grid. It now has its own card; choosing and clearing the folder is unchanged.
+- **Plex Live TV channel names.** The guide's channel column shows the station logo and hides the number and name. Tunarr was still publishing its stock logo when a station had no art, and Plex often left that cell blank. Stations without their own art now publish no logo, so Plex shows the channel number and name. A real station icon is still used when one is set. After this is installed, use **Refresh Plex map** (not Rebuild) so the guide picks it up.
 
 ## [1.37.30] — 2026-10-03
 
