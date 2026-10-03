@@ -88,11 +88,11 @@ export default function OwnerNowPlayingBreakdown({
       <div className="owner-now-playing-head">
         <div>
           <p className="eyebrow">Live Channels</p>
-          <h3 className="dash-panel-title">Stations</h3>
+          <h3 className="dash-panel-title">Channels</h3>
           <p className="owner-now-playing-meta">
             {digInExtras
-              ? "One board for every station — now, next, and health. Watch stays on /live."
-              : "All stations — now, next, and health. Open Watch for any station."}
+              ? "One board for every channel — now, next, and health. Watch stays on /live."
+              : "All channels — now, next, and health. Open Watch for any channel."}
           </p>
         </div>
         <button
@@ -107,14 +107,14 @@ export default function OwnerNowPlayingBreakdown({
 
       {error ? <p className="dash-panel-error">{error}</p> : null}
       {loading && !model.rows.length ? (
-        <p className="status status-secondary">Checking every station…</p>
+        <p className="status status-secondary">Checking every channel…</p>
       ) : null}
 
       {!loading && model.rows.length === 0 ? (
         <p className="dash-empty" data-testid="owner-now-playing-empty">
           {model.engineUp
-            ? "TV engine is up, but no stations are listed yet."
-            : "TV engine unreachable — open Live Channels Setup to reconnect."}
+            ? "The broadcast is running, but no channels are listed yet."
+            : "The broadcast isn’t reachable — open Setup to reconnect."}
         </p>
       ) : null}
 
@@ -123,7 +123,7 @@ export default function OwnerNowPlayingBreakdown({
           <table className="owner-now-playing-table" data-testid="owner-now-playing-table">
             <thead>
               <tr>
-                <th scope="col">Station</th>
+                <th scope="col">Channel</th>
                 <th scope="col">Now</th>
                 <th scope="col">Next</th>
                 <th scope="col">Health</th>
@@ -138,7 +138,7 @@ export default function OwnerNowPlayingBreakdown({
                   data-empty={row.isEmpty ? "true" : "false"}
                   data-now-kind={row.nowKind || ""}
                 >
-                  <td data-label="Station">
+                  <td data-label="Channel">
                     <span className="owner-now-playing-station">
                       {formatChannelLabel(row)}
                     </span>
@@ -212,7 +212,7 @@ export default function OwnerNowPlayingBreakdown({
                           disabled={actionsDisabled || refillBusyId === row.id}
                           onClick={() => onRefill(row.id, row.name)}
                         >
-                          {refillBusyId === row.id ? "Refilling…" : "Refill"}
+                          {refillBusyId === row.id ? "Rebuilding…" : "Rebuild lineup"}
                         </button>
                       ) : (
                         <Link
@@ -257,7 +257,7 @@ export default function OwnerNowPlayingBreakdown({
                               to="/admin/live-channels"
                               data-testid="owner-now-playing-admin"
                             >
-                              Stations
+                              Channels
                             </Link>
                           )}
                         </>

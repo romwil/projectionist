@@ -36,6 +36,7 @@ def register(scheduler: IdleScheduler) -> None:
             name="enthusiast_nudge",
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
+            off_loop=True,
             run_fn=run,
             description=(
                 "Sends opt-in “you have to see this” nudges (inbox + optional email), "

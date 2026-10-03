@@ -137,6 +137,7 @@ def register(scheduler: IdleScheduler) -> None:
             name="data_retention",
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
+            off_loop=True,
             run_fn=run,
             description=(
                 "Prunes old telemetry, anniversary, and scheduled-task run-history rows "

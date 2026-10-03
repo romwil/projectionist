@@ -36,6 +36,7 @@ def register(scheduler: IdleScheduler) -> None:
             name="owner_monthly_curation",
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
+            off_loop=True,
             run_fn=run,
             description=(
                 "Delivers a monthly collection-curation update to owners via the "

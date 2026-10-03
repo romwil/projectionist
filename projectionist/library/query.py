@@ -1482,6 +1482,14 @@ def refresh_library_overview_cache(db: Database) -> Dict[str, Any]:
         pass
     overview = compute_library_overview(db)
     db.set_sync_state(OVERVIEW_CACHE_KEY, json.dumps(overview))
+    # Library changed: rebuild derived dashboards here (sync worker / scheduler
+    # thread) so request paths never recompute them on first paint.
+    try:
+        from projectionist.library.derived_caches import rebuild_after_library_change
+
+        rebuild_after_library_change(db)
+    except Exception:  # noqa: BLE001 — never fail a sync over a cache warm
+        pass
     return overview
 
 

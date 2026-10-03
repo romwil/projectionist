@@ -225,6 +225,7 @@ def register(scheduler: IdleScheduler) -> None:
             name="purge_candidates",
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
+            off_loop=True,
             run_fn=run,
             description=(
                 "Pre-computes purge candidate recommendations from watch history and "

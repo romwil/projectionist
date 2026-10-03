@@ -174,6 +174,14 @@ export function digestBlurb(item) {
   return firstSentence(item?.body || item?.message || "");
 }
 
+/** Weekly household letter delivered to the owner inbox as a "digest". */
+export function isHouseLetter(item) {
+  return (
+    String(item?.kind || "") === "digest" &&
+    String(item?.payload?.newsletter || "") === "house-letter"
+  );
+}
+
 export function isLiveChannelsNudge(item) {
   if (String(item?.kind || "") !== "nudge") return false;
   const payload = item?.payload || {};

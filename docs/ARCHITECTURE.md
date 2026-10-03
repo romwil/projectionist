@@ -383,9 +383,7 @@ Some features span both sides. The scheduler pre-computes; the agent tool (or Ex
 | `title_relations_refresh` → `title_relations` | `list_relations`, `walk_relations` |
 | `llm_logline_enrichment` | layered embedding text (optional; never invents plot) |
 | `anniversary_scanner` | `get_todays_anniversaries`, On This Day feed fallback |
-| `recommendation_warmup` | agent recommendation caches |
 | `taste_refresh` | persona/taste personalization |
-| `health_metrics` | `/api/library/health`, owner dashboard |
 
 ### Metadata trickle (sync vs idle)
 
@@ -398,6 +396,8 @@ Some features span both sides. The scheduler pre-computes; the agent tool (or Ex
 3. `plot_neighbors` — materialize top-K cosine (+ surprise) into `item_neighbors`, preferring titles still missing neighbor rows (`neighbors_backlog`)
 4. `summary_motifs` / `keyword_theme_tagging` / optional `long_synopsis_enrichment` / optional `llm_logline_enrichment`
 5. `title_relations_refresh` — collection + neighbor + shared-crew edges
+
+While a trickle task reports `has_more` after a productive full batch, the scheduler re-runs it after a short per-task catch-up gap instead of the full interval ([cadence rules](CURATOR_KNOWLEDGE.md#catch-up-retry-and-backoff-when-is-a-task-next-due)); sync-heavy tasks run `off_loop` on a worker thread.
 
 Batch sizes for (1)–(3) and loglines are **auto-tuned** from durable run history (see [Active auto-tune](#active-auto-tune-batch--interval)); agent tools and Explore feeds **read caches**; they do not recompute embeddings or graphs per chat turn.
 

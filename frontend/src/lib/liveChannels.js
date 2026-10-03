@@ -1,6 +1,7 @@
 /** Pure helpers for Projectionist `/live` watch + guide. */
 
 import { ROUTES } from "./backNav.js";
+import { normalizeSubtitleTracks } from "./subtitleCues.js";
 import {
   formatProgramDisplayTitle,
   formatProgramEpisodeLabel,
@@ -17,14 +18,7 @@ export const LIVE_CC_EMPTY_AIRING = "No captions available for this airing";
 export function mergeLiveCcTracks(streamTracks = [], plexPayload = null) {
   const stream = Array.isArray(streamTracks) ? streamTracks : [];
   const plexRows = Array.isArray(plexPayload?.plex_streams) ? plexPayload.plex_streams : [];
-  const plex = plexRows.map((row, index) => ({
-    index: `plex-${row.id || index}`,
-    label: row.label || row.display_title || row.language || `Plex ${index + 1}`,
-    language: row.language_code || row.language || "",
-    viaPlex: true,
-    proxyUrl: row.proxy_url || "",
-    streamId: row.id || "",
-  }));
+  const plex = normalizeSubtitleTracks(plexRows).map((track) => ({ ...track, viaPlex: true, streamId: track.id }));
   const hasAny = stream.length > 0 || plex.length > 0;
   let emptyMessage = "";
   if (!hasAny) {
@@ -726,8 +720,9 @@ export function appendWeatherChannel(guide) {
     .map((channel) => Number(channel?.number))
     .filter((n) => Number.isFinite(n));
   const number = numbers.length ? Math.max(...numbers) + 1 : null;
-  const start = guide.windowStart;
-  const stop = guide.windowEnd;
+  // Same half-hour-aligned bounds the guide grid draws, so the block's left edge
+  // sits on the first tick and its right edge on the last (not mid-column).
+  const { gridStart: start, gridEnd: stop } = guideGridBounds(guide.windowStart, guide.windowEnd);
   return {
     ...guide,
     channels: [
@@ -798,6 +793,9 @@ export function normalizeGuide(snapshot) {
   return {
     enabled: true,
     ready: Boolean(snapshot.ready) && channels.length > 0,
+    // Server is still building the first guide (SWR cold start) — poll, don't show "not ready".
+    warming: Boolean(snapshot.warming),
+    stale: Boolean(snapshot.stale),
     reason: String(snapshot.reason || ""),
     generatedAt,
     windowStart: generatedAt,
@@ -808,7 +806,55 @@ export function normalizeGuide(snapshot) {
   };
 }
 
-/** Pixel layout for a program cell in a horizontal EPG. */
+/** Guide grid unit: one column = 30 minutes. */
+export const GUIDE_SLOT_SECONDS = 1800;
+
+/**
+ * Half-hour-aligned grid bounds for a guide window. The server window starts at an
+ * arbitrary "generated at" instant; snapping outward means every tick is a column
+ * edge and every column is the same width.
+ * @returns {{gridStart: number, gridEnd: number, slotCount: number}}
+ */
+export function guideGridBounds(windowStart, windowEnd) {
+  const ws = Number.isFinite(Number(windowStart)) ? Number(windowStart) : Date.now() / 1000;
+  const we = Number.isFinite(Number(windowEnd)) && Number(windowEnd) > ws ? Number(windowEnd) : ws + 6 * 3600;
+  const gridStart = Math.floor(ws / GUIDE_SLOT_SECONDS) * GUIDE_SLOT_SECONDS;
+  const gridEnd = Math.max(
+    gridStart + GUIDE_SLOT_SECONDS,
+    Math.ceil(we / GUIDE_SLOT_SECONDS) * GUIDE_SLOT_SECONDS,
+  );
+  return { gridStart, gridEnd, slotCount: (gridEnd - gridStart) / GUIDE_SLOT_SECONDS };
+}
+
+/**
+ * The ONE time scale for the Live Guide: time header ticks, program cells, the
+ * now-line and the row gridlines all derive their x from `xForTime`.
+ * @returns {{gridStart:number, gridEnd:number, slotCount:number, pxPerHour:number,
+ *   pxPerSlot:number, width:number, xForTime:(t:number)=>number, marks:number[]}}
+ */
+export function guideTimeScale(windowStart, windowEnd, pxPerHour) {
+  const { gridStart, gridEnd, slotCount } = guideGridBounds(windowStart, windowEnd);
+  const pxPerSlot = (pxPerHour * GUIDE_SLOT_SECONDS) / 3600;
+  const marks = [];
+  for (let i = 0; i < slotCount; i += 1) marks.push(gridStart + i * GUIDE_SLOT_SECONDS);
+  return {
+    gridStart,
+    gridEnd,
+    slotCount,
+    pxPerHour,
+    pxPerSlot,
+    width: slotCount * pxPerSlot,
+    xForTime: (t) => ((Number(t) - gridStart) / 3600) * pxPerHour,
+    marks,
+  };
+}
+
+/**
+ * Pixel layout for a program cell in a horizontal EPG. Left edge = start on the
+ * shared scale; width = true duration (no minimum, so short blocks never overlap
+ * their neighbour or drift the rest of the row).
+ * `windowStart`/`windowEnd` here are the aligned grid bounds from `guideTimeScale`.
+ */
 export function programCellStyle(program, windowStart, windowEnd, pxPerHour) {
   const start = Number(program?.start);
   const stop = Number(program?.stop);
@@ -822,7 +868,7 @@ export function programCellStyle(program, windowStart, windowEnd, pxPerHour) {
   const widthHours = (clampedStop - clampedStart) / 3600;
   return {
     left: `${leftHours * pxPerHour}px`,
-    width: `${Math.max(48, widthHours * pxPerHour)}px`,
+    width: `${widthHours * pxPerHour}px`,
   };
 }
 

@@ -1202,14 +1202,41 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
         "function": {
             "name": "create_list",
             "description": (
-                "Create a named curated list in Projectionist (local only; Plex Lists publish is not available). "
-                "No confirmation token required."
+                "Create a Projectionist list, collection, or course (the default for any "
+                "'make me a collection/course' ask unless the user says Plex). "
+                "Set publish=true to make it a household-visible collection (owner only); "
+                "list_kind=course for a cinema course. Pass items (title, media_type, tmdb_id or "
+                "tvdb_id) to fill it in the same call. Result reports items_added / items_failed / "
+                "published. No confirmation token required. For a Plex-only shelf use "
+                "create_plex_collection instead."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "name": {"type": "string"},
                     "description": {"type": "string"},
+                    "list_kind": {
+                        "type": "string",
+                        "enum": ["list", "playlist", "course"],
+                        "description": "course = cinema course; list/playlist otherwise (default list)",
+                    },
+                    "publish": {
+                        "type": "boolean",
+                        "description": "Publish to household Collections shelves (owner only; default false)",
+                    },
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "title": {"type": "string"},
+                                "media_type": {"type": "string", "enum": ["movie", "show"]},
+                                "tmdb_id": {"type": "integer"},
+                                "tvdb_id": {"type": "integer"},
+                            },
+                            "required": ["title", "media_type"],
+                        },
+                    },
                 },
                 "required": ["name"],
             },
@@ -1298,7 +1325,9 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
         "function": {
             "name": "create_plex_collection",
             "description": (
-                "Propose creating a Plex collection in the user's library. "
+                "Propose creating a PLEX-ONLY collection in the user's Plex library. "
+                "This never creates a Projectionist collection or course — for those call "
+                "create_list. Use only when the user explicitly asks for Plex. "
                 "Returns a confirmation_token before any Plex write. "
                 "After the user affirms (yes / go for it / confirm), call "
                 "confirm_pending_action with that exact token — do not ask again."

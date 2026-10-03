@@ -50,8 +50,8 @@ export default function LivePage({ popout = false }) {
   const [activeChannelId, setActiveChannelId] = useState(channelParam);
   const [plexUrl, setPlexUrl] = useState(plexLiveTvUrl());
 
-  const loadGuide = useCallback(async () => {
-    setLoading(true);
+  const loadGuide = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const features = await getFeatures();
       const enabled = Boolean(features?.features?.live_channels_enabled);
@@ -64,15 +64,18 @@ export default function LivePage({ popout = false }) {
         setLoading(false);
         return;
       }
-      const [snapshot, machineId] = await Promise.all([
-        getLiveChannelsGuide({ hours: 6 }),
-        getPlexMachineId().catch(() => ""),
-      ]);
+      // Guide is server-precached (SWR) — paint as soon as it arrives. The Plex
+      // machine id only feeds a secondary link, so it must never gate first paint.
+      const snapshot = await getLiveChannelsGuide({ hours: 6 });
       const model = appendWeatherChannel(normalizeGuide(snapshot));
       setGuide(model);
-      setPlexUrl(plexLiveTvUrl(machineId));
       setError("");
       setActiveChannelId((current) => current || model?.channels?.[0]?.id || "");
+      if (!silent) {
+        getPlexMachineId()
+          .catch(() => "")
+          .then((machineId) => setPlexUrl(plexLiveTvUrl(machineId)));
+      }
     } catch (err) {
       setError(err.message || "Could not load the live guide.");
       setGuide(null);
@@ -85,6 +88,24 @@ export default function LivePage({ popout = false }) {
     if (!authReady) return;
     loadGuide();
   }, [authReady, loadGuide]);
+
+  // Cold start: server returns warming:true while it builds the first guide.
+  const guideWarming = Boolean(guide?.warming);
+  useEffect(() => {
+    if (!guideWarming) return undefined;
+    let tries = 0;
+    const timer = setInterval(() => {
+      tries += 1;
+      if (tries > 40) {
+        clearInterval(timer);
+        // Give up politely: fall through to the normal "not ready" copy.
+        setGuide((current) => (current ? { ...current, warming: false } : current));
+        return;
+      }
+      loadGuide({ silent: true });
+    }, 1500);
+    return () => clearInterval(timer);
+  }, [guideWarming, loadGuide]);
 
   useEffect(() => {
     if (popout) return;
@@ -182,6 +203,16 @@ export default function LivePage({ popout = false }) {
     return (
       <div className="live-page live-page--loading" data-testid="live-page">
         <p className="live-page-status">Loading Live…</p>
+      </div>
+    );
+  }
+
+  if (guideWarming) {
+    return (
+      <div className="live-page live-page--loading" data-testid="live-page">
+        <p className="live-page-status" data-testid="live-warming">
+          Warming up the guide…
+        </p>
       </div>
     );
   }

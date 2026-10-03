@@ -10,7 +10,13 @@ import {
   sonarrMissingPhaseLabel,
   sonarrMissingProgressLine,
   sonarrMissingScanReady,
+  sonarrPruneSelection,
   sonarrSearchMissingButtonClass,
+  sonarrSearchSelectedLabel,
+  sonarrSearchSelectedPayload,
+  sonarrSelectAllSeries,
+  sonarrSelectedEpisodeIds,
+  sonarrToggleSeries,
   sonarrWantedDeltaCopy,
 } from "./sonarrMissing.js";
 
@@ -150,10 +156,13 @@ describe("sonarr find-all-missing Admin Libraries card", () => {
   it("exposes the Libraries card, scan, search, and specials toggle", () => {
     assert.match(libraries, /data-testid="sonarr-find-missing-card"/);
     assert.match(libraries, /data-testid="sonarr-find-missing-button"/);
-    assert.match(libraries, /data-testid="sonarr-search-missing-button"/);
     assert.match(libraries, /data-testid="sonarr-include-specials"/);
     assert.match(libraries, /Find all missing/);
-    assert.match(libraries, /Search these/);
+    assert.match(libraries, /data-testid="sonarr-search-selected-button"/);
+    assert.match(libraries, /data-testid="sonarr-select-all-button"/);
+    assert.match(libraries, /data-testid="sonarr-deselect-all-button"/);
+    assert.match(libraries, /data-testid="sonarr-search-all-button"/);
+    assert.doesNotMatch(libraries, /Search these/);
     assert.match(libraries, /Include specials/);
     assert.match(libraries, /data-testid="sonarr-cancel-missing-button"/);
     assert.match(libraries, /Cancel remaining/);
@@ -178,3 +187,46 @@ describe("sonarr find-all-missing Admin Libraries card", () => {
     assert.match(help, /command queue/i);
   });
 });
+
+describe("sonarr per-show selection", () => {
+  const groups = [
+    { seriesId: 1, seriesTitle: "Antiques Road Trip", count: 2, episodes: [{ episodeId: 11 }, { episodeId: 12 }] },
+    { seriesId: 2, seriesTitle: "CatDog", count: 1, episodes: [{ episodeId: 21 }] },
+    { seriesId: 3, seriesTitle: "Catalyst", count: 1, episodes: [{ episodeId: 31 }, { episodeId: 21 }] },
+  ];
+
+  it("starts empty and builds no payload, so Search selected can never fire everything", () => {
+    assert.equal(sonarrSearchSelectedPayload(groups, new Set()), null);
+    assert.equal(sonarrSearchSelectedLabel(0), "Search selected (0)");
+  });
+
+  it("maps checked shows to explicit, deduped episode_ids (never search_all)", () => {
+    const payload = sonarrSearchSelectedPayload(groups, new Set([1, 3]));
+    assert.deepEqual(payload, { episode_ids: [11, 12, 31, 21] });
+    assert.equal("search_all" in payload, false);
+    assert.equal(sonarrSearchSelectedLabel(2), "Search selected (2)");
+  });
+
+  it("select all, toggle, and deselect all", () => {
+    const all = sonarrSelectAllSeries(groups);
+    assert.deepEqual([...all], [1, 2, 3]);
+    assert.deepEqual(sonarrSelectedEpisodeIds(groups, all), [11, 12, 21, 31]);
+    const toggled = sonarrToggleSeries(all, 2);
+    assert.deepEqual([...toggled].sort(), [1, 3]);
+    assert.deepEqual([...sonarrToggleSeries(toggled, 2)].sort(), [1, 2, 3]);
+    assert.equal(sonarrSelectedEpisodeIds(groups, new Set()).length, 0);
+  });
+
+  it("drops picks for shows that are no longer in the scan", () => {
+    const next = sonarrPruneSelection([groups[0]], new Set([1, 2, 3]));
+    assert.deepEqual([...next], [1]);
+  });
+
+  it("Libraries card wires checkboxes, sticky Search selected, and clears picks on rescan", () => {
+    assert.match(libraries, /data-testid=\{`sonarr-select-\$\{group\.seriesId\}`\}/);
+    assert.match(libraries, /sonarr-missing-search-footer/);
+    assert.match(libraries, /setSonarrPicked\(new Set\(\)\);\s*handleSonarrMissingScan/);
+    assert.match(libraries, /window\.confirm\(/);
+  });
+});
+

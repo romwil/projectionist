@@ -52,6 +52,7 @@ def register(scheduler: IdleScheduler) -> None:
             name="title_relations_refresh",
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
+            off_loop=True,
             run_fn=run,
             description=(
                 "Refreshes title connections from collections, similar plots, and shared "

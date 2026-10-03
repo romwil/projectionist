@@ -309,7 +309,7 @@ class TelemetryConfigMixin:
         """Update status (and optional candidate JSON) for a staged row."""
 
         cleaned = str(status or "").strip().lower()
-        if cleaned not in {"pending", "approved", "rejected"}:
+        if cleaned not in {"pending", "approved", "rejected", "resolved"}:
             raise ValueError(f"invalid staged augmentation status: {status!r}")
 
         def _write() -> Optional[Dict[str, Any]]:

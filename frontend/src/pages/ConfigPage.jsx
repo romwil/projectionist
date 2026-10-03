@@ -51,6 +51,7 @@ import {
 import AdvancedSettings from "../components/AdvancedSettings";
 import PersonaSection from "../components/PersonaSection";
 import LiveChannelsSection, { isLiveChannelsLaunched } from "./admin/LiveChannelsSection";
+import { ownerLiveText } from "../lib/liveChannelsOwnerCopy.js";
 import HouseholdSection from "./admin/HouseholdSection";
 import LibrariesSection from "./admin/LibrariesSection";
 import OverviewSection from "./admin/OverviewSection";
@@ -681,6 +682,8 @@ export default function ConfigPage() {
     getLiveChannelsCraftOptions()
       .then((opts) => {
         setLiveCraftOptions(opts);
+        // Provisional (warming) numbers must not seed the form — wait for the real ones.
+        if (opts?.warming) return;
         setLiveCraft((prev) => ({
           ...prev,
           number: prev.number || String(opts.next_channel_number || 100),
@@ -701,6 +704,43 @@ export default function ConfigPage() {
         .catch(() => {});
     }
   }, [showWizard, section, settings?.features?.live_channels_enabled, settings?.tunarr?.url, settings?.tunarr?.docker_orchestration]);
+
+  // Server serves Live status stale-while-revalidate (durable). While it is
+  // stale/warming, re-poll briefly so the real probes replace the cached snapshot.
+  const liveStatusRevalidating = Boolean(liveChannelsStatus?.warming || liveChannelsStatus?.stale);
+  const liveCraftWarming = Boolean(liveCraftOptions?.warming);
+  useEffect(() => {
+    if (showWizard || (section !== "live-channels" && section !== "overview")) return undefined;
+    if (!liveStatusRevalidating && !liveCraftWarming) return undefined;
+    let tries = 0;
+    const timer = setInterval(() => {
+      tries += 1;
+      if (tries > 12) {
+        clearInterval(timer);
+        return;
+      }
+      if (liveStatusRevalidating) {
+        getLiveChannelsStatus()
+          .then(setLiveChannelsStatus)
+          .catch(() => {});
+      }
+      if (liveCraftWarming) {
+        getLiveChannelsCraftOptions()
+          .then((opts) => {
+            setLiveCraftOptions(opts);
+            if (opts?.warming) return;
+            setLiveCraft((prev) => ({
+              ...prev,
+              number: prev.number || String(opts.next_channel_number || 100),
+              motif: prev.motif || opts.motifs?.[0]?.value || "",
+              cluster_tag: prev.cluster_tag || opts.taste_clusters?.[0]?.cluster_tag || "",
+            }));
+          })
+          .catch(() => {});
+      }
+    }, 2500);
+    return () => clearInterval(timer);
+  }, [showWizard, section, liveStatusRevalidating, liveCraftWarming]);
 
   const liveJobBusy = isLiveJobBusy(liveChannelsStatus?.job);
   useEffect(() => {
@@ -1143,8 +1183,8 @@ export default function ConfigPage() {
     return (
       <InlineAlert
         type={fb.type}
-        message={fb.message}
-        details={fb.details}
+        message={ownerLiveText(fb.message)}
+        details={Array.isArray(fb.details) ? fb.details.map(ownerLiveText) : fb.details}
         testId={`live-channels-${block}-alert`}
       />
     );
@@ -2589,10 +2629,21 @@ export default function ConfigPage() {
     }
   }
 
-  async function handleSonarrMissingSearch() {
+  /**
+   * Queue EpisodeSearch. Pass `{ episode_ids }` for a checked subset; `{ search_all: true }`
+   * only from an explicit "Search all" confirm (or the Repair retry). No payload sends nothing.
+   */
+  async function handleSonarrMissingSearch(payload) {
+    if (!payload || (!payload.search_all && !(payload.episode_ids || []).length)) {
+      setActionFeedback("sonarr-missing", {
+        type: "error",
+        message: "Select at least one show to search.",
+      });
+      return;
+    }
     setActionFeedback("sonarr-missing", null);
     try {
-      const snap = await searchSonarrMissing({ search_all: true });
+      const snap = await searchSonarrMissing(payload);
       setSonarrMissing(snap);
     } catch (error) {
       setActionFeedback("sonarr-missing", {

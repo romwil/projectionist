@@ -168,6 +168,7 @@ def register(scheduler: IdleScheduler) -> None:
             name="anniversary_scanner",
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
+            off_loop=True,
             run_fn=run,
             description=(
                 "Scans the library once per day for release-date anniversaries and "

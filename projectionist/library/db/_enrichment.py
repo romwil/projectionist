@@ -319,6 +319,18 @@ class EnrichmentMixin:
             row = conn.execute("SELECT COUNT(*) AS cnt FROM embeddings").fetchone()
             return int(row["cnt"] if row else 0)
 
+    def embedding_item_ids(self) -> List[int]:
+        """Return stored embedding item ids, ascending — **without** decoding vectors.
+
+        ``get_embeddings()`` JSON-decodes every vector; callers that only need the
+        id set (e.g. the neighbor refresh rotation) must use this instead.
+        """
+        with self.connect() as conn:
+            rows = conn.execute(
+                "SELECT item_id FROM embeddings ORDER BY item_id ASC"
+            ).fetchall()
+            return [int(row["item_id"]) for row in rows]
+
     def count_items_missing_neighbors(self) -> int:
         """Count embedded titles that still have no ``item_neighbors`` rows.
 
@@ -382,8 +394,19 @@ class EnrichmentMixin:
         )
     """
 
-    def items_needing_long_synopsis(self, *, limit: int = 10) -> List[sqlite3.Row]:
-        """Rows still missing optional ``long_synopsis`` (Wikipedia/OMDb backlog)."""
+    def items_needing_long_synopsis(
+        self, *, limit: int = 10, skip_parked: bool = True, now: Optional[float] = None
+    ) -> List[sqlite3.Row]:
+        """Rows still missing optional ``long_synopsis`` (Wikipedia/OMDb backlog).
+
+        By default titles that are inside a retry backoff window, or whose retries
+        are exhausted, are skipped so one stubborn title cannot starve the queue.
+        """
+        from projectionist.library.knowledge_fetch import KIND_SYNOPSIS, parked_sql
+
+        park_sql, park_params = (
+            parked_sql(KIND_SYNOPSIS, now=now) if skip_parked else ("", ())
+        )
         with self.connect() as conn:
             cols = self._table_columns(conn, "library_items")
             if "long_synopsis" not in cols:
@@ -395,21 +418,35 @@ class EnrichmentMixin:
                            summary, tmdb_overview, tagline, long_synopsis, synopsis_source
                     FROM library_items
                     WHERE {self._LONG_SYNOPSIS_WHERE}
+                    {park_sql}
                     ORDER BY updated_at ASC
                     LIMIT ?
                     """,
-                    (max(1, int(limit)),),
+                    (*park_params, max(1, int(limit))),
                 ).fetchall()
             )
 
-    def count_items_needing_long_synopsis(self) -> int:
-        """Count titles still waiting on the optional long-synopsis trickle."""
+    def count_items_needing_long_synopsis(
+        self, *, include_exhausted: bool = False, now: Optional[float] = None
+    ) -> int:
+        """Count titles still waiting on the optional long-synopsis trickle.
+
+        Titles whose automatic retrieval is exhausted are not "waiting" (they are
+        owner-visible exceptions); pass ``include_exhausted=True`` for the raw gap.
+        """
+        from projectionist.library.knowledge_fetch import KIND_SYNOPSIS, exhausted_sql
+
+        ex_sql, ex_params = (
+            ("", ()) if include_exhausted else exhausted_sql(KIND_SYNOPSIS, now=now)
+        )
         with self.connect() as conn:
             cols = self._table_columns(conn, "library_items")
             if "long_synopsis" not in cols:
                 return 0
             row = conn.execute(
-                f"SELECT COUNT(*) AS cnt FROM library_items WHERE {self._LONG_SYNOPSIS_WHERE}"
+                f"SELECT COUNT(*) AS cnt FROM library_items "
+                f"WHERE {self._LONG_SYNOPSIS_WHERE} {ex_sql}",
+                tuple(ex_params),
             ).fetchone()
             return int(row["cnt"] if row else 0)
 

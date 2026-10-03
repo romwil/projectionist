@@ -1,3 +1,5 @@
+import { queuePadDraftFromStation } from "./liveQueuePad.js";
+
 /** Shared craft filter helpers for Admin Live Channels craft + station Settings. */
 
 /** Filter Plex / published collections for craft pickers (media scope + search). */
@@ -69,6 +71,7 @@ export function buildCraftFiltersPayload(craft) {
 /** Draft form state from status/station_meta for Settings read/write. */
 export function craftDraftFromStation(station = {}) {
   const filters = station?.craft_filters || {};
+  const queue = queuePadDraftFromStation(station);
   const genres = Array.isArray(filters.genres) ? filters.genres.filter(Boolean) : [];
   return {
     name: String(station?.name || "").trim(),
@@ -80,6 +83,8 @@ export function craftDraftFromStation(station = {}) {
     collection_title: station?.collection_title || "",
     programming_mode: station?.programming_mode || "",
     genres,
+    queue_up_to: queue.queue_up_to,
+    queue_feed: queue.queue_feed,
     decade: filters.decade == null || filters.decade === "" ? "" : String(filters.decade),
     theme: Array.isArray(filters.themes) && filters.themes[0] ? String(filters.themes[0]) : "",
     content_rating:

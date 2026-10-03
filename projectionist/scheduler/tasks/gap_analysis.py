@@ -181,6 +181,7 @@ def register(scheduler: IdleScheduler) -> None:
             name="gap_analysis",
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
+            off_loop=True,
             run_fn=run,
             description=(
                 "Looks up TMDB filmographies for your most-represented directors and "

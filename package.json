@@ -1,7 +1,7 @@
 {
   "name": "projectionist",
   "private": true,
-  "version": "1.37.24",
+  "version": "1.37.30",
   "license": "AGPL-3.0-only",
   "scripts": {
     "test": "python -m pytest && npm run test:frontend && npm run test:e2e",

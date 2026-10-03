@@ -313,6 +313,55 @@
   margin-bottom: var(--space-2);
 }
 
+/* Admin → Libraries → Sonarr find all missing: per-show selection */
+.sonarr-missing-select-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 var(--space-2);
+}
+
+.sonarr-missing-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.sonarr-missing-row > .config-advanced-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.sonarr-missing-check {
+  flex: none;
+  margin-top: calc(var(--space-2) + 2px);
+  accent-color: var(--accent);
+}
+
+.sonarr-missing-search-footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--space-3) 0;
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--bg, #0f1218) 92%, transparent),
+    color-mix(in srgb, var(--bg, #0f1218) 88%, transparent) 70%,
+    transparent
+  );
+  z-index: 2;
+}
+
+/* Same iPad Safari guard as the Mail save bar: keep later panels reachable. */
+@media (max-width: 1024px) {
+  .sonarr-missing-search-footer {
+    position: static;
+    background: transparent;
+  }
+}
+
 .scheduled-task-id-details {
   margin-top: 4px;
 }

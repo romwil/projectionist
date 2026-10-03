@@ -550,6 +550,7 @@ def set_station_meta(
     youth_safe: Optional[bool] = None,
     item_rating_keys: Optional[Sequence[str]] = None,
     item_hints: Optional[Sequence[str]] = None,
+    queue_pad: Optional[Mapping[str, Any]] = None,
 ) -> None:
     """Persist station recipe fields on ``settings.tunarr.station_meta`` (in-memory).
 
@@ -601,7 +602,21 @@ def set_station_meta(
         from projectionist.live_channels.filters import normalize_craft_filters
 
         row["craft_filters"] = normalize_craft_filters(craft_filters).to_dict()
+    if queue_pad is not None:
+        from projectionist.live_channels.queue_padding import normalize_queue_pad
+
+        normalized_pad = normalize_queue_pad(queue_pad)
+        if normalized_pad:
+            row["queue_pad"] = normalized_pad
+        else:
+            row.pop("queue_pad", None)
     meta[cid] = row
+
+
+def _stored_queue_pad(row: Mapping[str, Any]) -> Dict[str, Any]:
+    from projectionist.live_channels.queue_padding import normalize_queue_pad
+
+    return normalize_queue_pad(row.get("queue_pad"))
 
 
 def station_craft_snapshot(settings: Any, channel_id: str) -> Dict[str, Any]:
@@ -629,6 +644,7 @@ def station_craft_snapshot(settings: Any, channel_id: str) -> Dict[str, Any]:
         "subtitles_enabled": (
             bool(row["subtitles_enabled"]) if "subtitles_enabled" in row else None
         ),
+        "queue_pad": _stored_queue_pad(row),
     }
 
 
@@ -780,6 +796,7 @@ def recipe_from_station_meta(
         youth_safe=bool(row.get("youth_safe")),
         item_rating_keys=rating_keys,
         item_hints=item_hints,
+        queue_pad=_stored_queue_pad(row),
     )
 
 
@@ -836,6 +853,8 @@ def merge_refill_recipe_payload(
                 payload["craft_filters"] = dict(stored_dict["craft_filters"])
         if "youth_safe" not in payload and stored_dict.get("youth_safe"):
             payload["youth_safe"] = stored_dict["youth_safe"]
+        if not payload.get("queue_pad") and stored_dict.get("queue_pad"):
+            payload["queue_pad"] = dict(stored_dict["queue_pad"])
         if not payload.get("media_scope"):
             payload["media_scope"] = stored_dict.get("media_scope") or stored_scope
     elif not payload.get("media_scope"):
@@ -1961,6 +1980,128 @@ def random_slot_schedule_for_programs(
     }
 
 
+def apply_queue_padding(
+    client: TunarrClient,
+    recipe: ChannelRecipe,
+    programs: Sequence[Mapping[str, Any]],
+    *,
+    catalog: Optional[Sequence[Mapping[str, Any]]] = None,
+    media_scope: str = "",
+    settings: Any = None,
+    db: Any = None,
+    stats: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
+    """Fill spare rotation slots from the recipe's queue-pad feed.
+
+    ``playing`` = the titles the channel itself resolved. ``spare =
+    max(0, up_to - playing)`` slots are filled from Recently added / Recently
+    released, appended *after* the playing block so the rotation does not snap
+    back to the start the moment the block ends. Recipes without a queue-pad
+    setting are returned unchanged.
+    """
+    from projectionist.live_channels.queue_padding import (
+        feed_candidates,
+        normalize_queue_pad,
+        order_padded_programs,
+        queue_pad_plan,
+    )
+
+    base = [dict(p) for p in programs or () if isinstance(p, Mapping)]
+    setting = normalize_queue_pad(getattr(recipe, "queue_pad", None))
+    if not setting:
+        return base
+    plan = queue_pad_plan(setting, len(base))
+    if stats is not None:
+        stats["queue_pad"] = plan
+    if plan["pad"] <= 0:
+        return base
+
+    if db is None:
+        try:
+            from projectionist.web.jobs import get_job_manager
+
+            db = get_job_manager().db
+        except Exception:  # noqa: BLE001
+            db = None
+    scope = normalize_media_scope(media_scope or getattr(recipe, "media_scope", None))
+
+    from projectionist.live_channels.filters import exclusion_rating_keys
+
+    skip_keys = set(exclusion_rating_keys(settings) or ())
+    primary_ids = {str(p.get("id") or "") for p in base}
+    for row in base:
+        for key in row.get("plex_keys") or ():
+            skip_keys.add(str(key))
+    candidates = feed_candidates(
+        db,
+        setting["feed"],
+        count=plan["pad"],
+        media_scope=scope,
+        exclude_rating_keys=sorted(skip_keys),
+    )
+
+    normalized_catalog: List[Dict[str, Any]] = []
+    for item in catalog or ():
+        if isinstance(item, Mapping):
+            row = _normalize_program_row(item, media_scope=scope)
+            if row is not None:
+                normalized_catalog.append(row)
+    by_key = _index_pool_by_plex_key(normalized_catalog)
+
+    from projectionist.live_channels.recipes import (
+        apply_youth_gate_to_items,
+        recipe_is_youth_safe,
+        resolve_recipe_youth_max_rating,
+    )
+
+    youth_safe = recipe_is_youth_safe(recipe)
+    ceiling = (
+        resolve_recipe_youth_max_rating(recipe, settings=settings) if youth_safe else ""
+    )
+
+    picked: List[Dict[str, Any]] = []
+    for cand in candidates:
+        if len(picked) >= plan["pad"]:
+            break
+        match = by_key.get(str(cand.get("rating_key") or ""))
+        if match is None:
+            continue
+        if str(match.get("type") or "").lower() == "show":
+            first: Optional[Dict[str, Any]] = None
+            try:
+                for ep in client.list_program_descendants(str(match.get("id") or "")):
+                    if isinstance(ep, Mapping):
+                        first = _normalize_program_row(ep, media_scope=scope)
+                        if first is not None:
+                            # Episodes inherit the show's rating for youth gates.
+                            if not first.get("content_rating"):
+                                first["content_rating"] = match.get("content_rating") or ""
+                            break
+            except Exception:  # noqa: BLE001
+                first = None
+            match = first
+        if not match or not match.get("id") or str(match["id"]) in primary_ids:
+            continue
+        if youth_safe and not apply_youth_gate_to_items(
+            [match], settings=settings, max_rating=ceiling
+        ):
+            continue
+        primary_ids.add(str(match["id"]))
+        picked.append(dict(match))
+
+    mode = normalize_programming_mode(recipe.programming_mode)
+    if stats is not None:
+        plan = dict(plan)
+        plan["added"] = len(picked)
+        plan["titles"] = [p.get("title") for p in picked]
+        stats["queue_pad"] = plan
+    if not picked:
+        return base
+    return order_padded_programs(
+        base, picked, shuffle_playing=mode == ProgrammingMode.SHUFFLE
+    )
+
+
 def programming_body_for_recipe(
     recipe: ChannelRecipe,
     *,
@@ -1996,7 +2137,12 @@ def programming_body_for_recipe(
         program_ids.append(pid)
 
     mode = normalize_programming_mode(recipe.programming_mode)
-    use_random = mode == ProgrammingMode.SHUFFLE and program_ids
+    # A padded queue keeps its order (playing block → padded items → loop); the
+    # random-slot schedule cannot express "these first, then those".
+    from projectionist.live_channels.queue_padding import has_queue_pad
+
+    queue_padded = has_queue_pad(programs or ())
+    use_random = mode == ProgrammingMode.SHUFFLE and program_ids and not queue_padded
     if use_random:
         schedule = random_slot_schedule_for_programs(
             programs or (),
@@ -2922,6 +3068,7 @@ def publish_recipes(
             youth_safe=bool(getattr(recipe, "youth_safe", False)),
             item_rating_keys=list(getattr(recipe, "item_rating_keys", ()) or ()),
             item_hints=list(getattr(recipe, "item_hints", ()) or ()),
+            queue_pad=dict(getattr(recipe, "queue_pad", None) or {}),
         )
 
     def _apply_programming(channel_id: str, recipe: ChannelRecipe) -> Dict[str, Any]:
@@ -2936,6 +3083,15 @@ def publish_recipes(
             media_scope=scope,
             settings=settings,
             match_stats=stats,
+        )
+        programs = apply_queue_padding(
+            client,
+            recipe,
+            programs,
+            catalog=_scoped_catalog(scope),
+            media_scope=scope,
+            settings=settings,
+            stats=stats,
         )
         prog_body = programming_body_for_recipe(
             recipe,
@@ -2975,6 +3131,7 @@ def publish_recipes(
             "full_run": is_full,
             "fill_target": int(stats.get("fill_target") or 0),
             "soft_capped": not is_full,
+            "queue_pad": dict(stats.get("queue_pad") or {}),
         }
 
     for raw in recipes:
@@ -3302,10 +3459,12 @@ def publish_collection_channel(
     programming_mode: str = "",
     craft_filters: Optional[Mapping[str, Any]] = None,
     media_scope: str = "",
+    queue_pad: Optional[Mapping[str, Any]] = None,
     settings: Any = None,
 ) -> Dict[str, Any]:
     """Create a station from a Plex/Projectionist collection (seq / shuffle)."""
     from projectionist.live_channels.filters import normalize_craft_filters
+    from projectionist.live_channels.queue_padding import normalize_queue_pad
 
     title = str(collection_title or name or "Collection").strip() or "Collection"
     number = int(channel_number or 0)
@@ -3341,6 +3500,7 @@ def publish_collection_channel(
         item_hints=hints,
         item_rating_keys=rating_keys,
         craft_filters=normalize_craft_filters(craft_filters).to_dict(),
+        queue_pad=normalize_queue_pad(queue_pad),
     )
     result = publish_recipes(
         client,
@@ -3403,6 +3563,7 @@ def publish_show_channel(
     channel_number: int = 0,
     name: str = "",
     programming_mode: str = "",
+    queue_pad: Optional[Mapping[str, Any]] = None,
     settings: Any = None,
 ) -> Dict[str, Any]:
     """Create a nonstop station from one TV show (seq run / shuffle).
@@ -3410,6 +3571,8 @@ def publish_show_channel(
     The show ``ratingKey`` rides ``item_rating_keys``; fill expands it to every
     episode via Tunarr descendants, so the station is a full-run marathon.
     """
+    from projectionist.live_channels.queue_padding import normalize_queue_pad
+
     rating_key, title = resolve_show_for_channel(
         show_rating_key=show_rating_key,
         show_title=show_title,
@@ -3437,6 +3600,7 @@ def publish_show_channel(
         summary=f"{mode_label} channel from the show “{title}”",
         item_hints=(title,),
         item_rating_keys=(rating_key,),
+        queue_pad=normalize_queue_pad(queue_pad),
     )
     result = publish_recipes(
         client,
@@ -3620,6 +3784,7 @@ def refill_channel_lineup(
             youth_safe=bool(getattr(recipe, "youth_safe", False)),
             item_rating_keys=list(getattr(recipe, "item_rating_keys", ()) or ()),
             item_hints=list(getattr(recipe, "item_hints", ()) or ()),
+            queue_pad=dict(getattr(recipe, "queue_pad", None) or {}),
         )
 
     media_types = (
@@ -3652,6 +3817,15 @@ def refill_channel_lineup(
         media_scope=scope,
         settings=settings,
         match_stats=stats,
+    )
+    programs = apply_queue_padding(
+        client,
+        recipe,
+        programs,
+        catalog=catalog,
+        media_scope=scope,
+        settings=settings,
+        stats=stats,
     )
     prog_body = programming_body_for_recipe(
         recipe,

@@ -46,7 +46,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional
 
 from projectionist.circuit_breaker import (
     DEFAULT_QUARANTINE_COOLDOWN_SECONDS,
@@ -59,6 +59,12 @@ from projectionist.scheduler.autotune import (
     AUTOTUNE_TASKS,
     evaluate_autotune,
     resolve_batch_size,
+)
+from projectionist.scheduler.cadence import (
+    Cadence,
+    effective_cadence,
+    is_failure_status,
+    is_productive_catch_up,
 )
 from projectionist.scheduler.progress import progress_for_definition
 from projectionist.scheduler.run_history import (
@@ -99,6 +105,15 @@ class TaskDefinition:
     # How to count remaining work for ETA:
     #   metadata_backlog | llm_logline_backlog | embeddings_pending | embeddings_pass
     progress_scope: Optional[str] = None
+    # Run ``run_fn`` on a worker thread (private event loop) so synchronous
+    # SQLite / HTTP / CPU work never stalls the web server's event loop. Leave
+    # False only for tasks that await objects bound to the main loop.
+    off_loop: bool = False
+    # Trickle tasks only: when a run processed a full batch and still reports
+    # ``has_more``, the next run is due after this many seconds (if shorter than
+    # the configured interval) so backlogs drain at a paced rate on any library
+    # size. ``None`` keeps strict one-batch-per-interval (e.g. paid LLM calls).
+    catchup_gap_seconds: Optional[int] = None
 
 
 # QuarantineInfo lives in projectionist.circuit_breaker (shared with connector HTTP).
@@ -135,6 +150,9 @@ class _HeartbeatHandle:
 
     def __init__(self) -> None:
         self.last_heartbeat: float = time.time()
+        # Set when the watchdog gives up on the task; worker-thread tasks cannot
+        # be hard-cancelled, so ``should_stop`` starts returning True instead.
+        self.cancelled: bool = False
 
     def heartbeat(self) -> None:
         self.last_heartbeat = time.time()
@@ -229,9 +247,10 @@ class IdleScheduler:
         for state in states:
             defn = self._definitions.get(state.name)
             interval = state.run_interval_seconds
+            cadence = self._cadence_for(state, defn)
             next_run: Optional[float] = None
             if state.last_run_at is not None:
-                next_run = state.last_run_at + interval
+                next_run = state.last_run_at + cadence.interval_seconds
             qinfo = self._quarantine.get(state.name)
             quarantine_dict: Dict[str, Any] = {
                 "is_quarantined": False,
@@ -304,7 +323,7 @@ class IdleScheduler:
             progress = progress_for_definition(
                 self._db,
                 defn,
-                interval_seconds=interval,
+                interval_seconds=cadence.interval_seconds,
                 items_per_cycle=effective_batch,
                 items_per_hour=measured_iph,
             )
@@ -314,6 +333,10 @@ class IdleScheduler:
                     "id": state.name,
                     "enabled": state.enabled,
                     "run_interval_seconds": interval,
+                    # What actually governs "Next run": equals the configured
+                    # interval except while catching up / retrying / backing off.
+                    "effective_run_interval_seconds": cadence.interval_seconds,
+                    "schedule_reason": cadence.reason,
                     "default_run_interval_seconds": (
                         defn.run_interval_seconds if defn is not None else interval
                     ),
@@ -346,7 +369,7 @@ class IdleScheduler:
                         state.enabled
                         and (
                             state.last_run_at is None
-                            or (now - state.last_run_at) >= interval
+                            or (now - state.last_run_at) >= cadence.interval_seconds
                         )
                     ),
                     "quarantine": quarantine_dict,
@@ -448,6 +471,7 @@ class IdleScheduler:
                 items_processed=items_processed,
                 remaining_items=remaining,
                 has_more=has_more,
+                catchup_gap_seconds=defn.catchup_gap_seconds,
             )
             entry = {
                 "name": name,
@@ -816,6 +840,52 @@ class IdleScheduler:
             ),
         }
 
+    def _failure_streak(self, name: str) -> int:
+        """Consecutive most-recent ``degraded`` / ``error`` runs (newest first)."""
+        try:
+            runs = list_task_runs(self._db, name, limit=6)
+        except Exception:  # noqa: BLE001 — cadence must never break the loop
+            return 1
+        streak = 0
+        for run in runs:
+            if not is_failure_status(str(run.get("status") or "")):
+                break
+            streak += 1
+        return max(1, streak)
+
+    def _cadence_for(self, state: TaskState, defn: Optional[TaskDefinition]) -> Cadence:
+        """Effective due-after interval for ``state`` (see :mod:`scheduler.cadence`)."""
+        streak = self._failure_streak(state.name) if is_failure_status(state.last_status) else 0
+        return effective_cadence(
+            interval_seconds=state.run_interval_seconds,
+            last_status=state.last_status,
+            last_run_summary=state.last_run_summary,
+            catchup_gap_seconds=defn.catchup_gap_seconds if defn is not None else None,
+            failure_streak=streak,
+        )
+
+    def retire_tasks(self, names: Iterable[str]) -> List[str]:
+        """Remove state + history for tasks that no longer exist in the registry.
+
+        Returns the names that actually had a row. Registered tasks are never
+        removed, so a retired name that is reused later simply re-registers.
+        """
+        removed: List[str] = []
+        wanted = [n for n in names if n and n not in self._definitions]
+        if not wanted:
+            return removed
+        with self._db.connect() as conn:
+            for name in wanted:
+                row = conn.execute(
+                    "SELECT 1 FROM scheduled_tasks WHERE name = ?", (name,)
+                ).fetchone()
+                if row is not None:
+                    removed.append(name)
+                conn.execute("DELETE FROM scheduled_tasks WHERE name = ?", (name,))
+                conn.execute("DELETE FROM scheduled_task_runs WHERE name = ?", (name,))
+                self._quarantine.pop(name, None)
+        return removed
+
     def _stale_tasks(self) -> List[TaskDefinition]:
         """Return enabled, non-quarantined tasks overdue for execution, sorted most-overdue first."""
         now = time.time()
@@ -835,9 +905,10 @@ class IdleScheduler:
                 staleness = float("inf")
             else:
                 elapsed = now - state.last_run_at
-                if elapsed < state.run_interval_seconds:
+                due_after = self._cadence_for(state, defn).interval_seconds
+                if elapsed < due_after:
                     continue
-                staleness = elapsed - state.run_interval_seconds
+                staleness = elapsed - due_after
             candidates.append((staleness, defn))
 
         candidates.sort(key=lambda x: x[0], reverse=True)
@@ -872,6 +943,7 @@ class IdleScheduler:
             except asyncio.TimeoutError:
                 if hb.last_heartbeat > last_hb:
                     continue
+                hb.cancelled = True
                 task.cancel()
                 try:
                     await task
@@ -942,9 +1014,19 @@ class IdleScheduler:
                     each call extends the timeout deadline automatically.
                     """
                     hb.heartbeat()
+                    if hb.cancelled:
+                        return True
                     return stop_check()
 
-                return await defn.run_fn(self._db, settings, stop_with_heartbeat)
+                run_fn = defn.run_fn
+                if defn.off_loop:
+                    # Private event loop on a worker thread: synchronous work in
+                    # ``run_fn`` can no longer freeze requests / SSE on the main loop.
+                    def _in_thread() -> Dict[str, Any]:
+                        return asyncio.run(run_fn(self._db, settings, stop_with_heartbeat))
+
+                    return await asyncio.to_thread(_in_thread)
+                return await run_fn(self._db, settings, stop_with_heartbeat)
 
             result = await self._run_with_deadline(defn, hb, _run_with_heartbeat())
             elapsed_ms = int((time.time() - start) * 1000)
@@ -1096,6 +1178,28 @@ class IdleScheduler:
             except (TypeError, ValueError):
                 pass
 
+        # Persist backlog signals so the cadence (and ``optimize_autotune_rates``)
+        # can see them after a restart. ``has_more`` is a reserved result key and
+        # is not part of the extracted counters.
+        run_has_more = bool(result.get("has_more")) if isinstance(result, dict) else False
+        if run_has_more:
+            metrics["has_more"] = True
+            batch_for_run: Optional[int] = None
+            if isinstance(result, dict) and result.get("batch_size") is not None:
+                try:
+                    batch_for_run = int(result["batch_size"])
+                except (TypeError, ValueError):
+                    batch_for_run = None
+            if batch_for_run is None:
+                batch_for_run = defn.items_per_cycle
+            if is_productive_catch_up(
+                has_more=True,
+                items_processed=items_processed,
+                batch_size=batch_for_run,
+                catchup_gap_seconds=defn.catchup_gap_seconds,
+            ):
+                metrics["catching_up"] = True
+
         # Auto-tune before writing history so the decision is included in metrics.
         if apply_autotune and defn.name in AUTOTUNE_TASKS:
             states = {s.name: s for s in self._load_all_states()}
@@ -1124,6 +1228,7 @@ class IdleScheduler:
                 items_processed=items_processed,
                 remaining_items=remaining,
                 has_more=has_more,
+                catchup_gap_seconds=defn.catchup_gap_seconds,
             )
             metrics.update(decision.as_metrics())
             if decision.changed:
