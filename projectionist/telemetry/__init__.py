@@ -40,6 +40,7 @@ from projectionist.telemetry.llm_usage import (
     PURPOSE_LIBRARY_SUMMARY,
     PURPOSE_LOGLINE,
     PURPOSE_PERSONA_CONSULT,
+    PURPOSE_SEASONAL_CURATION,
     PURPOSE_WRAP_UP,
 )
 
@@ -67,4 +68,5 @@ __all__ = [
     "PURPOSE_LOGLINE",
     "PURPOSE_EMBED",
     "PURPOSE_PERSONA_CONSULT",
+    "PURPOSE_SEASONAL_CURATION",
 ]
