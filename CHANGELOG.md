@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [1.37.32] — 2026-10-04
+
+One patch on 1.37.31: Plex Live TV keeps a week of real programme titles so the evening grid does not go dark.
+
+### Highlights
+- **Live TV does not stop at the end of the day.** The guide Plex reads now carries about a week of real programme titles, and a background job loads the next week before that one runs out. After this is installed, use **Refresh Plex map** once (not **Rebuild tuner in Plex**) so the longer guide shows up.
+
+### Fixed
+_week-long Live guide (#98)_
+- **Plex Live went dark in the evening.** On 4 Oct 2026 at 21:04 UTC the published guide ended at 09:00 UTC the next morning — about 12 hours ahead — because the engine's guide length was 12 hours (`programmingHours`). Station lineups were already about eight days; Plex had only ingested the short slice, so later slots were Unknown Airing and playback ended with "This live TV session has ended" (101 Sci-Fi and 106 Creature Feature). The guide length is now seven days (168 hours). `live_guide_week` rolls the next week when fewer than two days remain, refills a station from its saved lineup only when that station's cycle is shorter than a week, and asks Plex to re-read the file. It does not recreate the tuner. The same pass runs at startup.
+- Unused `Optional` import removed from `seasonal_curation.py` so backend ruff is clean on this tree.
+
+### Verification
+- One full run on the 1.37.32 tree: backend `pytest tests/` — 2540 passed, 6 skipped, coverage 76.99% (floor 74%), run with `PROJECTIONIST_SKIP_DOTENV=1`.
+- Frontend unit 929/929; lint 0 errors (151 pre-existing warnings); `npm run build` OK.
+- Playwright e2e (mocked, port 8799; theater port 8791 was free and used): 107 passed, 8 skipped.
+
 ## [1.37.31] — 2026-10-03
 
 One patch on 1.37.30: the professor can curate every seasonal shelf, Admin no longer waits on Docker and Tunarr to paint, Weather Channel music has its own card, and Plex Live TV shows channel names when a station has no art.

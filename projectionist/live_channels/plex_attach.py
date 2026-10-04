@@ -887,6 +887,62 @@ def _put_device_channelmap(
     return mappings, (err or None)
 
 
+def reload_published_plex_guide(
+    settings: Any = None,
+    *,
+    tunarr_url: Optional[str] = None,
+    request_host: Optional[str] = None,
+    timeout: int = 45,
+) -> Dict[str, Any]:
+    """Ask Plex to re-read the Live XMLTV file.
+
+    This is a guide refresh. It does not delete the tuner or recreate the DVR.
+    """
+    if settings is None:
+        return {"ok": False, "reloaded": False, "message": "Settings required."}
+    plex_url = str(getattr(settings, "plex_url", "") or "").strip()
+    plex_token = str(getattr(settings, "plex_token", "") or "").strip()
+    if not plex_url or not plex_token:
+        return {"ok": False, "reloaded": False, "message": "Plex not configured."}
+
+    facing = resolve_plex_facing_tunarr_base(
+        settings, tunarr_url=tunarr_url, request_host=request_host
+    )
+    base = str(facing.get("base_url") or "").strip()
+    if not base or bool(facing.get("docker_only")):
+        return {"ok": False, "reloaded": False, "message": "No LAN tuner address for the guide."}
+
+    from projectionist.connectors.plex import PlexClient
+
+    client = PlexClient(plex_url, plex_token, timeout=timeout)
+    xmltv = xmltv_url(base)
+    manual = host_port_for_plex(base)
+    devices = _plex_xml(client, "/media/grabbers/devices", timeout=timeout)
+    device = _find_tunarr_device(devices, tunarr_base=base, manual_address=manual)
+    if device is None:
+        return {"ok": False, "reloaded": False, "message": "Live tuner is not in Plex yet."}
+    device_uuid = str(device.attrib.get("uuid") or "").strip()
+    dvrs = _plex_xml(client, "/livetv/dvrs", timeout=timeout)
+    dvr_key = ""
+    for dvr in _iter_dvrs(dvrs):
+        owns = any(
+            str(dev.attrib.get("uuid") or "") == device_uuid for dev in dvr.findall("Device")
+        )
+        lineup = str(dvr.attrib.get("lineup") or "")
+        if owns and _lineup_matches_xmltv(lineup, xmltv):
+            dvr_key = str(dvr.attrib.get("key") or "").strip()
+            break
+    if not dvr_key:
+        return {"ok": False, "reloaded": False, "message": "Live guide is not attached."}
+    _reload_dvr_guide(client, dvr_key, timeout=timeout)
+    return {
+        "ok": True,
+        "reloaded": True,
+        "dvr_key": dvr_key,
+        "message": "Plex is re-reading the Live guide.",
+    }
+
+
 def _reload_dvr_guide(client: Any, dvr_key: str, *, timeout: int = 45) -> None:
     from urllib.parse import quote
 
