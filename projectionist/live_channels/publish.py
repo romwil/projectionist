@@ -2162,9 +2162,12 @@ def programming_body_for_recipe(
     queue_padded = has_queue_pad(programs or ())
     use_random = mode == ProgrammingMode.SHUFFLE and program_ids and not queue_padded
     if use_random:
+        from projectionist.live_channels.guide_horizon import GUIDE_HORIZON_DAYS
+
         schedule = random_slot_schedule_for_programs(
             programs or (),
             max_flex_ms=max_flex_ms if pad_lineups else 0,
+            max_days=GUIDE_HORIZON_DAYS,
             programming_mode=mode,
         )
         if schedule:
