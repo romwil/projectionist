@@ -363,6 +363,8 @@ Defined in `projectionist/scheduler/engine.py` with individual tasks in `project
 
 **Characteristics:** batch-oriented, minutes-long, produces data that agent tools later consume. Each task receives a `should_stop` callback for cooperative interruption when chat activity resumes.
 
+`live_guide_week` is maintenance, not a knowledge trickle. Every six hours (and once at startup via `maintain_guide_week`) it keeps the published XMLTV window at seven days (`programmingHours` 168). When fewer than 48 hours remain it rolls the next week and refills a station from its saved lineup only when that station’s cycle is shorter than a week. It asks Plex to re-read the guide file. It does not recreate the tuner. After an upgrade, the owner still uses **Refresh Plex map** once so Plex ingests the longer file.
+
 ### The boundary rule
 
 | If it…                                            | It belongs in…         |
