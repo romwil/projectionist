@@ -127,7 +127,7 @@ When the household owner turns **Live Channels** on and publishes stations, **[L
 
 > **Example:** Live’s Guide shows **101 · Chaos Night** with *Heat* at 45%. Tap the cell → Watch opens on that station mid-airing. Later on the couch, **Open in Plex Live TV** opens the same lineup in the Plex app — you didn't lose the channel.
 
-**How it works / honest limits.** Live only appears when stations are on the air. Youth mode may hide some stations by content rating. Guests see Live when the owner enabled it for the household — empty states invite you to ask the owner rather than dump Admin steps. Projectionist Live and Plex Live TV share the guide; neither replaces the other.
+**How it works / honest limits.** Live only appears when stations are on the air. Youth mode may hide some stations by content rating. Guests see Live when the owner enabled it for the household — empty states invite you to ask the owner rather than dump Admin steps. Projectionist Live and Plex Live TV share the guide; neither replaces the other. That guide carries about a week of real titles, so the evening grid stays named instead of turning into Unknown Airing at the end of the day.
 
 **Tuning & pause.** Channel changes and cold tunes show the same static + wry **tuning** interstitial as Play seeks. A random movie trailer plays only when a movie is starting on that station — not on every tune, and not before a show. It plays through with no title and no skip. Projectionist picks that trailer for this browser. If you pause and the scheduled program ends while you’re still paused, Projectionist asks clearly: **Rejoin live** (jump to what’s airing now) or **Finish this, then rejoin live** (keep the piece you paused, then catch wherever live has moved — Projectionist owns the schedule, so finishing stretches reality on purpose).
 
@@ -795,6 +795,8 @@ When `header_mode` is **dynamic**, idle boards show **RECENTLY ADDED**, **RECENT
 
 Live turns your library into always-on channels. They show up in Projectionist **[Live](/live)** **and** in **Plex Live TV**, beside any antenna channels you already have. You pick what’s on a channel; Projectionist builds and runs the lineup. Household members watch in either place (see **Live** above for the member how-to).
 
+**Guide length.** Plex reads a guide that is seven days of real programme titles (168 hours). It does not stop at the end of the day: later slots stay titled instead of **Unknown Airing**, and playback does not end just because the evening slice ran out. A background job loads the next week when fewer than two days remain. It refills a station from its saved lineup only when that station’s own cycle is shorter than a week. It asks Plex to re-read the guide. It does not recreate the tuner. After an upgrade that lengthens the guide, use **Refresh Plex map** once under Setup (not **Rebuild tuner in Plex**, which briefly freezes Plex and drops Live TV).
+
 **Turn it on and make a channel (Admin → Live Channels):**
 1. **Turn on Live.** One button; you can turn it off any time and your channels are kept.
 2. **What’s on it.** Pick one: a **show, nonstop**; a **collection or list**; a **mood or taste** (a story mood, your taste, or family-safe); or **Suggest some for me**.
@@ -821,7 +823,7 @@ If you already have an antenna / HDHomeRun DVR, keep it — Plex supports multip
 
 While a Live job is running, a sticky rail says what is working and other mutating Live buttons stay off — you can still refresh status, copy addresses, switch tabs, and edit forms. Admin **Overview** echoes the Plex lineup and the same rail if a job is in flight.
 
-**If play fails with “This live TV session has ended”:** Prefer **Plex Web** (`http://your-plex:32400/web`) over the Windows/Linux desktop app. Desktop clients often hit a known Direct Stream quirk ([Tunarr#718](https://github.com/chrisbenincasa/tunarr/issues/718)) — in that client, open Settings → Debug (or Video) and **disable Direct Stream**, then retry. Also confirm the Plex hookup used the broadcast’s LAN address (the one Setup → Advanced shows), not a dead leftover tuner.
+**If play fails with “This live TV session has ended”:** If the Plex grid has turned to **Unknown Airing** after tonight, the guide file was too short. The published guide is now a week long and reloads itself; use **Refresh Plex map** once so Plex picks that up — not **Rebuild tuner in Plex**. If titles are already in the grid and only a desktop app fails, prefer **Plex Web** (`http://your-plex:32400/web`). Desktop clients often hit a known Direct Stream quirk ([Tunarr#718](https://github.com/chrisbenincasa/tunarr/issues/718)) — in that client, open Settings → Debug (or Video) and **disable Direct Stream**, then retry. Also confirm the Plex hookup used the broadcast’s LAN address (the one Setup → Advanced shows), not a dead leftover tuner.
 
 ---
 

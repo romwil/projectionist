@@ -392,6 +392,16 @@ def live_channels_lifecycle_endpoint(
         # race "Stream not ready yet" / 0-byte MPEG-TS.
         if api_url and settings.features.live_channels_enabled:
             try:
+                from projectionist.connectors.tunarr import TunarrClient
+                from projectionist.live_channels.guide_horizon import GUIDE_HORIZON_HOURS
+
+                payload_out["guide_week"] = TunarrClient(
+                    api_url, timeout=90
+                ).ensure_xmltv_programming_hours(GUIDE_HORIZON_HOURS)
+            except Exception:  # noqa: BLE001 — horizon is also maintained by the scheduler
+                pass
+        if api_url and settings.features.live_channels_enabled:
+            try:
                 from projectionist.live_channels.publish import (
                     prepare_channels_for_playback,
                     resolve_channel_icon_url,

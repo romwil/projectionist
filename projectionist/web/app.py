@@ -444,6 +444,14 @@ async def lifespan(_app: FastAPI):
             prewarm_live_guide(settings)
             prewarm_live_channels_status(settings, manager.db)
             logger.info("Startup: first-paint caches prewarmed")
+            from projectionist.live_channels.guide_horizon import maintain_guide_week
+
+            week = maintain_guide_week(settings, manager.db)
+            logger.info(
+                "Startup: live guide week extended=%s hours_ahead=%s",
+                week.get("extended"),
+                week.get("hours_ahead"),
+            )
         except Exception:  # noqa: BLE001
             logger.debug("Startup: live prewarm skipped", exc_info=True)
 
