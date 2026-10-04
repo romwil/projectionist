@@ -55,6 +55,7 @@ def register_all(scheduler: IdleScheduler) -> None:
         watch_history_ingest,
         weekly_letter,
         year_in_review,
+        live_guide_week,
     )
 
     semantic_embeddings.register(scheduler)
@@ -85,5 +86,6 @@ def register_all(scheduler: IdleScheduler) -> None:
     watch_history_ingest.register(scheduler)
     weekly_letter.register(scheduler)
     year_in_review.register(scheduler)
+    live_guide_week.register(scheduler)
 
     scheduler.retire_tasks(RETIRED_TASKS)

@@ -318,6 +318,39 @@ class TunarrClientTests(unittest.TestCase):
             self.assertTrue(second["ok"])
             self.assertFalse(second["changed"])
 
+    def test_ensure_xmltv_programming_hours_week(self) -> None:
+        client = TunarrClient("http://tunarr.test")
+        calls: list[tuple[str, str, dict | None]] = []
+
+        def fake_request_json(url, *, method="GET", headers=None, body=None, timeout=30):
+            del headers, timeout
+            calls.append((method, url, body))
+            if url.endswith("/xmltv-settings") and method == "GET":
+                return {"programmingHours": 12, "refreshHours": 1, "useShowPoster": True}
+            if url.endswith("/xmltv-settings") and method == "PUT":
+                return {"programmingHours": body["programmingHours"], "refreshHours": 1}
+            raise AssertionError(f"unexpected {method} {url}")
+
+        with patch("projectionist.connectors.tunarr.request_json", side_effect=fake_request_json):
+            first = client.ensure_xmltv_programming_hours(168)
+            self.assertTrue(first["ok"])
+            self.assertTrue(first["changed"])
+            self.assertEqual(first["programmingHours"], 168)
+            self.assertEqual(calls[-1][0], "PUT")
+            self.assertEqual(calls[-1][2], {"programmingHours": 168})
+
+        def already_week(url, *, method="GET", headers=None, body=None, timeout=30):
+            del headers, body, timeout
+            if url.endswith("/xmltv-settings") and method == "GET":
+                return {"programmingHours": 168, "refreshHours": 1}
+            raise AssertionError(f"unexpected {method} {url}")
+
+        with patch("projectionist.connectors.tunarr.request_json", side_effect=already_week):
+            second = client.ensure_xmltv_programming_hours(168)
+            self.assertTrue(second["ok"])
+            self.assertFalse(second["changed"])
+            self.assertEqual(second["programmingHours"], 168)
+
 
 if __name__ == "__main__":
     unittest.main()
