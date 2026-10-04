@@ -168,7 +168,7 @@ Chat turns must stay snappy. Building motifs across thousands of titles, embeddi
 | `long_synopsis_enrichment` | Longer plot from Wikipedia (default) or OMDb | `long_synopsis` + `synopsis_source` |
 | `keyword_theme_tagging` | Local keyword→controlled theme map | `facet_type='theme'` |
 
-Other tasks (taste, health, anniversary, retention, …) support ops and taste — not plot depth. Full boundary table: [ARCHITECTURE.md — Agent tools vs. background scheduler](ARCHITECTURE.md#agent-tools-vs-background-scheduler).
+Other tasks (taste, health, anniversary, retention, `live_guide_week`, …) support ops, taste, and the Live guide — not plot depth. `live_guide_week` keeps seven days of programme titles on the guide Plex reads and rolls the next week before that window runs out; it does not rebuild the tuner. Full boundary table: [ARCHITECTURE.md — Agent tools vs. background scheduler](ARCHITECTURE.md#agent-tools-vs-background-scheduler).
 
 ### Why trickle?
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Sequence
 
 from projectionist.config_store import Settings, validate_llm_settings
 from projectionist.library.db import Database
