@@ -14,6 +14,7 @@ REST API under ``{base}/api``:
 | Now playing / guide | ``GET /channels/{id}/now_playing``, ``GET /guide/channels`` |
 | Stream sessions | ``GET /sessions``, ``GET /channels/{id}/sessions`` |
 | Guide cache status | ``GET /guide/status`` |
+| Guide length | ``GET/PUT /xmltv-settings`` (``programmingHours``) |
 | Health / version | ``GET /system/health``, ``GET /version`` |
 
 Airing progress is **derived** from ``TvGuideProgram`` ``start`` / ``stop`` /
@@ -678,6 +679,61 @@ class TunarrClient:
             "streamPath": str(updated.get("streamPath") or "direct"),
             "message": "Tunarr plex streamPath set to direct (local media mounts).",
             "settings": dict(updated),
+        }
+
+    def get_xmltv_settings(self) -> Mapping[str, Any]:
+        """XMLTV window (``GET /api/xmltv-settings``)."""
+        payload = request_json(self._api_url("/xmltv-settings"), timeout=self.timeout)
+        return payload if isinstance(payload, dict) else {}
+
+    def put_xmltv_settings(self, body: Mapping[str, Any]) -> Mapping[str, Any]:
+        """Update XMLTV settings (``PUT /api/xmltv-settings``).
+
+        Omitted keys are left alone. ``programmingHours`` is the slice Plex
+        ingests. The engine rebuilds the file as part of this call.
+        """
+        payload = request_json(
+            self._api_url("/xmltv-settings"),
+            method="PUT",
+            body=dict(body),
+            timeout=self.timeout,
+        )
+        if not isinstance(payload, dict):
+            raise RuntimeError("Unexpected response from Tunarr PUT xmltv-settings")
+        return payload
+
+    def ensure_xmltv_programming_hours(self, hours: int = 168) -> Mapping[str, Any]:
+        """Publish at least ``hours`` of guide titles. Idempotent; never raises."""
+        target = max(1, int(hours or 168))
+        try:
+            current = dict(self.get_xmltv_settings())
+        except Exception as error:  # noqa: BLE001
+            return {"ok": False, "changed": False, "error": str(error)[:200]}
+        try:
+            existing = int(current.get("programmingHours") or 0)
+        except (TypeError, ValueError):
+            existing = 0
+        if existing >= target:
+            return {
+                "ok": True,
+                "changed": False,
+                "programmingHours": existing,
+                "message": "Guide already covers the requested horizon.",
+            }
+        try:
+            updated = self.put_xmltv_settings({"programmingHours": target})
+        except Exception as error:  # noqa: BLE001
+            return {"ok": False, "changed": False, "error": str(error)[:200]}
+        try:
+            written = int(updated.get("programmingHours") or target)
+        except (TypeError, ValueError):
+            written = target
+        return {
+            "ok": True,
+            "changed": True,
+            "programmingHours": written,
+            "previous": existing,
+            "message": f"Guide horizon set to {written} hours.",
         }
 
 
