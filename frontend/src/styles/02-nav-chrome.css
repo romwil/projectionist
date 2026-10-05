@@ -535,6 +535,28 @@ button.app-topbar-icon:focus-visible {
   background: color-mix(in srgb, var(--ambient-accent) 16%, var(--surface-2));
 }
 
+/* Same disclosure chrome as live-studio details: closed until asked. */
+.optional-disclosure {
+  margin-top: var(--space-3);
+}
+
+.optional-disclosure > summary {
+  cursor: pointer;
+  min-height: var(--tap-min);
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+}
+
+.optional-disclosure[open] > summary {
+  margin-bottom: var(--space-3);
+}
+
+/* Author display rules (flex/grid) beat the user-agent hide for closed details. */
+.optional-disclosure:not([open]) > :not(summary) {
+  display: none;
+}
+
 .whisper-home-link-row {
   display: flex;
   flex-wrap: wrap;

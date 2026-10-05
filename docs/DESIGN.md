@@ -75,7 +75,7 @@ Projectionist serves one React application (`frontend/src/App.jsx`) with a share
 | **Hamburger AppNav** | Navigation drawer (☰) on chat and AppShell pages. **Navigate** repeats the top bar's role-gated peers as labelled links (Search, Chat, Explore, Inbox, Admin for owners, My Journey, Settings) from the shared `primaryNav.js` model; **More** adds Plot Lab, Tags, **Watchlist** (opens the `/watchlist` explore page), Library, Help, Privacy, About. On `/admin/*` an owner also gets an **Admin** block of section links between the two. |
 | **Top bar** | Projectionist brand, curator name, agent pulse; **Plex server name** + movie/show counts; icon chrome for **Explore**, theme cycle, watchlist pins, Admin/Settings; optional streak chip; optional **UserMenu** when multi-user is on. No About link in the top bar. |
 | **Sidebar** | Conversation list + New thread + **Watchlist (N)** button (→ `/watchlist`) + **status dock** (bottom of rail) |
-| **Chat column** | Recommendations inbox (multi-user), welcome / On This Day / Library Glance / Quick Pick, thread with **AgentAvatar** + ambient context tag (⧉), title cards, composer with **PersonaSelector** + Surprise Me |
+| **Chat column** | Welcome and starter chips first. **More from home** (closed) holds On This Day, Library Glance, whispers, and saved shelves. Thread with **AgentAvatar** + ambient context tag (⧉), title cards, composer with **PersonaSelector** + Surprise Me |
 | **Explore** | Hub at `/explore` with children (Tags, Plot Lab, section pages) — cinema browse, not a second “app mode” |
 | **Results overlay** | Optional horizontal expand for large card sets (“Cinema mode”) |
 | **Footer** | Subtle **Privacy** and **About** links on all layouts (chat, Admin, Settings, Explore). **What’s New** may surface as a lightweight release modal (separate from AppNav). |
@@ -374,8 +374,8 @@ Shipped alongside the idle scheduler (1.6+):
 
 | Feature | UX |
 |---------|-----|
-| **On This Day** | Anniversary prompts above the welcome panel |
-| **Library at a Glance** | One-time post-sync summary (genres, decade range, hidden gems) |
+| **On This Day** | Anniversary prompts inside **More from home** on chat home (closed until opened) |
+| **Library at a Glance** | One-time post-sync summary (genres, decade range, hidden gems), same closed disclosure |
 | **Night Owl** | After evening hours, softer top-bar palette + runtime-aware tonight picks |
 | **Double Feature** | Chat agent tool + `DoubleFeatureCard` (not an Explore rail) |
 | **Surprise Me** | Dice button → `QuickPickCard` reveal |
