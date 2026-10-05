@@ -13,8 +13,8 @@ import {
 import GlassDoor from "../components/GlassDoor";
 import InlineAlert from "../components/InlineAlert";
 import { loginLede, plexAdvancedCopy, resolveAuthMethods } from "../lib/loginScreen";
+import { startPlexPinPoll } from "../lib/plexPinPoll";
 
-const PIN_POLL_MS = 1000;
 const PIN_TIMEOUT_MS = 15 * 60 * 1000;
 
 export default function LoginPage() {
@@ -56,8 +56,8 @@ export default function LoginPage() {
 
   useEffect(() => {
     return () => {
-      if (pollRef.current) {
-        clearTimeout(pollRef.current);
+      if (typeof pollRef.current === "function") {
+        pollRef.current();
       }
       if (popupRef.current && !popupRef.current.closed) {
         popupRef.current.close();
@@ -66,8 +66,8 @@ export default function LoginPage() {
   }, []);
 
   function stopPinWait() {
-    if (pollRef.current) {
-      clearTimeout(pollRef.current);
+    if (typeof pollRef.current === "function") {
+      pollRef.current();
       pollRef.current = null;
     }
     if (popupRef.current && !popupRef.current.closed) {
@@ -80,30 +80,31 @@ export default function LoginPage() {
   }
 
   function schedulePinPoll(pinId, deadline) {
-    pollRef.current = setTimeout(async () => {
-      try {
-        if (Date.now() >= deadline) {
-          stopPinWait();
-          setError("Plex sign-in timed out. Try again.");
-          return;
+    if (typeof pollRef.current === "function") {
+      pollRef.current();
+    }
+    pollRef.current = startPlexPinPoll({
+      deadline,
+      poll: () => pollPlexPinLogin(pinId),
+      onSuccess: () => {
+        if (popupRef.current && !popupRef.current.closed) {
+          popupRef.current.close();
         }
-        const result = await pollPlexPinLogin(pinId);
-        if (result?.authenticated && result?.user) {
-          if (popupRef.current && !popupRef.current.closed) {
-            popupRef.current.close();
-          }
-          popupRef.current = null;
-          setWaitingForPlex(false);
-          setLoading(false);
-          navigate("/chat", { replace: true });
-          return;
-        }
-        schedulePinPoll(pinId, deadline);
-      } catch (pollError) {
+        popupRef.current = null;
+        pollRef.current = null;
+        setWaitingForPlex(false);
+        setLoading(false);
+        navigate("/chat", { replace: true });
+      },
+      onTimeout: () => {
+        stopPinWait();
+        setError("Plex sign-in timed out. Try again.");
+      },
+      onError: (pollError) => {
         stopPinWait();
         setError(formatApiError(pollError));
-      }
-    }, PIN_POLL_MS);
+      },
+    });
   }
 
   async function handlePlexSignIn() {
