@@ -2,9 +2,22 @@
 
 ## [Unreleased]
 
-### Changed
+## [1.37.33] — 2026-10-05
+
+One patch on 1.37.32: chat home and search keep the extra blocks closed until you open them.
+
+### Highlights
 - **Chat home opens on the question.** On This Day, a library glance, whispers, and saved shelves stay behind **More from home** until you open it.
-- **Search stays on the hits.** **Beyond your collection** — titles that are not already in the library, plus the note when that search is unavailable — stays closed under the results until you ask.
+- **Search stays on the hits.** **Beyond your collection** stays closed under the results until you ask. Library browse still shows that block in the page.
+
+### Changed
+_collapse home and search extras (#102)_
+- **Chat home opens on the question.** On This Day, a library glance, whispers, and saved shelves stay behind **More from home** until you open it. The disclosure starts closed and does not stay open after a reload.
+- **Search stays on the hits.** On search, **Beyond your collection** — titles that are not already in the library, plus the note when that search is unavailable — stays closed under the results until you ask. Library browse with a query still shows that block inline.
+
+### Verification
+- One full run on the merged #102 tree shipped as 1.37.33: backend `pytest tests/` — 2540 passed, 6 skipped, coverage 76.99% (floor 74%), run with `PROJECTIONIST_SKIP_DOTENV=1`.
+- Frontend unit 934/934; lint 0 errors (151 pre-existing warnings); `npm run build` OK.
 
 ## [1.37.32] — 2026-10-04
 
