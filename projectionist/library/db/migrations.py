@@ -254,6 +254,7 @@ def _build_migrations() -> List[Migration]:
         (51, "weather_location", wrap("_migrate_weather_location")),
         (52, "knowledge_fetch_state", wrap("_migrate_knowledge_fetch_state")),
         (53, "holiday_rail_curator_notes", wrap("_migrate_holiday_rail_curator_notes")),
+        (54, "holiday_rail_shelf_mode", wrap("_migrate_holiday_rail_shelf_mode")),
     ]
 
 

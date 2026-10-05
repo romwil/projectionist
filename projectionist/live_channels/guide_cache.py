@@ -33,20 +33,22 @@ GUIDE_SOFT_TTL_SECONDS = 30.0
 GUIDE_HARD_TTL_SECONDS = 2 * 3600.0
 # Briefly show an honest upstream error when there is nothing better cached.
 GUIDE_DEGRADED_SOFT_TTL_SECONDS = 5.0
-# First-ever visit may wait this long for a fast Tunarr before showing "warming".
-GUIDE_COLD_WAIT_SECONDS = 0.75
+# Never wait on Tunarr/Docker/Plex on the request path. A cold start returns
+# the warming skeleton immediately; the last guide (memory or disk) paints
+# while a refresh runs behind it.
+GUIDE_COLD_WAIT_SECONDS = 0.0
 
 GUIDE_CACHE = SwrCache(
     "live_guide",
     soft_ttl=GUIDE_SOFT_TTL_SECONDS,
     hard_ttl=GUIDE_HARD_TTL_SECONDS,
-    durable=False,
+    durable=True,
 )
 ON_NOW_CACHE = SwrCache(
     "live_on_now",
     soft_ttl=GUIDE_SOFT_TTL_SECONDS,
     hard_ttl=GUIDE_HARD_TTL_SECONDS,
-    durable=False,
+    durable=True,
 )
 
 
@@ -192,8 +194,9 @@ def get_guide_snapshot(
     youth_max_rating: Optional[str] = None,
     hours: float = 6.0,
     cold_wait: float = GUIDE_COLD_WAIT_SECONDS,
+    db: Any = None,
 ) -> Dict[str, Any]:
-    """``/live`` EPG guide — cached, never blocks on Tunarr after the first build."""
+    """``/live`` EPG guide — cached, never blocks on Tunarr."""
     trivial = _is_trivial(settings)
     if trivial is not None:
         trivial.update({"cached": False, "stale": False, "warming": False})
@@ -211,6 +214,7 @@ def get_guide_snapshot(
     result = GUIDE_CACHE.get(
         key,
         _build,
+        db=db,
         warming=lambda: _warming_snapshot(hours=hours_clamped),
         accept=_accept_snapshot,
         cold_wait=cold_wait,
@@ -225,8 +229,9 @@ def get_on_now_snapshot(
     *,
     youth_max_rating: Optional[str] = None,
     cold_wait: float = GUIDE_COLD_WAIT_SECONDS,
+    db: Any = None,
 ) -> Dict[str, Any]:
-    """Household On Now rows — cached, never blocks on Tunarr after the first build.
+    """Household On Now rows — cached, never blocks on Tunarr.
 
     Served from the (richer) guide cache when it already holds this audience so
     one Tunarr round-trip feeds ``/live`` and every On Now widget.
@@ -243,6 +248,7 @@ def get_on_now_snapshot(
     result = ON_NOW_CACHE.get(
         key,
         _build,
+        db=db,
         warming=lambda: _warming_snapshot(),
         accept=_accept_snapshot,
         cold_wait=cold_wait,
@@ -252,7 +258,7 @@ def get_on_now_snapshot(
     return _finish(result)
 
 
-def prewarm_live_guide(settings: Any) -> None:
+def prewarm_live_guide(settings: Any, db: Any = None) -> None:
     """Build the household (non-youth) guide + On Now once, off the request path."""
     if _is_trivial(settings) is not None:
         return
@@ -260,11 +266,11 @@ def prewarm_live_guide(settings: Any) -> None:
         guide_key = _cache_key(settings, youth_max_rating=None, extra="guide|h=6.0")
         guide = _guide.build_guide_snapshot(settings, youth_max_rating=None, hours=6.0)
         if _accept_snapshot(guide):
-            GUIDE_CACHE.put(guide_key, guide)
+            GUIDE_CACHE.put(guide_key, guide, db=db)
         on_now_key = _cache_key(settings, youth_max_rating=None, extra="on-now")
         on_now = _guide.build_on_now_snapshot(settings, youth_max_rating=None)
         if _accept_snapshot(on_now):
-            ON_NOW_CACHE.put(on_now_key, on_now)
+            ON_NOW_CACHE.put(on_now_key, on_now, db=db)
     except Exception:  # noqa: BLE001
         logger.debug("live guide prewarm skipped", exc_info=True)
 

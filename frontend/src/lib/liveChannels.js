@@ -647,20 +647,44 @@ export function buildOsdModel(channel, nowMs = Date.now(), { selectedProgram = n
  * Quiet persistent lower-third while Continuity/flex fills the air.
  * Independent of cable OSD idle hide — vanishes when ``isFlex`` clears.
  * @param {ReturnType<typeof buildOsdModel>|null|undefined} osd
- * @returns {{ eyebrow: string, title: string, countdown: string }|null}
+ * @returns {{ eyebrow: string, title: string, time: string, sentence: string }|null}
  */
 export function buildFlexLowerThird(osd) {
   if (!osd || typeof osd !== "object" || !osd.isFlex) return null;
-  const channelName = String(osd.name || "Channel").trim() || "Channel";
   const title = String(osd.nextDisplay || osd.nextTitle || "").trim();
-  const remaining = osd.secondsRemaining;
-  const countdown =
-    remaining != null && Number.isFinite(Number(remaining)) ? formatClock(remaining) : "";
+  const time = formatWallTime(osd.nextStart);
+  const sentence = title && time
+    ? `Up next: ${title} at ${time}`
+    : title
+      ? `Up next: ${title}`
+      : "Up next";
   return {
-    eyebrow: `Up next on ${channelName}`,
+    eyebrow: "Up next",
     title,
-    countdown,
+    time,
+    sentence,
   };
+}
+
+/**
+ * Keep one channel's cells from painting on top of each other.
+ * A later start wins the shared instant: the earlier stop is trimmed to it.
+ * @param {object[]} programs
+ */
+export function separateOverlappingGuidePrograms(programs) {
+  const ordered = (Array.isArray(programs) ? programs : [])
+    .filter((program) => program && typeof program === "object")
+    .slice()
+    .sort((a, b) => Number(a.start) - Number(b.start));
+  return ordered.map((program, index) => {
+    const next = ordered[index + 1];
+    const stop = Number(program.stop);
+    const nextStart = Number(next?.start);
+    if (!Number.isFinite(stop) || !Number.isFinite(nextStart) || stop <= nextStart) {
+      return program;
+    }
+    return { ...program, stop: nextStart };
+  });
 }
 
 /**
@@ -768,11 +792,13 @@ export function normalizeGuide(snapshot) {
   const channels = (Array.isArray(snapshot.channels) ? snapshot.channels : [])
     .map((channel) => {
       if (!channel || typeof channel !== "object") return null;
-      const programs = (Array.isArray(channel.programs) ? channel.programs : [])
-        .map((program) =>
-          program && typeof program === "object" ? normalizeGuideProgram(program) : null,
-        )
-        .filter(Boolean);
+      const programs = separateOverlappingGuidePrograms(
+        (Array.isArray(channel.programs) ? channel.programs : [])
+          .map((program) =>
+            program && typeof program === "object" ? normalizeGuideProgram(program) : null,
+          )
+          .filter(Boolean),
+      );
       // Ensure now/next appear even when programs list is thin.
       if (!programs.length && channel.now) {
         const fallback = normalizeGuideProgram(channel.now);

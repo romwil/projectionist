@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+## [1.37.34] — 2026-10-05
+
+One patch on 1.37.33: seasonal curate replaces the shelf, Live and Explore paint before the slow work finishes, and the next library title starts on the quarter hour with Continuity in the gap.
+
+### Highlights
+- **Ask the professor replaces the shelf.** Seasonal shelves show the new staff picks right away. Last year's keyword cards do not stay underneath.
+- **Live opens on the guide.** The page paints immediately and fills the stations in, instead of a blank screen while the TV engine answers.
+- **Explore paints before the slow rails finish.** Recently added and the other local shelves show up while Continue Watching and the seasonal shelf are still loading.
+- **The next title waits until the quarter hour.** Continuity covers the gap, and the player says what's up next and when it starts. The week of programming stays a full week.
+
+### Fixed
+_seasonal curate replaces the shelf (#104)_
+- **Ask the professor to curate replaces the shelf.** On seasonal shelves (Halloween, Día de los Muertos, and every other grounded season), that button proposes a staff-pick list and applies it immediately. The old year-sorted keyword cards and a saved Explore snapshot of them do not stay on the shelf. A professor failure shows under the button instead of leaving the old picks in place with no message. Migration 54 adds `holiday_rail_shelf_mode` so a replaced shelf stays replaced.
+
+_live first paint (#105)_
+- **`/live` no longer waits on Tunarr before first paint.** `GET /api/live-channels/guide` and On Now return a disk-backed cached guide (kept across a restart) or a warming skeleton without blocking. Now-playing probes for that build run together under a 5s cap, so one sleepy station cannot hold the whole grid. The page shows its chrome and placeholder rows while the programmes fill in. The in-app guide window stays 6 hours. The week of programming Plex reads stays 7 days / `programmingHours` 168.
+
+_explore first paint (#106)_
+- **`/explore` waited on the slowest feed.** Local rails publish as they finish, and the page keeps their posters. The seasonal shelf fills in after that first paint. The Plex on-deck probe used by the hub is capped at 3 seconds and falls back to local progress. Curate-apply behavior from the seasonal-shelf fix is unchanged.
+
+_quarter-hour lineup pad (#107)_
+- **Live guide titles no longer sit on top of each other.** The next library title starts at the next :00, :15, :30, or :45 at or after the previous file ends. Continuity filler covers the gap. A title that ends at 9:39 has filler until 9:45; a title that ends on :15 starts the next one then. Shuffle stations publish that sequence instead of stacked random slots. While Continuity is on screen, the player shows "Up next: title at time". The week horizon stays 7 days / `programmingHours` 168. Existing on-air lineups keep the old overlapping starts until a station refill republishes them.
+
+### Verification
+- One full run on the merged #104 #105 #106 #107 tree: backend `pytest tests/` — 2553 passed, 6 skipped, coverage 76.98% (floor 74%), run with `PROJECTIONIST_SKIP_DOTENV=1`.
+- Frontend unit 938/938; lint 0 errors (149 warnings); `npm run build` OK.
+- Backend ruff clean on the same tree.
+
 ## [1.37.33] — 2026-10-05
 
 One patch on 1.37.32: chat home and search keep the extra blocks closed until you open them.

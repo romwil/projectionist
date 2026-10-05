@@ -9,6 +9,9 @@ path** after the first successful build:
 * Process restart — hydrate from durable ``sync_state`` and refresh in the background.
 * True cold miss — return a warming skeleton immediately (do not hang first paint);
   a single-flight background build fills memory + disk for the next request / client poll.
+* Slow rails (Plex on-deck, full-library spotlights, the seasonal snapshot) must not
+  hold the fast rails. The builder publishes the local rails first, then fills the
+  slow ones in. A poll during that window returns whatever is already ready.
 """
 
 from __future__ import annotations
@@ -18,7 +21,7 @@ import json
 import logging
 import threading
 import time
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Callable, Dict, Mapping, Optional
 
 from projectionist.config_store import Settings
 from projectionist.connectors.plex import PlexClient
@@ -49,6 +52,9 @@ HUB_CACHE_HARD_TTL_SECONDS = 6 * 3600.0
 HUB_DISK_KEY_PREFIX = "explore_hub:"
 
 HUB_CACHE_TTL_SECONDS = HUB_CACHE_SOFT_TTL_SECONDS  # back-compat alias for tests/stats
+# Continue Watching may ask Plex. Cap it so a sleeping server cannot stall the
+# rest of the hub; the rail falls back to local progress when the probe fails.
+HUB_PLEX_TIMEOUT_SECONDS = 3
 
 _LOCK = threading.Lock()
 # key -> (soft_expires_at, hard_expires_at, payload)
@@ -85,24 +91,27 @@ def invalidate_explore_hub_cache() -> None:
             _CACHE[key] = (now, hard, payload)
 
 
-def _empty_rail(feed_name: str) -> Dict[str, Any]:
-    return {"feed": feed_name, "items": [], "total": 0, "note": None}
+def _empty_rail(feed_name: str, *, pending: bool = False) -> Dict[str, Any]:
+    rail: Dict[str, Any] = {"feed": feed_name, "items": [], "total": 0, "note": None}
+    if pending:
+        rail["pending"] = True
+    return rail
 
 
 def _warming_payload(*, rail_limit: int, is_youth: bool) -> Dict[str, Any]:
     rails: Dict[str, Any] = {
-        "continue_watching": _empty_rail("continue-watching"),
-        "tonight_table": _empty_rail("tonight-table"),
-        "unfinished": _empty_rail("unfinished"),
-        "afterglow": _empty_rail("afterglow"),
-        "recently_added": _empty_rail("recently-added"),
-        "recently_added_episodes": _empty_rail("recently-added-episodes"),
-        "recent_releases": _empty_rail("recent-releases"),
-        "revisit_these": _empty_rail("revisit-these"),
-        "on_this_day": _empty_rail("on-this-day"),
-        "director_spotlight": _empty_rail("director-spotlight"),
-        "genre_spotlight": _empty_rail("genre-spotlight"),
-        "seasonal_spotlight": _empty_rail("seasonal-spotlight"),
+        "continue_watching": _empty_rail("continue-watching", pending=True),
+        "tonight_table": _empty_rail("tonight-table", pending=True),
+        "unfinished": _empty_rail("unfinished", pending=True),
+        "afterglow": _empty_rail("afterglow", pending=True),
+        "recently_added": _empty_rail("recently-added", pending=True),
+        "recently_added_episodes": _empty_rail("recently-added-episodes", pending=True),
+        "recent_releases": _empty_rail("recent-releases", pending=True),
+        "revisit_these": _empty_rail("revisit-these", pending=True),
+        "on_this_day": _empty_rail("on-this-day", pending=True),
+        "director_spotlight": _empty_rail("director-spotlight", pending=True),
+        "genre_spotlight": _empty_rail("genre-spotlight", pending=True),
+        "seasonal_spotlight": _empty_rail("seasonal-spotlight", pending=True),
     }
     if is_youth:
         rails["pick_for_me"] = None
@@ -192,7 +201,31 @@ def _plex_client(settings: Settings) -> Optional[PlexClient]:
         settings.plex_token,
         movie_section=settings.plex_movie_section or None,
         tv_section=settings.plex_tv_section or None,
+        timeout=HUB_PLEX_TIMEOUT_SECONDS,
     )
+
+
+def _coerce_rail(existing: Mapping[str, Any], builder: Callable[[], Any], *, key: str) -> Dict[str, Any]:
+    """Run one rail. A failure becomes an honest empty rail, not a hung hub."""
+    try:
+        rail = builder()
+    except Exception:  # noqa: BLE001 — one rail must not drop the rest of Explore
+        logger.exception("explore hub rail failed key=%s", key)
+        rail = None
+    if not isinstance(rail, dict):
+        return _empty_rail(str(existing.get("feed") or key))
+    settled = dict(rail)
+    settled.pop("pending", None)
+    return settled
+
+
+def _emit_partial(
+    payload: Dict[str, Any],
+    on_partial: Optional[Callable[[Dict[str, Any]], None]],
+) -> None:
+    if on_partial is None:
+        return
+    on_partial(copy.deepcopy(payload))
 
 
 def build_explore_hub(
@@ -202,43 +235,55 @@ def build_explore_hub(
     is_youth: bool = False,
     user_id: Optional[str] = None,
     rail_limit: int = 12,
+    on_partial: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Dict[str, Any]:
-    """Assemble every Explore home rail + pulse in one payload."""
+    """Assemble every Explore home rail + pulse in one payload.
+
+    Local rails are published through ``on_partial`` before Plex, the full-library
+    spotlights, and the seasonal snapshot run. Callers that omit ``on_partial``
+    (explicit refresh) still receive the finished payload.
+    """
     capped = max(1, min(int(rail_limit or 12), 24))
     plex = _plex_client(settings)
-    feeds: Dict[str, Any] = {
-        "continue_watching": feed_continue_watching(db, limit=capped, plex_client=plex),
-        "tonight_table": feed_tonight_table(db, limit=3),
-        "unfinished": feed_unfinished(db, limit=capped, idle_days=60),
-        "afterglow": feed_afterglow(db, limit=capped, days=14, user_id=user_id),
-        "recently_added": feed_recently_added(db, limit=capped, days=30),
-        "recently_added_episodes": feed_recently_added_episodes(db, limit=capped, days=30),
-        "recent_releases": feed_recent_releases(db, limit=capped, days=90),
-        "revisit_these": feed_revisit_these(db, limit=20, idle_days=60),
-        "on_this_day": feed_on_this_day(db, limit=capped),
-        "director_spotlight": feed_director_spotlight(db, limit=capped),
-        "genre_spotlight": feed_genre_spotlight(db, limit=capped),
-        "seasonal_spotlight": feed_seasonal_spotlight(db, limit=capped),
-    }
-    if is_youth:
-        # Youth pick-for-me stays on its own endpoint (age gate + shuffle).
-        feeds["pick_for_me"] = None
-    overview = library_overview(db, use_cache=True)
+    payload = _warming_payload(rail_limit=capped, is_youth=is_youth)
+    rails = payload["rails"]
+
+    # SQL rails first — these are the first screen. Do not wait on Plex or the
+    # seasonal library scan before publishing them.
+    fast: tuple[tuple[str, Callable[[], Any]], ...] = (
+        ("tonight_table", lambda: feed_tonight_table(db, limit=3)),
+        ("unfinished", lambda: feed_unfinished(db, limit=capped, idle_days=60)),
+        ("afterglow", lambda: feed_afterglow(db, limit=capped, days=14, user_id=user_id)),
+        ("recently_added", lambda: feed_recently_added(db, limit=capped, days=30)),
+        ("recently_added_episodes", lambda: feed_recently_added_episodes(db, limit=capped, days=30)),
+        ("recent_releases", lambda: feed_recent_releases(db, limit=capped, days=90)),
+        ("revisit_these", lambda: feed_revisit_these(db, limit=20, idle_days=60)),
+    )
+    for key, builder in fast:
+        rails[key] = _coerce_rail(rails[key], builder, key=key)
+    payload["overview"] = library_overview(db, use_cache=True)
     try:
-        health = compute_library_health(db)
+        payload["health"] = compute_library_health(db)
     except Exception:  # noqa: BLE001 — pulse degrades gracefully
-        health = {}
-    return {
-        "feed": "explore-hub",
-        "generated_at": int(time.time()),
-        "cached": False,
-        "stale": False,
-        "warming": False,
-        "rails": feeds,
-        "overview": overview,
-        "health": health,
-        "rail_limit": capped,
-    }
+        payload["health"] = {}
+    payload["generated_at"] = int(time.time())
+    _emit_partial(payload, on_partial)
+
+    slow: tuple[tuple[str, Callable[[], Any]], ...] = (
+        ("continue_watching", lambda: feed_continue_watching(db, limit=capped, plex_client=plex)),
+        ("on_this_day", lambda: feed_on_this_day(db, limit=capped)),
+        ("director_spotlight", lambda: feed_director_spotlight(db, limit=capped)),
+        ("genre_spotlight", lambda: feed_genre_spotlight(db, limit=capped)),
+        ("seasonal_spotlight", lambda: feed_seasonal_spotlight(db, limit=capped)),
+    )
+    for key, builder in slow:
+        rails[key] = _coerce_rail(rails[key], builder, key=key)
+        payload["generated_at"] = int(time.time())
+        _emit_partial(payload, on_partial)
+
+    payload["warming"] = False
+    payload["generated_at"] = int(time.time())
+    return payload
 
 
 def _public_copy(
@@ -271,12 +316,18 @@ def _schedule_refresh(
 
     def _run() -> None:
         try:
+            def _on_partial(snapshot: Dict[str, Any]) -> None:
+                # Soft TTL 0 keeps the partial stale so clients keep polling
+                # while slower rails are still pending. Disk stores the finish only.
+                _cache_set(cache_key, snapshot, soft_ttl=0.0)
+
             payload = build_explore_hub(
                 db,
                 settings,
                 is_youth=is_youth,
                 user_id=user_id,
                 rail_limit=rail_limit,
+                on_partial=_on_partial,
             )
             _cache_set(cache_key, payload)
             _disk_store(db, cache_key, payload)
@@ -321,8 +372,8 @@ def get_explore_hub(
     entry = _cache_get_entry(cache_key)
     if entry is not None:
         fresh, _within_hard, payload = entry
-        if fresh:
-            return _public_copy(payload, cached=True, stale=False)
+        if fresh and not payload.get("warming"):
+            return _public_copy(payload, cached=True, stale=False, warming=False)
         _schedule_refresh(
             cache_key,
             db,
@@ -331,7 +382,12 @@ def get_explore_hub(
             user_id=user_id,
             rail_limit=rail_limit,
         )
-        return _public_copy(payload, cached=True, stale=True)
+        return _public_copy(
+            payload,
+            cached=True,
+            stale=True,
+            warming=bool(payload.get("warming")),
+        )
 
     disk = _disk_load(db, cache_key)
     if disk is not None:
@@ -344,7 +400,7 @@ def get_explore_hub(
             user_id=user_id,
             rail_limit=rail_limit,
         )
-        return _public_copy(disk, cached=True, stale=True)
+        return _public_copy(disk, cached=True, stale=True, warming=False)
 
     # Cold miss — do not hang first paint on full recompute.
     _schedule_refresh(

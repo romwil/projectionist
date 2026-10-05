@@ -486,6 +486,20 @@ class HolidaysMixin:
                         """,
                         (scope_id, item_id, position, note, now),
                     )
+                # This list is the shelf. Keyword matches must not fill the tail.
+                conn.execute(
+                    """
+                    INSERT INTO holiday_rail_shelf_mode (scope_id, replaces_matches)
+                    VALUES (?, 1)
+                    ON CONFLICT(scope_id) DO UPDATE SET
+                        replaces_matches = 1
+                    """,
+                    (scope_id,),
+                )
+                conn.execute(
+                    "DELETE FROM seasonal_rail_snapshots WHERE scope_id = ?",
+                    (scope_id,),
+                )
             return self.list_holiday_rail_titles(scope_id)
 
         return self.run_write(_write, label="apply_holiday_rail_curation") or []
@@ -599,6 +613,23 @@ class HolidaysMixin:
             elif role == "exclude":
                 excludes.append(item_id)
         return {"pins": pins, "includes": includes, "excludes": excludes}
+
+    def holiday_rail_replaces_matches(self, scope_id: str) -> bool:
+        """True after a professor curate: the pin list is the whole shelf."""
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT replaces_matches FROM holiday_rail_shelf_mode
+                WHERE scope_id = ?
+                """,
+                (scope_id,),
+            ).fetchone()
+        if row is None:
+            return False
+        try:
+            return int(row["replaces_matches"] or 0) == 1
+        except (TypeError, ValueError, KeyError):
+            return False
 
     def get_library_items_by_ids(self, item_ids: Sequence[int]) -> Dict[int, Any]:
         ids = [int(item_id) for item_id in item_ids]
