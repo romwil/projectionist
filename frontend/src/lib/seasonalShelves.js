@@ -112,6 +112,48 @@ export function shelfChatSeedMessage(args = {}) {
   return seasonalPickChatSeed(args);
 }
 
+/**
+ * What one click on "Ask the professor to curate" should do.
+ * A failed or empty professor reply is an error the shelf must show.
+ * A real proposal is applied immediately — the owner does not clear old cards first.
+ * @param {{ error?: unknown, proposal?: { picks?: Array<Record<string, unknown>> } | null }} input
+ */
+export function curateClickPlan({ error = null, proposal = null } = {}) {
+  if (error) {
+    const message = String(error).trim() || "The professor couldn't curate this shelf.";
+    return { ok: false, message, applyPicks: [] };
+  }
+  const picks = Array.isArray(proposal?.picks) ? proposal.picks : [];
+  const applyPicks = [];
+  for (const pick of picks) {
+    const libraryItemId = Number(pick?.library_item_id || pick?.id);
+    if (!Number.isFinite(libraryItemId) || libraryItemId < 1) continue;
+    applyPicks.push({
+      library_item_id: libraryItemId,
+      curator_note: String(pick?.curator_note || pick?.note || ""),
+    });
+  }
+  if (!applyPicks.length) {
+    return {
+      ok: false,
+      message: "The professor didn't return any picks for this shelf.",
+      applyPicks: [],
+    };
+  }
+  return { ok: true, message: "", applyPicks };
+}
+
+/**
+ * Cards to show after a professor curate. Keyword/anniversary dump rows drop.
+ * A hand pin (replacesMatches false) still keeps the rest of the shelf.
+ */
+export function visibleCuratedShelf(items, { replacesMatches = false } = {}) {
+  const rows = Array.isArray(items) ? items : [];
+  if (!replacesMatches) return rows;
+  const kept = rows.filter((row) => row?.rail_role === "pin" || row?.rail_role === "include");
+  return kept.length ? kept : rows;
+}
+
 /** Fields the owner edits per shelf (PATCH body for the existing holidays API). */
 export function shelfPatchFromForm(form, item) {
   const patch = {
