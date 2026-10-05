@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-05T22:00:20Z",
+  "generated_at": "2026-10-05T22:01:03Z",
   "releases": [
     {
       "version": "1.37.35",
@@ -25,7 +25,7 @@
           "title": "Verification",
           "bullets": [
             "One full run on the merged #109 #100 #101 #110 tree: backend `pytest tests/` — 2563 passed, 6 skipped, coverage 77.03% (floor 74%), run with `PROJECTIONIST_SKIP_DOTENV=1`.",
-            "Frontend unit 949/949; lint 0 errors (149 warnings).",
+            "Frontend unit 949/949; lint 0 errors (149 warnings); `npm run build` OK.",
             "`node --test frontend/src/lib/theaterPlayer.test.mjs` is included in that unit run: Next Episode opens `/watch/…`, a missing next episode surfaces a message, and Back to Explore opens `/explore` even then.",
             "`tests/test_explore_wave3.py` is included in the pytest run."
           ]
