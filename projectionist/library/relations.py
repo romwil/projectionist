@@ -15,6 +15,8 @@ import json
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 from projectionist.library.db import Database
+from projectionist.library.neighbors import measured_metadata_overlap
+from projectionist.library.plot_kinship import plot_blob, surprising_plot_link
 
 RelationRow = Tuple[int, int, str, float, str]
 
@@ -56,35 +58,82 @@ def _plot_kinship_label(score: float) -> str:
     return "Loose plot kinship"
 
 
-def _surprise_flavor(score: float, surprise_score: Optional[float]) -> Optional[str]:
-    if surprise_score is None or score <= 0:
+def _row_field(row: Any, name: str) -> Any:
+    if row is None:
         return None
-    overlap = max(0.0, min(1.0, 1.0 - (surprise_score / score)))
-    if overlap <= 0.15:
-        return "Almost no shared genre, keyword, or credit labels"
-    if overlap <= 0.35:
-        return "Shelf labels barely overlap"
-    if overlap <= 0.55:
-        return "Only partial shelf overlap"
-    return "Some shelf overlap"
+    try:
+        return row[name]
+    except (KeyError, IndexError, TypeError):
+        return None
+
+
+def _positive_id(value: Any) -> Optional[int]:
+    if value is None or value == "":
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _same_library_title(seed: Any, peer: Any) -> bool:
+    """True when the peer is the seed title, including a duplicate library row."""
+    if seed is None or peer is None:
+        return False
+    seed_id = _positive_id(_row_field(seed, "id"))
+    peer_id = _positive_id(_row_field(peer, "id"))
+    if seed_id is not None and peer_id is not None and seed_id == peer_id:
+        return True
+    for key in ("tmdb_id", "tvdb_id"):
+        left = _positive_id(_row_field(seed, key))
+        right = _positive_id(_row_field(peer, key))
+        if left is not None and right is not None and left == right:
+            return True
+    left_title = " ".join(str(_row_field(seed, "title") or "").casefold().split())
+    right_title = " ".join(str(_row_field(peer, "title") or "").casefold().split())
+    if not left_title or left_title != right_title:
+        return False
+    if str(_row_field(seed, "media_type") or "") != str(_row_field(peer, "media_type") or ""):
+        return False
+    left_year = _row_field(seed, "year")
+    right_year = _row_field(peer, "year")
+    if left_year is None or right_year is None:
+        return True
+    try:
+        return int(left_year) == int(right_year)
+    except (TypeError, ValueError):
+        return True
+
+
+def _shelf_labels(row: Any, people: Sequence[str]) -> Set[str]:
+    labels: Set[str] = set()
+    if row is not None:
+        labels.update(label.casefold() for label in _json_labels(_row_field(row, "genres")))
+        labels.update(label.casefold() for label in _json_labels(_row_field(row, "keywords")))
+    for name in people:
+        text = str(name or "").strip().casefold()
+        if text:
+            labels.add(text)
+    return labels
 
 
 def _relation_context(
     db: Database,
     item_id: int,
     rows: Sequence[Any],
-) -> Tuple[Mapping[int, Any], Mapping[int, List[str]], Mapping[int, Optional[float]]]:
+) -> Tuple[Mapping[int, Any], Mapping[int, List[str]]]:
     ids = {int(item_id)}
     ids.update(int(row["to_id"]) for row in rows)
     placeholders = ",".join("?" for _ in ids)
     metadata: Dict[int, Any] = {}
     crew_by_item: Dict[int, List[str]] = defaultdict(list)
-    surprise_by_peer: Dict[int, Optional[float]] = {}
     with db.connect() as conn:
         for row in conn.execute(
             f"""
             SELECT id, rating_key, media_type, title, year, poster_url, backdrop_url,
-                   tmdb_id, tvdb_id, genres, collection_name, content_rating
+                   tmdb_id, tvdb_id, genres, keywords, summary, tmdb_overview, tagline,
+                   long_synopsis, llm_logline, collection_name, content_rating
             FROM library_items
             WHERE id IN ({placeholders})
             """,
@@ -108,20 +157,7 @@ def _relation_context(
             name = str(row["name"] or "").strip()
             if name and name not in crew_by_item[int(row["item_id"])]:
                 crew_by_item[int(row["item_id"])].append(name)
-        for row in conn.execute(
-            """
-            SELECT neighbor_id, surprise_score
-            FROM item_neighbors
-            WHERE item_id = ?
-            """,
-            (int(item_id),),
-        ).fetchall():
-            surprise_by_peer[int(row["neighbor_id"])] = (
-                float(row["surprise_score"])
-                if row["surprise_score"] is not None
-                else None
-            )
-    return metadata, crew_by_item, surprise_by_peer
+    return metadata, crew_by_item
 
 
 def _why_payload(
@@ -131,7 +167,8 @@ def _why_payload(
     seed: Any,
     peer: Any,
     shared_people: Sequence[str],
-    surprise_score: Optional[float],
+    seed_people: Sequence[str] = (),
+    peer_people: Sequence[str] = (),
 ) -> Dict[str, Any]:
     seed_genres = _json_labels(seed["genres"]) if seed is not None else []
     peer_genres = _json_labels(peer["genres"]) if peer is not None else []
@@ -139,6 +176,9 @@ def _why_payload(
     collection_name: Optional[str] = None
     plot_kinship: Optional[str] = None
     surprise_flavor: Optional[str] = None
+    plot_link: Optional[str] = None
+    shelf_note: Optional[str] = None
+    shared_story: List[str] = []
 
     if relation == "collection":
         for row in (seed, peer):
@@ -159,10 +199,26 @@ def _why_payload(
         )
     elif relation == "neighbor":
         plot_kinship = _plot_kinship_label(weight)
-        surprise_flavor = _surprise_flavor(weight, surprise_score)
-        label = plot_kinship
-        if shared_genres:
-            label += f" · Shared genres: {', '.join(shared_genres[:3])}"
+        seed_shelf = _shelf_labels(seed, seed_people)
+        peer_shelf = _shelf_labels(peer, peer_people)
+        link = surprising_plot_link(
+            cosine=weight,
+            overlap=measured_metadata_overlap(seed_shelf, peer_shelf),
+            seed_text=plot_blob(seed),
+            peer_text=plot_blob(peer),
+            shelf_labels=seed_shelf | peer_shelf,
+        )
+        if link:
+            plot_link = str(link["sentence"])
+            shelf_note = str(link["shelf_note"] or "") or None
+            shared_story = [str(term) for term in link.get("terms") or []]
+            # The flavor is the kinship. Absence of labels is only a secondary note.
+            surprise_flavor = plot_link
+            label = plot_link
+        else:
+            label = plot_kinship
+            if shared_genres:
+                label += f" · Shared genres: {', '.join(shared_genres[:3])}"
     else:
         label = "Related title"
 
@@ -174,6 +230,9 @@ def _why_payload(
         "collection_name": collection_name,
         "plot_kinship": plot_kinship,
         "surprise_flavor": surprise_flavor,
+        "plot_link": plot_link,
+        "shelf_note": shelf_note,
+        "shared_story": shared_story,
     }
 
 
@@ -333,7 +392,7 @@ def list_relations_for_item(
 ) -> Dict[str, Any]:
     """Read enriched outgoing edges for one seed and their peer title cards."""
     rows = db.list_title_relations(int(item_id), relation=relation, limit=limit)
-    metadata, crew_by_item, surprise_by_peer = _relation_context(db, item_id, rows)
+    metadata, crew_by_item = _relation_context(db, item_id, rows)
     seed = metadata.get(int(item_id))
     items: List[Dict[str, Any]] = []
     for row in rows:
@@ -341,6 +400,8 @@ def list_relations_for_item(
         relation_type = str(row["relation"])
         weight = float(row["weight"] or 0)
         peer_row = metadata.get(to_id)
+        if relation_type == "neighbor" and _same_library_title(seed, peer_row):
+            continue
         seed_crew = crew_by_item.get(int(item_id), [])
         peer_crew = crew_by_item.get(to_id, [])
         shared_people = (
@@ -380,7 +441,8 @@ def list_relations_for_item(
             seed=seed,
             peer=peer_row,
             shared_people=shared_people,
-            surprise_score=surprise_by_peer.get(to_id),
+            seed_people=seed_crew,
+            peer_people=peer_crew,
         )
         items.append(
             {
