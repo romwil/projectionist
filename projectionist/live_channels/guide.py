@@ -383,6 +383,76 @@ def clamp_flex_progress_to_next(
     return {"now": clamped, "next": dict(next_prog)}
 
 
+def separate_channel_programs(programs: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
+    """One channel, no overlapping programmes.
+
+    Content occupies ``[start, start+duration)`` when a file duration is known.
+    A padded ``stop`` that runs past the next start is trimmed to that start.
+    When the file ends before the next library title, the gap is Continuity
+    filler — not a second movie drawn on top of the first.
+    """
+    ordered = [
+        dict(program)
+        for program in programs
+        if isinstance(program, Mapping) and program.get("start") is not None
+    ]
+    ordered.sort(key=lambda program: float(program.get("start") or 0.0))
+    laid: List[Dict[str, Any]] = []
+    for index, program in enumerate(ordered):
+        item = dict(program)
+        try:
+            start = float(item.get("start"))
+        except (TypeError, ValueError):
+            laid.append(item)
+            continue
+        stop_raw = item.get("stop")
+        try:
+            stop = float(stop_raw) if stop_raw is not None else None
+        except (TypeError, ValueError):
+            stop = None
+        duration = item.get("duration_seconds")
+        try:
+            duration_s = float(duration) if duration is not None else None
+        except (TypeError, ValueError):
+            duration_s = None
+        if (
+            not item.get("is_flex")
+            and duration_s is not None
+            and duration_s > 0
+        ):
+            file_end = start + duration_s
+            stop = file_end if stop is None else min(float(stop), file_end)
+        next_start: Optional[float] = None
+        if index + 1 < len(ordered):
+            try:
+                next_start = float(ordered[index + 1].get("start"))
+            except (TypeError, ValueError):
+                next_start = None
+        if stop is not None and next_start is not None and stop > next_start:
+            stop = next_start
+        if stop is not None:
+            item["stop"] = stop
+            item["ends_at"] = stop
+        laid.append(item)
+        # Ignore sub-minute clock skew. Real Continuity gaps are several minutes.
+        if stop is not None and next_start is not None and next_start > stop + 30.0:
+            laid.append(
+                {
+                    "title": "Continuity",
+                    "episode_title": None,
+                    "start": stop,
+                    "stop": next_start,
+                    "started_at": stop,
+                    "ends_at": next_start,
+                    "is_flex": True,
+                    "media_type": None,
+                    "content_rating": None,
+                    "duration_seconds": int(round(next_start - stop)),
+                }
+            )
+    return laid
+
+
 def _relabel_flex_program_placeholders(programs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Keep guideFlexTitle pads labeled as flex (do not steal the next episode).
 
@@ -795,7 +865,9 @@ def _channel_row_from_guide(
             item = _normalize_program(program)
             if item:
                 normalized.append(item)
-        row["programs"] = _relabel_flex_program_placeholders(normalized)
+        row["programs"] = separate_channel_programs(
+            _relabel_flex_program_placeholders(normalized)
+        )
     return row
 
 

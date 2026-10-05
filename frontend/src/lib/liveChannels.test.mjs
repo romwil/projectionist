@@ -6,6 +6,8 @@ import {
   WEATHER_CHANNEL_ID,
   buildFlexLowerThird,
   buildOsdModel,
+  formatWallTime,
+  separateOverlappingGuidePrograms,
   classifyLiveStreamHealth,
   formatClock,
   isHlsBufferStallDetail,
@@ -366,11 +368,13 @@ describe("liveChannels helpers", () => {
     assert.ok(osd.secondsRemaining < 3600);
     const l3 = buildFlexLowerThird(osd);
     assert.ok(l3);
+    assert.equal(l3.eyebrow, "Up next");
     assert.equal(l3.title, "Blade Runner");
-    assert.equal(l3.countdown, formatClock(900));
+    assert.equal(l3.time, formatWallTime(nowSec + 900));
+    assert.equal(l3.sentence, `Up next: Blade Runner at ${formatWallTime(nowSec + 900)}`);
   });
 
-  it("buildFlexLowerThird is visible only on flex with Up-next copy + countdown", () => {
+  it("buildFlexLowerThird names the next title and its quarter-hour start", () => {
     const flexOsd = buildOsdModel(
       {
         id: "flex-ch",
@@ -392,9 +396,13 @@ describe("liveChannels helpers", () => {
     );
     const l3 = buildFlexLowerThird(flexOsd);
     assert.ok(l3);
-    assert.equal(l3.eyebrow, "Up next on Gilligan's Island");
+    assert.equal(l3.eyebrow, "Up next");
     assert.equal(l3.title, "Gilligan's Island — The Big Gold Strike");
-    assert.equal(l3.countdown, formatClock(800));
+    assert.equal(l3.time, formatWallTime(2800));
+    assert.equal(
+      l3.sentence,
+      `Up next: Gilligan's Island — The Big Gold Strike at ${formatWallTime(2800)}`,
+    );
 
     const programOsd = buildOsdModel(
       {
@@ -413,6 +421,17 @@ describe("liveChannels helpers", () => {
     assert.equal(buildFlexLowerThird(programOsd), null);
     assert.equal(buildFlexLowerThird(null), null);
     assert.equal(buildFlexLowerThird({ isFlex: false, name: "X" }), null);
+  });
+
+  it("separateOverlappingGuidePrograms trims a padded stop at the next start", () => {
+    const start = 1_700_000_000;
+    const separated = separateOverlappingGuidePrograms([
+      { title: "Alien", start, stop: start + 3 * 3600 },
+      { title: "Alien³", start: start + 45 * 60, stop: start + 45 * 60 + 2 * 3600 },
+    ]);
+    assert.equal(separated[0].stop, start + 45 * 60);
+    assert.equal(separated[1].start, start + 45 * 60);
+    assert.ok(separated[0].stop <= separated[1].start);
   });
 
   it("pickNowAndNext advances past EOF Dora to MythBusters", () => {
