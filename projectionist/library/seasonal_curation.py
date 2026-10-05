@@ -2,7 +2,7 @@
 
 Admin Live Channels asks the LLM to propose an ordered mix of well-known and
 lesser-known library titles for a holiday shelf, each with a short curator note.
-Nothing is written until the owner confirms the proposal.
+The owner click applies that proposal: prior pins and the keyword dump are replaced.
 """
 
 from __future__ import annotations
