@@ -288,7 +288,8 @@ function useFeed(loader, deps = []) {
 }
 
 export default function ExplorePage() {
-  const { isOwner, multiUserEnabled, isYouth } = useAuthGate();
+  const { authReady, isOwner, multiUserEnabled, isYouth } = useAuthGate();
+  const ownerChrome = authReady && isOwner;
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [recommendItem, setRecommendItem] = useState(null);
@@ -450,6 +451,7 @@ export default function ExplorePage() {
     <AppShell
       className="app-root explore-page"
       testId="explore-page"
+      blockUntilAuth={false}
     >
       <main className="explore-main">
         <LibrarySearchBar
@@ -494,7 +496,7 @@ export default function ExplorePage() {
           id="continue-watching"
           title="Continue Watching"
           subtitle="Pick up where you left off — in-progress titles from Plex"
-          isOwner={isOwner}
+          isOwner={ownerChrome}
           empty={
             continueWatching.error ||
             (!continueWatching.loading && !continueWatching.items.length ? continueWatching.note : null)
@@ -521,7 +523,7 @@ export default function ExplorePage() {
           id="tonight-table"
           title="Tonight's table"
           subtitle="Under two hours — two unwatched seats and one comfort, not leftover or afterglow"
-          isOwner={isOwner}
+          isOwner={ownerChrome}
           empty={
             tonightTable.error ||
             (!tonightTable.loading && !tonightTable.items.length ? tonightTable.note : null)
@@ -549,7 +551,7 @@ export default function ExplorePage() {
           id="unfinished"
           title="Unfinished"
           subtitle="Leftover runtime you can still finish — not titles idle for two months"
-          isOwner={isOwner}
+          isOwner={ownerChrome}
           empty={
             unfinished.error ||
             (!unfinished.loading && !unfinished.items.length ? unfinished.note : null)
@@ -576,7 +578,7 @@ export default function ExplorePage() {
           id="afterglow"
           title="Afterglow"
           subtitle="Still warm — a few questions while the credits fade"
-          isOwner={isOwner}
+          isOwner={ownerChrome}
           empty={
             afterglow.error ||
             (!afterglow.loading && !afterglow.items.length ? afterglow.note : null)
@@ -608,7 +610,7 @@ export default function ExplorePage() {
             id="pick-for-me"
             title="Pick for me"
             subtitle="Spin up a handful of age-friendly titles you haven't watched yet"
-            isOwner={isOwner}
+            isOwner={ownerChrome}
             empty={
               pickForMe.error ||
               (!pickForMe.loading && !pickForMe.items.length
@@ -637,7 +639,7 @@ export default function ExplorePage() {
           title="Recently Added"
           subtitle="Fresh movie and show arrivals from the last 30 days"
           titleHref={exploreSectionPath("recently-added")}
-          isOwner={isOwner}
+          isOwner={ownerChrome}
           mediaTypeLinks={[
             {
               mediaType: "movie",
@@ -673,7 +675,7 @@ export default function ExplorePage() {
           title="Recently added episodes"
           subtitle="Fresh episodes that just landed — not whole shows"
           titleHref={libraryBrowsePath({ mediaType: "show" })}
-          isOwner={isOwner}
+          isOwner={ownerChrome}
           empty={
             recentlyAddedEpisodes.error ||
             (!recentlyAddedEpisodes.loading && !recentlyAddedEpisodes.items.length
@@ -703,7 +705,7 @@ export default function ExplorePage() {
           title="Recent Releases"
           subtitle="Library titles released in the last 90 days"
           titleHref={exploreSectionPath("recent-releases")}
-          isOwner={isOwner}
+          isOwner={ownerChrome}
           mediaTypeLinks={[
             {
               mediaType: "movie",
@@ -733,7 +735,7 @@ export default function ExplorePage() {
           id="revisit-these"
           title="Revisit These"
           subtitle="Partially watched shows you haven’t touched in over two months"
-          isOwner={isOwner}
+          isOwner={ownerChrome}
           empty={
             revisitThese.error ||
             (!revisitThese.loading && !revisitThese.items.length ? revisitThese.note : null)
@@ -751,7 +753,7 @@ export default function ExplorePage() {
           id="on-this-day"
           title="On This Day"
           subtitle={otdSubtitle}
-          isOwner={isOwner}
+          isOwner={ownerChrome}
           empty={onThisDay.error || (!onThisDay.loading && !onThisDay.items.length ? onThisDay.note : null)}
           note={onThisDay.items.length && onThisDay.note && !onThisDay.error ? onThisDay.note : null}
         >
@@ -769,7 +771,7 @@ export default function ExplorePage() {
             title={`Films by ${directorSpotlight.meta?.director || "a director"}`}
             subtitle="A daily rotating filmography from your shelves"
             titleHref={directorSpotlight.meta?.director ? exploreFacetPath("directors", directorSpotlight.meta.director) : null}
-            isOwner={isOwner}
+            isOwner={ownerChrome}
             empty={directorSpotlight.error || (!directorSpotlight.loading && !directorSpotlight.items.length ? directorSpotlight.note : null)}
           >
             <FeedRail
@@ -787,7 +789,7 @@ export default function ExplorePage() {
             title={`${genreSpotlight.meta?.genre || "Genre"} in your library`}
             subtitle="A daily rotating corner of your collection"
             titleHref={genreSpotlight.meta?.genre ? exploreFacetPath("genre", genreSpotlight.meta.genre) : null}
-            isOwner={isOwner}
+            isOwner={ownerChrome}
             empty={genreSpotlight.error || (!genreSpotlight.loading && !genreSpotlight.items.length ? genreSpotlight.note : null)}
           >
             <FeedRail
@@ -808,7 +810,7 @@ export default function ExplorePage() {
                 ? "Staff picks from your library for this season — why each one made the shelf, and room to chat"
                 : "A light seasonal turn through your library — staff-pick notes when the curator has weighed in"
             }
-            isOwner={isOwner}
+            isOwner={ownerChrome}
             empty={seasonalSpotlight.error || (!seasonalSpotlight.loading && !seasonalSpotlight.items.length ? seasonalSpotlight.note : null)}
           >
             <SeasonalSpotlightRail
@@ -829,7 +831,7 @@ export default function ExplorePage() {
           subtitle="A quick read on collection health"
           helpAnchorId="what-knowledge-coverage-means"
           helpTitle="What Library Pulse & knowledge coverage mean"
-          isOwner={isOwner}
+          isOwner={ownerChrome}
           empty={pulse.error || (!pulse.loading && !pulse.stats.length ? "No overview stats yet." : null)}
         >
           {pulse.loading ? (
@@ -886,7 +888,7 @@ export default function ExplorePage() {
             id="facet-filter"
             title={facetWall.label}
             subtitle="Deep-link filter from title detail"
-            isOwner={isOwner}
+            isOwner={ownerChrome}
             empty={facetWall.error || facetWall.note}
           >
             {facetWall.loading ? (

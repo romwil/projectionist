@@ -7,8 +7,9 @@ path** after the first successful build:
 * Soft TTL — payload is considered fresh.
 * After soft TTL — serve the last payload immediately and refresh in the background.
 * Process restart — hydrate from durable ``sync_state`` and refresh in the background.
-* True cold miss — return a warming skeleton immediately (do not hang first paint);
-  a single-flight background build fills memory + disk for the next request / client poll.
+* True cold miss — return local SQL shelves on this response (slow rails stay
+  pending). A single-flight background build fills Plex, spotlights, and the
+  seasonal snapshot for the next poll. Do not wait on those before first paint.
 * Slow rails (Plex on-deck, full-library spotlights, the seasonal snapshot) must not
   hold the fast rails. The builder publishes the local rails first, then fills the
   slow ones in. A poll during that window returns whatever is already ready.
@@ -228,6 +229,84 @@ def _emit_partial(
     on_partial(copy.deepcopy(payload))
 
 
+def _read_cached_overview(db: Database) -> Dict[str, Any]:
+    """Overview already on disk. Never recomputes — a miss stays empty for this paint."""
+    from projectionist.library.query import OVERVIEW_CACHE_KEY
+
+    raw = db.get_sync_state(OVERVIEW_CACHE_KEY)
+    if not raw:
+        return {}
+    try:
+        cached = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    if isinstance(cached, dict) and "by_media_type" in cached:
+        return cached
+    return {}
+
+
+def _fast_rail_builders(
+    db: Database,
+    *,
+    capped: int,
+    user_id: Optional[str],
+) -> tuple[tuple[str, Callable[[], Any]], ...]:
+    return (
+        ("tonight_table", lambda: feed_tonight_table(db, limit=3)),
+        ("unfinished", lambda: feed_unfinished(db, limit=capped, idle_days=60)),
+        ("afterglow", lambda: feed_afterglow(db, limit=capped, days=14, user_id=user_id)),
+        ("recently_added", lambda: feed_recently_added(db, limit=capped, days=30)),
+        ("recently_added_episodes", lambda: feed_recently_added_episodes(db, limit=capped, days=30)),
+        ("recent_releases", lambda: feed_recent_releases(db, limit=capped, days=90)),
+        ("revisit_these", lambda: feed_revisit_these(db, limit=20, idle_days=60)),
+    )
+
+
+def _fill_fast_rails(
+    payload: Dict[str, Any],
+    db: Database,
+    *,
+    capped: int,
+    user_id: Optional[str],
+) -> None:
+    """Local SQL shelves only. No Plex, no full-library scan, no overview rebuild."""
+    rails = payload["rails"]
+    for key, builder in _fast_rail_builders(db, capped=capped, user_id=user_id):
+        rails[key] = _coerce_rail(rails[key], builder, key=key)
+    payload["overview"] = _read_cached_overview(db)
+    payload["generated_at"] = int(time.time())
+
+
+def _slow_rail_builders(
+    db: Database,
+    *,
+    capped: int,
+    plex: Optional[PlexClient],
+) -> tuple[tuple[str, Callable[[], Any]], ...]:
+    return (
+        ("continue_watching", lambda: feed_continue_watching(db, limit=capped, plex_client=plex)),
+        ("on_this_day", lambda: feed_on_this_day(db, limit=capped)),
+        ("director_spotlight", lambda: feed_director_spotlight(db, limit=capped)),
+        ("genre_spotlight", lambda: feed_genre_spotlight(db, limit=capped)),
+        ("seasonal_spotlight", lambda: feed_seasonal_spotlight(db, limit=capped)),
+    )
+
+
+def _fast_partial(
+    db: Database,
+    *,
+    is_youth: bool,
+    user_id: Optional[str],
+    rail_limit: int,
+) -> Dict[str, Any]:
+    """First paint: local shelves, slow rails still pending."""
+    capped = max(1, min(int(rail_limit or 12), 24))
+    payload = _warming_payload(rail_limit=capped, is_youth=is_youth)
+    _fill_fast_rails(payload, db, capped=capped, user_id=user_id)
+    payload["warming"] = True
+    return payload
+
+
 def build_explore_hub(
     db: Database,
     settings: Settings,
@@ -240,27 +319,18 @@ def build_explore_hub(
     """Assemble every Explore home rail + pulse in one payload.
 
     Local rails are published through ``on_partial`` before Plex, the full-library
-    spotlights, and the seasonal snapshot run. Callers that omit ``on_partial``
-    (explicit refresh) still receive the finished payload.
+    spotlights, the seasonal snapshot, and the library-wide pulse scan. Callers
+    that omit ``on_partial`` (explicit refresh) still receive the finished payload.
     """
     capped = max(1, min(int(rail_limit or 12), 24))
     plex = _plex_client(settings)
     payload = _warming_payload(rail_limit=capped, is_youth=is_youth)
     rails = payload["rails"]
 
-    # SQL rails first — these are the first screen. Do not wait on Plex or the
-    # seasonal library scan before publishing them.
-    fast: tuple[tuple[str, Callable[[], Any]], ...] = (
-        ("tonight_table", lambda: feed_tonight_table(db, limit=3)),
-        ("unfinished", lambda: feed_unfinished(db, limit=capped, idle_days=60)),
-        ("afterglow", lambda: feed_afterglow(db, limit=capped, days=14, user_id=user_id)),
-        ("recently_added", lambda: feed_recently_added(db, limit=capped, days=30)),
-        ("recently_added_episodes", lambda: feed_recently_added_episodes(db, limit=capped, days=30)),
-        ("recent_releases", lambda: feed_recent_releases(db, limit=capped, days=90)),
-        ("revisit_these", lambda: feed_revisit_these(db, limit=20, idle_days=60)),
-    )
-    for key, builder in fast:
-        rails[key] = _coerce_rail(rails[key], builder, key=key)
+    # Publish local shelves before any full-library pulse or slow rail.
+    _fill_fast_rails(payload, db, capped=capped, user_id=user_id)
+    _emit_partial(payload, on_partial)
+
     payload["overview"] = library_overview(db, use_cache=True)
     try:
         payload["health"] = compute_library_health(db)
@@ -269,14 +339,7 @@ def build_explore_hub(
     payload["generated_at"] = int(time.time())
     _emit_partial(payload, on_partial)
 
-    slow: tuple[tuple[str, Callable[[], Any]], ...] = (
-        ("continue_watching", lambda: feed_continue_watching(db, limit=capped, plex_client=plex)),
-        ("on_this_day", lambda: feed_on_this_day(db, limit=capped)),
-        ("director_spotlight", lambda: feed_director_spotlight(db, limit=capped)),
-        ("genre_spotlight", lambda: feed_genre_spotlight(db, limit=capped)),
-        ("seasonal_spotlight", lambda: feed_seasonal_spotlight(db, limit=capped)),
-    )
-    for key, builder in slow:
+    for key, builder in _slow_rail_builders(db, capped=capped, plex=plex):
         rails[key] = _coerce_rail(rails[key], builder, key=key)
         payload["generated_at"] = int(time.time())
         _emit_partial(payload, on_partial)
@@ -402,7 +465,15 @@ def get_explore_hub(
         )
         return _public_copy(disk, cached=True, stale=True, warming=False)
 
-    # Cold miss — do not hang first paint on full recompute.
+    # Cold miss — local shelves go out on this response. Plex, spotlights, and
+    # the seasonal scan fill the same cache entry in the background.
+    partial = _fast_partial(
+        db,
+        is_youth=is_youth,
+        user_id=user_id,
+        rail_limit=rail_limit,
+    )
+    _cache_set(cache_key, partial, soft_ttl=0.0)
     _schedule_refresh(
         cache_key,
         db,
@@ -411,7 +482,7 @@ def get_explore_hub(
         user_id=user_id,
         rail_limit=rail_limit,
     )
-    return _warming_payload(rail_limit=rail_limit, is_youth=is_youth)
+    return _public_copy(partial, cached=False, stale=True, warming=True)
 
 
 def explore_hub_cache_stats() -> Mapping[str, Any]:

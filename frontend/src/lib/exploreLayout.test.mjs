@@ -115,6 +115,18 @@ describe("explore and recommendations responsive layout", () => {
     assert.match(explorePage, /Recently added episodes/);
   });
 
+  it("paints the Explore shell instead of a full-page loader while auth settles", () => {
+    const appShell = readFileSync(join(here, "../layouts/AppShell.jsx"), "utf8");
+    assert.match(explorePage, /blockUntilAuth=\{false\}/);
+    assert.match(appShell, /blockUntilAuth && !authReady/);
+    assert.match(appShell, /login-lede">Loading…/);
+    // The viewport loader stays available for other shells. Explore must not use it.
+    assert.doesNotMatch(
+      explorePage.slice(explorePage.indexOf("return (")),
+      /app-shell-auth-loading|login-lede">Loading…/,
+    );
+  });
+
   it("puts seasonal staff-pick notes and chat on Explore for members", () => {
     assert.match(explorePage, /SeasonalSpotlightRail/);
     assert.match(explorePage, /Staff picks from your library for this season/);
