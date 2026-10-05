@@ -4,6 +4,52 @@
 
 ### Fixed
 - **Sign in with Plex catches up as soon as Plex does.** The PIN check could sit for 20 seconds, so Projectionist still looked like it was waiting after Plex showed you could close the window. It now checks immediately, about once a second, and opens your household session as soon as Plex links the PIN. Watchlist sync follows behind that.
+- **`/explore` still sat on a loading screen after the first-paint hub.** The full-viewport “Loading…” gate is the auth shell (`AppShell`): it hid the page, so the hub request could not start until `/api/features` and `/api/auth/me` returned. The first hub payload was also an empty warming skeleton — local shelves were only published on a later poll, and that publish waited on the library-wide pulse scan before Continue Watching, On This Day, and the seasonal shelf. A warm cached hub then walked every poster for watch-tracker summaries before the response could finish. Explore now paints its shell immediately (`blockUntilAuth={false}`; nav stays empty until auth is ready). The first `GET /api/library/feeds/hub` response includes the local SQL shelves and leaves Plex on-deck, the full-library spotlights, and the seasonal snapshot pending. Those still fill in on the next poll. The hub response does not open a database connection per poster. Seasonal curate-apply and the Live quarter-hour path are unchanged.
+
+## [1.37.34] — 2026-10-05
+
+One patch on 1.37.33: seasonal curate replaces the shelf, Live and Explore paint before the slow work finishes, and the next library title starts on the quarter hour with Continuity in the gap.
+
+### Highlights
+- **Ask the professor replaces the shelf.** Seasonal shelves show the new staff picks right away. Last year's keyword cards do not stay underneath.
+- **Live opens on the guide.** The page paints immediately and fills the stations in, instead of a blank screen while the TV engine answers.
+- **Explore paints before the slow rails finish.** Recently added and the other local shelves show up while Continue Watching and the seasonal shelf are still loading.
+- **The next title waits until the quarter hour.** Continuity covers the gap, and the player says what's up next and when it starts. The week of programming stays a full week.
+
+### Fixed
+_seasonal curate replaces the shelf (#104)_
+- **Ask the professor to curate replaces the shelf.** On seasonal shelves (Halloween, Día de los Muertos, and every other grounded season), that button proposes a staff-pick list and applies it immediately. The old year-sorted keyword cards and a saved Explore snapshot of them do not stay on the shelf. A professor failure shows under the button instead of leaving the old picks in place with no message. Migration 54 adds `holiday_rail_shelf_mode` so a replaced shelf stays replaced.
+
+_live first paint (#105)_
+- **`/live` no longer waits on Tunarr before first paint.** `GET /api/live-channels/guide` and On Now return a disk-backed cached guide (kept across a restart) or a warming skeleton without blocking. Now-playing probes for that build run together under a 5s cap, so one sleepy station cannot hold the whole grid. The page shows its chrome and placeholder rows while the programmes fill in. The in-app guide window stays 6 hours. The week of programming Plex reads stays 7 days / `programmingHours` 168.
+
+_explore first paint (#106)_
+- **`/explore` waited on the slowest feed.** Local rails publish as they finish, and the page keeps their posters. The seasonal shelf fills in after that first paint. The Plex on-deck probe used by the hub is capped at 3 seconds and falls back to local progress. Curate-apply behavior from the seasonal-shelf fix is unchanged.
+
+_quarter-hour lineup pad (#107)_
+- **Live guide titles no longer sit on top of each other.** The next library title starts at the next :00, :15, :30, or :45 at or after the previous file ends. Continuity filler covers the gap. A title that ends at 9:39 has filler until 9:45; a title that ends on :15 starts the next one then. Shuffle stations publish that sequence instead of stacked random slots. While Continuity is on screen, the player shows "Up next: title at time". The week horizon stays 7 days / `programmingHours` 168. Existing on-air lineups keep the old overlapping starts until a station refill republishes them.
+
+### Verification
+- One full run on the merged #104 #105 #106 #107 tree: backend `pytest tests/` — 2553 passed, 6 skipped, coverage 76.98% (floor 74%), run with `PROJECTIONIST_SKIP_DOTENV=1`.
+- Frontend unit 938/938; lint 0 errors (149 warnings); `npm run build` OK.
+- Backend ruff clean on the same tree.
+
+## [1.37.33] — 2026-10-05
+
+One patch on 1.37.32: chat home and search keep the extra blocks closed until you open them.
+
+### Highlights
+- **Chat home opens on the question.** On This Day, a library glance, whispers, and saved shelves stay behind **More from home** until you open it.
+- **Search stays on the hits.** **Beyond your collection** stays closed under the results until you ask. Library browse still shows that block in the page.
+
+### Changed
+_collapse home and search extras (#102)_
+- **Chat home opens on the question.** On This Day, a library glance, whispers, and saved shelves stay behind **More from home** until you open it. The disclosure starts closed and does not stay open after a reload.
+- **Search stays on the hits.** On search, **Beyond your collection** — titles that are not already in the library, plus the note when that search is unavailable — stays closed under the results until you ask. Library browse with a query still shows that block inline.
+
+### Verification
+- One full run on the merged #102 tree shipped as 1.37.33: backend `pytest tests/` — 2540 passed, 6 skipped, coverage 76.99% (floor 74%), run with `PROJECTIONIST_SKIP_DOTENV=1`.
+- Frontend unit 934/934; lint 0 errors (151 pre-existing warnings); `npm run build` OK.
 
 ## [1.37.32] — 2026-10-04
 

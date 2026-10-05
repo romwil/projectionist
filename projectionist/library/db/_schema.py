@@ -1949,6 +1949,11 @@ class SchemaMigrationsMixin:
             CREATE INDEX IF NOT EXISTS idx_holiday_rail_titles_scope
                 ON holiday_rail_titles(scope_id, curation, pin_position);
 
+            CREATE TABLE IF NOT EXISTS holiday_rail_shelf_mode (
+                scope_id TEXT PRIMARY KEY,
+                replaces_matches INTEGER NOT NULL DEFAULT 0
+            );
+
             CREATE TABLE IF NOT EXISTS seasonal_rail_snapshots (
                 snapshot_date TEXT PRIMARY KEY,
                 scope_id TEXT NOT NULL,
@@ -2169,4 +2174,15 @@ class SchemaMigrationsMixin:
             conn.execute(
                 "ALTER TABLE holiday_rail_titles ADD COLUMN curator_note TEXT NOT NULL DEFAULT ''"
             )
+
+    def _migrate_holiday_rail_shelf_mode(self, conn: sqlite3.Connection) -> None:
+        """Per-scope flag: a professor curate replaces the keyword dump."""
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS holiday_rail_shelf_mode (
+                scope_id TEXT PRIMARY KEY,
+                replaces_matches INTEGER NOT NULL DEFAULT 0
+            )
+            """
+        )
 

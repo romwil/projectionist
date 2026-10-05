@@ -441,7 +441,7 @@ async def lifespan(_app: FastAPI):
             from projectionist.live_channels.guide_cache import prewarm_live_guide
             from projectionist.live_channels.status_cache import prewarm_live_channels_status
 
-            prewarm_live_guide(settings)
+            prewarm_live_guide(settings, manager.db)
             prewarm_live_channels_status(settings, manager.db)
             logger.info("Startup: first-paint caches prewarmed")
             from projectionist.live_channels.guide_horizon import maintain_guide_week
@@ -1226,15 +1226,20 @@ def _maybe_emit_explore_miss(payload: Any) -> None:
         pass
 
 
-def _sanitize_library_payload(payload: Any, user) -> Any:
+def _sanitize_library_payload(payload: Any, user, *, attach_watch: bool = True) -> Any:
     settings = _settings()
-    from projectionist.watch_tracker.store import attach_user_watch_summaries
+    if attach_watch:
+        from projectionist.watch_tracker.store import attach_user_watch_summaries
 
-    tracker_adopted = attach_user_watch_summaries(
-        _db(),
-        payload,
-        user_id=str(getattr(user, "id", "") or ""),
-    )
+        # One connection per poster. Fine for a title page; the Explore hub
+        # carries every rail at once and must not wait on that walk.
+        tracker_adopted = attach_user_watch_summaries(
+            _db(),
+            payload,
+            user_id=str(getattr(user, "id", "") or ""),
+        )
+    else:
+        tracker_adopted = payload
     sanitized = sanitize_library_payload(tracker_adopted, settings=settings, user=user)
     from projectionist.youth.apply import filter_payload_for_youth
 
@@ -2374,14 +2379,20 @@ def library_feed_explore_hub(
     # Sanitize nested rail items the same way individual feed routes do.
     rails = payload.get("rails") or {}
     sanitized_rails = {
-        key: _sanitize_library_payload(value, user) if isinstance(value, dict) else value
+        key: _sanitize_library_payload(value, user, attach_watch=False)
+        if isinstance(value, dict)
+        else value
         for key, value in rails.items()
     }
     payload = {
         **payload,
         "rails": sanitized_rails,
-        "overview": _sanitize_library_payload(payload.get("overview") or {}, user),
-        "health": _sanitize_library_payload(payload.get("health") or {}, user),
+        "overview": _sanitize_library_payload(
+            payload.get("overview") or {}, user, attach_watch=False
+        ),
+        "health": _sanitize_library_payload(
+            payload.get("health") or {}, user, attach_watch=False
+        ),
     }
     return payload
 
@@ -2582,6 +2593,7 @@ def library_feed_pick_for_me(
                 snap = get_on_now_snapshot(
                     settings,
                     youth_max_rating=resolve_youth_max_rating(settings),
+                    db=_db(),
                 )
                 payload["live_station"] = pick_youth_safe_live_station(
                     settings, snap.get("channels") or []

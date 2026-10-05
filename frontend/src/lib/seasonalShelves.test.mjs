@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   addShelfIdFirst,
+  curateClickPlan,
   inputToTerms,
   moveShelfId,
   seasonalCardMeta,
@@ -11,6 +12,7 @@ import {
   shelfFormFromItem,
   shelfPatchFromForm,
   shelfRoleLabel,
+  visibleCuratedShelf,
 } from "./seasonalShelves.js";
 
 test("moveShelfId moves one row and clamps at the ends", () => {
@@ -81,6 +83,55 @@ test("seasonal pick chat seed carries season, title, and curator note", () => {
   assert.match(seed, /lean gateway scream/);
   assert.match(seed, /professor/);
   assert.match(seed, /halloween/);
+});
+
+test("curate click applies picks for both seasons and surfaces a failure", () => {
+  const halloween = curateClickPlan({
+    proposal: {
+      picks: [
+        { library_item_id: 11, curator_note: "The doorway this year." },
+        { library_item_id: 12, note: "The quieter one." },
+      ],
+    },
+  });
+  assert.equal(halloween.ok, true);
+  assert.deepEqual(halloween.applyPicks, [
+    { library_item_id: 11, curator_note: "The doorway this year." },
+    { library_item_id: 12, curator_note: "The quieter one." },
+  ]);
+
+  const muertos = curateClickPlan({
+    proposal: {
+      picks: [{ library_item_id: 21, curator_note: "Why this ofrenda this year." }],
+    },
+  });
+  assert.equal(muertos.ok, true);
+  assert.equal(muertos.applyPicks[0].library_item_id, 21);
+
+  const failed = curateClickPlan({ error: "Curator request failed: model timeout" });
+  assert.equal(failed.ok, false);
+  assert.match(failed.message, /model timeout/);
+  assert.deepEqual(failed.applyPicks, []);
+
+  const empty = curateClickPlan({ proposal: { picks: [] } });
+  assert.equal(empty.ok, false);
+  assert.match(empty.message, /didn't return any picks/);
+});
+
+test("a curated shelf drops old keyword cards; a hand pin does not", () => {
+  const items = [
+    { id: 1, rail_role: "pin", curator_note: "Why this year." },
+    { id: 2, rail_role: "match", title: "Year sort dump" },
+    { id: 3, rail_role: "include", title: "Added by you" },
+  ];
+  assert.deepEqual(
+    visibleCuratedShelf(items, { replacesMatches: true }).map((row) => row.id),
+    [1, 3],
+  );
+  assert.deepEqual(
+    visibleCuratedShelf(items, { replacesMatches: false }).map((row) => row.id),
+    [1, 2, 3],
+  );
 });
 
 test("seasonal card meta prefers curator notes for Explore posters", () => {

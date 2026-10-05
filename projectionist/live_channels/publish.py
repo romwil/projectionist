@@ -1931,10 +1931,10 @@ def random_slot_schedule_for_programs(
 ) -> Dict[str, Any]:
     """Build a Tunarr ``RandomSlotSchedule`` from a resolved program pool.
 
-    Movie-heavy pools get a movie slot; TV episodes get per-show slots (capped).
-    Residual: Tunarr has no generic “shuffle this UUID list” slot — show slots
-    need ``showId``. When neither movies nor showIds resolve, callers fall back
-    to a shuffled manual lineup.
+    Not used when publishing station lineups. One movie slot plus a slot per
+    show shares a clock in Tunarr 1.3.9 and the next title can start before
+    the previous file ends. ``programming_body_for_recipe`` publishes a manual
+    lineup padded to the next quarter hour instead.
     """
     has_movie = False
     show_ids: List[str] = []
@@ -2131,16 +2131,20 @@ def programming_body_for_recipe(
     """Best-effort programming payload for ``POST …/programming``.
 
     Tunarr 1.3.x manual updates require ``lineup`` (array), not ``programs``.
-    Shuffle prefers ``type=random`` (RandomSlotSchedule) for continuous
-    reshuffle within the resolved pool when Tunarr can schedule the pool;
-    otherwise fall back to a shuffled manual lineup.
-    When ``pad_lineups`` is true, insert flex (≤ ``max_flex_ms``) toward :00/:30
-    on manual lineups (``padMs`` on random schedules).
+    Every station — including shuffle — is a manual lineup. Shuffle still
+    shuffles the resolved pool before this call; the published order is that
+    sequence, then it loops. Stacked random slots (one movie slot plus a slot
+    per show) let Tunarr start the next library title inside the previous
+    file, and the guide draws those intervals on top of each other.
+
+    When ``pad_lineups`` is true, flex fills from each title's end to the next
+    quarter hour (:00, :15, :30, :45). The week-long guide
+    (``GUIDE_HORIZON_DAYS`` / ``programmingHours`` 168) is unchanged: this does
+    not truncate the lineup or restore an end-of-day.
     """
     from projectionist.live_channels.filler import pad_lineup_with_flex
 
     content_lineup: List[Dict[str, Any]] = []
-    program_ids: List[str] = []
     for raw in programs or ():
         if not isinstance(raw, Mapping):
             continue
@@ -2152,30 +2156,6 @@ def programming_body_for_recipe(
         if not pid or duration < _MIN_PROGRAM_DURATION_MS:
             continue
         content_lineup.append({"type": "content", "id": pid, "duration": duration})
-        program_ids.append(pid)
-
-    mode = normalize_programming_mode(recipe.programming_mode)
-    # A padded queue keeps its order (playing block → padded items → loop); the
-    # random-slot schedule cannot express "these first, then those".
-    from projectionist.live_channels.queue_padding import has_queue_pad
-
-    queue_padded = has_queue_pad(programs or ())
-    use_random = mode == ProgrammingMode.SHUFFLE and program_ids and not queue_padded
-    if use_random:
-        from projectionist.live_channels.guide_horizon import GUIDE_HORIZON_DAYS
-
-        schedule = random_slot_schedule_for_programs(
-            programs or (),
-            max_flex_ms=max_flex_ms if pad_lineups else 0,
-            max_days=GUIDE_HORIZON_DAYS,
-            programming_mode=mode,
-        )
-        if schedule:
-            return {
-                "type": "random",
-                "programs": program_ids,
-                "schedule": schedule,
-            }
 
     if content_lineup:
         lineup = (
