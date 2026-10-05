@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Highlights
+- **Live opens on the guide.** `/live` paints the page immediately and fills the stations in, instead of sitting on a blank loading screen while the TV engine answers.
+
+### Fixed
+_live page first paint_
+- **`/live` no longer waits on Tunarr before first paint.** `GET /api/live-channels/guide` and On Now return a cached guide (kept across a restart) or a warming skeleton without blocking. Now-playing probes for that build run together under a 5s cap, so one sleepy station cannot hold the whole grid. The page shows its chrome and placeholder rows while the programmes fill in. The week of programming Plex reads is unchanged.
+
 ## [1.37.33] — 2026-10-05
 
 One patch on 1.37.32: chat home and search keep the extra blocks closed until you open them.
