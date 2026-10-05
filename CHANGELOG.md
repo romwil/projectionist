@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+- **Chat home opens on the question.** On This Day, a library glance, whispers, and saved shelves stay behind **More from home** until you open it.
+- **Search stays on the hits.** **Beyond your collection** — titles that are not already in the library, plus the note when that search is unavailable — stays closed under the results until you ask.
+
 ## [1.37.32] — 2026-10-04
 
 One patch on 1.37.31: Plex Live TV keeps a week of real programme titles so the evening grid does not go dark.
