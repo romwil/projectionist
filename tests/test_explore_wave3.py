@@ -443,6 +443,89 @@ class FeedHelperTests(unittest.TestCase):
                 with hub_mod._LOCK:
                     hub_mod._CACHE.clear()
 
+    def test_first_hub_response_paints_local_rails_while_slow_rails_hang(self) -> None:
+        """The call Explore waits on must return local shelves while seasonal and Plex are still hung.
+
+        A later poll is too late: the page treats the first response as the paint.
+        """
+        from projectionist.library import explore_hub as hub_mod
+
+        release = threading.Event()
+        started = {"seasonal": threading.Event(), "plex": threading.Event()}
+
+        def hang_seasonal(*_args, **_kwargs):
+            started["seasonal"].set()
+            release.wait(30)
+            return {
+                "feed": "seasonal-spotlight",
+                "items": [{"title": "Seasonal later"}],
+                "total": 1,
+                "note": None,
+            }
+
+        class _HangingPlex:
+            def __init__(self, *_args, **kwargs) -> None:
+                self.timeout = int(kwargs.get("timeout") or 0)
+
+            def on_deck(self, **_kwargs):
+                started["plex"].set()
+                release.wait(30)
+                return []
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_item(
+                {
+                    "rating_key": "fast-rail",
+                    "media_type": "movie",
+                    "title": "Fast Rail Title",
+                    "year": 2024,
+                    "added_at": int(time.time()),
+                }
+            )
+            invalidate_explore_hub_cache()
+            with hub_mod._LOCK:
+                hub_mod._CACHE.clear()
+            with hub_mod._REFRESH_LOCK:
+                hub_mod._REFRESHING.clear()
+            settings = Settings(plex_url="http://plex.test:32400", plex_token="token")
+            try:
+                with (
+                    patch.object(hub_mod, "feed_seasonal_spotlight", side_effect=hang_seasonal),
+                    patch.object(hub_mod, "PlexClient", _HangingPlex),
+                ):
+                    t0 = time.perf_counter()
+                    first = get_explore_hub(db, settings, rail_limit=8)
+                    elapsed = time.perf_counter() - t0
+                self.assertLess(elapsed, 1.0, f"first hub response blocked for {elapsed:.3f}s")
+                self.assertTrue(first.get("warming"))
+                fast_titles = [
+                    item.get("title") for item in first["rails"]["recently_added"]["items"]
+                ]
+                self.assertIn(
+                    "Fast Rail Title",
+                    fast_titles,
+                    "first hub payload had no local shelves while slow rails were still pending",
+                )
+                self.assertTrue(first["rails"]["seasonal_spotlight"].get("pending"))
+                self.assertTrue(first["rails"]["continue_watching"].get("pending"))
+                seasonal_titles = [
+                    item.get("title") for item in first["rails"]["seasonal_spotlight"]["items"]
+                ]
+                self.assertNotIn("Seasonal later", seasonal_titles)
+            finally:
+                release.set()
+                deadline = time.time() + 3.0
+                while time.time() < deadline:
+                    with hub_mod._REFRESH_LOCK:
+                        busy = bool(hub_mod._REFRESHING)
+                    if not busy:
+                        break
+                    time.sleep(0.05)
+                invalidate_explore_hub_cache()
+                with hub_mod._LOCK:
+                    hub_mod._CACHE.clear()
+
     def test_explore_hub_caps_plex_probe(self) -> None:
         from projectionist.library import explore_hub as hub_mod
 

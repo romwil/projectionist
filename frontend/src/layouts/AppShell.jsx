@@ -35,6 +35,7 @@ export default function AppShell({
   chrome,
   showPrimaryNav,
   inboxUnreadCount = 0,
+  blockUntilAuth = true,
 }) {
   const {
     authReady,
@@ -64,8 +65,10 @@ export default function AppShell({
 
   // useAuthGate failure-opens as owner until /auth/me settles. Never paint
   // PrimaryTopbar / owner-only chrome with those defaults — members briefly
-  // saw Admin. Chat (App.jsx) already waits on authReady; match that here.
-  if (!authReady) {
+  // saw Admin. Nav already returns no peers while authReady is false.
+  // Explore opts out: a full-viewport Loading… hid the shell until auth
+  // finished, and the hub request could not even start until then.
+  if (blockUntilAuth && !authReady) {
     return (
       <div className="app-root app-loading" data-testid={testId || "app-shell-auth-loading"}>
         <p className="login-lede">Loading…</p>
