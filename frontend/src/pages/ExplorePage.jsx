@@ -22,6 +22,7 @@ import { ROUTES, decadeYearRange, exploreSectionPath, libraryBrowsePath } from "
 import { formatLanguageName } from "../lib/languageNames.js";
 import { buildPulseStats, normalizeFeed } from "../lib/exploreFeeds.js";
 import {
+  exploreHubStillWarming,
   hubRailState,
   readExploreHubCache,
   writeExploreHubCache,
@@ -192,23 +193,25 @@ function useExploreHub() {
     let cancelled = false;
     let pollTimer = null;
     const WARMING_POLL_MS = 1200;
-    const WARMING_MAX_ATTEMPTS = 12;
+    const WARMING_MAX_ATTEMPTS = 30;
     const sessionPayload = cached?.payload || null;
 
     const fetchHub = (attempt = 0) => {
       getExploreHub({ limit: 12 })
         .then((payload) => {
           if (cancelled) return;
-          const warming = Boolean(payload?.warming) && !hubHasRailItems(payload);
+          const warming = exploreHubStillWarming(payload);
           if (warming) {
-            // Keep session cache / prior payload on screen while the server builds.
+            // Paint rails that have already landed. Keep a prior full payload
+            // only when this response is still an empty skeleton.
             setHub((prev) => {
+              const incomingReady = hubHasRailItems(payload);
               const keep =
-                (hubHasRailItems(prev.payload) && prev.payload) ||
-                (hubHasRailItems(sessionPayload) && sessionPayload) ||
+                (!incomingReady && hubHasRailItems(prev.payload) && prev.payload) ||
+                (!incomingReady && hubHasRailItems(sessionPayload) && sessionPayload) ||
                 null;
               return {
-                loading: !keep,
+                loading: false,
                 payload: keep || payload,
                 error: "",
                 fromCache: Boolean(keep),
@@ -217,7 +220,11 @@ function useExploreHub() {
             if (attempt < WARMING_MAX_ATTEMPTS) {
               pollTimer = window.setTimeout(() => fetchHub(attempt + 1), WARMING_POLL_MS);
             } else {
-              setHub((prev) => ({ ...prev, loading: false }));
+              setHub((prev) => ({
+                ...prev,
+                loading: false,
+                payload: prev.payload ? { ...prev.payload, warming: false } : prev.payload,
+              }));
             }
             return;
           }

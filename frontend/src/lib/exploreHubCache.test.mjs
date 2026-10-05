@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   clearExploreHubCache,
+  exploreHubStillWarming,
   hubRailState,
   readExploreHubCache,
   writeExploreHubCache,
@@ -46,5 +47,23 @@ describe("exploreHubCache", () => {
     assert.equal(state.items[0].episode_label, "S2E1");
     assert.equal(state.loading, false);
     assert.equal(state.meta.mode, "x");
+  });
+
+  it("paints ready rails while a slower rail is still pending", () => {
+    const payload = {
+      warming: true,
+      rails: {
+        recently_added: { items: [{ title: "Heat" }], pending: false },
+        seasonal_spotlight: { items: [], pending: true, note: "still matching" },
+      },
+    };
+    assert.equal(exploreHubStillWarming(payload), true);
+    const ready = hubRailState(payload, "recently_added", { loading: true });
+    assert.equal(ready.loading, false);
+    assert.equal(ready.items[0].title, "Heat");
+    const waiting = hubRailState(payload, "seasonal_spotlight");
+    assert.equal(waiting.loading, true);
+    assert.equal(waiting.items.length, 0);
+    assert.equal(waiting.note, null);
   });
 });

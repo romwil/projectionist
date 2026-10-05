@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Highlights
+- **Explore paints before the slow rails finish.** Recently added and the other local shelves show up while Continue Watching (Plex), the seasonal snapshot, and the full-library spotlights are still loading.
+
+### Fixed
+- **`/explore` waited on the slowest feed.** The hub cache already returned a warming skeleton, but it did not publish anything until Plex on-deck, the holiday/season scan, and the other full-library rails all finished — so the first screen stayed empty for the whole build. Local rails are now stored as they finish, the page keeps their posters, and the slower rails fill in on the next poll. The Plex on-deck probe used by the hub is capped at 3 seconds and falls back to local progress.
+
 ## [1.37.33] — 2026-10-05
 
 One patch on 1.37.32: chat home and search keep the extra blocks closed until you open them.
