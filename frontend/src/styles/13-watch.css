@@ -93,8 +93,8 @@ html:has([data-theater-mode="true"]) #root {
   z-index: 5;
   max-height: none;
   /* Single safe-area pad on the OSD host — do not also pad transport/inner. */
-  padding: 0 max(0.75rem, env(safe-area-inset-right, 0px)) max(0.65rem, env(safe-area-inset-bottom, 0px))
-    max(0.75rem, env(safe-area-inset-left, 0px));
+  padding: 0 max(0.75rem, env(safe-area-inset-right, 0px))
+    max(0.65rem, env(safe-area-inset-bottom, 0px)) max(0.75rem, env(safe-area-inset-left, 0px));
   box-sizing: border-box;
 }
 
@@ -216,7 +216,9 @@ html:has([data-theater-mode="true"]) #root {
   font-weight: 700;
   letter-spacing: 0.02em;
   cursor: pointer;
-  transition: transform 160ms ease, filter 160ms ease;
+  transition:
+    transform 160ms ease,
+    filter 160ms ease;
 }
 
 .theater-osd-play:hover,
@@ -337,7 +339,10 @@ html:has([data-theater-mode="true"]) #root {
   display: grid;
   place-items: center;
   backdrop-filter: blur(8px);
-  transition: transform 180ms ease, background 180ms ease, border-color 180ms ease;
+  transition:
+    transform 180ms ease,
+    background 180ms ease,
+    border-color 180ms ease;
 }
 
 .theater-center-play:hover,
@@ -414,7 +419,8 @@ html:has([data-theater-mode="true"]) #root {
   justify-content: center;
   gap: 1.1rem;
   background: rgba(5, 6, 8, 0.72);
-  z-index: 4;
+  /* Above .theater-osd (z-index 5) so Next Episode receives the click. */
+  z-index: 6;
   text-align: center;
   padding: 1.5rem;
 }
@@ -430,6 +436,14 @@ html:has([data-theater-mode="true"]) #root {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--accent);
+}
+
+.theater-end-note {
+  margin: 0;
+  max-width: 28rem;
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  color: var(--text);
 }
 
 .theater-resume-title {
@@ -528,8 +542,8 @@ html:has([data-theater-mode="true"]) #root {
 
   .library-watch--phone .theater-osd.live-osd,
   .library-watch--compact .theater-osd.live-osd {
-    padding: 0 max(0.5rem, env(safe-area-inset-right, 0px)) max(0.35rem, env(safe-area-inset-bottom, 0px))
-      max(0.5rem, env(safe-area-inset-left, 0px));
+    padding: 0 max(0.5rem, env(safe-area-inset-right, 0px))
+      max(0.35rem, env(safe-area-inset-bottom, 0px)) max(0.5rem, env(safe-area-inset-left, 0px));
   }
 
   .library-watch--phone .theater-osd-inner,

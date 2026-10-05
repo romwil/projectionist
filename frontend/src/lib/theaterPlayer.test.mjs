@@ -11,8 +11,14 @@ import {
   clampTime,
   createStageGesture,
   formatClockMs,
+  EXPLORE_PATH,
+  NEXT_EPISODE_MISSING_MESSAGE,
+  NEXT_EPISODE_UNAVAILABLE_MESSAGE,
   libraryWatchPath,
   libraryWatchPopoutPath,
+  nextEpisodeEndCardAction,
+  runEndCardBackToExplore,
+  runNextEpisodeEndCard,
   libraryWatchTo,
   msFromScrubPct,
   notePlayingBeforeHide,
@@ -234,4 +240,76 @@ test("toggleTheaterFullscreen uses immersive CSS when requestFullscreen is missi
   assert.equal(toggleTheaterFullscreen(root), "exit");
   assert.equal(root.classList.contains("theater-player--immersive"), false);
   assert.equal(toggleTheaterFullscreen(null), "noop");
+});
+
+test("Next Episode control opens the in-app watch route", () => {
+  const calls = [];
+  const messages = [];
+  const decision = runNextEpisodeEndCard(
+    { rating_key: "ep-2", play_rating_key: "ep-2-play" },
+    "ep-1",
+    {
+      navigate: (path) => calls.push(path),
+      onMessage: (message) => messages.push(message),
+    },
+  );
+  assert.equal(decision.action, "play");
+  assert.equal(decision.path, "/watch/ep-2-play");
+  assert.deepEqual(calls, ["/watch/ep-2-play"]);
+  assert.deepEqual(messages, []);
+});
+
+test("missing next episode surfaces a message instead of navigating", () => {
+  const calls = [];
+  const messages = [];
+  for (const next of [null, undefined, {}, { rating_key: "  " }, { rating_key: "" }]) {
+    const decision = runNextEpisodeEndCard(next, "ep-1", {
+      navigate: (path) => calls.push(path),
+      onMessage: (message) => messages.push(message),
+    });
+    assert.equal(decision.action, "message");
+    assert.equal(decision.message, NEXT_EPISODE_MISSING_MESSAGE);
+  }
+  assert.deepEqual(calls, []);
+  assert.ok(messages.length >= 1);
+  assert.ok(messages.every((message) => message === NEXT_EPISODE_MISSING_MESSAGE));
+});
+
+test("Next Episode on the current watch route surfaces a message instead of a no-op", () => {
+  const calls = [];
+  const messages = [];
+  const decision = nextEpisodeEndCardAction({ rating_key: "ep-9" }, "ep-9");
+  assert.equal(decision.action, "message");
+  assert.equal(decision.message, NEXT_EPISODE_UNAVAILABLE_MESSAGE);
+  const ran = runNextEpisodeEndCard({ rating_key: "abc/1" }, "abc/1", {
+    navigate: (path) => calls.push(path),
+    onMessage: (message) => messages.push(message),
+  });
+  assert.equal(ran.action, "message");
+  assert.deepEqual(calls, []);
+  assert.deepEqual(messages, [NEXT_EPISODE_UNAVAILABLE_MESSAGE]);
+});
+
+test("Back to Explore opens /explore even when Next Episode cannot start", () => {
+  const calls = [];
+  const messages = [];
+  const next = runNextEpisodeEndCard(null, "ep-1", {
+    navigate: (path) => calls.push(path),
+    onMessage: (message) => messages.push(message),
+  });
+  assert.equal(next.action, "message");
+  assert.equal(messages[0], NEXT_EPISODE_MISSING_MESSAGE);
+  const back = runEndCardBackToExplore({
+    navigate: (path) => calls.push(path),
+  });
+  assert.equal(back.action, "explore");
+  assert.equal(back.path, EXPLORE_PATH);
+  assert.deepEqual(calls, ["/explore"]);
+  const sameRoute = runNextEpisodeEndCard({ rating_key: "ep-9" }, "ep-9", {
+    navigate: (path) => calls.push(`next:${path}`),
+    onMessage: () => {},
+  });
+  assert.equal(sameRoute.action, "message");
+  runEndCardBackToExplore({ navigate: (path) => calls.push(path) });
+  assert.deepEqual(calls, ["/explore", "/explore"]);
 });

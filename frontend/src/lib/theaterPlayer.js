@@ -83,9 +83,7 @@ export function bufferedRanges(video) {
 
 export function isTheaterChromeTarget(target) {
   if (!target || typeof target.closest !== "function") return false;
-  return Boolean(
-    target.closest("button, a, input, [role='slider'], [data-theater-chrome='true']"),
-  );
+  return Boolean(target.closest("button, a, input, [role='slider'], [data-theater-chrome='true']"));
 }
 
 /**
@@ -238,7 +236,10 @@ export function isDocumentFullscreen() {
  * which would hide custom OSD controls.
  * @returns {"exit"|"enter"|"immersive"|"noop"}
  */
-export function toggleTheaterFullscreen(root, { immersiveClass = "theater-player--immersive" } = {}) {
+export function toggleTheaterFullscreen(
+  root,
+  { immersiveClass = "theater-player--immersive" } = {},
+) {
   if (!root) return "noop";
   const hasDocument = typeof document !== "undefined";
   const immersive = Boolean(immersiveClass && root.classList?.contains?.(immersiveClass));
@@ -288,3 +289,56 @@ export function toggleTheaterFullscreen(root, { immersiveClass = "theater-player
   return "noop";
 }
 
+/** Shown on the end card when the series has no later episode in the library. */
+export const NEXT_EPISODE_MISSING_MESSAGE = "That’s the last episode in your library.";
+
+/** Shown on the end card when Next Episode cannot open the watch route. */
+export const NEXT_EPISODE_UNAVAILABLE_MESSAGE = "Couldn’t start the next episode.";
+
+function episodePlayRatingKey(item) {
+  return String(item?.play_rating_key || item?.rating_key || item?.plex_rating_key || "").trim();
+}
+
+/**
+ * Decide what the end-card Next Episode control should do.
+ * `play` opens the in-app watch route. `message` is a visible failure, never a no-op.
+ * @returns {{ action: "play", path: string, ratingKey: string } | { action: "message", message: string }}
+ */
+export function nextEpisodeEndCardAction(next, currentRatingKey = "") {
+  const ratingKey = episodePlayRatingKey(next);
+  const path = libraryWatchPath(ratingKey);
+  if (!path) {
+    return { action: "message", message: NEXT_EPISODE_MISSING_MESSAGE };
+  }
+  const currentPath = libraryWatchPath(currentRatingKey);
+  if (currentPath && path === currentPath) {
+    return { action: "message", message: NEXT_EPISODE_UNAVAILABLE_MESSAGE };
+  }
+  return { action: "play", path, ratingKey };
+}
+
+/**
+ * Run the end-card Next Episode control.
+ * Plays via `navigate(watchPath)` or surfaces `onMessage` when playback cannot start.
+ */
+export function runNextEpisodeEndCard(next, currentRatingKey = "", { navigate, onMessage } = {}) {
+  const decision = nextEpisodeEndCardAction(next, currentRatingKey);
+  if (decision.action === "play") {
+    if (typeof navigate === "function") navigate(decision.path);
+    return decision;
+  }
+  if (typeof onMessage === "function") onMessage(decision.message);
+  return decision;
+}
+
+/** In-app Explore route. End card uses this to leave the player. */
+export const EXPLORE_PATH = "/explore";
+
+/**
+ * Leave the end card for Explore. Independent of whether Next Episode can play.
+ * @returns {{ action: "explore", path: string }}
+ */
+export function runEndCardBackToExplore({ navigate } = {}) {
+  if (typeof navigate === "function") navigate(EXPLORE_PATH);
+  return { action: "explore", path: EXPLORE_PATH };
+}
