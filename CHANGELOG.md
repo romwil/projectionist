@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **`/explore` still sat on a loading screen after the first-paint hub.** The full-viewport “Loading…” gate is the auth shell (`AppShell`): it hid the page, so the hub request could not start until `/api/features` and `/api/auth/me` returned. The first hub payload was also an empty warming skeleton — local shelves were only published on a later poll, and that publish waited on the library-wide pulse scan before Continue Watching, On This Day, and the seasonal shelf. A warm cached hub then walked every poster for watch-tracker summaries before the response could finish. Explore now paints its shell immediately (`blockUntilAuth={false}`; nav stays empty until auth is ready). The first `GET /api/library/feeds/hub` response includes the local SQL shelves and leaves Plex on-deck, the full-library spotlights, and the seasonal snapshot pending. Those still fill in on the next poll. The hub response does not open a database connection per poster. Seasonal curate-apply and the Live quarter-hour path are unchanged.
+
 ## [1.37.34] — 2026-10-05
 
 One patch on 1.37.33: seasonal curate replaces the shelf, Live and Explore paint before the slow work finishes, and the next library title starts on the quarter hour with Continuity in the gap.
