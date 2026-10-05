@@ -1,6 +1,37 @@
 {
-  "generated_at": "2026-10-05T20:55:05Z",
+  "generated_at": "2026-10-05T22:00:20Z",
   "releases": [
+    {
+      "version": "1.37.35",
+      "date": "2026-10-05",
+      "summary": "One patch on 1.37.34: the end card starts the next episode or says why it cannot, Back to Explore leaves the player, Explore no longer sits on a loading screen, Plex sign-in catches up when the PIN is linked, and Surprising matches need a story you can name.",
+      "highlights": [
+        "**Next episode plays, and you can go back.** Next Episode starts the following episode in Play. If it cannot, the card says why. Back to Explore returns to the site.",
+        "**Explore opens without the long loading screen.** Shelves show up while the slower rails finish, instead of a full-page Loading… through the whole wait.",
+        "**Sign-in catches up with Plex.** Once Plex links the PIN, Projectionist opens your household instead of staying on waiting.",
+        "**Surprising matches share a story.** A neighbor lands on Surprising only when the plots connect in a way we can say in one sentence."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "**Next Episode did nothing.** The watch player kept the finished episode's end card after the route changed (`ended` stayed true, so the stream was withheld). The click now opens `/watch/…` for the next episode and that episode starts. If there is no next episode, or playback cannot start, the card says so. **Back to Explore** leaves the player for `/explore`, including when Next Episode cannot start.",
+            "**`/explore` still sat on a loading screen after the first-paint hub.** The full-viewport “Loading…” gate is the auth shell (`AppShell`): it hid the page, so the hub request could not start until `/api/features` and `/api/auth/me` returned. The first hub payload was also an empty warming skeleton — local shelves were only published on a later poll, and that publish waited on the library-wide pulse scan before Continue Watching, On This Day, and the seasonal shelf. A warm cached hub then walked every poster for watch-tracker summaries before the response could finish. Explore now paints its shell immediately (`blockUntilAuth={false}`; nav stays empty until auth is ready). The first `GET /api/library/feeds/hub` response includes the local SQL shelves and leaves Plex on-deck, the full-library spotlights, and the seasonal snapshot pending. Those still fill in on the next poll. The hub response does not open a database connection per poster. Seasonal curate-apply and the Live quarter-hour path are unchanged.",
+            "**Sign in with Plex catches up as soon as Plex does.** The PIN check could sit for 20 seconds, so Projectionist still looked like it was waiting after Plex showed you could close the window. It now checks immediately, about once a second, and opens your household session as soon as Plex links the PIN. Watchlist sync follows behind that.",
+            "**Surprising plot neighbors were circular.** A title could land on Surprising because genre, keyword, and credit labels barely overlapped — including when the plot was empty or the stories did not actually meet — and the card said so. Missing shelf labels were scored as zero overlap, so that absence became the rank. Surprising now requires a named plot kinship plus genuinely low shelf overlap. The why text leads with that kinship; low overlap can only follow it. Ordinary neighbors stay on Similar. A title is left out of its own similar row."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "One full run on the merged #109 #100 #101 #110 tree: backend `pytest tests/` — 2563 passed, 6 skipped, coverage 77.03% (floor 74%), run with `PROJECTIONIST_SKIP_DOTENV=1`.",
+            "Frontend unit 949/949; lint 0 errors (149 warnings).",
+            "`node --test frontend/src/lib/theaterPlayer.test.mjs` is included in that unit run: Next Episode opens `/watch/…`, a missing next episode surfaces a message, and Back to Explore opens `/explore` even then.",
+            "`tests/test_explore_wave3.py` is included in the pytest run."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.34",
       "date": "2026-10-05",
