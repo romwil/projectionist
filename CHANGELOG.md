@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Live guide titles no longer sit on top of each other.** The next library title starts when the previous one ends, then Continuity filler runs until the next quarter hour (:00, :15, :30, :45). A title that ends at 9:39 has filler until 9:45; a title that ends on :15 starts the next one then. Shuffle stations publish that sequence instead of stacked random slots, so Alien finishes before Alien³. The week-long guide (seven days) is unchanged.
+- **Filler lower-third is back.** While Continuity is on screen, the player shows Up next: the next episode or movie at its quarter-hour start.
+
 ## [1.37.33] — 2026-10-05
 
 One patch on 1.37.32: chat home and search keep the extra blocks closed until you open them.
