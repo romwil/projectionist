@@ -75,8 +75,7 @@ export default function SurprisingNeighborsShowcase({
               </ul>
             ) : (
               <p className="surprise-showcase-detail status status-secondary">
-                High plot similarity with lower genre/keyword/credit overlap than
-                obvious shelfmates.
+                A story link is not ready for this neighbor yet.
               </p>
             )}
           </div>

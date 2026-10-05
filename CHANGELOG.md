@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Highlights
+- **Surprising matches have to share a story.** The Surprising tab keeps a title only when the plots connect in a way we can say in one sentence. "Nothing in common" is no longer the recommendation.
+
+### Fixed
+- **Surprising plot neighbors were circular.** A title could land on Surprising because genre, keyword, and credit labels barely overlapped — including when the plot was empty or the stories did not actually meet — and the card said so. Missing shelf labels were scored as zero overlap, so that absence became the rank. Surprising now requires a named plot kinship plus genuinely low shelf overlap. The why text leads with that kinship; low overlap can only follow it. Ordinary neighbors stay on Similar. A title is left out of its own similar row.
+
 ## [1.37.32] — 2026-10-04
 
 One patch on 1.37.31: Plex Live TV keeps a week of real programme titles so the evening grid does not go dark.

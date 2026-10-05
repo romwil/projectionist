@@ -1276,6 +1276,19 @@ def neighbors_payload(
             if isinstance(parsed, list):
                 seed_genres = [str(g) for g in parsed if g]
     items: List[Dict[str, Any]] = []
+    surprise_link = None
+    seed_labels: set[str] = set()
+    seed_plot = ""
+    if normalized == "surprising":
+        from projectionist.library.neighbors import (
+            measured_metadata_overlap,
+            metadata_overlap_tokens,
+        )
+        from projectionist.library.plot_kinship import plot_blob, surprising_plot_link
+
+        surprise_link = surprising_plot_link
+        seed_labels = metadata_overlap_tokens(seed)
+        seed_plot = plot_blob(seed)
     for neighbor in neighbor_rows:
         item = _feed_item(neighbor)
         # Prefer neighbor_id as the related title's library id.
@@ -1294,7 +1307,26 @@ def neighbors_payload(
             item["metadata_overlap"] = None
         item["overview"] = str(neighbor["summary"] or "") if "summary" in neighbor.keys() else ""
         item["in_library"] = True
+        if normalized == "surprising" and surprise_link is not None:
+            peer_labels = metadata_overlap_tokens(neighbor)
+            link = surprise_link(
+                cosine=score,
+                overlap=measured_metadata_overlap(seed_labels, peer_labels),
+                seed_text=seed_plot,
+                peer_text=plot_blob(neighbor),
+                shelf_labels=seed_labels | peer_labels,
+            )
+            if link is None:
+                continue
+            item["plot_link"] = link["sentence"]
+            item["shelf_note"] = link["shelf_note"]
         items.append(item)
+    if items:
+        note = None
+    elif normalized == "surprising" and neighbor_rows:
+        note = "No surprising story link is ready for this title."
+    else:
+        note = "Empty — plot_neighbors cache not built yet for this title."
     return {
         "item_id": int(item_id),
         "seed": {
@@ -1307,11 +1339,7 @@ def neighbors_payload(
         "mode": normalized,
         "items": items,
         "total": len(items),
-        "note": (
-            None
-            if items
-            else "Empty — plot_neighbors cache not built yet for this title."
-        ),
+        "note": note,
     }
 
 

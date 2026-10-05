@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { getTitleRelations } from "../api/client";
-import { relationWhyCopy, relatedTitlesPath } from "../lib/relationUx.js";
+import { isSurprisingRelation, relationWhyCopy, relatedTitlesPath } from "../lib/relationUx.js";
 import { titleDetailPath } from "../lib/titleLinks.js";
 import PosterOverlayControls from "./PosterOverlayControls";
 import TitleDetailLink from "./TitleDetailLink";
@@ -80,7 +80,7 @@ export default function TitleNeighborsRails({
   const plotEdges = (relations || []).filter((edge) => edge.relation === "neighbor");
   const neighbors =
     neighborMode === "surprising"
-      ? plotEdges.filter((edge) => edge.why?.surprise_flavor)
+      ? plotEdges.filter((edge) => isSurprisingRelation(edge))
       : plotEdges;
   const showNeighbors = plotEdges.length > 0;
   const relatedPath = relatedTitlesPath(detail);
@@ -222,7 +222,7 @@ export default function TitleNeighborsRails({
           </div>
           {neighborMode === "surprising" ? (
             <p className="title-neighbors-intro" data-testid="title-neighbors-surprise-intro">
-              Strong plot kinship with little overlap in genre, keyword, or filmmaker labels.
+              A story connection the shelf would not suggest. A title is included only when we can say what the plots share.
             </p>
           ) : null}
           {neighborMode === "surprising" && !neighbors.length ? (

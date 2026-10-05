@@ -60,8 +60,28 @@ def metadata_overlap_tokens(
     return tokens
 
 
+def measured_metadata_overlap(
+    left: Set[str] | Set[int],
+    right: Set[str] | Set[int],
+) -> Optional[float]:
+    """Shelf Jaccard when both sides actually have labels.
+
+    Empty label sets are unknown overlap. Scoring them as 0 made
+    ``surprise_score`` equal the cosine, so missing shelf data ranked as
+    maximally surprising.
+    """
+    if not left or not right:
+        return None
+    return jaccard(left, right)
+
+
 def surprise_score(cosine: float, overlap: float) -> float:
-    """High cosine with low metadata/credit overlap → surprising neighbor."""
+    """High cosine with low metadata/credit overlap → higher surprise rank.
+
+    Callers must pass a measured overlap. Unknown (missing) labels are not
+    zero overlap — use ``measured_metadata_overlap`` and skip this when it
+    returns None.
+    """
     cosine = max(0.0, min(1.0, float(cosine)))
     overlap = max(0.0, min(1.0, float(overlap)))
     return cosine * (1.0 - overlap)
@@ -83,8 +103,9 @@ def compute_neighbors_for_seed(
         score = cosine_similarity(seed_vector, vector)
         if score <= 0:
             continue
-        overlap = jaccard(seed_tokens, tokens)
-        scored.append((neighbor_id, score, surprise_score(score, overlap)))
+        overlap = measured_metadata_overlap(seed_tokens, tokens)
+        surprise = 0.0 if overlap is None else surprise_score(score, overlap)
+        scored.append((neighbor_id, score, surprise))
     scored.sort(key=lambda item: item[1], reverse=True)
     return scored[: max(1, int(top_k))]
 
