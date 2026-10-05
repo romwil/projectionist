@@ -30,6 +30,8 @@ from starlette.responses import JSONResponse
 
 from projectionist.config_store import Settings, load_merged_settings
 from projectionist.connectors.plex_account import (
+    PLEX_PIN_CONFIRM_TIMEOUT_SECONDS,
+    PLEX_PIN_POLL_TIMEOUT_SECONDS,
     create_plex_pin,
     fetch_plex_account,
     fetch_plex_pin,
@@ -672,26 +674,116 @@ def start_plex_pin_login(
     }
 
 
+def _plex_pin_check_still_pending(error: BaseException) -> bool:
+    """A hung plex.tv status read is not a failed login. Keep polling.
+
+    The message comes from our HTTP helper (sanitized URL, no auth token).
+    """
+    text = str(error).lower()
+    return "timeout" in text or "timed out" in text
+
+
+def _load_plex_pin_status(pin_id: int, client_id: str) -> Optional[Dict[str, Any]]:
+    """One PIN status read. None means still waiting (including a short timeout)."""
+    try:
+        pin = fetch_plex_pin(
+            int(pin_id),
+            client_id,
+            timeout=PLEX_PIN_POLL_TIMEOUT_SECONDS,
+        )
+    except Exception as error:  # noqa: BLE001
+        if _plex_pin_check_still_pending(error):
+            logger.debug("Plex PIN status check still waiting pin_id=%s", int(pin_id))
+            return None
+        raise HTTPException(status_code=502, detail=f"Could not check Plex login: {error}") from error
+    if not isinstance(pin, dict):
+        return None
+    return pin
+
+
+def _pin_auth_token(pin: Dict[str, Any]) -> str:
+    return str(pin.get("authToken") or pin.get("auth_token") or "").strip()
+
+
+_followup_threads_lock = threading.Lock()
+_followup_threads: List[threading.Thread] = []
+
+
+def finish_plex_login_followups(db: Database, user_id: str) -> None:
+    """Avatar cache and watchlist pull after the household session is already issued."""
+    settings = _settings()
+    try:
+        row = db.get_user(user_id)
+        if row is not None:
+            keys = set(row.keys()) if hasattr(row, "keys") else set()
+            remote = str(row["avatar_url"] or "").strip() if "avatar_url" in keys else ""
+            if remote.startswith(("http://", "https://")):
+                from projectionist.web.avatars import cache_remote_avatar
+
+                cached = cache_remote_avatar(user_id, remote)
+                if cached:
+                    db.update_user_profile(user_id, avatar_url=cached)
+    except Exception:
+        logger.debug("Could not cache Plex avatar after login", exc_info=True)
+    try:
+        from projectionist.watchlist.plex_sync import maybe_pull_on_login
+
+        maybe_pull_on_login(db, settings, user_id=user_id)
+    except Exception:
+        logger.debug("Could not sync Plex watchlist after login", exc_info=True)
+
+
+def schedule_plex_login_followups(db: Database, user_id: str) -> None:
+    """Run login side effects off the PIN poll response."""
+    thread = threading.Thread(
+        target=finish_plex_login_followups,
+        args=(db, str(user_id)),
+        name="plex-login-followup",
+        daemon=True,
+    )
+    with _followup_threads_lock:
+        _followup_threads.append(thread)
+    thread.start()
+
+
+def join_plex_login_followups(timeout: float = 2.0) -> None:
+    """Test helper: wait briefly so a follow-up thread is not still using the DB."""
+    with _followup_threads_lock:
+        threads = list(_followup_threads)
+        _followup_threads.clear()
+    for thread in threads:
+        thread.join(timeout=timeout)
+
+
 def poll_plex_pin_login(pin_id: int, request: Request, db: Database) -> Optional[CurrentUser]:
     """Poll plex.tv PIN once. Returns CurrentUser when authorized, else None.
 
     Login/join only. Does not bind Plex onto an existing local-password user —
     that is ``link_plex_identity``.
+
+    A linked PIN returns as soon as plex.tv reports the auth token. Watchlist
+    sync and avatar caching run after that, not inside this response.
     """
     enforce_rate_limit(request, bucket="auth_plex_pin_poll", limit=60, window_seconds=60)
     _ensure_plex_login_enabled()
     invite_token = _require_pin_nonce(pin_id, request, consume=False)
     client_id = get_or_create_client_id(_data_dir())
-    try:
-        pin = fetch_plex_pin(int(pin_id), client_id)
-    except Exception as error:  # noqa: BLE001
-        raise HTTPException(status_code=502, detail=f"Could not check Plex login: {error}") from error
+    pin = _load_plex_pin_status(int(pin_id), client_id)
+    if pin is None:
+        return None
 
-    auth_token = pin.get("authToken") or pin.get("auth_token")
+    auth_token = _pin_auth_token(pin)
     if not auth_token:
         return None
     invite_token = _require_pin_nonce(pin_id, request, consume=True)
-    return authenticate_plex_user(str(auth_token), db, invite_token=invite_token)
+    user = authenticate_plex_user(
+        auth_token,
+        db,
+        invite_token=invite_token,
+        defer_followups=True,
+    )
+    schedule_plex_login_followups(db, user.id)
+    return user
 
 
 def peek_plex_pin_authorized(pin_id: int, request: Request) -> bool:
@@ -700,11 +792,10 @@ def peek_plex_pin_authorized(pin_id: int, request: Request) -> bool:
     _ensure_plex_login_enabled()
     _require_pin_nonce(pin_id, request, consume=False)
     client_id = get_or_create_client_id(_data_dir())
-    try:
-        pin = fetch_plex_pin(int(pin_id), client_id)
-    except Exception as error:  # noqa: BLE001
-        raise HTTPException(status_code=502, detail=f"Could not check Plex login: {error}") from error
-    return bool(pin.get("authToken") or pin.get("auth_token"))
+    pin = _load_plex_pin_status(int(pin_id), client_id)
+    if pin is None:
+        return False
+    return bool(_pin_auth_token(pin))
 
 
 def link_plex_identity(
@@ -735,7 +826,11 @@ def link_plex_identity(
     _require_pin_nonce(pin_id, request, consume=False)
     client_id = get_or_create_client_id(_data_dir())
     try:
-        pin = fetch_plex_pin(int(pin_id), client_id)
+        pin = fetch_plex_pin(
+            int(pin_id),
+            client_id,
+            timeout=PLEX_PIN_CONFIRM_TIMEOUT_SECONDS,
+        )
     except Exception as error:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Could not check Plex login: {error}") from error
     auth_token = pin.get("authToken") or pin.get("auth_token")
@@ -797,6 +892,7 @@ def authenticate_plex_user(
     db: Database,
     *,
     invite_token: Optional[str] = None,
+    defer_followups: bool = False,
 ) -> CurrentUser:
     settings = _ensure_plex_login_enabled()
 
@@ -872,7 +968,7 @@ def authenticate_plex_user(
     stored_avatar = avatar_url
     if find_local_avatar_file(user_id):
         stored_avatar = local_avatar_api_path(user_id)
-    elif avatar_url:
+    elif avatar_url and not defer_followups:
         cached = cache_remote_avatar(user_id, avatar_url)
         if cached:
             stored_avatar = cached
@@ -913,7 +1009,9 @@ def authenticate_plex_user(
         from projectionist.watchlist.plex_sync import maybe_pull_on_login
 
         db.set_user_plex_token_enc(str(user_row["id"]), encrypt_plex_token(cleaned))
-        maybe_pull_on_login(db, settings, user_id=str(user_row["id"]))
+        # PIN login returns the session first; the poll schedules this itself.
+        if not defer_followups:
+            maybe_pull_on_login(db, settings, user_id=str(user_row["id"]))
     except Exception:
         logger.debug("Could not persist/sync Plex watchlist token", exc_info=True)
     resolved_avatar = resolve_avatar_url(str(user_row["id"]), user_row.get("avatar_url"))

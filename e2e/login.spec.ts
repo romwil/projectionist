@@ -43,7 +43,8 @@ test.describe("Login flow", () => {
     await page.goto("/login");
     await expect(page.getByTestId("login-page")).toBeVisible();
     await page.getByTestId("sign-in-with-plex").click();
-    await expect(page.getByTestId("plex-pin-waiting")).toBeVisible();
+    // The mock links the PIN as soon as it is created. The first check is immediate,
+    // so the waiting card may never paint. Login still has to land on chat.
     // Post-login home is the chat workspace (`/` redirects to `/chat`).
     await expect(page).toHaveURL(/\/(chat)?$/);
     await page.getByTestId("composer-input").waitFor();

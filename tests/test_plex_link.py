@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from projectionist.web.auth import _hash_password, clear_pin_bindings
+from projectionist.web.auth import _hash_password, clear_pin_bindings, join_plex_login_followups
 from projectionist.web.rate_limit import clear_rate_limits
 from projectionist.web.session_tokens import clear_session_secret_cache
 
@@ -66,6 +66,7 @@ class PlexLinkTests(unittest.TestCase):
     def tearDown(self) -> None:
         import projectionist.web.jobs as jobs
 
+        join_plex_login_followups(timeout=2.0)
         jobs._manager = None
         clear_session_secret_cache()
         clear_rate_limits()

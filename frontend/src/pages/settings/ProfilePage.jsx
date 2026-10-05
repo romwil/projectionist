@@ -14,6 +14,7 @@ import SettingsPageHeader from "../../components/settings/SettingsPageHeader";
 import SettingsPanel from "../../components/settings/SettingsPanel";
 import WeatherLocationPicker from "../../components/weather/WeatherLocationPicker";
 import UserAvatar from "../../components/UserAvatar";
+import { startPlexPinPoll } from "../../lib/plexPinPoll";
 import {
   applyUiFontSize,
   applyUiTheme,
@@ -83,13 +84,13 @@ export default function ProfilePage() {
 
   useEffect(() => {
     return () => {
-      if (linkPollRef.current) clearTimeout(linkPollRef.current);
+      if (typeof linkPollRef.current === "function") linkPollRef.current();
     };
   }, []);
 
   function stopLinkWait() {
-    if (linkPollRef.current) {
-      clearTimeout(linkPollRef.current);
+    if (typeof linkPollRef.current === "function") {
+      linkPollRef.current();
       linkPollRef.current = null;
     }
     setLinkWaiting(false);
@@ -97,26 +98,28 @@ export default function ProfilePage() {
   }
 
   function scheduleLinkPoll(pinId, deadline) {
-    linkPollRef.current = setTimeout(async () => {
-      try {
-        if (Date.now() >= deadline) {
-          stopLinkWait();
-          setStatus({ type: "error", message: "Plex sign-in timed out. Try again." });
-          return;
-        }
-        const result = await pollPlexPinLogin(pinId, { peek: true });
-        if (result?.authorized) {
-          setLinkAuthorized(true);
-          setLinkWaiting(false);
-          setLinkBusy(false);
-          return;
-        }
-        scheduleLinkPoll(pinId, deadline);
-      } catch (error) {
+    if (typeof linkPollRef.current === "function") {
+      linkPollRef.current();
+    }
+    linkPollRef.current = startPlexPinPoll({
+      deadline,
+      peek: true,
+      poll: () => pollPlexPinLogin(pinId, { peek: true }),
+      onSuccess: () => {
+        linkPollRef.current = null;
+        setLinkAuthorized(true);
+        setLinkWaiting(false);
+        setLinkBusy(false);
+      },
+      onTimeout: () => {
+        stopLinkWait();
+        setStatus({ type: "error", message: "Plex sign-in timed out. Try again." });
+      },
+      onError: (error) => {
         stopLinkWait();
         setStatus({ type: "error", message: error.message || "Could not check Plex." });
-      }
-    }, 1000);
+      },
+    });
   }
 
   async function handleStartLinkPlex() {
