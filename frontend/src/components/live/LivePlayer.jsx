@@ -934,9 +934,9 @@ export default function LivePlayer({
                 </p>
               ) : null}
             </div>
-            {flexL3.countdown ? (
-              <p className="live-flex-l3-countdown" data-testid="live-flex-l3-countdown">
-                {flexL3.countdown}
+            {flexL3.time ? (
+              <p className="live-flex-l3-countdown" data-testid="live-flex-l3-time">
+                at {flexL3.time}
               </p>
             ) : null}
           </div>

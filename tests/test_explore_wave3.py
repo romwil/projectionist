@@ -7,6 +7,7 @@ import json
 import os
 import sqlite3
 import tempfile
+import threading
 import time
 import unittest
 from datetime import date
@@ -370,6 +371,98 @@ class FeedHelperTests(unittest.TestCase):
                 time.sleep(0.05)
             else:
                 self.fail("background hub refresh never completed")
+
+    def test_explore_hub_publishes_fast_rails_while_seasonal_hangs(self) -> None:
+        """The first screen must not wait on the seasonal snapshot / library scan."""
+        from projectionist.library import explore_hub as hub_mod
+
+        release = threading.Event()
+        started = threading.Event()
+
+        def hang_seasonal(*_args, **_kwargs):
+            started.set()
+            release.wait(8)
+            return {
+                "feed": "seasonal-spotlight",
+                "items": [{"title": "Seasonal later"}],
+                "total": 1,
+                "note": None,
+            }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_item(
+                {
+                    "rating_key": "fast-rail",
+                    "media_type": "movie",
+                    "title": "Fast Rail Title",
+                    "year": 2024,
+                    "added_at": int(time.time()),
+                }
+            )
+            invalidate_explore_hub_cache()
+            with hub_mod._LOCK:
+                hub_mod._CACHE.clear()
+            with hub_mod._REFRESH_LOCK:
+                hub_mod._REFRESHING.clear()
+            settings = Settings()
+            try:
+                with patch.object(hub_mod, "feed_seasonal_spotlight", side_effect=hang_seasonal):
+                    t0 = time.perf_counter()
+                    cold = get_explore_hub(db, settings, rail_limit=8)
+                    cold_elapsed = time.perf_counter() - t0
+                    self.assertTrue(cold.get("warming"))
+                    self.assertLess(cold_elapsed, 0.2, f"cold hub blocked for {cold_elapsed:.3f}s")
+                    self.assertTrue(started.wait(3), "seasonal rail was never reached")
+                    t1 = time.perf_counter()
+                    mid = get_explore_hub(db, settings, rail_limit=8)
+                    mid_elapsed = time.perf_counter() - t1
+                self.assertLess(mid_elapsed, 0.2, f"hub blocked on seasonal hang for {mid_elapsed:.3f}s")
+                self.assertTrue(mid.get("warming"), "partial hub dropped its warming flag")
+                fast_titles = [item.get("title") for item in mid["rails"]["recently_added"]["items"]]
+                self.assertIn(
+                    "Fast Rail Title",
+                    fast_titles,
+                    "recently added stayed empty while seasonal was still hung",
+                )
+                seasonal_titles = [
+                    item.get("title") for item in mid["rails"]["seasonal_spotlight"]["items"]
+                ]
+                self.assertNotIn("Seasonal later", seasonal_titles)
+                self.assertTrue(mid["rails"]["seasonal_spotlight"].get("pending"))
+            finally:
+                release.set()
+                deadline = time.time() + 3.0
+                while time.time() < deadline:
+                    with hub_mod._REFRESH_LOCK:
+                        busy = bool(hub_mod._REFRESHING)
+                    if not busy:
+                        break
+                    time.sleep(0.05)
+                invalidate_explore_hub_cache()
+                with hub_mod._LOCK:
+                    hub_mod._CACHE.clear()
+
+    def test_explore_hub_caps_plex_probe(self) -> None:
+        from projectionist.library import explore_hub as hub_mod
+
+        created: dict[str, int] = {}
+
+        class _FakePlex:
+            def __init__(self, *_args, **kwargs) -> None:
+                created["timeout"] = int(kwargs.get("timeout") or 0)
+
+            def on_deck(self, **_kwargs):
+                return []
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            settings = Settings(plex_url="http://plex.test:32400", plex_token="token")
+            with patch.object(hub_mod, "PlexClient", _FakePlex):
+                payload = hub_mod.build_explore_hub(db, settings, rail_limit=4)
+            self.assertIn("continue_watching", payload["rails"])
+            self.assertLessEqual(created["timeout"], hub_mod.HUB_PLEX_TIMEOUT_SECONDS)
+            self.assertGreater(created["timeout"], 0)
 
     def test_hub_survives_legacy_db_missing_episode_added_at(self) -> None:
         """Prod footgun: migration 10 ran before 1.37.11 stuffed added_at into phase4."""

@@ -428,6 +428,17 @@ def _apply_rail_curation(
     pin_ids = list(curation.get("pins") or [])
     include_ids = list(curation.get("includes") or [])
     exclude_ids = list(curation.get("excludes") or [])
+    if _shelf_replaces_matches(db, scope_id) and pin_ids:
+        return _attach_curator_notes(
+            _curated_replacement_items(
+                db,
+                pin_ids=pin_ids,
+                include_ids=include_ids,
+                exclude_ids=exclude_ids,
+                limit=limit,
+            ),
+            notes,
+        )
     if not pin_ids and not include_ids and not exclude_ids:
         return _attach_curator_notes(_sort_rail_items(matches, limit), notes)
 
@@ -451,6 +462,37 @@ def _apply_rail_curation(
     return _attach_curator_notes(items, notes)
 
 
+def _curated_replacement_items(
+    db: Database,
+    *,
+    pin_ids: Sequence[int],
+    include_ids: Sequence[int],
+    exclude_ids: Sequence[int],
+    limit: int,
+) -> List[Dict[str, Any]]:
+    """Pins (then owner includes) only — the keyword year-sort dump stays off."""
+    exclude = {int(item_id) for item_id in exclude_ids}
+    needed = list(dict.fromkeys([*pin_ids, *include_ids]))
+    by_id = db.get_library_items_by_ids(needed)
+    items: List[Dict[str, Any]] = []
+    seen: set[int] = set()
+    for item_id in pin_ids:
+        if len(items) >= limit:
+            break
+        if item_id in exclude or item_id in seen or item_id not in by_id:
+            continue
+        seen.add(item_id)
+        items.append(_feed_item(by_id[item_id], rail_role="pin"))
+    for item_id in include_ids:
+        if len(items) >= limit:
+            break
+        if item_id in exclude or item_id in seen or item_id not in by_id:
+            continue
+        seen.add(item_id)
+        items.append(_feed_item(by_id[item_id], rail_role="include"))
+    return items
+
+
 def _has_curated_seasonal_pins(db: Database, scope_id: str) -> bool:
     """True when the owner/agent has pinned deliberate picks for this season."""
     try:
@@ -458,6 +500,14 @@ def _has_curated_seasonal_pins(db: Database, scope_id: str) -> bool:
     except Exception:  # noqa: BLE001
         return False
     return bool(curation.get("pins"))
+
+
+def _shelf_replaces_matches(db: Database, scope_id: str) -> bool:
+    """True when a professor curate replaced the keyword/anniversary dump."""
+    try:
+        return bool(db.holiday_rail_replaces_matches(scope_id))
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _seasonal_spotlight_payload(
@@ -550,6 +600,12 @@ def feed_seasonal_spotlight(
                             total=len(items),
                             from_schedule=True,
                         )
+            elif _shelf_replaces_matches(db, snap_scope) or _shelf_replaces_matches(
+                db, scope_id
+            ):
+                # Professor curate replaced this shelf. A morning keyword or
+                # year-sort snapshot must not keep the old cards on Explore.
+                pass
             else:
                 items = _attach_curator_notes(
                     raw_items[:capped], _rail_curator_notes(db, snap_scope)
@@ -718,6 +774,10 @@ def preview_holiday_rail(
         curation = db.list_holiday_rail_titles(scope_id)
     except Exception:  # noqa: BLE001
         curation = []
+    try:
+        replaces_matches = bool(db.holiday_rail_replaces_matches(scope_id))
+    except Exception:  # noqa: BLE001
+        replaces_matches = False
     return {
         "scope_id": scope_id,
         "label": label,
@@ -728,6 +788,7 @@ def preview_holiday_rail(
         "items": items,
         "curation": curation,
         "match_count": len(matches),
+        "replaces_matches": replaces_matches,
         "note": None if items else "Add a favorite or loosen filter terms.",
     }
 

@@ -441,7 +441,7 @@ async def lifespan(_app: FastAPI):
             from projectionist.live_channels.guide_cache import prewarm_live_guide
             from projectionist.live_channels.status_cache import prewarm_live_channels_status
 
-            prewarm_live_guide(settings)
+            prewarm_live_guide(settings, manager.db)
             prewarm_live_channels_status(settings, manager.db)
             logger.info("Startup: first-paint caches prewarmed")
             from projectionist.live_channels.guide_horizon import maintain_guide_week
@@ -2582,6 +2582,7 @@ def library_feed_pick_for_me(
                 snap = get_on_now_snapshot(
                     settings,
                     youth_max_rating=resolve_youth_max_rating(settings),
+                    db=_db(),
                 )
                 payload["live_station"] = pick_youth_safe_live_station(
                     settings, snap.get("channels") or []

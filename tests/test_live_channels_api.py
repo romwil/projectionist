@@ -169,6 +169,12 @@ class LiveChannelsApiTests(unittest.TestCase):
             "projectionist.live_channels.guide.build_guide_snapshot",
             return_value=guide_payload,
         ):
+            from projectionist.live_channels.guide_cache import GUIDE_CACHE
+
+            # Cold start returns a warming skeleton; the built guide paints on the next read.
+            warming = self.client.get("/api/live-channels/guide?hours=6")
+            self.assertEqual(warming.status_code, 200, warming.text)
+            self.assertTrue(GUIDE_CACHE.wait_idle(3))
             guide = self.client.get("/api/live-channels/guide?hours=6")
         self.assertEqual(guide.status_code, 200, guide.text)
         self.assertEqual(guide.json()["channels"][0]["id"], "ch-1")
@@ -202,6 +208,34 @@ class LiveChannelsApiTests(unittest.TestCase):
             stream = self.client.get("/api/live-channels/stream/ch-1/index.m3u8")
         self.assertEqual(stream.status_code, 200, stream.text)
         self.assertIn("mpegurl", stream.headers.get("content-type", ""))
+
+    def test_guide_get_returns_while_tunarr_hangs(self) -> None:
+        self._enable()
+
+        def hang(*_a, **_k):
+            time.sleep(2.0)
+            return {
+                "enabled": True,
+                "ready": True,
+                "channels": [{"id": "slow", "name": "Slow", "programs": []}],
+                "count": 1,
+            }
+
+        with patch(
+            "projectionist.live_channels.guide.build_guide_snapshot",
+            side_effect=hang,
+        ):
+            from projectionist.live_channels.guide_cache import GUIDE_CACHE
+
+            started = time.perf_counter()
+            resp = self.client.get("/api/live-channels/guide?hours=6")
+            took = time.perf_counter() - started
+            GUIDE_CACHE.wait_idle(4)
+        self.assertEqual(resp.status_code, 200, resp.text)
+        self.assertLess(took, 0.4)
+        body = resp.json()
+        self.assertTrue(body.get("warming"))
+        self.assertFalse(body.get("ready"))
 
     def test_publish_requires_confirm(self) -> None:
         self._enable()
