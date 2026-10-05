@@ -13,6 +13,12 @@ from projectionist.connectors.http import request_json
 PLEX_PRODUCT = "CuratorX"
 PLEX_VERSION = "Plex OAuth"
 CLIENT_ID_FILENAME = "plex_oauth_client_id"
+# Status polls run while the Plex window is open. A 20s socket timeout holds
+# the in-flight check for the whole window, so Projectionist stays on "waiting"
+# long after Plex has linked the PIN. Cap the check and retry; do not hammer.
+PLEX_PIN_POLL_TIMEOUT_SECONDS = 2
+# One-shot confirm (Link Plex) is not a poll. Keep a normal plex.tv budget.
+PLEX_PIN_CONFIRM_TIMEOUT_SECONDS = 20
 
 
 def _data_dir() -> Path:
@@ -116,12 +122,18 @@ def fetch_plex_pin(
     pin_id: int,
     client_id: str,
     *,
-    timeout: int = 20,
+    timeout: int = PLEX_PIN_POLL_TIMEOUT_SECONDS,
 ) -> Dict[str, Any]:
-    """Poll a plex.tv PIN; authToken is set once the user authorizes."""
+    """Poll a plex.tv PIN; authToken is set once the user authorizes.
+
+    Uses a short socket timeout so a hung status read cannot block the next
+    check for the old 20s budget. Callers treat that timeout as "still waiting".
+    """
+    headers = plex_oauth_headers(client_id)
+    headers["Cache-Control"] = "no-cache"
     payload = request_json(
         f"https://plex.tv/api/v2/pins/{int(pin_id)}",
-        headers=plex_oauth_headers(client_id),
+        headers=headers,
         timeout=timeout,
     )
     if not isinstance(payload, dict):

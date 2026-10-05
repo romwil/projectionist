@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Sign in with Plex catches up as soon as Plex does.** The PIN check could sit for 20 seconds, so Projectionist still looked like it was waiting after Plex showed you could close the window. It now checks immediately, about once a second, and opens your household session as soon as Plex links the PIN. Watchlist sync follows behind that.
+
 ## [1.37.32] — 2026-10-04
 
 One patch on 1.37.31: Plex Live TV keeps a week of real programme titles so the evening grid does not go dark.
