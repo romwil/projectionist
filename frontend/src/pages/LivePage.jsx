@@ -53,7 +53,14 @@ export default function LivePage({ popout = false }) {
   const loadGuide = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
     try {
-      const features = await getFeatures();
+      // Features and the guide are independent. The guide is server-precached
+      // (SWR): a cold start is a warming skeleton, and the page paints that
+      // shell without waiting for Tunarr. The Plex machine id only feeds a
+      // secondary link, so it must never gate first paint.
+      const [features, snapshot] = await Promise.all([
+        getFeatures(),
+        getLiveChannelsGuide({ hours: 6 }).catch((err) => ({ __error: err })),
+      ]);
       const enabled = Boolean(features?.features?.live_channels_enabled);
       const ready = Boolean(features?.features?.live_channels_ready);
       setFeatureOn(enabled);
@@ -64,9 +71,7 @@ export default function LivePage({ popout = false }) {
         setLoading(false);
         return;
       }
-      // Guide is server-precached (SWR) — paint as soon as it arrives. The Plex
-      // machine id only feeds a secondary link, so it must never gate first paint.
-      const snapshot = await getLiveChannelsGuide({ hours: 6 });
+      if (snapshot?.__error) throw snapshot.__error;
       const model = appendWeatherChannel(normalizeGuide(snapshot));
       setGuide(model);
       setError("");
@@ -78,7 +83,6 @@ export default function LivePage({ popout = false }) {
       }
     } catch (err) {
       setError(err.message || "Could not load the live guide.");
-      setGuide(null);
     } finally {
       setLoading(false);
     }
@@ -90,22 +94,26 @@ export default function LivePage({ popout = false }) {
   }, [authReady, loadGuide]);
 
   // Cold start: server returns warming:true while it builds the first guide.
+  // Stale means the grid is already on screen and a refresh is in flight.
   const guideWarming = Boolean(guide?.warming);
+  const guideStale = Boolean(guide?.stale);
   useEffect(() => {
-    if (!guideWarming) return undefined;
+    if (!guideWarming && !guideStale) return undefined;
     let tries = 0;
     const timer = setInterval(() => {
       tries += 1;
       if (tries > 40) {
         clearInterval(timer);
         // Give up politely: fall through to the normal "not ready" copy.
-        setGuide((current) => (current ? { ...current, warming: false } : current));
+        setGuide((current) =>
+          current ? { ...current, warming: false, stale: false } : current,
+        );
         return;
       }
       loadGuide({ silent: true });
     }, 1500);
     return () => clearInterval(timer);
-  }, [guideWarming, loadGuide]);
+  }, [guideWarming, guideStale, loadGuide]);
 
   useEffect(() => {
     if (popout) return;
@@ -199,29 +207,15 @@ export default function LivePage({ popout = false }) {
     );
   }
 
-  if (!authReady || loading) {
-    return (
-      <div className="live-page live-page--loading" data-testid="live-page">
-        <p className="live-page-status">Loading Live…</p>
-      </div>
-    );
-  }
-
-  if (guideWarming) {
-    return (
-      <div className="live-page live-page--loading" data-testid="live-page">
-        <p className="live-page-status" data-testid="live-warming">
-          Warming up the guide…
-        </p>
-      </div>
-    );
-  }
-
-  const empty = liveUserEmptyCopy({
-    featureOn,
-    featureReady,
-    guideReady: Boolean(guide?.ready),
-  });
+  const guidePending = !guide?.ready && (!authReady || loading || guideWarming);
+  const empty =
+    authReady && !loading && !guideWarming
+      ? liveUserEmptyCopy({
+          featureOn,
+          featureReady,
+          guideReady: Boolean(guide?.ready),
+        })
+      : null;
   if (empty) {
     const ctaTo = empty.ctaTo === "admin" ? ROUTES.admin : ROUTES.chat;
     return (
@@ -345,7 +339,16 @@ export default function LivePage({ popout = false }) {
 
       {error ? <p className="live-page-error">{error}</p> : null}
 
-      {weatherMode ? (
+      {guidePending && !weatherMode ? (
+        <div className="live-guide-skeleton" data-testid="live-guide-skeleton" aria-busy="true">
+          <p className="live-page-status live-page-status--inline" data-testid="live-warming">
+            Filling in the guide…
+          </p>
+          {Array.from({ length: 6 }, (_, row) => (
+            <div key={row} className="live-guide-skeleton-row" />
+          ))}
+        </div>
+      ) : weatherMode ? (
         <WeatherChannelPlayer
           onClose={() => {
             setSearchParams((prev) => {
