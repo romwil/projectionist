@@ -1608,7 +1608,7 @@ def live_channels_on_now_endpoint(user=Depends(get_current_user_dep)) -> Dict[st
     if youth_gate_active(user):
         youth_ceiling = resolve_youth_max_rating(settings)
     # SWR: last good snapshot paints immediately; Tunarr is only asked in the background.
-    snapshot = get_on_now_snapshot(settings, youth_max_rating=youth_ceiling)
+    snapshot = get_on_now_snapshot(settings, youth_max_rating=youth_ceiling, db=_db())
     # Soft, deduped ready nudge for opt-in members (never blocks the response).
     try:
         maybe_deliver_live_channels_ready_nudge(
@@ -1629,9 +1629,9 @@ def live_channels_guide_endpoint(
 ) -> Dict[str, Any]:
     """Wider channel × time guide for the Projectionist `/live` EPG (1–12 hours).
 
-    Stale-while-revalidate: the last good guide is served immediately (now/next
-    re-derived from cached programs) and Tunarr is refreshed in the background.
-    A true cold start returns ``warming: true`` instead of hanging first paint.
+    Stale-while-revalidate: the last good guide (including the copy kept across
+    a restart) is served immediately and Tunarr is refreshed in the background.
+    A true cold start returns ``warming: true`` without waiting on Tunarr.
     """
     from projectionist.live_channels.guide_cache import get_guide_snapshot
     from projectionist.youth.rating_gate import resolve_youth_max_rating, youth_gate_active
@@ -1644,6 +1644,7 @@ def live_channels_guide_endpoint(
         settings,
         youth_max_rating=youth_ceiling,
         hours=hours,
+        db=_db(),
     )
 
 
@@ -1666,7 +1667,7 @@ def live_channels_channel_subtitles_endpoint(
     youth_ceiling = None
     if youth_gate_active(user):
         youth_ceiling = resolve_youth_max_rating(settings)
-    snap = get_on_now_snapshot(settings, youth_max_rating=youth_ceiling)
+    snap = get_on_now_snapshot(settings, youth_max_rating=youth_ceiling, db=_db())
     channel = next(
         (c for c in snap.get("channels") or [] if str(c.get("id")) == cid),
         None,
