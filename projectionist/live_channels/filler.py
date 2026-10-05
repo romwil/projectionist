@@ -643,30 +643,79 @@ def attach_continuity_to_channel(
     return {"ok": True, "changed": True, "channel_id": cid}
 
 
+# Next library title starts on a quarter hour (:00, :15, :30, :45).
+QUARTER_HOUR_MS = 15 * 60 * 1000
+
+
+def gap_to_next_quarter_hour_ms(end_ms: int) -> int:
+    """Filler length from ``end_ms`` forward to the next :00/:15/:30/:45.
+
+    Zero when ``end_ms`` is already on a quarter hour — the next title may
+    start immediately. Never negative, so the next title cannot start early.
+    """
+    rem = int(end_ms) % QUARTER_HOUR_MS
+    if rem == 0:
+        return 0
+    return QUARTER_HOUR_MS - rem
+
+
+def lineup_bounds(
+    lineup: Sequence[Mapping[str, Any]],
+    *,
+    start_time_ms: int,
+) -> List[tuple[int, int, str]]:
+    """``(start_ms, end_ms, type)`` for each lineup row. End is exclusive."""
+    cursor = int(start_time_ms)
+    bounds: List[tuple[int, int, str]] = []
+    for raw in lineup:
+        if not isinstance(raw, Mapping):
+            continue
+        try:
+            duration = int(raw.get("duration") or 0)
+        except (TypeError, ValueError):
+            duration = 0
+        if duration <= 0:
+            continue
+        kind = str(raw.get("type") or "content").lower()
+        bounds.append((cursor, cursor + duration, kind))
+        cursor += duration
+    return bounds
+
+
+def lineup_has_overlap(bounds: Sequence[tuple[int, int, str]]) -> bool:
+    """True when any row starts before the previous row's exclusive end."""
+    previous_end: Optional[int] = None
+    for start, end, _kind in bounds:
+        if previous_end is not None and start < previous_end:
+            return True
+        previous_end = end
+    return False
+
+
 def pad_lineup_with_flex(
     lineup: Sequence[Mapping[str, Any]],
     *,
     max_flex_ms: int = 15 * 60 * 1000,
     start_time_ms: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
-    """Insert flex pads (≤ max_flex_ms) so content lands on :00 / :30 boundaries.
+    """Insert flex so the next library title starts on a quarter hour.
 
-    Flex duration owns the clock — filler clip lengths do not push the next title.
+    A programme occupies ``[start, start+duration)``. The next library title
+    starts at the next :00, :15, :30, or :45 at or after that end. Filler
+    (flex) covers the gap. An end that is already on a quarter hour has no
+    gap. Flex is not another movie or episode.
+
+    ``max_flex_ms`` <= 0 leaves the lineup back-to-back (owner pad knob).
+    A quarter-hour gap is at most 14m59s, so the default 15-minute cap always
+    covers it. A tighter cap still refuses an oversized flex and starts the
+    next title at the previous end — never before it.
     """
     cap = max(0, int(max_flex_ms or 0))
     if cap <= 0:
         return [dict(item) for item in lineup if isinstance(item, Mapping)]
 
-    half_hour_ms = 30 * 60 * 1000
     cursor = int(start_time_ms if start_time_ms is not None else time.time() * 1000)
     out: List[Dict[str, Any]] = []
-
-    def _gap_to_boundary(end_ms: int) -> int:
-        # Distance forward to next :00 or :30 wall-clock mark.
-        rem = end_ms % half_hour_ms
-        if rem == 0:
-            return 0
-        return half_hour_ms - rem
 
     for raw in lineup:
         if not isinstance(raw, Mapping):
@@ -688,7 +737,7 @@ def pad_lineup_with_flex(
             continue
         out.append(item)
         cursor += duration
-        gap = _gap_to_boundary(cursor)
+        gap = gap_to_next_quarter_hour_ms(cursor)
         if 0 < gap <= cap:
             out.append({"type": "flex", "duration": gap})
             cursor += gap

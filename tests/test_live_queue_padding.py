@@ -307,11 +307,13 @@ class LineupOrderTests(unittest.TestCase):
         self.assertEqual(ids[-1], "p-new")
         self.assertEqual(sorted(ids[:2]), ["play-0", "play-1"])
 
-    def test_unpadded_shuffle_channel_still_uses_random_schedule(self) -> None:
+    def test_shuffle_channel_is_a_manual_lineup_not_stacked_slots(self) -> None:
         recipe = _recipe(programming_mode="shuffle")
         programs = [_program("a", "k1"), _program("b", "k2")]
         body = programming_body_for_recipe(recipe, programs=programs, pad_lineups=False)
-        self.assertEqual(body["type"], "random")
+        self.assertEqual(body["type"], "manual")
+        self.assertNotIn("schedule", body)
+        self.assertEqual([row["id"] for row in body["lineup"]], ["a", "b"])
 
     def test_sequential_padded_lineup_is_in_order(self) -> None:
         recipe = _recipe(queue_pad={"up_to": 5, "feed": "recently_added"})

@@ -3804,13 +3804,17 @@ class ContinuityFillerTests(unittest.TestCase):
         self.assertEqual(lined[1]["duration"], 8 * 60 * 1000)
         self.assertLessEqual(lined[1]["duration"], 15 * 60 * 1000)
 
-        # Gap larger than cap is skipped (do not insert oversized flex).
+        # Gap larger than a tight cap is skipped. The next title still starts
+        # at the previous end — never earlier.
         long = pad_lineup_with_flex(
-            [{"type": "content", "id": "ep1", "duration": 10 * 60 * 1000}],
-            max_flex_ms=5 * 60 * 1000,
+            [
+                {"type": "content", "id": "ep1", "duration": 10 * 60 * 1000},
+                {"type": "content", "id": "ep2", "duration": 10 * 60 * 1000},
+            ],
+            max_flex_ms=60 * 1000,
             start_time_ms=0,
         )
-        self.assertEqual(len(long), 1)
+        self.assertEqual([row["type"] for row in long], ["content", "content"])
 
         body = programming_body_for_recipe(
             ChannelRecipe(name="TV", number=100, source="chaos", media_scope="tv"),
@@ -5094,7 +5098,120 @@ class CraftFiltersTests(unittest.TestCase):
             )
         self.assertEqual(picked, [])
 
-    def test_shuffle_programming_uses_random_slots(self) -> None:
+    def test_quarter_hour_pad_fills_from_minute_39(self) -> None:
+        """A title ending at :39 starts the next at :45, with filler in the gap."""
+        from projectionist.live_channels.filler import (
+            lineup_bounds,
+            lineup_has_overlap,
+            pad_lineup_with_flex,
+        )
+
+        # 21:00 UTC + 39 minutes = 21:39. Next quarter hour is 21:45.
+        start = 21 * 60 * 60 * 1000
+        lined = pad_lineup_with_flex(
+            [
+                {"type": "content", "id": "alien", "duration": 39 * 60 * 1000},
+                {"type": "content", "id": "alien3", "duration": 114 * 60 * 1000},
+            ],
+            max_flex_ms=15 * 60 * 1000,
+            start_time_ms=start,
+        )
+        self.assertEqual(
+            [row["type"] for row in lined],
+            ["content", "flex", "content", "flex"],
+        )
+        self.assertEqual(lined[0]["id"], "alien")
+        self.assertEqual(lined[1]["duration"], 6 * 60 * 1000)
+        self.assertEqual(lined[2]["id"], "alien3")
+        bounds = lineup_bounds(lined, start_time_ms=start)
+        self.assertEqual(bounds[0], (start, start + 39 * 60 * 1000, "content"))
+        self.assertEqual(bounds[1], (start + 39 * 60 * 1000, start + 45 * 60 * 1000, "flex"))
+        self.assertEqual(bounds[2][0], start + 45 * 60 * 1000)
+        self.assertEqual(bounds[2][2], "content")
+        self.assertLessEqual(bounds[2][1], bounds[3][0])
+        self.assertFalse(lineup_has_overlap(bounds))
+
+    def test_exact_quarter_hour_starts_the_next_title_immediately(self) -> None:
+        from projectionist.live_channels.filler import (
+            lineup_bounds,
+            lineup_has_overlap,
+            pad_lineup_with_flex,
+        )
+
+        start = 21 * 60 * 60 * 1000 + 15 * 60 * 1000  # 21:15
+        lined = pad_lineup_with_flex(
+            [
+                {"type": "content", "id": "a", "duration": 30 * 60 * 1000},
+                {"type": "content", "id": "b", "duration": 15 * 60 * 1000},
+            ],
+            max_flex_ms=15 * 60 * 1000,
+            start_time_ms=start,
+        )
+        self.assertEqual([row["type"] for row in lined], ["content", "content"])
+        bounds = lineup_bounds(lined, start_time_ms=start)
+        self.assertEqual(bounds[1][0], start + 30 * 60 * 1000)
+        self.assertFalse(lineup_has_overlap(bounds))
+
+    def test_two_titles_on_one_channel_never_overlap(self) -> None:
+        from projectionist.live_channels.filler import (
+            lineup_bounds,
+            lineup_has_overlap,
+            pad_lineup_with_flex,
+        )
+
+        start = 21 * 60 * 60 * 1000
+        durations = [39 * 60 * 1000, 117 * 60 * 1000, 22 * 60 * 1000, 15 * 60 * 1000]
+        lined = pad_lineup_with_flex(
+            [
+                {"type": "content", "id": f"p{i}", "duration": duration}
+                for i, duration in enumerate(durations)
+            ],
+            max_flex_ms=15 * 60 * 1000,
+            start_time_ms=start,
+        )
+        bounds = lineup_bounds(lined, start_time_ms=start)
+        self.assertFalse(lineup_has_overlap(bounds))
+        content = [row for row in bounds if row[2] == "content"]
+        self.assertEqual(len(content), 4)
+        for previous, nxt in zip(content, content[1:]):
+            self.assertLessEqual(previous[1], nxt[0])
+            self.assertEqual(nxt[0] % (15 * 60 * 1000), 0)
+
+    def test_guide_programs_do_not_paint_over_each_other(self) -> None:
+        from projectionist.live_channels.guide import separate_channel_programs
+
+        alien_start = 1_700_000_000.0
+        # File ends at :39 past the hour; the guide stop is padded across Alien³.
+        alien_end = alien_start + 39 * 60
+        alien3_start = alien_start + 45 * 60
+        programs = separate_channel_programs(
+            [
+                {
+                    "title": "Alien",
+                    "start": alien_start,
+                    "stop": alien3_start + 30 * 60,
+                    "duration_seconds": 39 * 60,
+                    "is_flex": False,
+                },
+                {
+                    "title": "Alien³",
+                    "start": alien3_start,
+                    "stop": alien3_start + 114 * 60,
+                    "duration_seconds": 114 * 60,
+                    "is_flex": False,
+                },
+            ]
+        )
+        self.assertEqual(programs[0]["title"], "Alien")
+        self.assertEqual(programs[0]["stop"], alien_end)
+        self.assertTrue(programs[1]["is_flex"])
+        self.assertEqual(programs[1]["start"], alien_end)
+        self.assertEqual(programs[1]["stop"], alien3_start)
+        self.assertEqual(programs[2]["title"], "Alien³")
+        self.assertLessEqual(programs[0]["stop"], programs[1]["start"])
+        self.assertLessEqual(programs[1]["stop"], programs[2]["start"])
+
+    def test_shuffle_programming_pads_to_quarter_hour(self) -> None:
         from projectionist.live_channels.publish import programming_body_for_recipe
         from projectionist.live_channels.recipes import ChannelRecipe, ProgrammingMode
 
@@ -5109,26 +5226,31 @@ class CraftFiltersTests(unittest.TestCase):
             programs=[
                 {
                     "id": "m1",
-                    "duration": 5_400_000,
-                    "title": "Heat",
+                    "duration": 39 * 60 * 1000,
+                    "title": "Alien",
                     "type": "movie",
                 },
                 {
                     "id": "m2",
-                    "duration": 7_200_000,
-                    "title": "Alien",
+                    "duration": 114 * 60 * 1000,
+                    "title": "Alien³",
                     "type": "movie",
                 },
             ],
             pad_lineups=True,
-            max_flex_ms=0,
+            max_flex_ms=15 * 60 * 1000,
+            start_time_ms=21 * 60 * 60 * 1000,
         )
-        self.assertEqual(body["type"], "random")
-        self.assertEqual(body["programs"], ["m1", "m2"])
-        self.assertEqual(body["schedule"]["type"], "random")
-        self.assertTrue(
-            any(slot.get("type") == "movie" for slot in body["schedule"]["slots"])
+        self.assertEqual(body["type"], "manual")
+        self.assertNotIn("schedule", body)
+        self.assertNotIn("slots", body)
+        rows = body["lineup"]
+        self.assertEqual(
+            [row["type"] for row in rows],
+            ["content", "flex", "content", "flex"],
         )
+        self.assertEqual(rows[1]["duration"], 6 * 60 * 1000)
+        self.assertEqual([row.get("id") for row in rows if row["type"] == "content"], ["m1", "m2"])
 
     def test_recipe_persists_craft_filters(self) -> None:
         from projectionist.live_channels.recipes import recipe_from_mapping
