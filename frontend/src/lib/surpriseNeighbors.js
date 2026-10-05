@@ -1,12 +1,12 @@
 /**
- * Surprising-neighbor presentation: honest "why" copy from real plot scores.
+ * Surprising-neighbor presentation.
  *
- * Server formula: surprise = cosine × (1 − metadata_overlap).
- * We never invent scores — only restate score / surprise_score / genres.
+ * A neighbor is surprising only when the server names a plot link (`plot_link`).
+ * Low shelf overlap can follow that sentence. It is not a reason by itself.
  */
 
 export const SURPRISE_SECTION_INTRO =
-  "Titles that share DNA but sit far from the obvious shelf — close in plot space, distant on genre and credit cards.";
+  "A story kinship the shelf would not suggest — included only when we can say what the plots share.";
 
 export const SURPRISE_SHOWCASE_INITIAL = 6;
 
@@ -65,20 +65,18 @@ function plotKinshipLabel(cosine) {
   return "Loose plot kinship";
 }
 
-function shelfDistanceLabel(overlap) {
-  if (overlap == null) return null;
-  if (overlap <= 0.15) return "Almost no shared genre, keyword, or credit cards";
-  if (overlap <= 0.35) return "Shelf labels barely overlap";
-  if (overlap <= 0.55) return "Only partial shelf overlap";
-  return "Some shelf overlap — still ranked for plot pull";
-}
+const ABSENCE_REASON =
+  /almost no shared|nothing in common|barely overlap|partial shelf|some shelf overlap|no shared genre|credit labels|credit cards/i;
 
 /**
  * Build showcase copy for one surprising neighbor.
+ * A title with no named plot link is not surprising — low shelf overlap is not a reason.
  * @returns {{ headline: string, detail: string, signals: string[] } | null}
  */
 export function buildSurpriseWhy(item, { seedGenres } = {}) {
   if (!item || typeof item !== "object") return null;
+  const link = String(item.plot_link || "").trim();
+  if (!link || ABSENCE_REASON.test(link)) return null;
 
   const cosine = clampUnit(item.score);
   const surprise = clampUnit(
@@ -89,36 +87,21 @@ export function buildSurpriseWhy(item, { seedGenres } = {}) {
       ? clampUnit(item.metadata_overlap)
       : metadataOverlapFromScores(cosine, surprise);
 
-  const signals = [];
+  const signals = [link];
   const plotLabel = plotKinshipLabel(cosine);
   if (plotLabel) signals.push(plotLabel);
-
-  const shelfLabel = shelfDistanceLabel(overlap);
-  if (shelfLabel) signals.push(shelfLabel);
+  if (overlap != null && overlap <= 0.35) {
+    signals.push("Shelf labels barely overlap");
+  }
 
   const contrast = genreContrast(seedGenres, item.genres);
-  if (contrast.shared.length) {
-    signals.push(`Shared genres: ${contrast.shared.slice(0, 3).join(", ")}`);
-  }
   if (contrast.neighborOnly.length && (seedGenres || []).length) {
     signals.push(
       `Different shelf: ${contrast.neighborOnly.slice(0, 3).join(", ")}`,
     );
-  } else if (contrast.neighborOnly.length && !contrast.shared.length) {
-    signals.push(`Genres: ${contrast.neighborOnly.slice(0, 3).join(", ")}`);
   }
 
-  if (!signals.length) return null;
-
-  const headline =
-    overlap != null && overlap <= 0.35 && cosine != null && cosine >= 0.55
-      ? "Plot twin on a different shelf"
-      : overlap != null && overlap <= 0.55 && cosine != null && cosine >= 0.4
-        ? "Narrative neighbor, unexpected company"
-        : "Surprising plot neighbor";
-
-  const detail = signals.join(" · ");
-  return { headline, detail, signals };
+  return { headline: link, detail: signals.join(" · "), signals };
 }
 
 export function visibleSurpriseItems(items, { expanded = false, initial = SURPRISE_SHOWCASE_INITIAL } = {}) {

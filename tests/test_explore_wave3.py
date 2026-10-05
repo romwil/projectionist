@@ -1087,6 +1087,9 @@ class NeighborsFeedTests(unittest.TestCase):
                     "title": "Seed",
                     "year": 2000,
                     "genres": ["Sci-Fi"],
+                    "summary": (
+                        "Amateur bakers compete around a signature bake inside a failing colony."
+                    ),
                 }
             )
             twin = db.upsert_library_item(
@@ -1105,6 +1108,9 @@ class NeighborsFeedTests(unittest.TestCase):
                     "title": "Odd",
                     "year": 2002,
                     "genres": ["Romance"],
+                    "summary": (
+                        "Rivals reunite after amateur bakers compete and ruin a signature bake tonight."
+                    ),
                 }
             )
             db.set_neighbors(seed, [(twin, 0.99, 0.1), (odd, 0.9, 0.85)])
@@ -1112,6 +1118,8 @@ class NeighborsFeedTests(unittest.TestCase):
             surprising = neighbors_payload(db, seed, mode="surprising", limit=5)
             self.assertEqual(similar["items"][0]["title"], "Twin")
             self.assertEqual(surprising["items"][0]["title"], "Odd")
+            self.assertIn("amateur bakers", surprising["items"][0]["plot_link"].lower())
+            self.assertNotIn("almost no shared", surprising["items"][0]["plot_link"].lower())
             self.assertIn("score", similar["items"][0])
             self.assertIn("surprise_score", similar["items"][0])
             # surprise = cosine × (1 − overlap) → Odd: 0.85 = 0.9 × (1 − overlap)

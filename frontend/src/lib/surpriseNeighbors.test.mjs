@@ -10,8 +10,9 @@ import {
 } from "./surpriseNeighbors.js";
 
 test("SURPRISE_SECTION_INTRO frames the section", () => {
-  assert.match(SURPRISE_SECTION_INTRO, /share DNA/i);
+  assert.match(SURPRISE_SECTION_INTRO, /story/i);
   assert.match(SURPRISE_SECTION_INTRO, /shelf/i);
+  assert.match(SURPRISE_SECTION_INTRO, /plots share/i);
 });
 
 test("metadataOverlapFromScores inverts surprise = cosine × (1 − overlap)", () => {
@@ -28,31 +29,44 @@ test("genreContrast reports shared and divergent labels", () => {
   assert.deepEqual(contrast.neighborOnly, ["Romance"]);
 });
 
-test("buildSurpriseWhy explains high cosine + low overlap", () => {
+test("buildSurpriseWhy explains a named kinship and keeps low overlap second", () => {
   const why = buildSurpriseWhy(
     {
       score: 0.9,
       surprise_score: 0.81,
+      plot_link: "Both stories turn on amateur bakers and a signature bake.",
       genres: ["Romance", "Drama"],
     },
     { seedGenres: ["Sci-Fi", "Action"] },
   );
   assert.ok(why);
-  assert.match(why.headline, /different shelf|unexpected|Surprising/i);
-  assert.match(why.detail, /plot/i);
-  assert.match(why.detail, /overlap|shelf|Genres|Different/i);
-  assert.ok(why.signals.some((s) => /Romance|Drama/.test(s)));
+  assert.match(why.headline, /amateur bakers/i);
+  assert.match(why.detail, /^Both stories turn on/i);
+  assert.match(why.detail, /barely overlap/i);
+  assert.doesNotMatch(why.detail, /^Almost no shared|^Shelf labels/i);
+  assert.ok(why.signals.some((s) => /Romance|Drama|Different shelf/.test(s)));
 });
 
-test("buildSurpriseWhy prefers API metadata_overlap when present", () => {
-  const why = buildSurpriseWhy({
-    score: 0.9,
-    surprise_score: 0.1,
-    metadata_overlap: 0.12,
-    genres: ["Noir"],
-  });
-  assert.ok(why);
-  assert.match(why.detail, /Almost no shared|barely overlap/i);
+test("buildSurpriseWhy excludes a neighbor whose only signal is missing labels", () => {
+  assert.equal(
+    buildSurpriseWhy({
+      score: 0.9,
+      surprise_score: 0.9,
+      metadata_overlap: 0,
+      genres: ["Noir"],
+    }),
+    null,
+  );
+  assert.equal(
+    buildSurpriseWhy({
+      score: 0.9,
+      surprise_score: 0.1,
+      metadata_overlap: 0.12,
+      plot_link: "Almost no shared genre, keyword, or credit labels",
+      genres: ["Noir"],
+    }),
+    null,
+  );
 });
 
 test("buildSurpriseWhy returns null without signals", () => {

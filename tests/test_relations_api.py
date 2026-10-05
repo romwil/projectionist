@@ -123,7 +123,8 @@ class RelationPayloadTests(unittest.TestCase):
             plot = by_relation["neighbor"]
             self.assertEqual(plot["why"]["plot_kinship"], "Strong plot kinship")
             self.assertEqual(plot["why"]["shared_genres"], ["Science Fiction"])
-            self.assertTrue(plot["why"]["surprise_flavor"])
+            self.assertIsNone(plot["why"]["plot_link"])
+            self.assertIsNone(plot["why"]["surprise_flavor"])
             self.assertIn("Strong plot kinship", plot["why"]["label"])
 
     def test_walk_caps_depth_at_two_and_keeps_enriched_edges(self) -> None:

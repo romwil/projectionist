@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   appendRelationBreadcrumb,
   filterRelationEdges,
+  isSurprisingRelation,
   relationWhyCopy,
   relatedTitlesPath,
 } from "./relationUx.js";
@@ -17,15 +18,30 @@ test("appendRelationBreadcrumb keeps a two-hop trail without duplicate seeds", (
   assert.deepEqual(appendRelationBreadcrumb([seed], firstHop), [seed, firstHop]);
 });
 
-test("relationWhyCopy keeps the plain why first and surprise context second", () => {
+test("relationWhyCopy leads with a named story link and keeps shelf distance second", () => {
   assert.deepEqual(
     relationWhyCopy({
-      label: "Strong plot kinship · Shared genres: Drama",
-      surprise_flavor: "Shelf labels barely overlap",
+      label: "Strong plot kinship",
+      plot_link: "Both stories turn on amateur bakers.",
+      shelf_note: "Shelf labels barely overlap",
+      surprise_flavor: "Both stories turn on amateur bakers.",
     }),
     {
-      label: "Strong plot kinship · Shared genres: Drama",
-      detail: "Surprising because shelf labels barely overlap.",
+      label: "Both stories turn on amateur bakers.",
+      detail: "Shelf labels barely overlap.",
+    },
+  );
+});
+
+test("relationWhyCopy does not recommend a title for having no shared labels", () => {
+  assert.deepEqual(
+    relationWhyCopy({
+      label: "Strong plot kinship",
+      surprise_flavor: "Almost no shared genre, keyword, or credit labels",
+    }),
+    {
+      label: "Strong plot kinship",
+      detail: "",
     },
   );
 });
@@ -50,13 +66,25 @@ test("filterRelationEdges supports relation types and surprising similarity", ()
     { relation: "neighbor", why: { label: "Plot kinship", surprise_flavor: null } },
     {
       relation: "neighbor",
-      why: { label: "Plot kinship", surprise_flavor: "Almost no shared labels" },
+      why: {
+        label: "Strong plot kinship",
+        surprise_flavor: "Almost no shared labels",
+      },
+    },
+    {
+      relation: "neighbor",
+      why: {
+        label: "Both stories turn on amateur bakers.",
+        plot_link: "Both stories turn on amateur bakers.",
+      },
     },
   ];
 
-  assert.equal(filterRelationEdges(edges, "all").length, 4);
+  assert.equal(filterRelationEdges(edges, "all").length, 5);
   assert.equal(filterRelationEdges(edges, "shared_crew").length, 1);
   assert.equal(filterRelationEdges(edges, "surprising").length, 1);
+  assert.equal(isSurprisingRelation(edges[3]), false);
+  assert.equal(isSurprisingRelation(edges[4]), true);
 });
 
 test("relatedTitlesPath chooses a stable title id and preserves seed copy", () => {
