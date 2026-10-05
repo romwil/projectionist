@@ -188,6 +188,44 @@ class LiveGuideSwrTests(unittest.TestCase):
         self.assertLess(took, 0.25)
         self.gc.GUIDE_CACHE.wait_idle(3)
 
+    def test_default_cold_wait_does_not_block_on_hung_tunarr(self) -> None:
+        """The live guide request path must not sit on a slow Tunarr build."""
+
+        def hang(*_a, **_k):
+            time.sleep(1.5)
+            return _guide(time.time())
+
+        with patch("projectionist.live_channels.guide.build_guide_snapshot", side_effect=hang):
+            snap, took = _elapsed(lambda: self.gc.get_guide_snapshot(_live_settings()))
+        self.assertTrue(snap["warming"])
+        self.assertFalse(snap["ready"])
+        self.assertLess(took, 0.25)
+        self.gc.GUIDE_CACHE.wait_idle(3)
+
+    def test_durable_guide_paints_while_refresh_hangs(self) -> None:
+        from projectionist.library.db import Database
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "guide.db")
+            settings = _live_settings()
+            key = self.gc._cache_key(settings, youth_max_rating=None, extra="guide|h=6.0")
+            self.gc.GUIDE_CACHE.put(key, _guide(time.time()), db=db)
+            self.gc.GUIDE_CACHE.clear()
+
+            def hang(*_a, **_k):
+                time.sleep(1.5)
+                return _guide(time.time(), title_now="Fresh")
+
+            with patch("projectionist.live_channels.guide.build_guide_snapshot", side_effect=hang):
+                snap, took = _elapsed(
+                    lambda: self.gc.get_guide_snapshot(settings, db=db)
+                )
+        self.assertLess(took, 0.25)
+        self.assertTrue(snap["ready"])
+        self.assertTrue(snap["stale"])
+        self.assertEqual(snap["channels"][0]["now"]["title"], "Now Show")
+        self.gc.GUIDE_CACHE.wait_idle(3)
+
     def test_stale_guide_never_waits_on_tunarr_and_rebases_now(self) -> None:
         ts = time.time()
         settings = _live_settings()

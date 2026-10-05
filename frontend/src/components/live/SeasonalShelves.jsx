@@ -12,11 +12,13 @@ import {
 } from "../../api/client";
 import {
   addShelfIdFirst,
+  curateClickPlan,
   moveShelfId,
   shelfDateLabel,
   shelfFormFromItem,
   shelfPatchFromForm,
   shelfRoleLabel,
+  visibleCuratedShelf,
 } from "../../lib/seasonalShelves.js";
 import SeasonalPickChatPane from "../SeasonalPickChatPane";
 
@@ -33,9 +35,9 @@ function ShelfEditor({ item, onSaved }) {
   const [message, setMessage] = useState(null);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState(null);
-  const [proposal, setProposal] = useState(null);
   const [noteDrafts, setNoteDrafts] = useState({});
   const [chatTitle, setChatTitle] = useState(null);
+  const [curateBusy, setCurateBusy] = useState(false);
 
   const loadRail = useCallback(async () => {
     try {
@@ -49,7 +51,9 @@ function ShelfEditor({ item, onSaved }) {
     loadRail();
   }, [loadRail]);
 
-  const titles = rail?.items || [];
+  const titles = visibleCuratedShelf(rail?.items, {
+    replacesMatches: Boolean(rail?.replaces_matches),
+  });
   const ids = titles.map((row) => Number(row.id));
   const chatOpen = Boolean(chatTitle);
 
@@ -94,76 +98,36 @@ function ShelfEditor({ item, onSaved }) {
             type="button"
             className="primary"
             disabled={busy}
+            aria-busy={curateBusy}
             data-testid={`live-shelf-curate-${item.id}`}
-            onClick={() =>
-              run(async () => {
-                setProposal(null);
-                const result = await proposeHolidayRailCuration(item.id, { limit: 10 });
-                setProposal(result);
-              }, "Professor proposal ready — review below, then confirm.")
-            }
+            onClick={() => {
+              setCurateBusy(true);
+              void run(async () => {
+                try {
+                  const result = await proposeHolidayRailCuration(item.id, { limit: 10 });
+                  const plan = curateClickPlan({ proposal: result });
+                  if (!plan.ok) throw new Error(plan.message);
+                  const applied = await applyHolidayRailCuration(item.id, plan.applyPicks);
+                  if (applied?.preview) setRail(applied.preview);
+                  else await loadRail();
+                  setNoteDrafts({});
+                } finally {
+                  setCurateBusy(false);
+                }
+              }, "Shelf curated. These picks replace the old shelf.");
+            }}
           >
-            Ask the professor to curate
+            {curateBusy ? "Asking the professor…" : "Ask the professor to curate"}
           </button>
         </div>
-
-        {proposal?.picks?.length ? (
-          <div
-            className="live-shelf-proposal"
-            data-testid={`live-shelf-proposal-${item.id}`}
+        {message ? (
+          <p
+            className={`live-studio-note live-studio-note--${message.type}`}
+            role={message.type === "error" ? "alert" : "status"}
+            data-testid={`live-shelf-message-${item.id}`}
           >
-            <p className="live-studio-hint">
-              {proposal.note ||
-                "Review these staff picks. Confirming replaces the current shelf order (titles you marked Not a fit stay off)."}
-            </p>
-            <ol className="live-shelf-proposal-list">
-              {proposal.picks.map((pick) => (
-                <li key={pick.library_item_id}>
-                  <strong>
-                    {pick.title}
-                    {pick.year ? ` (${pick.year})` : ""}
-                  </strong>
-                  {pick.curator_note ? (
-                    <p className="live-shelf-title-note">{pick.curator_note}</p>
-                  ) : null}
-                </li>
-              ))}
-            </ol>
-            <div className="live-shelf-proposal-actions">
-              <button
-                type="button"
-                className="primary"
-                disabled={busy}
-                data-testid={`live-shelf-proposal-confirm-${item.id}`}
-                onClick={() =>
-                  run(async () => {
-                    const result = await applyHolidayRailCuration(
-                      item.id,
-                      proposal.picks.map((pick) => ({
-                        library_item_id: Number(pick.library_item_id),
-                        curator_note: String(pick.curator_note || ""),
-                      })),
-                    );
-                    if (result?.preview) setRail(result.preview);
-                    else await loadRail();
-                    setProposal(null);
-                    setNoteDrafts({});
-                  }, "Shelf curated.")
-                }
-              >
-                Use these picks
-              </button>
-              <button
-                type="button"
-                className="ghost"
-                disabled={busy}
-                data-testid={`live-shelf-proposal-dismiss-${item.id}`}
-                onClick={() => setProposal(null)}
-              >
-                Discard
-              </button>
-            </div>
-          </div>
+            {message.text}
+          </p>
         ) : null}
 
         {titles.length ? (
@@ -430,15 +394,6 @@ function ShelfEditor({ item, onSaved }) {
             </button>
           </div>
         </details>
-        {message ? (
-          <p
-            className={`live-studio-note live-studio-note--${message.type}`}
-            role={message.type === "error" ? "alert" : "status"}
-            data-testid={`live-shelf-message-${item.id}`}
-          >
-            {message.text}
-          </p>
-        ) : null}
       </div>
 
       {chatOpen ? (

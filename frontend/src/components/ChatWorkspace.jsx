@@ -18,6 +18,7 @@ import SlashCommandPalette from "./SlashCommandPalette";
 import OnThisDayCard from "./OnThisDayCard";
 import LibraryGlanceCard from "./LibraryGlanceCard";
 import { lastAssistantHasTitleCards } from "../lib/addActions.js";
+import { HOME_OPTIONAL_SUMMARY } from "../lib/optionalPageExtras.js";
 import { savedLibraryChatHref } from "../lib/backNav.js";
 import { shouldSubmitComposerOnEnter } from "../lib/composerKeyboard.js";
 import { createId } from "../lib/id.js";
@@ -304,16 +305,6 @@ authReady,
           <div className="chat-scroll-region" data-testid="chat-scroll-region" ref={scrollRef}>
             {showWelcomePanel ? (
               <>
-                {(anniversaries.length > 0 || (libraryGlance && !glanceShown)) ? (
-                  <div className="home-bento" data-testid="home-bento">
-                    {anniversaries.length > 0 ? (
-                      <OnThisDayCard items={anniversaries} accentColor={personaUi?.accent_hue} />
-                    ) : null}
-                    {libraryGlance && !glanceShown ? (
-                      <LibraryGlanceCard snapshot={libraryGlance} onDismiss={handleDismissGlance} />
-                    ) : null}
-                  </div>
-                ) : null}
                 <WelcomePanel
                   curatorName={curatorName}
                   greeting={personaUi?.welcome_greeting}
@@ -322,21 +313,37 @@ authReady,
                   contextChips={homeChips}
                   onContextChip={handleContextChip}
                 />
-                <WhisperInboxLink />
-                {shelfPages.length ? (
-                  <div className="holdable-shelf" data-testid="holdable-shelf">
-                    {shelfPages.map((page) => (
-                      <Link
-                        key={page.id}
-                        to={savedLibraryChatHref(page.id)}
-                        className="holdable-shelf-chip"
-                        data-testid="holdable-shelf-chip"
-                      >
-                        {page.name}
-                      </Link>
-                    ))}
-                  </div>
-                ) : null}
+                <details
+                  className="optional-disclosure"
+                  data-testid="home-optional-extras"
+                >
+                  <summary>{HOME_OPTIONAL_SUMMARY}</summary>
+                    {(anniversaries.length > 0 || (libraryGlance && !glanceShown)) ? (
+                      <div className="home-bento" data-testid="home-bento">
+                        {anniversaries.length > 0 ? (
+                          <OnThisDayCard items={anniversaries} accentColor={personaUi?.accent_hue} />
+                        ) : null}
+                        {libraryGlance && !glanceShown ? (
+                          <LibraryGlanceCard snapshot={libraryGlance} onDismiss={handleDismissGlance} />
+                        ) : null}
+                      </div>
+                    ) : null}
+                    <WhisperInboxLink />
+                    {shelfPages.length ? (
+                      <div className="holdable-shelf" data-testid="holdable-shelf">
+                        {shelfPages.map((page) => (
+                          <Link
+                            key={page.id}
+                            to={savedLibraryChatHref(page.id)}
+                            className="holdable-shelf-chip"
+                            data-testid="holdable-shelf-chip"
+                          >
+                            {page.name}
+                          </Link>
+                        ))}
+                      </div>
+                    ) : null}
+                </details>
               </>
             ) : null}
             {!showWelcomePanel && libraryGlance && !glanceShown ? (
