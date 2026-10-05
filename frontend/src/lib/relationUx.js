@@ -6,6 +6,20 @@ export const RELATION_FILTERS = [
   { id: "surprising", label: "Surprisingly similar" },
 ];
 
+/** Absence of shelf labels is not a story connection. */
+const ABSENCE_REASON =
+  /almost no shared|nothing in common|barely overlap|partial shelf|some shelf overlap|no shared genre|no shared keyword|credit labels|credit cards/i;
+
+export function surprisingPlotLink(why = {}) {
+  const link = String(why?.plot_link || "").trim();
+  if (!link || ABSENCE_REASON.test(link)) return "";
+  return link;
+}
+
+export function isSurprisingRelation(edge) {
+  return edge?.relation === "neighbor" && Boolean(surprisingPlotLink(edge?.why));
+}
+
 function relationItemKey(item) {
   if (!item) return "";
   return String(
@@ -28,14 +42,24 @@ export function appendRelationBreadcrumb(breadcrumbs, item) {
 
 export function relationWhyCopy(why = {}) {
   const label = String(why.label || "Related title").trim();
-  const surprise = String(why.surprise_flavor || "").trim();
+  const link = surprisingPlotLink(why);
   const sharedGenres = Array.isArray(why.shared_genres)
     ? why.shared_genres.map((genre) => String(genre).trim()).filter(Boolean)
     : [];
+  if (link) {
+    const shelf = String(why.shelf_note || "").trim();
+    return {
+      label: link,
+      detail: shelf ? (shelf.endsWith(".") ? shelf : `${shelf}.`) : "",
+    };
+  }
+  const surprise = String(why.surprise_flavor || "").trim();
+  // Do not turn "no shared labels" into the recommendation.
+  if (surprise && !ABSENCE_REASON.test(surprise)) {
+    return { label, detail: surprise.endsWith(".") ? surprise : `${surprise}.` };
+  }
   let detail = "";
-  if (surprise) {
-    detail = `Surprising because ${surprise.charAt(0).toLowerCase()}${surprise.slice(1)}.`;
-  } else if (sharedGenres.length && !label.toLowerCase().includes("shared genres")) {
+  if (sharedGenres.length && !label.toLowerCase().includes("shared genres")) {
     detail = `Shared genres: ${sharedGenres.slice(0, 3).join(", ")}.`;
   }
   return {
@@ -48,9 +72,7 @@ export function filterRelationEdges(edges, filter = "all") {
   const list = Array.isArray(edges) ? edges : [];
   if (!filter || filter === "all") return list;
   if (filter === "surprising") {
-    return list.filter(
-      (edge) => edge?.relation === "neighbor" && Boolean(edge?.why?.surprise_flavor),
-    );
+    return list.filter((edge) => isSurprisingRelation(edge));
   }
   return list.filter((edge) => edge?.relation === filter);
 }
