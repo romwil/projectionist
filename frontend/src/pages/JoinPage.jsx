@@ -12,8 +12,8 @@ import {
 import GlassDoor from "../components/GlassDoor";
 import InlineAlert from "../components/InlineAlert";
 import { resolveAuthMethods } from "../lib/loginScreen";
+import { startPlexPinPoll } from "../lib/plexPinPoll";
 
-const PIN_POLL_MS = 1000;
 const PIN_TIMEOUT_MS = 15 * 60 * 1000;
 
 /**
@@ -62,7 +62,7 @@ export default function JoinPage() {
 
   useEffect(() => {
     return () => {
-      if (pollRef.current) clearTimeout(pollRef.current);
+      if (typeof pollRef.current === "function") pollRef.current();
     };
   }, []);
 
@@ -72,8 +72,8 @@ export default function JoinPage() {
   const localEnabled = methods.includes("local") && (invite?.allowed_methods || []).includes("local");
 
   function stopPinWait() {
-    if (pollRef.current) {
-      clearTimeout(pollRef.current);
+    if (typeof pollRef.current === "function") {
+      pollRef.current();
       pollRef.current = null;
     }
     setWaitingForPlex(false);
@@ -82,25 +82,25 @@ export default function JoinPage() {
   }
 
   function schedulePinPoll(pinId, deadline) {
-    pollRef.current = setTimeout(async () => {
-      try {
-        if (Date.now() >= deadline) {
-          stopPinWait();
-          setError("Plex sign-in timed out. Try again.");
-          return;
-        }
-        const result = await pollPlexPinLogin(pinId);
-        if (result?.authenticated && result?.user) {
-          stopPinWait();
-          navigate("/chat", { replace: true });
-          return;
-        }
-        schedulePinPoll(pinId, deadline);
-      } catch (err) {
+    if (typeof pollRef.current === "function") {
+      pollRef.current();
+    }
+    pollRef.current = startPlexPinPoll({
+      deadline,
+      poll: () => pollPlexPinLogin(pinId),
+      onSuccess: () => {
+        stopPinWait();
+        navigate("/chat", { replace: true });
+      },
+      onTimeout: () => {
+        stopPinWait();
+        setError("Plex sign-in timed out. Try again.");
+      },
+      onError: (err) => {
         stopPinWait();
         setError(formatApiError(err) || "Plex sign-in failed.");
-      }
-    }, PIN_POLL_MS);
+      },
+    });
   }
 
   async function handlePlex() {

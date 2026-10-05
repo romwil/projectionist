@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from projectionist.connectors.plex_account import (
+    PLEX_PIN_POLL_TIMEOUT_SECONDS,
     build_plex_auth_url,
     create_plex_pin,
     fetch_plex_pin,
@@ -60,7 +61,11 @@ class PlexPinHelperTests(unittest.TestCase):
         mocked.assert_called_once()
         args, kwargs = mocked.call_args
         self.assertEqual(args[0], "https://plex.tv/api/v2/pins/99")
+        self.assertNotIn("authToken", args[0])
         self.assertEqual(kwargs["headers"]["X-Plex-Client-Identifier"], "client-abc")
+        self.assertEqual(kwargs["headers"]["Cache-Control"], "no-cache")
+        self.assertEqual(kwargs["timeout"], PLEX_PIN_POLL_TIMEOUT_SECONDS)
+        self.assertLessEqual(PLEX_PIN_POLL_TIMEOUT_SECONDS, 2)
 
 
 if __name__ == "__main__":

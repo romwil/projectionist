@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from projectionist.web.auth import clear_pin_bindings
+from projectionist.web.auth import clear_pin_bindings, join_plex_login_followups
 from projectionist.web.rate_limit import clear_rate_limits
 from projectionist.web.session_tokens import clear_session_secret_cache
 
@@ -40,6 +40,7 @@ class AuthTests(unittest.TestCase):
     def tearDown(self) -> None:
         import projectionist.web.jobs as jobs
 
+        join_plex_login_followups(timeout=2.0)
         jobs._manager = None
         clear_session_secret_cache()
         clear_rate_limits()
@@ -188,6 +189,101 @@ class AuthTests(unittest.TestCase):
         me = self.client.get("/api/auth/me")
         self.assertEqual(me.status_code, 200)
         self.assertEqual(me.json()["user"]["display_name"], "PIN User")
+
+    def test_plex_pin_timeout_stays_pending(self) -> None:
+        self._enable_multi_user()
+        pin_create = {
+            "id": 77,
+            "code": "ABCD",
+            "client_id": "client-xyz",
+            "auth_url": "https://app.plex.tv/auth/#!?clientID=client-xyz&code=ABCD",
+            "expires_in": 1800,
+        }
+        with patch("projectionist.web.auth.create_plex_pin", return_value=pin_create), patch(
+            "projectionist.web.auth.get_or_create_client_id",
+            return_value="client-xyz",
+        ):
+            start = self.client.post("/api/auth/plex/pin")
+        self.assertEqual(start.status_code, 200)
+
+        with patch(
+            "projectionist.web.auth.fetch_plex_pin",
+            side_effect=RuntimeError("Timeout requesting https://plex.tv/api/v2/pins/77"),
+        ):
+            pending = self.client.get("/api/auth/plex/pin/77")
+        self.assertEqual(pending.status_code, 200)
+        self.assertTrue(pending.json()["pending"])
+        self.assertFalse(pending.json()["authenticated"])
+        self.assertNotIn("curatorx_session", pending.cookies)
+
+        with patch(
+            "projectionist.web.auth.fetch_plex_pin",
+            side_effect=RuntimeError("HTTP 401 from https://plex.tv/api/v2/pins/77: denied"),
+        ):
+            failed = self.client.get("/api/auth/plex/pin/77")
+        self.assertEqual(failed.status_code, 502)
+        self.assertNotIn("pin-auth-token", failed.text)
+
+    def test_linked_pin_returns_without_watchlist_pull(self) -> None:
+        self._enable_multi_user()
+        from projectionist.connectors.plex_account import PLEX_PIN_POLL_TIMEOUT_SECONDS
+
+        pin_create = {
+            "id": 88,
+            "code": "WXYZ",
+            "client_id": "client-xyz",
+            "auth_url": "https://app.plex.tv/auth/#!?clientID=client-xyz&code=WXYZ",
+            "expires_in": 1800,
+        }
+        profile = {"id": 5150, "title": "Linked Now", "email": "linked@example.com"}
+        scheduled: list[str] = []
+
+        def record_followup(_db, user_id: str) -> None:
+            scheduled.append(str(user_id))
+
+        def fail_pull(*_args, **_kwargs):
+            raise AssertionError("watchlist pull blocked the PIN poll")
+
+        with patch("projectionist.web.auth.create_plex_pin", return_value=pin_create), patch(
+            "projectionist.web.auth.get_or_create_client_id",
+            return_value="client-xyz",
+        ):
+            start = self.client.post("/api/auth/plex/pin")
+        self.assertEqual(start.status_code, 200)
+
+        with patch(
+            "projectionist.web.auth.fetch_plex_pin",
+            return_value={"authToken": "pin-auth-token"},
+        ) as fetched, patch(
+            "projectionist.web.auth.fetch_plex_account",
+            return_value=profile,
+        ), patch(
+            "projectionist.web.auth.schedule_plex_login_followups",
+            side_effect=record_followup,
+        ), patch(
+            "projectionist.watchlist.plex_sync.maybe_pull_on_login",
+            side_effect=fail_pull,
+        ):
+            done = self.client.get("/api/auth/plex/pin/88")
+
+        self.assertEqual(done.status_code, 200)
+        body = done.json()
+        self.assertTrue(body["authenticated"])
+        self.assertFalse(body["pending"])
+        self.assertEqual(body["user"]["display_name"], "Linked Now")
+        self.assertIn("curatorx_session", done.cookies)
+        self.assertEqual(fetched.call_args.kwargs["timeout"], PLEX_PIN_POLL_TIMEOUT_SECONDS)
+        self.assertEqual(scheduled, [body["user"]["id"]])
+        self.assertNotIn("pin-auth-token", done.text)
+
+    def test_login_followup_still_pulls_watchlist(self) -> None:
+        from projectionist.web.auth import finish_plex_login_followups
+        from projectionist.web.jobs import get_job_manager
+
+        with patch("projectionist.watchlist.plex_sync.maybe_pull_on_login") as pull:
+            finish_plex_login_followups(get_job_manager().db, "missing-user")
+        pull.assert_called_once()
+        self.assertEqual(pull.call_args.kwargs["user_id"], "missing-user")
 
     def test_plex_pin_start_requires_multi_user(self) -> None:
         resp = self.client.post("/api/auth/plex/pin")
