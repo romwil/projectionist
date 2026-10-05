@@ -6,7 +6,7 @@ export default function LibraryWatchPage({ popout = false }) {
   const { ratingKey } = useParams();
   return (
     <div className="watch-theater-shell" data-theater-mode="true" data-testid="watch-theater-shell">
-      <LibraryPlayer ratingKey={ratingKey} popout={popout} />
+      <LibraryPlayer key={ratingKey || ""} ratingKey={ratingKey} popout={popout} />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   fetchNextPreroll,
   getLibraryItemSubtitles,
@@ -19,8 +19,10 @@ import {
   clampTime,
   formatClockMs,
   isDocumentFullscreen,
-  libraryWatchPath,
   libraryWatchPopoutPath,
+  nextEpisodeEndCardAction,
+  runEndCardBackToExplore,
+  runNextEpisodeEndCard,
   msFromScrubPct,
   notePlayingBeforeHide,
   scrubPctFromMs,
@@ -32,11 +34,7 @@ import {
   theaterKeyAction,
   toggleTheaterFullscreen,
 } from "../../lib/theaterPlayer.js";
-import {
-  UI_PREFS_CHANGED_EVENT,
-  loadPauseWhenBackgrounded,
-} from "../../lib/uiPrefs.js";
-import { plexPlayRatingKey } from "../../lib/titleLinks.js";
+import { UI_PREFS_CHANGED_EVENT, loadPauseWhenBackgrounded } from "../../lib/uiPrefs.js";
 import {
   SUBTITLE_EMPTY_TRACKS,
   clampSubtitleDelay,
@@ -69,12 +67,11 @@ function displayTitle(session) {
   return displayHeadline(session);
 }
 
-export default function LibraryPlayer({
-  ratingKey,
-  popout = false,
-  className = "",
-}) {
+export default function LibraryPlayer({ ratingKey, popout = false, className = "" }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const autoplayNextRef = useRef(false);
+  autoplayNextRef.current = Boolean(location.state?.autoplayNext);
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
   const sessionRef = useRef(null);
@@ -92,6 +89,8 @@ export default function LibraryPlayer({
   const [error, setError] = useState("");
   const [resumeOpen, setResumeOpen] = useState(false);
   const [ended, setEnded] = useState(false);
+  const [endNote, setEndNote] = useState("");
+  const [playerKey, setPlayerKey] = useState(() => String(ratingKey || "").trim());
   const [skipChip, setSkipChip] = useState("");
   const [ccOpen, setCcOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -110,6 +109,17 @@ export default function LibraryPlayer({
   const [preroll, setPreroll] = useState(null);
 
   const key = String(ratingKey || "").trim();
+  if (key !== playerKey) {
+    // Same player instance, new episode. Clear the end card before paint so the
+    // next watch route can attach a stream instead of sitting on a dead card.
+    setPlayerKey(key);
+    setEnded(false);
+    setEndNote("");
+    setError("");
+    setResumeOpen(false);
+    setPreroll(null);
+    setSession(null);
+  }
 
   // One subtitle model: real Plex tracks (embedded + sidecar) for the item being played,
   // fetched through the authenticated proxy and drawn by Projectionist.
@@ -134,7 +144,8 @@ export default function LibraryPlayer({
         if (cancelled) return;
         const tracks = normalizeSubtitleTracks(payload?.streams);
         setSubTracks(tracks);
-        if (!tracks.length) setSubListNote(payload?.ok === false ? payload?.message || "" : SUBTITLE_EMPTY_TRACKS);
+        if (!tracks.length)
+          setSubListNote(payload?.ok === false ? payload?.message || "" : SUBTITLE_EMPTY_TRACKS);
       })
       .catch(() => {
         if (!cancelled) setSubListNote("Couldn’t read subtitle tracks for this title.");
@@ -185,7 +196,7 @@ export default function LibraryPlayer({
     } catch {
       // Best-effort — unmount / hide still tears down local state.
     }
-    sessionRef.current = null;
+    if (sessionRef.current === current) sessionRef.current = null;
   }, []);
 
   const handlePlayerStatus = useCallback((next) => {
@@ -294,8 +305,13 @@ export default function LibraryPlayer({
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err?.message || "This title couldn’t start in Projectionist.");
+          const message = err?.message || "This title couldn’t start in Projectionist.";
+          setError(message);
           setStatus("error");
+          if (autoplayNextRef.current) {
+            setEndNote(message);
+            setEnded(true);
+          }
         }
       }
     })();
@@ -346,7 +362,9 @@ export default function LibraryPlayer({
         if (remembered != null) wasPlayingBeforeHideRef.current = remembered;
         // Default: keep buffering/playing through Mac Spaces / tab hide.
         // Opt-in: soft-pause without killing the Plex session.
-        if (shouldPauseOnVisibilityHide({ pauseWhenBackgrounded: pausePref, visibilityState: state })) {
+        if (
+          shouldPauseOnVisibilityHide({ pauseWhenBackgrounded: pausePref, visibilityState: state })
+        ) {
           if (video && !video.paused) {
             video.pause();
             hlsRef.current?.stopLoad?.();
@@ -408,7 +426,10 @@ export default function LibraryPlayer({
   function applyLocalSkip(deltaSeconds) {
     const video = videoRef.current;
     if (!video) return;
-    const next = clampTime((video.currentTime || 0) + deltaSeconds, video.duration || durationMs / 1000);
+    const next = clampTime(
+      (video.currentTime || 0) + deltaSeconds,
+      video.duration || durationMs / 1000,
+    );
     try {
       video.currentTime = next;
     } catch {
@@ -656,10 +677,23 @@ export default function LibraryPlayer({
 
   const plexHref = session?.plex_watch_url || "";
   const next = session?.next_episode;
+  const nextDecision = nextEpisodeEndCardAction(next, key);
+  const endCardMessage = endNote || (nextDecision.action === "message" ? nextDecision.message : "");
+
+  function playNextEpisode() {
+    runNextEpisodeEndCard(next, key, {
+      navigate: (path) => navigate(path, { state: { autoplayNext: true } }),
+      onMessage: setEndNote,
+    });
+  }
+
+  function backToExplore() {
+    stopSession();
+    runEndCardBackToExplore({ navigate });
+  }
   const showOsd = !resumeOpen && !ended;
   const playing = status === "playing";
-  const showCenterPlay =
-    showOsd && !playing && !error && status !== "loading" && Boolean(session);
+  const showCenterPlay = showOsd && !playing && !error && status !== "loading" && Boolean(session);
   const durationS = durationMs / 1000 || 0;
   const bufferedPct = durationS ? Math.round((bufferedEndS / durationS) * 100) : 0;
   const playheadPct = scrubPctFromMs(nowMs, durationMs);
@@ -772,12 +806,26 @@ export default function LibraryPlayer({
           {moreOpen ? (
             <div className="theater-osd-menu" role="menu" data-testid="library-osd-menu">
               {pipSupported ? (
-                <button type="button" role="menuitem" onClick={() => { enterPiP(); setMoreOpen(false); }}>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    enterPiP();
+                    setMoreOpen(false);
+                  }}
+                >
                   Picture in Picture
                 </button>
               ) : null}
               {!phone && !popout ? (
-                <button type="button" role="menuitem" onClick={() => { openPopout(); setMoreOpen(false); }}>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    openPopout();
+                    setMoreOpen(false);
+                  }}
+                >
                   Pop-out
                 </button>
               ) : null}
@@ -792,7 +840,12 @@ export default function LibraryPlayer({
                   Open in Plex
                 </a>
               ) : null}
-              <button type="button" role="menuitem" onClick={leaveWatch} data-testid="library-osd-back">
+              <button
+                type="button"
+                role="menuitem"
+                onClick={leaveWatch}
+                data-testid="library-osd-back"
+              >
                 Back
               </button>
             </div>
@@ -863,12 +916,7 @@ export default function LibraryPlayer({
             testId="library-subtitle-overlay"
           />
         ) : null}
-        {preroll ? (
-          <PrerollStage
-            src={preroll.url}
-            onDone={() => setPreroll(null)}
-          />
-        ) : null}
+        {preroll ? <PrerollStage src={preroll.url} onDone={() => setPreroll(null)} /> : null}
         {showCenterPlay ? (
           <button
             type="button"
@@ -921,27 +969,69 @@ export default function LibraryPlayer({
         ) : null}
 
         {ended ? (
-          <div className="theater-end-card" data-testid="library-end-card">
+          <div
+            className="theater-end-card"
+            data-testid="library-end-card"
+            data-theater-chrome="true"
+          >
             <p className="theater-end-kicker">That’s the reel</p>
+            {endCardMessage ? (
+              <p
+                className="theater-end-note"
+                role="status"
+                data-testid="library-next-episode-message"
+              >
+                {endCardMessage}
+              </p>
+            ) : null}
             <div className="theater-resume-actions">
-              {next?.rating_key ? (
-                <Link
+              {endNote && error ? (
+                <button
+                  type="button"
                   className="title-cta title-cta-primary"
-                  to={libraryWatchPath(plexPlayRatingKey(next) || next.rating_key)}
+                  disabled={startBusy}
+                  onClick={() => begin({ startOver: false })}
+                >
+                  Try again
+                </button>
+              ) : nextDecision.action === "play" ? (
+                <button
+                  type="button"
+                  className="title-cta title-cta-primary"
+                  onClick={playNextEpisode}
+                  data-testid="library-next-episode"
                 >
                   Next episode
-                </Link>
-              ) : (
-                <button type="button" className="title-cta title-cta-primary" onClick={leaveWatch}>
+                </button>
+              ) : null}
+              {nextDecision.action !== "play" || (endNote && error) ? (
+                <button
+                  type="button"
+                  className={
+                    endNote && error ? "title-cta title-cta-ghost" : "title-cta title-cta-primary"
+                  }
+                  onClick={leaveWatch}
+                >
                   Back to title
                 </button>
-              )}
+              ) : null}
+              <button
+                type="button"
+                className="title-cta title-cta-ghost"
+                onClick={backToExplore}
+                data-testid="library-back-to-explore"
+              >
+                Back to Explore
+              </button>
             </div>
           </div>
         ) : null}
 
-        {error ? (
-          <div className="live-player-status live-player-status--error" data-testid="library-player-error">
+        {error && !(ended && endNote) ? (
+          <div
+            className="live-player-status live-player-status--error"
+            data-testid="library-player-error"
+          >
             <p>{error}</p>
             <div className="theater-resume-actions">
               <button
@@ -953,7 +1043,12 @@ export default function LibraryPlayer({
                 Try again
               </button>
               {plexHref ? (
-                <a className="title-cta title-cta-ghost" href={plexHref} target="_blank" rel="noopener noreferrer">
+                <a
+                  className="title-cta title-cta-ghost"
+                  href={plexHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   Open in Plex
                 </a>
               ) : null}
