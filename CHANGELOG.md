@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Ask the professor to curate replaces the shelf.** On seasonal shelves (Halloween, Día de los Muertos, and every other grounded season), that button now proposes a staff-pick list and applies it. The old year-sorted keyword cards and a saved Explore snapshot of them do not stay on the shelf. A professor failure shows under the button instead of leaving the old picks in place with no message.
+
 ## [1.37.33] — 2026-10-05
 
 One patch on 1.37.32: chat home and search keep the extra blocks closed until you open them.
