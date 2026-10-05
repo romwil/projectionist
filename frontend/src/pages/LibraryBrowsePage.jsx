@@ -46,6 +46,10 @@ import {
 } from "../lib/beyondSearch.js";
 import { ROUTES } from "../lib/browseLinks.js";
 import {
+  SEARCH_OPTIONAL_SUMMARY,
+  searchOptionalGroup,
+} from "../lib/optionalPageExtras.js";
+import {
   BULK_DELETE_EMPTY_SELECTION_MESSAGE,
   formatBulkLibraryDeleteResultMessage,
   hasRemovalSummary,
@@ -467,6 +471,105 @@ export default function LibraryBrowsePage({ embedded = false }) {
     ? { showRecommend: true, onRecommend: setRecommendItem }
     : { showRecommend: false };
 
+  const searchExtras = searchOptionalGroup({
+    isSearchRoute,
+    showBeyond: showBeyondAffordance,
+    beyondUnavailable: beyond.status === BEYOND_STATUS.unavailable,
+  });
+
+  const beyondRegion = (
+    <>
+      {showBeyondAffordance ? (
+        <section
+          className={`explore-beyond ${hasLibraryResults ? "is-secondary" : "is-prominent"}`}
+          data-testid="explore-beyond"
+        >
+          {!beyondActivated ? (
+            <div className="explore-beyond-cta" data-testid="explore-beyond-cta">
+              <p className="explore-beyond-lead">
+                {hasLibraryResults
+                  ? "Looking for something you don’t own yet?"
+                  : "Not in your library — want to look further afield?"}
+              </p>
+              <button
+                type="button"
+                className={hasLibraryResults ? "ghost" : ""}
+                data-testid="explore-beyond-button"
+                onClick={handleBeyondSearch}
+              >
+                {beyondCtaLabel({ q })}
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="explore-beyond-heading">
+                <h2 data-testid="explore-beyond-title">Beyond your collection</h2>
+                <p className="explore-section-subtitle">{beyondSectionSubtitle({ q })}</p>
+              </div>
+              {beyond.status === BEYOND_STATUS.loaded && beyondExpand.show ? (
+                <div className="explore-beyond-actions bulk-confirm-actions">
+                  <button
+                    type="button"
+                    className="confirm-all-button viewport-expand-btn"
+                    data-testid="explore-beyond-expand"
+                    onClick={() => setTurnstyleOpen(true)}
+                  >
+                    {beyondExpand.label}
+                  </button>
+                </div>
+              ) : null}
+              {beyondBusy ? (
+                <p className="status status-secondary" data-testid="explore-beyond-loading">
+                  Searching beyond your collection…
+                </p>
+              ) : null}
+              {beyond.status === BEYOND_STATUS.error ? (
+                <p className="error" data-testid="explore-beyond-error">
+                  {beyondErrorNote()}
+                </p>
+              ) : null}
+              {beyond.status === BEYOND_STATUS.empty ? (
+                <p
+                  className="explore-empty status status-secondary"
+                  data-testid="explore-beyond-empty"
+                >
+                  {beyondEmptyMessage({ q })}
+                </p>
+              ) : null}
+              {beyond.status === BEYOND_STATUS.loaded ? (
+                <div
+                  className="inline-cards explore-beyond-grid"
+                  data-testid="explore-beyond-results"
+                >
+                  {beyond.items.map((item) => (
+                    <TitleCard
+                      key={`beyond-${item.media_type}-${item.tmdb_id || item.tvdb_id || item.title}`}
+                      item={item}
+                      onAdd={handleBeyondAdd}
+                      onDismiss={handleBeyondDismiss}
+                      requestPath={access.requestPath}
+                      userRole={access.userRole}
+                      multiUserEnabled={access.multiUserEnabled}
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </>
+          )}
+        </section>
+      ) : null}
+
+      {beyond.status === BEYOND_STATUS.unavailable ? (
+        <p
+          className="status status-secondary explore-beyond-note"
+          data-testid="explore-beyond-unavailable"
+        >
+          {beyondUnavailableNote()}
+        </p>
+      ) : null}
+    </>
+  );
+
   const pageBody = (
     <>
       {!embedded ? (
@@ -611,94 +714,14 @@ export default function LibraryBrowsePage({ embedded = false }) {
         />
       ) : null}
 
-      {showBeyondAffordance ? (
-        <section
-          className={`explore-beyond ${hasLibraryResults ? "is-secondary" : "is-prominent"}`}
-          data-testid="explore-beyond"
-        >
-          {!beyondActivated ? (
-            <div className="explore-beyond-cta" data-testid="explore-beyond-cta">
-              <p className="explore-beyond-lead">
-                {hasLibraryResults
-                  ? "Looking for something you don’t own yet?"
-                  : "Not in your library — want to look further afield?"}
-              </p>
-              <button
-                type="button"
-                className={hasLibraryResults ? "ghost" : ""}
-                data-testid="explore-beyond-button"
-                onClick={handleBeyondSearch}
-              >
-                {beyondCtaLabel({ q })}
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="explore-beyond-heading">
-                <h2 data-testid="explore-beyond-title">Beyond your collection</h2>
-                <p className="explore-section-subtitle">{beyondSectionSubtitle({ q })}</p>
-              </div>
-              {beyond.status === BEYOND_STATUS.loaded && beyondExpand.show ? (
-                <div className="explore-beyond-actions bulk-confirm-actions">
-                  <button
-                    type="button"
-                    className="confirm-all-button viewport-expand-btn"
-                    data-testid="explore-beyond-expand"
-                    onClick={() => setTurnstyleOpen(true)}
-                  >
-                    {beyondExpand.label}
-                  </button>
-                </div>
-              ) : null}
-              {beyondBusy ? (
-                <p className="status status-secondary" data-testid="explore-beyond-loading">
-                  Searching beyond your collection…
-                </p>
-              ) : null}
-              {beyond.status === BEYOND_STATUS.error ? (
-                <p className="error" data-testid="explore-beyond-error">
-                  {beyondErrorNote()}
-                </p>
-              ) : null}
-              {beyond.status === BEYOND_STATUS.empty ? (
-                <p
-                  className="explore-empty status status-secondary"
-                  data-testid="explore-beyond-empty"
-                >
-                  {beyondEmptyMessage({ q })}
-                </p>
-              ) : null}
-              {beyond.status === BEYOND_STATUS.loaded ? (
-                <div
-                  className="inline-cards explore-beyond-grid"
-                  data-testid="explore-beyond-results"
-                >
-                  {beyond.items.map((item) => (
-                    <TitleCard
-                      key={`beyond-${item.media_type}-${item.tmdb_id || item.tvdb_id || item.title}`}
-                      item={item}
-                      onAdd={handleBeyondAdd}
-                      onDismiss={handleBeyondDismiss}
-                      requestPath={access.requestPath}
-                      userRole={access.userRole}
-                      multiUserEnabled={access.multiUserEnabled}
-                    />
-                  ))}
-                </div>
-              ) : null}
-            </>
-          )}
-        </section>
-      ) : null}
-
-      {beyond.status === BEYOND_STATUS.unavailable ? (
-        <p
-          className="status status-secondary explore-beyond-note"
-          data-testid="explore-beyond-unavailable"
-        >
-          {beyondUnavailableNote()}
-        </p>
-      ) : null}
+      {searchExtras.show ? (
+        <details className="optional-disclosure" data-testid="search-optional-beyond">
+          <summary>{SEARCH_OPTIONAL_SUMMARY}</summary>
+          {beyondRegion}
+        </details>
+      ) : (
+        beyondRegion
+      )}
 
       <RemovalSummaryDialog
         open={Boolean(removalSummary)}
