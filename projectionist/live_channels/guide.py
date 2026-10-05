@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from projectionist.connectors.tunarr import TunarrClient
@@ -20,6 +21,10 @@ GUIDE_WINDOW_SECONDS = 3 * 3600
 GUIDE_GRID_WINDOW_SECONDS = 6 * 3600
 MAX_CHANNELS = 24
 MAX_GUIDE_CHANNELS = 48
+# Guide + now_playing probes share one short budget. They used to run
+# sequentially at 8s each (up to two per station), so a sleepy Tunarr held
+# the guide build — and `/live` first paint — for over a minute.
+GUIDE_PROBE_TIMEOUT_SECONDS = 5
 
 DUAL_WATCH_HINT = (
     "Watch here or in Plex Live TV — same stations, both first-class."
@@ -810,6 +815,41 @@ def _sort_channels(channels: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return channels
 
 
+def _needs_now_playing(slots: Mapping[str, Any], programs: Sequence[Any]) -> bool:
+    """True when the guide window cannot name what's on without a live probe."""
+    now_slot = slots.get("now") if isinstance(slots, Mapping) else None
+    next_slot = slots.get("next") if isinstance(slots, Mapping) else None
+    if now_slot is None and next_slot is None and not programs:
+        return True
+    if now_slot is None:
+        return True
+    if isinstance(now_slot, Mapping) and now_slot.get("is_flex"):
+        title = str(now_slot.get("title") or "")
+        if _is_guide_flex_placeholder(title):
+            return True
+    return False
+
+
+def _fetch_now_playing_batch(client: Any, channel_ids: Sequence[str]) -> Dict[str, Any]:
+    """Probe stations together. Wall clock is one timeout, not one per station."""
+    ids = [str(cid).strip() for cid in channel_ids if str(cid or "").strip()]
+    if not ids:
+        return {}
+
+    def _one(cid: str) -> tuple[str, Any]:
+        try:
+            return cid, client.get_now_playing(cid)
+        except Exception:  # noqa: BLE001 — a dead probe must not drop the guide
+            return cid, None
+
+    out: Dict[str, Any] = {}
+    workers = min(8, len(ids))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for cid, playing in pool.map(_one, ids):
+            out[cid] = playing
+    return out
+
+
 def build_on_now_snapshot(
     settings: Any,
     *,
@@ -835,7 +875,7 @@ def build_on_now_snapshot(
     window = max(GUIDE_WINDOW_SECONDS, int(window_seconds or GUIDE_WINDOW_SECONDS))
     limit = max(1, min(int(max_channels or MAX_CHANNELS), 100))
     try:
-        tunarr_client = client or TunarrClient(url, timeout=8)
+        tunarr_client = client or TunarrClient(url, timeout=GUIDE_PROBE_TIMEOUT_SECONDS)
         channels_meta = tunarr_client.list_channels()
         guide_by_id = tunarr_client.get_all_channel_guides(ts, ts + window)
     except Exception as error:  # noqa: BLE001
@@ -861,7 +901,8 @@ def build_on_now_snapshot(
     else:
         channel_ids = list(meta_by_id.keys())
 
-    channels: List[Dict[str, Any]] = []
+    prepared: List[tuple[str, Mapping[str, Any], Any, List[Any], Dict[str, Any]]] = []
+    needs_probe: List[str] = []
     for cid in channel_ids[:limit]:
         meta = meta_by_id.get(cid) or {}
         lineup = guide_by_id.get(cid) if isinstance(guide_by_id, dict) else None
@@ -871,24 +912,26 @@ def build_on_now_snapshot(
             if not meta:
                 meta = lineup
         slots = pick_now_and_next(programs, now=ts)
+        if _needs_now_playing(slots, programs):
+            needs_probe.append(cid)
+        prepared.append((cid, meta, lineup, programs, slots))
+
+    playing_by_id = _fetch_now_playing_batch(tunarr_client, needs_probe)
+
+    channels: List[Dict[str, Any]] = []
+    for cid, meta, lineup, programs, slots in prepared:
+        playing = playing_by_id.get(cid)
         if slots["now"] is None and slots["next"] is None and not programs:
             # Best-effort now_playing fallback when the guide window is empty.
-            try:
-                playing = tunarr_client.get_now_playing(cid)
-            except Exception:  # noqa: BLE001
-                playing = None
             if playing and not now_playing_past_file_eof(playing, now=ts):
                 slots = {"now": _normalize_program(playing, now=ts), "next": None}
         # Nested Tunarr content + now_playing often beats an empty guide parse;
         # also prefer real titles over guideFlexTitle pads for OSD / on-now.
         if slots["now"] is None or (
-            slots["now"].get("is_flex")
+            isinstance(slots.get("now"), Mapping)
+            and slots["now"].get("is_flex")
             and _is_guide_flex_placeholder(str(slots["now"].get("title") or ""))
         ):
-            try:
-                playing = tunarr_client.get_now_playing(cid)
-            except Exception:  # noqa: BLE001
-                playing = None
             playing_norm = _normalize_program(playing, now=ts) if playing else None
             # Past file EOF: now_playing often keeps the ended title with a padded
             # stop while the guide/stream already rolled to the next airing.

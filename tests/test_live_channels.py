@@ -1360,6 +1360,33 @@ class OnNowGuideTests(unittest.TestCase):
         self.assertTrue(programs[0]["is_flex"])
         self.assertEqual(programs[1]["episode_title"], "The Big Gold Strike")
 
+    def test_now_playing_probes_run_together(self) -> None:
+        """A hung now_playing probe must not be paid once per station."""
+        settings = Settings(
+            features=FeatureFlags(live_channels_enabled=True),
+            tunarr=TunarrSettings(url="http://tunarr.test"),
+        )
+
+        class _SlowClient:
+            def list_channels(self):
+                return [
+                    {"id": f"ch-{i}", "name": f"Station {i}", "number": 100 + i}
+                    for i in range(4)
+                ]
+
+            def get_all_channel_guides(self, *_args, **_kwargs):
+                return {f"ch-{i}": {"programs": []} for i in range(4)}
+
+            def get_now_playing(self, _cid):
+                time.sleep(0.45)
+                return None
+
+        started = time.perf_counter()
+        snap = build_on_now_snapshot(settings, client=_SlowClient())
+        took = time.perf_counter() - started
+        self.assertEqual(snap["count"], 4)
+        self.assertLess(took, 1.0)
+
     def test_empty_when_flag_off(self) -> None:
         snap = build_on_now_snapshot(Settings())
         self.assertFalse(snap["enabled"])
