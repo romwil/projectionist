@@ -16,9 +16,9 @@ _live guide and weather Lights Up_
 - **Weather channel was a dark full-bleed panel on paper.** Under Lights Up the board, type, ticker, and the two corner buttons use the paper theme so they stay readable. Lights Down keeps the dark weather board.
 
 ### Verification
-- Frontend unit includes `frontend/src/lib/liveGuideLightTheme.test.mjs` (4 cases): Lights Up guide/weather rules use theme tokens and omit the dark-chamber palette; Lights Down rules stay on the dark chamber.
-- Frontend unit 953/953; lint and `npm run build` recorded at ship time.
-- Backend `pytest tests/test_version.py` for lockstep after patch-release.
+- Backend `pytest tests/` — 2563 passed, 6 skipped, coverage 77.03% (floor 74%), run with `PROJECTIONIST_SKIP_DOTENV=1`.
+- Frontend unit 953/953 (includes `frontend/src/lib/liveGuideLightTheme.test.mjs`: Lights Up guide/weather rules use theme tokens and omit the dark-chamber palette; Lights Down stays on the dark chamber).
+- Lint 0 errors (149 warnings); `npm run build` OK.
 
 ## [1.37.35] — 2026-10-05
 
