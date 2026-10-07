@@ -1346,3 +1346,178 @@
   font-size: var(--text-xs);
   color: var(--muted);
 }
+
+/*
+ * lights-up-live-surfaces
+ * Lights Up follows platform tokens. Rules above stay the Lights Down chamber:
+ * the guide page and the weather board were hardcoded dark, so Lights Up ink
+ * (--text / --muted) sat on near-black chips, rails, and the programme card.
+ */
+html[data-theme="lights-up"] .live-page--guide,
+html[data-theme="lights-up"] .live-page--empty,
+html[data-theme="lights-up"] .live-page--watch:has(.weather-channel) {
+  --live-bg: var(--bg);
+  --live-panel: var(--surface);
+  --live-line: var(--border-subtle);
+  background:
+    radial-gradient(
+      120% 80% at 50% -10%,
+      color-mix(in srgb, var(--accent) 12%, transparent),
+      transparent 55%
+    ),
+    linear-gradient(180deg, var(--workspace-wash-a) 0%, var(--bg) 42%, var(--workspace-base) 100%);
+  color: var(--text);
+}
+
+html[data-theme="lights-up"] .live-page--guide .live-chrome,
+html[data-theme="lights-up"] .live-page--watch:has(.weather-channel) .live-chrome {
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  border-bottom-color: var(--border-subtle);
+  color: var(--text);
+}
+
+html[data-theme="lights-up"] .live-page--guide .live-chrome-icon-btn:hover:not(:disabled),
+html[data-theme="lights-up"] .live-page--guide .live-chrome-icon-btn:focus-visible:not(:disabled),
+html[data-theme="lights-up"] .live-page--watch:has(.weather-channel) .live-chrome-icon-btn:hover:not(:disabled),
+html[data-theme="lights-up"] .live-page--watch:has(.weather-channel) .live-chrome-icon-btn:focus-visible:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+html[data-theme="lights-up"] .live-page--guide .live-mode-toggle,
+html[data-theme="lights-up"] .live-page--watch:has(.weather-channel) .live-mode-toggle {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
+html[data-theme="lights-up"] .live-page--guide .live-eyebrow,
+html[data-theme="lights-up"] .live-page--empty .live-eyebrow,
+html[data-theme="lights-up"] .live-guide-rail-label,
+html[data-theme="lights-up"] .live-guide-station-num,
+html[data-theme="lights-up"] .live-program-hover-eyebrow,
+html[data-theme="lights-up"] .live-program-hover-hint {
+  color: var(--accent-2);
+}
+
+html[data-theme="lights-up"] .live-page--guide .live-guide-skeleton-row {
+  background: var(--surface-2);
+}
+
+html[data-theme="lights-up"] .live-guide-rail,
+html[data-theme="lights-up"] .live-guide-rail-corner,
+html[data-theme="lights-up"] .live-guide-timeline {
+  background: var(--surface);
+  color: var(--text);
+}
+
+html[data-theme="lights-up"] .live-guide-tick {
+  border-left-color: var(--border);
+  color: var(--muted);
+}
+
+html[data-theme="lights-up"] .live-guide-rows {
+  background-image:
+    linear-gradient(to right, var(--border) 0 1px, transparent 1px),
+    linear-gradient(to right, var(--border-subtle) 0 1px, transparent 1px);
+}
+
+html[data-theme="lights-up"] .live-guide-row {
+  background: transparent;
+}
+
+html[data-theme="lights-up"] .live-guide-row.is-focused {
+  background: var(--accent-soft);
+}
+
+html[data-theme="lights-up"] .live-guide-now-line {
+  background: var(--accent-2);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-2) 40%, transparent);
+}
+
+html[data-theme="lights-up"] .live-guide-cell {
+  background: var(--surface-raised);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+html[data-theme="lights-up"] .live-guide-cell:hover,
+html[data-theme="lights-up"] .live-guide-cell.is-focused {
+  background: color-mix(in srgb, var(--accent-soft) 65%, var(--surface-raised));
+  border-color: var(--accent-2);
+  color: var(--text);
+}
+
+html[data-theme="lights-up"] .live-guide-station:focus-visible,
+html[data-theme="lights-up"] .live-guide-cell:focus-visible {
+  outline-color: var(--accent-2);
+}
+
+html[data-theme="lights-up"] .live-program-hover {
+  background: var(--surface-raised);
+  color: var(--text);
+  border-color: var(--border);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--text) 16%, transparent);
+}
+
+html[data-theme="lights-up"] .live-program-hover:hover,
+html[data-theme="lights-up"] .live-program-hover:focus-visible {
+  border-color: var(--accent-2);
+  outline-color: var(--accent-2);
+}
+
+html[data-theme="lights-up"] .weather-channel {
+  --wx-ink: var(--text);
+  --wx-amber: var(--accent-2);
+  --wx-dim: var(--muted);
+  background: var(--bg);
+  color: var(--text);
+}
+
+html[data-theme="lights-up"] .weather-channel .weather-channel-sky {
+  background:
+    radial-gradient(
+      ellipse at 70% 0%,
+      color-mix(in srgb, var(--accent) 16%, transparent),
+      transparent 46%
+    ),
+    linear-gradient(180deg, var(--workspace-wash-a) 0%, var(--bg) 70%);
+}
+
+html[data-theme="lights-up"] .weather-channel-place,
+html[data-theme="lights-up"] .weather-channel-temp,
+html[data-theme="lights-up"] .weather-channel-status {
+  text-shadow: none;
+}
+
+html[data-theme="lights-up"] .weather-channel .ghost {
+  background: var(--surface-raised);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+html[data-theme="lights-up"] .weather-channel .ghost:hover:not(:disabled),
+html[data-theme="lights-up"] .weather-channel .ghost:focus-visible:not(:disabled) {
+  border-color: var(--accent-2);
+  color: var(--accent-2);
+}
+
+html[data-theme="lights-up"] .weather-day-grid {
+  border-color: var(--border);
+}
+
+html[data-theme="lights-up"] .weather-channel-ticker {
+  border-color: var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+html[data-theme="lights-up"] .weather-channel-status--error {
+  color: var(--danger);
+}
+
+html[data-theme="lights-up"] .weather-place-picker--channel .field-help,
+html[data-theme="lights-up"] .weather-place-picker--channel .weather-place-status,
+html[data-theme="lights-up"] .weather-place-picker--channel .weather-place-current {
+  color: var(--muted);
+}
