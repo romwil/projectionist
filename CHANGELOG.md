@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [1.37.36] — 2026-10-07
+
+One patch on 1.37.35: the Live guide and Weather channel follow Lights Up instead of staying a dark chamber on paper.
+
+### Highlights
+- **Live guide follows Lights Up.** Channel names, programme titles, and the programme card stay readable on paper. Lights Down keeps the dark guide.
+- **Weather channel follows Lights Up.** The weather board, forecast strip, and corner controls use the paper theme. Lights Down keeps the dark board.
+
+### Fixed
+_live guide and weather Lights Up_
+- **Live guide was a dark chamber on paper.** Under Lights Up, channel names, programme titles, and the programme card used dark ink on dark chips. The guide page, time header, channel column, programme blocks, empty slots, now line, hover and focus, and the programme card now use the same theme tokens as the rest of the app. Lights Down stays the dark guide.
+- **Weather channel was a dark full-bleed panel on paper.** Under Lights Up the board, type, ticker, and the two corner buttons use the paper theme so they stay readable. Lights Down keeps the dark weather board.
+
+### Verification
+- Frontend unit includes `frontend/src/lib/liveGuideLightTheme.test.mjs` (4 cases): Lights Up guide/weather rules use theme tokens and omit the dark-chamber palette; Lights Down rules stay on the dark chamber.
+- Frontend unit 953/953; lint and `npm run build` recorded at ship time.
+- Backend `pytest tests/test_version.py` for lockstep after patch-release.
+
 ## [1.37.35] — 2026-10-05
 
 One patch on 1.37.34: the end card starts the next episode or says why it cannot, Back to Explore leaves the player, Explore no longer sits on a loading screen, Plex sign-in catches up when the PIN is linked, and Surprising matches need a story you can name.
