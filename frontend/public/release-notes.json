@@ -1,6 +1,32 @@
 {
-  "generated_at": "2026-10-05T22:01:03Z",
+  "generated_at": "2026-10-07T20:29:56Z",
   "releases": [
+    {
+      "version": "1.37.36",
+      "date": "2026-10-07",
+      "summary": "One patch on 1.37.35: the Live guide and Weather channel follow Lights Up instead of staying a dark chamber on paper.",
+      "highlights": [
+        "**Live guide follows Lights Up.** Channel names, programme titles, and the programme card stay readable on paper. Lights Down keeps the dark guide.",
+        "**Weather channel follows Lights Up.** The weather board, forecast strip, and corner controls use the paper theme. Lights Down keeps the dark board."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "**Live guide was a dark chamber on paper.** Under Lights Up, channel names, programme titles, and the programme card used dark ink on dark chips. The guide page, time header, channel column, programme blocks, empty slots, now line, hover and focus, and the programme card now use the same theme tokens as the rest of the app. Lights Down stays the dark guide.",
+            "**Weather channel was a dark full-bleed panel on paper.** Under Lights Up the board, type, ticker, and the two corner buttons use the paper theme so they stay readable. Lights Down keeps the dark weather board."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend `pytest tests/` — 2563 passed, 6 skipped, coverage 77.03% (floor 74%), run with `PROJECTIONIST_SKIP_DOTENV=1`.",
+            "Frontend unit 953/953 (includes `frontend/src/lib/liveGuideLightTheme.test.mjs`: Lights Up guide/weather rules use theme tokens and omit the dark-chamber palette; Lights Down stays on the dark chamber).",
+            "Lint 0 errors (149 warnings); `npm run build` OK."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.35",
       "date": "2026-10-05",
