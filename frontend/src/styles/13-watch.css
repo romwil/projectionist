@@ -153,7 +153,8 @@ html:has([data-theater-mode="true"]) #root {
   grid-template-columns: auto 1fr auto;
   gap: 0.55rem;
   align-items: center;
-  touch-action: none;
+  /* manipulation, not none: iPad Safari drops range gestures under touch-action: none. */
+  touch-action: manipulation;
   font-variant-numeric: tabular-nums;
 }
 
@@ -211,7 +212,7 @@ html:has([data-theater-mode="true"]) #root {
   border: 0;
   border-radius: 999px;
   background: var(--accent);
-  color: #1a1200;
+  color: var(--accent-text);
   font: inherit;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -254,6 +255,15 @@ html:has([data-theater-mode="true"]) #root {
   border-color: transparent;
   background: transparent;
   font-variant-numeric: tabular-nums;
+}
+
+/* ±30 only when the bar is landscape and wide. Portrait / phone keep ±15. */
+.theater-osd-skip-long {
+  display: none;
+}
+
+.library-watch[data-long-skip="true"] .theater-osd-skip-long {
+  display: inline-flex;
 }
 
 .theater-osd-skip:hover,
@@ -332,9 +342,9 @@ html:has([data-theater-mode="true"]) #root {
   width: 5.25rem;
   height: 5.25rem;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  border: 1px solid color-mix(in srgb, var(--ink-on-media) 28%, transparent);
   background: rgba(5, 6, 8, 0.55);
-  color: #fff;
+  color: var(--ink-on-media);
   cursor: pointer;
   display: grid;
   place-items: center;
@@ -350,7 +360,7 @@ html:has([data-theater-mode="true"]) #root {
   transform: translate(-50%, -50%) scale(1.05);
   background: rgba(255, 184, 0, 0.92);
   border-color: transparent;
-  color: #1a1200;
+  color: var(--accent-text);
 }
 
 .theater-center-play-glyph {
@@ -370,7 +380,7 @@ html:has([data-theater-mode="true"]) #root {
   padding: 0.55rem 1rem;
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.55);
-  color: #fff;
+  color: var(--ink-on-media);
 }
 
 .theater-skip-chip {
@@ -381,7 +391,7 @@ html:has([data-theater-mode="true"]) #root {
   padding: 0.4rem 0.85rem;
   border-radius: 999px;
   background: rgba(255, 184, 0, 0.92);
-  color: #1a1200;
+  color: var(--accent-text);
   font-weight: 700;
   letter-spacing: 0.04em;
   pointer-events: none;
@@ -419,6 +429,7 @@ html:has([data-theater-mode="true"]) #root {
   justify-content: center;
   gap: 1.1rem;
   background: rgba(5, 6, 8, 0.72);
+  color: var(--ink-on-media);
   /* Above .theater-osd (z-index 5) so Next Episode receives the click. */
   z-index: 6;
   text-align: center;
@@ -443,7 +454,19 @@ html:has([data-theater-mode="true"]) #root {
   max-width: 28rem;
   font-size: var(--text-sm);
   line-height: 1.4;
-  color: var(--text);
+  color: var(--muted-on-media);
+}
+
+.theater-resume-gate .muted,
+.theater-end-card .muted {
+  color: var(--muted-on-media);
+}
+
+.theater-resume-gate .title-cta-ghost,
+.theater-end-card .title-cta-ghost {
+  color: var(--ink-on-media);
+  background: color-mix(in srgb, var(--ink-on-media) 12%, transparent);
+  border-color: color-mix(in srgb, var(--ink-on-media) 35%, transparent);
 }
 
 .theater-resume-title {
@@ -651,7 +674,7 @@ html:has([data-theater-mode="true"]) #root {
   padding: 0.65rem 1.1rem;
   border-radius: 0.35rem;
   background: rgba(8, 6, 2, 0.72);
-  color: #f4efe4;
+  color: var(--ink-on-media);
   font-family: var(--font-display, "Fraunces", Georgia, serif);
   font-size: clamp(1rem, 2.4vw, 1.35rem);
   font-weight: 500;
@@ -688,7 +711,80 @@ html:has([data-theater-mode="true"]) #root {
   padding: 0.45rem 0.8rem;
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.55);
-  color: #f4efe4;
+  color: var(--ink-on-media);
   font-size: 0.85rem;
   text-align: center;
+}
+
+/*
+ * lights-up-player-chrome
+ * The picture stays dark. The control bar is page chrome: under Lights Up it
+ * uses paper tokens so skip, captions, fullscreen, and More are not dark ink
+ * on the dark glass. Lights Down keeps the glass above. The Play pill stays
+ * accent on accent-text in both themes.
+ */
+html[data-theme="lights-up"] .theater-osd-inner {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+  box-shadow: 0 -16px 48px color-mix(in srgb, var(--text) 18%, transparent);
+}
+
+html[data-theme="lights-up"] .theater-osd-kicker,
+html[data-theme="lights-up"] .theater-osd-episode,
+html[data-theme="lights-up"] .theater-clock {
+  color: var(--muted);
+}
+
+html[data-theme="lights-up"] .theater-osd-title {
+  color: var(--text);
+}
+
+html[data-theme="lights-up"] .theater-scrubber-buffered {
+  background: var(--border);
+}
+
+html[data-theme="lights-up"] .theater-osd-skip {
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
+}
+
+html[data-theme="lights-up"] .theater-osd-secondary {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+html[data-theme="lights-up"] .theater-osd-skip:hover,
+html[data-theme="lights-up"] .theater-osd-skip:focus-visible,
+html[data-theme="lights-up"] .theater-osd-secondary:hover,
+html[data-theme="lights-up"] .theater-osd-secondary:focus-visible,
+html[data-theme="lights-up"] .theater-osd-secondary.is-active {
+  color: var(--text);
+  background: var(--accent-soft);
+  border-color: var(--accent-2);
+}
+
+html[data-theme="lights-up"] .theater-osd-menu {
+  background: var(--surface-raised);
+  color: var(--text);
+  border-color: var(--border);
+  box-shadow: 0 12px 36px color-mix(in srgb, var(--text) 16%, transparent);
+}
+
+html[data-theme="lights-up"] .theater-osd-menu button,
+html[data-theme="lights-up"] .theater-osd-menu a {
+  color: var(--text);
+}
+
+html[data-theme="lights-up"] .theater-osd-menu button:hover,
+html[data-theme="lights-up"] .theater-osd-menu button:focus-visible,
+html[data-theme="lights-up"] .theater-osd-menu a:hover,
+html[data-theme="lights-up"] .theater-osd-menu a:focus-visible {
+  background: var(--accent-soft);
+}
+
+html[data-theme="lights-up"] .theater-cc-note {
+  border-top-color: var(--border-subtle);
 }

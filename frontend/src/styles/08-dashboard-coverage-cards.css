@@ -448,7 +448,7 @@
 
 .dash-purge-btn--danger {
   background: var(--danger);
-  color: #1a1208;
+  color: var(--bg);
 }
 
 .dash-purge-btn--muted {

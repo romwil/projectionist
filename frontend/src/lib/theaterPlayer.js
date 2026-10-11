@@ -1,6 +1,10 @@
 /** Shared in-app theater helpers — skip zones, resume, progress, HLS attach. */
 
 export const SKIP_SECONDS = 15;
+/** Extra skip shown only when the Play bar is landscape and wide enough. */
+export const SKIP_LONG_SECONDS = 30;
+/** iPad-class landscape. Phone landscape stays on ±15 so the bar does not wrap over the slider. */
+export const LONG_SKIP_MIN_WIDTH = 1000;
 export const RESUME_THRESHOLD_MS = 2 * 60 * 1000;
 export const PROGRESS_THROTTLE_MS = 10_000;
 export const DOUBLE_TAP_MS = 300;
@@ -163,6 +167,71 @@ export function msFromScrubPct(pct, durationMs) {
   const p = Number(pct);
   if (!Number.isFinite(p)) return 0;
   return Math.round((Math.max(0, Math.min(SCRUB_MAX, p)) / SCRUB_MAX) * d);
+}
+
+/**
+ * True when ±30 skip buttons fit the Play bar: landscape and at least iPad width.
+ * Portrait and phone landscape stay on ±15.
+ */
+export function longSkipFits(viewport) {
+  const width = Number(viewport?.width);
+  const height = Number(viewport?.height);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return false;
+  return width > height && width >= LONG_SKIP_MIN_WIDTH;
+}
+
+/**
+ * Coalesce a Play scrubber gesture into one seek.
+ * iPad Safari emits a burst of `input` events while the finger moves. Seeking
+ * on each event restarts the HLS session and the player locks. Preview during
+ * the burst; commit once on release, or once after the burst goes quiet if
+ * pointerup never arrives.
+ */
+export function createScrubCommit({ onCommit, quietMs = 180, lostEndMs = 700 } = {}) {
+  let dragging = false;
+  let latest = null;
+  let timer = null;
+
+  function clearTimer() {
+    if (timer != null) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  }
+
+  function commit() {
+    clearTimer();
+    dragging = false;
+    if (latest == null) return;
+    const pct = latest;
+    latest = null;
+    onCommit?.(pct);
+  }
+
+  return {
+    begin() {
+      dragging = true;
+      clearTimer();
+    },
+    input(pct) {
+      const n = Number(pct);
+      if (!Number.isFinite(n)) return;
+      latest = n;
+      clearTimer();
+      timer = setTimeout(commit, dragging ? lostEndMs : quietMs);
+    },
+    end() {
+      commit();
+    },
+    cancel() {
+      clearTimer();
+      dragging = false;
+      latest = null;
+    },
+    isDragging() {
+      return dragging;
+    },
+  };
 }
 
 /**
