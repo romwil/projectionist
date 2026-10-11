@@ -4,7 +4,9 @@ import {
   clearExploreHubCache,
   exploreHubStillWarming,
   hubRailState,
+  mergeContinueWatchingNotes,
   readExploreHubCache,
+  rememberContinueWatchingProgress,
   writeExploreHubCache,
 } from "./exploreHubCache.js";
 
@@ -65,5 +67,52 @@ describe("exploreHubCache", () => {
     assert.equal(waiting.loading, true);
     assert.equal(waiting.items.length, 0);
     assert.equal(waiting.note, null);
+  });
+
+  it("puts a play just recorded on Continue Watching without the old offset", () => {
+    const storage = memoryStorage();
+    const previous = {
+      warming: false,
+      rails: {
+        recently_added: { items: [{ title: "Heat" }] },
+        continue_watching: {
+          items: [{ title: "Heat", rating_key: "movie-1", play_rating_key: "movie-1", view_offset_ms: 60_000 }],
+          note: null,
+        },
+      },
+    };
+    writeExploreHubCache(previous, storage);
+    rememberContinueWatchingProgress(
+      {
+        ratingKey: "movie-1",
+        viewOffsetMs: 1_800_000,
+        durationMs: 6_000_000,
+        title: "Heat",
+        mediaType: "movie",
+      },
+      storage,
+    );
+    const hit = readExploreHubCache(storage);
+    const row = hit.payload.rails.continue_watching.items[0];
+    assert.equal(row.title, "Heat");
+    assert.equal(row.view_offset_ms, 1_800_000);
+    assert.notEqual(row.view_offset_ms, previous.rails.continue_watching.items[0].view_offset_ms);
+    assert.equal(hit.payload.rails.recently_added.items[0].title, "Heat");
+
+    const staleServer = {
+      warming: false,
+      rails: {
+        continue_watching: {
+          source: "plex_on_deck",
+          items: [{ title: "Heat", rating_key: "movie-1", play_rating_key: "movie-1", view_offset_ms: 60_000 }],
+        },
+      },
+    };
+    const merged = mergeContinueWatchingNotes(staleServer, storage);
+    assert.equal(merged.rails.continue_watching.items[0].view_offset_ms, 1_800_000);
+    assert.notEqual(
+      merged.rails.continue_watching.items[0].view_offset_ms,
+      staleServer.rails.continue_watching.items[0].view_offset_ms,
+    );
   });
 });
