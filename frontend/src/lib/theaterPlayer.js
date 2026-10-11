@@ -50,6 +50,29 @@ export function skipDeltaForZone(zone) {
   return 0;
 }
 
+/**
+ * Bottom third of the picture only shows or hides the control overlay.
+ * The rest of the picture keeps one-tap play/pause.
+ * @returns {"osd"|"toggle"}
+ */
+export function pictureTapIntent(offsetY, height) {
+  const y = Number(offsetY);
+  const h = Number(height);
+  if (!Number.isFinite(y) || !Number.isFinite(h) || h <= 0 || y < 0) return "toggle";
+  if (y >= (h * 2) / 3) return "osd";
+  return "toggle";
+}
+
+/** Apply a picture tap. Bottom third must not call pause/play. */
+export function dispatchPictureTap({ offsetY, height, togglePlayback, toggleOsd } = {}) {
+  if (pictureTapIntent(offsetY, height) === "osd") {
+    toggleOsd?.();
+    return "osd";
+  }
+  togglePlayback?.();
+  return "playback";
+}
+
 export function shouldResumeFromOffset(viewOffsetMs) {
   const offset = Number(viewOffsetMs);
   return Number.isFinite(offset) && offset >= RESUME_THRESHOLD_MS;
