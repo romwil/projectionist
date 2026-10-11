@@ -428,7 +428,9 @@ test.describe("In-app library Play", () => {
     expect(shrunk.identity).toBe("alive");
     expect(shrunk.count).toBe(1);
 
-    await page.getByTestId("topbar-explore-link").click();
+    // Title detail uses the sticky header, so Chat / Explore / Search are in the hamburger.
+    await page.getByTestId("app-nav-toggle").click();
+    await page.getByTestId("app-nav-explore").click();
     await expect(page).toHaveURL(/\/explore/);
     await expect(page.getByTestId("library-player-video")).toHaveAttribute("data-pip-identity", "alive");
 
