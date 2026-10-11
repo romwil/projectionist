@@ -624,6 +624,8 @@ def update_local_view_offset(db: Any, rating_key: str, offset_ms: int, duration_
         return
     now = time.time()
     offset = max(0, int(offset_ms or 0))
+    duration = max(0, int(duration_ms or 0))
+    finished = duration >= 30_000 and offset >= duration * 0.9
     with db.connect() as conn:
         conn.execute(
             """
@@ -663,6 +665,18 @@ def update_local_view_offset(db: Any, rating_key: str, offset_ms: int, duration_
                 """,
                 (int(now), key),
             )
+    try:
+        from projectionist.library.continue_watching_progress import note_playback_progress
+
+        note_playback_progress(
+            db,
+            key,
+            0 if finished else offset,
+            duration,
+            finished=finished,
+        )
+    except Exception:  # noqa: BLE001 — playback progress must still persist
+        logger.debug("continue watching progress note failed", exc_info=True)
 
 
 def plex_timeline_url(
@@ -837,6 +851,7 @@ def seek_playback(
     offset_ms: int,
     *,
     fetch: Optional[FetchFn] = None,
+    db: Any = None,
 ) -> Dict[str, Any]:
     fetch = fetch or fetch_plex_bytes
     offset = max(0, int(offset_ms or 0))
@@ -844,6 +859,8 @@ def seek_playback(
     session.view_offset_ms = offset
     start_plex_hls(session, offset_seconds=offset / 1000.0, fetch=fetch)
     _put_session(session)
+    if db is not None:
+        update_local_view_offset(db, session.rating_key, offset, int(session.duration_ms or 0))
     return session_public_payload(session, can_resume=False)
 
 
@@ -861,7 +878,9 @@ def report_progress(
     fetch = fetch or fetch_plex_bytes
     stamp = time.time() if now is None else float(now)
     mapped = _timeline_state(state)
-    if mapped == "stopped":
+    # Pause and stop are the moments we know the playhead. Do not wait out
+    # the playing-state throttle to put that offset on Continue Watching.
+    if mapped in {"stopped", "paused"}:
         force = True
     if not force and not should_send_progress(session.last_progress_at, stamp):
         return {"ok": True, "throttled": True}

@@ -63,6 +63,13 @@ _CACHE: Dict[str, tuple[float, float, Dict[str, Any]]] = {}
 # Single-flight background refresh keys.
 _REFRESHING: set[str] = set()
 _REFRESH_LOCK = threading.Lock()
+# Continue Watching-only refresh after in-app playback. Does not republish a
+# warming hub, so local rails stay on screen.
+_CW_REFRESHING: set[str] = set()
+_CW_REFRESH_LOCK = threading.Lock()
+# cache key -> build context for a background on-deck refresh
+_CONTEXTS: Dict[str, Dict[str, Any]] = {}
+_CONTEXT_LOCK = threading.Lock()
 
 _RAIL_KEYS = (
     "continue_watching",
@@ -82,6 +89,21 @@ _RAIL_KEYS = (
 def _cap_rail_limit(rail_limit: int) -> int:
     """Explore shelf length. Matches the Plex on-deck window, not the old short cap."""
     return max(1, min(int(rail_limit or EXPLORE_RAIL_LIMIT), EXPLORE_RAIL_LIMIT))
+
+
+def _remember_hub_context(
+    cache_key: str,
+    db: Database,
+    settings: Settings,
+    *,
+    rail_limit: int,
+) -> None:
+    with _CONTEXT_LOCK:
+        _CONTEXTS[cache_key] = {
+            "db_path": str(getattr(db, "path", "") or ""),
+            "settings": settings,
+            "rail_limit": _cap_rail_limit(rail_limit),
+        }
 
 
 def invalidate_explore_hub_cache() -> None:
@@ -357,11 +379,21 @@ def _public_copy(
     cached: bool,
     stale: bool,
     warming: bool = False,
+    db: Optional[Database] = None,
 ) -> Dict[str, Any]:
     out = copy.deepcopy(payload)
     out["cached"] = cached
     out["stale"] = stale
     out["warming"] = warming
+    if db is not None:
+        from projectionist.library.continue_watching_progress import apply_known_continue_watching
+
+        rails = out.get("rails")
+        rail = rails.get("continue_watching") if isinstance(rails, dict) else None
+        if isinstance(rail, dict):
+            # In-app progress wins over a fresh hub snapshot so Continue Watching
+            # does not sit on the on-deck row from before this play.
+            rails["continue_watching"] = apply_known_continue_watching(db, rail)
     return out
 
 
@@ -410,6 +442,61 @@ def _schedule_refresh(
     thread.start()
 
 
+def _refresh_continue_watching_cache(cache_key: str, db: Database, ctx: Mapping[str, Any]) -> None:
+    """Replace only the Continue Watching rail. Other shelves stay as they are."""
+    from projectionist.library.continue_watching_progress import apply_known_continue_watching
+    from projectionist.library.feeds import feed_continue_watching
+
+    settings = ctx.get("settings")
+    if not isinstance(settings, Settings):
+        return
+    rail_limit = _cap_rail_limit(int(ctx.get("rail_limit") or EXPLORE_RAIL_LIMIT))
+    rail = feed_continue_watching(db, limit=rail_limit, plex_client=_plex_client(settings))
+    rail = apply_known_continue_watching(db, rail)
+    with _LOCK:
+        hit = _CACHE.get(cache_key)
+        if not hit:
+            return
+        soft_expires, hard_expires, payload = hit
+        updated = copy.deepcopy(payload)
+        rails = updated.get("rails")
+        if not isinstance(rails, dict):
+            return
+        rails["continue_watching"] = rail
+        updated["generated_at"] = int(time.time())
+        # Keep the existing soft expiry. A playback update must not mark the
+        # whole hub warming or force Explore to wait on a cold rebuild.
+        _CACHE[cache_key] = (soft_expires, hard_expires, updated)
+    _disk_store(db, cache_key, updated)
+
+
+def refresh_continue_watching_after_playback(db: Database) -> None:
+    """Background on-deck refresh after this process recorded play progress."""
+    path = str(getattr(db, "path", "") or "")
+    with _CONTEXT_LOCK:
+        jobs = [(key, dict(ctx)) for key, ctx in _CONTEXTS.items() if ctx.get("db_path") == path]
+    for cache_key, ctx in jobs:
+        with _CW_REFRESH_LOCK:
+            if cache_key in _CW_REFRESHING:
+                continue
+            _CW_REFRESHING.add(cache_key)
+
+        def _run(cache_key: str = cache_key, ctx: Dict[str, Any] = ctx) -> None:
+            try:
+                _refresh_continue_watching_cache(cache_key, db, ctx)
+            except Exception:  # noqa: BLE001 — on-deck refresh must not surface to playback
+                logger.exception("continue watching refresh failed key=%s", cache_key)
+            finally:
+                with _CW_REFRESH_LOCK:
+                    _CW_REFRESHING.discard(cache_key)
+
+        threading.Thread(
+            target=_run,
+            name=f"continue-watching-refresh:{cache_key[:48]}",
+            daemon=True,
+        ).start()
+
+
 def get_explore_hub(
     db: Database,
     settings: Settings,
@@ -421,6 +508,7 @@ def get_explore_hub(
 ) -> Dict[str, Any]:
     """Return Explore hub via stale-while-revalidate (never block on soft-expired)."""
     cache_key = f"youth={int(bool(is_youth))}|uid={user_id or ''}|limit={rail_limit}"
+    _remember_hub_context(cache_key, db, settings, rail_limit=rail_limit)
 
     if bypass_cache:
         payload = build_explore_hub(
@@ -432,13 +520,13 @@ def get_explore_hub(
         )
         _cache_set(cache_key, payload)
         _disk_store(db, cache_key, payload)
-        return _public_copy(payload, cached=False, stale=False, warming=False)
+        return _public_copy(payload, cached=False, stale=False, warming=False, db=db)
 
     entry = _cache_get_entry(cache_key)
     if entry is not None:
         fresh, _within_hard, payload = entry
         if fresh and not payload.get("warming"):
-            return _public_copy(payload, cached=True, stale=False, warming=False)
+            return _public_copy(payload, cached=True, stale=False, warming=False, db=db)
         _schedule_refresh(
             cache_key,
             db,
@@ -452,6 +540,7 @@ def get_explore_hub(
             cached=True,
             stale=True,
             warming=bool(payload.get("warming")),
+            db=db,
         )
 
     disk = _disk_load(db, cache_key)
@@ -465,7 +554,7 @@ def get_explore_hub(
             user_id=user_id,
             rail_limit=rail_limit,
         )
-        return _public_copy(disk, cached=True, stale=True, warming=False)
+        return _public_copy(disk, cached=True, stale=True, warming=False, db=db)
 
     # Cold miss — local shelves go out on this response. Plex, spotlights, and
     # the seasonal scan fill the same cache entry in the background.
@@ -484,7 +573,7 @@ def get_explore_hub(
         user_id=user_id,
         rail_limit=rail_limit,
     )
-    return _public_copy(partial, cached=False, stale=True, warming=True)
+    return _public_copy(partial, cached=False, stale=True, warming=True, db=db)
 
 
 def explore_hub_cache_stats() -> Mapping[str, Any]:
@@ -501,3 +590,10 @@ def explore_hub_cache_stats() -> Mapping[str, Any]:
         "refreshing": refreshing,
         "rail_keys": list(_RAIL_KEYS),
     }
+
+
+from projectionist.library.continue_watching_progress import (  # noqa: E402
+    register_continue_watching_refresh,
+)
+
+register_continue_watching_refresh(refresh_continue_watching_after_playback)

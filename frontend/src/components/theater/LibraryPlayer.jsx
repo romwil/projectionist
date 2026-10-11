@@ -9,6 +9,7 @@ import {
   stopLibraryPlayback,
 } from "../../api/client";
 import { isCompactPlayViewport, isPhonePlayViewport } from "../../lib/chatLayout.js";
+import { rememberContinueWatchingProgress } from "../../lib/exploreHubCache.js";
 import {
   POP_OUT_OF_WINDOW_LABEL,
   SHRINK_ONTO_PAGE_LABEL,
@@ -76,6 +77,28 @@ function displayTitle(session) {
   const meta = displayMeta(session);
   if (meta) return `${displayHeadline(session)} · ${meta}`;
   return displayHeadline(session);
+}
+
+/** Push a play this screen just recorded onto the Explore Continue Watching rail. */
+function rememberPlayedProgress(session, timeMs, durationMs) {
+  const ratingKey = String(session?.rating_key || "");
+  if (!ratingKey) return;
+  const offset = Math.max(0, Math.floor(Number(timeMs) || 0));
+  const duration = Math.max(0, Math.floor(Number(durationMs) || 0));
+  const finished = duration >= 30_000 && offset >= duration * 0.9;
+  rememberContinueWatchingProgress({
+    ratingKey,
+    viewOffsetMs: finished ? 0 : offset,
+    durationMs: duration,
+    finished: finished || offset <= 0,
+    title: session.show_title || session.title || "",
+    episodeTitle: session.media_type === "episode" ? session.title || "" : "",
+    mediaType: session.media_type || "",
+    season: session.season,
+    episode: session.episode,
+    posterUrl: session.poster_url || "",
+    year: session.year,
+  });
 }
 
 export default function LibraryPlayer({
@@ -222,10 +245,13 @@ export default function LibraryPlayer({
     if (!current?.session_id) return;
     const video = videoRef.current;
     try {
+      const timeMs = extra.time_ms ?? Math.round((video?.currentTime || 0) * 1000);
+      const durationMs = extra.duration_ms ?? Math.round((video?.duration || 0) * 1000);
       await stopLibraryPlayback(current.session_id, {
-        time_ms: extra.time_ms ?? Math.round((video?.currentTime || 0) * 1000),
-        duration_ms: extra.duration_ms ?? Math.round((video?.duration || 0) * 1000),
+        time_ms: timeMs,
+        duration_ms: durationMs,
       });
+      rememberPlayedProgress(current, timeMs, durationMs);
     } catch {
       // Best-effort — unmount / hide still tears down local state.
     }
@@ -310,6 +336,7 @@ export default function LibraryPlayer({
         if (sessionRef.current?.session_id && startOver) {
           try {
             await stopLibraryPlayback(sessionRef.current.session_id, { time_ms: 0 });
+            rememberPlayedProgress(sessionRef.current, 0, Number(sessionRef.current.duration_ms) || 0);
           } catch {
             // replace the session below
           }
@@ -484,14 +511,17 @@ export default function LibraryPlayer({
     const current = sessionRef.current;
     if (!current?.session_id) return;
     const now = Date.now();
-    if (state !== "stopped" && !shouldSendProgress(lastProgressAtRef.current, now)) return;
+    if (state !== "stopped" && state !== "paused" && !shouldSendProgress(lastProgressAtRef.current, now)) return;
     lastProgressAtRef.current = now;
+    const timeMs = Math.round((video?.currentTime || 0) * 1000);
+    const reportedDuration = Math.round((video?.duration || durationMs / 1000 || 0) * 1000);
     try {
       await progressLibraryPlayback(current.session_id, {
         state,
-        time_ms: Math.round((video?.currentTime || 0) * 1000),
-        duration_ms: Math.round((video?.duration || durationMs / 1000 || 0) * 1000),
+        time_ms: timeMs,
+        duration_ms: reportedDuration,
       });
+      rememberPlayedProgress(current, timeMs, reportedDuration);
     } catch {
       // Progress is best-effort.
     }
@@ -524,6 +554,7 @@ export default function LibraryPlayer({
       sessionRef.current = next;
       setSession(next);
       setNowMs(offsetMs);
+      rememberPlayedProgress(next, offsetMs, Number(next.duration_ms) || durationMs);
     } catch (err) {
       setSeeking(false);
       setError(err?.message || "Couldn’t jump in this title.");

@@ -1601,15 +1601,20 @@ def feed_continue_watching(
             "Nothing in progress — start something in Plex, or wait for watch "
             "progress to sync."
         )
-    return {
-        "feed": "continue-watching",
-        "source": source,
-        "items": items,
-        "total": len(items),
-        "limit": capped,
-        "note": note,
-        "plex_error": plex_error,
-    }
+    from projectionist.library.continue_watching_progress import apply_known_continue_watching
+
+    return apply_known_continue_watching(
+        db,
+        {
+            "feed": "continue-watching",
+            "source": source,
+            "items": items,
+            "total": len(items),
+            "limit": capped,
+            "note": note,
+            "plex_error": plex_error,
+        },
+    )
 
 
 def _row_int(row: Mapping[str, Any], key: str) -> Optional[int]:

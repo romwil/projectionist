@@ -23,8 +23,10 @@ import { ROUTES, decadeYearRange, exploreSectionPath, libraryBrowsePath } from "
 import { formatLanguageName } from "../lib/languageNames.js";
 import { buildPulseStats, normalizeFeed } from "../lib/exploreFeeds.js";
 import {
+  CONTINUE_WATCHING_PROGRESS_EVENT,
   exploreHubStillWarming,
   hubRailState,
+  mergeContinueWatchingNotes,
   readExploreHubCache,
   writeExploreHubCache,
 } from "../lib/exploreHubCache.js";
@@ -181,39 +183,64 @@ function hubHasRailItems(payload) {
   );
 }
 
+function withPlayedProgress(payload) {
+  return payload ? mergeContinueWatchingNotes(payload) : payload;
+}
+
 function useExploreHub() {
   const cached = typeof sessionStorage !== "undefined" ? readExploreHubCache() : null;
   const [hub, setHub] = useState(() => ({
     loading: !cached?.payload,
-    payload: cached?.payload || null,
+    payload: withPlayedProgress(cached?.payload) || null,
     error: "",
     fromCache: Boolean(cached?.payload),
   }));
+
+  useEffect(() => {
+    function onPlayed() {
+      const stored = readExploreHubCache();
+      setHub((prev) => {
+        const base = stored?.payload || prev.payload;
+        if (!base) return prev;
+        return {
+          ...prev,
+          loading: false,
+          payload: withPlayedProgress(base),
+          error: "",
+        };
+      });
+    }
+    window.addEventListener(CONTINUE_WATCHING_PROGRESS_EVENT, onPlayed);
+    return () => window.removeEventListener(CONTINUE_WATCHING_PROGRESS_EVENT, onPlayed);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     let pollTimer = null;
     const WARMING_POLL_MS = 1200;
     const WARMING_MAX_ATTEMPTS = 30;
-    const sessionPayload = cached?.payload || null;
+    const sessionPayload = withPlayedProgress(cached?.payload) || null;
 
     const fetchHub = (attempt = 0) => {
       getExploreHub({ limit: EXPLORE_RAIL_LIMIT })
         .then((payload) => {
           if (cancelled) return;
-          const warming = exploreHubStillWarming(payload);
+          const played = withPlayedProgress(payload);
+          const warming = exploreHubStillWarming(played);
           if (warming) {
             // Paint rails that have already landed. Keep a prior full payload
             // only when this response is still an empty skeleton.
+            // Continue Watching still takes a play this app just recorded,
+            // including while the rest of the hub is warming.
             setHub((prev) => {
-              const incomingReady = hubHasRailItems(payload);
+              const incomingReady = hubHasRailItems(played);
               const keep =
                 (!incomingReady && hubHasRailItems(prev.payload) && prev.payload) ||
                 (!incomingReady && hubHasRailItems(sessionPayload) && sessionPayload) ||
                 null;
               return {
                 loading: false,
-                payload: keep || payload,
+                payload: withPlayedProgress(keep || played),
                 error: "",
                 fromCache: Boolean(keep),
               };
@@ -229,8 +256,8 @@ function useExploreHub() {
             }
             return;
           }
-          writeExploreHubCache(payload);
-          setHub({ loading: false, payload, error: "", fromCache: false });
+          writeExploreHubCache(played);
+          setHub({ loading: false, payload: played, error: "", fromCache: false });
         })
         .catch((err) => {
           if (cancelled) return;

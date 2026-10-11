@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Continue Watching updates when you press Play here.** A progress write, pause, seek, or stop in the in-app player puts that title and offset on the Explore rail immediately. The row does not sit on the previous on-deck snapshot until the next hub poll. On-deck refreshes in the background after the play; local shelves still paint first.
+
 ## [1.37.39] — 2026-10-11
 
 One patch on 1.37.38: the Live guide keeps published slots, `/live` uses the shared top bar, Play can shrink onto the page, and public nav paints before the session check.
