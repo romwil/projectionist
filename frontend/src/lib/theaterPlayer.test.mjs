@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  OSD_IDLE_MS,
   RESUME_THRESHOLD_MS,
   SCRUB_MAX,
   SEEK_RESTART_DEBOUNCE_MS,
@@ -10,6 +11,9 @@ import {
   canLocalSeekTo,
   createScrubCommit,
   dispatchPictureTap,
+  bottomThirdTapResult,
+  centerPlayHoldAfterOsdHide,
+  playerClosePlacement,
   longSkipFits,
   pictureTapIntent,
   canResumeAttachedStream,
@@ -343,6 +347,72 @@ test("a scrubber burst commits one seek, not one per input", async () => {
   await new Promise((resolve) => setTimeout(resolve, 50));
   assert.deepEqual(burst, [524]);
   loose.cancel();
+});
+
+test("bottom third open keeps the normal idle and a second tap hides", () => {
+  assert.equal(pictureTapIntent(600, 900), "osd");
+  const shown = bottomThirdTapResult({ visibleAtPointerDown: false });
+  assert.equal(shown.effect, "show");
+  assert.equal(shown.hideAfterMs, OSD_IDLE_MS);
+  assert.ok(shown.hideAfterMs > 1000);
+
+  let visible = false;
+  let hideAt = null;
+  function tap(at, visibleAtPointerDown) {
+    const result = bottomThirdTapResult({ visibleAtPointerDown });
+    if (result.effect === "show") {
+      visible = true;
+      hideAt = at + result.hideAfterMs;
+      return;
+    }
+    visible = false;
+    hideAt = null;
+  }
+  function at(t) {
+    if (visible && hideAt != null && t >= hideAt) visible = false;
+    return visible;
+  }
+
+  tap(0, false);
+  assert.equal(at(OSD_IDLE_MS - 1), true);
+  assert.equal(at(OSD_IDLE_MS), false);
+
+  tap(OSD_IDLE_MS + 10, false);
+  tap(OSD_IDLE_MS + 10, true);
+  assert.equal(at(OSD_IDLE_MS + 10), false);
+});
+
+test("paused center Play outlives the bar by one idle timeout", () => {
+  const hold = centerPlayHoldAfterOsdHide({ paused: true });
+  assert.equal(hold.visible, true);
+  assert.equal(hold.hideAfterMs, OSD_IDLE_MS);
+  assert.equal(centerPlayHoldAfterOsdHide({ paused: false }).visible, false);
+
+  let osd = true;
+  let center = true;
+  let centerHideAt = null;
+  function tick(t) {
+    if (osd && t >= OSD_IDLE_MS) {
+      osd = false;
+      const next = centerPlayHoldAfterOsdHide({ paused: true });
+      center = next.visible;
+      centerHideAt = t + next.hideAfterMs;
+    }
+    if (!osd && centerHideAt != null && t >= centerHideAt) center = false;
+    return { osd, center };
+  }
+
+  assert.deepEqual(tick(OSD_IDLE_MS - 1), { osd: true, center: true });
+  assert.deepEqual(tick(OSD_IDLE_MS), { osd: false, center: true });
+  assert.deepEqual(tick(OSD_IDLE_MS + hold.hideAfterMs - 1), { osd: false, center: true });
+  assert.deepEqual(tick(OSD_IDLE_MS + hold.hideAfterMs), { osd: false, center: false });
+});
+
+test("Close sits on the player bar and not in More", () => {
+  const place = playerClosePlacement();
+  assert.equal(place.onBar, true);
+  assert.equal(place.inMoreMenu, false);
+  assert.equal(place.label, "Close");
 });
 
 test("bottom third toggles the overlay and does not pause", () => {

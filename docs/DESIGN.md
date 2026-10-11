@@ -130,7 +130,7 @@ These surfaces share one bar: **picture first, one gold primary, quiet chrome, L
 |----------|-----|
 | **One viewport composition** (`100dvh`, `overflow: hidden`, fixed shell) | Living-room Play must fill the screen. Poster art must never grow the document or force scroll-to-find controls. |
 | **Cover poster behind contain video** | Atmosphere without lying about the frame. Video letterboxes honestly; art is backdrop only. |
-| **OSD hierarchy** | Primary = Play/Pause + scrubber + clock. ±15 is discreet (double-tap thirds remain the living-room skip). CC + Fullscreen secondary. PiP, Pop-out, Open in Plex, Back under **More**. |
+| **OSD hierarchy** | Primary = Play/Pause + scrubber + clock. ±15 is discreet (double-tap thirds remain the living-room skip). CC, **Shrink onto page**, Fullscreen, and **Close** are on the bar. Browser picture-in-picture, **Pop out of the window**, and Open in Plex stay under **More**. Close leaves the player. Shrink floats the same player above the page you left; it does not pause and does not replace pop-out. A bottom-third tap shows the bar for the normal idle, and a second tap there hides it. After pause, the center Play glyph stays one idle longer than the bar, then leaves a clean frame. |
 | **Large center play when paused** | One clear invitation; auto-hide OSD on idle; mouse move / tap reveals chrome. |
 | **Keep playing when backgrounded** | Mac Spaces / tab hide must not kill the reel. Default: keep buffering. Opt-in **Pause when backgrounded** (Settings → Profile, browser-local) soft-pauses for kiosks. |
 | **Keyboard** | Space/`K`/`S` play-pause; `J`/`A`/← −15s; `L`/`D`/→ +15s; `F` fullscreen; `M` mute; `C` captions. |
