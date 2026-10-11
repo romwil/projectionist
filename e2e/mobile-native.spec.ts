@@ -369,7 +369,7 @@ test.describe("Native mobile — member living-room", () => {
     await page.touchscreen.tap(x, y);
     await expect(page.getByRole("status")).toContainText("+15s");
 
-    await page.getByRole("button", { name: "Back" }).click();
+    await page.getByRole("button", { name: "Close" }).click();
     await page.goto("/chat");
     await expect(page.getByTestId("composer-input")).toBeVisible();
     await assertPinnedNearViewportBottom(page.locator("form.composer"), NATIVE_VIEWPORT.height);

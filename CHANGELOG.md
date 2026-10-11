@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+- **Shrink Play onto the page you were on.** While a library title is playing, **Shrink onto page** keeps the picture and sound going in a small panel over chat, Explore, or search. Drag it if it covers the composer. **Return to player** opens the full page again; **Close** on that panel stops it. **Pop out of the window** is still its own action under More.
+- **Play controls stay up long enough to use.** A tap along the bottom of the picture shows the bar without pausing, and the bar stays for the same few seconds as any other reveal. Tap that band again to hide it. **Close** is on the bar. After you pause, the big Play button remains when the bar hides, then leaves one timeout later so a still frame can be a clean screenshot.
+
 ### Fixed
 - **Live guide dropped programmes that were still on.** A station whose published slot runs past the file (Kung Fu Theater, Emergency!) had its guide cell cut down to the file length, so the title ended before the visible window and the row looked empty. Tune still started in that programme. Cells now follow the published start and stop, trimmed only when the next title has already started, so the show on screen is the show in the grid.
 - **Live was a dead end off the rest of the app.** Guide, Watch, and the weather channel on `/live` used a private header, so Chat, Explore, and Search were only reachable from the Projectionist logo. Those pages now use the shared top bar and hamburger. Guide and Watch stay. The logo stays.
