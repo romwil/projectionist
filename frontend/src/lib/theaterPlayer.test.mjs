@@ -5,8 +5,11 @@ import {
   RESUME_THRESHOLD_MS,
   SCRUB_MAX,
   SEEK_RESTART_DEBOUNCE_MS,
+  SKIP_LONG_SECONDS,
   SKIP_SECONDS,
   canLocalSeekTo,
+  createScrubCommit,
+  longSkipFits,
   canResumeAttachedStream,
   clampTime,
   createStageGesture,
@@ -312,4 +315,41 @@ test("Back to Explore opens /explore even when Next Episode cannot start", () =>
   assert.equal(sameRoute.action, "message");
   runEndCardBackToExplore({ navigate: (path) => calls.push(path) });
   assert.deepEqual(calls, ["/explore", "/explore"]);
+});
+
+test("a scrubber burst commits one seek, not one per input", async () => {
+  const seeks = [];
+  const scrub = createScrubCommit({
+    onCommit: (pct) => seeks.push(pct),
+    quietMs: 40,
+    lostEndMs: 200,
+  });
+  scrub.begin();
+  for (let i = 1; i <= 40; i += 1) scrub.input(i * 10);
+  assert.equal(seeks.length, 0, "drag must not seek until release");
+  scrub.end();
+  assert.deepEqual(seeks, [400]);
+
+  const burst = [];
+  const loose = createScrubCommit({
+    onCommit: (pct) => burst.push(pct),
+    quietMs: 30,
+    lostEndMs: 200,
+  });
+  for (let i = 0; i < 25; i += 1) loose.input(500 + i);
+  assert.equal(burst.length, 0);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.deepEqual(burst, [524]);
+  loose.cancel();
+});
+
+test("long skip is ±30 only in wide landscape", () => {
+  assert.equal(SKIP_LONG_SECONDS, 30);
+  assert.equal(SKIP_SECONDS, 15);
+  assert.equal(longSkipFits({ width: 1024, height: 768 }), true);
+  assert.equal(longSkipFits({ width: 1180, height: 820 }), true);
+  assert.equal(longSkipFits({ width: 768, height: 1024 }), false);
+  assert.equal(longSkipFits({ width: 844, height: 390 }), false);
+  assert.equal(longSkipFits({ width: 390, height: 844 }), false);
+  assert.equal(longSkipFits({ width: 0, height: 0 }), false);
 });

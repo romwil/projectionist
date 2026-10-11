@@ -55,6 +55,9 @@
   --workspace-wash-a: #1a1612;
   --workspace-wash-b: #12151c;
   --workspace-base: #0c0d11;
+  /* Ink for a surface that stays dark in both themes (the picture, a poster veil). */
+  --ink-on-media: #e6e2d6;
+  --muted-on-media: #c8c2b4;
   font-family: var(--font-body);
   font-size: var(--base-font-size);
   line-height: var(--leading-body);

@@ -181,7 +181,7 @@
   padding: var(--space-5) var(--space-4);
   border-right: 1px solid var(--border-subtle);
   background:
-    linear-gradient(180deg, rgba(26, 22, 18, 0.55) 0%, transparent 40%),
+    linear-gradient(180deg, color-mix(in srgb, var(--text) 10%, transparent) 0%, transparent 40%),
     var(--surface);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
@@ -394,7 +394,7 @@
 .admin-rail-link:hover,
 .settings-rail-link:hover {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--accent-soft);
 }
 
 .admin-rail-link-active,

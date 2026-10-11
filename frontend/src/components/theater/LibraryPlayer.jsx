@@ -12,8 +12,11 @@ import { isCompactPlayViewport, isPhonePlayViewport } from "../../lib/chatLayout
 import {
   SCRUB_MAX,
   SEEK_RESTART_DEBOUNCE_MS,
+  SKIP_LONG_SECONDS,
   SKIP_SECONDS,
   bufferedRanges,
+  createScrubCommit,
+  longSkipFits,
   canLocalSeekTo,
   canResumeAttachedStream,
   clampTime,
@@ -81,6 +84,9 @@ export default function LibraryPlayer({ ratingKey, popout = false, className = "
   const pauseWhenBackgroundedRef = useRef(loadPauseWhenBackgrounded());
   /** True while the user is dragging the scrubber — blocks timeupdate from stealing the thumb. */
   const scrubbingRef = useRef(false);
+  /** Collapses a slider burst into one seek. iPad Safari must not restart HLS per input. */
+  const scrubCommitRef = useRef(null);
+  const commitScrubRef = useRef(() => {});
   /** Collapses rapid scrub-end session restarts into one seek. */
   const seekRestartTimerRef = useRef(null);
   const seekRestartPendingMsRef = useRef(null);
@@ -101,6 +107,12 @@ export default function LibraryPlayer({ ratingKey, popout = false, className = "
   const [bufferedEndS, setBufferedEndS] = useState(0);
   const [phone, setPhone] = useState(() => isPhonePlayViewport());
   const [compact, setCompact] = useState(() => isCompactPlayViewport());
+  const [longSkip, setLongSkip] = useState(() =>
+    longSkipFits({
+      width: typeof window !== "undefined" ? window.innerWidth : 0,
+      height: typeof window !== "undefined" ? window.innerHeight : 0,
+    }),
+  );
   const [pipSupported, setPipSupported] = useState(false);
   const [startBusy, setStartBusy] = useState(false);
   /** True while scrub/skip is waiting on a Plex session restart. */
@@ -168,6 +180,7 @@ export default function LibraryPlayer({ ratingKey, popout = false, className = "
     const syncViewport = () => {
       setPhone(isPhonePlayViewport());
       setCompact(isCompactPlayViewport());
+      setLongSkip(longSkipFits({ width: window.innerWidth, height: window.innerHeight }));
     };
     const onResize = () => syncViewport();
     window.addEventListener("resize", onResize);
@@ -181,6 +194,7 @@ export default function LibraryPlayer({ ratingKey, popout = false, className = "
         window.clearTimeout(seekRestartTimerRef.current);
         seekRestartTimerRef.current = null;
       }
+      scrubCommitRef.current?.cancel();
     };
   }, []);
 
@@ -436,7 +450,7 @@ export default function LibraryPlayer({ ratingKey, popout = false, className = "
       // Some browsers reject currentTime before metadata.
     }
     setNowMs(next * 1000);
-    const label = deltaSeconds < 0 ? `−${SKIP_SECONDS}s` : `+${SKIP_SECONDS}s`;
+    const label = deltaSeconds < 0 ? `−${Math.abs(deltaSeconds)}s` : `+${deltaSeconds}s`;
     setSkipChip(label);
     window.setTimeout(() => setSkipChip(""), 900);
   }
@@ -506,7 +520,7 @@ export default function LibraryPlayer({ ratingKey, popout = false, className = "
       return;
     }
     applySeekRestart(Math.round(target * 1000));
-    const label = deltaSeconds < 0 ? `−${SKIP_SECONDS}s` : `+${SKIP_SECONDS}s`;
+    const label = deltaSeconds < 0 ? `−${Math.abs(deltaSeconds)}s` : `+${deltaSeconds}s`;
     setSkipChip(label);
     window.setTimeout(() => setSkipChip(""), 900);
   }
@@ -521,36 +535,40 @@ export default function LibraryPlayer({ ratingKey, popout = false, className = "
     if (duration) setNowMs(msFromScrubPct(pct, duration));
   }
 
+  commitScrubRef.current = (pct) => {
+    scrubbingRef.current = false;
+    setScrubPct(null);
+    const duration = scrubDurationMs();
+    if (!duration) return;
+    seekToOffsetMs(msFromScrubPct(pct, duration));
+  };
+
+  if (!scrubCommitRef.current) {
+    scrubCommitRef.current = createScrubCommit({
+      onCommit: (pct) => commitScrubRef.current(pct),
+    });
+  }
+
   function beginScrub(event) {
+    // Do not setPointerCapture. On iPad Safari, capturing the range input
+    // steals the gesture and pointerup never arrives, so the scrub flag stays
+    // set and playback stops updating.
     scrubbingRef.current = true;
-    previewScrub(Number(event.target.value));
-    try {
-      event.currentTarget.setPointerCapture?.(event.pointerId);
-    } catch {
-      // Pointer may already be released; pointerup/cancel still end the scrub.
-    }
+    const pct = Number(event.target.value);
+    previewScrub(pct);
+    scrubCommitRef.current.begin();
+    scrubCommitRef.current.input(pct);
   }
 
   function onScrubInput(event) {
+    scrubbingRef.current = true;
     const pct = Number(event.target.value);
     previewScrub(pct);
-    // Keyboard / assistive scrub: no pointerdown, so commit each step.
-    if (!scrubbingRef.current) {
-      const duration = scrubDurationMs();
-      if (!duration) return;
-      seekToOffsetMs(msFromScrubPct(pct, duration));
-      setScrubPct(null);
-    }
+    scrubCommitRef.current.input(pct);
   }
 
-  function endScrub(event) {
-    if (!scrubbingRef.current) return;
-    scrubbingRef.current = false;
-    const duration = scrubDurationMs();
-    const pct = Number(event.target.value);
-    setScrubPct(null);
-    if (!duration) return;
-    seekToOffsetMs(msFromScrubPct(pct, duration));
+  function endScrub() {
+    scrubCommitRef.current.end();
   }
 
   async function togglePlayback() {
@@ -736,6 +754,17 @@ export default function LibraryPlayer({ ratingKey, popout = false, className = "
       </div>
 
       <div className="theater-osd-transport" data-testid="library-osd-transport">
+        {longSkip ? (
+          <button
+            type="button"
+            className="theater-osd-skip theater-osd-skip-long"
+            onClick={() => skipBy(-SKIP_LONG_SECONDS)}
+            aria-label={`Skip back ${SKIP_LONG_SECONDS} seconds`}
+            data-testid="library-skip-back-30"
+          >
+            −{SKIP_LONG_SECONDS}
+          </button>
+        ) : null}
         <button
           type="button"
           className="theater-osd-skip"
@@ -766,6 +795,17 @@ export default function LibraryPlayer({ ratingKey, popout = false, className = "
         >
           +{SKIP_SECONDS}
         </button>
+        {longSkip ? (
+          <button
+            type="button"
+            className="theater-osd-skip theater-osd-skip-long"
+            onClick={() => skipBy(SKIP_LONG_SECONDS)}
+            aria-label={`Skip forward ${SKIP_LONG_SECONDS} seconds`}
+            data-testid="library-skip-forward-30"
+          >
+            +{SKIP_LONG_SECONDS}
+          </button>
+        ) : null}
 
         <span className="theater-osd-spacer" aria-hidden="true" />
 
@@ -874,6 +914,7 @@ export default function LibraryPlayer({ ratingKey, popout = false, className = "
       className={`library-watch ${phone ? "library-watch--phone" : ""} ${compact ? "library-watch--compact" : ""} ${className}`.trim()}
       data-play-phone={phone ? "true" : "false"}
       data-play-compact={compact ? "true" : "false"}
+      data-long-skip={longSkip ? "true" : "false"}
     >
       <TheaterPlayer
         src={resumeOpen || ended || preroll || !session?.stream_url ? "" : session.stream_url}
