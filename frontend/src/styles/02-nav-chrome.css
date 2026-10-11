@@ -2024,16 +2024,21 @@ button.watchlist-chip {
   padding: 0;
 }
 
+/* Stay inside the chat column. A max-content table plus overflow-x: clip on
+   .markdown-body / .message-inner sliced long cells mid-word (Safari never
+   offered a usable inner scrollbar). Cells wrap on word boundaries instead. */
 .markdown-table-wrap {
-  overflow-x: auto;
-  overflow-y: hidden;
+  display: block;
+  max-width: 100%;
+  min-width: 0;
   margin: 0 0 0.75em;
-  -webkit-overflow-scrolling: touch;
+  overflow: visible;
 }
 
 .markdown-body table {
-  width: max-content;
-  min-width: 100%;
+  width: 100%;
+  max-width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: 0.92em;
 }
@@ -2044,6 +2049,24 @@ button.watchlist-chip {
   padding: 8px 12px;
   text-align: left;
   vertical-align: top;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+  overflow: visible;
+  text-overflow: clip;
+  hyphens: manual;
+}
+
+/* Short index column stays narrow. A middle title column stays readable.
+   The last column (the prose) takes the remaining width and wraps. */
+.markdown-body th:first-child:not(:last-child),
+.markdown-body td:first-child:not(:last-child) {
+  width: 6.5rem;
+}
+
+.markdown-body th:nth-child(2):not(:last-child),
+.markdown-body td:nth-child(2):not(:last-child) {
+  width: 34%;
 }
 
 .markdown-body th {

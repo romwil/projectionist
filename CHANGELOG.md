@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Chat result tables wrap cell text inside the thread column instead of clipping sentences at the cell edge.
+
 ## [1.37.36] — 2026-10-07
 
 One patch on 1.37.35: the Live guide and Weather channel follow Lights Up instead of staying a dark chamber on paper.
