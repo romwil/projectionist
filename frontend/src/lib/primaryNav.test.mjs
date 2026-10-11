@@ -38,15 +38,40 @@ describe("primaryNav", () => {
     assert.deepEqual(ids, ["search", "chat", "explore", "inbox", "my-journey", "settings"]);
   });
 
-  it("never includes Admin while auth is unresolved even if isOwner defaults true", () => {
+  it("paints public peers while auth is unresolved and never includes Admin", () => {
     const unresolved = primaryNavVisibleIds({
       role: "owner",
       isOwner: true,
       multiUserEnabled: true,
       authReady: false,
     });
-    assert.deepEqual(unresolved, []);
+    assert.deepEqual(unresolved, [
+      "search",
+      "chat",
+      "explore",
+      "inbox",
+      "my-journey",
+      "settings",
+    ]);
     assert.equal(unresolved.includes("admin"), false);
+    assert.equal(unresolved.includes("live"), false);
+
+    const unresolvedWithLive = primaryNavVisibleIds({
+      role: "owner",
+      isOwner: true,
+      authReady: false,
+      liveChannelsReady: true,
+    });
+    assert.deepEqual(unresolvedWithLive, [
+      "search",
+      "chat",
+      "explore",
+      "live",
+      "inbox",
+      "my-journey",
+      "settings",
+    ]);
+    assert.equal(unresolvedWithLive.includes("admin"), false);
 
     const memberAfterReady = primaryNavVisibleIds({
       role: "member",
@@ -110,7 +135,12 @@ describe("primaryNav", () => {
       ],
     );
     assert.ok(owner.every((item) => item.kind === "primary" && item.label && item.to));
-    assert.deepEqual(buildPrimaryDrawerItems({ isOwner: true, authReady: false }), []);
+    const beforeAuth = buildPrimaryDrawerItems({ isOwner: true, authReady: false });
+    assert.deepEqual(
+      beforeAuth.map((item) => item.id),
+      ["search", "chat", "explore", "inbox", "my-journey", "settings"],
+    );
+    assert.equal(beforeAuth.some((item) => item.id === "admin"), false);
   });
 
   it("marks chat active for /chat", () => {

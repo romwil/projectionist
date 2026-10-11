@@ -9,6 +9,7 @@
 ### Fixed
 - **Live guide dropped programmes that were still on.** A station whose published slot runs past the file (Kung Fu Theater, Emergency!) had its guide cell cut down to the file length, so the title ended before the visible window and the row looked empty. Tune still started in that programme. Cells now follow the published start and stop, trimmed only when the next title has already started, so the show on screen is the show in the grid.
 - **Live was a dead end off the rest of the app.** Guide, Watch, and the weather channel on `/live` used a private header, so Chat, Explore, and Search were only reachable from the Projectionist logo. Those pages now use the shared top bar and hamburger. Guide and Watch stay. The logo stays.
+- **The icon bar stays up while the session check runs.** A hard refresh no longer hides Search, Chat, Explore, and the other public peers for several seconds. Those links paint immediately in the icon bar and in the hamburger Navigate section. Admin still waits until auth returns, so a member does not see the owner icon during the wait. More links were already static and stay as they are.
 
 ## [1.37.38] — 2026-10-11
 
