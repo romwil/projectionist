@@ -4,6 +4,7 @@
 
 ### Fixed
 - **Live guide dropped programmes that were still on.** A station whose published slot runs past the file (Kung Fu Theater, Emergency!) had its guide cell cut down to the file length, so the title ended before the visible window and the row looked empty. Tune still started in that programme. Cells now follow the published start and stop, trimmed only when the next title has already started, so the show on screen is the show in the grid.
+- **Live was a dead end off the rest of the app.** Guide, Watch, and the weather channel on `/live` used a private header, so Chat, Explore, and Search were only reachable from the Projectionist logo. Those pages now use the shared top bar and hamburger. Guide and Watch stay. The logo stays.
 
 ## [1.37.38] — 2026-10-11
 
