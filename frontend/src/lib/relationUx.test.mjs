@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   appendRelationBreadcrumb,
   filterRelationEdges,
+  hasSpecificStoryLink,
   isSurprisingRelation,
   relationWhyCopy,
   relatedTitlesPath,
@@ -74,17 +75,32 @@ test("filterRelationEdges supports relation types and surprising similarity", ()
     {
       relation: "neighbor",
       why: {
+        label: "Both stories turn on museum exhibits.",
+        plot_link: "Both stories turn on museum exhibits.",
+        surprise_flavor: null,
+      },
+    },
+    {
+      relation: "neighbor",
+      why: {
         label: "Both stories turn on amateur bakers.",
         plot_link: "Both stories turn on amateur bakers.",
+        surprise_flavor: "Both stories turn on amateur bakers.",
       },
     },
   ];
 
-  assert.equal(filterRelationEdges(edges, "all").length, 5);
+  assert.equal(filterRelationEdges(edges, "all").length, 6);
   assert.equal(filterRelationEdges(edges, "shared_crew").length, 1);
   assert.equal(filterRelationEdges(edges, "surprising").length, 1);
   assert.equal(isSurprisingRelation(edges[3]), false);
-  assert.equal(isSurprisingRelation(edges[4]), true);
+  assert.equal(isSurprisingRelation(edges[4]), false);
+  assert.equal(isSurprisingRelation(edges[5]), true);
+  assert.equal(hasSpecificStoryLink({ label: "Strong plot kinship" }), false);
+  assert.equal(
+    hasSpecificStoryLink({ plot_link: "Both stories turn on museum exhibits." }),
+    true,
+  );
 });
 
 test("relatedTitlesPath chooses a stable title id and preserves seed copy", () => {

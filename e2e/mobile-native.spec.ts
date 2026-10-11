@@ -30,7 +30,11 @@ function neighborEdge(peer: (typeof RAIL_TITLES)[number], toId: number) {
     relation: "neighbor",
     to_id: toId,
     peer: { ...peer, in_library: true },
-    why: { label: "Strong plot kinship", surprise_flavor: null },
+    why: {
+      label: "Both stories turn on a stranded crew.",
+      plot_link: "Both stories turn on a stranded crew.",
+      surprise_flavor: null,
+    },
   };
 }
 

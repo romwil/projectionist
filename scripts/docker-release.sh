@@ -72,6 +72,9 @@ fi
 echo "Generating release notes from CHANGELOG.md (require ## [${VERSION}])"
 ./scripts/generate-release-notes.sh --require-version "${VERSION}"
 
+echo "Writing version-stable dependency manifests (.docker-deps/)"
+./scripts/docker-dep-manifests.sh
+
 echo "Building ${IMAGE}:${VERSION} (+ :${ALSO_LINE} :latest) for ${PLATFORMS}"
 echo "Build identity: version=${VERSION} created=${BUILD_DATE} revision=${VCS_REF}"
 echo "Flags: --provenance=false --sbom=false (Unraid-compatible Docker v2 manifests)"

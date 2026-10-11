@@ -101,6 +101,58 @@ _GENERIC_UNIGRAMS = frozenset(
         "little",
         "great",
         "american",
+        # Abstract craft and shelf words. A shared phrase made only of these
+        # ("creative arts") is not a story someone would recognize.
+        "creative",
+        "arts",
+        "art",
+        "artist",
+        "artists",
+        "artistic",
+        "design",
+        "designer",
+        "culture",
+        "cultural",
+        "history",
+        "historical",
+        "science",
+        "scientific",
+        "company",
+        "project",
+        "projects",
+        "build",
+        "building",
+        "built",
+        "work",
+        "works",
+        "working",
+        "documentary",
+        "reality",
+        "based",
+        "story",
+        "stories",
+        "film",
+        "movie",
+        "modern",
+        "visual",
+        "fine",
+        "performing",
+        "human",
+        "humans",
+        "technology",
+        "future",
+        "business",
+        "create",
+        "creating",
+        "creation",
+        "discover",
+        "discovery",
+        "explore",
+        "exploration",
+        "adventure",
+        "journey",
+        "famous",
+        "known",
     }
 )
 
@@ -157,7 +209,10 @@ def _story_bigrams(tokens: Set[str], blocked: Set[str]) -> list[str]:
             continue
         if left in _GENERIC_UNIGRAMS and right in _GENERIC_UNIGRAMS:
             continue
-        if token in blocked or left in blocked or right in blocked:
+        # A shelf word inside a longer phrase ("museum" in "museum exhibits")
+        # does not erase the subject. Drop the phrase only when it is itself
+        # a shelf label, or both words already are.
+        if token in blocked or (left in blocked and right in blocked):
             continue
         found.append(token)
     found.sort(key=lambda term: (-len(term), term))
@@ -193,6 +248,36 @@ def _sentence(terms: Sequence[str]) -> str:
     return f"Both stories turn on {_phrase(chosen[0])} and {_phrase(chosen[1])}."
 
 
+def specific_plot_link(
+    *,
+    seed_text: str,
+    peer_text: str,
+    shelf_labels: Optional[Set[str]] = None,
+) -> Optional[dict[str, Any]]:
+    """Name a shared story or subject, or refuse a generic or empty overlap.
+
+    Cosine proximity is not an input. A neighbor is honest only when the plots
+    share a concrete phrase (``museum exhibits``), not a vague one
+    (``creative arts``) and not embeddings alone.
+    """
+    seed_tokens = _tokenize(seed_text)
+    peer_tokens = _tokenize(peer_text)
+    if len(_content_unigrams(seed_tokens)) < MIN_PLOT_UNIGRAMS:
+        return None
+    if len(_content_unigrams(peer_tokens)) < MIN_PLOT_UNIGRAMS:
+        return None
+
+    blocked = _blocklist(shelf_labels or set())
+    shared = set(_story_bigrams(seed_tokens, blocked)) & set(
+        _story_bigrams(peer_tokens, blocked)
+    )
+    terms = sorted(shared, key=lambda term: (-len(term), term))
+    sentence = _sentence(terms)
+    if not sentence:
+        return None
+    return {"sentence": sentence, "terms": terms[:3]}
+
+
 def surprising_plot_link(
     *,
     cosine: float,
@@ -221,22 +306,15 @@ def surprising_plot_link(
     if overlap_value > MAX_SURPRISE_OVERLAP:
         return None
 
-    seed_tokens = _tokenize(seed_text)
-    peer_tokens = _tokenize(peer_text)
-    if len(_content_unigrams(seed_tokens)) < MIN_PLOT_UNIGRAMS:
-        return None
-    if len(_content_unigrams(peer_tokens)) < MIN_PLOT_UNIGRAMS:
-        return None
-
-    blocked = _blocklist(shelf_labels or set())
-    shared = set(_story_bigrams(seed_tokens, blocked)) & set(
-        _story_bigrams(peer_tokens, blocked)
+    link = specific_plot_link(
+        seed_text=seed_text,
+        peer_text=peer_text,
+        shelf_labels=shelf_labels,
     )
-    sentence = _sentence(sorted(shared, key=lambda term: (-len(term), term)))
-    if not sentence:
+    if not link:
         return None
     return {
-        "sentence": sentence,
-        "terms": sorted(shared, key=lambda term: (-len(term), term))[:3],
+        "sentence": link["sentence"],
+        "terms": list(link["terms"]),
         "shelf_note": "Shelf labels barely overlap",
     }

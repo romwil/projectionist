@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { getTitleRelations } from "../api/client";
-import { isSurprisingRelation, relationWhyCopy, relatedTitlesPath } from "../lib/relationUx.js";
+import {
+  hasSpecificStoryLink,
+  isSurprisingRelation,
+  relationWhyCopy,
+  relatedTitlesPath,
+} from "../lib/relationUx.js";
 import { titleDetailPath } from "../lib/titleLinks.js";
 import PosterOverlayControls from "./PosterOverlayControls";
 import TitleDetailLink from "./TitleDetailLink";
@@ -77,7 +82,9 @@ export default function TitleNeighborsRails({
 
   const collectionEdges = (relations || []).filter((edge) => edge.relation === "collection");
   const crewEdges = (relations || []).filter((edge) => edge.relation === "shared_crew");
-  const plotEdges = (relations || []).filter((edge) => edge.relation === "neighbor");
+  const plotEdges = (relations || []).filter(
+    (edge) => edge.relation === "neighbor" && hasSpecificStoryLink(edge.why),
+  );
   const neighbors =
     neighborMode === "surprising"
       ? plotEdges.filter((edge) => isSurprisingRelation(edge))
@@ -243,7 +250,7 @@ export default function TitleNeighborsRails({
         </section>
       ) : compact ? (
         <p className="title-neighbors-intro" data-testid="title-neighbors-empty">
-          More like this is still warming up for this title.
+          No close story matches in your library for this title.
         </p>
       ) : null}
     </>

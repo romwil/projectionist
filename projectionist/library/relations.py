@@ -16,7 +16,11 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, 
 
 from projectionist.library.db import Database
 from projectionist.library.neighbors import measured_metadata_overlap
-from projectionist.library.plot_kinship import plot_blob, surprising_plot_link
+from projectionist.library.plot_kinship import (
+    plot_blob,
+    specific_plot_link,
+    surprising_plot_link,
+)
 
 RelationRow = Tuple[int, int, str, float, str]
 
@@ -198,27 +202,34 @@ def _why_payload(
             else "Shared directors or writers"
         )
     elif relation == "neighbor":
-        plot_kinship = _plot_kinship_label(weight)
         seed_shelf = _shelf_labels(seed, seed_people)
         peer_shelf = _shelf_labels(peer, peer_people)
-        link = surprising_plot_link(
-            cosine=weight,
-            overlap=measured_metadata_overlap(seed_shelf, peer_shelf),
-            seed_text=plot_blob(seed),
-            peer_text=plot_blob(peer),
-            shelf_labels=seed_shelf | peer_shelf,
+        shelf = seed_shelf | peer_shelf
+        seed_plot = plot_blob(seed)
+        peer_plot = plot_blob(peer)
+        specific = specific_plot_link(
+            seed_text=seed_plot,
+            peer_text=peer_plot,
+            shelf_labels=shelf,
         )
-        if link:
-            plot_link = str(link["sentence"])
-            shelf_note = str(link["shelf_note"] or "") or None
-            shared_story = [str(term) for term in link.get("terms") or []]
-            # The flavor is the kinship. Absence of labels is only a secondary note.
-            surprise_flavor = plot_link
-            label = plot_link
+        # Cosine alone ("Strong plot kinship") is not a reason to show a neighbor.
+        if not specific:
+            label = ""
         else:
-            label = plot_kinship
-            if shared_genres:
-                label += f" · Shared genres: {', '.join(shared_genres[:3])}"
+            plot_link = str(specific["sentence"])
+            shared_story = [str(term) for term in specific.get("terms") or []]
+            label = plot_link
+            link = surprising_plot_link(
+                cosine=weight,
+                overlap=measured_metadata_overlap(seed_shelf, peer_shelf),
+                seed_text=seed_plot,
+                peer_text=peer_plot,
+                shelf_labels=shelf,
+            )
+            if link:
+                plot_kinship = _plot_kinship_label(weight)
+                shelf_note = str(link["shelf_note"] or "") or None
+                surprise_flavor = plot_link
     else:
         label = "Related title"
 
@@ -444,6 +455,8 @@ def list_relations_for_item(
             seed_people=seed_crew,
             peer_people=peer_crew,
         )
+        if relation_type == "neighbor" and not why.get("plot_link"):
+            continue
         items.append(
             {
                 "from_id": int(row["from_id"]),

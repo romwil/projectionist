@@ -16,8 +16,17 @@ export function surprisingPlotLink(why = {}) {
   return link;
 }
 
+export function hasSpecificStoryLink(why = {}) {
+  return Boolean(surprisingPlotLink(why));
+}
+
+const COSINE_ONLY_REASON = /plot kinship|plot space/i;
+
 export function isSurprisingRelation(edge) {
-  return edge?.relation === "neighbor" && Boolean(surprisingPlotLink(edge?.why));
+  if (edge?.relation !== "neighbor") return false;
+  const flavor = String(edge?.why?.surprise_flavor || "").trim();
+  if (!flavor || ABSENCE_REASON.test(flavor) || COSINE_ONLY_REASON.test(flavor)) return false;
+  return hasSpecificStoryLink(edge?.why);
 }
 
 function relationItemKey(item) {
