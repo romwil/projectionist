@@ -1546,6 +1546,49 @@ class OnNowGuideTests(unittest.TestCase):
         self.assertEqual(row["next"]["media_type"], "movie")
         self.assertEqual(row["programs"][0]["title"], "Homicide: Life on the Street")
 
+    def test_guide_keeps_title_when_file_ended_but_slot_covers_window(self) -> None:
+        """Kung Fu / Emergency: one published item, file already over, stop still ahead.
+
+        Capping the cell to file duration pushed the title off the left of the
+        6-hour grid (display:none) while tune still played that programme.
+        """
+        settings = Settings(
+            features=FeatureFlags(live_channels_enabled=True),
+            tunarr=TunarrSettings(url="http://tunarr.test"),
+        )
+        now = 1_791_760_000.0
+        start = now - 4 * 3600
+        stop = now + 7 * 24 * 3600
+        duration_ms = 111 * 60 * 1000
+        client = MagicMock()
+        client.list_channels.return_value = [
+            {"id": "ch-kungfu", "name": "Kung Fu Theater", "number": 104},
+        ]
+        client.get_all_channel_guides.return_value = {
+            "ch-kungfu": {
+                "programs": [
+                    {
+                        "type": "content",
+                        "title": None,
+                        "start": int(start * 1000),
+                        "stop": int(stop * 1000),
+                        "duration": duration_ms,
+                        "program": {"type": "movie", "title": "Drunken Master"},
+                    }
+                ]
+            },
+        }
+        client.get_now_playing.return_value = None
+        snap = build_guide_snapshot(settings, client=client, now=now, hours=6)
+        programs = snap["channels"][0]["programs"]
+        self.assertEqual([row["title"] for row in programs], ["Drunken Master"])
+        cell = programs[0]
+        window_end = now + 6 * 3600
+        visible_start = max(float(cell["start"]), now)
+        visible_stop = min(float(cell["stop"]), window_end)
+        self.assertGreater(visible_stop, visible_start)
+        self.assertGreater(float(cell["stop"]) - float(cell["start"]), 0)
+
     def test_guide_program_detail_fields_for_hover_and_dig_in(self) -> None:
         """Episode/movie detail fields soft-fail when Tunarr omits them."""
         settings = Settings(
@@ -5181,8 +5224,9 @@ class CraftFiltersTests(unittest.TestCase):
         from projectionist.live_channels.guide import separate_channel_programs
 
         alien_start = 1_700_000_000.0
-        # File ends at :39 past the hour; the guide stop is padded across Alien³.
-        alien_end = alien_start + 39 * 60
+        # File ends at :39 past the hour; the published stop runs across Alien³.
+        # The cell keeps that slot until Alien³ starts — file duration must not
+        # open a hole, and the padded stop must not cover the next title.
         alien3_start = alien_start + 45 * 60
         programs = separate_channel_programs(
             [
@@ -5202,14 +5246,12 @@ class CraftFiltersTests(unittest.TestCase):
                 },
             ]
         )
-        self.assertEqual(programs[0]["title"], "Alien")
-        self.assertEqual(programs[0]["stop"], alien_end)
-        self.assertTrue(programs[1]["is_flex"])
-        self.assertEqual(programs[1]["start"], alien_end)
-        self.assertEqual(programs[1]["stop"], alien3_start)
-        self.assertEqual(programs[2]["title"], "Alien³")
+        self.assertEqual([row["title"] for row in programs], ["Alien", "Alien³"])
+        self.assertEqual(programs[0]["stop"], alien3_start)
+        self.assertEqual(programs[1]["start"], alien3_start)
+        self.assertGreater(programs[0]["stop"], programs[0]["start"])
+        self.assertGreater(programs[1]["stop"], programs[1]["start"])
         self.assertLessEqual(programs[0]["stop"], programs[1]["start"])
-        self.assertLessEqual(programs[1]["stop"], programs[2]["start"])
 
     def test_shuffle_programming_pads_to_quarter_hour(self) -> None:
         from projectionist.live_channels.publish import programming_body_for_recipe
