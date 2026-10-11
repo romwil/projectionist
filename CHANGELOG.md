@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Live guide dropped programmes that were still on.** A station whose published slot runs past the file (Kung Fu Theater, Emergency!) had its guide cell cut down to the file length, so the title ended before the visible window and the row looked empty. Tune still started in that programme. Cells now follow the published start and stop, trimmed only when the next title has already started, so the show on screen is the show in the grid.
+
 ## [1.37.38] — 2026-10-11
 
 One patch on 1.37.37: Explore shelves use the longer on-deck window, More like this needs a story you can name, and release image builds stop compiling the site under emulation.
