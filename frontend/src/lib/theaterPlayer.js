@@ -73,6 +73,28 @@ export function dispatchPictureTap({ offsetY, height, togglePlayback, toggleOsd 
   return "playback";
 }
 
+/**
+ * Bottom-third result from the overlay state at pointerdown.
+ * A reveal uses the same idle as every other show. A later tap hides.
+ * The pointerdown snapshot matters: the click's own mousemove can reveal the
+ * bar before the gesture delay fires, and that follow-up must not hide it.
+ */
+export function bottomThirdTapResult({ visibleAtPointerDown = false, idleMs = OSD_IDLE_MS } = {}) {
+  if (visibleAtPointerDown) return { effect: "hide", hideAfterMs: 0 };
+  return { effect: "show", hideAfterMs: idleMs };
+}
+
+/** After the bar hides while paused, the center Play glyph stays one more idle. */
+export function centerPlayHoldAfterOsdHide({ paused = false, idleMs = OSD_IDLE_MS } = {}) {
+  if (!paused) return { visible: false, hideAfterMs: 0 };
+  return { visible: true, hideAfterMs: idleMs };
+}
+
+/** Close leaves the player from the bar. Back stays out of More. */
+export function playerClosePlacement() {
+  return { onBar: true, inMoreMenu: false, label: "Close" };
+}
+
 export function shouldResumeFromOffset(viewOffsetMs) {
   const offset = Number(viewOffsetMs);
   return Number.isFinite(offset) && offset >= RESUME_THRESHOLD_MS;

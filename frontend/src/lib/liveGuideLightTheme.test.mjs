@@ -110,7 +110,9 @@ html[data-theme="lights-up"] .live-guide-cell.is-focused`,
 
   it("leaves the Lights Down guide and weather board on the dark chamber", () => {
     const before = css.slice(0, css.indexOf(marker));
-    assert.match(ruleBody(before, ".live-page"), /#07080c/);
+    // The shell layout rule also contains `.live-page`. The dark chamber is the
+    // base `.live-page` block, which still starts the guide under Lights Down.
+    assert.match(ruleBody(before, "\n.live-page"), /#07080c/);
     assert.match(ruleBody(before, ".live-guide-rail"), /rgba\(8,\s*9,\s*14,\s*0\.96\)/);
     assert.match(ruleBody(before, ".live-guide-cell"), /rgba\(28,\s*32,\s*41,\s*0\.92\)/);
     assert.match(ruleBody(before, ".live-program-hover"), /rgba\(16,\s*18,\s*24,\s*0\.97\)/);

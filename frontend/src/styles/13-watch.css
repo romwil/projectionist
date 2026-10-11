@@ -592,6 +592,11 @@ html:has([data-theater-mode="true"]) #root {
     gap: 0.25rem 0.35rem;
   }
 
+  .library-watch--phone .library-shrink-long,
+  .library-watch--compact .library-shrink-long {
+    display: none;
+  }
+
   .library-watch--phone .theater-osd-skip,
   .library-watch--phone .theater-osd-secondary,
   .library-watch--compact .theater-osd-skip,
@@ -787,4 +792,81 @@ html[data-theme="lights-up"] .theater-osd-menu a:focus-visible {
 
 html[data-theme="lights-up"] .theater-cc-note {
   border-top-color: var(--border-subtle);
+}
+
+/* Lifted Play host: full stage on /watch, floating panel after Shrink onto page. */
+.inapp-playback-host[data-presentation="stage"] {
+  position: fixed;
+  inset: 0;
+  z-index: 41;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  max-height: 100dvh;
+  background: #050608;
+  min-height: 0;
+}
+
+.inapp-playback-host[data-presentation="pip"] {
+  position: fixed;
+  top: 4.75rem;
+  right: max(1rem, env(safe-area-inset-right, 0px));
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  width: min(22rem, calc(100vw - 2rem));
+  height: min(16rem, 46vh);
+  border-radius: 14px;
+  overflow: hidden;
+  background: #050608;
+  border: 1px solid rgba(230, 226, 214, 0.22);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+}
+
+.inapp-playback-host[data-presentation="pip"][data-dragged="true"] {
+  right: auto;
+}
+
+.inapp-playback-host .library-watch {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+
+.inapp-pip-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+  padding: 0.35rem 0.45rem;
+  background: color-mix(in srgb, var(--surface, #14161c) 92%, transparent);
+  color: var(--text, #f4f1ea);
+  cursor: grab;
+  touch-action: none;
+}
+
+.inapp-pip-toolbar-label {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-xs, 0.75rem);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.inapp-pip-toolbar button {
+  min-height: 44px;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--border, rgba(230, 226, 214, 0.2));
+  background: var(--surface-2, rgba(255, 255, 255, 0.06));
+  color: var(--text, #f4f1ea);
+  font: inherit;
+  font-size: var(--text-sm, 0.875rem);
+  cursor: pointer;
+}
+
+.inapp-playback-host[data-presentation="pip"] .theater-osd {
+  display: none;
 }

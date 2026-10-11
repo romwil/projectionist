@@ -699,6 +699,39 @@ describe("liveChannels helpers", () => {
       assert.ok(scale.xForTime(now) >= 0 && scale.xForTime(now) <= scale.width);
     });
 
+    it("draws a lineup programme across the visible window when its file already ended", () => {
+      const scale = guideTimeScale(generatedAt, windowEnd, PX);
+      // Started hours before the grid. File length would end before the first
+      // column; the published stop still covers the window (Kung Fu / Emergency).
+      const program = {
+        title: "Drunken Master",
+        start: scale.gridStart - 4 * 3600,
+        stop: scale.gridEnd + 3600,
+        duration_seconds: 111 * 60,
+      };
+      const guide = normalizeGuide({
+        enabled: true,
+        ready: true,
+        generated_at: generatedAt,
+        window_seconds: windowEnd - generatedAt,
+        channels: [
+          {
+            id: "kungfu",
+            name: "Kung Fu Theater",
+            number: 104,
+            programs: [program],
+          },
+        ],
+      });
+      const cell = guide.channels[0].programs[0];
+      assert.equal(cell.title, "Drunken Master");
+      const style = programCellStyle(cell, scale.gridStart, scale.gridEnd, PX);
+      assert.equal(style.display, undefined);
+      assert.equal(parseFloat(style.left), 0);
+      assert.ok(parseFloat(style.width) > 0);
+      assert.ok(Math.abs(parseFloat(style.width) - scale.width) < 1e-6);
+    });
+
     it("rejects hostile input without NaN geometry", () => {
       for (const bad of [null, undefined, NaN, "x", Infinity]) {
         const { gridStart, gridEnd, slotCount } = guideGridBounds(bad, bad);

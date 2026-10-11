@@ -1,5 +1,24 @@
 /* Projectionist /live — immersive watch + newspaper EPG */
 
+/* In-app /live shares AppShell. The guide fills the space under that bar
+   instead of claiming a second viewport. Pop-out TV is not inside .live-shell. */
+.app-root.live-shell {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-root.live-shell > .live-page {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+}
+
+.app-root.live-shell .live-chrome {
+  /* The shared top bar already clears the notch. */
+  padding-top: 0.5rem;
+}
+
 .live-page {
   --live-bg: #07080c;
   --live-panel: rgba(12, 14, 20, 0.92);

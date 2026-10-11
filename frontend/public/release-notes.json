@@ -1,6 +1,42 @@
 {
-  "generated_at": "2026-10-11T22:30:23Z",
+  "generated_at": "2026-10-11T23:38:46Z",
   "releases": [
+    {
+      "version": "1.37.39",
+      "date": "2026-10-11",
+      "summary": "One patch on 1.37.38: the Live guide keeps published slots, `/live` uses the shared top bar, Play can shrink onto the page, and public nav paints before the session check.",
+      "highlights": [
+        "**The guide keeps the show that’s still on.** Kung Fu Theater, Emergency!, and The Repair Shop stay in the grid through the published slot. The cell is no longer cut off when the file ends early.",
+        "**Live uses the same top bar as the rest of the app.** Guide, Watch, and Weather keep Chat, Explore, and Search on the page. The pop-out TV window stays compact.",
+        "**Shrink Play onto the page you were on.** The picture and sound continue in a small panel while you use chat, Explore, or search. A tap along the bottom of the picture shows the bar without pausing, and Close sits on that bar. Pop out of the window is still its own action.",
+        "**Search, Chat, and Explore are there on the first paint.** A hard refresh no longer waits for the session check to show those links. Admin still waits."
+      ],
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "**Shrink Play onto the page you were on.** While a library title is playing, **Shrink onto page** keeps the picture and sound going in a small panel over chat, Explore, or search. Drag it if it covers the composer. **Return to player** opens the full page again; **Close** on that panel stops it. **Pop out of the window** is still its own action under More.",
+            "**Play controls stay up long enough to use.** A tap along the bottom of the picture shows the bar without pausing, and the bar stays for the same few seconds as any other reveal. Tap that band again to hide it. **Close** is on the bar. After you pause, the big Play button remains when the bar hides, then leaves one timeout later so a still frame can be a clean screenshot."
+          ]
+        },
+        {
+          "title": "Fixed",
+          "bullets": [
+            "**Live guide dropped programmes that were still on.** A station whose published slot runs past the file (Kung Fu Theater, Emergency!, The Repair Shop) had its guide cell cut down to the file length, so the title ended before the visible window and the row looked empty. Tune still started in that programme. Cells now follow the published start and stop, trimmed only when the next title has already started, so the show on screen is the show in the grid.",
+            "**Live was a dead end off the rest of the app.** Guide, Watch, and the weather channel on `/live` used a private header, so Chat, Explore, and Search were only reachable from the Projectionist logo. Those pages now use the shared top bar and hamburger. Guide and Watch stay. The logo stays. The pop-out TV window does not use that shell and stays compact.",
+            "**The icon bar stays up while the session check runs.** A hard refresh no longer hides Search, Chat, Explore, and the other public peers for several seconds. Those links paint immediately in the icon bar and in the hamburger Navigate section. Admin still waits until auth returns, so a member does not see the owner icon during the wait. More links were already static and stay as they are."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend `pytest tests/` — 2566 passed, 6 skipped, coverage 77.03% (floor 74%), run with `PROJECTIONIST_SKIP_DOTENV=1` on `release/1.37.39` (includes 1.37.38).",
+            "Frontend unit 970/970 (includes published guide slots, Live AppShell nav, in-app picture-in-picture and the 3200ms control bar, and public nav before `/api/auth/me`).",
+            "Lint 0 errors (147 warnings); `npm run build` OK."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.38",
       "date": "2026-10-11",
