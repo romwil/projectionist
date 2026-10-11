@@ -842,6 +842,78 @@ class FeedHelperTests(unittest.TestCase):
             self.assertIn("S1E1", payload["items"][0]["resume_label"])
             self.assertEqual(payload["items"][1]["title"], "Heat")
 
+    def test_continue_watching_keeps_twenty_item_on_deck(self) -> None:
+        """A 20-title Plex on-deck list is not cut to the old 12-title Explore cap."""
+        from projectionist.connectors.plex import PlexOnDeckItem
+        from projectionist.library.explore_hub import build_explore_hub
+        from projectionist.library.feeds import EXPLORE_RAIL_LIMIT
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            deck = []
+            for index in range(20):
+                key = f"deck-{index}"
+                db.upsert_library_item(
+                    {
+                        "rating_key": key,
+                        "media_type": "movie",
+                        "title": f"On Deck {index}",
+                        "year": 2000 + (index % 20),
+                        "view_count": 0,
+                        "view_offset_ms": 1_000,
+                        "duration_ms": 5_000_000,
+                    }
+                )
+                deck.append(
+                    PlexOnDeckItem(
+                        rating_key=key,
+                        media_type="movie",
+                        title=f"On Deck {index}",
+                        view_offset_ms=1_000,
+                        duration_ms=5_000_000,
+                    )
+                )
+
+            seen: dict[str, int] = {}
+
+            class FakePlex:
+                def on_deck(self, *, limit: int = 20):
+                    seen["limit"] = limit
+                    return deck[:limit]
+
+            short = feed_continue_watching(db, limit=12, plex_client=FakePlex())
+            self.assertEqual(len(short["items"]), 12)
+
+            payload = feed_continue_watching(
+                db,
+                limit=EXPLORE_RAIL_LIMIT,
+                plex_client=FakePlex(),
+            )
+            self.assertEqual(payload["source"], "plex_on_deck")
+            self.assertEqual(seen["limit"], EXPLORE_RAIL_LIMIT)
+            self.assertGreater(seen["limit"], 12)
+            self.assertEqual(len(payload["items"]), 20)
+            self.assertEqual(payload["limit"], EXPLORE_RAIL_LIMIT)
+
+            class _HubPlex:
+                def __init__(self, *_args, **_kwargs) -> None:
+                    return None
+
+                def on_deck(self, *, limit: int = 20):
+                    seen["hub_limit"] = limit
+                    return deck[:limit]
+
+            from projectionist.library import explore_hub as hub_mod
+
+            settings = Settings(plex_url="http://plex.test:32400", plex_token="token")
+            with patch.object(hub_mod, "PlexClient", _HubPlex):
+                hub = build_explore_hub(db, settings)
+            self.assertNotIn("tonight_table", hub["rails"])
+            self.assertEqual(list(hub["rails"])[-1], "afterglow")
+            self.assertEqual(hub["rail_limit"], EXPLORE_RAIL_LIMIT)
+            self.assertEqual(seen["hub_limit"], EXPLORE_RAIL_LIMIT)
+            self.assertEqual(len(hub["rails"]["continue_watching"]["items"]), 20)
+
     def test_continue_watching_honest_empty(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")

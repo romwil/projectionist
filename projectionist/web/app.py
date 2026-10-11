@@ -97,6 +97,7 @@ from projectionist.library.feeds import (
     feed_recently_added,
     feed_recently_added_episodes,
     feed_revisit_these,
+    EXPLORE_RAIL_LIMIT,
     feed_seasonal_spotlight,
     feed_tonight_table,
     feed_unfinished,
@@ -2360,7 +2361,7 @@ def library_anniversaries_endpoint(
 
 @app.get("/api/library/feeds/hub")
 def library_feed_explore_hub(
-    limit: int = 12,
+    limit: int = EXPLORE_RAIL_LIMIT,
     refresh: bool = False,
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:

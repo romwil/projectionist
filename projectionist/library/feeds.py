@@ -32,7 +32,11 @@ from projectionist.library.holidays import (
 from projectionist.library.query import row_to_query_item
 
 DEFAULT_FEED_LIMIT = 12
-MAX_FEED_LIMIT = 48
+# Plex Continue Watching reads /library/onDeck up to this container size
+# (see PlexClient.on_deck). Explore carousels use the same window instead of
+# the old 12-title request / 24-title hub cap.
+EXPLORE_RAIL_LIMIT = 50
+MAX_FEED_LIMIT = EXPLORE_RAIL_LIMIT
 MAX_PAGE_LIMIT = 100
 REVISIT_DEFAULT_LIMIT = 20
 REVISIT_IDLE_DAYS = 60

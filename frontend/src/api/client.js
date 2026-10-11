@@ -894,8 +894,11 @@ export async function getPickForMeFeed({ limit = 8 } = {}) {
   return api(`/library/feeds/pick-for-me?${search}`);
 }
 
+/** Matches Plex Continue Watching's on-deck window (projectionist.library.feeds.EXPLORE_RAIL_LIMIT). */
+export const EXPLORE_RAIL_LIMIT = 50;
+
 /** Single Explore home payload (rails + pulse). Prefer over per-rail fetches. */
-export async function getExploreHub({ limit = 12, refresh = false } = {}) {
+export async function getExploreHub({ limit = EXPLORE_RAIL_LIMIT, refresh = false } = {}) {
   const params = new URLSearchParams({ limit: String(limit) });
   if (refresh) params.set("refresh", "true");
   return api(`/library/feeds/hub?${params}`);
