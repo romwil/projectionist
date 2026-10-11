@@ -2,17 +2,34 @@
 
 ## [Unreleased]
 
+## [1.37.38] — 2026-10-11
+
+One patch on 1.37.37: Explore shelves use the longer on-deck window, More like this needs a story you can name, and release image builds stop compiling the site under emulation.
+
+### Highlights
+- **Explore shelves hold a full row of what you’re watching.** Continue Watching and the other carousels show up to 50 titles, the same window as Plex on deck, instead of a short strip.
+- **Explore opens on the shelves.** Tonight’s table is gone. Movies, TV, Related titles, and Tags sit in a compact row.
+- **More like this shares a specific story.** A neighbor shows up only when the plots meet on something particular, such as museum exhibits. A vague label or a similarity score alone is not enough.
+- **Watched means watched.** History says “Watched” or “Watched 2 times.” Open full page sits in the title sheet header, next to close.
+
 ### Changed
 - **Explore shelves match Plex Continue Watching.** Continue Watching and the other Explore carousels use the full on-deck window (50 titles) instead of the old 12-title request. Local shelves still paint first; the Plex on-deck rail fills in afterward at that longer length.
 - **Afterglow is the last Explore rail.** The other shelves stay in their previous order.
 - **Explore destinations are a tight row.** Movies, TV, Related titles, and Tags stay one tap away, without the long descriptions or the tall cards.
 - **Open full page stays on the title sheet header.** The button sits with the close control, the same weight as Play, so it is visible without scrolling the sheet.
 - **Watched means watched.** Episode history and the movie timeline say how many times a title was watched, including when it was watched again. They no longer split that into tracked completions and repeat completions.
-- **More like this needs a recognizable story.** A neighbor appears only when the plots share a specific subject, such as museum exhibits. A generic phrase or a bare similarity score is not enough, and an empty shelf is shown when nothing qualifies. Surprising still requires that named link and does not fall back to “nothing in common.”
+- **More like this needs a recognizable story.** A neighbor appears only when the plots share a specific subject (`specific_plot_link`), such as museum exhibits. A generic phrase like “creative arts,” or cosine similarity alone, is not enough, and an empty shelf is shown when nothing qualifies. Surprising still requires that named link and does not fall back to “nothing in common.”
+- **Release image builds the SPA once, on the builder’s own architecture.** `FROM --platform=$BUILDPLATFORM` keeps Vite and esbuild off QEMU. `scripts/docker-dep-manifests.sh` (run by `docker-release.sh` and CI docker-smoke) writes `.docker-deps/` with the version pinned to `0.0.0`, so a patch bump no longer re-runs `npm ci` or `pip install ".[web,mcp]"`. Release notes are copied into `dist` after Vite. The runtime image is still Debian ffmpeg, the same Python extras, and the built SPA.
 
 ### Removed
 - **Tonight’s table is gone from Explore.** The three-seat evening rail is no longer on the page or in the Explore hub.
 - **The title sheet no longer explains its own accounting.** The note that shows stay episode-first, and the “why this count” evidence essay, are gone. The episode and the date stay.
+
+### Verification
+- Backend `pytest tests/` — 2565 passed, 6 skipped, coverage 77.04% (floor 74%), run with `PROJECTIONIST_SKIP_DOTENV=1` on the rebased `fix/explore-rail-length` tree (includes 1.37.37). A first run failed 62 API cases because `frontend/dist/assets` was missing while Vite rebuilt; the rerun after `npm run build` is the one above.
+- Frontend unit 961/961 (includes Explore rail length, Tonight’s table removal, `specific_plot_link` neighbors, and plain watched copy in `exploreLayout.test.mjs`, `relationUx.test.mjs`, and `watchTracker.test.mjs`).
+- Lint 0 errors (149 warnings); `npm run build` OK.
+- Docker, release builder `curatorx-multi`, `linux/amd64` + `linux/arm64`: the previous Dockerfile’s amd64 `npm run build` ran under QEMU and exited 1 (`esbuild`: “The service was stopped”) at 6.70s wall; arm64 Vite had finished in 4.8s. Optimized first multi-arch build (dependency copy paths changed, so pip reinstalled): 63.03s — Vite once on the native arch in 3.1s, `npm ci` once in 2.0s, arm64 `pip install ".[web,mcp]"` 8.8s, amd64 pip under QEMU 48.0s. Repeat build after a version-only bump to `1.37.99` with regenerated `.docker-deps/`: 14.31s, with `npm ci`, Vite, and the dependency pip install cached on both architectures (remaining work was `pip install --no-deps`, 1.6s arm64 and 12.4s amd64). Native arm64 image smoke: `GET /api/health` returned `{"status":"ok","version":"1.37.37"}` before this version bump; ffmpeg and `frontend/dist` were present.
 
 ## [1.37.37] — 2026-10-11
 

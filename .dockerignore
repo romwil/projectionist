@@ -22,6 +22,7 @@ config/
 !.env.example
 *.md
 !README.md
+!.docker-deps/README.md
 docs/**
 !docs/PRIVACY.md
 !docs/HELP.md
