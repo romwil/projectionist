@@ -391,10 +391,13 @@ def clamp_flex_progress_to_next(
 def separate_channel_programs(programs: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
     """One channel, no overlapping programmes.
 
-    Content occupies ``[start, start+duration)`` when a file duration is known.
-    A padded ``stop`` that runs past the next start is trimmed to that start.
-    When the file ends before the next library title, the gap is Continuity
-    filler — not a second movie drawn on top of the first.
+    Each cell keeps the published guide ``[start, stop)``. Tunarr often leaves
+    ``stop`` far past the file ``duration`` (one movie whose slot runs for days).
+    Shrinking the cell to file EOF hides that title for the rest of the slot —
+    the guide and tune still call it the current programme — so the row looks
+    empty. A stop that runs past the next programme's start is trimmed to that
+    start so two titles never stack. A real hole between published stops is
+    Continuity filler, not a blank.
     """
     ordered = [
         dict(program)
@@ -415,18 +418,14 @@ def separate_channel_programs(programs: Sequence[Mapping[str, Any]]) -> List[Dic
             stop = float(stop_raw) if stop_raw is not None else None
         except (TypeError, ValueError):
             stop = None
-        duration = item.get("duration_seconds")
-        try:
-            duration_s = float(duration) if duration is not None else None
-        except (TypeError, ValueError):
-            duration_s = None
-        if (
-            not item.get("is_flex")
-            and duration_s is not None
-            and duration_s > 0
-        ):
-            file_end = start + duration_s
-            stop = file_end if stop is None else min(float(stop), file_end)
+        if stop is None:
+            duration = item.get("duration_seconds")
+            try:
+                duration_s = float(duration) if duration is not None else None
+            except (TypeError, ValueError):
+                duration_s = None
+            if duration_s is not None and duration_s > 0:
+                stop = start + duration_s
         next_start: Optional[float] = None
         if index + 1 < len(ordered):
             try:
@@ -435,6 +434,9 @@ def separate_channel_programs(programs: Sequence[Mapping[str, Any]]) -> List[Dic
                 next_start = None
         if stop is not None and next_start is not None and stop > next_start:
             stop = next_start
+        # A later title that starts at the same instant owns that point.
+        if stop is not None and stop <= start:
+            continue
         if stop is not None:
             item["stop"] = stop
             item["ends_at"] = stop

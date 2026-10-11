@@ -155,38 +155,26 @@ authReady,
   recommendItem,
   setRecommendItem,
 }) {
-  if (!authReady) {
-    return (
-      <div className="app-root workspace app-loading" data-testid="app-auth-loading">
-        <p className="login-lede">Loading…</p>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className={`app-root workspace${isYouth ? " app-root--youth youth-shell" : ""}`}
-      style={{ "--ambient-accent": ambientAccent }}
-      data-shell={isYouth ? "youth" : "default"}
-    >
-      <PrimaryTopbar
-        showNavToggle
-        isOwner={isOwner}
-        isYouth={isYouth}
-        role={userRole}
-        multiUserEnabled={multiUserEnabled}
-        seerrEnabled={seerrEnabled}
-        authReady={authReady}
-        liveChannelsReady={liveChannelsReady}
-        navOpen={appNavOpen}
-        onNavOpenChange={setAppNavOpen}
-        brandPulse={agentPulse}
-        chatError={chatError}
-        inboxUnreadCount={inboxUnreadCount}
-        uiTheme={uiTheme}
-        onThemeChange={setUiTheme}
-        className={`${nightOwl ? "night-owl" : ""} ${isYouth ? "youth-shell-topbar" : ""}`}
-        leadingExtra={
+  const topbar = (
+    <PrimaryTopbar
+      showNavToggle
+      isOwner={authReady ? isOwner : false}
+      isYouth={authReady ? isYouth : false}
+      role={authReady ? userRole : "member"}
+      multiUserEnabled={authReady ? multiUserEnabled : false}
+      seerrEnabled={authReady ? seerrEnabled : false}
+      authReady={authReady}
+      liveChannelsReady={liveChannelsReady}
+      navOpen={appNavOpen}
+      onNavOpenChange={setAppNavOpen}
+      brandPulse={agentPulse}
+      chatError={chatError}
+      inboxUnreadCount={authReady ? inboxUnreadCount : 0}
+      uiTheme={uiTheme}
+      onThemeChange={setUiTheme}
+      className={`${nightOwl ? "night-owl" : ""} ${authReady && isYouth ? "youth-shell-topbar" : ""}`}
+      leadingExtra={
+        authReady ? (
           <button
             type="button"
             className="app-topbar-menu ghost app-topbar-threads"
@@ -200,8 +188,29 @@ authReady,
               forum
             </span>
           </button>
-        }
-      />
+        ) : null
+      }
+    />
+  );
+
+  if (!authReady) {
+    return (
+      <div className="app-root workspace" data-testid="app-auth-loading">
+        {topbar}
+        <div className="app-loading">
+          <p className="login-lede">Loading…</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`app-root workspace${isYouth ? " app-root--youth youth-shell" : ""}`}
+      style={{ "--ambient-accent": ambientAccent }}
+      data-shell={isYouth ? "youth" : "default"}
+    >
+      {topbar}
 
       {setup && !setup.onboarding_complete ? (
         <div className="banner workspace-banner" data-testid="setup-banner">

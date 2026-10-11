@@ -10,6 +10,12 @@ import {
 } from "../../api/client";
 import { isCompactPlayViewport, isPhonePlayViewport } from "../../lib/chatLayout.js";
 import {
+  POP_OUT_OF_WINDOW_LABEL,
+  SHRINK_ONTO_PAGE_LABEL,
+  playerBarActions,
+  shrinkOntoPage,
+} from "../../lib/inAppPip.js";
+import {
   SCRUB_MAX,
   SEEK_RESTART_DEBOUNCE_MS,
   SKIP_LONG_SECONDS,
@@ -34,6 +40,8 @@ import {
   shouldResumeFromOffset,
   shouldSendProgress,
   skipDeltaForZone,
+  centerPlayHoldAfterOsdHide,
+  playerClosePlacement,
   theaterKeyAction,
   toggleTheaterFullscreen,
 } from "../../lib/theaterPlayer.js";
@@ -70,7 +78,14 @@ function displayTitle(session) {
   return displayHeadline(session);
 }
 
-export default function LibraryPlayer({ ratingKey, popout = false, className = "" }) {
+export default function LibraryPlayer({
+  ratingKey,
+  popout = false,
+  floated = false,
+  className = "",
+  onShrink,
+  onAfterPopout,
+}) {
   const navigate = useNavigate();
   const location = useLocation();
   const autoplayNextRef = useRef(false);
@@ -118,7 +133,11 @@ export default function LibraryPlayer({ ratingKey, popout = false, className = "
   /** True while scrub/skip is waiting on a Plex session restart. */
   const [seeking, setSeeking] = useState(false);
   /** Client-local movie bumper before the feature. */
+  const [centerPlayOn, setCenterPlayOn] = useState(true);
+  const [osdOpen, setOsdOpen] = useState(true);
   const [preroll, setPreroll] = useState(null);
+  const centerTimerRef = useRef(null);
+  const osdOpenRef = useRef(true);
 
   const key = String(ratingKey || "").trim();
   if (key !== playerKey) {
@@ -215,6 +234,20 @@ export default function LibraryPlayer({ ratingKey, popout = false, className = "
 
   const handlePlayerStatus = useCallback((next) => {
     setStatus(next);
+    if (next === "playing") {
+      if (centerTimerRef.current) {
+        window.clearTimeout(centerTimerRef.current);
+        centerTimerRef.current = null;
+      }
+      setCenterPlayOn(false);
+    } else if (next === "paused" && !osdOpenRef.current) {
+      const hold = centerPlayHoldAfterOsdHide({ paused: true });
+      setCenterPlayOn(hold.visible);
+      if (centerTimerRef.current) window.clearTimeout(centerTimerRef.current);
+      if (hold.hideAfterMs > 0) {
+        centerTimerRef.current = window.setTimeout(() => setCenterPlayOn(false), hold.hideAfterMs);
+      }
+    }
     if (next === "playing" || next === "ready") {
       setSeeking(false);
       setError("");
@@ -222,6 +255,33 @@ export default function LibraryPlayer({ ratingKey, popout = false, className = "
       setSeeking(false);
       setError((prev) => prev || "Playback stalled. Try Resume, refresh, or Open in Plex.");
     }
+  }, []);
+
+  const onOsdVisibility = useCallback((open) => {
+    osdOpenRef.current = open;
+    setOsdOpen(open);
+    if (open) {
+      if (centerTimerRef.current) {
+        window.clearTimeout(centerTimerRef.current);
+        centerTimerRef.current = null;
+      }
+      setCenterPlayOn(true);
+      return;
+    }
+    const video = videoRef.current;
+    const paused = Boolean(video && video.paused && !video.ended);
+    const hold = centerPlayHoldAfterOsdHide({ paused });
+    if (!hold.visible) {
+      setCenterPlayOn(false);
+      return;
+    }
+    setCenterPlayOn(true);
+    if (centerTimerRef.current) window.clearTimeout(centerTimerRef.current);
+    centerTimerRef.current = window.setTimeout(() => setCenterPlayOn(false), hold.hideAfterMs);
+  }, []);
+
+  useEffect(() => () => {
+    if (centerTimerRef.current) window.clearTimeout(centerTimerRef.current);
   }, []);
 
   const handleHlsRef = useCallback((hls) => {
@@ -615,7 +675,14 @@ export default function LibraryPlayer({ ratingKey, popout = false, className = "
     const popup = window.open(href, "projectionist-library-watch", features);
     if (!popup) return;
     stopSession();
-    navigate(-1);
+    if (onAfterPopout) onAfterPopout();
+    else navigate(-1);
+  }
+
+  function shrinkOntoPageClick() {
+    const from = typeof location.state?.from === "string" ? location.state.from : "";
+    const next = shrinkOntoPage(videoRef.current, { ratingKey: key, returnTo: from });
+    onShrink?.(next);
   }
 
   function leaveWatch() {
@@ -711,7 +778,11 @@ export default function LibraryPlayer({ ratingKey, popout = false, className = "
   }
   const showOsd = !resumeOpen && !ended;
   const playing = status === "playing";
-  const showCenterPlay = showOsd && !playing && !error && status !== "loading" && Boolean(session);
+  const showCenterPlay =
+    showOsd && !playing && !error && status !== "loading" && Boolean(session) && centerPlayOn;
+  const pausedFrameClean =
+    Boolean(session) && status === "paused" && !osdOpen && !centerPlayOn && !resumeOpen && !ended;
+  const closePlace = playerClosePlacement();
   const durationS = durationMs / 1000 || 0;
   const bufferedPct = durationS ? Math.round((bufferedEndS / durationS) * 100) : 0;
   const playheadPct = scrubPctFromMs(nowMs, durationMs);
@@ -719,6 +790,11 @@ export default function LibraryPlayer({ ratingKey, popout = false, className = "
   const headline = displayHeadline(session);
   const metaLine = displayMeta(session);
   const forceOsd = moreOpen || ccOpen;
+  const barActions = playerBarActions({
+    presentation: floated ? "pip" : "stage",
+    popoutWindow: popout,
+    phone,
+  });
 
   const osd = showOsd ? (
     <div className="theater-osd-inner" data-testid="library-osd-inner">
@@ -821,6 +897,18 @@ export default function LibraryPlayer({ ratingKey, popout = false, className = "
         >
           CC
         </button>
+        {barActions.shrinkOntoPage ? (
+          <button
+            type="button"
+            className="theater-osd-secondary library-shrink"
+            onClick={shrinkOntoPageClick}
+            data-testid="library-shrink"
+            aria-label={SHRINK_ONTO_PAGE_LABEL}
+          >
+            <span className="library-shrink-short">Shrink</span>
+            <span className="library-shrink-long"> onto page</span>
+          </button>
+        ) : null}
         <button
           type="button"
           className="theater-osd-secondary"
@@ -829,6 +917,16 @@ export default function LibraryPlayer({ ratingKey, popout = false, className = "
         >
           Fullscreen
         </button>
+        {closePlace.onBar ? (
+          <button
+            type="button"
+            className="theater-osd-secondary"
+            onClick={leaveWatch}
+            data-testid="library-close"
+          >
+            {closePlace.label}
+          </button>
+        ) : null}
         <div className="theater-osd-more-wrap" data-theater-chrome="true">
           <button
             type="button"
@@ -857,7 +955,7 @@ export default function LibraryPlayer({ ratingKey, popout = false, className = "
                   Picture in Picture
                 </button>
               ) : null}
-              {!phone && !popout ? (
+              {barActions.popOutOfWindow ? (
                 <button
                   type="button"
                   role="menuitem"
@@ -866,7 +964,7 @@ export default function LibraryPlayer({ ratingKey, popout = false, className = "
                     setMoreOpen(false);
                   }}
                 >
-                  Pop-out
+                  {POP_OUT_OF_WINDOW_LABEL}
                 </button>
               ) : null}
               {plexHref ? (
@@ -880,14 +978,6 @@ export default function LibraryPlayer({ ratingKey, popout = false, className = "
                   Open in Plex
                 </a>
               ) : null}
-              <button
-                type="button"
-                role="menuitem"
-                onClick={leaveWatch}
-                data-testid="library-osd-back"
-              >
-                Back
-              </button>
             </div>
           ) : null}
         </div>
@@ -915,6 +1005,7 @@ export default function LibraryPlayer({ ratingKey, popout = false, className = "
       data-play-phone={phone ? "true" : "false"}
       data-play-compact={compact ? "true" : "false"}
       data-long-skip={longSkip ? "true" : "false"}
+      data-center-play={showCenterPlay ? "visible" : "hidden"}
     >
       <TheaterPlayer
         src={resumeOpen || ended || preroll || !session?.stream_url ? "" : session.stream_url}
@@ -948,6 +1039,8 @@ export default function LibraryPlayer({ ratingKey, popout = false, className = "
         onStageActivate={handleStageActivate}
         onStageDoubleActivate={handleStageDoubleActivate}
         onKeyDown={handleKeyDown}
+        onOsdVisibility={onOsdVisibility}
+        pausedFrameClean={pausedFrameClean}
       >
         {activeSubTrack && subs.state === "ready" ? (
           <SubtitleOverlay

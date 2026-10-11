@@ -10,6 +10,7 @@ import LivePlayer from "../components/live/LivePlayer";
 import LiveTuneShare from "../components/live/LiveTuneShare";
 import WeatherChannelPlayer from "../components/live/WeatherChannelPlayer";
 import { useAuthGate } from "../components/UserMenu";
+import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/backNav.js";
 import {
   appendWeatherChannel,
@@ -22,6 +23,20 @@ import {
 import { liveUserEmptyCopy } from "../lib/liveChannelsCopy.js";
 import { saveLiveStickyOsd } from "../lib/liveTuneLink.js";
 import { plexLiveTvUrl } from "../lib/titleLinks.js";
+
+/**
+ * In-app `/live` uses the shared AppShell top bar (hamburger, logo, Search,
+ * Chat, Explore, and the other role-gated peers). Guide and Watch stay on
+ * the Live row. The pop-out TV window keeps its own compact chrome.
+ * @param {import("react").ReactNode} children
+ */
+function LivePlatformFrame({ children }) {
+  return (
+    <AppShell className="app-root live-shell" testId="live-shell" blockUntilAuth={false}>
+      {children}
+    </AppShell>
+  );
+}
 
 /**
  * Gasp-worthy Live Channels surface: Guide ↔ Watch, auth’d HLS, pop-out TV.
@@ -216,9 +231,14 @@ export default function LivePage({ popout = false }) {
           guideReady: Boolean(guide?.ready),
         })
       : null;
+  function withPlatformNav(node) {
+    if (popout) return node;
+    return <LivePlatformFrame>{node}</LivePlatformFrame>;
+  }
+
   if (empty) {
     const ctaTo = empty.ctaTo === "admin" ? ROUTES.admin : ROUTES.chat;
-    return (
+    return withPlatformNav(
       <div className="live-page live-page--empty" data-testid="live-page">
         <div className="live-empty-card" data-testid={empty.testId}>
           <p className="live-eyebrow">{empty.eyebrow}</p>
@@ -228,11 +248,11 @@ export default function LivePage({ popout = false }) {
             {empty.ctaLabel}
           </Link>
         </div>
-      </div>
+      </div>,
     );
   }
 
-  return (
+  return withPlatformNav(
     <div
       className={`live-page${popout ? " live-page--popout" : ""}${mode === "watch" ? " live-page--watch" : " live-page--guide"}`}
       data-testid={popout ? "live-watch-page" : "live-page"}
@@ -240,16 +260,14 @@ export default function LivePage({ popout = false }) {
     >
       <header className="live-chrome" data-testid="live-chrome">
         <div className="live-chrome-brand">
-          {!popout ? (
-            <Link to={ROUTES.chat} className="live-chrome-home" data-testid="live-back-chat">
-              Projectionist
-            </Link>
-          ) : (
-            <span className="live-chrome-home">Projectionist</span>
-          )}
-          <span className="live-chrome-sep" aria-hidden="true">
-            /
-          </span>
+          {popout ? (
+            <>
+              <span className="live-chrome-home">Projectionist</span>
+              <span className="live-chrome-sep" aria-hidden="true">
+                /
+              </span>
+            </>
+          ) : null}
           <h1 className="live-chrome-title">Live</h1>
         </div>
 
@@ -377,6 +395,6 @@ export default function LivePage({ popout = false }) {
           compact={popout}
         />
       )}
-    </div>
+    </div>,
   );
 }

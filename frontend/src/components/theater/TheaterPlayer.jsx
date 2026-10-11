@@ -3,6 +3,7 @@ import Hls from "hls.js";
 import TuningInterstitial from "./TuningInterstitial.jsx";
 import {
   OSD_IDLE_MS,
+  bottomThirdTapResult,
   createStageGesture,
   dispatchPictureTap,
   isTheaterChromeTarget,
@@ -45,6 +46,8 @@ export default function TheaterPlayer({
   onKeyDown,
   onVideoRef,
   onHlsRef,
+  onOsdVisibility,
+  pausedFrameClean = false,
   children,
 }) {
   const rootRef = useRef(null);
@@ -60,21 +63,42 @@ export default function TheaterPlayer({
   const onHlsRefRef = useRef(onHlsRef);
   const onVideoRefRef = useRef(onVideoRef);
   const onBumpOsdRef = useRef(onBumpOsd);
+  const onOsdVisibilityRef = useRef(onOsdVisibility);
+  const bottomTapRef = useRef(null);
   useEffect(() => {
     onStatusRef.current = onStatus;
     onHlsRefRef.current = onHlsRef;
     onVideoRefRef.current = onVideoRef;
     onBumpOsdRef.current = onBumpOsd;
+    onOsdVisibilityRef.current = onOsdVisibility;
   });
   const [internalOsd, setInternalOsd] = useState(true);
   const osdVisible = osdVisibleProp ?? internalOsd;
   const showTuning = Boolean(tuning || loading);
 
+  function hideOsd() {
+    setInternalOsd(false);
+    onOsdVisibilityRef.current?.(false);
+    if (idleTimerRef.current) {
+      clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = null;
+    }
+  }
+
   function bumpOsd() {
     setInternalOsd(true);
+    onOsdVisibilityRef.current?.(true);
     onBumpOsdRef.current?.();
     if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    idleTimerRef.current = setTimeout(() => setInternalOsd(false), OSD_IDLE_MS);
+    idleTimerRef.current = setTimeout(() => hideOsd(), OSD_IDLE_MS);
+  }
+
+  function applyBottomThird() {
+    const result = bottomThirdTapResult({
+      visibleAtPointerDown: Boolean(bottomTapRef.current?.visibleAtPointerDown),
+    });
+    if (result.effect === "hide") hideOsd();
+    else bumpOsd();
   }
 
   useEffect(() => {
@@ -167,26 +191,18 @@ export default function TheaterPlayer({
     onStageActivate,
     onStageDoubleActivate,
     toggleFullscreen,
-    toggleOsd: () => {},
+    applyBottomThird: () => {},
+    pausedFrameClean: false,
   });
   useEffect(() => {
     stageRef.current = {
       onStageActivate,
       onStageDoubleActivate,
       toggleFullscreen,
-      toggleOsd: () => {
-        if (osdVisible) {
-          setInternalOsd(false);
-          if (idleTimerRef.current) {
-            clearTimeout(idleTimerRef.current);
-            idleTimerRef.current = null;
-          }
-          return;
-        }
-        bumpOsd();
-      },
+      applyBottomThird,
+      pausedFrameClean,
     };
-  }, [onStageActivate, onStageDoubleActivate, osdVisible]);
+  });
 
   function pictureOffset(event) {
     const rect = rootRef.current?.getBoundingClientRect();
@@ -198,8 +214,13 @@ export default function TheaterPlayer({
     const handle = createStageGesture({
       onSingle: (event) => {
         if (isTheaterChromeTarget(event.target)) return;
+        if (stageRef.current.pausedFrameClean) {
+          bottomTapRef.current = { visibleAtPointerDown: false };
+          stageRef.current.applyBottomThird?.();
+          return;
+        }
         const { offsetY, height } = pictureOffset(event);
-        const intent = dispatchPictureTap({
+        dispatchPictureTap({
           offsetY,
           height,
           togglePlayback: () => {
@@ -210,15 +231,19 @@ export default function TheaterPlayer({
             );
             stageRef.current.onStageActivate?.(event, zone);
           },
-          toggleOsd: () => stageRef.current.toggleOsd?.(),
+          toggleOsd: () => stageRef.current.applyBottomThird?.(),
         });
-        if (intent === "osd") return;
       },
       onDouble: (event) => {
         if (isTheaterChromeTarget(event.target)) return;
+        if (stageRef.current.pausedFrameClean) {
+          bottomTapRef.current = { visibleAtPointerDown: false };
+          stageRef.current.applyBottomThird?.();
+          return;
+        }
         const { offsetY, height } = pictureOffset(event);
         if (pictureTapIntent(offsetY, height) === "osd") {
-          stageRef.current.toggleOsd?.();
+          stageRef.current.applyBottomThird?.();
           return;
         }
         const rect = rootRef.current?.getBoundingClientRect();
@@ -269,7 +294,11 @@ export default function TheaterPlayer({
       onPointerDown={(event) => {
         const rect = rootRef.current?.getBoundingClientRect();
         const y = (event.clientY ?? 0) - (rect?.top || 0);
-        if (pictureTapIntent(y, rect?.height || 0) === "osd") return;
+        if (pictureTapIntent(y, rect?.height || 0) === "osd") {
+          bottomTapRef.current = { visibleAtPointerDown: osdVisible };
+          return;
+        }
+        bottomTapRef.current = null;
         handlePointerMove(event);
       }}
       onPointerUp={(event) => {

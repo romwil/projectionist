@@ -99,8 +99,23 @@ export default function AdminLayout() {
 
   if (!ready) {
     return (
-      <div className="admin-shell admin-shell-loading" data-testid="admin-layout-loading">
-        <p className="status status-secondary">Loading admin…</p>
+      <div className="admin-shell" data-testid="admin-layout-loading">
+        <PrimaryTopbar
+          showNavToggle
+          isOwner={false}
+          role="member"
+          multiUserEnabled={false}
+          seerrEnabled={false}
+          authReady={false}
+          liveChannelsReady={liveChannelsReady}
+          navOpen={appNavOpen}
+          onNavOpenChange={setAppNavOpen}
+          uiTheme={uiTheme}
+          onThemeChange={setUiTheme}
+        />
+        <div className="admin-shell-loading">
+          <p className="status status-secondary">Loading admin…</p>
+        </div>
       </div>
     );
   }

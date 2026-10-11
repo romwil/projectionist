@@ -241,7 +241,8 @@ test.describe("In-app library Play", () => {
     await page.goto("/watch/plex-949");
     await page.getByTestId("library-osd-more").click();
     await expect(page.getByTestId("library-osd-menu")).toBeVisible();
-    await expect(page.getByRole("menuitem", { name: "Pop-out" })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Pop out of the window" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Shrink onto the page" })).toBeVisible();
     await page.goto("/watch/plex-949/popout");
     await expect(page).toHaveURL(/\/watch\/plex-949\/popout/);
     await page.goto("/chat");
@@ -371,5 +372,88 @@ test.describe("In-app library Play", () => {
     await page.goto("/title/show/43323");
     await page.getByTestId("show-episode-play-ep-fern-1").click();
     await expect(page).toHaveURL(/\/watch\/ep-fern-1/);
+  });
+
+  test("shrink keeps the player mounted across chat, explore, and search", async ({ page }) => {
+    await page.route("**/api/title/movie/949**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          media_type: "movie",
+          title: "Heat",
+          year: 1995,
+          tmdb_id: 949,
+          in_library: true,
+          rating_key: "plex-949",
+          plex_machine_id: "mock-plex-machine",
+        }),
+      });
+    });
+
+    await page.goto("/title/movie/949");
+    await page.getByRole("link", { name: "Play" }).click();
+    await expect(page).toHaveURL(/\/watch\/plex-949/);
+    await expect(page.getByRole("button", { name: "Shrink onto the page" })).toBeVisible();
+    await page.getByTestId("library-osd-more").click();
+    await expect(page.getByRole("menuitem", { name: "Pop out of the window" })).toBeVisible();
+    await page.getByTestId("library-osd-more").click();
+
+    await page.evaluate(() => {
+      const video = document.querySelector("[data-testid='library-player-video']") as HTMLVideoElement | null;
+      if (!video) return;
+      const win = window as Window & { __shrinkPauseCalls?: number };
+      win.__shrinkPauseCalls = 0;
+      const orig = video.pause.bind(video);
+      video.pause = () => {
+        win.__shrinkPauseCalls = (win.__shrinkPauseCalls || 0) + 1;
+        return orig();
+      };
+      video.dataset.pipIdentity = "alive";
+    });
+
+    await page.getByRole("button", { name: "Shrink onto the page" }).click();
+    await expect(page).toHaveURL(/\/title\/movie\/949/);
+    await expect(page.getByTestId("inapp-pip")).toBeVisible();
+    const shrunk = await page.evaluate(() => {
+      const win = window as Window & { __shrinkPauseCalls?: number };
+      const video = document.querySelector("[data-testid='library-player-video']");
+      return {
+        pauses: win.__shrinkPauseCalls ?? 0,
+        identity: video?.getAttribute("data-pip-identity") || "",
+        count: document.querySelectorAll("[data-testid='library-player-video']").length,
+      };
+    });
+    expect(shrunk.pauses).toBe(0);
+    expect(shrunk.identity).toBe("alive");
+    expect(shrunk.count).toBe(1);
+
+    // Title detail uses the sticky header, so Chat / Explore / Search are in the hamburger.
+    await page.getByTestId("app-nav-toggle").click();
+    await page.getByTestId("app-nav-explore").click();
+    await expect(page).toHaveURL(/\/explore/);
+    await expect(page.getByTestId("library-player-video")).toHaveAttribute("data-pip-identity", "alive");
+
+    await page.getByTestId("topbar-search-link").click();
+    await expect(page).toHaveURL(/\/search/);
+    await expect(page.getByTestId("library-player-video")).toHaveAttribute("data-pip-identity", "alive");
+
+    await page.getByTestId("topbar-chat-link").click();
+    await expect(page).toHaveURL(/\/chat/);
+    await expect(page.getByTestId("inapp-pip")).toBeVisible();
+    const composerClear = await page.evaluate(() => {
+      const pip = document.querySelector("[data-testid='inapp-pip']")?.getBoundingClientRect();
+      const composer = document.querySelector(".composer")?.getBoundingClientRect();
+      if (!pip || !composer) return true;
+      const overlapX = pip.left < composer.right && pip.right > composer.left;
+      const overlapY = pip.top < composer.bottom && pip.bottom > composer.top;
+      return !(overlapX && overlapY);
+    });
+    expect(composerClear).toBe(true);
+
+    await page.getByRole("button", { name: "Return to player" }).click();
+    await expect(page).toHaveURL(/\/watch\/plex-949/);
+    await expect(page.getByTestId("library-player-video")).toHaveAttribute("data-pip-identity", "alive");
+    await expect(page.getByRole("button", { name: "Shrink onto the page" })).toBeVisible();
   });
 });

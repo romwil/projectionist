@@ -165,7 +165,7 @@ describe("buildAppNavItems", () => {
     assert.ok(items.some((item) => item.id === "admin-heading-experience"));
   });
 
-  it("shows no peers while auth is unresolved, so Admin never flashes", () => {
+  it("shows Navigate peers while auth is unresolved, and withholds Admin", () => {
     const items = buildAppNavItems({
       isOwner: true,
       role: "owner",
@@ -173,10 +173,20 @@ describe("buildAppNavItems", () => {
       pathname: "/admin/overview",
     });
     const ids = items.map((item) => item.id);
-    assert.equal(ids.includes("heading-navigate"), false);
+    assert.equal(ids[0], "heading-navigate");
+    assert.deepEqual(navigateBlock(items), [
+      "search",
+      "chat",
+      "explore",
+      "inbox",
+      "my-journey",
+      "settings",
+    ]);
     assert.equal(ids.includes("admin"), false);
     assert.equal(ids.includes("heading-admin"), false);
-    assert.equal(ids[0], "heading-more");
+    assert.equal(ids.includes("heading-more"), true);
+    assert.ok(moreBlock(items).includes("tags"));
+    assert.ok(moreBlock(items).includes("library"));
   });
 
   it("keeps core browse destinations stable", () => {

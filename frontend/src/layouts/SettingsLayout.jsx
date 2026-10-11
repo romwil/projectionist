@@ -94,8 +94,24 @@ export default function SettingsLayout() {
 
   if (!ready) {
     return (
-      <div className="settings-shell settings-shell-loading" data-testid="settings-layout-loading">
-        <p className="status status-secondary">Loading settings…</p>
+      <div className="settings-shell" data-testid="settings-layout-loading">
+        <PrimaryTopbar
+          showNavToggle
+          isOwner={false}
+          isYouth={false}
+          role="member"
+          multiUserEnabled={false}
+          seerrEnabled={false}
+          authReady={false}
+          liveChannelsReady={liveChannelsReady}
+          navOpen={appNavOpen}
+          onNavOpenChange={setAppNavOpen}
+          uiTheme={uiTheme}
+          onThemeChange={setUiTheme}
+        />
+        <div className="settings-shell-loading">
+          <p className="status status-secondary">Loading settings…</p>
+        </div>
       </div>
     );
   }
