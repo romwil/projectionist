@@ -4,7 +4,9 @@ import TuningInterstitial from "./TuningInterstitial.jsx";
 import {
   OSD_IDLE_MS,
   createStageGesture,
+  dispatchPictureTap,
   isTheaterChromeTarget,
+  pictureTapIntent,
   skipZoneFromClientX,
   theaterHlsConfig,
   toggleTheaterFullscreen,
@@ -165,24 +167,60 @@ export default function TheaterPlayer({
     onStageActivate,
     onStageDoubleActivate,
     toggleFullscreen,
+    toggleOsd: () => {},
   });
   useEffect(() => {
-    stageRef.current = { onStageActivate, onStageDoubleActivate, toggleFullscreen };
-  }, [onStageActivate, onStageDoubleActivate]);
+    stageRef.current = {
+      onStageActivate,
+      onStageDoubleActivate,
+      toggleFullscreen,
+      toggleOsd: () => {
+        if (osdVisible) {
+          setInternalOsd(false);
+          if (idleTimerRef.current) {
+            clearTimeout(idleTimerRef.current);
+            idleTimerRef.current = null;
+          }
+          return;
+        }
+        bumpOsd();
+      },
+    };
+  }, [onStageActivate, onStageDoubleActivate, osdVisible]);
+
+  function pictureOffset(event) {
+    const rect = rootRef.current?.getBoundingClientRect();
+    const y = (event.clientY ?? event.changedTouches?.[0]?.clientY ?? 0) - (rect?.top || 0);
+    return { offsetY: y, height: rect?.height || 0 };
+  }
 
   useEffect(() => {
     const handle = createStageGesture({
       onSingle: (event) => {
         if (isTheaterChromeTarget(event.target)) return;
-        const zone = skipZoneFromClientX(
-          (event.clientX ?? event.changedTouches?.[0]?.clientX ?? 0) -
-            (rootRef.current?.getBoundingClientRect()?.left || 0),
-          rootRef.current?.getBoundingClientRect()?.width || 0,
-        );
-        stageRef.current.onStageActivate?.(event, zone);
+        const { offsetY, height } = pictureOffset(event);
+        const intent = dispatchPictureTap({
+          offsetY,
+          height,
+          togglePlayback: () => {
+            const zone = skipZoneFromClientX(
+              (event.clientX ?? event.changedTouches?.[0]?.clientX ?? 0) -
+                (rootRef.current?.getBoundingClientRect()?.left || 0),
+              rootRef.current?.getBoundingClientRect()?.width || 0,
+            );
+            stageRef.current.onStageActivate?.(event, zone);
+          },
+          toggleOsd: () => stageRef.current.toggleOsd?.(),
+        });
+        if (intent === "osd") return;
       },
       onDouble: (event) => {
         if (isTheaterChromeTarget(event.target)) return;
+        const { offsetY, height } = pictureOffset(event);
+        if (pictureTapIntent(offsetY, height) === "osd") {
+          stageRef.current.toggleOsd?.();
+          return;
+        }
         const rect = rootRef.current?.getBoundingClientRect();
         const zone = skipZoneFromClientX(
           (event.clientX ?? event.changedTouches?.[0]?.clientX ?? 0) - (rect?.left || 0),
@@ -228,7 +266,12 @@ export default function TheaterPlayer({
       tabIndex={0}
       onMouseMove={handlePointerMove}
       onFocus={bumpOsd}
-      onPointerDown={handlePointerMove}
+      onPointerDown={(event) => {
+        const rect = rootRef.current?.getBoundingClientRect();
+        const y = (event.clientY ?? 0) - (rect?.top || 0);
+        if (pictureTapIntent(y, rect?.height || 0) === "osd") return;
+        handlePointerMove(event);
+      }}
       onPointerUp={(event) => {
         if (event.pointerType === "mouse" && event.button !== 0) return;
         gestureRef.current?.(event);

@@ -9,7 +9,9 @@ import {
   SKIP_SECONDS,
   canLocalSeekTo,
   createScrubCommit,
+  dispatchPictureTap,
   longSkipFits,
+  pictureTapIntent,
   canResumeAttachedStream,
   clampTime,
   createStageGesture,
@@ -341,6 +343,33 @@ test("a scrubber burst commits one seek, not one per input", async () => {
   await new Promise((resolve) => setTimeout(resolve, 50));
   assert.deepEqual(burst, [524]);
   loose.cancel();
+});
+
+test("bottom third toggles the overlay and does not pause", () => {
+  assert.equal(pictureTapIntent(0, 900), "toggle");
+  assert.equal(pictureTapIntent(599, 900), "toggle");
+  assert.equal(pictureTapIntent(600, 900), "osd");
+  assert.equal(pictureTapIntent(899, 900), "osd");
+
+  const calls = [];
+  const bottom = dispatchPictureTap({
+    offsetY: 800,
+    height: 900,
+    togglePlayback: () => calls.push("pause"),
+    toggleOsd: () => calls.push("osd"),
+  });
+  assert.equal(bottom, "osd");
+  assert.deepEqual(calls, ["osd"]);
+
+  calls.length = 0;
+  const upper = dispatchPictureTap({
+    offsetY: 200,
+    height: 900,
+    togglePlayback: () => calls.push("pause"),
+    toggleOsd: () => calls.push("osd"),
+  });
+  assert.equal(upper, "playback");
+  assert.deepEqual(calls, ["pause"]);
 });
 
 test("long skip is ±30 only in wide landscape", () => {
