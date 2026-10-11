@@ -8,12 +8,23 @@ from pathlib import Path
 
 from projectionist.library.db import Database
 from projectionist.library.neighbors import compute_neighbors_for_seed
-from projectionist.library.plot_kinship import surprising_plot_link
+from projectionist.library.plot_kinship import specific_plot_link, surprising_plot_link
 from projectionist.library.relations import list_relations_for_item
 
 BAKE_PLOT = "Amateur bakers compete around a signature bake inside a failing colony."
 SPY_PLOT = "Rivals reunite after amateur bakers compete and ruin a signature bake tonight."
 GRAVITY_PLOT = "Astronauts fight to survive after debris destroys their orbiting shuttle."
+MUSEUM_PLOT = (
+    "A reality company builds museum exhibits, from dinosaur halls to a Titanic gallery, "
+    "and the crew celebrates creative arts while installing each hall."
+)
+ALIEN_PLOT = (
+    "Federal agents investigate aliens and a government conspiracy, and between cases "
+    "they argue about creative arts in the bureau basement."
+)
+MUSEUM_PEER_PLOT = (
+    "Installers spend a season placing museum exhibits inside a new natural history hall."
+)
 
 
 def _title(db: Database, **fields) -> int:
@@ -163,8 +174,8 @@ class SurprisingRelationPayloadTests(unittest.TestCase):
 
             self.assertNotIn("The Great American Baking Show", by_title)
             self.assertIn("Covert Kitchen", by_title)
-            self.assertIn("Gravity", by_title)
-            self.assertIn("Red Sparrow", by_title)
+            self.assertNotIn("Gravity", by_title)
+            self.assertNotIn("Red Sparrow", by_title)
 
             linked = by_title["Covert Kitchen"]["why"]
             self.assertTrue(linked["plot_link"])
@@ -175,13 +186,85 @@ class SurprisingRelationPayloadTests(unittest.TestCase):
             self.assertEqual(linked["shelf_note"], "Shelf labels barely overlap")
 
             for title in ("Gravity", "Red Sparrow"):
-                why = by_title[title]["why"]
-                self.assertIsNone(why["plot_link"])
-                self.assertIsNone(why["surprise_flavor"])
-                self.assertTrue(why["label"])
-                self.assertNotIn("almost no shared", why["label"].lower())
-                self.assertNotIn("barely overlap", why["label"].lower())
-                self.assertNotIn("nothing in common", why["label"].lower())
+                self.assertNotIn(title, by_title)
+
+
+class MuseumExhibitNeighborTests(unittest.TestCase):
+    def test_generic_phrase_and_bare_cosine_do_not_match_a_museum_show(self) -> None:
+        """A reality museum-exhibit plot must not pick up sci-fi via cosine or 'creative arts'."""
+        self.assertIsNone(
+            specific_plot_link(
+                seed_text=MUSEUM_PLOT,
+                peer_text=ALIEN_PLOT,
+                shelf_labels={"reality", "documentary", "science fiction", "mystery"},
+            )
+        )
+        self.assertIsNone(
+            surprising_plot_link(
+                cosine=0.91,
+                overlap=0.0,
+                seed_text=MUSEUM_PLOT,
+                peer_text=ALIEN_PLOT,
+                shelf_labels={"reality", "documentary", "science fiction", "mystery"},
+            )
+        )
+        honest = specific_plot_link(
+            seed_text=MUSEUM_PLOT,
+            peer_text=MUSEUM_PEER_PLOT,
+            shelf_labels={"reality", "documentary"},
+        )
+        self.assertIsNotNone(honest)
+        assert honest is not None
+        self.assertIn("museum exhibits", honest["sentence"].lower())
+        self.assertNotIn("creative arts", honest["sentence"].lower())
+        self.assertNotIn("plot kinship", honest["sentence"].lower())
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "museum.db")
+            seed = _title(
+                db,
+                rating_key="museum-men",
+                tmdb_id=1,
+                title="Museum Men",
+                media_type="show",
+                genres=["Reality"],
+                keywords=["museum"],
+                summary=MUSEUM_PLOT,
+            )
+            xfiles = _title(
+                db,
+                rating_key="xfiles",
+                tmdb_id=2,
+                title="The X-Files",
+                genres=["Science Fiction", "Mystery"],
+                keywords=["alien"],
+                summary=ALIEN_PLOT,
+            )
+            peer = _title(
+                db,
+                rating_key="hall",
+                tmdb_id=3,
+                title="Hall Install",
+                genres=["Reality"],
+                keywords=["museum"],
+                summary=MUSEUM_PEER_PLOT,
+            )
+            db.replace_relations_of_types(
+                {
+                    "neighbor": [
+                        (seed, xfiles, "neighbor", 0.88, "item_neighbors"),
+                        (seed, peer, "neighbor", 0.8, "item_neighbors"),
+                    ]
+                }
+            )
+            payload = list_relations_for_item(db, seed, limit=10)
+            titles = {edge["title"] for edge in payload["items"]}
+            self.assertNotIn("The X-Files", titles)
+            self.assertIn("Hall Install", titles)
+            why = next(edge["why"] for edge in payload["items"] if edge["title"] == "Hall Install")
+            self.assertIn("museum exhibits", why["label"].lower())
+            self.assertNotIn("Strong plot kinship", why["label"])
+            self.assertNotIn("creative arts", why["label"].lower())
 
 
 class MissingShelfSurpriseScoreTests(unittest.TestCase):

@@ -72,10 +72,17 @@ test("shouldOpenTitleOverlayClick allows plain left clicks only", () => {
   assert.equal(shouldOpenTitleOverlayClick({ button: 0, defaultPrevented: true }), false);
 });
 
-test("Open full page expands by closing the overlay on same-tab navigate", () => {
+test("Open full page sits on the sheet header and closes the overlay on same-tab navigate", () => {
   const content = readFileSync(join(componentsDir, "TitleDetailContent.jsx"), "utf8");
   const drawer = readFileSync(join(componentsDir, "TitleDetailDrawer.jsx"), "utf8");
-  assert.match(content, /onExpandFullPage/);
-  assert.match(content, /title-detail-open-full/);
-  assert.match(drawer, /onExpandFullPage=\{requestClose\}/);
+  const neighbors = readFileSync(join(componentsDir, "TitleNeighborsRails.jsx"), "utf8");
+  const headerEnd = drawer.indexOf('className="title-detail-drawer-body"');
+  const openIdx = drawer.indexOf("title-detail-open-full");
+  assert.ok(openIdx > 0 && headerEnd > openIdx);
+  assert.match(drawer.slice(0, headerEnd), /title-cta-primary title-detail-open-full/);
+  assert.match(drawer.slice(0, headerEnd), /requestClose\(\)/);
+  assert.doesNotMatch(content, /title-detail-open-full/);
+  assert.doesNotMatch(content, /title-detail-drawer-full-link/);
+  assert.match(neighbors, /hasSpecificStoryLink/);
+  assert.doesNotMatch(neighbors, /Strong plot kinship/);
 });

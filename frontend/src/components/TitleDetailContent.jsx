@@ -102,8 +102,6 @@ function MetaTile({ label, value, testId }) {
 export default function TitleDetailContent({
   detail,
   variant = "full",
-  fullPageHref = null,
-  onExpandFullPage = null,
   multiUserEnabled = false,
   userRole = "owner",
   requestPath = "arr",
@@ -632,33 +630,6 @@ export default function TitleDetailContent({
         </aside>
       </section>
 
-      {compact && fullPageHref ? (
-        <p className="title-detail-drawer-full-link">
-          <Link
-            to={fullPageHref}
-            className="title-meta-link"
-            data-testid="title-detail-open-full"
-            onClick={(event) => {
-              // Same-tab expand: dismiss the overlay so the full page is not
-              // stuck behind it. Modifier / middle-clicks keep the overlay
-              // (new tab) so Inbox stays as the user left it.
-              if (
-                event.defaultPrevented ||
-                (typeof event.button === "number" && event.button !== 0) ||
-                event.metaKey ||
-                event.ctrlKey ||
-                event.shiftKey ||
-                event.altKey
-              ) {
-                return;
-              }
-              onExpandFullPage?.();
-            }}
-          >
-            Open full page
-          </Link>
-        </p>
-      ) : null}
     </div>
   );
 }

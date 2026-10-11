@@ -62,6 +62,7 @@ jobs:
             ./scripts/generate-release-notes.sh
           fi
           test -f frontend/public/release-notes.json
+          ./scripts/docker-dep-manifests.sh
 
       - uses: docker/setup-buildx-action@v3
 

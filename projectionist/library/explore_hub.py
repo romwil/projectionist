@@ -28,6 +28,7 @@ from projectionist.config_store import Settings
 from projectionist.connectors.plex import PlexClient
 from projectionist.library.db import Database
 from projectionist.library.feeds import (
+    EXPLORE_RAIL_LIMIT,
     feed_afterglow,
     feed_continue_watching,
     feed_director_spotlight,
@@ -38,7 +39,6 @@ from projectionist.library.feeds import (
     feed_recently_added_episodes,
     feed_revisit_these,
     feed_seasonal_spotlight,
-    feed_tonight_table,
     feed_unfinished,
 )
 from projectionist.library.health import compute_library_health
@@ -66,9 +66,7 @@ _REFRESH_LOCK = threading.Lock()
 
 _RAIL_KEYS = (
     "continue_watching",
-    "tonight_table",
     "unfinished",
-    "afterglow",
     "recently_added",
     "recently_added_episodes",
     "recent_releases",
@@ -77,7 +75,13 @@ _RAIL_KEYS = (
     "director_spotlight",
     "genre_spotlight",
     "seasonal_spotlight",
+    "afterglow",
 )
+
+
+def _cap_rail_limit(rail_limit: int) -> int:
+    """Explore shelf length. Matches the Plex on-deck window, not the old short cap."""
+    return max(1, min(int(rail_limit or EXPLORE_RAIL_LIMIT), EXPLORE_RAIL_LIMIT))
 
 
 def invalidate_explore_hub_cache() -> None:
@@ -102,9 +106,7 @@ def _empty_rail(feed_name: str, *, pending: bool = False) -> Dict[str, Any]:
 def _warming_payload(*, rail_limit: int, is_youth: bool) -> Dict[str, Any]:
     rails: Dict[str, Any] = {
         "continue_watching": _empty_rail("continue-watching", pending=True),
-        "tonight_table": _empty_rail("tonight-table", pending=True),
         "unfinished": _empty_rail("unfinished", pending=True),
-        "afterglow": _empty_rail("afterglow", pending=True),
         "recently_added": _empty_rail("recently-added", pending=True),
         "recently_added_episodes": _empty_rail("recently-added-episodes", pending=True),
         "recent_releases": _empty_rail("recent-releases", pending=True),
@@ -113,6 +115,7 @@ def _warming_payload(*, rail_limit: int, is_youth: bool) -> Dict[str, Any]:
         "director_spotlight": _empty_rail("director-spotlight", pending=True),
         "genre_spotlight": _empty_rail("genre-spotlight", pending=True),
         "seasonal_spotlight": _empty_rail("seasonal-spotlight", pending=True),
+        "afterglow": _empty_rail("afterglow", pending=True),
     }
     if is_youth:
         rails["pick_for_me"] = None
@@ -125,7 +128,7 @@ def _warming_payload(*, rail_limit: int, is_youth: bool) -> Dict[str, Any]:
         "rails": rails,
         "overview": {},
         "health": {},
-        "rail_limit": max(1, min(int(rail_limit or 12), 24)),
+        "rail_limit": _cap_rail_limit(rail_limit),
     }
 
 
@@ -252,13 +255,12 @@ def _fast_rail_builders(
     user_id: Optional[str],
 ) -> tuple[tuple[str, Callable[[], Any]], ...]:
     return (
-        ("tonight_table", lambda: feed_tonight_table(db, limit=3)),
         ("unfinished", lambda: feed_unfinished(db, limit=capped, idle_days=60)),
-        ("afterglow", lambda: feed_afterglow(db, limit=capped, days=14, user_id=user_id)),
         ("recently_added", lambda: feed_recently_added(db, limit=capped, days=30)),
         ("recently_added_episodes", lambda: feed_recently_added_episodes(db, limit=capped, days=30)),
         ("recent_releases", lambda: feed_recent_releases(db, limit=capped, days=90)),
-        ("revisit_these", lambda: feed_revisit_these(db, limit=20, idle_days=60)),
+        ("revisit_these", lambda: feed_revisit_these(db, limit=capped, idle_days=60)),
+        ("afterglow", lambda: feed_afterglow(db, limit=capped, days=14, user_id=user_id)),
     )
 
 
@@ -300,7 +302,7 @@ def _fast_partial(
     rail_limit: int,
 ) -> Dict[str, Any]:
     """First paint: local shelves, slow rails still pending."""
-    capped = max(1, min(int(rail_limit or 12), 24))
+    capped = _cap_rail_limit(rail_limit)
     payload = _warming_payload(rail_limit=capped, is_youth=is_youth)
     _fill_fast_rails(payload, db, capped=capped, user_id=user_id)
     payload["warming"] = True
@@ -313,7 +315,7 @@ def build_explore_hub(
     *,
     is_youth: bool = False,
     user_id: Optional[str] = None,
-    rail_limit: int = 12,
+    rail_limit: int = EXPLORE_RAIL_LIMIT,
     on_partial: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Dict[str, Any]:
     """Assemble every Explore home rail + pulse in one payload.
@@ -322,7 +324,7 @@ def build_explore_hub(
     spotlights, the seasonal snapshot, and the library-wide pulse scan. Callers
     that omit ``on_partial`` (explicit refresh) still receive the finished payload.
     """
-    capped = max(1, min(int(rail_limit or 12), 24))
+    capped = _cap_rail_limit(rail_limit)
     plex = _plex_client(settings)
     payload = _warming_payload(rail_limit=capped, is_youth=is_youth)
     rails = payload["rails"]
@@ -414,7 +416,7 @@ def get_explore_hub(
     *,
     is_youth: bool = False,
     user_id: Optional[str] = None,
-    rail_limit: int = 12,
+    rail_limit: int = EXPLORE_RAIL_LIMIT,
     bypass_cache: bool = False,
 ) -> Dict[str, Any]:
     """Return Explore hub via stale-while-revalidate (never block on soft-expired)."""

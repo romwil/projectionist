@@ -2,25 +2,37 @@
 # BuildKit required for --mount=type=cache (default on Docker 23+ / buildx).
 # Older engines: DOCKER_BUILDKIT=1 docker build ...
 # Hub releases use scripts/docker-release.sh (buildx — always BuildKit).
+#
+# Before building, run ./scripts/docker-dep-manifests.sh (docker-release.sh does).
+# That writes .docker-deps/ with the version pinned to 0.0.0 so a patch bump
+# does not reinstall npm or pip dependencies.
 
-FROM node:20-alpine AS frontend
+# Frontend is JavaScript. Build it once on the builder's own architecture.
+# A multi-arch release otherwise runs Vite under QEMU for amd64, where esbuild
+# either crawls or dies ("The service was stopped"). The runtime stages still
+# follow the target platform so wheels and ffmpeg match the image.
+FROM --platform=$BUILDPLATFORM node:20-alpine AS frontend
 WORKDIR /frontend
 
-# Dependency manifests first — npm layer stays warm when only app source changes.
-COPY frontend/package.json frontend/package-lock.json ./
+# Dependency manifests first — npm layer stays warm when only app source or
+# the release version changes. Real package.json is not copied here on purpose.
+COPY .docker-deps/frontend/package.json .docker-deps/frontend/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
     npm ci
 
-COPY frontend/ ./
+COPY frontend/index.html frontend/vite.config.js ./
+COPY frontend/src ./src
+COPY frontend/public/favicon.svg ./public/favicon.svg
 # PrivacyPage / HelpPage import @docs/*.md (alias → /docs in this stage)
 COPY docs/PRIVACY.md /docs/PRIVACY.md
 COPY docs/HELP.md /docs/HELP.md
+RUN --mount=type=cache,target=/frontend/node_modules/.vite \
+    npm run build
+
 # release-notes.json is generated on the host by docker-release.sh /
-# generate-release-notes.sh before build; Vite copies public/ into dist.
-# Fail fast if missing so About / What's New work.
-RUN test -f public/release-notes.json \
-  || (echo "frontend/public/release-notes.json missing — run scripts/generate-release-notes.sh" >&2 && exit 1)
-RUN npm run build
+# generate-release-notes.sh before build. Copied after Vite so a notes-only
+# change does not rebuild the SPA. Fail fast if missing.
+COPY frontend/public/release-notes.json ./dist/release-notes.json
 
 FROM python:3.12-slim
 
@@ -40,11 +52,16 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 # Install Python deps from manifests only (stub package). Real sources come next so
 # app edits do not re-download wheels. Version ARG/LABEL intentionally come AFTER
-# this layer — otherwise every release would bust pip.
-COPY pyproject.toml README.md LICENSE ./
+# this layer — otherwise every release would bust pip. The manifests in
+# .docker-deps/ also drop the patch version and the README badge, which change
+# every release and used to invalidate this layer.
+COPY .docker-deps/pyproject.toml .docker-deps/README.md .docker-deps/LICENSE ./
 RUN mkdir -p projectionist && printf '# build stub\n' > projectionist/__init__.py
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install ".[web,mcp]"
+
+# Real metadata (version badge, license text) after wheels are installed.
+COPY pyproject.toml README.md LICENSE ./
 
 # Real package tree; --no-deps keeps the warm wheel layer when only sources change.
 COPY projectionist ./projectionist

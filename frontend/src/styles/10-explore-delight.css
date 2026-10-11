@@ -156,39 +156,43 @@
   margin-left: 0.15rem;
 }
 
-/* Explore hub cards */
+/* Explore destinations — a tight wrap, not a stack of described cards. */
 .explore-hub-links {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-  gap: 0.85rem;
-  margin-bottom: 1.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+.explore-hub-links--compact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
 }
 .explore-hub-card {
-  display: block;
-  padding: 1.1rem 1.15rem;
-  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
   text-decoration: none;
   color: inherit;
-  background: linear-gradient(
-    145deg,
-    color-mix(in srgb, var(--accent, #c4a35a) 12%, var(--surface, #1a1f27)),
-    var(--surface, #14181f)
-  );
+  background: color-mix(in srgb, var(--accent, #c4a35a) 10%, var(--surface, #14181f));
   border: 1px solid var(--border, rgba(255,255,255,0.08));
-  transition: transform 140ms ease, border-color 140ms ease;
+  transition: border-color 140ms ease;
+}
+.explore-hub-links--compact .explore-hub-card {
+  padding: 0.35rem 0.75rem;
 }
 .explore-hub-card:hover {
-  transform: translateY(-2px);
   border-color: color-mix(in srgb, var(--accent, #c4a35a) 45%, transparent);
 }
 .explore-hub-card h2 {
-  margin: 0 0 0.35rem;
-  font-size: 1.15rem;
-}
-.explore-hub-card p {
   margin: 0;
-  color: var(--muted, #9aa3ad);
   font-size: 0.92rem;
+  font-weight: 650;
+  line-height: 1.2;
 }
 .explore-hub-link-row {
   display: flex;
@@ -1812,6 +1816,18 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
   background: var(--surface);
 }
 
+.title-detail-drawer-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.title-detail-drawer-header .title-detail-open-full {
+  padding: 8px 14px;
+  white-space: nowrap;
+}
+
 .title-detail-drawer-eyebrow {
   margin: 0;
   font-size: var(--text-xs);
@@ -1878,12 +1894,6 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
   display: none;
 }
 
-.title-detail-drawer-full-link {
-  margin: var(--space-4) 0 0;
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--border);
-  font-size: var(--text-sm);
-}
 
 .dash-table-title-btn {
   appearance: none;

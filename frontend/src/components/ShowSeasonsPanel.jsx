@@ -12,8 +12,10 @@ import {
 import { libraryEpisodeTo, libraryWatchTo, plexWatchUrl } from "../lib/titleLinks.js";
 import {
   completionConfidenceLabel,
+  episodeHistorySummary,
   formatTrackedDate,
   normalizeWatchSummary,
+  watchedTimesLabel,
 } from "../lib/watchTracker.js";
 import RemovalSummaryDialog from "./RemovalSummaryDialog.jsx";
 import ScopedTvRemoveDialog from "./ScopedTvRemoveDialog.jsx";
@@ -159,11 +161,7 @@ export default function ShowSeasonsPanel({
         <div className="show-watch-summary" data-testid="show-watch-summary">
           <h3>Your episode history</h3>
           <p>
-            {watchSummary.unique_episodes_completed} episodes completed ·{" "}
-            {watchSummary.total_episode_completions} tracked episode completions
-            {watchSummary.repeat_episode_completions
-              ? ` · ${watchSummary.repeat_episode_completions} repeat episode completions`
-              : ""}
+            {episodeHistorySummary(watchSummary) || "No episodes watched yet"}
           </p>
           {watchSummary.timeline.length ? (
             <ul aria-label="Recent episode completion activity">
@@ -176,10 +174,6 @@ export default function ShowSeasonsPanel({
               ))}
             </ul>
           ) : null}
-          <p className="status status-secondary">
-            Shows stay episode-first: Projectionist never turns these into “show watched N
-            times.”
-          </p>
         </div>
       ) : null}
 
@@ -279,15 +273,11 @@ export default function ShowSeasonsPanel({
                               <span>{ep.runtime_minutes}m</span>
                             ) : null}
                             {epSize ? <span>{epSize}</span> : null}
-                            <span>{ep.unwatched ? "Unwatched" : "Watched"}</span>
-                            {tracked?.tracked_completions > 0 ? (
-                              <span className="watch-confidence" data-testid="episode-tracked-count">
-                                {tracked.tracked_completions} tracked{" "}
-                                {tracked.tracked_completions === 1
-                                  ? "completion"
-                                  : "completions"}
-                              </span>
-                            ) : null}
+                            <span data-testid="episode-watched-label">
+                              {ep.unwatched
+                                ? "Unwatched"
+                                : watchedTimesLabel(tracked?.tracked_completions) || "Watched"}
+                            </span>
                             <div className="show-episode-actions">
                               {playTo ? (
                                 <Link
