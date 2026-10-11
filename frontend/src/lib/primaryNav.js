@@ -79,12 +79,19 @@ export const PRIMARY_NAV_ITEMS = [
 ];
 
 /**
+ * Public peers painted on first load. They are route links, not session data.
+ * Admin is omitted until auth settles: useAuthGate defaults isOwner=true.
+ */
+const PUBLIC_PRIMARY_IDS = ["search", "chat", "explore", "inbox", "my-journey", "settings"];
+
+/**
  * Which primary toolbar peers a role may see.
  * Youth / member: no Admin.
- * Owner: full set.
+ * Owner: full set, once auth has settled.
  *
- * When `authReady` is false (useAuthGate still settling; defaults isOwner=true),
- * return no peers — never failure-open Admin for members.
+ * A slow `/api/auth/me` must not hide Search, Chat, Explore, and the other
+ * public peers. Live waits on the feature flag. Admin waits on auth so a
+ * member never sees the owner icon while the session check is in flight.
  */
 export function primaryNavVisibleIds({
   role = "owner",
@@ -94,16 +101,16 @@ export function primaryNavVisibleIds({
   authReady = true,
   liveChannelsReady = false,
 } = {}) {
-  if (!authReady) {
-    return [];
-  }
-  const normalized = String(role || "owner").toLowerCase();
-  const ids = ["search", "chat", "explore", "inbox", "my-journey", "settings"];
+  const ids = [...PUBLIC_PRIMARY_IDS];
   if (liveChannelsReady) {
     // Live sits after Explore — living-room peer, not Admin utility.
     const exploreIdx = ids.indexOf("explore");
     ids.splice(exploreIdx + 1, 0, "live");
   }
+  if (!authReady) {
+    return ids;
+  }
+  const normalized = String(role || "owner").toLowerCase();
   const showAdmin = isOwner || (!multiUserEnabled && normalized === "owner");
   if (showAdmin && !isYouth) {
     // Insert Admin immediately before My Journey (left of Settings cluster).

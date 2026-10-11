@@ -63,15 +63,30 @@ export default function AppShell({
     applyUiTheme(uiTheme);
   }, [uiTheme]);
 
-  // useAuthGate failure-opens as owner until /auth/me settles. Never paint
-  // PrimaryTopbar / owner-only chrome with those defaults — members briefly
-  // saw Admin. Nav already returns no peers while authReady is false.
-  // Explore opts out: a full-viewport Loading… hid the shell until auth
-  // finished, and the hub request could not even start until then.
+  // useAuthGate failure-opens as owner until /auth/me settles. Keep the
+  // public topbar mounted (Search, Chat, Explore, …) and withhold page
+  // children. Admin stays out of primaryNav until authReady. Explore opts
+  // out of this gate so the hub can paint and fetch while auth is in flight.
   if (blockUntilAuth && !authReady) {
     return (
-      <div className="app-root app-loading" data-testid={testId || "app-shell-auth-loading"}>
-        <p className="login-lede">Loading…</p>
+      <div className="app-root" data-testid={testId || "app-shell-auth-loading"}>
+        <PrimaryTopbar
+          showNavToggle
+          isOwner={false}
+          isYouth={false}
+          role="member"
+          multiUserEnabled={false}
+          seerrEnabled={false}
+          authReady={false}
+          liveChannelsReady={liveChannelsReady}
+          navOpen={navOpen}
+          onNavOpenChange={setNavOpen}
+          uiTheme={uiTheme}
+          onThemeChange={setUiTheme}
+        />
+        <div className="app-loading">
+          <p className="login-lede">Loading…</p>
+        </div>
       </div>
     );
   }
