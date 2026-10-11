@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
+  EXPLORE_RAIL_LIMIT,
   getExploreHub,
   getPickForMeFeed,
   queryLibrary,
@@ -197,7 +198,7 @@ function useExploreHub() {
     const sessionPayload = cached?.payload || null;
 
     const fetchHub = (attempt = 0) => {
-      getExploreHub({ limit: 12 })
+      getExploreHub({ limit: EXPLORE_RAIL_LIMIT })
         .then((payload) => {
           if (cancelled) return;
           const warming = exploreHubStillWarming(payload);
@@ -297,7 +298,6 @@ export default function ExplorePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const hub = useExploreHub();
   const continueWatching = hubRailState(hub.payload, "continue_watching", { loading: hub.loading, error: hub.error });
-  const tonightTable = hubRailState(hub.payload, "tonight_table", { loading: hub.loading, error: hub.error });
   const unfinished = hubRailState(hub.payload, "unfinished", { loading: hub.loading, error: hub.error });
   const afterglow = hubRailState(hub.payload, "afterglow", { loading: hub.loading, error: hub.error });
   const recentlyAdded = hubRailState(hub.payload, "recently_added", { loading: hub.loading, error: hub.error });
@@ -461,14 +461,16 @@ export default function ExplorePage() {
           onSubmit={handleSearchSubmit}
         />
 
-        <section className="explore-hub-links" data-testid="explore-hub-links">
+        <section
+          className="explore-hub-links explore-hub-links--compact"
+          data-testid="explore-hub-links"
+        >
           <Link
             to={libraryBrowsePath({ mediaType: "movie" })}
             className="explore-hub-card"
             data-testid="explore-hub-browse-movies"
           >
             <h2>Movies</h2>
-            <p>Page through every film with sort, filters, and columns</p>
           </Link>
           <Link
             to={libraryBrowsePath({ mediaType: "show" })}
@@ -476,7 +478,6 @@ export default function ExplorePage() {
             data-testid="explore-hub-browse-tv"
           >
             <h2>TV</h2>
-            <p>Fresh episodes first — then sort, filter, and page the rest</p>
           </Link>
           <Link
             to={ROUTES.relatedTitles}
@@ -484,11 +485,9 @@ export default function ExplorePage() {
             data-testid="explore-hub-related-titles"
           >
             <h2>Related titles</h2>
-            <p>Start with one title, follow its connections, and see why each match belongs</p>
           </Link>
           <Link to={ROUTES.tags} className="explore-hub-card" data-testid="explore-hub-tags">
             <h2>Tags</h2>
-            <p>Browse keyword tags across your full library</p>
           </Link>
         </section>
 
@@ -520,34 +519,6 @@ export default function ExplorePage() {
         </ExploreSection>
 
         <ExploreSection
-          id="tonight-table"
-          title="Tonight's table"
-          subtitle="Under two hours — two unwatched seats and one comfort, not leftover or afterglow"
-          isOwner={ownerChrome}
-          empty={
-            tonightTable.error ||
-            (!tonightTable.loading && !tonightTable.items.length ? tonightTable.note : null)
-          }
-        >
-          <FeedRail
-            testId="explore-tonight-table-rail"
-            items={tonightTable.items}
-            loading={tonightTable.loading}
-            cardMeta={(item) => item.why || null}
-            chatHref={
-              tonightTable.items.length
-                ? chatFromRailHref({
-                    railTitle: "Tonight's table",
-                    items: tonightTable.items,
-                  })
-                : null
-            }
-            chatLabel="Set the table"
-            {...recommendProps}
-          />
-        </ExploreSection>
-
-        <ExploreSection
           id="unfinished"
           title="Unfinished"
           subtitle="Leftover runtime you can still finish — not titles idle for two months"
@@ -570,37 +541,6 @@ export default function ExplorePage() {
                   })
                 : null
             }
-            {...recommendProps}
-          />
-        </ExploreSection>
-
-        <ExploreSection
-          id="afterglow"
-          title="Afterglow"
-          subtitle="Still warm — a few questions while the credits fade"
-          isOwner={ownerChrome}
-          empty={
-            afterglow.error ||
-            (!afterglow.loading && !afterglow.items.length ? afterglow.note : null)
-          }
-        >
-          <FeedRail
-            testId="explore-afterglow-rail"
-            items={afterglow.items}
-            loading={afterglow.loading}
-            cardMeta={(item) => item.afterglow_opener || item.why || null}
-            chatHref={
-              afterglow.items.length
-                ? chatFromRailHref({
-                    railTitle: "Afterglow",
-                    items: afterglow.items.map((item) => ({
-                      ...item,
-                      why: item.afterglow_opener || item.why,
-                    })),
-                  })
-                : null
-            }
-            chatLabel="Review while it's warm"
             {...recommendProps}
           />
         </ExploreSection>
@@ -823,6 +763,37 @@ export default function ExplorePage() {
             />
           </ExploreSection>
         ) : null}
+
+        <ExploreSection
+          id="afterglow"
+          title="Afterglow"
+          subtitle="Still warm — a few questions while the credits fade"
+          isOwner={ownerChrome}
+          empty={
+            afterglow.error ||
+            (!afterglow.loading && !afterglow.items.length ? afterglow.note : null)
+          }
+        >
+          <FeedRail
+            testId="explore-afterglow-rail"
+            items={afterglow.items}
+            loading={afterglow.loading}
+            cardMeta={(item) => item.afterglow_opener || item.why || null}
+            chatHref={
+              afterglow.items.length
+                ? chatFromRailHref({
+                    railTitle: "Afterglow",
+                    items: afterglow.items.map((item) => ({
+                      ...item,
+                      why: item.afterglow_opener || item.why,
+                    })),
+                  })
+                : null
+            }
+            chatLabel="Review while it's warm"
+            {...recommendProps}
+          />
+        </ExploreSection>
 
         <div className="explore-footer" data-testid="explore-footer">
         <ExploreSection

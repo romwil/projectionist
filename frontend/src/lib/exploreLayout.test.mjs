@@ -62,7 +62,7 @@ describe("explore and recommendations responsive layout", () => {
     assert.match(styles, /\.recommendations-inbox\s*\{[^}]*min-width:\s*0/s);
   });
 
-  it("places unfinished leftover runtime and afterglow review rails on Explore", () => {
+  it("places unfinished leftover runtime on Explore and Afterglow last", () => {
     assert.match(explorePage, /id="unfinished"/);
     assert.match(explorePage, /id="afterglow"/);
     assert.match(explorePage, /getExploreHub/);
@@ -71,34 +71,40 @@ describe("explore and recommendations responsive layout", () => {
     assert.match(explorePage, /Leftover runtime you can still finish/);
     assert.match(explorePage, /Still warm — a few questions while the credits fade/);
     assert.match(explorePage, /Review while it's warm/);
+    assert.doesNotMatch(explorePage, /id="tonight-table"/);
+    assert.doesNotMatch(explorePage, /"tonight_table"/);
+    assert.doesNotMatch(explorePage, /Tonight's table/);
     const unfinishedIdx = explorePage.indexOf('id="unfinished"');
     const afterglowIdx = explorePage.indexOf('id="afterglow"');
     const revisitIdx = explorePage.indexOf('id="revisit-these"');
-    assert.ok(unfinishedIdx > 0 && afterglowIdx > unfinishedIdx);
-    assert.ok(revisitIdx > afterglowIdx);
-    const unfinishedBlock = explorePage.slice(unfinishedIdx, afterglowIdx);
+    const seasonalIdx = explorePage.indexOf('id="seasonal-spotlight"');
+    const pulseIdx = explorePage.indexOf('id="library-pulse"');
+    assert.ok(unfinishedIdx > 0 && revisitIdx > unfinishedIdx);
+    assert.ok(seasonalIdx > revisitIdx);
+    assert.ok(afterglowIdx > seasonalIdx);
+    assert.ok(pulseIdx > afterglowIdx);
+    const unfinishedBlock = explorePage.slice(unfinishedIdx, revisitIdx);
     assert.match(unfinishedBlock, /Leftover runtime you can still finish/);
     assert.doesNotMatch(unfinishedBlock, /haven.t touched in over two months/);
     const revisitBlock = explorePage.slice(revisitIdx, revisitIdx + 400);
     assert.match(revisitBlock, /haven.t touched in over two months/);
   });
 
-  it("places tonight's table after continue watching and before leftover rails", () => {
-    assert.match(explorePage, /id="tonight-table"/);
-    assert.match(explorePage, /"tonight_table"/);
-    assert.match(explorePage, /two unwatched seats and one comfort/);
-    const continueIdx = explorePage.indexOf('id="continue-watching"');
-    const tonightIdx = explorePage.indexOf('id="tonight-table"');
-    const unfinishedIdx = explorePage.indexOf('id="unfinished"');
-    const afterglowIdx = explorePage.indexOf('id="afterglow"');
-    const revisitIdx = explorePage.indexOf('id="revisit-these"');
-    assert.ok(continueIdx > 0 && tonightIdx > continueIdx);
-    assert.ok(unfinishedIdx > tonightIdx);
-    assert.ok(afterglowIdx > unfinishedIdx);
-    assert.ok(revisitIdx > afterglowIdx);
-    const tonightBlock = explorePage.slice(tonightIdx, unfinishedIdx);
-    assert.match(tonightBlock, /not leftover or afterglow/);
-    assert.doesNotMatch(tonightBlock, /Leftover runtime you can still finish/);
+  it("requests the long Explore rail window and uses a compact destination row", () => {
+    assert.match(explorePage, /EXPLORE_RAIL_LIMIT/);
+    assert.match(explorePage, /getExploreHub\(\{ limit: EXPLORE_RAIL_LIMIT \}\)/);
+    assert.match(explorePage, /explore-hub-links--compact/);
+    assert.match(explorePage, /data-testid="explore-hub-browse-movies"/);
+    assert.match(explorePage, /data-testid="explore-hub-browse-tv"/);
+    assert.match(explorePage, /data-testid="explore-hub-related-titles"/);
+    assert.match(explorePage, /data-testid="explore-hub-tags"/);
+    assert.doesNotMatch(explorePage, /Page through every film/);
+    assert.doesNotMatch(explorePage, /Fresh episodes first/);
+    assert.match(styles, /\.explore-hub-links--compact\s*\{[^}]*flex-wrap:\s*wrap/s);
+    assert.match(
+      styles,
+      /\.explore-hub-links--compact \.explore-hub-card\s*\{[^}]*padding:\s*0\.35rem\s+0\.75rem/s,
+    );
   });
 
   it("omits Live habits and Double Feature from Explore", () => {

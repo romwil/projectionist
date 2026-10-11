@@ -113,7 +113,6 @@ export function mockExploreHubPayload(overrides: Record<string, unknown> = {}) {
     cached: false,
     rails: {
       continue_watching: emptyExploreRail("continue-watching"),
-      tonight_table: emptyExploreRail("tonight-table"),
       unfinished: emptyExploreRail("unfinished"),
       afterglow: emptyExploreRail("afterglow"),
       recently_added: {

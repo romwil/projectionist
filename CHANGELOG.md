@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Changed
+- **Explore shelves match Plex Continue Watching.** Continue Watching and the other Explore carousels use the full on-deck window (50 titles) instead of the old 12-title request. Local shelves still paint first; the Plex on-deck rail fills in afterward at that longer length.
+- **Afterglow is the last Explore rail.** The other shelves stay in their previous order.
+- **Explore destinations are a tight row.** Movies, TV, Related titles, and Tags stay one tap away, without the long descriptions or the tall cards.
+
+### Removed
+- **Tonight’s table is gone from Explore.** The three-seat evening rail is no longer on the page or in the Explore hub.
+
 ## [1.37.37] — 2026-10-11
 
 One patch on 1.37.36: Play stays usable in Lights Up, the episode scrubber seeks once on iPad, wide landscape gets ±30, and chat tables wrap inside the thread.
