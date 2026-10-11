@@ -1,11 +1,9 @@
 import { useEffect, useState } from "react";
 import { getWatchSummary } from "../api/client.js";
 import {
-  completionConfidenceLabel,
-  completionExplanation,
   formatTrackedDate,
   normalizeWatchSummary,
-  trackedCompletionCardLabel,
+  watchedTimesLabel,
 } from "../lib/watchTracker.js";
 
 export default function WatchHistoryTimeline({ ratingKey, plexPlayedEventCount = 0 }) {
@@ -45,19 +43,11 @@ export default function WatchHistoryTimeline({ ratingKey, plexPlayedEventCount =
       ) : !summary ? (
         <p className="status status-secondary">Loading your watch evidence…</p>
       ) : !summary.hasCoverage ? (
-        <>
-          <p data-testid="watch-history-fallback">{summary.fallbackLabel}</p>
-          {Number(summary.plex_played_event_count || 0) > 0 ? (
-            <p className="status status-secondary">Plex aggregate, not tracked sessions.</p>
-          ) : null}
-        </>
+        <p data-testid="watch-history-fallback">{summary.fallbackLabel}</p>
       ) : (
         <>
           <p className="watch-history-summary" data-testid="watch-history-summary">
-            {trackedCompletionCardLabel(summary) || "No tracked completions yet"}
-            {summary.sittings_observed > 0
-              ? ` · ${summary.sittings_observed} evidence observations`
-              : ""}
+            {watchedTimesLabel(summary.tracked_completions) || "Not watched yet"}
           </p>
           {summary.timeline.length ? (
             <ol className="watch-history-timeline">
@@ -66,25 +56,10 @@ export default function WatchHistoryTimeline({ ratingKey, plexPlayedEventCount =
                   <span className="watch-history-date">
                     {formatTrackedDate(completion.completed_at_ms)}
                   </span>
-                  <span className={`watch-confidence is-${completion.confidence || "unknown"}`}>
-                    {completionConfidenceLabel(completion.confidence)}
-                  </span>
-                  <details>
-                    <summary>Why this count?</summary>
-                    <p>{completionExplanation(completion)}</p>
-                  </details>
                 </li>
               ))}
             </ol>
-          ) : (
-            <p className="status status-secondary">
-              Evidence exists, but it has not produced a tracked completion.
-            </p>
-          )}
-          <p className="status status-secondary">
-            Confidence describes the evidence Projectionist observed; it never proves
-            uninterrupted or attentive viewing.
-          </p>
+          ) : null}
         </>
       )}
     </section>

@@ -120,12 +120,8 @@ class RelationPayloadTests(unittest.TestCase):
             )
             self.assertIn("Ava Director", crew["why"]["label"])
 
-            plot = by_relation["neighbor"]
-            self.assertEqual(plot["why"]["plot_kinship"], "Strong plot kinship")
-            self.assertEqual(plot["why"]["shared_genres"], ["Science Fiction"])
-            self.assertIsNone(plot["why"]["plot_link"])
-            self.assertIsNone(plot["why"]["surprise_flavor"])
-            self.assertIn("Strong plot kinship", plot["why"]["label"])
+            self.assertNotIn("neighbor", by_relation)
+            self.assertNotIn("Plot Cousin", {edge.get("title") for edge in payload["items"]})
 
     def test_walk_caps_depth_at_two_and_keeps_enriched_edges(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

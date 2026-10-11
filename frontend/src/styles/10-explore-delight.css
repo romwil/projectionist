@@ -1816,6 +1816,18 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
   background: var(--surface);
 }
 
+.title-detail-drawer-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.title-detail-drawer-header .title-detail-open-full {
+  padding: 8px 14px;
+  white-space: nowrap;
+}
+
 .title-detail-drawer-eyebrow {
   margin: 0;
   font-size: var(--text-xs);
@@ -1882,12 +1894,6 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
   display: none;
 }
 
-.title-detail-drawer-full-link {
-  margin: var(--space-4) 0 0;
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--border);
-  font-size: var(--text-sm);
-}
 
 .dash-table-title-btn {
   appearance: none;
