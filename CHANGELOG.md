@@ -2,6 +2,32 @@
 
 ## [Unreleased]
 
+## [1.37.37] — 2026-10-11
+
+One patch on 1.37.36: Play stays usable in Lights Up, the episode scrubber seeks once on iPad, wide landscape gets ±30, and chat tables wrap inside the thread.
+
+### Highlights
+- **Play controls stay readable in Lights Up.** Captions, fullscreen, and More sit on the paper bar instead of disappearing into the dark glass. Lights Down keeps the dark control bar. The yellow Play button stays.
+- **The episode slider seeks and keeps playing.** Dragging the Play scrubber on iPad Safari jumps once to where you let go. The picture continues. −15 and +15 still work.
+- **Wide landscape can skip 30 seconds.** −30 and +30 show beside ±15 when the Play bar is landscape and wide. Portrait and phone landscape keep ±15 only.
+- **Chat tables stay in the thread.** Result tables wrap cell text inside the column instead of clipping a sentence at the cell edge.
+
+### Fixed
+_Play chrome and scrubber_
+- **Lights Up painted dark ink on the dark Play bar.** Skip, captions, fullscreen, and More used `--text` on a hardcoded dark glass, so the round controls vanished on a light page. Lights Up now uses the paper surface, text, and border tokens for that bar and its menu. The video stage stays dark. Lights Down is unchanged.
+- **Live TV watch chrome had the same dark-on-dark ink.** The watch page (not the guide, not the weather board) follows Lights Up tokens. Guide and weather Lights Up rules are unchanged.
+- **Dragging the Play slider on iPad Safari locked playback.** Each `input` event during the drag could restart the HLS session, and capturing the pointer on the range input meant the gesture never released, so the playhead stopped updating. A drag now previews and commits one seek on release (or once the burst goes quiet). `touch-action: manipulation` lets Safari deliver the gesture to the slider.
+- **±30 was missing on a wide landscape bar.** −30 and +30 use the same skip path as ±15 and render only when the viewport is landscape and at least 1000px wide.
+- **A few other controls were locked to one theme.** The inbox count, review error, danger purge button, user-menu and admin-rail hovers, and the episode title on the poster veil now use theme tokens so light and dark pages both stay readable.
+
+_chat tables_
+- **Result tables clipped cell sentences.** Markdown tables in the thread now wrap inside the column.
+
+### Verification
+- Backend `pytest tests/` — 2563 passed, 6 skipped, coverage 77.02% (floor 74%), run with `PROJECTIONIST_SKIP_DOTENV=1`.
+- Frontend unit 960/960 (includes `playerChrome.test.mjs` and scrub-burst / ±30 cases in `theaterPlayer.test.mjs`; Live guide Lights Up test still passes).
+- Lint 0 errors (149 warnings); `npm run build` OK.
+
 ## [1.37.36] — 2026-10-07
 
 One patch on 1.37.35: the Live guide and Weather channel follow Lights Up instead of staying a dark chamber on paper.
