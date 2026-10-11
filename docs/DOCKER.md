@@ -26,19 +26,26 @@ Caching that matters:
 
 | Layer / mount | What stays warm | What busts it |
 |---|---|---|
-| Frontend `npm ci` | `frontend/package-lock.json` unchanged | Lockfile / package.json change |
-| BuildKit npm cache (`/root/.npm`) | Download cache across builds | Rare; cleared with builder prune |
+| Frontend `npm ci` | `.docker-deps/frontend` lockfile deps unchanged | Dependency change (not the patch version) |
+| Frontend Vite build | Runs **once** on the builder architecture (`FROM --platform=$BUILDPLATFORM`), not again under QEMU for the other Hub arch | `frontend/src`, `index.html`, `vite.config.js`, favicon, or the Help/Privacy markdown |
+| Release notes copy | After Vite, so a notes-only edit does not rebuild the SPA | `frontend/public/release-notes.json` (cheap copy) |
+| BuildKit npm cache (`/root/.npm`) and Vite cache | Download / transform cache across builds | Rare; cleared with builder prune |
 | Runtime apt (`ca-certificates`, `gosu`, `ffmpeg`) | Early RUN, before any `COPY` | This RUN or the `python:3.12-slim` FROM line |
 | BuildKit apt cache (`/var/cache/apt`, `/var/lib/apt`) | Downloaded .debs / lists across rebuilds | Builder prune |
-| Python deps (`pip install` on stub package) | `pyproject.toml` (+ README/LICENSE) unchanged | Dependency / metadata change |
+| Python deps (`pip install` on stub package) | `.docker-deps/pyproject.toml` dependency set unchanged | Dependency change (not the patch version or README badge) |
 | BuildKit pip cache (`/root/.cache/pip`) | Wheel cache across builds | Rare; cleared with builder prune |
-| App source / SPA rebuild | — | Any `projectionist/` or frontend source edit |
+| App source reinstall | `--no-deps` after the wheel layer | Any `projectionist/` edit |
 | Identity (`ARG`/`LABEL`/`/app/.build-info`) | Declared **after** apt/pip so version bumps do not reinstall deps | Every release (intentional) |
+
+`./scripts/docker-dep-manifests.sh` (called by `scripts/docker-release.sh` and CI docker-smoke) writes `.docker-deps/` before `docker build`. A bare local build needs that script first. The real `README.md`, `pyproject.toml`, and frontend `package.json` still land in the image after the dependency layers.
+
+The SPA is built once on `$BUILDPLATFORM` and copied into each runtime image. Hub still publishes `linux/amd64` and `linux/arm64`; only Debian packages and Python wheels are per-arch. That avoids running esbuild under QEMU, which made amd64 frontend builds slow and prone to `The service was stopped`.
 
 **BuildKit is required** for `--mount=type=cache`. Docker 23+ and `docker buildx` enable it by default. On older engines:
 
 ```bash
 export DOCKER_BUILDKIT=1
+./scripts/docker-dep-manifests.sh
 docker build -t projectionist:local .
 ```
 
