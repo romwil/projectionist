@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import BulkLibraryDeleteDialog from "./BulkLibraryDeleteDialog.jsx";
 import MarkBadMediaDialog from "./MarkBadMediaDialog.jsx";
 import RecommendModal from "./RecommendModal";
@@ -191,19 +192,43 @@ function getFocusableElements(root) {
               <p className="title-detail-drawer-eyebrow">
                 {detail?.media_type === "show" ? "TV Show" : "Movie"}
               </p>
-              <button
-                ref={closeButtonRef}
-                type="button"
-                className="title-detail-drawer-close ghost"
-                data-testid="title-detail-drawer-close"
-                aria-label="Close"
-                disabled={busyDeleting}
-                onClick={requestClose}
-              >
-                <span className="material-symbols-outlined" aria-hidden="true">
-                  close
-                </span>
-              </button>
+              <div className="title-detail-drawer-header-actions">
+                {fullPageHref ? (
+                  <Link
+                    to={fullPageHref}
+                    className="title-cta title-cta-primary title-detail-open-full"
+                    data-testid="title-detail-open-full"
+                    onClick={(event) => {
+                      if (
+                        event.defaultPrevented ||
+                        (typeof event.button === "number" && event.button !== 0) ||
+                        event.metaKey ||
+                        event.ctrlKey ||
+                        event.shiftKey ||
+                        event.altKey
+                      ) {
+                        return;
+                      }
+                      requestClose();
+                    }}
+                  >
+                    Open full page
+                  </Link>
+                ) : null}
+                <button
+                  ref={closeButtonRef}
+                  type="button"
+                  className="title-detail-drawer-close ghost"
+                  data-testid="title-detail-drawer-close"
+                  aria-label="Close"
+                  disabled={busyDeleting}
+                  onClick={requestClose}
+                >
+                  <span className="material-symbols-outlined" aria-hidden="true">
+                    close
+                  </span>
+                </button>
+              </div>
             </header>
 
             <div className="title-detail-drawer-body">
@@ -224,8 +249,6 @@ function getFocusableElements(root) {
                   <TitleDetailContent
                     detail={detail}
                     variant="compact"
-                    fullPageHref={fullPageHref}
-                    onExpandFullPage={requestClose}
                     titleId={titleId}
                     multiUserEnabled={interactions.multiUserEnabled}
                     userRole={interactions.userRole}

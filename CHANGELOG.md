@@ -6,9 +6,13 @@
 - **Explore shelves match Plex Continue Watching.** Continue Watching and the other Explore carousels use the full on-deck window (50 titles) instead of the old 12-title request. Local shelves still paint first; the Plex on-deck rail fills in afterward at that longer length.
 - **Afterglow is the last Explore rail.** The other shelves stay in their previous order.
 - **Explore destinations are a tight row.** Movies, TV, Related titles, and Tags stay one tap away, without the long descriptions or the tall cards.
+- **Open full page stays on the title sheet header.** The button sits with the close control, the same weight as Play, so it is visible without scrolling the sheet.
+- **Watched means watched.** Episode history and the movie timeline say how many times a title was watched, including when it was watched again. They no longer split that into tracked completions and repeat completions.
+- **More like this needs a recognizable story.** A neighbor appears only when the plots share a specific subject, such as museum exhibits. A generic phrase or a bare similarity score is not enough, and an empty shelf is shown when nothing qualifies. Surprising still requires that named link and does not fall back to “nothing in common.”
 
 ### Removed
 - **Tonight’s table is gone from Explore.** The three-seat evening rail is no longer on the page or in the Explore hub.
+- **The title sheet no longer explains its own accounting.** The note that shows stay episode-first, and the “why this count” evidence essay, are gone. The episode and the date stay.
 
 ## [1.37.37] — 2026-10-11
 

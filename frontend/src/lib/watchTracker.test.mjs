@@ -7,6 +7,7 @@ import { describe, it } from "node:test";
 import {
   completionConfidenceLabel,
   completionExplanation,
+  episodeHistorySummary,
   normalizeWatchSummary,
   trackedCompletionCardLabel,
 } from "./watchTracker.js";
@@ -49,7 +50,20 @@ describe("watch tracker presentation", () => {
       ],
     });
 
-    assert.equal(trackedCompletionCardLabel(summary), "2 tracked completions");
+    assert.equal(trackedCompletionCardLabel(summary), "Watched 2 times");
+    assert.equal(
+      episodeHistorySummary({
+        unique_episodes_completed: 4,
+        total_episode_completions: 5,
+        repeat_episode_completions: 1,
+      }),
+      "4 episodes watched · 1 watched again",
+    );
+    assert.doesNotMatch(episodeHistorySummary({
+      unique_episodes_completed: 4,
+      total_episode_completions: 5,
+      repeat_episode_completions: 1,
+    }), /tracked|repeat episode/i);
     assert.equal(completionConfidenceLabel("certain"), "Certain");
     assert.equal(completionConfidenceLabel("plex_event_only"), "Plex played event");
     assert.match(completionExplanation(summary.timeline[0]), /does not prove uninterrupted/);
@@ -66,8 +80,13 @@ describe("watch tracker presentation", () => {
     assert.match(detail, /WatchHistoryTimeline/);
     assert.match(seasons, /getShowWatchSummary/);
     assert.match(seasons, /episode_completions/);
+    assert.match(seasons, /episodeHistorySummary/);
+    assert.doesNotMatch(seasons, /tracked completion/i);
+    assert.doesNotMatch(seasons, /repeat episode completion/i);
+    assert.doesNotMatch(seasons, /episode-first/);
     assert.match(card, /trackedCompletionCardLabel/);
-    assert.match(timeline, /Why this count\?/);
+    assert.doesNotMatch(timeline, /tracked completion/i);
+    assert.doesNotMatch(timeline, /Why this count/);
     assert.match(timeline, /Your watch history/);
   });
 });

@@ -40,10 +40,34 @@ export function normalizeWatchSummary(raw = {}) {
   };
 }
 
+/** Plain watched fact. One viewing is "Watched"; another pass says how many times. */
+export function watchedTimesLabel(count) {
+  const n = Number(count || 0);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  if (n === 1) return "Watched";
+  return `Watched ${n} times`;
+}
+
+export function episodeHistorySummary(summary = {}) {
+  const unique = Number(summary.unique_episodes_completed || 0);
+  const repeats = Number(summary.repeat_episode_completions || 0);
+  const parts = [];
+  if (unique > 0) {
+    parts.push(`${unique} ${unique === 1 ? "episode" : "episodes"} watched`);
+  } else {
+    const total = watchedTimesLabel(summary.total_episode_completions);
+    if (total) parts.push(total);
+  }
+  if (repeats > 0) {
+    parts.push(repeats === 1 ? "1 watched again" : `${repeats} watched again`);
+  }
+  return parts.join(" · ");
+}
+
 export function trackedCompletionCardLabel(summary) {
   const normalized = summary?.hasCoverage == null ? normalizeWatchSummary(summary) : summary;
   if (!normalized.hasCoverage || normalized.tracked_completions <= 0) return "";
-  return plural(normalized.tracked_completions, "tracked completion");
+  return watchedTimesLabel(normalized.tracked_completions);
 }
 
 export function completionExplanation(completion = {}) {

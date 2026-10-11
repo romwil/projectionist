@@ -51,10 +51,8 @@ test.describe("Watch tracker", () => {
 
     const history = page.getByTestId("watch-history");
     await expect(history).toContainText("Your watch history");
-    await expect(history).toContainText("2 tracked completions");
-    await expect(history).toContainText("Plex played event");
-    await history.getByText("Why this count?").click();
-    await expect(history).toContainText("does not prove uninterrupted viewing");
+    await expect(history).toContainText("Watched 2 times");
+    await expect(history).not.toContainText("tracked");
   });
 
   test("labels the legacy Plex fallback when tracker coverage is absent", async ({ page }) => {
