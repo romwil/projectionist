@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Live guide programme cards stay on screen.** Hovering a title near the bottom of the guide opened the card downward, so the page cut off the rest of the synopsis and the Open title details link. The card now opens upward or shifts to stay inside the guide, and that link stays readable and clickable.
+
 ## [1.37.40] — 2026-10-12
 
 One patch on 1.37.39: Continue Watching follows a play, pause, seek, or stop in this app immediately.

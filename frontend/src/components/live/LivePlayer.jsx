@@ -1014,8 +1014,7 @@ export default function LivePlayer({
                 const rect = event.currentTarget.getBoundingClientRect();
                 setNextHover({
                   program: osd.nextProgram,
-                  x: rect.left,
-                  y: rect.bottom + 6,
+                  anchor: { top: rect.top, bottom: rect.bottom, left: rect.left },
                 });
               }}
               onMouseLeave={() => {
@@ -1101,8 +1100,7 @@ export default function LivePlayer({
         program={nextHover?.program}
         kind="next"
         open={Boolean(nextHover)}
-        x={nextHover?.x || 0}
-        y={nextHover?.y || 0}
+        anchor={nextHover?.anchor}
         onKeepAlive={() => {
           if (nextHoverLeaveTimer.current) {
             clearTimeout(nextHoverLeaveTimer.current);
