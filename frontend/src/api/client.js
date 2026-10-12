@@ -962,9 +962,22 @@ export async function getLiveChannelsOnNow() {
 }
 
 /** Household: wider channel × time guide for `/live` EPG (1–12 hours). */
-export async function getLiveChannelsGuide({ hours = 6 } = {}) {
+export async function getLiveChannelsGuide({ hours = 6, timeoutMs = 8000 } = {}) {
   const params = new URLSearchParams({ hours: String(hours) });
-  return api(`/live-channels/guide?${params}`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await api(`/live-channels/guide?${params}`, { signal: controller.signal });
+  } catch (err) {
+    if (err?.name === "AbortError") {
+      const error = new Error("The guide is taking too long.");
+      error.name = "TimeoutError";
+      throw error;
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** Household: warm + start-over a station before Projectionist playback. */

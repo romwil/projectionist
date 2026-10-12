@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { getAuthMe, getFeatures, logout } from "../api/client";
+import { applyLiveChannelsFeature, initialLiveChannelsReady } from "../lib/liveNavReady.js";
 import UserAvatar from "./UserAvatar";
 import { useAnchoredPopover } from "../hooks/useAnchoredPopover";
 
@@ -82,7 +83,7 @@ export function useAuthGate({ redirect = true } = {}) {
   const [role, setRole] = useState("owner");
   const [isYouth, setIsYouth] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
-  const [liveChannelsReady, setLiveChannelsReady] = useState(false);
+  const [liveChannelsReady, setLiveChannelsReady] = useState(initialLiveChannelsReady);
   const [seerrEnabled, setSeerrEnabled] = useState(false);
 
   useEffect(() => {
@@ -100,7 +101,7 @@ export function useAuthGate({ redirect = true } = {}) {
         }
         setMultiUserEnabled(enabled);
         setSeerrEnabled(Boolean(features?.features?.seerr_enabled));
-        setLiveChannelsReady(Boolean(features?.features?.live_channels_ready));
+        applyLiveChannelsFeature(features, setLiveChannelsReady);
         if (!enabled) {
           setIsOwner(true);
           setRole("owner");

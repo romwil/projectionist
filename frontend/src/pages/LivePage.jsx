@@ -1,15 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import {
-  getFeatures,
-  getLiveChannelsGuide,
-  getPlexMachineId,
-} from "../api/client";
+import { getLiveChannelsGuide, getPlexMachineId } from "../api/client";
 import LiveGuide from "../components/live/LiveGuide";
 import LivePlayer from "../components/live/LivePlayer";
 import LiveTuneShare from "../components/live/LiveTuneShare";
 import WeatherChannelPlayer from "../components/live/WeatherChannelPlayer";
-import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/backNav.js";
 import {
@@ -21,6 +16,13 @@ import {
   popoutHandoff,
 } from "../lib/liveChannels.js";
 import { liveUserEmptyCopy } from "../lib/liveChannelsCopy.js";
+import {
+  LIVE_GUIDE_WAIT_MS,
+  guideStallError,
+  readLiveGuideCache,
+  shouldShowGuideSkeleton,
+  writeLiveGuideCache,
+} from "../lib/liveGuidePaint.js";
 import { saveLiveStickyOsd } from "../lib/liveTuneLink.js";
 import { plexLiveTvUrl } from "../lib/titleLinks.js";
 
@@ -43,7 +45,6 @@ function LivePlatformFrame({ children }) {
  * @param {{ popout?: boolean }} props
  */
 export default function LivePage({ popout = false }) {
-  const { authReady } = useAuthGate();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const channelParam = String(searchParams.get("channel") || "").trim();
@@ -52,9 +53,15 @@ export default function LivePage({ popout = false }) {
 
   const [featureReady, setFeatureReady] = useState(false);
   const [featureOn, setFeatureOn] = useState(false);
-  const [guide, setGuide] = useState(null);
+  const [guide, setGuide] = useState(() => readLiveGuideCache());
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !readLiveGuideCache()?.ready);
+  const [gaveUp, setGaveUp] = useState(false);
+  const guideRef = useRef(guide);
+  const settleTimerRef = useRef(null);
+  useEffect(() => {
+    guideRef.current = guide;
+  }, [guide]);
   const [selectedProgram, setSelectedProgram] = useState(null);
   const [mode, setMode] = useState(() => {
     if (popout) return "watch";
@@ -66,69 +73,93 @@ export default function LivePage({ popout = false }) {
   const [plexUrl, setPlexUrl] = useState(plexLiveTvUrl());
 
   const loadGuide = useCallback(async ({ silent = false } = {}) => {
-    if (!silent) setLoading(true);
+    if (!silent && !guideRef.current?.ready) setLoading(true);
     try {
-      // Features and the guide are independent. The guide is server-precached
-      // (SWR): a cold start is a warming skeleton, and the page paints that
-      // shell without waiting for Tunarr. The Plex machine id only feeds a
-      // secondary link, so it must never gate first paint.
-      const [features, snapshot] = await Promise.all([
-        getFeatures(),
-        getLiveChannelsGuide({ hours: 6 }).catch((err) => ({ __error: err })),
-      ]);
-      const enabled = Boolean(features?.features?.live_channels_enabled);
-      const ready = Boolean(features?.features?.live_channels_ready);
+      // The guide is server-precached (SWR). Do not wait on /api/features or
+      // /api/auth/me — those can sit on SQLite's 30s busy timeout, and the
+      // warming poll never starts until this request returns.
+      const snapshot = await getLiveChannelsGuide({
+        hours: 6,
+        timeoutMs: LIVE_GUIDE_WAIT_MS,
+      });
+      const enabled = Boolean(snapshot?.enabled);
       setFeatureOn(enabled);
-      setFeatureReady(ready);
+      setFeatureReady(enabled && snapshot?.reason !== "tunarr_url_missing");
       if (!enabled) {
         setGuide(null);
         setError("");
         setLoading(false);
         return;
       }
-      if (snapshot?.__error) throw snapshot.__error;
       const model = appendWeatherChannel(normalizeGuide(snapshot));
-      setGuide(model);
-      setError("");
-      setActiveChannelId((current) => current || model?.channels?.[0]?.id || "");
+      if (model?.ready) {
+        writeLiveGuideCache(model);
+        setGuide(model);
+        setError("");
+        setActiveChannelId((current) => current || model?.channels?.[0]?.id || "");
+      } else if (guideRef.current?.ready) {
+        setGuide((current) => (current?.ready ? { ...current, stale: true } : current));
+      } else {
+        setGuide(model);
+      }
       if (!silent) {
         getPlexMachineId()
           .catch(() => "")
           .then((machineId) => setPlexUrl(plexLiveTvUrl(machineId)));
       }
     } catch (err) {
-      setError(err.message || "Could not load the live guide.");
+      if (!guideRef.current?.ready) {
+        setError(err.message || "Could not load the live guide.");
+      }
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (!authReady) return;
     loadGuide();
-  }, [authReady, loadGuide]);
+  }, [loadGuide]);
 
-  // Cold start: server returns warming:true while it builds the first guide.
-  // Stale means the grid is already on screen and a refresh is in flight.
+  // Hard stop. The old poll only ran after a warming payload, so a hung
+  // features/auth/guide call left "Filling in the guide…" up forever.
+  useEffect(() => {
+    if (guide?.ready) {
+      if (settleTimerRef.current) {
+        clearTimeout(settleTimerRef.current);
+        settleTimerRef.current = null;
+      }
+      return undefined;
+    }
+    if (settleTimerRef.current) return undefined;
+    settleTimerRef.current = setTimeout(() => setGaveUp(true), LIVE_GUIDE_WAIT_MS);
+    return () => {
+      if (settleTimerRef.current) {
+        clearTimeout(settleTimerRef.current);
+        settleTimerRef.current = null;
+      }
+    };
+  }, [guide?.ready]);
+
+  useEffect(() => {
+    if (!gaveUp || guide?.ready) return;
+    // A finished "not on the air" response is not a hung guide.
+    if (!loading && !guide?.warming) return;
+    setLoading(false);
+    setGuide((current) =>
+      current?.ready ? current : current ? { ...current, warming: false, stale: false } : current,
+    );
+    setError((current) => current || guideStallError({ guide: null, gaveUp: true }));
+  }, [gaveUp, guide?.ready, guide?.warming, loading]);
+
   const guideWarming = Boolean(guide?.warming);
   const guideStale = Boolean(guide?.stale);
   useEffect(() => {
-    if (!guideWarming && !guideStale) return undefined;
-    let tries = 0;
+    if (gaveUp || guide?.ready || (!guideWarming && !guideStale)) return undefined;
     const timer = setInterval(() => {
-      tries += 1;
-      if (tries > 40) {
-        clearInterval(timer);
-        // Give up politely: fall through to the normal "not ready" copy.
-        setGuide((current) =>
-          current ? { ...current, warming: false, stale: false } : current,
-        );
-        return;
-      }
       loadGuide({ silent: true });
     }, 1500);
     return () => clearInterval(timer);
-  }, [guideWarming, guideStale, loadGuide]);
+  }, [gaveUp, guide?.ready, guideWarming, guideStale, loadGuide]);
 
   useEffect(() => {
     if (popout) return;
@@ -222,9 +253,15 @@ export default function LivePage({ popout = false }) {
     );
   }
 
-  const guidePending = !guide?.ready && (!authReady || loading || guideWarming);
+  const stallMessage = guideStallError({ guide, gaveUp, error });
+  const guidePending = shouldShowGuideSkeleton({
+    guide,
+    error: stallMessage,
+    loading,
+    gaveUp,
+  });
   const empty =
-    authReady && !loading && !guideWarming
+    !guidePending && !stallMessage && !guide?.ready
       ? liveUserEmptyCopy({
           featureOn,
           featureReady,
@@ -355,7 +392,11 @@ export default function LivePage({ popout = false }) {
         </div>
       </header>
 
-      {error ? <p className="live-page-error">{error}</p> : null}
+      {stallMessage ? (
+        <p className="live-page-error" data-testid="live-guide-error">
+          {stallMessage}
+        </p>
+      ) : null}
 
       {guidePending && !weatherMode ? (
         <div className="live-guide-skeleton" data-testid="live-guide-skeleton" aria-busy="true">

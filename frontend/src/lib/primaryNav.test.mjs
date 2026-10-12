@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { ROUTES } from "./backNav.js";
+import { initialLiveChannelsReady, LIVE_NAV_READY_KEY } from "./liveNavReady.js";
 import {
   PRIMARY_NAV_ITEMS,
   buildPrimaryDrawerItems,
@@ -141,6 +142,39 @@ describe("primaryNav", () => {
       ["search", "chat", "explore", "inbox", "my-journey", "settings"],
     );
     assert.equal(beforeAuth.some((item) => item.id === "admin"), false);
+  });
+
+  it("keeps Live in the pending-auth peer set when this install already knows it", () => {
+    const storage = new Map();
+    const memory = {
+      getItem: (key) => (storage.has(key) ? storage.get(key) : null),
+      setItem: (key, value) => storage.set(key, String(value)),
+      removeItem: (key) => storage.delete(key),
+    };
+    globalThis.window = { __PROJECTIONIST_NAV__: { liveChannelsReady: true } };
+    try {
+      assert.equal(initialLiveChannelsReady(memory), true);
+      assert.equal(memory.getItem(LIVE_NAV_READY_KEY), "1");
+      const ids = primaryNavVisibleIds({
+        role: "owner",
+        isOwner: true,
+        multiUserEnabled: true,
+        authReady: false,
+        liveChannelsReady: initialLiveChannelsReady(memory),
+      });
+      assert.deepEqual(ids, [
+        "search",
+        "chat",
+        "explore",
+        "live",
+        "inbox",
+        "my-journey",
+        "settings",
+      ]);
+      assert.equal(ids.includes("admin"), false);
+    } finally {
+      delete globalThis.window;
+    }
   });
 
   it("marks chat active for /chat", () => {
