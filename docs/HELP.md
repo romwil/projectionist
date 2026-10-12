@@ -97,7 +97,7 @@ Saved pages preserve the structured text, title cards, reply chips, and any quot
 
 **[Explore](/explore) is cinema browse** over the same SQLite feeds the curator uses. Open it to skim:
 
-- **Continue Watching** — in-progress titles from Plex On Deck (resume + Play), not a live "now playing" session list
+- **Continue Watching** — titles you started and have not finished. Play, pause, or skip ahead in this app and that spot shows on the rail right away. Plays from another device still arrive from Plex On Deck. This is not a live list of what is on in another room.
 - **Recently Added** (movies and shows) and **Recently added episodes** (fresh episode arrivals, not whole series)
 - **Recent Releases**
 - **Revisit These** — partially watched TV that's been idle 60+ days
