@@ -111,7 +111,7 @@ def library_playback_seek(
     """Restart the Plex transcode at ``offset_ms`` (large VOD jumps)."""
     try:
         session = get_session(validate_session_id(session_id), user_id=_user_id(user))
-        return seek_playback(session, int(payload.offset_ms or 0))
+        return seek_playback(session, int(payload.offset_ms or 0), db=_db())
     except PlaybackError as error:
         _raise_playback(error, "Could not seek")
         raise
