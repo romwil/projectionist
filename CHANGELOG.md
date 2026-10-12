@@ -2,8 +2,21 @@
 
 ## [Unreleased]
 
+## [1.37.40] — 2026-10-12
+
+One patch on 1.37.39: Continue Watching follows a play, pause, seek, or stop in this app immediately.
+
+### Highlights
+- **Continue Watching moves when you press Play.** The title you just started, paused, or skipped through shows that spot on Explore right away.
+- **The rail does not jump backward.** A refresh in the background cannot put the previous On Deck row back over the progress you just made.
+
 ### Fixed
-- **Continue Watching updates when you press Play here.** A progress write, pause, seek, or stop in the in-app player puts that title and offset on the Explore rail immediately. The row does not sit on the previous on-deck snapshot until the next hub poll. On-deck refreshes in the background after the play; local shelves still paint first.
+- **Continue Watching stayed on the last Explore snapshot.** A play, pause, seek, or stop in the in-app player now puts that title and offset on the rail immediately. On Deck still refreshes in the background, and the local shelves still paint first, but that refresh cannot paint the previous row over the progress this play just recorded.
+
+### Verification
+- Backend `pytest tests/` — 2568 passed, 6 skipped, coverage 77.04% (floor 74%), run with `PROJECTIONIST_SKIP_DOTENV=1` on `fix/continue-watching-after-play` rebased onto `94ce3a1` (1.37.39).
+- Frontend unit 971/971 (includes Continue Watching after in-app play).
+- Lint 0 errors (147 warnings); `npm run build` OK.
 
 ## [1.37.39] — 2026-10-11
 
