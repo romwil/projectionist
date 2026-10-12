@@ -4,6 +4,7 @@ import { getAuthMe, getFeatures, listNotifications } from "../api/client";
 import PrimaryTopbar from "../components/PrimaryTopbar";
 import { ROUTES } from "../lib/backNav.js";
 import { SETTINGS_NAV } from "../lib/settingsNav.js";
+import { applyLiveChannelsFeature, initialLiveChannelsReady } from "../lib/liveNavReady.js";
 import { applyUiTheme, loadStoredUiTheme } from "../lib/uiPrefs.js";
 
 export { SETTINGS_NAV };
@@ -18,7 +19,7 @@ export default function SettingsLayout() {
   const [isYouth, setIsYouth] = useState(false);
   const [multiUserEnabled, setMultiUserEnabled] = useState(false);
   const [seerrEnabled, setSeerrEnabled] = useState(false);
-  const [liveChannelsReady, setLiveChannelsReady] = useState(false);
+  const [liveChannelsReady, setLiveChannelsReady] = useState(initialLiveChannelsReady);
   const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
   const [uiTheme, setUiTheme] = useState(() => loadStoredUiTheme());
 
@@ -30,7 +31,7 @@ export default function SettingsLayout() {
         const features = await getFeatures();
         const multiUser = Boolean(features?.features?.multi_user_enabled);
         const seerrReady = Boolean(features?.features?.seerr_enabled);
-        const liveReady = Boolean(features?.features?.live_channels_ready);
+        const liveFromFeatures = applyLiveChannelsFeature(features);
         const me = await getAuthMe().catch(() => null);
         if (me?.user?.ui_font_size || me?.user?.ui_theme) {
           const { applyUiFontSize, applyUiTheme: applyTheme } = await import("../lib/uiPrefs.js");
@@ -43,7 +44,7 @@ export default function SettingsLayout() {
             setRole("owner");
             setMultiUserEnabled(false);
             setSeerrEnabled(seerrReady);
-            setLiveChannelsReady(liveReady);
+            if (liveFromFeatures !== null) setLiveChannelsReady(liveFromFeatures);
             setReady(true);
           }
           return;
@@ -58,7 +59,7 @@ export default function SettingsLayout() {
         setIsYouth(Boolean(me.user.is_youth));
         setMultiUserEnabled(true);
         setSeerrEnabled(seerrReady);
-        setLiveChannelsReady(liveReady);
+        if (liveFromFeatures !== null) setLiveChannelsReady(liveFromFeatures);
         setReady(true);
       } catch {
         if (!cancelled) {

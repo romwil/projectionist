@@ -8,6 +8,9 @@
 ### Fixed
 - **Live guide programme cards stay on screen.** Hovering a title near the bottom of the guide opened the card downward, so the page cut off the rest of the synopsis and the Open title details link. The card now opens upward or shifts to stay inside the guide, and that link stays readable and clickable.
 - **Live TV status no longer warns on every poll.** Plex Media Server does not serve `GET /livetv/tuners` (that path is an HTML 404). The existing-tuner check reads `GET /livetv/dvrs` and the `Device` entries under each DVR. When that optional route is missing, the result is empty and is not logged as a warning.
+- **The icon bar is the same on every page.** Search, Chat, Explore, Inbox, My Journey, and Settings stay up while the session check runs. Live stays in that row when this install already has Live Channels, including on `/chat` before auth returns. Admin still waits so a member never sees the owner icon.
+- **Chat paints its shell while auth is slow.** `/chat` no longer sits on a full-page “Loading…” for the `/api/features` then `/api/auth/me` round trip. Those reads can block for SQLite’s 30s busy timeout. The conversation column and composer show immediately, and the thread fills in when it returns.
+- **Live does not stay on “Filling in the guide…”.** A cached guide shows at once. The guide request no longer waits on features or auth, and a hung guide becomes an error instead of a permanent skeleton.
 
 ## [1.37.40] — 2026-10-12
 

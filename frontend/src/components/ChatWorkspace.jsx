@@ -174,41 +174,29 @@ authReady,
       onThemeChange={setUiTheme}
       className={`${nightOwl ? "night-owl" : ""} ${authReady && isYouth ? "youth-shell-topbar" : ""}`}
       leadingExtra={
-        authReady ? (
-          <button
-            type="button"
-            className="app-topbar-menu ghost app-topbar-threads"
-            data-testid="mobile-nav-toggle"
-            aria-label="Open conversations"
-            aria-expanded={mobileNavOpen}
-            aria-controls="workspace-sidebar"
-            onClick={() => setMobileNavOpen(true)}
-          >
-            <span className="material-symbols-outlined" aria-hidden="true">
-              forum
-            </span>
-          </button>
-        ) : null
+        <button
+          type="button"
+          className="app-topbar-menu ghost app-topbar-threads"
+          data-testid="mobile-nav-toggle"
+          aria-label="Open conversations"
+          aria-expanded={mobileNavOpen}
+          aria-controls="workspace-sidebar"
+          onClick={() => setMobileNavOpen(true)}
+        >
+          <span className="material-symbols-outlined" aria-hidden="true">
+            forum
+          </span>
+        </button>
       }
     />
   );
 
-  if (!authReady) {
-    return (
-      <div className="app-root workspace" data-testid="app-auth-loading">
-        {topbar}
-        <div className="app-loading">
-          <p className="login-lede">Loading…</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div
-      className={`app-root workspace${isYouth ? " app-root--youth youth-shell" : ""}`}
+      className={`app-root workspace${authReady && isYouth ? " app-root--youth youth-shell" : ""}`}
       style={{ "--ambient-accent": ambientAccent }}
-      data-shell={isYouth ? "youth" : "default"}
+      data-testid="chat-workspace"
+      data-shell={authReady && isYouth ? "youth" : "default"}
     >
       {topbar}
 

@@ -90,8 +90,10 @@ const PUBLIC_PRIMARY_IDS = ["search", "chat", "explore", "inbox", "my-journey", 
  * Owner: full set, once auth has settled.
  *
  * A slow `/api/auth/me` must not hide Search, Chat, Explore, and the other
- * public peers. Live waits on the feature flag. Admin waits on auth so a
- * member never sees the owner icon while the session check is in flight.
+ * public peers. Live is included when this install already knows the feature
+ * is on (HTML stamp or cache), without waiting on features/auth. Admin waits
+ * on auth so a member never sees the owner icon while the session check is
+ * in flight.
  */
 export function primaryNavVisibleIds({
   role = "owner",
