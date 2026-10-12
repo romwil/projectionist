@@ -104,6 +104,7 @@ def _execute_request(
     data: Optional[bytes],
     timeout: int,
     max_bytes: Optional[int] = None,
+    quiet_statuses: Optional[tuple[int, ...]] = None,
 ) -> bytes:
     """urlopen with the shared per-host circuit breaker."""
     host_circuits.before_request(url)
@@ -116,7 +117,11 @@ def _execute_request(
         return body
     except urllib.error.HTTPError as error:
         detail = sanitize_log_message(error.read().decode("utf-8", errors="replace"))
-        logger.warning("HTTP %s %s from %s: %s", method, error.code, safe_url, detail[:500])
+        # Optional routes (Plex Live TV when the path is absent) must not warn on every poll.
+        if quiet_statuses and int(error.code) in quiet_statuses:
+            logger.debug("HTTP %s %s from %s (quiet)", method, error.code, safe_url)
+        else:
+            logger.warning("HTTP %s %s from %s: %s", method, error.code, safe_url, detail[:500])
         if _http_status_trips_breaker(int(error.code)):
             host_circuits.record_failure(url, f"HTTP {error.code}")
         else:
@@ -206,6 +211,7 @@ def request_xml(
     method: str = "GET",
     headers: Optional[Mapping[str, str]] = None,
     timeout: int = 30,
+    quiet_statuses: Optional[tuple[int, ...]] = None,
 ) -> ET.Element:
     return ET.fromstring(
         _execute_request(
@@ -214,6 +220,7 @@ def request_xml(
             headers=headers,
             data=None,
             timeout=timeout,
+            quiet_statuses=quiet_statuses,
         )
     )
 
