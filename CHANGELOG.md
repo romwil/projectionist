@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- **Explore destinations are navigation guides.** Movies, TV, Related titles, and Tags sit with search as the way into the library. Each control is large enough to tap and carries a one-line guide. The compact pills are gone, and the old description cards stay gone.
+
 ### Fixed
 - **Live guide programme cards stay on screen.** Hovering a title near the bottom of the guide opened the card downward, so the page cut off the rest of the synopsis and the Open title details link. The card now opens upward or shifts to stay inside the guide, and that link stays readable and clickable.
 
