@@ -17,9 +17,8 @@
   object-fit: cover;
 }
 
-.app-root--youth .explore-hub-links,
-.app-root--youth .explore-hub-links--compact {
-  gap: 0.35rem;
+.app-root--youth .explore-hub-links {
+  gap: 0.5rem;
 }
 
 .app-root--youth .app-topbar-eyebrow,

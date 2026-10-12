@@ -90,21 +90,32 @@ describe("explore and recommendations responsive layout", () => {
     assert.match(revisitBlock, /haven.t touched in over two months/);
   });
 
-  it("requests the long Explore rail window and uses a compact destination row", () => {
+  it("renders Explore destinations as navigation guides with the search", () => {
     assert.match(explorePage, /EXPLORE_RAIL_LIMIT/);
     assert.match(explorePage, /getExploreHub\(\{ limit: EXPLORE_RAIL_LIMIT \}\)/);
-    assert.match(explorePage, /explore-hub-links--compact/);
+    assert.match(explorePage, /className="explore-library-entry"/);
+    assert.match(explorePage, /<nav className="explore-hub-links" aria-label="Browse the library"/);
+    assert.match(explorePage, /className="explore-hub-guide"/);
+    assert.match(explorePage, /explore-hub-guide-line">Every film/);
+    assert.match(explorePage, /explore-hub-guide-line">Shows and episodes/);
+    assert.match(explorePage, /explore-hub-guide-line">Follow one title/);
+    assert.match(explorePage, /explore-hub-guide-line">Browse keywords/);
     assert.match(explorePage, /data-testid="explore-hub-browse-movies"/);
     assert.match(explorePage, /data-testid="explore-hub-browse-tv"/);
     assert.match(explorePage, /data-testid="explore-hub-related-titles"/);
     assert.match(explorePage, /data-testid="explore-hub-tags"/);
+    assert.doesNotMatch(explorePage, /explore-hub-links--compact/);
+    assert.doesNotMatch(explorePage, /explore-hub-card/);
     assert.doesNotMatch(explorePage, /Page through every film/);
     assert.doesNotMatch(explorePage, /Fresh episodes first/);
-    assert.match(styles, /\.explore-hub-links--compact\s*\{[^}]*flex-wrap:\s*wrap/s);
-    assert.match(
-      styles,
-      /\.explore-hub-links--compact \.explore-hub-card\s*\{[^}]*padding:\s*0\.35rem\s+0\.75rem/s,
-    );
+    assert.doesNotMatch(explorePage, /Start with one title, follow its connections/);
+    assert.doesNotMatch(explorePage, /Browse keyword tags across your full library/);
+    assert.doesNotMatch(styles, /\.explore-hub-links--compact/);
+    assert.match(styles, /\.explore-hub-links\s*\{[^}]*grid-template-columns:\s*repeat\(4,/s);
+    assert.match(styles, /\.explore-hub-guide\s*\{[^}]*min-height:\s*var\(--tap-min\)/s);
+    const guideRule = styles.match(/\.explore-hub-guide\s*\{[^}]*\}/s);
+    assert.ok(guideRule);
+    assert.doesNotMatch(guideRule[0], /999px/);
   });
 
   it("omits Live habits and Double Feature from Explore", () => {
