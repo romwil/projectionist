@@ -7,6 +7,7 @@
 
 ### Fixed
 - **Live guide programme cards stay on screen.** Hovering a title near the bottom of the guide opened the card downward, so the page cut off the rest of the synopsis and the Open title details link. The card now opens upward or shifts to stay inside the guide, and that link stays readable and clickable.
+- **Live TV status no longer warns on every poll.** Plex Media Server does not serve `GET /livetv/tuners` (that path is an HTML 404). The existing-tuner check reads `GET /livetv/dvrs` and the `Device` entries under each DVR. When that optional route is missing, the result is empty and is not logged as a warning.
 
 ## [1.37.40] — 2026-10-12
 
