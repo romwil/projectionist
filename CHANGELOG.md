@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [1.37.41] — 2026-10-14
+
+One patch on 1.37.40: guide cards stay clickable, Explore destinations sit beside search, Live TV status treats a missing tuner list as empty, and the icon bar, chat, and guide paint while slower reads catch up. Continue Watching after play is unchanged.
+
+### Highlights
+- **Guide cards stay on the screen.** Hovering a show near the bottom of the Live guide opens the card upward, so the synopsis and Open title details stay where you can tap them.
+- **Movies, TV, Related titles, and Tags sit beside search.** Each one is a tap-sized row with a one-line guide, in place of the small pills.
+- **The same icon bar while the app checks who you are.** Chat, Explore, Search, Live, and Settings keep Search, Chat, Explore, and Live in that row. Admin still waits. Chat shows the conversation and composer immediately instead of a full-page “Loading…”.
+- **Live shows the guide it already has.** A saved guide appears right away. If the refresh never finishes, you get an error instead of “Filling in the guide…” with no end.
+
 ### Changed
 - **Explore destinations are navigation guides.** Movies, TV, Related titles, and Tags sit with search as the way into the library. Each control is large enough to tap and carries a one-line guide. The compact pills are gone, and the old description cards stay gone.
 
@@ -11,6 +21,11 @@
 - **The icon bar is the same on every page.** Search, Chat, Explore, Inbox, My Journey, and Settings stay up while the session check runs. Live stays in that row when this install already has Live Channels, including on `/chat` before auth returns. Admin still waits so a member never sees the owner icon.
 - **Chat paints its shell while auth is slow.** `/chat` no longer sits on a full-page “Loading…” for the `/api/features` then `/api/auth/me` round trip. Those reads can block for SQLite’s 30s busy timeout. The conversation column and composer show immediately, and the thread fills in when it returns.
 - **Live does not stay on “Filling in the guide…”.** A cached guide shows at once. The guide request no longer waits on features or auth, and a hung guide becomes an error instead of a permanent skeleton.
+
+### Verification
+- Backend `pytest tests/` — 2573 passed, 6 skipped, coverage 77.05% (floor 74%), run with `PROJECTIONIST_SKIP_DOTENV=1` on `release/1.37.41` (four fixes rebased onto `c76359d`, 1.37.40).
+- Frontend unit 981/981.
+- Lint 0 errors (149 warnings); `npm run build` OK.
 
 ## [1.37.40] — 2026-10-12
 

@@ -110,6 +110,8 @@ Want a double-feature pairing? Ask Companion or Concierge in **Chat**. Live Chan
 
 **Chat about a rail.** Most Explore rails offer **Chat about these** — it opens a new conversation seeded with that rail's titles, stable library identities, and the persona *why* when present, so the curator discusses those same in-library picks (not outside search replacements). Posters and title detail also offer **Chat about this** for a single title — same Chat deep link, with a *Let's discuss* opener. Seasonal picks are the exception: their **Chat about this** stays docked on Explore.
 
+**Movies, TV, Related titles, and Tags** sit beside search. Each control is large enough to tap and carries a one-line guide into that part of the library. Search still finds a title by name.
+
 Those discovery rails only appear when your library has enough matching metadata, and their headings open the matching director or genre wall.
 
 ### Live
@@ -119,7 +121,7 @@ When the household owner turns **Live Channels** on and publishes stations, **[L
 **Shortest path tonight**
 
 1. Open **[Live](/live)** from the top bar (after Explore).
-2. On Live, use **Guide** for the channel × time grid, or **Watch** to tune the selected station. Click a channel’s name and number on the left — or a show in the grid — to start watching. **Weather** sits at the end of the lineup.
+2. On Live, use **Guide** for the channel × time grid, or **Watch** to tune the selected station. Click a channel’s name and number on the left — or a show in the grid — to start watching. Hover a show to read the synopsis; near the bottom of the guide the card opens upward so **Open title details** stays on screen. **Weather** sits at the end of the lineup. A guide you have already seen paints immediately; if a refresh never finishes, Live says so instead of leaving “Filling in the guide…” up.
 3. Prefer a dedicated TV window? Tap **Pop out** — Projectionist opens a watch-first window and leaves the original tab on the guide so you aren't running two streams of the same channel.
 4. Prefer living-room apps? Use **Open in Plex Live TV** from Live chrome — same stations, Plex clients.
 
