@@ -258,7 +258,6 @@
   .app-shell-page-titles .app-topbar-eyebrow,
   .app-topbar-eyebrow,
   .library-hub-lede,
-  .explore-hub-card p,
   .settings-rail-brand .eyebrow,
   .settings-shell .app-footer,
   .live-chrome-secondary [data-testid="live-popout"] {
@@ -334,20 +333,13 @@
     border-radius: var(--radius);
   }
 
-  .explore-hub-links,
-  .explore-hub-links--compact {
-    gap: 0.35rem;
-    margin-bottom: var(--space-3);
+  .explore-hub-links {
+    gap: 0.5rem;
   }
 
-  .explore-hub-links--compact .explore-hub-card,
-  .explore-hub-card {
-    padding: 0.35rem 0.7rem;
-  }
-
-  .explore-hub-card h2 {
-    margin: 0;
-    font-size: 0.92rem;
+  .explore-hub-guide {
+    min-height: var(--tap-min);
+    padding: 0.6rem 0.75rem;
   }
 
   .library-hub-tabs {

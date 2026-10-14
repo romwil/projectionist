@@ -99,8 +99,7 @@ export default function LiveGuide({
     setHover({
       program,
       kind,
-      x: rect.left,
-      y: rect.bottom + 6,
+      anchor: { top: rect.top, bottom: rect.bottom, left: rect.left },
     });
   }
 
@@ -255,8 +254,7 @@ export default function LiveGuide({
         program={hover?.program}
         kind={hover?.kind || "guide"}
         open={Boolean(hover)}
-        x={hover?.x || 0}
-        y={hover?.y || 0}
+        anchor={hover?.anchor}
         onKeepAlive={cancelHoverLeave}
         onClose={() => setHover(null)}
       />

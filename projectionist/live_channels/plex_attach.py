@@ -262,12 +262,94 @@ def host_port_for_plex(tunarr_base: str) -> str:
     return f"{host}:{port}"
 
 
+def _optional_livetv_xml(client: Any, path: str, *, timeout: int) -> Any:
+    """GET Plex Live TV XML. A 404 is a missing optional route, not a warning."""
+    from urllib.parse import quote
+
+    from projectionist.connectors.http import request_xml
+
+    separator = "&" if "?" in path else "?"
+    url = f"{client.base_url}{path}{separator}X-Plex-Token={quote(client.token)}"
+    try:
+        return request_xml(
+            url,
+            headers={"Accept": "application/xml"},
+            timeout=timeout,
+            quiet_statuses=(404,),
+        )
+    except RuntimeError as error:
+        if str(error).startswith("HTTP 404"):
+            return None
+        raise
+
+
+def _safe_dvr_key(node: Any) -> str:
+    key = str(getattr(node, "attrib", {}).get("key") or "").strip()
+    if key and all(ch.isalnum() or ch in "-_" for ch in key):
+        return key
+    return ""
+
+
+def _count_livetv_devices(client: Any, root: Any, *, timeout: int) -> int:
+    """Count tuner ``Device`` nodes on ``/livetv/dvrs`` (and per-DVR detail if needed)."""
+    if root is None:
+        return 0
+    dvrs = _iter_dvrs(root)
+    if not dvrs:
+        return len(list(root.iter("Device")))
+    count = 0
+    bare = 0
+    for dvr in dvrs:
+        devices = list(dvr.iter("Device"))
+        if not devices:
+            key = _safe_dvr_key(dvr)
+            detail = (
+                _optional_livetv_xml(client, f"/livetv/dvrs/{key}", timeout=timeout)
+                if key
+                else None
+            )
+            if detail is not None:
+                devices = list(detail.iter("Device"))
+        if devices:
+            count += len(devices)
+        else:
+            bare += 1
+    return count if count else bare
+
+
+def _livetv_none() -> Dict[str, Any]:
+    return {
+        "status": "none",
+        "ok": True,
+        "device_count": 0,
+        "message": (
+            "No existing Plex Live TV / DVR devices were listed. You can add Tunarr "
+            "as your first network tuner — or as another tuner later if you add OTA."
+        ),
+    }
+
+
+def _livetv_unknown(detail: str) -> Dict[str, Any]:
+    return {
+        "status": "unknown",
+        "ok": None,
+        "device_count": None,
+        "message": (
+            "Could not reliably read Plex Live TV devices "
+            f"({detail}). If you already have OTA, keep it — Tunarr is "
+            "added as another tuner, not a replacement."
+        ),
+    }
+
+
 def probe_existing_plex_livetv(settings: Any = None, *, timeout: int = 5) -> Dict[str, Any]:
     """Soft probe for existing Plex Live TV / DVR devices.
 
-    Returns ``status`` of ``detected`` | ``none`` | ``unknown``. Detection uses
-    best-effort Plex endpoints that vary by PMS version — never treat failure as
-    "no Live TV" and never block attach on this signal.
+    Returns ``status`` of ``detected`` | ``none`` | ``unknown``. PMS lists tuners
+    as ``Device`` children of ``GET /livetv/dvrs`` (or ``GET /livetv/dvrs/{key}``
+    when they are not inlined). ``/livetv/tuners`` is not a PMS route. A 404 on
+    the DVR list is an empty result. Other failures stay ``unknown`` — never
+    treat a transport error as "no Live TV", and never block attach on this signal.
     """
     if settings is None:
         return {
@@ -307,57 +389,17 @@ def probe_existing_plex_livetv(settings: Any = None, *, timeout: int = 5) -> Dic
             ),
         }
 
-    # Prefer /livetv/dvrs (DVR setups). Fall back to /livetv/tuners when present.
-    # Either path failing → unknown (honest), not "none".
-    counts: List[int] = []
-    last_error = ""
-    for path, tags in (
-        ("/livetv/dvrs", ("Dvr", "DVR")),
-        ("/livetv/tuners", ("Device", "Tuner", "MediaGrabber")),
-    ):
-        try:
-            root = client._request_xml(path)
-        except Exception as error:  # noqa: BLE001
-            last_error = str(error)[:160]
-            continue
-        if root is None:
-            continue
-        n = 0
-        for tag in tags:
-            n += len(list(root.iter(tag)))
-        # Also count direct children that look like devices when tags differ.
-        if n == 0:
-            n = sum(
-                1
-                for child in list(root)
-                if str(getattr(child, "tag", "") or "")
-                not in ("", "MediaContainer", "Size")
-            )
-        counts.append(n)
-
-    if not counts and last_error:
-        return {
-            "status": "unknown",
-            "ok": None,
-            "device_count": None,
-            "message": (
-                "Could not reliably read Plex Live TV devices "
-                f"({last_error}). If you already have OTA, keep it — Tunarr is "
-                "added as another tuner, not a replacement."
-            ),
-        }
-    if not counts:
-        return {
-            "status": "unknown",
-            "ok": None,
-            "device_count": None,
-            "message": (
-                "Plex Live TV device listing is unavailable on this server build. "
-                "Add Tunarr as an additional network tuner; leave any OTA DVR alone."
-            ),
-        }
-
-    device_count = max(counts)
+    # PMS serves tuners as Device children of /livetv/dvrs. /livetv/tuners 404s.
+    try:
+        root = _optional_livetv_xml(client, "/livetv/dvrs", timeout=timeout)
+    except Exception as error:  # noqa: BLE001
+        return _livetv_unknown(str(error)[:160])
+    if root is None:
+        return _livetv_none()
+    try:
+        device_count = _count_livetv_devices(client, root, timeout=timeout)
+    except Exception as error:  # noqa: BLE001
+        return _livetv_unknown(str(error)[:160])
     if device_count > 0:
         return {
             "status": "detected",
@@ -368,15 +410,7 @@ def probe_existing_plex_livetv(settings: Any = None, *, timeout: int = 5) -> Dic
                 "tuner. Keep your OTA / current DVR; do not remove or replace it."
             ),
         }
-    return {
-        "status": "none",
-        "ok": True,
-        "device_count": 0,
-        "message": (
-            "No existing Plex Live TV / DVR devices were listed. You can add Tunarr "
-            "as your first network tuner — or as another tuner later if you add OTA."
-        ),
-    }
+    return _livetv_none()
 
 
 def build_plex_attach(

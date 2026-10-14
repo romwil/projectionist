@@ -4,6 +4,7 @@ import { getAuthMe, getFeatures, listMediaIssues, listNotifications } from "../a
 import PrimaryTopbar from "../components/PrimaryTopbar";
 import { ADMIN_NAV, adminNavGroups } from "../lib/adminNav.js";
 import { ROUTES } from "../lib/backNav.js";
+import { applyLiveChannelsFeature, initialLiveChannelsReady } from "../lib/liveNavReady.js";
 import { applyUiTheme, loadStoredUiTheme } from "../lib/uiPrefs.js";
 
 export { ADMIN_NAV };
@@ -19,7 +20,7 @@ export default function AdminLayout() {
   const [uiTheme, setUiTheme] = useState(() => loadStoredUiTheme());
   const [multiUserEnabled, setMultiUserEnabled] = useState(false);
   const [seerrEnabled, setSeerrEnabled] = useState(false);
-  const [liveChannelsReady, setLiveChannelsReady] = useState(false);
+  const [liveChannelsReady, setLiveChannelsReady] = useState(initialLiveChannelsReady);
 
   useEffect(() => {
     let cancelled = false;
@@ -31,7 +32,7 @@ export default function AdminLayout() {
         if (!cancelled) {
           setMultiUserEnabled(multiUser);
           setSeerrEnabled(Boolean(features?.features?.seerr_enabled));
-          setLiveChannelsReady(Boolean(features?.features?.live_channels_ready));
+          applyLiveChannelsFeature(features, setLiveChannelsReady);
         }
         if (!multiUser) {
           if (!cancelled) {
