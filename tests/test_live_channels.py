@@ -2706,6 +2706,144 @@ class PreflightAndPublishTests(unittest.TestCase):
         self.assertEqual(result["status"], "unknown")
         self.assertIn("additional", result["message"].lower())
 
+    def test_probe_existing_livetv_404_html_is_quiet_empty(self) -> None:
+        import io
+        import urllib.error
+        import urllib.parse
+
+        from projectionist.live_channels.plex_attach import probe_existing_plex_livetv
+
+        token = "unit-test-plex-token"
+        html = (
+            b"<html><head><title>Not Found</title></head>"
+            b"<body><h1>404 Not Found</h1></body></html>"
+        )
+        paths: list[str] = []
+
+        def fake_open(request, timeout=None):
+            raw = request.get_full_url()
+            paths.append(urllib.parse.urlparse(raw).path)
+            raise urllib.error.HTTPError(
+                "http://10.66.12.200:32400/redacted",
+                404,
+                "Not Found",
+                None,
+                io.BytesIO(html),
+            )
+
+        settings = Settings(plex_url="http://10.66.12.200:32400", plex_token=token)
+        with patch(
+            "projectionist.connectors.http.urllib.request.urlopen",
+            side_effect=fake_open,
+        ), self.assertNoLogs("projectionist.connectors.http", level="WARNING"):
+            first = probe_existing_plex_livetv(settings)
+            second = probe_existing_plex_livetv(settings)
+        self.assertEqual(paths, ["/livetv/dvrs", "/livetv/dvrs"])
+        for result in (first, second):
+            self.assertEqual(result["status"], "none")
+            self.assertEqual(result["device_count"], 0)
+            self.assertTrue(result["ok"])
+            blob = str(result)
+            self.assertNotIn(token, blob)
+            self.assertNotIn("<html", blob.lower())
+            self.assertNotIn("404", blob)
+
+    def test_probe_existing_livetv_parses_dvr_devices(self) -> None:
+        import urllib.parse
+
+        from projectionist.live_channels.plex_attach import probe_existing_plex_livetv
+
+        listed = b"""<?xml version="1.0" encoding="UTF-8"?>
+<MediaContainer size="2">
+  <Dvr key="8" lineup="lineup://tv.plex.providers.epg.cloud/example" lineupTitle="Local">
+    <Device key="1" protocol="livetv" status="alive" state="enabled" make="Silicondust" tuners="2" uuid="ota"/>
+  </Dvr>
+  <Dvr key="12" lineup="lineup://tv.plex.providers.epg.xmltv/http://tunarr.example:8000/api/xmltv.xml#Projectionist" lineupTitle="Projectionist">
+    <Device key="14" protocol="livetv" status="alive" state="enabled" make="Tunarr - Silicondust" tuners="2" uuid="tunarr"/>
+  </Dvr>
+</MediaContainer>
+"""
+        paths: list[str] = []
+
+        class _XmlResponse:
+            def __init__(self, body: bytes) -> None:
+                self._body = body
+
+            def read(self, _n=None):
+                return self._body
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+        def fake_open(request, timeout=None):
+            paths.append(urllib.parse.urlparse(request.get_full_url()).path)
+            return _XmlResponse(listed)
+
+        settings = Settings(plex_url="http://10.66.12.200:32400", plex_token="unit-test-plex-token")
+        with patch(
+            "projectionist.connectors.http.urllib.request.urlopen",
+            side_effect=fake_open,
+        ):
+            result = probe_existing_plex_livetv(settings)
+        self.assertEqual(paths, ["/livetv/dvrs"])
+        self.assertEqual(result["status"], "detected")
+        self.assertEqual(result["device_count"], 2)
+        self.assertIn("another tuner", result["message"].lower())
+        self.assertNotIn("unit-test-plex-token", str(result))
+
+    def test_probe_existing_livetv_loads_devices_from_dvr_detail(self) -> None:
+        import urllib.parse
+
+        from projectionist.live_channels.plex_attach import probe_existing_plex_livetv
+
+        listed = b"""<?xml version="1.0" encoding="UTF-8"?>
+<MediaContainer size="1">
+  <Dvr key="8" lineup="lineup://tv.plex.providers.epg.cloud/example" lineupTitle="Local"/>
+</MediaContainer>
+"""
+        detail = b"""<?xml version="1.0" encoding="UTF-8"?>
+<MediaContainer size="1">
+  <Dvr key="8" lineupTitle="Local">
+    <Device key="1" protocol="livetv" status="alive" state="enabled" make="Silicondust" tuners="2" uuid="ota"/>
+  </Dvr>
+</MediaContainer>
+"""
+        paths: list[str] = []
+
+        class _XmlResponse:
+            def __init__(self, body: bytes) -> None:
+                self._body = body
+
+            def read(self, _n=None):
+                return self._body
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+        def fake_open(request, timeout=None):
+            path = urllib.parse.urlparse(request.get_full_url()).path
+            paths.append(path)
+            if path == "/livetv/dvrs/8":
+                return _XmlResponse(detail)
+            return _XmlResponse(listed)
+
+        settings = Settings(plex_url="http://10.66.12.200:32400", plex_token="unit-test-plex-token")
+        with patch(
+            "projectionist.connectors.http.urllib.request.urlopen",
+            side_effect=fake_open,
+        ):
+            result = probe_existing_plex_livetv(settings)
+        self.assertEqual(paths, ["/livetv/dvrs", "/livetv/dvrs/8"])
+        self.assertNotIn("/livetv/tuners", paths)
+        self.assertEqual(result["status"], "detected")
+        self.assertEqual(result["device_count"], 1)
+
     def test_fetch_tunarr_logs_prefers_api(self) -> None:
         from projectionist.live_channels.logs import fetch_tunarr_logs
 

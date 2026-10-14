@@ -17,14 +17,27 @@ _frontend_dist: Path | None = None
 _static_dir: Path | None = None
 
 
-def _serve_index() -> HTMLResponse:
+def _index_html() -> str:
     index = (_frontend_dist or Path()) / "index.html"
     if index.exists():
-        return HTMLResponse(index.read_text(encoding="utf-8"))
+        return index.read_text(encoding="utf-8")
     fallback = (_static_dir or Path()) / "index.html"
     if fallback.exists():
-        return HTMLResponse(fallback.read_text(encoding="utf-8"))
-    return HTMLResponse("<h1>CuratorX</h1><p>Build the frontend with <code>npm run build</code>.</p>")
+        return fallback.read_text(encoding="utf-8")
+    return "<h1>CuratorX</h1><p>Build the frontend with <code>npm run build</code>.</p>"
+
+
+def _serve_index() -> HTMLResponse:
+    from projectionist.web.nav_bootstrap import inject_nav_bootstrap, live_channels_nav_ready
+
+    ready = False
+    try:
+        from projectionist.web.auth import _settings
+
+        ready = live_channels_nav_ready(_settings())
+    except Exception:
+        ready = False
+    return HTMLResponse(inject_nav_bootstrap(_index_html(), ready=ready))
 
 
 def _frontend_public_file(*parts: str) -> Path | None:

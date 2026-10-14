@@ -481,42 +481,45 @@ export default function ExplorePage() {
       blockUntilAuth={false}
     >
       <main className="explore-main">
-        <LibrarySearchBar
-          testId="explore-search"
-          value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
-          onSubmit={handleSearchSubmit}
-        />
+        <div className="explore-library-entry">
+          <LibrarySearchBar
+            testId="explore-search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            onSubmit={handleSearchSubmit}
+          />
 
-        <section
-          className="explore-hub-links explore-hub-links--compact"
-          data-testid="explore-hub-links"
-        >
-          <Link
-            to={libraryBrowsePath({ mediaType: "movie" })}
-            className="explore-hub-card"
-            data-testid="explore-hub-browse-movies"
-          >
-            <h2>Movies</h2>
-          </Link>
-          <Link
-            to={libraryBrowsePath({ mediaType: "show" })}
-            className="explore-hub-card"
-            data-testid="explore-hub-browse-tv"
-          >
-            <h2>TV</h2>
-          </Link>
-          <Link
-            to={ROUTES.relatedTitles}
-            className="explore-hub-card"
-            data-testid="explore-hub-related-titles"
-          >
-            <h2>Related titles</h2>
-          </Link>
-          <Link to={ROUTES.tags} className="explore-hub-card" data-testid="explore-hub-tags">
-            <h2>Tags</h2>
-          </Link>
-        </section>
+          <nav className="explore-hub-links" aria-label="Browse the library" data-testid="explore-hub-links">
+            <Link
+              to={libraryBrowsePath({ mediaType: "movie" })}
+              className="explore-hub-guide"
+              data-testid="explore-hub-browse-movies"
+            >
+              <span className="explore-hub-guide-label">Movies</span>
+              <span className="explore-hub-guide-line">Every film</span>
+            </Link>
+            <Link
+              to={libraryBrowsePath({ mediaType: "show" })}
+              className="explore-hub-guide"
+              data-testid="explore-hub-browse-tv"
+            >
+              <span className="explore-hub-guide-label">TV</span>
+              <span className="explore-hub-guide-line">Shows and episodes</span>
+            </Link>
+            <Link
+              to={ROUTES.relatedTitles}
+              className="explore-hub-guide"
+              data-testid="explore-hub-related-titles"
+            >
+              <span className="explore-hub-guide-label">Related titles</span>
+              <span className="explore-hub-guide-line">Follow one title</span>
+            </Link>
+            <Link to={ROUTES.tags} className="explore-hub-guide" data-testid="explore-hub-tags">
+              <span className="explore-hub-guide-label">Tags</span>
+              <span className="explore-hub-guide-line">Browse keywords</span>
+            </Link>
+          </nav>
+        </div>
 
         <ExploreSection
           id="continue-watching"
