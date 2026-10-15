@@ -16,24 +16,82 @@ from projectionist.watchlist.plex_sync import resolve_account_token
 logger = logging.getLogger(__name__)
 
 
+def _episode_by_rating_key(db: Database, rating_key: str):
+    with db.connect() as conn:
+        return conn.execute(
+            "SELECT * FROM library_episodes WHERE rating_key = ?",
+            (rating_key,),
+        ).fetchone()
+
+
 def set_library_item_watched(
     db: Database,
     rating_key: str,
     *,
     watched: bool,
 ) -> Dict[str, Any]:
-    """Update local ``view_count`` / ``last_viewed_at`` for a library item."""
+    """Update local watch state for a movie, show, or episode rating key.
+
+    Continue Watching show cards scrobble the in-progress episode key, which
+    lives on ``library_episodes`` rather than ``library_items``.
+    """
     key = str(rating_key or "").strip()
     if not key:
         raise ValueError("rating_key is required")
     row = db.library_item_by_rating_key(key)
-    if row is None:
+    episode = None if row is not None else _episode_by_rating_key(db, key)
+    if row is None and episode is None:
         raise ValueError("Library item not found")
 
     # Match the library DB conventions: last_viewed_at is INTEGER epoch seconds
     # (like added_at), updated_at is a REAL epoch timestamp (like _library_item_params).
     now = time.time()
     last_viewed_at = int(now)
+    if episode is not None:
+        show_item_id = int(episode["show_item_id"])
+        with db.connect() as conn:
+            if watched:
+                conn.execute(
+                    """
+                    UPDATE library_episodes
+                    SET view_count = CASE
+                            WHEN COALESCE(view_count, 0) < 1 THEN 1
+                            ELSE view_count
+                        END,
+                        last_viewed_at = ?,
+                        view_offset_ms = 0
+                    WHERE rating_key = ?
+                    """,
+                    (last_viewed_at, key),
+                )
+            else:
+                conn.execute(
+                    """
+                    UPDATE library_episodes
+                    SET view_count = 0,
+                        last_viewed_at = NULL,
+                        view_offset_ms = 0
+                    WHERE rating_key = ?
+                    """,
+                    (key,),
+                )
+            db._update_show_episode_rollups_on_conn(conn, show_item_id)
+        updated_episode = _episode_by_rating_key(db, key)
+        if updated_episode is None:
+            raise ValueError("Library item not found")
+        return {
+            "rating_key": key,
+            "media_type": "episode",
+            "title": str(updated_episode["title"] or ""),
+            "watched": bool(watched),
+            "view_count": int(updated_episode["view_count"] or 0),
+            "last_viewed_at": (
+                int(updated_episode["last_viewed_at"])
+                if updated_episode["last_viewed_at"] is not None
+                else None
+            ),
+        }
+
     with db.connect() as conn:
         if watched:
             conn.execute(
@@ -44,6 +102,7 @@ def set_library_item_watched(
                         ELSE view_count
                     END,
                     last_viewed_at = ?,
+                    view_offset_ms = 0,
                     updated_at = ?
                 WHERE rating_key = ?
                 """,
@@ -55,6 +114,7 @@ def set_library_item_watched(
                 UPDATE library_items
                 SET view_count = 0,
                     last_viewed_at = NULL,
+                    view_offset_ms = 0,
                     updated_at = ?
                 WHERE rating_key = ?
                 """,
@@ -128,9 +188,11 @@ def record_manual_watch_observation(
         # Local/OIDC identities must not be guessed into a Plex account.
         return False
     item = db.library_item_by_rating_key(key)
-    if item is None:
-        return False
-    media_type = str(item["media_type"] or "").strip().lower()
+    if item is not None:
+        media_type = str(item["media_type"] or "").strip().lower()
+    else:
+        episode = _episode_by_rating_key(db, key)
+        media_type = "episode" if episode is not None else ""
     if media_type not in {"movie", "episode"}:
         return False
 

@@ -22,7 +22,8 @@ import {
   plexWatchUrl,
   titleDetailPath,
 } from "../lib/titleLinks.js";
-import { posterWatchAction, watchedStatePatch } from "../lib/posterWatchAction.js";
+import { commitPosterWatched, posterWatchAction } from "../lib/posterWatchAction.js";
+import { rememberContinueWatchingProgress } from "../lib/exploreHubCache.js";
 
 function placePosterMenu(anchor, menu) {
   const margin = 8;
@@ -124,9 +125,11 @@ export default function PosterActionMenu({
     if (!watchAction) return;
     const nextWatched = watchAction.nextWatched;
     try {
-      const result = await setLibraryItemWatched(item.rating_key || item.plex_rating_key, nextWatched);
-      const patch = watchedStatePatch(nextWatched);
-      if (result && typeof result.view_count === "number") patch.view_count = result.view_count;
+      const { patch, result } = await commitPosterWatched(effectiveItem, {
+        watched: nextWatched,
+        setWatched: setLibraryItemWatched,
+        rememberProgress: rememberContinueWatchingProgress,
+      });
       setWatchPatch(patch);
       onWatchedChange?.(item, patch, result);
       const plexNote =
@@ -174,33 +177,33 @@ export default function PosterActionMenu({
   const popover = open && typeof document !== "undefined" ? createPortal(
     <div className="poster-action-popover" ref={popoverRef} role="menu" style={popoverStyle || { visibility: "hidden" }}>
       {detailPath ? (
-        <TitleDetailLink item={{ ...item, in_library: true }} onClick={() => setOpen(false)}>
+        <TitleDetailLink className="poster-action-item" item={{ ...item, in_library: true }} onClick={() => setOpen(false)}>
           Open details
         </TitleDetailLink>
       ) : null}
-      {playHref ? <Link to={playHref} onClick={() => setOpen(false)}>Play</Link> : null}
-      {plexHref ? <a href={plexHref} target="_blank" rel="noopener noreferrer">Open in Plex</a> : null}
-      {watchAction ? <button type="button" className="poster-action-watched" onClick={toggleWatched}>{watchAction.label}</button> : null}
-      <button type="button" onClick={togglePin}>{pinned ? "Remove from watchlist" : "Add to watchlist"}</button>
-      {listId && onRemoveFromList ? <button type="button" onClick={async () => { await onRemoveFromList(listId, listItemId); onRemovedFromList?.(); flashStatus("Removed from this collection."); }}>Remove from this collection</button> : null}
-      <button type="button" onClick={openLists}>Add to list or playlist…</button>
+      {playHref ? <Link className="poster-action-item" to={playHref} onClick={() => setOpen(false)}>Play</Link> : null}
+      {plexHref ? <a className="poster-action-item" href={plexHref} target="_blank" rel="noopener noreferrer">Open in Plex</a> : null}
+      {watchAction ? <button type="button" className="poster-action-item" onClick={toggleWatched}>{watchAction.label}</button> : null}
+      <button type="button" className="poster-action-item" onClick={togglePin}>{pinned ? "Remove from watchlist" : "Add to watchlist"}</button>
+      {listId && onRemoveFromList ? <button type="button" className="poster-action-item" onClick={async () => { await onRemoveFromList(listId, listItemId); onRemovedFromList?.(); flashStatus("Removed from this collection."); }}>Remove from this collection</button> : null}
+      <button type="button" className="poster-action-item" onClick={openLists}>Add to list or playlist…</button>
       {listOpen ? <div className="poster-action-submenu">
-        {lists.length ? lists.map((list) => <button key={list.id} type="button" onClick={() => addToList(list)}>{list.name} <span>{list.list_kind === "playlist" ? "Playlist" : "List"}</span></button>) : <span>No lists yet</span>}
+        {lists.length ? lists.map((list) => <button key={list.id} type="button" className="poster-action-item" onClick={() => addToList(list)}>{list.name} <span>{list.list_kind === "playlist" ? "Playlist" : "List"}</span></button>) : <span className="poster-action-label">No lists yet</span>}
       </div> : null}
-      {onRecommend && multiUserEnabled ? <button type="button" onClick={() => { onRecommend(item); setOpen(false); }}>Recommend</button> : null}
-      {item?.title ? <Link to={recommendLikeHref(item)} onClick={() => setOpen(false)}>Recommend like this in chat</Link> : null}
-      {item?.title ? <Link to={chatAboutTitleHref(item)} onClick={() => setOpen(false)}>Chat about this</Link> : null}
-      {onSeed ? <button type="button" onClick={() => { onSeed(item); setOpen(false); }}>More like this</button> : null}
-      {motifWhy ? <button type="button" onClick={() => { flashStatus(motifWhy.summary || "This title matches the current context."); }}>Why this?</button> : null}
-      <button type="button" onClick={() => setReportOpen(true)}>Report issue…</button>
+      {onRecommend && multiUserEnabled ? <button type="button" className="poster-action-item" onClick={() => { onRecommend(item); setOpen(false); }}>Recommend</button> : null}
+      {item?.title ? <Link className="poster-action-item" to={recommendLikeHref(item)} onClick={() => setOpen(false)}>Recommend like this in chat</Link> : null}
+      {item?.title ? <Link className="poster-action-item" to={chatAboutTitleHref(item)} onClick={() => setOpen(false)}>Chat about this</Link> : null}
+      {onSeed ? <button type="button" className="poster-action-item" onClick={() => { onSeed(item); setOpen(false); }}>More like this</button> : null}
+      {motifWhy ? <button type="button" className="poster-action-item" onClick={() => { flashStatus(motifWhy.summary || "This title matches the current context."); }}>Why this?</button> : null}
+      <button type="button" className="poster-action-item" onClick={() => setReportOpen(true)}>Report issue…</button>
       {isOwner ? <div className="poster-action-owner">
-        <span>Owner tools</span>
+        <span className="poster-action-label">Owner tools</span>
         {item?.rating_key || item?.plex_rating_key ? (
           <>
-            <button type="button" data-testid="poster-action-mark-bad-media" onClick={() => { setOpen(false); setBadMediaOpen(true); }}>
+            <button type="button" className="poster-action-item" data-testid="poster-action-mark-bad-media" onClick={() => { setOpen(false); setBadMediaOpen(true); }}>
               Mark as bad media
             </button>
-            <button type="button" onClick={deleteIndex}>Delete from index</button>
+            <button type="button" className="poster-action-item" onClick={deleteIndex}>Delete from index</button>
           </>
         ) : null}
       </div> : null}
