@@ -1733,6 +1733,16 @@ def set_library_item_watched_endpoint(
         watched=payload.watched,
         user_id=_scoped_user_id(user) or user.id,
     )
+    # Same in-process note playback uses so Continue Watching drops a finished
+    # episode before the next Plex on-deck snapshot arrives.
+    from projectionist.library.continue_watching_progress import note_playback_progress
+
+    note_playback_progress(
+        db,
+        payload.rating_key,
+        0,
+        finished=bool(payload.watched),
+    )
     return {**item, **plex}
 
 
