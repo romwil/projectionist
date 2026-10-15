@@ -1407,8 +1407,10 @@ export async function getLibraryOverview() {
   return api("/library/overview");
 }
 
-export async function getLibraryAggregate(groupBy) {
-  return api(`/library/aggregate?group_by=${encodeURIComponent(groupBy)}`);
+export async function getLibraryAggregate(groupBy, { mediaType } = {}) {
+  const params = new URLSearchParams({ group_by: groupBy });
+  if (mediaType === "movie" || mediaType === "show") params.set("media_type", mediaType);
+  return api(`/library/aggregate?${params}`);
 }
 
 export async function getLibraryHealth() {
