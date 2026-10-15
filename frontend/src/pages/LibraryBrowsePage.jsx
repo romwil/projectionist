@@ -69,6 +69,7 @@ import {
 } from "../lib/progressiveBrowseSearch.js";
 import LibrarySearchBar from "../components/LibrarySearchBar.jsx";
 import { allowWatchlistPin } from "../lib/watchlistPin.js";
+import { browseLanguageOptions } from "../lib/languageNames.js";
 
 function browseHeading(mediaType, q) {
   if (q) return `Search: ${q}`;
@@ -114,7 +115,7 @@ export default function LibraryBrowsePage({ embedded = false }) {
     error: "",
   });
   const [columns, setColumns] = useState(null);
-  const [filterOptions, setFilterOptions] = useState({ years: [], genres: [] });
+  const [filterOptions, setFilterOptions] = useState({ years: [], genres: [], languages: [] });
   const [recommendItem, setRecommendItem] = useState(null);
   const [selected, setSelected] = useState(() => new Set());
   const [actionStatus, setActionStatus] = useState("");
@@ -194,7 +195,8 @@ export default function LibraryBrowsePage({ embedded = false }) {
     Promise.all([
       getLibraryAggregate("year", aggregateOptions).catch(() => ({ buckets: [] })),
       getLibraryAggregate("genre", aggregateOptions).catch(() => ({ buckets: [] })),
-    ]).then(([yearAgg, genreAgg]) => {
+      getLibraryAggregate("language", aggregateOptions).catch(() => ({ buckets: [] })),
+    ]).then(([yearAgg, genreAgg, languageAgg]) => {
       if (cancelled) return;
       setFilterOptions({
         years: [
@@ -203,6 +205,7 @@ export default function LibraryBrowsePage({ embedded = false }) {
         genres: [
           ...new Set((genreAgg?.buckets || []).map((bucket) => bucket.genre).filter(Boolean)),
         ].sort(),
+        languages: browseLanguageOptions((languageAgg?.buckets || []).map((bucket) => bucket.value)),
       });
     });
     return () => {

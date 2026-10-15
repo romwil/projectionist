@@ -152,3 +152,23 @@ export function isKnownLanguageCode(code) {
   const key = normalizeLanguageCode(code);
   return Boolean(key && Object.prototype.hasOwnProperty.call(LANGUAGE_NAMES, key));
 }
+
+/**
+ * Languages that exist in the library, as readable select options.
+ * Unknown codes are left out so a bad value cannot become an "Any" dump.
+ */
+export function browseLanguageOptions(values) {
+  const byCode = new Map();
+  for (const entry of Array.isArray(values) ? values : []) {
+    const raw =
+      typeof entry === "string"
+        ? entry
+        : entry?.value ?? entry?.code ?? entry?.original_language ?? "";
+    const code = normalizeLanguageCode(raw);
+    if (!isKnownLanguageCode(code) || byCode.has(code)) continue;
+    byCode.set(code, { code, label: formatLanguageName(code) });
+  }
+  return [...byCode.values()].sort((a, b) =>
+    a.label.localeCompare(b.label, "en", { sensitivity: "base" }),
+  );
+}

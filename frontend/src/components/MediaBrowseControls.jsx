@@ -7,6 +7,25 @@ import {
   loadMediaBrowseColumns,
   saveMediaBrowseColumns,
 } from "../lib/mediaBrowse.js";
+import { formatLanguageName, isKnownLanguageCode, normalizeLanguageCode } from "../lib/languageNames.js";
+
+function browseLanguageChoices(options, current) {
+  const list = [];
+  const seen = new Set();
+  for (const entry of options || []) {
+    const code = normalizeLanguageCode(typeof entry === "string" ? entry : entry?.code);
+    if (!code || seen.has(code) || !isKnownLanguageCode(code)) continue;
+    seen.add(code);
+    const label =
+      typeof entry === "object" && entry?.label ? entry.label : formatLanguageName(code);
+    list.push({ code, label });
+  }
+  const selected = normalizeLanguageCode(current);
+  if (selected && !seen.has(selected)) {
+    list.push({ code: selected, label: formatLanguageName(selected) });
+  }
+  return list;
+}
 
 export default function MediaBrowseControls({
   state,
@@ -59,6 +78,7 @@ export default function MediaBrowseControls({
   const typeValue = typeChoices.some((choice) => choice.value === (state.media_type || ""))
     ? state.media_type || ""
     : typeChoices[0].value;
+  const languageChoices = browseLanguageChoices(filterOptions.languages, state.language);
 
   return (
     <div className="media-browse-controls" data-testid="media-browse-controls">
@@ -105,6 +125,23 @@ export default function MediaBrowseControls({
                 {filterOptions.years.map((year) => (
                   <option key={year} value={year}>
                     {year}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {languageChoices.length ? (
+            <label>
+              <span>Language</span>
+              <select
+                value={normalizeLanguageCode(state.language) || ""}
+                data-testid="media-browse-language"
+                onChange={(event) => update({ language: event.target.value })}
+              >
+                <option value="">Any</option>
+                {languageChoices.map((language) => (
+                  <option key={language.code} value={language.code}>
+                    {language.label}
                   </option>
                 ))}
               </select>

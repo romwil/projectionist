@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   addWatchlistPin,
   deleteLibraryItems,
@@ -23,7 +23,7 @@ import {
   libraryBrowseItemKey,
   partitionBulkDeleteSelection,
 } from "../lib/bulkLibraryDelete.js";
-import { formatLanguageName } from "../lib/languageNames.js";
+import { formatLanguageName, browseLanguageOptions } from "../lib/languageNames.js";
 import {
   LANGUAGE_MEDIA_TABS,
   NO_MATCHING_TITLES,
@@ -54,6 +54,7 @@ const EMPTY_STATE = {
 
 export default function LanguageLandingPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { isOwner } = useAuthGate();
   const { start, update, finish } = useBulkActionProgress();
   const rawLanguage = searchParams.get("language");
@@ -74,14 +75,18 @@ export default function LanguageLandingPage() {
   const [deleteError, setDeleteError] = useState("");
   const [removalSummary, setRemovalSummary] = useState(null);
   const [columns, setColumns] = useState(null);
-  const [filterOptions, setFilterOptions] = useState({ years: [], genres: [] });
+  const [filterOptions, setFilterOptions] = useState({ years: [], genres: [], languages: [] });
 
   useEffect(() => {
     let cancelled = false;
+    const mediaType =
+      browse.media_type === "movie" || browse.media_type === "show" ? browse.media_type : "";
+    const aggregateOptions = mediaType ? { mediaType } : {};
     Promise.all([
-      getLibraryAggregate("year").catch(() => ({ buckets: [] })),
-      getLibraryAggregate("genre").catch(() => ({ buckets: [] })),
-    ]).then(([yearAgg, genreAgg]) => {
+      getLibraryAggregate("year", aggregateOptions).catch(() => ({ buckets: [] })),
+      getLibraryAggregate("genre", aggregateOptions).catch(() => ({ buckets: [] })),
+      getLibraryAggregate("language", aggregateOptions).catch(() => ({ buckets: [] })),
+    ]).then(([yearAgg, genreAgg, languageAgg]) => {
       if (cancelled) return;
       setFilterOptions({
         years: [
@@ -90,12 +95,16 @@ export default function LanguageLandingPage() {
         genres: [
           ...new Set((genreAgg?.buckets || []).map((bucket) => bucket.genre).filter(Boolean)),
         ].sort(),
+        languages: browseLanguageOptions([
+          ...(languageAgg?.buckets || []).map((bucket) => bucket.value),
+          rawLanguage,
+        ]),
       });
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [browse.media_type, rawLanguage]);
 
   if (seenKey !== queryKey) {
     setSeenKey(queryKey);
@@ -173,7 +182,12 @@ export default function LanguageLandingPage() {
     request.kind === "query" ? formatLanguageName(request.code) : "Language";
 
   function updateSearch(updates) {
-    setSearchParams(buildLanguageLandingSearch(rawLanguage, browse, updates), { replace: true });
+    const params = buildLanguageLandingSearch(rawLanguage, browse, updates);
+    if (Object.hasOwn(updates, "language") && !params.get("language")) {
+      navigate({ pathname: ROUTES.search, search: params.toString() });
+      return;
+    }
+    setSearchParams(params, { replace: true });
   }
 
   function exportCurrentPage(exportColumns) {

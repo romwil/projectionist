@@ -74,6 +74,10 @@ test("toolbar updates keep the relative language param", () => {
   assert.equal(params.get("language"), "en");
   assert.equal(params.get("media_type"), "movie");
   assert.equal(params.toString().includes("automat.vip"), false);
+  const switched = buildLanguageLandingSearch("en", baseBrowse, { language: "ja" });
+  assert.equal(switched.get("language"), "ja");
+  const cleared = buildLanguageLandingSearch("en", baseBrowse, { language: "" });
+  assert.equal(cleared.get("language"), null);
   assert.deepEqual(
     LANGUAGE_MEDIA_TABS.map((tab) => tab.label),
     ["All", "Movies", "TV"],
