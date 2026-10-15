@@ -49,6 +49,8 @@ import {
   skipDeltaForZone,
   skipZoneFromClientX,
   theaterHlsConfig,
+  dispatchLibraryPlayKey,
+  isPlayShortcutBlockedTarget,
   theaterKeyAction,
   toggleTheaterFullscreen,
   isDocumentFullscreen,
@@ -176,6 +178,83 @@ test("theaterKeyAction maps J/K/L and Minecraft A/S/D aliases", () => {
   assert.equal(theaterKeyAction("f"), "fullscreen");
   assert.equal(theaterKeyAction("Escape"), "escape");
   assert.equal(theaterKeyAction("x"), null);
+});
+
+test("library play arrows seek ±15 and space toggles unless typing", () => {
+  const calls = [];
+  const skipBy = (delta) => calls.push(["skip", delta]);
+  const togglePlayback = () => calls.push(["toggle"]);
+  function fire(key, target, extra = {}) {
+    const event = {
+      key,
+      target,
+      repeat: false,
+      ...extra,
+      preventDefault() {
+        calls.push(["prevent", key]);
+      },
+    };
+    return dispatchLibraryPlayKey(event, { skipBy, togglePlayback });
+  }
+
+  assert.equal(fire("ArrowLeft", { tagName: "DIV" }), true);
+  assert.equal(fire("ArrowRight", { tagName: "BODY" }), true);
+  assert.equal(fire(" ", { tagName: "DIV" }), true);
+  assert.deepEqual(calls, [
+    ["prevent", "ArrowLeft"],
+    ["skip", -SKIP_SECONDS],
+    ["prevent", "ArrowRight"],
+    ["skip", SKIP_SECONDS],
+    ["prevent", " "],
+    ["toggle"],
+  ]);
+
+  const blocked = [];
+  const typingTargets = [
+    { tagName: "INPUT", type: "range" },
+    { tagName: "INPUT", type: "text" },
+    { tagName: "TEXTAREA" },
+    { tagName: "SELECT" },
+    { tagName: "DIV", isContentEditable: true },
+  ];
+  for (const target of typingTargets) {
+    assert.equal(isPlayShortcutBlockedTarget(target), true);
+    const key = target.tagName === "TEXTAREA" || target.isContentEditable ? " " : "ArrowRight";
+    const event = {
+      key,
+      target,
+      preventDefault() {
+        blocked.push("prevent");
+      },
+    };
+    assert.equal(
+      dispatchLibraryPlayKey(event, {
+        skipBy: () => blocked.push("skip"),
+        togglePlayback: () => blocked.push("toggle"),
+      }),
+      false,
+    );
+  }
+  assert.deepEqual(blocked, []);
+
+  const alias = [];
+  for (const key of ["a", "A", "d", "D", "s", "S"]) {
+    dispatchLibraryPlayKey(
+      { key, target: { tagName: "DIV" }, preventDefault() {} },
+      {
+        skipBy: (delta) => alias.push(["skip", delta]),
+        togglePlayback: () => alias.push(["toggle"]),
+      },
+    );
+  }
+  assert.deepEqual(alias, [
+    ["skip", -SKIP_SECONDS],
+    ["skip", -SKIP_SECONDS],
+    ["skip", SKIP_SECONDS],
+    ["skip", SKIP_SECONDS],
+    ["toggle"],
+    ["toggle"],
+  ]);
 });
 
 test("stage gesture ignores the click that completes a double-tap", async () => {
