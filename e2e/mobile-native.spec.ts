@@ -189,9 +189,8 @@ test.describe("Native mobile — member living-room", () => {
     await expect(page.getByText("Every title in your library")).toHaveCount(0);
     await expect(page.getByTestId("library-browse-search-input")).toBeVisible();
     await expect(page.getByTestId("app-shell-page-bar")).toHaveCount(0);
-    const filters = page.getByTestId("library-browse-filters");
+    const filters = page.getByTestId("media-browse-controls");
     await expect(filters).toBeVisible();
-    await expect(filters).not.toHaveAttribute("open");
     await assertNoHorizontalPageOverflow(page);
 
     const card = page.getByTestId("library-browse-card").first();

@@ -10,6 +10,7 @@ import RecommendModal from "../components/RecommendModal";
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/browseLinks.js";
+import { browseLanguageOptions } from "../lib/languageNames.js";
 import { TAG_SORT_OPTIONS, normalizeTagSort, parseAndTags } from "../lib/tagSearch.js";
 import {
   MEDIA_BROWSE_PAGE_SIZES,
@@ -32,7 +33,7 @@ export default function TagPage() {
   const sort = normalizeTagSort(searchParams.get("sort"));
   const browse = useMemo(() => parseMediaBrowse(searchParams, { sort }), [searchParams, sort]);
   const [columns, setColumns] = useState(null);
-  const [filterOptions, setFilterOptions] = useState({ years: [], genres: [] });
+  const [filterOptions, setFilterOptions] = useState({ years: [], genres: [], languages: [] });
   const { multiUserEnabled } = useAuthGate();
   const [recommendItem, setRecommendItem] = useState(null);
   const [state, setState] = useState({
@@ -51,7 +52,8 @@ export default function TagPage() {
     Promise.all([
       getLibraryAggregate("year", aggregateOptions).catch(() => ({ buckets: [] })),
       getLibraryAggregate("genre", aggregateOptions).catch(() => ({ buckets: [] })),
-    ]).then(([yearAgg, genreAgg]) => {
+      getLibraryAggregate("language", aggregateOptions).catch(() => ({ buckets: [] })),
+    ]).then(([yearAgg, genreAgg, languageAgg]) => {
       if (cancelled) return;
       setFilterOptions({
         years: [
@@ -60,6 +62,7 @@ export default function TagPage() {
         genres: [
           ...new Set((genreAgg?.buckets || []).map((bucket) => bucket.genre).filter(Boolean)),
         ].sort(),
+        languages: browseLanguageOptions((languageAgg?.buckets || []).map((bucket) => bucket.value)),
       });
     });
     return () => {

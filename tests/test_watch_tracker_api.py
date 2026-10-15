@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import json
 import os
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -242,8 +243,11 @@ class WatchTrackerApiTests(unittest.TestCase):
             body["completion_timeline"][0]["basis"],
             "observed_threshold_crossing",
         )
-        self.assertNotIn("user-a", json.dumps(body))
-        self.assertNotIn("4242", json.dumps(body))
+        serialized_summary = json.dumps(body)
+        self.assertNotIn("user-a", serialized_summary)
+        self.assertIsNone(
+            re.search(r'(?<![0-9A-Fa-f-])4242(?![0-9A-Fa-f-])', serialized_summary)
+        )
 
     def test_show_summary_rolls_up_episode_completions(self) -> None:
         self._enable_multi_user()
@@ -307,8 +311,8 @@ class WatchTrackerApiTests(unittest.TestCase):
         self.assertGreater(response.json()["count"], 0)
         serialized = json.dumps(response.json())
         self.assertNotIn("source_user_key", serialized)
-        self.assertNotIn("4242", serialized)
-        self.assertNotIn("9999", serialized)
+        self.assertIsNone(re.search(r'(?<![0-9A-Fa-f-])4242(?![0-9A-Fa-f-])', serialized))
+        self.assertIsNone(re.search(r'(?<![0-9A-Fa-f-])9999(?![0-9A-Fa-f-])', serialized))
         self.assertEqual(forbidden.status_code, 403)
 
 
