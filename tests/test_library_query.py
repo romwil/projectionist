@@ -277,11 +277,22 @@ class LibraryQueryTests(unittest.TestCase):
                     "original_language": "fr",
                 }
             )
+            db.upsert_library_item(
+                {
+                    "rating_key": "blank",
+                    "media_type": "movie",
+                    "title": "No Language",
+                    "original_language": "",
+                }
+            )
             result = aggregate_library(db, "language")
             buckets = {b["value"]: b["count"] for b in result["buckets"]}
             self.assertEqual(result["group_by"], "language")
             self.assertEqual(buckets["en"], 1)
             self.assertEqual(buckets["fr"], 1)
+            self.assertNotIn("ja", buckets)
+            self.assertNotIn("", buckets)
+            self.assertEqual(set(buckets), {"en", "fr"})
 
     def test_aggregate_country_and_language_from_json_columns(self) -> None:
         """Integration: stored JSON text columns aggregate without facet index."""
