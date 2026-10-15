@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
+  clearShrunkPlay,
+  initialPipState,
   isLibraryPopoutPath,
   normalizeReturnTo,
+  persistShrunkPlay,
   playbackMountKey,
   resolvePlaybackHost,
   watchRatingKeyFromPath,
@@ -17,11 +20,16 @@ import LibraryPlayer from "./LibraryPlayer.jsx";
 export default function InAppPlaybackHost() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [pip, setPip] = useState(null);
+  const [pip, setPip] = useState(() => initialPipState(globalThis.location?.pathname || ""));
   const [dragPos, setDragPos] = useState(null);
   const [leaving, setLeaving] = useState(false);
   const dragRef = useRef(null);
   const hostRef = useRef(null);
+  const pipRef = useRef(pip);
+  const playheadAtRef = useRef(0);
+  useEffect(() => {
+    pipRef.current = pip;
+  }, [pip]);
 
   const [navTrail, setNavTrail] = useState({ current: "", previous: "" });
   const here = `${location.pathname}${location.search || ""}`;
@@ -31,6 +39,7 @@ export default function InAppPlaybackHost() {
   const routeKey = watchRatingKeyFromPath(location.pathname);
   const popoutWindow = isLibraryPopoutPath(location.pathname);
   if (pip && routeKey && !leaving) {
+    clearShrunkPlay();
     setPip(null);
   } else if (leaving && !routeKey && !popoutWindow) {
     setLeaving(false);
@@ -53,10 +62,25 @@ export default function InAppPlaybackHost() {
     const remembered = explicit || navTrail.previous;
     setDragPos(null);
     setLeaving(true);
-    setPip({
+    const nextPip = {
       ratingKey,
       returnTo: normalizeReturnTo(remembered),
-    });
+      offsetMs: Math.max(0, Math.floor(Number(next?.offsetMs) || 0)),
+      title: String(next?.title || ""),
+    };
+    persistShrunkPlay(nextPip);
+    setPip(nextPip);
+  }
+
+  function rememberPlayhead(sample) {
+    const current = pipRef.current;
+    if (!current?.ratingKey) return;
+    const offsetMs = Math.max(0, Math.floor(Number(sample?.offsetMs) || 0));
+    const title = String(sample?.title || current.title || "");
+    const now = Date.now();
+    if (!sample?.flush && now - playheadAtRef.current < 2000) return;
+    playheadAtRef.current = now;
+    persistShrunkPlay({ ratingKey: current.ratingKey, offsetMs, title });
   }
 
   function expand() {
@@ -68,12 +92,14 @@ export default function InAppPlaybackHost() {
   }
 
   function closePip() {
+    clearShrunkPlay();
     setLeaving(false);
     setPip(null);
     setDragPos(null);
   }
 
   function afterPopout() {
+    clearShrunkPlay();
     setLeaving(false);
     setPip(null);
     setDragPos(null);
@@ -141,6 +167,8 @@ export default function InAppPlaybackHost() {
         key={mountKey}
         ratingKey={decision.ratingKey}
         floated={floated}
+        continueAtMs={pip?.restored ? pip.offsetMs ?? 0 : null}
+        onPlayhead={floated ? rememberPlayhead : null}
         onShrink={shrink}
         onAfterPopout={afterPopout}
       />

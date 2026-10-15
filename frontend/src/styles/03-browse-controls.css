@@ -48,11 +48,12 @@
   font-weight: 600;
   letter-spacing: 0.04em;
 }
-.media-browse-controls select {
-  min-height: 34px;
-}
-.media-browse-sort-direction {
-  min-height: 34px;
+.media-browse-controls select,
+.media-browse-sort-direction,
+.media-browse-view-toggle button,
+.media-browse-secondary-actions button,
+.explore-section-bulk button {
+  min-height: var(--tap-min);
 }
 .media-browse-filters-toggle {
   display: none;
@@ -167,7 +168,7 @@
 }
 .media-browse-filter-menu > summary {
   cursor: pointer;
-  min-height: 34px;
+  min-height: var(--tap-min);
   padding: 7px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -233,8 +234,11 @@
   color: var(--muted);
   font-size: var(--text-sm);
 }
+.media-browse-pagination-nav button {
+  min-height: var(--tap-min);
+}
 .media-browse-pagination-size select {
-  min-height: 34px;
+  min-height: var(--tap-min);
   padding: var(--space-1) var(--space-2);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
@@ -271,36 +275,57 @@
   max-width: min(280px, calc(100vw - 16px));
   max-height: calc(100vh - 16px);
   overflow-y: auto;
+  color: var(--text);
+  background: var(--surface-raised, var(--surface));
 }
-.poster-action-popover a,
-.poster-action-popover button {
+/* One row contract for links and buttons — same type, weight, and 44px target.
+   Beats the global `button` accent style and the default underlined `a`. */
+.poster-action-popover .poster-action-item {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
   width: 100%;
-  text-align: left;
+  min-height: var(--tap-min);
+  margin: 0;
+  padding: 0 12px;
   border: 0;
+  border-radius: 8px;
   background: transparent;
-  color: inherit;
-  padding: 7px 8px;
-  border-radius: 6px;
-  font: inherit;
+  box-shadow: none;
+  color: var(--text);
+  text-align: left;
+  text-decoration: none;
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  font-style: normal;
+  line-height: 1.3;
+  letter-spacing: normal;
+  cursor: pointer;
+  filter: none;
 }
-.poster-action-popover a:hover,
-.poster-action-popover button:hover {
-  background: var(--surface-2);
+.poster-action-popover .poster-action-item:hover,
+.poster-action-popover .poster-action-item:focus-visible {
+  background: var(--accent-soft);
+  color: var(--text);
+  text-decoration: none;
+  filter: none;
 }
 .poster-action-submenu,
 .poster-action-owner {
   display: grid;
   gap: 2px;
-  padding: 5px 0;
+  padding: 4px 0 0;
   border-top: 1px solid var(--border);
 }
-.poster-action-submenu span,
-.poster-action-owner > span,
-.poster-action-status {
-  font-size: 11px;
-  color: var(--muted);
-  padding: 2px 8px;
+.poster-action-label {
   margin: 0;
+  padding: 8px 12px 2px;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.3;
 }
 .media-list-scroll {
   position: relative;
