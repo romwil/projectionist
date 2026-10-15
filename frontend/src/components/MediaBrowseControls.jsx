@@ -128,6 +128,30 @@ export default function MediaBrowseControls({
               </div>
             </details>
           ) : null}
+          {filterOptions.languages?.length ? (
+            <details className="media-browse-filter-menu" data-testid="media-browse-language-filter">
+              <summary>Language{state.language ? " (1)" : ""}</summary>
+              <div className="media-browse-popover">
+                <span>Language</span>
+                {filterOptions.languages.map((language) => {
+                  const code = typeof language === "string" ? language : language.code;
+                  const label = typeof language === "string" ? language : language.label || code;
+                  return (
+                    <label key={code}>
+                      <input
+                        type="checkbox"
+                        checked={state.language === code}
+                        onChange={() =>
+                          update({ language: state.language === code ? "" : code })
+                        }
+                      />
+                      {label}
+                    </label>
+                  );
+                })}
+              </div>
+            </details>
+          ) : null}
         </div>
         <div className="media-browse-control-group media-browse-sort-controls">
           <label>

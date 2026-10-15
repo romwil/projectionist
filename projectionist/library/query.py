@@ -1233,7 +1233,7 @@ def _aggregate_language(
     return {
         "group_by": "language",
         "total_matched": sum(counts.values()),
-        "buckets": buckets[:50],
+        "buckets": buckets,
     }
 
 

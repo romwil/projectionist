@@ -25,10 +25,13 @@ import {
 } from "../lib/bulkLibraryDelete.js";
 import { formatLanguageName } from "../lib/languageNames.js";
 import {
-  LANGUAGE_MEDIA_TABS,
+  ALL_LANGUAGES_HEADING,
+  ALL_LANGUAGES_LEDE,
+  LANGUAGE_LANDING_LEDE,
   NO_MATCHING_TITLES,
   buildLanguageLandingSearch,
   languageLandingRequest,
+  languageOptionsFromBuckets,
 } from "../lib/languageLanding.js";
 import {
   MEDIA_BROWSE_PAGE_SIZES,
@@ -74,14 +77,15 @@ export default function LanguageLandingPage() {
   const [deleteError, setDeleteError] = useState("");
   const [removalSummary, setRemovalSummary] = useState(null);
   const [columns, setColumns] = useState(null);
-  const [filterOptions, setFilterOptions] = useState({ years: [], genres: [] });
+  const [filterOptions, setFilterOptions] = useState({ years: [], genres: [], languages: [] });
 
   useEffect(() => {
     let cancelled = false;
     Promise.all([
       getLibraryAggregate("year").catch(() => ({ buckets: [] })),
       getLibraryAggregate("genre").catch(() => ({ buckets: [] })),
-    ]).then(([yearAgg, genreAgg]) => {
+      getLibraryAggregate("language").catch(() => ({ buckets: [] })),
+    ]).then(([yearAgg, genreAgg, languageAgg]) => {
       if (cancelled) return;
       setFilterOptions({
         years: [
@@ -90,6 +94,7 @@ export default function LanguageLandingPage() {
         genres: [
           ...new Set((genreAgg?.buckets || []).map((bucket) => bucket.genre).filter(Boolean)),
         ].sort(),
+        languages: languageOptionsFromBuckets(languageAgg?.buckets),
       });
     });
     return () => {
@@ -154,9 +159,6 @@ export default function LanguageLandingPage() {
     [view.items, selected],
   );
 
-  const activeTab =
-    LANGUAGE_MEDIA_TABS.find((tab) => tab.mediaType && tab.mediaType === browse.media_type)?.id ||
-    "all";
   const isAll = isAllPageSize(browse.limit);
   const pageSize = isAll ? view.returned || 1 : Number(browse.limit) || 48;
   const page = isAll ? 1 : Math.floor((view.offset || 0) / pageSize) + 1;
@@ -169,8 +171,8 @@ export default function LanguageLandingPage() {
     : `Page ${page} of ${pageCount}${view.total ? ` · ${view.total} titles` : ""}`;
   const showToolbarPagination = Boolean(view.total || view.returned);
   const sortOptions = browse.media_type === "show" ? MEDIA_BROWSE_TV_SORTS : MEDIA_BROWSE_SORTS;
-  const heading =
-    request.kind === "query" ? formatLanguageName(request.code) : "Language";
+  const heading = request.code ? formatLanguageName(request.code) : ALL_LANGUAGES_HEADING;
+  const lede = request.code ? LANGUAGE_LANDING_LEDE : ALL_LANGUAGES_LEDE;
 
   function updateSearch(updates) {
     setSearchParams(buildLanguageLandingSearch(rawLanguage, browse, updates), { replace: true });
@@ -330,33 +332,14 @@ export default function LanguageLandingPage() {
       <section className="explore-section-hero" data-testid="language-landing-hero">
         <p className="person-eyebrow">Explore</p>
         <h1 data-testid="language-landing-title">{heading}</h1>
-        <p className="explore-section-subtitle">Library titles in this original language</p>
+        <p className="explore-section-subtitle" data-testid="language-landing-lede">
+          {lede}
+        </p>
       </section>
-
-      <div
-        className="explore-media-tabs"
-        role="tablist"
-        aria-label="Media type"
-        data-testid="language-landing-media-tabs"
-      >
-        {LANGUAGE_MEDIA_TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={activeTab === tab.id}
-            className={`explore-media-tab${activeTab === tab.id ? " is-active" : ""}`}
-            data-testid={`language-landing-tab-${tab.id}`}
-            onClick={() => updateSearch({ media_type: tab.mediaType, offset: 0 })}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
 
       <div className="explore-section-toolbar" data-testid="language-landing-toolbar">
         <MediaBrowseControls
-          state={browse}
+          state={{ ...browse, language: request.code || "" }}
           onChange={updateSearch}
           columns={columns}
           onColumnsChange={setColumns}
