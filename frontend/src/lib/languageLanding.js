@@ -60,9 +60,11 @@ export function languageLandingRequest(rawCode, browse = {}) {
 
 /** Keep the language facet on every toolbar update. Relative path only. */
 export function buildLanguageLandingSearch(rawCode, browse, updates = {}) {
-  const params = buildMediaBrowseParams(browse, updates);
-  const code = languageLandingCode(rawCode);
-  params.set("language", code);
+  const nextCode = Object.hasOwn(updates, "language") ? updates.language : rawCode;
+  const code = languageLandingCode(nextCode);
+  const params = buildMediaBrowseParams(browse, { ...updates, language: code || "" });
+  if (code) params.set("language", code);
+  else params.delete("language");
   return params;
 }
 
