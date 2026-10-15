@@ -109,6 +109,7 @@ describe("bulkLibraryDelete typed confirm", () => {
     const dashboard = readFileSync(join(libDir, "pages", "DashboardPage.jsx"), "utf8");
     const browse = readFileSync(join(libDir, "pages", "LibraryBrowsePage.jsx"), "utf8");
     const explore = readFileSync(join(libDir, "pages", "ExploreSectionPage.jsx"), "utf8");
+    const languageLanding = readFileSync(join(libDir, "pages", "LanguageLandingPage.jsx"), "utf8");
     const watchlist = readFileSync(join(libDir, "pages", "WatchlistPage.jsx"), "utf8");
 
     assert.match(BULK_DELETE_EMPTY_SELECTION_MESSAGE, /No titles selected/);
@@ -118,7 +119,7 @@ describe("bulkLibraryDelete typed confirm", () => {
     assert.match(dashboard, /if \(purgeDialogOpen \|\| actionLoading\) return;/);
     assert.match(dashboard, /disabled=\{purgeDialogOpen \|\| actionLoading\}/);
     assert.match(dashboard, /setPurgeError\(BULK_DELETE_EMPTY_SELECTION_MESSAGE\)/);
-    for (const page of [browse, explore, watchlist]) {
+    for (const page of [browse, explore, watchlist, languageLanding]) {
       assert.match(page, /if \(deleteOpen \|\| deleting\) return;/);
       assert.match(page, /setDeleteError\(BULK_DELETE_EMPTY_SELECTION_MESSAGE\)/);
       assert.match(page, /titles=\{deletePartition\.titles\}/);

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   formatLanguageName,
+  isKnownLanguageCode,
   languageFacetKey,
   normalizeLanguageCode,
 } from "./languageNames.js";
@@ -16,6 +17,10 @@ describe("languageNames", () => {
 
   it("falls back to uppercase code when unknown", () => {
     assert.equal(formatLanguageName("xx"), "XX");
+    assert.equal(isKnownLanguageCode("en"), true);
+    assert.equal(isKnownLanguageCode("EN"), true);
+    assert.equal(isKnownLanguageCode("xx"), false);
+    assert.equal(isKnownLanguageCode(""), false);
   });
 
   it("normalizes region subtags for facet keys", () => {
