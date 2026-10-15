@@ -534,9 +534,9 @@ export default function TitleDetailContent({
             {languageMeta ? (
               <div className="title-meta-tile">
                 <span className="title-meta-tile-label">Language</span>
-                <MetaLink to={languageMeta.path} testId="title-language-link">
+                <span className={META_STATIC_CLASS} data-testid="title-language-label">
                   {languageMeta.label}
-                </MetaLink>
+                </span>
               </div>
             ) : null}
             {countryValues.length ? (
