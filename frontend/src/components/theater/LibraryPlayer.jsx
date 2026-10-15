@@ -43,6 +43,8 @@ import {
   skipDeltaForZone,
   centerPlayHoldAfterOsdHide,
   playerClosePlacement,
+  dispatchLibraryPlayKey,
+  isPlayShortcutBlockedTarget,
   theaterKeyAction,
   toggleTheaterFullscreen,
 } from "../../lib/theaterPlayer.js";
@@ -128,6 +130,8 @@ export default function LibraryPlayer({
   /** Collapses rapid scrub-end session restarts into one seek. */
   const seekRestartTimerRef = useRef(null);
   const seekRestartPendingMsRef = useRef(null);
+  /** Latest skip/toggle so the window key listener does not close over a stale render. */
+  const playKeyRef = useRef({ skipBy: () => {}, togglePlayback: () => {} });
   const [session, setSession] = useState(null);
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
@@ -507,6 +511,17 @@ export default function LibraryPlayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- visibility controller
   }, [stopSession]);
 
+  useEffect(() => {
+    function onWindowKey(event) {
+      // Focused player (and its scrubber) already receive keydown on the stage.
+      const root = document.querySelector("[data-testid='library-player']");
+      if (root?.contains(event.target)) return;
+      dispatchLibraryPlayKey(event, playKeyRef.current);
+    }
+    window.addEventListener("keydown", onWindowKey);
+    return () => window.removeEventListener("keydown", onWindowKey);
+  }, []);
+
   async function sendProgress(state, video) {
     const current = sessionRef.current;
     if (!current?.session_id) return;
@@ -685,6 +700,8 @@ export default function LibraryPlayer({
     }
   }
 
+  playKeyRef.current = { skipBy, togglePlayback };
+
   async function enterPiP() {
     const video = videoRef.current;
     if (!video?.requestPictureInPicture) return;
@@ -745,18 +762,11 @@ export default function LibraryPlayer({
   }
 
   function handleKeyDown(event, { toggleFullscreen: fs, video }) {
+    if (isPlayShortcutBlockedTarget(event.target)) return;
+    if (dispatchLibraryPlayKey(event, { skipBy, togglePlayback })) return;
     const action = theaterKeyAction(event.key);
     if (!action) return;
-    if (action === "toggle") {
-      event.preventDefault();
-      togglePlayback();
-    } else if (action === "skipBack") {
-      event.preventDefault();
-      skipBy(-SKIP_SECONDS);
-    } else if (action === "skipForward") {
-      event.preventDefault();
-      skipBy(SKIP_SECONDS);
-    } else if (action === "mute") {
+    if (action === "mute") {
       event.preventDefault();
       if (video) video.muted = !video.muted;
     } else if (action === "captions") {
