@@ -4,6 +4,10 @@ import test from "node:test";
 import {
   POP_OUT_OF_WINDOW_LABEL,
   SHRINK_ONTO_PAGE_LABEL,
+  clearShrunkPlay,
+  initialPipState,
+  persistShrunkPlay,
+  playShrunkAfterReload,
   playbackMountKey,
   playerBarActions,
   resolvePlaybackHost,
@@ -79,4 +83,73 @@ test("shrink return path rejects watch and off-site targets", () => {
     shrinkOntoPage({ paused: true }, { ratingKey: "a", returnTo: "/search?q=heat" }).returnTo,
     "/search?q=heat",
   );
+});
+
+function memoryStorage(initial = {}) {
+  const data = { ...initial };
+  return {
+    getItem(key) {
+      return Object.prototype.hasOwnProperty.call(data, key) ? data[key] : null;
+    },
+    setItem(key, value) {
+      data[key] = String(value);
+    },
+    removeItem(key) {
+      delete data[key];
+    },
+  };
+}
+
+test("stored shrunk session restores the overlay after a fresh page, and Close does not", async () => {
+  const storage = memoryStorage();
+  const saved = persistShrunkPlay(
+    {
+      ratingKey: "plex-949",
+      offsetMs: 125000,
+      title: "Hope",
+      stream_url: "https://plex.example/stream",
+      token: "plex-token",
+    },
+    storage,
+  );
+  assert.deepEqual(Object.keys(saved).sort(), ["offsetMs", "ratingKey", "shrunk", "title"]);
+  assert.equal(saved.stream_url, undefined);
+  assert.equal(saved.token, undefined);
+
+  const pip = initialPipState("/explore", storage);
+  assert.equal(pip.restored, true);
+  assert.equal(pip.ratingKey, "plex-949");
+  assert.equal(pip.offsetMs, 125000);
+  assert.equal(pip.title, "Hope");
+  const host = resolvePlaybackHost({
+    pathname: "/explore",
+    session: { presentation: "pip", ratingKey: pip.ratingKey },
+  });
+  assert.equal(host.active, true);
+  assert.equal(host.presentation, "pip");
+  assert.equal(playbackMountKey(host), "library-play:plex-949");
+
+  clearShrunkPlay(storage);
+  assert.equal(initialPipState("/explore", storage), null);
+  const afterClose = resolvePlaybackHost({ pathname: "/explore", session: null });
+  assert.equal(afterClose.active, false);
+  assert.equal(playbackMountKey(afterClose), "");
+
+  let plays = 0;
+  const video = {
+    muted: false,
+    async play() {
+      plays += 1;
+      if (plays === 1 && this.muted === false) {
+        const err = new Error("NotAllowedError");
+        err.name = "NotAllowedError";
+        throw err;
+      }
+    },
+  };
+  const result = await playShrunkAfterReload(video);
+  assert.equal(result.playing, true);
+  assert.equal(result.muted, true);
+  assert.equal(result.unmuteOnTap, true);
+  assert.equal(video.muted, true);
 });
