@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+## [1.37.42] — 2026-10-15
+
+One patch on 1.37.41: language links open a title wall, poster menus share one style, Movies/TV/search/tag bars stay open, Play seeks once and keeps the last frame, a shrunk player survives reload, and arrow keys and space drive skip and pause.
+
+### Highlights
+- **A language opens a wall of titles.** Tap the language on a title and you get All, Movies, and TV for that language, with the same browse bar as the rest of the library.
+- **Mark as watched uses the episode on the card.** The poster menu is one style. Marking it watched tells Plex, and that title leaves Continue Watching.
+- **The browse bar stays open.** Movies, TV, search, and tag walls show sort and filters immediately, including on iPad Safari.
+- **Play seeks once and comes back where you left it.** Letting go of the scrubber jumps once and holds the last frame until the new spot is a real picture. A shrunk player returns after a reload or an iPad lock, at the same title and spot. Left and Right skip 15 seconds; Space pauses.
+
+### Changed
+- **Title language is a results page.** The link is a relative `/explore?language=` path. All, Movies, and TV and the shared browse bar stay on that page.
+- **Poster actions share one row style.** Mark as watched scrobbles the card’s play key (the episode when the poster is an episode) and drops that Continue Watching card.
+- **Library result grids keep the browse bar open.** Movies, TV, search, and tags render MediaBrowseControls in the open bar. It is not tucked into a closed disclosure.
+
+### Fixed
+- **Scrubbing Play seeks once on release.** The last frame stays up, the playlist reloads with a seek query because the playlist URL does not change, and video shows only after a real frame. iPad Safari still does not capture the pointer on the slider.
+- **A shrunk player survives a reload.** The small in-app player returns on the same title at the same offset after a document reload, including an iPad lock. Close does not restore it. The saved record is the rating key and playhead only.
+- **Left, Right, and Space drive Play.** Left and Right skip 15 seconds. Space pauses. A, S, and D still work. Keys do nothing while you are typing in a field.
+
+### Verification
+- Backend `pytest tests/` — 2577 passed, 6 skipped, coverage 77.08% (floor 74%), run with `PROJECTIONIST_SKIP_DOTENV=1` and `PYTHONPATH` on `release/1.37.42`. Three cases that import the SPA failed only while `frontend/dist` was still building; they passed on rerun.
+- Frontend unit 1001/1001.
+- Lint 0 errors (150 warnings); `npm run build` OK.
+
 ## [1.37.41] — 2026-10-14
 
 One patch on 1.37.40: guide cards stay clickable, Explore destinations sit beside search, Live TV status treats a missing tuner list as empty, and the icon bar, chat, and guide paint while slower reads catch up. Continue Watching after play is unchanged.

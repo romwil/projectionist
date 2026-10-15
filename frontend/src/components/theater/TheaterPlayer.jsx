@@ -78,7 +78,6 @@ export default function TheaterPlayer({
   const onOsdVisibilityRef = useRef(onOsdVisibility);
   const onPictureReadyRef = useRef(onPictureReady);
   const pictureHoldRef = useRef(pictureHold);
-  pictureHoldRef.current = pictureHold;
   const resumeMutedIfBlockedRef = useRef(resumeMutedIfBlocked);
   const onAutoplayResultRef = useRef(onAutoplayResult);
   const bottomTapRef = useRef(null);
@@ -89,6 +88,7 @@ export default function TheaterPlayer({
     onBumpOsdRef.current = onBumpOsd;
     onOsdVisibilityRef.current = onOsdVisibility;
     onPictureReadyRef.current = onPictureReady;
+    pictureHoldRef.current = pictureHold;
     resumeMutedIfBlockedRef.current = resumeMutedIfBlocked;
     onAutoplayResultRef.current = onAutoplayResult;
   });
