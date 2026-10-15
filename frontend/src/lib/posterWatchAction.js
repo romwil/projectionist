@@ -16,17 +16,31 @@ import { canMarkTitleWatched } from "./titleDetailExtras.js";
 import { watchProgressState } from "./watchProgress.js";
 
 /**
+ * Rating key the card actually represents for scrobble.
+ * Continue Watching show cards keep the show on `rating_key` and the
+ * in-progress episode on `play_rating_key`. Marking the parent show watched
+ * does not complete that episode.
+ * @param {Record<string, unknown> | null | undefined} item
+ */
+export function posterWatchRatingKey(item) {
+  return String(item?.play_rating_key || item?.rating_key || item?.plex_rating_key || "").trim();
+}
+
+/**
  * @param {Record<string, unknown> | null | undefined} item
  * @param {{ role?: string, multiUserEnabled?: boolean }} [gate]
- * @returns {{ watched: boolean, nextWatched: boolean, label: string } | null}
+ * @returns {{ watched: boolean, nextWatched: boolean, label: string, ratingKey: string } | null}
  *   `null` when the action must be hidden for this card/viewer.
  */
 export function posterWatchAction(item, { role, multiUserEnabled } = {}) {
   if (!canMarkTitleWatched(item, { role, multiUserEnabled })) return null;
+  const ratingKey = posterWatchRatingKey(item);
+  if (!ratingKey) return null;
   const watched = watchProgressState(item) === "watched";
   return {
     watched,
     nextWatched: !watched,
+    ratingKey,
     label: watched ? "Mark as unwatched" : "Mark as watched",
   };
 }
@@ -34,6 +48,50 @@ export function posterWatchAction(item, { role, multiUserEnabled } = {}) {
 /** Optimistic local patch reflecting a completed scrobble/unscrobble. */
 export function watchedStatePatch(nextWatched) {
   return nextWatched
-    ? { watch_state: "watched", view_count: 1 }
-    : { watch_state: "unwatched", view_count: 0, view_offset_ms: 0 };
+    ? { watch_state: "watched", view_count: 1, view_offset_ms: 0, resume_label: "" }
+    : { watch_state: "unwatched", view_count: 0, view_offset_ms: 0, resume_label: "" };
+}
+
+/**
+ * Progress note for the Explore Continue Watching cache (1.37.40 hub merge).
+ * A finished scrobble drops the in-progress row without waiting on Plex on-deck.
+ */
+export function continueWatchingProgressForWatched(item, ratingKey, watched) {
+  const episodeKey = String(item?.play_rating_key || "").trim();
+  const parentKey = String(item?.rating_key || item?.plex_rating_key || "").trim();
+  const isEpisode = Boolean(
+    (episodeKey && parentKey && episodeKey !== parentKey)
+    || item?.continue_season != null
+    || item?.continue_episode != null,
+  );
+  return {
+    ratingKey: String(ratingKey),
+    viewOffsetMs: 0,
+    durationMs: Number(item?.duration_ms) || 0,
+    finished: Boolean(watched),
+    title: item?.title || "",
+    mediaType: isEpisode ? "episode" : (item?.media_type || "movie"),
+    season: item?.continue_season ?? null,
+    episode: item?.continue_episode ?? null,
+    episodeTitle: item?.continue_episode_title || "",
+    posterUrl: item?.poster_url || "",
+    year: item?.year ?? null,
+  };
+}
+
+/**
+ * Mark the card's rating key watched/unwatched, then update local Continue Watching.
+ * @param {Record<string, unknown>} item
+ * @param {{ watched: boolean, setWatched: (key: string, watched: boolean) => Promise<unknown>, rememberProgress?: (note: object) => void }} deps
+ */
+export async function commitPosterWatched(item, { watched, setWatched, rememberProgress }) {
+  const ratingKey = posterWatchRatingKey(item);
+  if (!ratingKey) {
+    throw new Error("This title has no rating key to mark watched.");
+  }
+  const result = await setWatched(ratingKey, watched);
+  const patch = watchedStatePatch(watched);
+  if (result && typeof result.view_count === "number") patch.view_count = result.view_count;
+  rememberProgress?.(continueWatchingProgressForWatched(item, ratingKey, watched));
+  return { ratingKey, result, patch };
 }

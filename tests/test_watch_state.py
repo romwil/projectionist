@@ -56,6 +56,44 @@ class WatchStateStoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             set_library_item_watched(self.db, "missing", watched=True)
 
+    def test_mark_episode_watched_updates_episode_not_show(self) -> None:
+        show_id = self.db.upsert_library_item(
+            {
+                "rating_key": "show-tz",
+                "media_type": "show",
+                "title": "The Twilight Zone",
+                "view_count": 0,
+            }
+        )
+        self.db.upsert_library_episode(
+            {
+                "show_item_id": show_id,
+                "rating_key": "ep-s1e2",
+                "season_number": 1,
+                "episode_number": 2,
+                "title": "Where Is Everybody?",
+                "view_count": 0,
+                "view_offset_ms": 180_000,
+            }
+        )
+        watched = set_library_item_watched(self.db, "ep-s1e2", watched=True)
+        self.assertEqual(watched["media_type"], "episode")
+        self.assertEqual(watched["rating_key"], "ep-s1e2")
+        self.assertEqual(watched["view_count"], 1)
+        with self.db.connect() as conn:
+            episode = conn.execute(
+                "SELECT view_count, view_offset_ms FROM library_episodes WHERE rating_key = ?",
+                ("ep-s1e2",),
+            ).fetchone()
+            show = conn.execute(
+                "SELECT view_count, unwatched_episode_count FROM library_items WHERE rating_key = ?",
+                ("show-tz",),
+            ).fetchone()
+        self.assertEqual(int(episode["view_count"]), 1)
+        self.assertEqual(int(episode["view_offset_ms"] or 0), 0)
+        self.assertEqual(int(show["view_count"] or 0), 0)
+        self.assertEqual(int(show["unwatched_episode_count"] or 0), 0)
+
     def test_watched_timestamp_types_match_db_conventions(self) -> None:
         set_library_item_watched(self.db, "movie-1", watched=True)
         with self.db.connect() as conn:
@@ -238,6 +276,67 @@ class WatchStateApiTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+
+    def test_api_mark_episode_scrobbles_episode_and_clears_continue_watching(self) -> None:
+        from projectionist.library.continue_watching_progress import (
+            apply_known_continue_watching,
+            clear_continue_watching_progress_notes,
+        )
+
+        clear_continue_watching_progress_notes()
+        show_id = self.db.upsert_library_item(
+            {
+                "rating_key": "show-tz",
+                "media_type": "show",
+                "title": "The Twilight Zone",
+                "year": 1959,
+                "summary": "Test",
+                "genres": [],
+                "cast": [],
+                "directors": [],
+                "keywords": [],
+                "view_count": 0,
+            }
+        )
+        self.db.upsert_library_episode(
+            {
+                "show_item_id": show_id,
+                "rating_key": "ep-s1e2",
+                "season_number": 1,
+                "episode_number": 2,
+                "title": "Where Is Everybody?",
+                "view_count": 0,
+                "view_offset_ms": 180_000,
+            }
+        )
+        with patch.object(PlexClient, "scrobble") as mock_scrobble:
+            resp = self.client.post(
+                "/api/library/items/watched",
+                json={"rating_key": "ep-s1e2", "watched": True},
+            )
+        self.assertEqual(resp.status_code, 200, resp.text)
+        body = resp.json()
+        self.assertEqual(body["media_type"], "episode")
+        self.assertEqual(body["view_count"], 1)
+        self.assertTrue(body["plex_synced"])
+        mock_scrobble.assert_called_once_with("ep-s1e2")
+        rail = apply_known_continue_watching(
+            self.db,
+            {
+                "items": [
+                    {
+                        "title": "The Twilight Zone",
+                        "rating_key": "show-tz",
+                        "play_rating_key": "ep-s1e2",
+                        "view_offset_ms": 180_000,
+                        "resume_label": "S1E2 · 18% watched",
+                    }
+                ],
+                "total": 1,
+            },
+        )
+        self.assertEqual(rail["items"], [])
+        clear_continue_watching_progress_notes()
 
     def test_api_mark_watched_updates_db_and_calls_plex(self) -> None:
         with patch.object(PlexClient, "scrobble") as mock_scrobble:

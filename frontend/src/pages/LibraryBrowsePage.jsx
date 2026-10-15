@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import {
   addWatchlistPin,
@@ -45,10 +45,7 @@ import {
   shouldShowBeyondAffordance,
 } from "../lib/beyondSearch.js";
 import { ROUTES } from "../lib/browseLinks.js";
-import {
-  SEARCH_OPTIONAL_SUMMARY,
-  searchOptionalGroup,
-} from "../lib/optionalPageExtras.js";
+import { SEARCH_OPTIONAL_SUMMARY, searchOptionalGroup } from "../lib/optionalPageExtras.js";
 import {
   BULK_DELETE_EMPTY_SELECTION_MESSAGE,
   formatBulkLibraryDeleteResultMessage,
@@ -96,6 +93,14 @@ export default function LibraryBrowsePage({ embedded = false }) {
     location.pathname === ROUTES.search || location.pathname.startsWith(`${ROUTES.search}/`);
 
   const browse = useMemo(() => parseMediaBrowse(searchParams), [searchParams]);
+  const initialMediaType = String(searchParams.get("media_type") || "")
+    .trim()
+    .toLowerCase();
+  const [landingTypeScope, setLandingTypeScope] = useState(
+    initialMediaType === "movie" || initialMediaType === "show" ? initialMediaType : "",
+  );
+  const ignoreScopeReset = useRef(false);
+  const seenMediaType = useRef(searchParams.get("media_type") || "");
   const q = (searchParams.get("q") || "").trim();
   const isAll = isAllPageSize(browse.limit);
 
@@ -132,6 +137,18 @@ export default function LibraryBrowsePage({ embedded = false }) {
   // Progressive search: draft drives the input; debounced commit writes URL `q`
   // so the existing queryLibrary + Beyond path filters as the user types.
   const [draftQ, setDraftQ] = useState(q);
+
+  useEffect(() => {
+    const next = searchParams.get("media_type") || "";
+    if (next === seenMediaType.current) return;
+    seenMediaType.current = next;
+    if (ignoreScopeReset.current) {
+      ignoreScopeReset.current = false;
+      return;
+    }
+    const mediaType = next.trim().toLowerCase();
+    setLandingTypeScope(mediaType === "movie" || mediaType === "show" ? mediaType : "");
+  }, [searchParams]);
 
   useEffect(() => {
     setDraftQ(q);
@@ -171,9 +188,12 @@ export default function LibraryBrowsePage({ embedded = false }) {
 
   useEffect(() => {
     let cancelled = false;
+    const mediaType =
+      browse.media_type === "movie" || browse.media_type === "show" ? browse.media_type : "";
+    const aggregateOptions = mediaType ? { mediaType } : {};
     Promise.all([
-      getLibraryAggregate("year").catch(() => ({ buckets: [] })),
-      getLibraryAggregate("genre").catch(() => ({ buckets: [] })),
+      getLibraryAggregate("year", aggregateOptions).catch(() => ({ buckets: [] })),
+      getLibraryAggregate("genre", aggregateOptions).catch(() => ({ buckets: [] })),
     ]).then(([yearAgg, genreAgg]) => {
       if (cancelled) return;
       setFilterOptions({
@@ -188,7 +208,7 @@ export default function LibraryBrowsePage({ embedded = false }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [browse.media_type]);
 
   useEffect(() => {
     let cancelled = false;
@@ -276,6 +296,7 @@ export default function LibraryBrowsePage({ embedded = false }) {
   }
 
   function updateBrowse(patch) {
+    if (Object.hasOwn(patch, "media_type")) ignoreScopeReset.current = true;
     const params = buildMediaBrowseParams(browse, patch);
     setBrowseSearchQueryParam(params, q);
     setSearchParams(params, { replace: true });
@@ -573,42 +594,40 @@ export default function LibraryBrowsePage({ embedded = false }) {
   const pageBody = (
     <>
       {!embedded ? (
-      <section
-        className={`explore-section-hero${isSearchRoute ? " search-page-hero" : ""}`}
-        data-testid="library-browse-hero"
-      >
-        {isSearchRoute ? null : (
-          <>
-            <p className="person-eyebrow">Explore</p>
-            <h1 data-testid="library-browse-title">{browseHeading(browse.media_type, q)}</h1>
-            <p className="explore-section-subtitle">{browseSubtitle(browse.media_type, q)}</p>
-          </>
-        )}
-        <LibrarySearchBar
-          className="library-browse-search"
-          testId="library-browse-search"
-          placeholder="Search titles…"
-          value={draftQ}
-          onChange={(event) => setDraftQ(event.target.value)}
-          onSubmit={handleSearchSubmit}
-        />
-      </section>
+        <section
+          className={`explore-section-hero${isSearchRoute ? " search-page-hero" : ""}`}
+          data-testid="library-browse-hero"
+        >
+          {isSearchRoute ? null : (
+            <>
+              <p className="person-eyebrow">Explore</p>
+              <h1 data-testid="library-browse-title">{browseHeading(browse.media_type, q)}</h1>
+              <p className="explore-section-subtitle">{browseSubtitle(browse.media_type, q)}</p>
+            </>
+          )}
+          <LibrarySearchBar
+            className="library-browse-search"
+            testId="library-browse-search"
+            placeholder="Search titles…"
+            value={draftQ}
+            onChange={(event) => setDraftQ(event.target.value)}
+            onSubmit={handleSearchSubmit}
+          />
+        </section>
       ) : null}
 
       <div className="explore-section-toolbar" data-testid="library-browse-toolbar">
-        <details className="media-browse-filters" data-testid="library-browse-filters">
-          <summary className="media-browse-filters-toggle">Filters &amp; sort</summary>
-          <MediaBrowseControls
-            state={browse}
-            onChange={updateBrowse}
-            columns={columns}
-            onColumnsChange={setColumns}
-            columnScope="browse"
-            filterOptions={filterOptions}
-            pageSizes={MEDIA_BROWSE_PAGE_SIZES}
-            sortOptions={browse.media_type === "show" ? MEDIA_BROWSE_TV_SORTS : undefined}
-          />
-        </details>
+        <MediaBrowseControls
+          state={browse}
+          onChange={updateBrowse}
+          columns={columns}
+          onColumnsChange={setColumns}
+          columnScope="browse"
+          filterOptions={filterOptions}
+          pageSizes={MEDIA_BROWSE_PAGE_SIZES}
+          sortOptions={browse.media_type === "show" ? MEDIA_BROWSE_TV_SORTS : undefined}
+          mediaTypeScope={landingTypeScope}
+        />
         <div className="explore-section-toolbar-row">
           <div className="explore-section-toolbar-primary">
             <p className="explore-section-pagination-summary" data-testid="library-browse-summary">

@@ -20,7 +20,7 @@ import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { chatFromRailHref } from "../lib/backNav.js";
 import { ROUTES, decadeYearRange, exploreSectionPath, libraryBrowsePath } from "../lib/browseLinks.js";
-import { formatLanguageName } from "../lib/languageNames.js";
+import LanguageLandingPage from "./LanguageLandingPage.jsx";
 import { buildPulseStats, normalizeFeed } from "../lib/exploreFeeds.js";
 import {
   CONTINUE_WATCHING_PROGRESS_EVENT,
@@ -315,7 +315,7 @@ function useFeed(loader, deps = []) {
   return state;
 }
 
-export default function ExplorePage() {
+function ExploreHubPage() {
   const { authReady, isOwner, multiUserEnabled, isYouth } = useAuthGate();
   const ownerChrome = authReady && isOwner;
   const navigate = useNavigate();
@@ -367,9 +367,8 @@ export default function ExplorePage() {
     const cast = String(searchParams.get("cast") || "").trim();
     const directors = String(searchParams.get("directors") || "").trim();
     const decade = String(searchParams.get("decade") || "").trim();
-    const language = String(searchParams.get("language") || "").trim();
     const country = String(searchParams.get("country") || "").trim();
-    if (!genre && !cast && !directors && !decade && !language && !country) {
+    if (!genre && !cast && !directors && !decade && !country) {
       setFacetWall({ loading: false, items: [], note: null, error: "", label: "" });
       return undefined;
     }
@@ -391,9 +390,6 @@ export default function ExplorePage() {
         filters.year_to = range.year_to;
       }
       label = `Decade: ${decade}`;
-    } else if (language) {
-      filters.original_language = language.toLowerCase();
-      label = `Language: ${formatLanguageName(language)}`;
     } else if (country) {
       filters.countries = [country];
       label = `Country: ${country}`;
@@ -929,4 +925,10 @@ export default function ExplorePage() {
       />
     </AppShell>
   );
+}
+
+export default function ExplorePage() {
+  const [searchParams] = useSearchParams();
+  if (searchParams.has("language")) return <LanguageLandingPage />;
+  return <ExploreHubPage />;
 }

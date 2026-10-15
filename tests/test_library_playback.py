@@ -25,6 +25,7 @@ from projectionist.library.playback import (
     reset_playback_sessions,
     resolve_playable_item,
     rewrite_plex_hls_playlist,
+    seek_playback,
     should_resume_from_offset,
     should_send_progress,
     start_playback,
@@ -340,6 +341,64 @@ class PlaybackStartMockTests(unittest.TestCase):
         self.assertTrue(second["throttled"])
         row = self.db.library_item_by_rating_key("movie-1")
         self.assertEqual(int(row["view_offset_ms"] or 0), 5000)
+
+    def test_seek_restarts_hls_at_offset_without_changing_playlist_url(self) -> None:
+        settings = Settings(plex_url="http://plex.test:32400", plex_token="server-token")
+        user = type("U", (), {"id": "owner", "is_youth": False})()
+        calls = []
+
+        def fake_fetch(url, **_kwargs):
+            calls.append(url)
+            return b"#EXTM3U\n", "application/vnd.apple.mpegurl", 200, url
+
+        started = start_playback(
+            self.db,
+            settings,
+            rating_key="movie-1",
+            user=user,
+            fetch=fake_fetch,
+        )
+        from projectionist.library.playback import get_session
+
+        session = get_session(started["session_id"], user_id="owner")
+        calls.clear()
+        payload = seek_playback(session, 15_000, fetch=fake_fetch, db=self.db)
+        self.assertEqual(payload["stream_url"], started["stream_url"])
+        self.assertEqual(payload["view_offset_ms"], 15_000)
+        self.assertTrue(any("/transcode/universal/stop" in url for url in calls))
+        self.assertTrue(any("start.m3u8" in url and "offset=15&" in url for url in calls))
+
+    def test_failed_seek_restores_the_previous_playable_offset(self) -> None:
+        settings = Settings(plex_url="http://plex.test:32400", plex_token="server-token")
+        user = type("U", (), {"id": "owner", "is_youth": False})()
+
+        def ok_fetch(url, **_kwargs):
+            return b"#EXTM3U\n", "application/vnd.apple.mpegurl", 200, url
+
+        started = start_playback(
+            self.db,
+            settings,
+            rating_key="movie-1",
+            user=user,
+            fetch=ok_fetch,
+        )
+        from projectionist.library.playback import get_session
+
+        session = get_session(started["session_id"], user_id="owner")
+        calls = []
+
+        def failing_fetch(url, **_kwargs):
+            calls.append(url)
+            if "start.m3u8" in url and "offset=30&" in url:
+                raise PlaybackError("transcode failed")
+            return b"#EXTM3U\n", "application/vnd.apple.mpegurl", 200, url
+
+        with self.assertRaises(PlaybackError):
+            seek_playback(session, 30_000, fetch=failing_fetch, db=self.db)
+        self.assertEqual(session.view_offset_ms, 0)
+        self.assertTrue(any("start.m3u8" in url and "offset=0&" in url for url in calls))
+        row = self.db.library_item_by_rating_key("movie-1")
+        self.assertEqual(int(row["view_offset_ms"] or 0), 0)
 
 
 class PlaybackApiTests(unittest.TestCase):

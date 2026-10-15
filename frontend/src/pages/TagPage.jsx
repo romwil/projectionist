@@ -1,21 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { queryLibrary } from "../api/client";
+import { getLibraryAggregate, queryLibrary } from "../api/client";
 import BackLink from "../components/BackLink";
 import LibraryMediaCard from "../components/LibraryMediaCard";
 import MediaBrowseControls from "../components/MediaBrowseControls";
+import MediaBrowsePagination from "../components/MediaBrowsePagination";
 import MediaBrowseResults from "../components/MediaBrowseResults";
 import RecommendModal from "../components/RecommendModal";
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/browseLinks.js";
+import { TAG_SORT_OPTIONS, normalizeTagSort, parseAndTags } from "../lib/tagSearch.js";
 import {
-  TAG_SORT_OPTIONS,
-  normalizeTagSort,
-  parseAndTags,
-} from "../lib/tagSearch.js";
-import {
+  MEDIA_BROWSE_PAGE_SIZES,
   buildMediaBrowseParams,
+  isAllPageSize,
   parseMediaBrowse,
   queryFiltersFromBrowse,
   resolvePageSizeLimit,
@@ -33,19 +32,58 @@ export default function TagPage() {
   const sort = normalizeTagSort(searchParams.get("sort"));
   const browse = useMemo(() => parseMediaBrowse(searchParams, { sort }), [searchParams, sort]);
   const [columns, setColumns] = useState(null);
+  const [filterOptions, setFilterOptions] = useState({ years: [], genres: [] });
   const { multiUserEnabled } = useAuthGate();
   const [recommendItem, setRecommendItem] = useState(null);
-  const [state, setState] = useState({ loading: true, items: [], error: "" });
+  const [state, setState] = useState({
+    loading: true,
+    items: [],
+    total: 0,
+    hasMore: false,
+    error: "",
+  });
 
   useEffect(() => {
     let cancelled = false;
-    setState({ loading: true, items: [], error: "" });
-    queryLibrary({ ...queryFiltersFromBrowse(browse), keywords, limit: resolvePageSizeLimit(browse.limit), sort: browse.sort })
+    const mediaType =
+      browse.media_type === "movie" || browse.media_type === "show" ? browse.media_type : "";
+    const aggregateOptions = mediaType ? { mediaType } : {};
+    Promise.all([
+      getLibraryAggregate("year", aggregateOptions).catch(() => ({ buckets: [] })),
+      getLibraryAggregate("genre", aggregateOptions).catch(() => ({ buckets: [] })),
+    ]).then(([yearAgg, genreAgg]) => {
+      if (cancelled) return;
+      setFilterOptions({
+        years: [
+          ...new Set((yearAgg?.buckets || []).map((bucket) => bucket.year).filter(Boolean)),
+        ].sort((a, b) => b - a),
+        genres: [
+          ...new Set((genreAgg?.buckets || []).map((bucket) => bucket.genre).filter(Boolean)),
+        ].sort(),
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [browse.media_type]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setState((prev) => ({ ...prev, loading: true, error: "" }));
+    queryLibrary({
+      ...queryFiltersFromBrowse(browse),
+      keywords,
+      limit: resolvePageSizeLimit(browse.limit),
+      sort: browse.sort,
+    })
       .then((data) => {
         if (cancelled) return;
+        const items = Array.isArray(data?.items) ? data.items : [];
         setState({
           loading: false,
-          items: Array.isArray(data?.items) ? data.items : [],
+          items,
+          total: Number(data?.total_matched ?? items.length) || 0,
+          hasMore: Boolean(data?.has_more),
           error: "",
         });
       })
@@ -54,6 +92,8 @@ export default function TagPage() {
         setState({
           loading: false,
           items: [],
+          total: 0,
+          hasMore: false,
           error: err.message || "Could not load titles for this tag.",
         });
       });
@@ -71,10 +111,18 @@ export default function TagPage() {
   }
 
   function handleBrowseChange(patch) {
-    const params = buildMediaBrowseParams(browse, patch);
+    const params = buildMediaBrowseParams({ ...browse, keywords }, patch);
     params.set("keywords", keywords.join(","));
     setSearchParams(params, { replace: true });
   }
+
+  const isAll = isAllPageSize(browse.limit);
+  const pageSize = isAll ? state.items.length || 1 : Number(browse.limit) || 48;
+  const page = isAll ? 1 : Math.floor((Number(browse.offset) || 0) / pageSize) + 1;
+  const pageCount = isAll ? 1 : Math.max(1, Math.ceil((state.total || 0) / pageSize));
+  const paginationSummary = isAll
+    ? `${state.total} title${state.total === 1 ? "" : "s"}`
+    : `Page ${page} of ${pageCount}${state.total ? ` · ${state.total} titles` : ""}`;
 
   return (
     <AppShell
@@ -92,9 +140,23 @@ export default function TagPage() {
         <p className="person-eyebrow">Tag{keywords.length > 1 ? "s (AND)" : ""}</p>
         <h1 data-testid="tag-name">{keywords.join(" + ") || "Untitled tag"}</h1>
         <p className="explore-section-subtitle">
-          Library titles tagged with {keywords.length > 1 ? "all of these keywords" : "this keyword"}
+          Library titles tagged with{" "}
+          {keywords.length > 1 ? "all of these keywords" : "this keyword"}
         </p>
-        <MediaBrowseControls state={browse} onChange={handleBrowseChange} columns={columns} onColumnsChange={setColumns} columnScope="tag" />
+        <div className="explore-section-toolbar" data-testid="tag-browse-toolbar">
+          <MediaBrowseControls
+            state={{ ...browse, keywords }}
+            onChange={handleBrowseChange}
+            columns={columns}
+            onColumnsChange={setColumns}
+            columnScope="tag"
+            filterOptions={filterOptions}
+            pageSizes={MEDIA_BROWSE_PAGE_SIZES}
+          />
+          <p className="explore-section-pagination-summary" data-testid="tag-browse-summary">
+            {paginationSummary}
+          </p>
+        </div>
       </section>
 
       <section className="tag-results" data-testid="tag-results">
@@ -105,7 +167,33 @@ export default function TagPage() {
             No library titles match {keywords.length > 1 ? "these tags" : "this tag"} yet.
           </p>
         ) : null}
-        {state.items.length ? <MediaBrowseResults state={browse} items={state.items} columns={columns || undefined} cardProps={{ testId: "tag-title-card", showRecommend: multiUserEnabled, onRecommend: multiUserEnabled ? setRecommendItem : undefined }} /> : null}
+        {state.items.length ? (
+          <MediaBrowseResults
+            state={browse}
+            items={state.items}
+            columns={columns || undefined}
+            cardProps={{
+              testId: "tag-title-card",
+              showRecommend: multiUserEnabled,
+              onRecommend: multiUserEnabled ? setRecommendItem : undefined,
+            }}
+          />
+        ) : null}
+        {!state.loading && !state.error && state.total ? (
+          <MediaBrowsePagination
+            summary={paginationSummary}
+            pageSize={isAll ? "all" : pageSize}
+            pageSizes={MEDIA_BROWSE_PAGE_SIZES}
+            onPageSizeChange={(limit) => handleBrowseChange({ limit, offset: 0 })}
+            hasPrevious={!isAll && Number(browse.offset) > 0}
+            hasNext={!isAll && state.hasMore}
+            onPrevious={() =>
+              handleBrowseChange({ offset: Math.max(0, (Number(browse.offset) || 0) - pageSize) })
+            }
+            onNext={() => handleBrowseChange({ offset: (Number(browse.offset) || 0) + pageSize })}
+            testIdPrefix="tag-browse"
+          />
+        ) : null}
       </section>
 
       <RecommendModal
