@@ -1,3 +1,5 @@
+import { normalizeLanguageCode } from "./languageNames.js";
+
 export const MEDIA_BROWSE_COLUMNS = [
   { id: "title", label: "Title" },
   { id: "year", label: "Year" },
@@ -38,6 +40,7 @@ export const DEFAULT_MEDIA_BROWSE = {
   media_type: "",
   watch_state: "",
   year: "",
+  language: "",
   genres: [],
   keywords: [],
 };
@@ -138,6 +141,7 @@ export function parseMediaBrowse(searchParams, defaults = {}) {
     media_type: get("media_type") || merged.media_type || "",
     watch_state: get("watch_state") || merged.watch_state || "",
     year: get("year") || merged.year || "",
+    language: normalizeLanguageCode(get("language") || merged.language || ""),
     genres: stringList(get("genres") || merged.genres),
     keywords: stringList(get("keywords") || merged.keywords),
   };
@@ -155,6 +159,11 @@ export function buildMediaBrowseParams(state, updates = {}) {
     if (key === "sort" && value === defaults.sort) continue;
     if (key === "sort_dir" && value === defaults.sort_dir) continue;
     if (key === "limit" && value === DEFAULT_MEDIA_BROWSE.limit) continue;
+    if (key === "language") {
+      const code = normalizeLanguageCode(value);
+      if (code) params.set(key, code);
+      continue;
+    }
     const normalized = Array.isArray(value) ? stringList(value).join(",") : String(value || "").trim();
     if (normalized) params.set(key, normalized);
   }
@@ -172,6 +181,10 @@ export function queryFiltersFromBrowse(state, extra = {}) {
   if (state?.watch_state === "unwatched") filters.unwatched_only = true;
   if (state?.watch_state === "watched") filters.min_view_count = 1;
   if (state?.watch_state === "in_progress") filters.in_progress_only = true;
+  // Keep an explicit code even when it is unknown. Dropping it would return
+  // the unfiltered library.
+  const language = normalizeLanguageCode(state?.language);
+  if (language && !filters.original_language) filters.original_language = language;
   return filters;
 }
 
@@ -212,6 +225,11 @@ export function saveMediaBrowseColumns(scope, columns) {
 
 export function libraryExportHref(state, columns = []) {
   const params = buildMediaBrowseParams(state);
+  const language = normalizeLanguageCode(state?.language);
+  if (language) {
+    params.delete("language");
+    params.set("original_language", language);
+  }
   if (columns.length) params.set("columns", columns.join(","));
   return `/api/library/export.csv?${params.toString()}`;
 }

@@ -7,7 +7,9 @@ import {
   MEDIA_BROWSE_TV_SORTS,
   browseTypeChoices,
   parseMediaBrowse,
+  queryFiltersFromBrowse,
 } from "./mediaBrowse.js";
+import { browseLanguageOptions } from "./languageNames.js";
 
 const page = readFileSync(new URL("../pages/LibraryBrowsePage.jsx", import.meta.url), "utf8");
 const controls = readFileSync(
@@ -70,6 +72,39 @@ test("movies and TV results render the shared browse controls outside a closed d
   assert.match(controls, /Export CSV/);
   assert.match(controls, /Per page/);
   assert.match(controls, /browseTypeChoices\(mediaTypeScope\)/);
+});
+
+test("movies browse bar filters the library query by original language", () => {
+  const yearAt = controls.indexOf("<span>Year</span>");
+  const languageAt = controls.indexOf('data-testid="media-browse-language"');
+  const genresAt = controls.indexOf("<span>Genres</span>");
+  assert.ok(yearAt > 0 && languageAt > yearAt && genresAt > languageAt);
+  assert.match(controls, /<span>Language<\/span>/);
+  assert.match(controls, /<option value="">Any<\/option>/);
+  assert.match(page, /getLibraryAggregate\("language", aggregateOptions\)/);
+  assert.match(page, /queryLibrary\(filters\)/);
+
+  const state = parseMediaBrowse(
+    new URLSearchParams("media_type=movie&language=en&year=2016&watch_state=unwatched&genres=Drama"),
+  );
+  const filters = queryFiltersFromBrowse(state);
+  assert.equal(filters.media_type, "movie");
+  assert.equal(filters.original_language, "en");
+  assert.equal(filters.language, undefined);
+  assert.equal(filters.year, "2016");
+  assert.equal(filters.unwatched_only, true);
+  assert.deepEqual(filters.genres, ["Drama"]);
+
+  const unknown = queryFiltersFromBrowse(
+    parseMediaBrowse(new URLSearchParams("media_type=movie&language=notalang")),
+  );
+  assert.equal(unknown.media_type, "movie");
+  assert.equal(unknown.original_language, "notalang");
+
+  assert.deepEqual(browseLanguageOptions(["en", "ja", "en-US", "notalang", ""]), [
+    { code: "en", label: "English" },
+    { code: "ja", label: "Japanese" },
+  ]);
 });
 
 test("recently added keeps the same open toolbar and its All / Movies / TV tabs", () => {
