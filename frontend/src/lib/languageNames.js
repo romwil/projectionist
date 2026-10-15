@@ -147,3 +147,8 @@ export function formatLanguageName(code) {
 export function languageFacetKey(code) {
   return normalizeLanguageCode(code);
 }
+
+export function isKnownLanguageCode(code) {
+  const key = normalizeLanguageCode(code);
+  return Boolean(key && Object.prototype.hasOwnProperty.call(LANGUAGE_NAMES, key));
+}
