@@ -3,6 +3,14 @@
 export const SHRINK_ONTO_PAGE_LABEL = "Shrink onto the page";
 export const POP_OUT_OF_WINDOW_LABEL = "Pop out of the window";
 
+/**
+ * Survives a document reload (manual refresh, or iPad Safari reload after unlock).
+ * Rating key + playhead only. Never a stream URL or Plex token.
+ */
+export const SHRUNK_PLAY_STORAGE_KEY = "projectionist.shrunkPlay";
+
+const SHRUNK_TITLE_MAX = 180;
+
 function pathOnly(pathname) {
   return String(pathname || "").split("#")[0].split("?")[0];
 }
@@ -33,18 +41,116 @@ export function normalizeReturnTo(returnTo) {
   return raw;
 }
 
+function playheadMs(video) {
+  const seconds = Number(video?.currentTime);
+  if (!Number.isFinite(seconds)) return 0;
+  return Math.max(0, Math.round(seconds * 1000));
+}
+
 /**
  * Shrink keeps the current playhead. It must not call pause.
- * @returns {{ presentation: "pip", ratingKey: string, returnTo: string, paused: boolean }}
+ * @returns {{ presentation: "pip", ratingKey: string, returnTo: string, paused: boolean, offsetMs: number, title: string }}
  */
-export function shrinkOntoPage(video, { ratingKey = "", returnTo = "" } = {}) {
+export function shrinkOntoPage(video, { ratingKey = "", returnTo = "", title = "" } = {}) {
   const key = String(ratingKey || "").trim();
   return {
     presentation: "pip",
     ratingKey: key,
     returnTo: normalizeReturnTo(returnTo),
     paused: Boolean(video?.paused),
+    offsetMs: playheadMs(video),
+    title: String(title || "").slice(0, SHRUNK_TITLE_MAX),
   };
+}
+
+/** Whitelist persisted fields. Drops stream URLs, tokens, and anything else. */
+export function shrunkPlayRecord({ ratingKey = "", offsetMs = 0, title = "" } = {}) {
+  const key = String(ratingKey || "").trim();
+  if (!key) return null;
+  const offset = Math.floor(Number(offsetMs) || 0);
+  return {
+    shrunk: true,
+    ratingKey: key,
+    offsetMs: offset > 0 ? offset : 0,
+    title: String(title || "").slice(0, SHRUNK_TITLE_MAX),
+  };
+}
+
+export function persistShrunkPlay(record, storage = globalThis.localStorage) {
+  const safe = shrunkPlayRecord(record);
+  if (!safe || !storage?.setItem) return null;
+  try {
+    storage.setItem(SHRUNK_PLAY_STORAGE_KEY, JSON.stringify(safe));
+  } catch {
+    return null;
+  }
+  return safe;
+}
+
+export function readShrunkPlay(storage = globalThis.localStorage) {
+  if (!storage?.getItem) return null;
+  try {
+    const raw = storage.getItem(SHRUNK_PLAY_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.shrunk !== true) return null;
+    return shrunkPlayRecord(parsed);
+  } catch {
+    return null;
+  }
+}
+
+export function clearShrunkPlay(storage = globalThis.localStorage) {
+  try {
+    storage?.removeItem?.(SHRUNK_PLAY_STORAGE_KEY);
+  } catch {
+    // storage unavailable
+  }
+}
+
+/**
+ * Fresh document state. The overlay returns only when a shrunk flag was stored.
+ * A full watch page or the browser pop-out does not resurrect it.
+ */
+export function initialPipState(pathname = "", storage = globalThis.localStorage) {
+  if (isLibraryPopoutPath(pathname)) return null;
+  if (watchRatingKeyFromPath(pathname)) {
+    clearShrunkPlay(storage);
+    return null;
+  }
+  const stored = readShrunkPlay(storage);
+  if (!stored) return null;
+  return {
+    ratingKey: stored.ratingKey,
+    returnTo: "/chat",
+    offsetMs: stored.offsetMs,
+    title: stored.title,
+    restored: true,
+  };
+}
+
+/**
+ * iPad Safari often rejects unmuted autoplay after a reload.
+ * Try sound first. If that is blocked, start the picture muted and let the
+ * next tap of the small player unmute. Never reloads the document.
+ */
+export async function playShrunkAfterReload(video) {
+  if (!video?.play) return { playing: false, muted: false, unmuteOnTap: false };
+  try {
+    video.muted = false;
+    delete video.dataset?.shrunkHoldMute;
+    await video.play();
+    return { playing: true, muted: false, unmuteOnTap: false };
+  } catch {
+    try {
+      video.muted = true;
+      if (video.dataset) video.dataset.shrunkHoldMute = "1";
+      await video.play();
+      return { playing: true, muted: true, unmuteOnTap: true };
+    } catch {
+      return { playing: false, muted: Boolean(video.muted), unmuteOnTap: true };
+    }
+  }
 }
 
 /**

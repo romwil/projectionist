@@ -108,6 +108,9 @@ export default function LibraryPlayer({
   className = "",
   onShrink,
   onAfterPopout,
+  /** Set only when a reload restored a shrunk session. Null during a live shrink. */
+  continueAtMs = null,
+  onPlayhead,
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -128,6 +131,15 @@ export default function LibraryPlayer({
   /** Collapses rapid scrub-end session restarts into one seek. */
   const seekRestartTimerRef = useRef(null);
   const seekRestartPendingMsRef = useRef(null);
+  const floatedRef = useRef(floated);
+  const onPlayheadRef = useRef(onPlayhead);
+  const continueAtMsRef = useRef(continueAtMs);
+  const pendingUnmuteRef = useRef(false);
+  useEffect(() => {
+    floatedRef.current = floated;
+    onPlayheadRef.current = onPlayhead;
+    continueAtMsRef.current = continueAtMs;
+  });
   const [session, setSession] = useState(null);
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
@@ -387,22 +399,52 @@ export default function LibraryPlayer({
           return;
         }
         sessionRef.current = payload;
-        setSession(payload);
         setDurationMs(Number(payload.duration_ms) || 0);
-        setNowMs(Number(payload.view_offset_ms) || 0);
-        if (shouldResumeFromOffset(payload.view_offset_ms) && payload.can_resume) {
-          setResumeOpen(true);
-          setStatus("paused");
-        } else {
-          if (shouldPlayMoviePreroll(payload) && !Number(payload.view_offset_ms)) {
+        const continueAt = continueAtMsRef.current;
+        const restoring = continueAt != null && Number.isFinite(Number(continueAt));
+        if (restoring) {
+          const target = Math.max(0, Math.floor(Number(continueAt) || 0));
+          let active = payload;
+          const plexOffset = Number(payload.view_offset_ms) || 0;
+          if (payload.session_id && Math.abs(plexOffset - target) > 1500) {
             try {
-              const bumper = normalizePrerollPayload(await fetchNextPreroll("movie"));
-              if (!cancelled) setPreroll(bumper);
+              active = await seekLibraryPlayback(payload.session_id, target);
             } catch {
-              if (!cancelled) setPreroll(null);
+              // Play already started a session; keep that position if the seek fails.
             }
           }
+          if (cancelled) {
+            try {
+              await stopLibraryPlayback(active?.session_id || payload.session_id, {});
+            } catch {
+              // ignore
+            }
+            return;
+          }
+          sessionRef.current = active;
+          setSession(active);
+          setDurationMs(Number(active?.duration_ms) || Number(payload.duration_ms) || 0);
+          setNowMs(target);
+          setResumeOpen(false);
+          setPreroll(null);
           setStatus("ready");
+        } else {
+          setSession(payload);
+          setNowMs(Number(payload.view_offset_ms) || 0);
+          if (shouldResumeFromOffset(payload.view_offset_ms) && payload.can_resume) {
+            setResumeOpen(true);
+            setStatus("paused");
+          } else {
+            if (shouldPlayMoviePreroll(payload) && !Number(payload.view_offset_ms)) {
+              try {
+                const bumper = normalizePrerollPayload(await fetchNextPreroll("movie"));
+                if (!cancelled) setPreroll(bumper);
+              } catch {
+                if (!cancelled) setPreroll(null);
+              }
+            }
+            setStatus("ready");
+          }
         }
       } catch (err) {
         if (!cancelled) {
@@ -494,6 +536,14 @@ export default function LibraryPlayer({
 
     function onPageHide() {
       // Real navigation / close — free the transcoder. Do not disarm on mere hide.
+      if (floatedRef.current) {
+        const video = videoRef.current;
+        onPlayheadRef.current?.({
+          offsetMs: Math.round((video?.currentTime || 0) * 1000),
+          title: displayTitle(sessionRef.current),
+          flush: true,
+        });
+      }
       stopSession();
     }
 
@@ -712,7 +762,11 @@ export default function LibraryPlayer({
 
   function shrinkOntoPageClick() {
     const from = typeof location.state?.from === "string" ? location.state.from : "";
-    const next = shrinkOntoPage(videoRef.current, { ratingKey: key, returnTo: from });
+    const next = shrinkOntoPage(videoRef.current, {
+      ratingKey: key,
+      returnTo: from,
+      title: displayTitle(sessionRef.current),
+    });
     onShrink?.(next);
   }
 
@@ -732,6 +786,14 @@ export default function LibraryPlayer({
   }
 
   function handleStageActivate(_event, _zone) {
+    const video = videoRef.current;
+    if (pendingUnmuteRef.current && video?.muted) {
+      delete video.dataset?.shrunkHoldMute;
+      video.muted = false;
+      pendingUnmuteRef.current = false;
+      if (video.paused) video.play?.().catch(() => {});
+      return;
+    }
     togglePlayback();
   }
 
@@ -1053,6 +1115,10 @@ export default function LibraryPlayer({
         onStatus={handlePlayerStatus}
         onVideoRef={handleVideoRef}
         onHlsRef={handleHlsRef}
+        resumeMutedIfBlocked={continueAtMs != null}
+        onAutoplayResult={(result) => {
+          pendingUnmuteRef.current = Boolean(result?.unmuteOnTap && result?.playing);
+        }}
         onTimeUpdate={(video) => {
           if (!scrubbingRef.current) {
             setNowMs(Math.round((video.currentTime || 0) * 1000));
@@ -1061,6 +1127,12 @@ export default function LibraryPlayer({
           const ranges = bufferedRanges(video);
           setBufferedEndS(ranges[ranges.length - 1]?.end || 0);
           if (!scrubbingRef.current) sendProgress("playing", video);
+          if (floatedRef.current) {
+            onPlayheadRef.current?.({
+              offsetMs: Math.round((video.currentTime || 0) * 1000),
+              title: displayTitle(sessionRef.current),
+            });
+          }
         }}
         onEnded={() => {
           setEnded(true);
