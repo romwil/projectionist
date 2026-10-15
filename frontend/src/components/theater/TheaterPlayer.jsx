@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Hls from "hls.js";
 import TuningInterstitial from "./TuningInterstitial.jsx";
 import {
@@ -12,6 +12,7 @@ import {
   theaterHlsConfig,
   toggleTheaterFullscreen,
 } from "../../lib/theaterPlayer.js";
+import { playShrunkAfterReload } from "../../lib/inAppPip.js";
 
 /**
  * Shared theater shell: auth’d HLS video, idle OSD, fullscreen, stall copy.
@@ -48,6 +49,9 @@ export default function TheaterPlayer({
   onHlsRef,
   onOsdVisibility,
   pausedFrameClean = false,
+  /** After a shrunk-play reload, start muted if unmuted autoplay is blocked. */
+  resumeMutedIfBlocked = false,
+  onAutoplayResult,
   children,
 }) {
   const rootRef = useRef(null);
@@ -64,6 +68,8 @@ export default function TheaterPlayer({
   const onVideoRefRef = useRef(onVideoRef);
   const onBumpOsdRef = useRef(onBumpOsd);
   const onOsdVisibilityRef = useRef(onOsdVisibility);
+  const resumeMutedIfBlockedRef = useRef(resumeMutedIfBlocked);
+  const onAutoplayResultRef = useRef(onAutoplayResult);
   const bottomTapRef = useRef(null);
   useEffect(() => {
     onStatusRef.current = onStatus;
@@ -71,6 +77,8 @@ export default function TheaterPlayer({
     onVideoRefRef.current = onVideoRef;
     onBumpOsdRef.current = onBumpOsd;
     onOsdVisibilityRef.current = onOsdVisibility;
+    resumeMutedIfBlockedRef.current = resumeMutedIfBlocked;
+    onAutoplayResultRef.current = onAutoplayResult;
   });
   const [internalOsd, setInternalOsd] = useState(true);
   const osdVisible = osdVisibleProp ?? internalOsd;
@@ -106,6 +114,11 @@ export default function TheaterPlayer({
     return () => onVideoRefRef.current?.(null);
   }, []);
 
+  useLayoutEffect(() => {
+    const video = videoRef.current;
+    if (video?.dataset?.shrunkHoldMute === "1") video.muted = true;
+  });
+
   useEffect(() => {
     bumpOsd();
     return () => {
@@ -121,6 +134,18 @@ export default function TheaterPlayer({
     let destroyed = false;
     onStatusRef.current?.("loading");
 
+    const startAutoplay = () => {
+      if (resumeMutedIfBlockedRef.current) {
+        playShrunkAfterReload(video).then((result) => {
+          if (destroyed) return;
+          onAutoplayResultRef.current?.(result);
+          onStatusRef.current?.(result.playing ? "playing" : "paused");
+        });
+        return;
+      }
+      video.play?.().then(() => onStatusRef.current?.("playing")).catch(() => onStatusRef.current?.("paused"));
+    };
+
     const attachHls = () => {
       if (destroyed || !video || !Hls.isSupported()) return;
       if (hlsRef.current) {
@@ -135,7 +160,7 @@ export default function TheaterPlayer({
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         if (destroyed) return;
         onStatusRef.current?.("ready");
-        video.play?.().then(() => onStatusRef.current?.("playing")).catch(() => onStatusRef.current?.("paused"));
+        startAutoplay();
       });
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (destroyed || !data?.fatal) return;
@@ -158,7 +183,7 @@ export default function TheaterPlayer({
       video.addEventListener("loadedmetadata", () => {
         if (!destroyed) {
           onStatusRef.current?.("ready");
-          video.play?.().then(() => onStatusRef.current?.("playing")).catch(() => onStatusRef.current?.("paused"));
+          startAutoplay();
         }
       });
     } else {
