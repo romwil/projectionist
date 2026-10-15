@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   MEDIA_BROWSE_COLUMNS,
   MEDIA_BROWSE_SORTS,
+  browseTypeChoices,
   libraryExportHref,
   loadMediaBrowseColumns,
   saveMediaBrowseColumns,
@@ -21,6 +22,7 @@ export default function MediaBrowseControls({
   exportItems,
   onExport,
   pageSizes,
+  mediaTypeScope = "",
 }) {
   const [columnOpen, setColumnOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -53,6 +55,11 @@ export default function MediaBrowseControls({
     });
   }
 
+  const typeChoices = browseTypeChoices(mediaTypeScope);
+  const typeValue = typeChoices.some((choice) => choice.value === (state.media_type || ""))
+    ? state.media_type || ""
+    : typeChoices[0].value;
+
   return (
     <div className="media-browse-controls" data-testid="media-browse-controls">
       <div className="media-browse-controls-main">
@@ -61,12 +68,18 @@ export default function MediaBrowseControls({
           <label>
             <span>Type</span>
             <select
-              value={state.media_type || ""}
-              onChange={(event) => update({ media_type: event.target.value })}
+              value={typeValue}
+              data-testid="media-browse-type"
+              onChange={(event) => {
+                if (mediaTypeScope) return;
+                update({ media_type: event.target.value });
+              }}
             >
-              <option value="">All</option>
-              <option value="movie">Movies</option>
-              <option value="show">TV shows</option>
+              {typeChoices.map((choice) => (
+                <option key={choice.value || "all"} value={choice.value}>
+                  {choice.label}
+                </option>
+              ))}
             </select>
           </label>
           <label>
