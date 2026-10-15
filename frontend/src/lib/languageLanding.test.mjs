@@ -5,12 +5,13 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { languageBrowseMeta } from "./titleDetailMeta.js";
 import {
-  LANGUAGE_MEDIA_TABS,
-  NO_MATCHING_TITLES,
-  UNKNOWN_LANGUAGE,
+  ALL_LANGUAGES_HEADING,
+  ALL_LANGUAGES_LEDE,
+  LANGUAGE_LANDING_LEDE,
   buildLanguageLandingSearch,
   languageLandingPath,
   languageLandingRequest,
+  languageOptionsFromBuckets,
 } from "./languageLanding.js";
 
 const srcDir = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -57,16 +58,33 @@ test("language landing queries original language for All, Movies, and TV", () =>
   assert.equal(year.filters.unwatched_only, true);
 });
 
-test("empty language does not query and unknown codes do not drop the filter", () => {
+test("blank language lists every title and a code never widens the query", () => {
   const empty = languageLandingRequest("  ", baseBrowse);
-  assert.equal(empty.kind, "empty");
-  assert.equal(empty.message, NO_MATCHING_TITLES);
-  assert.equal("filters" in empty, false);
+  assert.equal(empty.kind, "query");
+  assert.equal(empty.code, "");
+  assert.equal(empty.filters.original_language, undefined);
 
   const unknown = languageLandingRequest("notalang", baseBrowse);
-  assert.equal(unknown.kind, "unknown");
-  assert.equal(unknown.message, UNKNOWN_LANGUAGE);
-  assert.equal("filters" in unknown, false);
+  assert.equal(unknown.kind, "query");
+  assert.equal(unknown.filters.original_language, "notalang");
+});
+
+test("language options are the catalog buckets, not a world list", () => {
+  const options = languageOptionsFromBuckets([
+    { value: "fr", count: 2 },
+    { value: "en", count: 4 },
+    { value: "EN", count: 1 },
+    { value: "", count: 8 },
+    { value: "unknown", count: 3 },
+  ]);
+  assert.deepEqual(
+    options.map((option) => option.code),
+    ["en", "fr"],
+  );
+  assert.equal(options.some((option) => option.code === "ja"), false);
+  assert.equal(options.find((option) => option.code === "en")?.label, "English");
+  assert.equal(options.find((option) => option.code === "en")?.count, 5);
+  assert.equal(options.find((option) => option.code === "fr")?.label, "French");
 });
 
 test("toolbar updates keep the relative language param", () => {
@@ -74,26 +92,39 @@ test("toolbar updates keep the relative language param", () => {
   assert.equal(params.get("language"), "en");
   assert.equal(params.get("media_type"), "movie");
   assert.equal(params.toString().includes("automat.vip"), false);
-  assert.deepEqual(
-    LANGUAGE_MEDIA_TABS.map((tab) => tab.label),
-    ["All", "Movies", "TV"],
-  );
-  assert.equal(LANGUAGE_MEDIA_TABS[0].mediaType, "");
+
+  const cleared = buildLanguageLandingSearch("en", baseBrowse, { language: "" });
+  assert.equal(cleared.get("language"), "");
+  assert.equal(cleared.has("language"), true);
 });
 
 test("language landing renders shared browse controls instead of the Explore hub", () => {
   const landing = readFileSync(join(srcDir, "pages", "LanguageLandingPage.jsx"), "utf8");
   const explore = readFileSync(join(srcDir, "pages", "ExplorePage.jsx"), "utf8");
   const detail = readFileSync(join(srcDir, "components", "TitleDetailContent.jsx"), "utf8");
+  const controls = readFileSync(join(srcDir, "components", "MediaBrowseControls.jsx"), "utf8");
 
   assert.match(landing, /MediaBrowseControls/);
   assert.match(landing, /MediaBrowsePagination/);
-  assert.match(landing, /LANGUAGE_MEDIA_TABS/);
+  assert.doesNotMatch(landing, /LANGUAGE_MEDIA_TABS/);
+  assert.doesNotMatch(landing, /language-landing-media-tabs/);
+  assert.doesNotMatch(landing, /explore-media-tab/);
+  assert.match(landing, /getLibraryAggregate\("language"\)/);
+  assert.match(landing, /languageOptionsFromBuckets/);
+  assert.equal(ALL_LANGUAGES_HEADING, "All languages");
+  assert.equal(LANGUAGE_LANDING_LEDE, "Library titles in this original language");
+  assert.equal(ALL_LANGUAGES_LEDE, "Library titles in every original language");
+  assert.match(landing, /ALL_LANGUAGES_HEADING/);
+  assert.match(landing, /LANGUAGE_LANDING_LEDE/);
+  assert.match(landing, /ALL_LANGUAGES_LEDE/);
   assert.match(landing, /Select page/);
   assert.match(landing, /Pin \$\{selected\.size \|\| ""\} to watchlist/);
   assert.match(landing, />\s*Delete\s*</);
-  assert.match(landing, /request\.kind !== "query"/);
   assert.match(landing, /queryLibrary\(request\.filters\)/);
+  const genresAt = controls.indexOf("<summary>Genres");
+  const languageAt = controls.indexOf("<summary>Language");
+  assert.ok(genresAt > 0 && languageAt > genresAt, "Language sits beside Genres");
+  assert.match(controls, /data-testid="media-browse-language-filter"/);
   assert.match(explore, /searchParams\.has\("language"\)/);
   assert.match(explore, /<LanguageLandingPage \/>/);
   assert.doesNotMatch(explore, /original_language/);
