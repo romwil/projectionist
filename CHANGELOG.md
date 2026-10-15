@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [1.37.43] — 2026-10-15
+
+One patch on 1.37.42: Movies, TV, search, tags, and the language page can filter the current wall by original language.
+
+### Highlights
+- **Filter a wall by language.** Movies, TV, search, and tag results have a Language control beside Year and Genres. It starts at Any. Pick English, Japanese, or another language in the library and the posters narrow to that original language.
+- **Movies stay movies.** Choosing a language does not switch the wall to TV, and TV stays TV. The language name on a title still opens the language page.
+
+### Added
+- **Browse bars share a Language select.** The control lists readable names for languages that exist in the current library scope. The query keeps `media_type` and sends the choice as the library’s original-language filter.
+
+### Verification
+- Backend `pytest tests/` — 2577 passed, 6 skipped, coverage 77.08% (floor 74%), run with `PROJECTIONIST_SKIP_DOTENV=1` and `PYTHONPATH` on `fix/browse-language-filter` (parent `899ae25`, 1.37.42).
+- Frontend unit 1002/1002.
+- Lint 0 errors (150 warnings); `npm run build` OK.
+
 ## [1.37.42] — 2026-10-15
 
 One patch on 1.37.41: language links open a title wall, poster menus share one style, Movies/TV/search/tag bars stay open, Play seeks once and keeps the last frame, a shrunk player survives reload, and arrow keys and space drive skip and pause.
