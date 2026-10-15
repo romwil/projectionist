@@ -375,7 +375,8 @@ export function capturePlaybackHoldFrame(video) {
 
 /**
  * Map a keydown key to a theater action.
- * Includes YouTube-style J/K/L and Minecraft-style A/S/D aliases (case-insensitive).
+ * Includes YouTube-style J/K/L, Minecraft-style A/S/D (case-insensitive),
+ * ArrowLeft/ArrowRight (±SKIP_SECONDS, same as the −15/+15 buttons), and Space.
  * @returns {"toggle"|"skipBack"|"skipForward"|"mute"|"captions"|"fullscreen"|"escape"|null}
  */
 export function theaterKeyAction(key) {
@@ -388,6 +389,34 @@ export function theaterKeyAction(key) {
   if (k === "f" || k === "F") return "fullscreen";
   if (k === "Escape") return "escape";
   return null;
+}
+
+/** True while the user is typing — library Play shortcuts must not steal those keys. */
+export function isPlayShortcutBlockedTarget(target) {
+  if (!target || typeof target !== "object") return false;
+  const tag = String(target.tagName || "").toLowerCase();
+  if (tag === "input" || tag === "textarea" || tag === "select") return true;
+  return Boolean(target.isContentEditable);
+}
+
+/**
+ * Library `/watch` transport keys. Calls the same `skipBy` as the on-screen
+ * −15/+15 buttons (ArrowLeft/A/J back, ArrowRight/D/L forward) and the same
+ * toggle as the Pause/Play button (Space/S/K). Does not touch ±30.
+ * Scrubber range inputs are blocked so Left/Right keep native slider behavior.
+ * Returns true when the event was consumed (including Space key-repeat, which
+ * is swallowed so the page does not scroll).
+ */
+export function dispatchLibraryPlayKey(event, { skipBy, togglePlayback } = {}) {
+  if (!event || isPlayShortcutBlockedTarget(event.target)) return false;
+  const action = theaterKeyAction(event.key);
+  if (action !== "toggle" && action !== "skipBack" && action !== "skipForward") return false;
+  event.preventDefault?.();
+  if (event.repeat && action === "toggle") return true;
+  if (action === "toggle") togglePlayback?.();
+  else if (action === "skipBack") skipBy?.(-SKIP_SECONDS);
+  else skipBy?.(SKIP_SECONDS);
+  return true;
 }
 
 /**
