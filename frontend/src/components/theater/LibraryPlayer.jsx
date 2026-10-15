@@ -18,10 +18,13 @@ import {
 } from "../../lib/inAppPip.js";
 import {
   SCRUB_MAX,
+  SEEK_FAILED_MESSAGE,
+  SEEK_PICTURE_TIMEOUT_MS,
   SEEK_RESTART_DEBOUNCE_MS,
   SKIP_LONG_SECONDS,
   SKIP_SECONDS,
   bufferedRanges,
+  capturePlaybackHoldFrame,
   createScrubCommit,
   longSkipFits,
   canLocalSeekTo,
@@ -31,11 +34,14 @@ import {
   isDocumentFullscreen,
   libraryWatchPopoutPath,
   nextEpisodeEndCardAction,
+  playbackSrcForSeek,
+  playheadMsFromMedia,
   runEndCardBackToExplore,
   runNextEpisodeEndCard,
   msFromScrubPct,
   notePlayingBeforeHide,
   scrubPctFromMs,
+  seekTimelineOriginMs,
   shouldAutoResumePlayback,
   shouldPauseOnVisibilityHide,
   shouldResumeFromOffset,
@@ -128,6 +134,18 @@ export default function LibraryPlayer({
   /** Collapses rapid scrub-end session restarts into one seek. */
   const seekRestartTimerRef = useRef(null);
   const seekRestartPendingMsRef = useRef(null);
+  const seekPaintTimerRef = useRef(null);
+  const pictureHoldRef = useRef(false);
+  const seekReloadArmedRef = useRef(false);
+  const seekRestoreMsRef = useRef(null);
+  const seekRestoreAttemptedRef = useRef(false);
+  const seekFailedRef = useRef(false);
+  const seekFailingRef = useRef(false);
+  const seekCommittedMsRef = useRef(null);
+  const seekTimelineOriginRef = useRef(0);
+  const savedMutedRef = useRef(false);
+  const wasPlayingRef = useRef(true);
+  const failSeekRef = useRef(async () => {});
   const [session, setSession] = useState(null);
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
@@ -155,6 +173,11 @@ export default function LibraryPlayer({
   const [startBusy, setStartBusy] = useState(false);
   /** True while scrub/skip is waiting on a Plex session restart. */
   const [seeking, setSeeking] = useState(false);
+  /** Bumps when a seek must reload the same playlist URL. */
+  const [seekEpoch, setSeekEpoch] = useState(0);
+  /** Hide the video element until the restarted playlist can paint. */
+  const [pictureHold, setPictureHold] = useState(false);
+  const [holdFrame, setHoldFrame] = useState("");
   /** Client-local movie bumper before the feature. */
   const [centerPlayOn, setCenterPlayOn] = useState(true);
   const [osdOpen, setOsdOpen] = useState(true);
@@ -173,6 +196,11 @@ export default function LibraryPlayer({
     setResumeOpen(false);
     setPreroll(null);
     setSession(null);
+    setSeekEpoch(0);
+    setPictureHold(false);
+    setHoldFrame("");
+    pictureHoldRef.current = false;
+    seekTimelineOriginRef.current = 0;
   }
 
   // One subtitle model: real Plex tracks (embedded + sidecar) for the item being played,
@@ -236,6 +264,10 @@ export default function LibraryPlayer({
         window.clearTimeout(seekRestartTimerRef.current);
         seekRestartTimerRef.current = null;
       }
+      if (seekPaintTimerRef.current) {
+        window.clearTimeout(seekPaintTimerRef.current);
+        seekPaintTimerRef.current = null;
+      }
       scrubCommitRef.current?.cancel();
     };
   }, []);
@@ -245,7 +277,10 @@ export default function LibraryPlayer({
     if (!current?.session_id) return;
     const video = videoRef.current;
     try {
-      const timeMs = extra.time_ms ?? Math.round((video?.currentTime || 0) * 1000);
+      const timeMs = extra.time_ms ?? playheadMsFromMedia({
+        currentTimeSec: video?.currentTime || 0,
+        originMs: seekTimelineOriginRef.current,
+      });
       const durationMs = extra.duration_ms ?? Math.round((video?.duration || 0) * 1000);
       await stopLibraryPlayback(current.session_id, {
         time_ms: timeMs,
@@ -274,12 +309,20 @@ export default function LibraryPlayer({
         centerTimerRef.current = window.setTimeout(() => setCenterPlayOn(false), hold.hideAfterMs);
       }
     }
-    if (next === "playing" || next === "ready") {
+    if (next === "playing") {
+      // Manifest "ready" is not a frame. A seek hold clears only from onPictureReady.
+      if (pictureHoldRef.current) return;
       setSeeking(false);
-      setError("");
+      if (!seekFailedRef.current) setError("");
     } else if (next === "error") {
-      setSeeking(false);
-      setError((prev) => prev || "Playback stalled. Try Resume, refresh, or Open in Plex.");
+      if (pictureHoldRef.current && seekReloadArmedRef.current) {
+        void failSeekRef.current(SEEK_FAILED_MESSAGE);
+        return;
+      }
+      if (!pictureHoldRef.current) {
+        setSeeking(false);
+        setError((prev) => prev || "Playback stalled. Try Resume, refresh, or Open in Plex.");
+      }
     }
   }, []);
 
@@ -345,6 +388,9 @@ export default function LibraryPlayer({
         const payload = await startLibraryPlayback(key, { startOver });
         sessionRef.current = payload;
         setSession(payload);
+        seekTimelineOriginRef.current = 0;
+        seekCommittedMsRef.current = null;
+        setSeekEpoch(0);
         setDurationMs(Number(payload.duration_ms) || 0);
         setNowMs(startOver ? 0 : Number(payload.view_offset_ms) || 0);
         setResumeOpen(false);
@@ -388,6 +434,9 @@ export default function LibraryPlayer({
         }
         sessionRef.current = payload;
         setSession(payload);
+        seekTimelineOriginRef.current = 0;
+        seekCommittedMsRef.current = null;
+        setSeekEpoch(0);
         setDurationMs(Number(payload.duration_ms) || 0);
         setNowMs(Number(payload.view_offset_ms) || 0);
         if (shouldResumeFromOffset(payload.view_offset_ms) && payload.can_resume) {
@@ -513,7 +562,10 @@ export default function LibraryPlayer({
     const now = Date.now();
     if (state !== "stopped" && state !== "paused" && !shouldSendProgress(lastProgressAtRef.current, now)) return;
     lastProgressAtRef.current = now;
-    const timeMs = Math.round((video?.currentTime || 0) * 1000);
+    const timeMs = playheadMsFromMedia({
+      currentTimeSec: video?.currentTime || 0,
+      originMs: seekTimelineOriginRef.current,
+    });
     const reportedDuration = Math.round((video?.duration || durationMs / 1000 || 0) * 1000);
     try {
       await progressLibraryPlayback(current.session_id, {
@@ -539,15 +591,129 @@ export default function LibraryPlayer({
     } catch {
       // Some browsers reject currentTime before metadata.
     }
-    setNowMs(next * 1000);
+    setNowMs(playheadMsFromMedia({
+      currentTimeSec: next,
+      originMs: seekTimelineOriginRef.current,
+    }));
     const label = deltaSeconds < 0 ? `−${Math.abs(deltaSeconds)}s` : `+${deltaSeconds}s`;
     setSkipChip(label);
     window.setTimeout(() => setSkipChip(""), 900);
   }
 
+  function displayedPlayheadMs() {
+    const video = videoRef.current;
+    return playheadMsFromMedia({
+      currentTimeSec: video?.currentTime || 0,
+      originMs: seekTimelineOriginRef.current,
+    });
+  }
+
+  function clearSeekPaintTimer() {
+    if (seekPaintTimerRef.current) {
+      window.clearTimeout(seekPaintTimerRef.current);
+      seekPaintTimerRef.current = null;
+    }
+  }
+
+  function armSeekPaintTimer() {
+    clearSeekPaintTimer();
+    seekPaintTimerRef.current = window.setTimeout(() => {
+      seekPaintTimerRef.current = null;
+      void failSeekRef.current(SEEK_FAILED_MESSAGE);
+    }, SEEK_PICTURE_TIMEOUT_MS);
+  }
+
+  function holdSeekPicture() {
+    const video = videoRef.current;
+    if (!pictureHoldRef.current) {
+      savedMutedRef.current = Boolean(video?.muted);
+      wasPlayingRef.current = video ? !video.paused : true;
+      setHoldFrame(capturePlaybackHoldFrame(video));
+    }
+    pictureHoldRef.current = true;
+    setPictureHold(true);
+    if (video) {
+      try {
+        video.pause();
+      } catch {
+        // Ignore pause races while the element is being swapped.
+      }
+      video.muted = true;
+    }
+  }
+
+  function releaseSeekPicture() {
+    const video = videoRef.current;
+    pictureHoldRef.current = false;
+    setPictureHold(false);
+    setHoldFrame("");
+    clearSeekPaintTimer();
+    if (video) video.muted = savedMutedRef.current;
+  }
+
+  function handlePictureReady() {
+    if (!pictureHoldRef.current) return;
+    const video = videoRef.current;
+    seekTimelineOriginRef.current = seekTimelineOriginMs({
+      currentTimeSec: video?.currentTime,
+      committedOffsetMs: seekCommittedMsRef.current,
+    });
+    const failed = seekFailedRef.current;
+    releaseSeekPicture();
+    setSeeking(false);
+    if (!failed) setError("");
+    if (!video) return;
+    if (wasPlayingRef.current) {
+      if (video.paused) video.play?.().catch(() => {});
+    } else {
+      video.pause();
+    }
+  }
+
+  async function failSeek(message) {
+    if (seekFailingRef.current) return;
+    seekFailingRef.current = true;
+    const text = message || SEEK_FAILED_MESSAGE;
+    setError(text);
+    seekFailedRef.current = true;
+    clearSeekPaintTimer();
+    const current = sessionRef.current;
+    const restore = seekRestoreMsRef.current;
+    if (!seekRestoreAttemptedRef.current && current?.session_id && restore != null) {
+      seekRestoreAttemptedRef.current = true;
+      try {
+        const next = await seekLibraryPlayback(current.session_id, restore);
+        sessionRef.current = next;
+        setSession(next);
+        setNowMs(restore);
+        seekCommittedMsRef.current = restore;
+        seekReloadArmedRef.current = true;
+        holdSeekPicture();
+        setSeekEpoch((epoch) => epoch + 1);
+        armSeekPaintTimer();
+        seekFailingRef.current = false;
+        return;
+      } catch {
+        // The previous position could not be reopened either.
+      }
+    }
+    seekReloadArmedRef.current = false;
+    releaseSeekPicture();
+    setSeeking(false);
+    setStatus("paused");
+    seekFailingRef.current = false;
+  }
+
+  failSeekRef.current = failSeek;
+
   async function applySeekRestartNow(offsetMs) {
     const current = sessionRef.current;
-    if (!current?.session_id) return;
+    if (!current?.session_id) {
+      releaseSeekPicture();
+      setSeeking(false);
+      return;
+    }
+    seekCommittedMsRef.current = offsetMs;
     setSeeking(true);
     try {
       const next = await seekLibraryPlayback(current.session_id, offsetMs);
@@ -555,14 +721,24 @@ export default function LibraryPlayer({
       setSession(next);
       setNowMs(offsetMs);
       rememberPlayedProgress(next, offsetMs, Number(next.duration_ms) || durationMs);
+      seekReloadArmedRef.current = true;
+      setSeekEpoch((epoch) => epoch + 1);
+      armSeekPaintTimer();
     } catch (err) {
-      setSeeking(false);
-      setError(err?.message || "Couldn’t jump in this title.");
+      await failSeek(err?.message || SEEK_FAILED_MESSAGE);
     }
   }
 
   /** Debounce Plex session-restart seeks from scrub / skip spam. */
   function applySeekRestart(offsetMs) {
+    if (!pictureHoldRef.current) {
+      const playingMs = displayedPlayheadMs();
+      seekRestoreMsRef.current = playingMs > 0 ? playingMs : Math.max(0, Math.round(nowMs));
+      seekRestoreAttemptedRef.current = false;
+      seekFailedRef.current = false;
+      seekReloadArmedRef.current = false;
+      holdSeekPicture();
+    }
     seekRestartPendingMsRef.current = offsetMs;
     setSeeking(true);
     if (seekRestartTimerRef.current) {
@@ -583,18 +759,25 @@ export default function LibraryPlayer({
     const durationS = video?.duration || durationMs / 1000;
     const target = clampTime(offsetMs / 1000, durationS);
     const targetMs = Math.round(target * 1000);
-    if (video && canLocalSeekTo(video, target)) {
+    if (video && canLocalSeekTo(video, target) && !seekReloadArmedRef.current) {
       if (seekRestartTimerRef.current) {
         window.clearTimeout(seekRestartTimerRef.current);
         seekRestartTimerRef.current = null;
         seekRestartPendingMsRef.current = null;
+      }
+      if (pictureHoldRef.current) {
+        releaseSeekPicture();
+        setSeeking(false);
       }
       try {
         video.currentTime = target;
       } catch {
         // Some browsers reject currentTime before metadata.
       }
-      setNowMs(targetMs);
+      setNowMs(playheadMsFromMedia({
+        currentTimeSec: target,
+        originMs: seekTimelineOriginRef.current,
+      }));
       return;
     }
     applySeekRestart(targetMs);
@@ -602,15 +785,19 @@ export default function LibraryPlayer({
 
   function skipBy(deltaSeconds, { preferLocal = true } = {}) {
     const video = videoRef.current;
-    const duration = video?.duration || durationMs / 1000;
-    const current = video?.currentTime || nowMs / 1000;
-    const target = clampTime(current + deltaSeconds, duration);
-    const inBuffer = canLocalSeekTo(video, target);
+    const titleDuration = durationMs > 0 ? durationMs / 1000 : 0;
+    const duration = titleDuration || video?.duration || 0;
+    const originSec = seekTimelineOriginRef.current / 1000;
+    const mediaNow = video?.currentTime || 0;
+    const displayNow = mediaNow + originSec || nowMs / 1000;
+    const targetDisplay = clampTime(displayNow + deltaSeconds, duration);
+    const targetMedia = Math.max(0, targetDisplay - originSec);
+    const inBuffer = canLocalSeekTo(video, targetMedia);
     if (preferLocal && video && (Math.abs(deltaSeconds) <= SKIP_SECONDS || inBuffer)) {
       applyLocalSkip(deltaSeconds);
       return;
     }
-    applySeekRestart(Math.round(target * 1000));
+    applySeekRestart(Math.round(targetDisplay * 1000));
     const label = deltaSeconds < 0 ? `−${Math.abs(deltaSeconds)}s` : `+${deltaSeconds}s`;
     setSkipChip(label);
     window.setTimeout(() => setSkipChip(""), 900);
@@ -663,6 +850,7 @@ export default function LibraryPlayer({
   }
 
   async function togglePlayback() {
+    if (pictureHoldRef.current) return;
     if (status === "loading" || status === "error" || resumeOpen) return;
     const video = videoRef.current;
     // If the stream was cleared (pagehide / failed attach), Play re-arms via begin()
@@ -1039,13 +1227,19 @@ export default function LibraryPlayer({
       data-center-play={showCenterPlay ? "visible" : "hidden"}
     >
       <TheaterPlayer
-        src={resumeOpen || ended || preroll || !session?.stream_url ? "" : session.stream_url}
+        src={
+          resumeOpen || ended || preroll || !session?.stream_url
+            ? ""
+            : playbackSrcForSeek(session.stream_url, seekEpoch)
+        }
         poster={session?.poster_url || ""}
         className="library-player"
         testId="library-player"
         videoTestId="library-player-video"
-        loading={(status === "loading" || seeking) && !resumeOpen && !preroll}
-        tuning={seeking}
+        loading={status === "loading" && !resumeOpen && !preroll}
+        pictureHold={pictureHold}
+        holdFrame={holdFrame}
+        onPictureReady={handlePictureReady}
         loadingCopy="warming the reel"
         error=""
         osd={osd}
@@ -1054,8 +1248,11 @@ export default function LibraryPlayer({
         onVideoRef={handleVideoRef}
         onHlsRef={handleHlsRef}
         onTimeUpdate={(video) => {
-          if (!scrubbingRef.current) {
-            setNowMs(Math.round((video.currentTime || 0) * 1000));
+          if (!scrubbingRef.current && !pictureHoldRef.current) {
+            setNowMs(playheadMsFromMedia({
+              currentTimeSec: video.currentTime || 0,
+              originMs: seekTimelineOriginRef.current,
+            }));
           }
           if (video.duration) setDurationMs(Math.round(video.duration * 1000));
           const ranges = bufferedRanges(video);
