@@ -53,6 +53,17 @@ export const DEFAULT_TV_MEDIA_BROWSE = {
 /** Page sizes surfaced in the shared "Show" selector. "all" is a capped fetch. */
 export const MEDIA_BROWSE_PAGE_SIZES = [48, 100, 500, "all"];
 
+/** Type menu for a results grid. Landings stay on their own shelf. */
+export function browseTypeChoices(scope) {
+  if (scope === "movie") return [{ value: "movie", label: "Movies" }];
+  if (scope === "show") return [{ value: "show", label: "TV shows" }];
+  return [
+    { value: "", label: "All" },
+    { value: "movie", label: "Movies" },
+    { value: "show", label: "TV shows" },
+  ];
+}
+
 /**
  * Ceiling for an "All" request. Mirrors the CSV export cap in
  * projectionist/web/app.py so "All" never asks the reader for an unbounded payload.
