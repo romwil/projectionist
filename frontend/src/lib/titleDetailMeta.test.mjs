@@ -16,18 +16,21 @@ describe("titleDetailMeta", () => {
     assert.deepEqual(decadeYearRange("2020s"), { year_from: 2020, year_to: 2029 });
   });
 
-  it("shows language as a label and does not link to Explore", () => {
-    for (const code of ["en", "EN", "en-US", "hi"]) {
-      const meta = languageBrowseMeta(code);
-      assert.equal(typeof meta.label, "string");
-      assert.ok(meta.label.length > 0);
-      assert.equal("path" in meta, false);
-      const serialized = JSON.stringify(meta);
-      assert.equal(serialized.includes("/explore?language="), false);
-      assert.equal(serialized.includes("automat.vip"), false);
-    }
-    assert.deepEqual(languageBrowseMeta("en"), { label: "English" });
-    assert.deepEqual(languageBrowseMeta("hi"), { label: "Hindi" });
+  it("links language to a relative Explore language landing", () => {
+    assert.deepEqual(languageBrowseMeta("en"), {
+      label: "English",
+      path: "/explore?language=en",
+    });
+    assert.deepEqual(languageBrowseMeta("en-US"), {
+      label: "English",
+      path: "/explore?language=en",
+    });
+    assert.deepEqual(languageBrowseMeta("hi"), {
+      label: "Hindi",
+      path: "/explore?language=hi",
+    });
+    assert.equal(languageBrowseMeta("en").path.startsWith("/explore?language="), true);
+    assert.equal(languageBrowseMeta("en").path.includes("automat.vip"), false);
     assert.equal(languageBrowseMeta(""), null);
     assert.equal(languageBrowseMeta(null), null);
   });
