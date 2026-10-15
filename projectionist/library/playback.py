@@ -853,11 +853,35 @@ def seek_playback(
     fetch: Optional[FetchFn] = None,
     db: Any = None,
 ) -> Dict[str, Any]:
+    """Stop the current transcode and open a new one at ``offset_ms``.
+
+    The public playlist URL does not change (same session id). Callers must
+    reload that URL. If the new transcode fails, the previous offset is
+    started again so the session is still playable.
+    """
     fetch = fetch or fetch_plex_bytes
     offset = max(0, int(offset_ms or 0))
+    previous_ms = int(session.view_offset_ms or 0)
+    previous_s = float(session.last_offset_s or 0.0)
     stop_plex_session(session, fetch=fetch)
     session.view_offset_ms = offset
-    start_plex_hls(session, offset_seconds=offset / 1000.0, fetch=fetch)
+    try:
+        start_plex_hls(session, offset_seconds=offset / 1000.0, fetch=fetch)
+    except Exception:
+        session.view_offset_ms = previous_ms
+        try:
+            start_plex_hls(session, offset_seconds=previous_s, fetch=fetch)
+        except Exception:
+            logger.debug("Plex seek restore failed for %s", session.session_id, exc_info=True)
+        _put_session(session)
+        if db is not None:
+            update_local_view_offset(
+                db,
+                session.rating_key,
+                previous_ms,
+                int(session.duration_ms or 0),
+            )
+        raise
     _put_session(session)
     if db is not None:
         update_local_view_offset(db, session.rating_key, offset, int(session.duration_ms or 0))

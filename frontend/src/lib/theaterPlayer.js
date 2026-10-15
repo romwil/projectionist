@@ -11,6 +11,12 @@ export const DOUBLE_TAP_MS = 300;
 export const OSD_IDLE_MS = 3200;
 /** Collapse rapid Play scrub session-restarts into one seek. */
 export const SEEK_RESTART_DEBOUNCE_MS = 280;
+/**
+ * How long a restarted Plex playlist may stay hidden before the seek fails.
+ * The picture stays on the previous frame until a new video frame can paint.
+ */
+export const SEEK_PICTURE_TIMEOUT_MS = 12_000;
+export const SEEK_FAILED_MESSAGE = "Couldn’t jump in this title.";
 
 export function libraryWatchPath(ratingKey) {
   const key = String(ratingKey || "").trim();
@@ -288,6 +294,83 @@ export function canLocalSeekTo(video, offsetSeconds) {
   const target = Number(offsetSeconds);
   if (!video || !Number.isFinite(target)) return false;
   return bufferedRanges(video).some((range) => target >= range.start && target <= range.end);
+}
+
+/**
+ * Plex seek keeps the same proxy playlist URL and restarts the transcoder.
+ * Bump `seekEpoch` so the player tears down the old MediaSource and loads the
+ * new session. Epoch 0 leaves the URL untouched (first play).
+ */
+export function playbackSrcForSeek(streamUrl, seekEpoch = 0) {
+  const url = String(streamUrl || "").trim();
+  const epoch = Number(seekEpoch) || 0;
+  if (!url || epoch <= 0) return url;
+  const hashAt = url.indexOf("#");
+  const hash = hashAt >= 0 ? url.slice(hashAt) : "";
+  const base = hashAt >= 0 ? url.slice(0, hashAt) : url;
+  const join = base.includes("?") ? "&" : "?";
+  return `${base}${join}seek=${encodeURIComponent(String(Math.floor(epoch)))}${hash}`;
+}
+
+/**
+ * While a session-restart seek is in flight, the video element must stay
+ * hidden. A decoded snow frame still has a width — only a real, current
+ * frame (HAVE_CURRENT_DATA and a non-zero video width) may be shown.
+ * Outside a seek hold the picture is always presentable.
+ */
+export function shouldRevealPlaybackPicture({
+  holdingSeek = false,
+  readyState = 0,
+  videoWidth = 0,
+} = {}) {
+  if (!holdingSeek) return true;
+  const ready = Number(readyState);
+  const width = Number(videoWidth);
+  return Number.isFinite(ready) && ready >= 2 && Number.isFinite(width) && width > 0;
+}
+
+/**
+ * Decide whether the reloaded playlist timeline is 0-based or already at the
+ * Plex offset (copyts). Sample once when the new picture is ready.
+ * Returns milliseconds to add to `video.currentTime`.
+ */
+export function seekTimelineOriginMs({ currentTimeSec, committedOffsetMs } = {}) {
+  const mediaMs = Math.max(0, Math.round((Number(currentTimeSec) || 0) * 1000));
+  const committed = Math.max(0, Math.round(Number(committedOffsetMs) || 0));
+  if (committed > 1500 && mediaMs + 1500 < committed) return committed;
+  return 0;
+}
+
+/** Playhead after a seek, including a 0-based transcoder timeline. */
+export function playheadMsFromMedia({ currentTimeSec, originMs = 0 } = {}) {
+  const mediaMs = Math.max(0, Math.round((Number(currentTimeSec) || 0) * 1000));
+  const origin = Math.max(0, Math.round(Number(originMs) || 0));
+  return mediaMs + origin;
+}
+
+/**
+ * Freeze the last painted frame to cover the element while the next playlist
+ * loads. Returns "" when there is nothing safe to draw (tests, empty video).
+ */
+export function capturePlaybackHoldFrame(video) {
+  const width = Number(video?.videoWidth) || 0;
+  const height = Number(video?.videoHeight) || 0;
+  if (!video || width < 2 || height < 2) return "";
+  if (typeof document === "undefined" || typeof document.createElement !== "function") return "";
+  try {
+    const canvas = document.createElement("canvas");
+    const maxW = 960;
+    const w = Math.min(width, maxW);
+    const h = Math.max(1, Math.round(height * (w / width)));
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return "";
+    ctx.drawImage(video, 0, 0, w, h);
+    return canvas.toDataURL("image/jpeg", 0.72);
+  } catch {
+    return "";
+  }
 }
 
 /**

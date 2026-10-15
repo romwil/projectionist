@@ -1,14 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import {
   OSD_IDLE_MS,
   RESUME_THRESHOLD_MS,
   SCRUB_MAX,
+  SEEK_PICTURE_TIMEOUT_MS,
   SEEK_RESTART_DEBOUNCE_MS,
   SKIP_LONG_SECONDS,
   SKIP_SECONDS,
   canLocalSeekTo,
+  capturePlaybackHoldFrame,
   createScrubCommit,
   dispatchPictureTap,
   bottomThirdTapResult,
@@ -30,8 +36,12 @@ import {
   runNextEpisodeEndCard,
   libraryWatchTo,
   msFromScrubPct,
+  playbackSrcForSeek,
+  playheadMsFromMedia,
   notePlayingBeforeHide,
   scrubPctFromMs,
+  seekTimelineOriginMs,
+  shouldRevealPlaybackPicture,
   shouldAutoResumePlayback,
   shouldPauseOnVisibilityHide,
   shouldResumeFromOffset,
@@ -347,6 +357,72 @@ test("a scrubber burst commits one seek, not one per input", async () => {
   await new Promise((resolve) => setTimeout(resolve, 50));
   assert.deepEqual(burst, [524]);
   loose.cancel();
+});
+
+test("slider drag previews the time and commits one seek on release", () => {
+  const durationMs = 27 * 60 * 1000 + 52 * 1000;
+  const commits = [];
+  const previews = [];
+  const scrub = createScrubCommit({
+    onCommit: (pct) => commits.push(msFromScrubPct(pct, durationMs)),
+    quietMs: 50,
+    lostEndMs: 500,
+  });
+  scrub.begin();
+  for (const pct of [120, 280, 360]) {
+    scrub.input(pct);
+    previews.push(msFromScrubPct(pct, durationMs));
+  }
+  assert.equal(commits.length, 0);
+  assert.ok(previews[2] > previews[0]);
+  assert.equal(previews[2], msFromScrubPct(360, durationMs));
+  scrub.end();
+  assert.deepEqual(commits, [previews[2]]);
+  assert.ok(SEEK_RESTART_DEBOUNCE_MS >= 0);
+  assert.ok(SEEK_PICTURE_TIMEOUT_MS >= 1000);
+});
+
+test("seek reload changes the playlist src once per committed epoch", () => {
+  const base = "/api/library/playback/sess/index.m3u8";
+  assert.equal(playbackSrcForSeek(base, 0), base);
+  assert.equal(playbackSrcForSeek(base, 1), `${base}?seek=1`);
+  assert.equal(playbackSrcForSeek(`${base}?x=1`, 2), `${base}?x=1&seek=2`);
+  assert.equal(playbackSrcForSeek("", 3), "");
+});
+
+test("held seek does not present the video until a frame can paint", () => {
+  assert.equal(shouldRevealPlaybackPicture({ holdingSeek: false, readyState: 0, videoWidth: 0 }), true);
+  assert.equal(shouldRevealPlaybackPicture({ holdingSeek: true, readyState: 0, videoWidth: 0 }), false);
+  assert.equal(shouldRevealPlaybackPicture({ holdingSeek: true, readyState: 1, videoWidth: 1280 }), false);
+  assert.equal(shouldRevealPlaybackPicture({ holdingSeek: true, readyState: 2, videoWidth: 0 }), false);
+  assert.equal(shouldRevealPlaybackPicture({ holdingSeek: true, readyState: 2, videoWidth: 16 }), true);
+  assert.equal(shouldRevealPlaybackPicture({ holdingSeek: true, readyState: 4, videoWidth: 1920 }), true);
+  assert.equal(capturePlaybackHoldFrame(null), "");
+  assert.equal(capturePlaybackHoldFrame({ videoWidth: 0, videoHeight: 0 }), "");
+});
+
+test("seek playhead follows a 0-based transcoder timeline and copyts", () => {
+  const committed = 10 * 60 * 1000 + 11 * 1000;
+  assert.equal(seekTimelineOriginMs({ currentTimeSec: 0.4, committedOffsetMs: committed }), committed);
+  assert.equal(seekTimelineOriginMs({ currentTimeSec: 611, committedOffsetMs: committed }), 0);
+  const origin = seekTimelineOriginMs({ currentTimeSec: 0.2, committedOffsetMs: committed });
+  assert.equal(playheadMsFromMedia({ currentTimeSec: 4, originMs: origin }), committed + 4000);
+  assert.equal(playheadMsFromMedia({ currentTimeSec: 611.5, originMs: 0 }), 611500);
+});
+
+test("Play seek holds the picture instead of the static tuning overlay", () => {
+  const root = dirname(fileURLToPath(import.meta.url));
+  const player = readFileSync(join(root, "../components/theater/LibraryPlayer.jsx"), "utf8");
+  const stage = readFileSync(join(root, "../components/theater/TheaterPlayer.jsx"), "utf8");
+  const css = readFileSync(join(root, "../styles/13-watch.css"), "utf8");
+  assert.match(player, /playbackSrcForSeek\(session\.stream_url, seekEpoch\)/);
+  assert.match(player, /pictureHold=\{pictureHold\}/);
+  assert.match(player, /onPictureReady=\{handlePictureReady\}/);
+  assert.doesNotMatch(player, /tuning=\{seeking\}/);
+  assert.doesNotMatch(player, /\.setPointerCapture/);
+  assert.match(stage, /shouldRevealPlaybackPicture/);
+  assert.match(stage, /data-picture-hold=\{pictureHold \? "true" : "false"\}/);
+  assert.match(css, /\.theater-player-video\[data-picture-hold="true"\]\s*\{\s*visibility:\s*hidden;/);
 });
 
 test("bottom third open keeps the normal idle and a second tap hides", () => {

@@ -8,6 +8,7 @@ import {
   dispatchPictureTap,
   isTheaterChromeTarget,
   pictureTapIntent,
+  shouldRevealPlaybackPicture,
   skipZoneFromClientX,
   theaterHlsConfig,
   toggleTheaterFullscreen,
@@ -27,8 +28,15 @@ export default function TheaterPlayer({
   autoFullscreen = false,
   loading = false,
   loadingCopy = "warming the reel",
-  /** When true, show CRT static interstitial (Play seek / start waits). */
+  /** When true, show CRT static interstitial (Play start / Live tune). */
   tuning = false,
+  /**
+   * Session-restart seek: hide the video element until the new playlist
+   * can paint. `holdFrame` is the previous picture (or empty for the poster).
+   */
+  pictureHold = false,
+  holdFrame = "",
+  onPictureReady,
   error = "",
   errorNode = null,
   healthNode = null,
@@ -64,6 +72,9 @@ export default function TheaterPlayer({
   const onVideoRefRef = useRef(onVideoRef);
   const onBumpOsdRef = useRef(onBumpOsd);
   const onOsdVisibilityRef = useRef(onOsdVisibility);
+  const onPictureReadyRef = useRef(onPictureReady);
+  const pictureHoldRef = useRef(pictureHold);
+  pictureHoldRef.current = pictureHold;
   const bottomTapRef = useRef(null);
   useEffect(() => {
     onStatusRef.current = onStatus;
@@ -71,6 +82,7 @@ export default function TheaterPlayer({
     onVideoRefRef.current = onVideoRef;
     onBumpOsdRef.current = onBumpOsd;
     onOsdVisibilityRef.current = onOsdVisibility;
+    onPictureReadyRef.current = onPictureReady;
   });
   const [internalOsd, setInternalOsd] = useState(true);
   const osdVisible = osdVisibleProp ?? internalOsd;
@@ -144,6 +156,11 @@ export default function TheaterPlayer({
           return;
         }
         if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          // A seek hold must not recover into a snow frame with live audio.
+          if (pictureHoldRef.current) {
+            onStatusRef.current?.("error");
+            return;
+          }
           hls.recoverMediaError();
           return;
         }
@@ -282,12 +299,31 @@ export default function TheaterPlayer({
     if (key !== "Escape") bumpOsd();
   }
 
+  function publishPlaying() {
+    const video = videoRef.current;
+    const held = pictureHoldRef.current;
+    if (
+      held &&
+      !shouldRevealPlaybackPicture({
+        holdingSeek: true,
+        readyState: video?.readyState ?? 0,
+        videoWidth: video?.videoWidth ?? 0,
+      })
+    ) {
+      return;
+    }
+    if (held) onPictureReadyRef.current?.();
+    onPlaying?.();
+    onStatus?.("playing");
+  }
+
   return (
     <div
       ref={rootRef}
       className={`theater-player live-player ${className}`.trim()}
       data-testid={testId}
       data-osd={osdVisible ? "visible" : "hidden"}
+      data-picture-hold={pictureHold ? "true" : "false"}
       tabIndex={0}
       onMouseMove={handlePointerMove}
       onFocus={bumpOsd}
@@ -319,15 +355,29 @@ export default function TheaterPlayer({
         muted={false}
         controls={false}
         data-testid={videoTestId}
+        data-picture-hold={pictureHold ? "true" : "false"}
         onTimeUpdate={(event) => onTimeUpdate?.(event.currentTarget)}
         onEnded={() => onEnded?.()}
-        onPlaying={() => {
-          onPlaying?.();
-          onStatus?.("playing");
+        onPlaying={publishPlaying}
+        onLoadedData={() => {
+          if (pictureHoldRef.current) publishPlaying();
+        }}
+        onResize={() => {
+          if (pictureHoldRef.current) publishPlaying();
         }}
         onPause={() => onStatus?.("paused")}
         onWaiting={() => onWaiting?.()}
       />
+
+      {pictureHold && holdFrame ? (
+        <img
+          className="theater-seek-hold-frame"
+          src={holdFrame}
+          alt=""
+          aria-hidden="true"
+          data-testid={`${testId}-seek-hold`}
+        />
+      ) : null}
 
       <TuningInterstitial
         active={showTuning}
