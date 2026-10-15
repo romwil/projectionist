@@ -7,7 +7,6 @@ import {
   exploreDecadePath,
   exploreDirectorsPath,
   exploreGenrePath,
-  exploreLanguagePath,
   exploreSectionPath,
   libraryBrowsePath,
   personPath,
@@ -28,7 +27,6 @@ describe("browseLinks", () => {
     assert.equal(exploreCastPath("Keanu Reeves"), "/explore?cast=Keanu%20Reeves");
     assert.equal(exploreDirectorsPath("Lana Wachowski"), "/explore?directors=Lana%20Wachowski");
     assert.equal(exploreDecadePath("2020s"), "/explore?decade=2020s");
-    assert.equal(exploreLanguagePath("hi"), "/explore?language=hi");
     assert.equal(exploreCountryPath("India"), "/explore?country=India");
     assert.deepEqual(decadeYearRange("1970s"), { year_from: 1970, year_to: 1979 });
     assert.equal(

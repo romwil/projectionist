@@ -50,12 +50,6 @@ export function exploreDecadePath(decadeLabel) {
   return `/explore?decade=${encodeURIComponent(label)}`;
 }
 
-export function exploreLanguagePath(languageCode) {
-  const code = String(languageCode || "").trim().toLowerCase().split("-")[0];
-  if (!code) return null;
-  return `/explore?language=${encodeURIComponent(code)}`;
-}
-
 export function exploreCountryPath(countryName) {
   const name = String(countryName || "").trim();
   if (!name) return null;

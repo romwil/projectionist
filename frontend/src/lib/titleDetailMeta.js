@@ -1,4 +1,4 @@
-import { exploreCountryPath, exploreDecadePath, exploreLanguagePath } from "./browseLinks.js";
+import { exploreCountryPath, exploreDecadePath } from "./browseLinks.js";
 import { formatLanguageName, languageFacetKey } from "./languageNames.js";
 
 export function decadeLabel(year) {
@@ -14,10 +14,7 @@ export function decadeBrowsePath(year) {
 export function languageBrowseMeta(code) {
   const key = languageFacetKey(code);
   if (!key) return null;
-  return {
-    label: formatLanguageName(code),
-    path: exploreLanguagePath(key),
-  };
+  return { label: formatLanguageName(code) };
 }
 
 export function countryBrowsePath(country) {
