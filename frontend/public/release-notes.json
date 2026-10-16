@@ -1,6 +1,33 @@
 {
-  "generated_at": "2026-10-16T20:27:54Z",
+  "generated_at": "2026-10-16T21:33:10Z",
   "releases": [
+    {
+      "version": "1.37.52",
+      "date": "2026-10-16",
+      "summary": "One patch on 1.37.51: the poster trailer button stops spinning and says what happened when a title has no trailer or the lookup fails.",
+      "highlights": [
+        "**A missing trailer tells you so.** The poster trailer button stops spinning and shows “No trailer for this title.”",
+        "**A failed lookup says why.** If the request fails, you see that error, or “Couldn't load the trailer.” when there is no message.",
+        "**A real trailer still plays.** When a trailer exists, it opens in the player as before."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "**The poster trailer control no longer ends a lookup in silence.** A title with no YouTube key, or no identity to look up, clears the spinner and flashes “No trailer for this title.” A failed request flashes the error message, or “Couldn't load the trailer.” when the error is blank. A key still opens the existing trailer player."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend `pytest tests/` — 2530 passed, 43 skipped, coverage 76.17% (floor 74%), with `PROJECTIONIST_SKIP_DOTENV=1`. The first pass failed 8 API cases because `frontend/dist/assets` was not built yet; those 8 passed after `npm run build`.",
+            "Frontend unit 1026/1026, including `frontend/src/lib/posterTrailer.test.mjs`.",
+            "Lint 0 errors (166 warnings); `npm run build` OK.",
+            "`npm run test:release-perf` on the mocked e2e server (port 8808, lobby theater 8796) — passed. About, Explore, Movies, Inbox, and Live stayed inside `frontend/perf/baseline.json`."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.51",
       "date": "2026-10-16",
