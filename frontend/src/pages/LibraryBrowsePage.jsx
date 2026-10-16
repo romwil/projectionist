@@ -14,6 +14,7 @@ import BackLink from "../components/BackLink";
 import { useBulkActionProgress } from "../components/BulkActionProgress.jsx";
 import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog.jsx";
 import RemovalSummaryDialog from "../components/RemovalSummaryDialog.jsx";
+import BrowseResultsRegion from "../components/BrowseResultsRegion.jsx";
 import MediaBrowseControls from "../components/MediaBrowseControls";
 import MediaBrowsePagination from "../components/MediaBrowsePagination.jsx";
 import MediaBrowseResults from "../components/MediaBrowseResults";
@@ -217,7 +218,9 @@ export default function LibraryBrowsePage({ embedded = false }) {
         genres: [
           ...new Set((genreAgg?.buckets || []).map((bucket) => bucket.genre).filter(Boolean)),
         ].sort(),
-        languages: browseLanguageOptions((languageAgg?.buckets || []).map((bucket) => bucket.value)),
+        languages: browseLanguageOptions(
+          (languageAgg?.buckets || []).map((bucket) => bucket.value),
+        ),
       });
     });
     return () => {
@@ -711,27 +714,28 @@ export default function LibraryBrowsePage({ embedded = false }) {
         </p>
       ) : null}
 
-      <section className="explore-section-results" data-testid="library-browse-results">
-        {state.loading ? <p className="status status-secondary">Loading…</p> : null}
-        {state.error ? <p className="error">{state.error}</p> : null}
-        {!state.loading && !state.error && !state.items.length ? (
+      <BrowseResultsRegion
+        testId="library-browse-results"
+        loading={state.loading}
+        error={state.error}
+        hasItems={state.items.length > 0}
+        empty={
           <p className="explore-empty status status-secondary" data-testid="library-browse-empty">
             {q ? `No library titles match “${q}”.` : "No titles match these filters yet."}
           </p>
-        ) : null}
-        {state.items.length ? (
-          <MediaBrowseResults
-            state={browse}
-            items={state.items}
-            columns={columns || undefined}
-            selectable
-            selected={selected}
-            onToggleSelect={toggleSelect}
-            getItemKey={libraryBrowseItemKey}
-            cardProps={{ testId: "library-browse-card", ...recommendProps }}
-          />
-        ) : null}
-      </section>
+        }
+      >
+        <MediaBrowseResults
+          state={browse}
+          items={state.items}
+          columns={columns || undefined}
+          selectable
+          selected={selected}
+          onToggleSelect={toggleSelect}
+          getItemKey={libraryBrowseItemKey}
+          cardProps={{ testId: "library-browse-card", ...recommendProps }}
+        />
+      </BrowseResultsRegion>
 
       {!state.loading && !state.error && state.items.length ? (
         <MediaBrowsePagination

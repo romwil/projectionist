@@ -1034,3 +1034,66 @@
 .viewport .title-card .card-actions button {
   pointer-events: auto;
 }
+
+/* Empty poster grid still fetching. Sits under the browse bar, not over it. */
+.browse-grid-pending {
+  display: grid;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+.browse-grid-pending-label {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-lg);
+  font-weight: 650;
+  line-height: var(--leading-tight);
+}
+
+.browse-grid-pending-wall {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: var(--space-3);
+}
+
+.browse-grid-pending-card {
+  aspect-ratio: 2 / 3;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--text) 16%, var(--surface));
+  position: relative;
+  overflow: hidden;
+}
+
+.browse-grid-pending-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 15%,
+    color-mix(in srgb, var(--accent) 70%, transparent) 50%,
+    transparent 85%
+  );
+  transform: translateX(-120%);
+  animation: browse-grid-pending-shimmer 1.25s ease-in-out infinite;
+}
+
+html[data-theme="lights-up"] .browse-grid-pending-card {
+  background: color-mix(in srgb, var(--text) 12%, var(--surface));
+  border-color: var(--border);
+}
+
+@keyframes browse-grid-pending-shimmer {
+  to {
+    transform: translateX(120%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .browse-grid-pending-card::after {
+    animation: none;
+    transform: none;
+    background: color-mix(in srgb, var(--accent) 28%, transparent);
+  }
+}
