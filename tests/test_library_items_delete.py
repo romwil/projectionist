@@ -261,7 +261,7 @@ class LibraryItemsDeleteApiTests(unittest.TestCase):
         remaining = jobs.get_job_manager().db.search_keyword("Full Remove Me")
         self.assertEqual(len(remaining), 0)
 
-    def test_full_remove_leaves_index_when_arr_missing(self) -> None:
+    def test_full_remove_drops_index_when_arr_missing(self) -> None:
         self._seed_item("rk-full-miss", title="Not In Arr", tmdb_id=202)
         path = Path(self._tmpdir.name) / "settings.json"
         path.write_text(
@@ -286,14 +286,16 @@ class LibraryItemsDeleteApiTests(unittest.TestCase):
             )
         self.assertEqual(resp.status_code, 200)
         body = resp.json()
-        self.assertEqual(body["deleted"], 0)
-        self.assertEqual(len(body["errors"]), 1)
-        self.assertIn("not in Radarr", body["errors"][0]["error"])
+        self.assertEqual(body["deleted"], 1)
+        self.assertEqual(body["errors"], [])
+        self.assertIn("not in Radarr", body["results"][0]["note"])
+        self.assertTrue(body["results"][0]["index_deleted"])
+        self.assertFalse(body["results"][0]["arr"]["add_exclusion"])
 
         import projectionist.web.jobs as jobs
 
         remaining = jobs.get_job_manager().db.search_keyword("Not In Arr")
-        self.assertEqual(len(remaining), 1)
+        self.assertEqual(len(remaining), 0)
 
     def test_full_remove_errors_when_radarr_not_configured(self) -> None:
         self._seed_item("rk-no-radarr", title="No Radarr", tmdb_id=303)

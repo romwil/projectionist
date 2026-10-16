@@ -31,13 +31,16 @@ function RemovalItem({ entry, showStatus }) {
       <header className="removal-summary-item-head">
         <h3>{entry.title || "Untitled"}</h3>
         <span className="removal-summary-item-bytes">
-          {showStatus && status !== "removed" ? (
+          {showStatus ? (
             <span className="removal-summary-status" data-testid="removal-item-status">
               {removalStatusLabel(status)}
             </span>
           ) : (
             formatRemovalFreedLabel(entry)
           )}
+          {showStatus && status === "removed" ? (
+            <span className="removal-summary-item-freed">{formatRemovalFreedLabel(entry)}</span>
+          ) : null}
         </span>
       </header>
       {status === "failed" && entry.error ? (
@@ -48,6 +51,11 @@ function RemovalItem({ entry, showStatus }) {
       {status === "stopped" ? (
         <p className="status status-secondary" data-testid="removal-item-stopped">
           Left in the library. This title had not started.
+        </p>
+      ) : null}
+      {status === "removed" && entry.note ? (
+        <p className="status status-secondary" data-testid="removal-summary-paths-note">
+          {entry.note}
         </p>
       ) : null}
       {status === "removed" && files.length ? (
@@ -61,7 +69,7 @@ function RemovalItem({ entry, showStatus }) {
             ))}
           </ul>
         </div>
-      ) : status === "removed" && pathNote ? (
+      ) : status === "removed" && !entry.note && pathNote ? (
         <p className="status status-secondary" data-testid="removal-summary-paths-note">
           {pathNote}
         </p>
@@ -107,7 +115,7 @@ function RemovalSummaryPanel({
   const displayItems = live
     ? result.items
     : results.map((entry) => ({ ...entry, status: "removed" }));
-  const showLiveStatus = running || (live && result.items.some((item) => item.status !== "removed"));
+  const showLiveStatus = Boolean(live);
   const indexOnly = (live ? result.mode : summarySource?.mode) === "index";
 
   function handleBackdrop() {

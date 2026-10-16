@@ -265,6 +265,18 @@ class PlexSubtitleStream:
         return base
 
 
+def _plex_part_files(root) -> List[str]:
+    paths: List[str] = []
+    seen: set[str] = set()
+    for part in root.findall(".//Part"):
+        file_path = str(part.attrib.get("file") or "").strip()
+        if not file_path or file_path in seen:
+            continue
+        seen.add(file_path)
+        paths.append(file_path)
+    return paths
+
+
 class PlexClient:
     def __init__(
         self,
@@ -745,6 +757,27 @@ class PlexClient:
             if section.type == section_type:
                 return section.key
         raise RuntimeError(f"No Plex {section_type} library section found")
+
+    def media_file_paths(self, rating_key: str, *, include_leaves: bool = False) -> List[str]:
+        """File paths Plex already reports on this item (Part ``file`` attributes).
+
+        Show metadata often has no parts; ``include_leaves`` reads episode files
+        from ``allLeaves`` only when the item itself has none. A failed leaves
+        request returns the paths already collected.
+        """
+        key = str(rating_key or "").strip()
+        if not key:
+            raise ValueError("rating_key is required")
+        quoted = urllib.parse.quote(key)
+        root = self._request_xml(f"/library/metadata/{quoted}")
+        paths = _plex_part_files(root)
+        if paths or not include_leaves:
+            return paths
+        try:
+            leaves = self._request_xml(f"/library/metadata/{quoted}/allLeaves")
+        except Exception:
+            return paths
+        return _plex_part_files(leaves)
 
     def delete_metadata(self, rating_key: str) -> None:
         """Remove a library item from Plex (metadata only; does not delete disk files)."""

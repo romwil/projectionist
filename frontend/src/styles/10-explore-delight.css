@@ -1640,6 +1640,10 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
   white-space: nowrap;
 }
 
+.removal-summary-item-freed {
+  margin-left: 0.65rem;
+}
+
 .removal-summary-paths {
   margin-top: var(--space-2);
 }
