@@ -54,7 +54,6 @@ function ExplorePosterCard({ item, meta, onSeed, seedLabel = "Surprise from this
 function ExploreSection({
   id,
   title,
-  subtitle,
   children,
   empty,
   note,
@@ -107,7 +106,6 @@ function ExploreSection({
               />
             ) : null}
           </div>
-          {subtitle ? <p className="explore-section-subtitle">{subtitle}</p> : null}
         </div>
       </header>
       {message ? (
@@ -423,13 +421,6 @@ function ExploreHubPage() {
     };
   }, [facetBrowse, searchParams]);
 
-  const otdSubtitle = useMemo(() => {
-    const mode = onThisDay.meta?.mode;
-    if (mode === "calendar") return "Release anniversaries sharing today’s date";
-    if (mode === "milestone_fallback") return "Milestone-year picks from your shelves";
-    return "Anniversary picks from your shelves";
-  }, [onThisDay.meta?.mode]);
-
   const recommendProps = multiUserEnabled
     ? { showRecommend: true, onRecommend: setRecommendItem }
     : { showRecommend: false };
@@ -520,7 +511,6 @@ function ExploreHubPage() {
         <ExploreSection
           id="continue-watching"
           title="Continue Watching"
-          subtitle="Pick up where you left off — in-progress titles from Plex"
           isOwner={ownerChrome}
           empty={
             continueWatching.error ||
@@ -547,7 +537,6 @@ function ExploreHubPage() {
         <ExploreSection
           id="unfinished"
           title="Unfinished"
-          subtitle="Leftover runtime you can still finish — not titles idle for two months"
           isOwner={ownerChrome}
           empty={
             unfinished.error ||
@@ -575,7 +564,6 @@ function ExploreHubPage() {
           <ExploreSection
             id="pick-for-me"
             title="Pick for me"
-            subtitle="Spin up a handful of age-friendly titles you haven't watched yet"
             isOwner={ownerChrome}
             empty={
               pickForMe.error ||
@@ -603,7 +591,6 @@ function ExploreHubPage() {
         <ExploreSection
           id="recently-added"
           title="Recently Added"
-          subtitle="Fresh movie and show arrivals from the last 30 days"
           titleHref={exploreSectionPath("recently-added")}
           isOwner={ownerChrome}
           mediaTypeLinks={[
@@ -639,7 +626,6 @@ function ExploreHubPage() {
         <ExploreSection
           id="recently-added-episodes"
           title="Recently added episodes"
-          subtitle="Fresh episodes that just landed — not whole shows"
           titleHref={libraryBrowsePath({ mediaType: "show" })}
           isOwner={ownerChrome}
           empty={
@@ -669,7 +655,6 @@ function ExploreHubPage() {
         <ExploreSection
           id="recent-releases"
           title="Recent Releases"
-          subtitle="Library titles released in the last 90 days"
           titleHref={exploreSectionPath("recent-releases")}
           isOwner={ownerChrome}
           mediaTypeLinks={[
@@ -700,7 +685,6 @@ function ExploreHubPage() {
         <ExploreSection
           id="revisit-these"
           title="Revisit These"
-          subtitle="Partially watched shows you haven’t touched in over two months"
           isOwner={ownerChrome}
           empty={
             revisitThese.error ||
@@ -718,7 +702,6 @@ function ExploreHubPage() {
         <ExploreSection
           id="on-this-day"
           title="On This Day"
-          subtitle={otdSubtitle}
           isOwner={ownerChrome}
           empty={onThisDay.error || (!onThisDay.loading && !onThisDay.items.length ? onThisDay.note : null)}
           note={onThisDay.items.length && onThisDay.note && !onThisDay.error ? onThisDay.note : null}
@@ -735,7 +718,6 @@ function ExploreHubPage() {
           <ExploreSection
             id="director-spotlight"
             title={`Films by ${directorSpotlight.meta?.director || "a director"}`}
-            subtitle="A daily rotating filmography from your shelves"
             titleHref={directorSpotlight.meta?.director ? exploreFacetPath("directors", directorSpotlight.meta.director) : null}
             isOwner={ownerChrome}
             empty={directorSpotlight.error || (!directorSpotlight.loading && !directorSpotlight.items.length ? directorSpotlight.note : null)}
@@ -753,7 +735,6 @@ function ExploreHubPage() {
           <ExploreSection
             id="genre-spotlight"
             title={`${genreSpotlight.meta?.genre || "Genre"} in your library`}
-            subtitle="A daily rotating corner of your collection"
             titleHref={genreSpotlight.meta?.genre ? exploreFacetPath("genre", genreSpotlight.meta.genre) : null}
             isOwner={ownerChrome}
             empty={genreSpotlight.error || (!genreSpotlight.loading && !genreSpotlight.items.length ? genreSpotlight.note : null)}
@@ -771,11 +752,6 @@ function ExploreHubPage() {
           <ExploreSection
             id="seasonal-spotlight"
             title={seasonalSpotlight.meta?.label || "Seasonal picks"}
-            subtitle={
-              seasonalSpotlight.meta?.mode === "holiday"
-                ? "Staff picks from your library for this season — why each one made the shelf, and room to chat"
-                : "A light seasonal turn through your library — staff-pick notes when the curator has weighed in"
-            }
             isOwner={ownerChrome}
             empty={seasonalSpotlight.error || (!seasonalSpotlight.loading && !seasonalSpotlight.items.length ? seasonalSpotlight.note : null)}
           >
@@ -793,7 +769,6 @@ function ExploreHubPage() {
         <ExploreSection
           id="afterglow"
           title="Afterglow"
-          subtitle="Still warm — a few questions while the credits fade"
           isOwner={ownerChrome}
           empty={
             afterglow.error ||
@@ -825,7 +800,6 @@ function ExploreHubPage() {
         <ExploreSection
           id="library-pulse"
           title="Library Pulse"
-          subtitle="A quick read on collection health"
           helpAnchorId="what-knowledge-coverage-means"
           helpTitle="What Library Pulse & knowledge coverage mean"
           isOwner={ownerChrome}
@@ -884,7 +858,6 @@ function ExploreHubPage() {
           <ExploreSection
             id="facet-filter"
             title={facetWall.label}
-            subtitle="Deep-link filter from title detail"
             isOwner={ownerChrome}
             empty={facetWall.error || facetWall.note}
           >
