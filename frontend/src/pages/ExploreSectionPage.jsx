@@ -7,6 +7,7 @@ import {
   getExploreFeedRecentlyAdded,
 } from "../api/client";
 import BackLink from "../components/BackLink.jsx";
+import BrowseResultsRegion from "../components/BrowseResultsRegion.jsx";
 import { useBulkActionProgress } from "../components/BulkActionProgress.jsx";
 import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog.jsx";
 import RemovalSummaryDialog from "../components/RemovalSummaryDialog.jsx";
@@ -484,26 +485,27 @@ export default function ExploreSectionPage() {
         </p>
       ) : null}
 
-      <section className="explore-section-results" data-testid="explore-section-results">
-        {state.loading ? <p className="status status-secondary">Loading…</p> : null}
-        {state.error ? <p className="error">{state.error}</p> : null}
-        {!state.loading && !state.error && !sortedItems.length ? (
+      <BrowseResultsRegion
+        testId="explore-section-results"
+        loading={state.loading}
+        error={state.error}
+        hasItems={sortedItems.length > 0}
+        empty={
           <p className="explore-empty status status-secondary" data-testid="explore-section-empty">
             {state.note || "No titles in this section yet."}
           </p>
-        ) : null}
-        {sortedItems.length ? (
-          <MediaBrowseResults
-            state={{ ...query, media_type: query.mediaType || "" }}
-            items={sortedItems}
-            columns={columns || undefined}
-            selectable
-            selected={selected}
-            onToggleSelect={toggleSelect}
-            getItemKey={libraryBrowseItemKey}
-          />
-        ) : null}
-      </section>
+        }
+      >
+        <MediaBrowseResults
+          state={{ ...query, media_type: query.mediaType || "" }}
+          items={sortedItems}
+          columns={columns || undefined}
+          selectable
+          selected={selected}
+          onToggleSelect={toggleSelect}
+          getItemKey={libraryBrowseItemKey}
+        />
+      </BrowseResultsRegion>
 
       {showToolbarPagination ? (
         <MediaBrowsePagination
