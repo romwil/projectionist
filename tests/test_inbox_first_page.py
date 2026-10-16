@@ -65,3 +65,27 @@ class InboxFirstPageTests(unittest.TestCase):
         ids = [row["id"] for row in page["items"] + rest["items"]]
         self.assertEqual(len(ids), 30)
         self.assertEqual(len(set(ids)), 30)
+
+    def test_read_keeps_the_row_and_dismiss_removes_it(self) -> None:
+        self._seed_unread(3)
+        updated = self.db.mark_notifications_read("member-1", ["note-0"])
+        self.assertEqual(updated, 1)
+        kept = self.db.notification_inbox_page("member-1", status="all", limit=12)
+        self.assertEqual(kept["total"], 3)
+        self.assertEqual(kept["unread_count"], 2)
+        row = next(item for item in kept["items"] if item["id"] == "note-0")
+        self.assertIsNone(row["seen_at"])
+        self.assertIsNotNone(row["read_at"])
+        unread = self.db.notification_inbox_page("member-1", status="unread", sort="oldest", limit=12)
+        self.assertEqual([item["id"] for item in unread["items"]], ["note-2", "note-1"])
+        self.db.mark_notifications_seen("member-1", notification_ids=["note-0"])
+        after = self.db.notification_inbox_page("member-1", status="all", limit=12)
+        self.assertEqual(after["total"], 2)
+        self.assertNotIn("note-0", [item["id"] for item in after["items"]])
+
+    def test_dismiss_all_leaves_mail_you_already_read(self) -> None:
+        self._seed_unread(2)
+        self.db.mark_notifications_read("member-1", ["note-0"])
+        self.db.mark_notifications_seen("member-1", all_unread=True)
+        kept = self.db.notification_inbox_page("member-1", status="all", limit=12)
+        self.assertEqual([item["id"] for item in kept["items"]], ["note-0"])

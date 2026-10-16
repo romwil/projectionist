@@ -183,11 +183,27 @@ export async function markRecommendationsSeen(payload) {
 export async function listNotifications(params = {}) {
   const query = new URLSearchParams();
   if (params.unread_only) query.set("unread_only", "true");
+  if (params.status) query.set("status", String(params.status));
+  if (params.sort) query.set("sort", String(params.sort));
   if (params.limit) query.set("limit", String(params.limit));
   if (params.offset) query.set("offset", String(params.offset));
   if (params.kind) query.set("kind", String(params.kind));
   const suffix = query.toString() ? `?${query}` : "";
   return api(`/notifications${suffix}`);
+}
+
+export async function markNotificationsRead(payload) {
+  return api("/notifications/read", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function bindNotificationThread(notificationId, sessionId) {
+  return api(`/notifications/${encodeURIComponent(notificationId)}/thread`, {
+    method: "POST",
+    body: JSON.stringify({ session_id: sessionId }),
+  });
 }
 
 export async function markNotificationsSeen(payload) {

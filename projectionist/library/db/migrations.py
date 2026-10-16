@@ -193,6 +193,14 @@ def _backfill_show_file_size_rollups(
     logger.info("Backfilled show file_size rollups for %s shows", len(show_ids))
 
 
+def _notification_read_at(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
+    """Separate \"read\" from dismiss so opening a note does not remove it."""
+    del db
+    columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(user_notifications)")}
+    if "read_at" not in columns:
+        conn.execute("ALTER TABLE user_notifications ADD COLUMN read_at REAL")
+
+
 def _build_migrations() -> List[Migration]:
     def wrap(method_name: str) -> MigrationFn:
         def _run(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
@@ -255,6 +263,7 @@ def _build_migrations() -> List[Migration]:
         (52, "knowledge_fetch_state", wrap("_migrate_knowledge_fetch_state")),
         (53, "holiday_rail_curator_notes", wrap("_migrate_holiday_rail_curator_notes")),
         (54, "holiday_rail_shelf_mode", wrap("_migrate_holiday_rail_shelf_mode")),
+        (55, "notification_read_at", _notification_read_at),
     ]
 
 
