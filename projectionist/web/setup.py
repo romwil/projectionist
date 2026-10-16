@@ -529,6 +529,23 @@ def build_setup_status(settings: Settings, db: Database | None = None) -> Dict[s
     }
 
 
+def preserve_omitted_ask_delete_confirmation(
+    payload: Any,
+    existing: Settings,
+    merged: Dict[str, Any],
+) -> None:
+    """Keep the typed-DELETE preference when a partial settings PUT omits it.
+
+    ``SettingsPayload`` defaults ``ask_delete_confirmation`` to True. A PUT that
+    only changes another field must not turn the confirmation back on.
+    """
+    fields_set = getattr(payload, "model_fields_set", set())
+    if "ask_delete_confirmation" not in fields_set:
+        merged["ask_delete_confirmation"] = bool(
+            getattr(existing, "ask_delete_confirmation", True)
+        )
+
+
 def merge_theater_settings_payload(
     payload: Any,
     existing: Settings,

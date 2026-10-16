@@ -745,6 +745,9 @@ class Settings:
     tv_page_size: int = 500
     library_enrich_workers: int = 6
     sync_reviews_to_plex: bool = True
+    # Owner typed-DELETE gate for library removal. True asks; False skips the word.
+    # Default stays on until an owner opts out from the dialog or Admin → Libraries.
+    ask_delete_confirmation: bool = True
     # TTL for agent-created / movie-night ephemeral Plex collections (hours).
     ephemeral_collection_ttl_hours: int = 168
     # Explicit allowlist: empty keeps all reported repairs owner-approved.

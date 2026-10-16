@@ -259,6 +259,26 @@ export function isBulkDeleteConfirmPhrase(value) {
   return String(value || "").trim() === BULK_DELETE_CONFIRM_PHRASE;
 }
 
+/** Missing or any value other than explicit false still asks for DELETE. */
+export function libraryRemovalNeedsTypedDelete(askDeleteConfirmation) {
+  return askDeleteConfirmation !== false;
+}
+
+/**
+ * Typed DELETE is required until the owner opts out. With the preference off,
+ * a chosen target is enough — the caller still has to pick removal scope.
+ */
+export function canConfirmLibraryRemoval({
+  needsTypedDelete = true,
+  phrase = "",
+  hasTarget = false,
+  loading = false,
+} = {}) {
+  if (loading || !hasTarget) return false;
+  if (!needsTypedDelete) return true;
+  return isBulkDeleteConfirmPhrase(phrase);
+}
+
 export function formatBulkDeletePreviewTitles(titles, limit = 5) {
   const list = (Array.isArray(titles) ? titles : [])
     .map((title) => String(title || "").trim())

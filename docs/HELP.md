@@ -518,10 +518,12 @@ curl -s "http://localhost:8788/api/media-issues?status=open" | python3 -m json.t
 
 ### Delete from Projectionist library (index vs full remove)
 
-Owner delete from a title detail page, browse multi-select, or Explore section toolbar opens a typed-`DELETE` confirm. Choose a **removal scope**:
+Owner delete from a title detail page, browse multi-select, or Explore section toolbar opens a removal dialog. By default you type `DELETE` before it proceeds. Choose a **removal scope**:
 
 - **Index only** (default) — drops the Projectionist library index row. Plex files stay; the title can reappear on the next library sync.
 - **Full remove** — asks Radarr or Sonarr to delete the managed title **with files** and **add an import exclusion** (so list syncs do not re-add it), removes the Plex metadata entry when Plex is configured, then drops the Projectionist index row.
+
+**Don’t ask again** on that dialog turns the typed word off for later removals (`ask_delete_confirmation`, owner-only). **Admin → Libraries** shows **Ask me to type DELETE before removing titles**. It starts checked. Unchecked, the dialog still offers Index only or Full remove, still shows the warning and the titles, and still does not remove anything until you confirm there. The grid Delete button opens that dialog either way. Check the Admin box again to require the typed word.
 
 On a **TV show** title detail page, owners also see **Seasons & episodes** (counts and per-episode rows from the library index). From that list you can fully remove one **season** or one **episode** (typed `DELETE`) — Sonarr deletes the matching episode files, Plex metadata is cleaned up, and Projectionist drops those episode rows. Season/episode remove does not add an import exclusion for the whole show.
 
