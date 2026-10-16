@@ -1,6 +1,31 @@
 {
-  "generated_at": "2026-10-16T00:48:32Z",
+  "generated_at": "2026-10-16T01:41:48Z",
   "releases": [
+    {
+      "version": "1.37.45",
+      "date": "2026-10-16",
+      "summary": "One patch on 1.37.44: owners can skip typing DELETE before a library removal, and turn that prompt back on from Admin → Libraries.",
+      "highlights": [
+        "**You can skip typing DELETE.** On the removal dialog, Don’t ask again remembers that choice. The next removal still shows Index only or Full remove, the warning, and the titles.",
+        "**Turn the prompt back on anytime.** Admin → Libraries has “Ask me to type DELETE before removing titles.” It starts checked. Uncheck it to skip the typed word. Delete on the grid still opens the dialog."
+      ],
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "**Owner setting `ask_delete_confirmation`.** It defaults to on. Don’t ask again calls owner-only `PUT /api/settings/ask-delete-confirmation`. Admin → Libraries reads and writes the same flag. When it is off, the typed word is omitted. Scope, warning, and the title list stay."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend `pytest tests/` — 2588 passed, 6 skipped, coverage 77.02% (floor 74%), run with `PROJECTIONIST_SKIP_DOTENV=1` on `fix/delete-confirm-setting` (parent `b08918a`, 1.37.44).",
+            "Frontend unit 1019/1019.",
+            "Lint 0 errors (151 warnings); `npm run build` OK."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.44",
       "date": "2026-10-15",

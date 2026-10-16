@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [1.37.45] — 2026-10-16
+
+One patch on 1.37.44: owners can skip typing DELETE before a library removal, and turn that prompt back on from Admin → Libraries.
+
+### Highlights
+- **You can skip typing DELETE.** On the removal dialog, Don’t ask again remembers that choice. The next removal still shows Index only or Full remove, the warning, and the titles.
+- **Turn the prompt back on anytime.** Admin → Libraries has “Ask me to type DELETE before removing titles.” It starts checked. Uncheck it to skip the typed word. Delete on the grid still opens the dialog.
+
+### Added
+- **Owner setting `ask_delete_confirmation`.** It defaults to on. Don’t ask again calls owner-only `PUT /api/settings/ask-delete-confirmation`. Admin → Libraries reads and writes the same flag. When it is off, the typed word is omitted. Scope, warning, and the title list stay.
+
+### Verification
+- Backend `pytest tests/` — 2588 passed, 6 skipped, coverage 77.02% (floor 74%), run with `PROJECTIONIST_SKIP_DOTENV=1` on `fix/delete-confirm-setting` (parent `b08918a`, 1.37.44).
+- Frontend unit 1019/1019.
+- Lint 0 errors (151 warnings); `npm run build` OK.
+
 ## [1.37.44] — 2026-10-15
 
 One patch on 1.37.43: Movies opens on the newest titles, Explore rails drop the extra sentence, a failed knowledge strip stays quiet, Inbox behaves like a mailbox, and recommendations name a real link to something you watched.
