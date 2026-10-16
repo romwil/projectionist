@@ -16,13 +16,13 @@ import MediaBrowseResults from "../components/MediaBrowseResults";
 import RecommendModal from "../components/RecommendModal";
 import { useTitleDetailOverlay } from "../components/TitleDetailOverlayProvider.jsx";
 import { useAuthGate } from "../components/UserMenu";
+import { useRemovalProgressSession } from "../hooks/useRemovalProgressSession.js";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/backNav.js";
 import { libraryHubPath } from "../lib/libraryTabs.js";
 import {
   BULK_DELETE_EMPTY_SELECTION_MESSAGE,
   formatBulkLibraryDeleteResultMessage,
-  hasRemovalSummary,
   partitionBulkDeleteSelection,
 } from "../lib/bulkLibraryDelete.js";
 import {
@@ -49,6 +49,7 @@ function pinToCardItem(pin) {
 export default function WatchlistPage({ embedded = false }) {
   const { isOwner, multiUserEnabled } = useAuthGate();
   const { start, update, finish } = useBulkActionProgress();
+  const removal = useRemovalProgressSession();
   const { openTitleDetail } = useTitleDetailOverlay();
   const [searchParams, setSearchParams] = useSearchParams();
   const [state, setState] = useState({ loading: true, items: [], error: "" });
@@ -59,7 +60,6 @@ export default function WatchlistPage({ embedded = false }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
-  const [removalSummary, setRemovalSummary] = useState(null);
   const [recommendItem, setRecommendItem] = useState(null);
 
   const refresh = useCallback(async ({ pull = false } = {}) => {
@@ -215,34 +215,29 @@ export default function WatchlistPage({ embedded = false }) {
       setDeleteError(BULK_DELETE_EMPTY_SELECTION_MESSAGE);
       return;
     }
-    const progressId = start({
-      label: mode === "full" ? "Fully removing from stack" : "Deleting from library index",
-      total: ratingKeys.length,
-      asynchronous: true,
-    });
+    setDeleteOpen(false);
     setDeleting(true);
     setDeleteError("");
+    const targets = ratingKeys.map((rating_key, index) => ({
+      rating_key,
+      title: titles[index],
+    }));
     try {
-      const result = await deleteLibraryItems(ratingKeys, { mode });
+      const result = await removal.run({
+        mode,
+        targets,
+        stream: (opts) => deleteLibraryItems(ratingKeys, { mode, ...opts }),
+      });
       const deletedCount = Number(result?.deleted) || 0;
       const errors = Array.isArray(result?.errors) ? result.errors : [];
-      const summary = formatBulkLibraryDeleteResultMessage(result, { titles });
-      if (errors.length && !deletedCount) {
-        setDeleteError(summary);
-        finish(progressId, { label: summary, state: "error" });
-        return;
+      setActionStatus(formatBulkLibraryDeleteResultMessage(result, { titles }));
+      if (deletedCount) {
+        setSelected(new Set());
+        await refresh();
       }
-      setDeleteOpen(false);
-      setSelected(new Set());
-      setActionStatus(summary);
-      if (hasRemovalSummary(result)) setRemovalSummary(result);
-      update(progressId, ratingKeys.length);
-      finish(progressId, { label: summary, state: errors.length ? "error" : "success" });
-      await refresh();
+      if (errors.length && !deletedCount) return;
     } catch (err) {
-      const message = err.message || "Could not delete selected titles.";
-      setDeleteError(message);
-      finish(progressId, { label: message, state: "error" });
+      setActionStatus(err.message || "Could not delete selected titles.");
     } finally {
       setDeleting(false);
     }
@@ -396,9 +391,11 @@ export default function WatchlistPage({ embedded = false }) {
       </section>
 
       <RemovalSummaryDialog
-        open={Boolean(removalSummary)}
-        result={removalSummary}
-        onClose={() => setRemovalSummary(null)}
+        open={Boolean(removal.summary)}
+        result={removal.summary}
+        cancelRequested={removal.cancelRequested}
+        onCancelRemaining={removal.cancelRemaining}
+        onClose={removal.dismiss}
       />
 
       <BulkLibraryDeleteDialog

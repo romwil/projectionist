@@ -1650,10 +1650,83 @@ export async function enrichPurgeCandidates(ratingKeys) {
   });
 }
 
+async function readRemovalNdjson(response, onEvent) {
+  const reader = response.body?.getReader?.();
+  if (!reader) {
+    const payload = await response.json();
+    onEvent?.({ type: "complete", result: payload });
+    return payload;
+  }
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finalResult = null;
+  const take = (line) => {
+    const trimmed = String(line || "").trim();
+    if (!trimmed) return;
+    const event = JSON.parse(trimmed);
+    onEvent?.(event);
+    if (event?.type === "complete") finalResult = event.result ?? null;
+  };
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let nl = buffer.indexOf("\n");
+    while (nl >= 0) {
+      take(buffer.slice(0, nl));
+      buffer = buffer.slice(nl + 1);
+      nl = buffer.indexOf("\n");
+    }
+  }
+  buffer += decoder.decode();
+  if (buffer.trim()) take(buffer);
+  return finalResult;
+}
+
+/** Stream per-title removal progress (NDJSON). One library lookup per title. */
+async function streamLibraryRemoval(path, ratingKeys, { mode, onEvent, signal, runId } = {}) {
+  const response = await fetch(`${API}${path}`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
+    body: JSON.stringify({
+      rating_keys: ratingKeys,
+      mode,
+      stream: true,
+      run_id: runId,
+    }),
+    signal,
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    const error = new Error(parseApiErrorBody(text, response.statusText, response.status));
+    error.status = response.status;
+    throw error;
+  }
+  return readRemovalNdjson(response, onEvent);
+}
+
+/** Ask a streamed removal to skip titles that have not started. */
+export async function cancelLibraryRemoval(runId) {
+  return api("/library/items/delete/cancel", {
+    method: "POST",
+    body: JSON.stringify({ run_id: runId }),
+  });
+}
+
 /** Owner-only: delete purge candidates. Default ``mode: "full"`` (*arr + Plex + index).
  * Pass ``mode: "index"`` for undoable index-only prune.
+ * Pass ``onEvent`` to stream per-title progress.
  */
-export async function deletePurgeCandidates(ratingKeys, { mode = "full" } = {}) {
+export async function deletePurgeCandidates(ratingKeys, { mode = "full", onEvent, signal, runId } = {}) {
+  if (onEvent || runId) {
+    return streamLibraryRemoval("/library/purge-candidates/delete", ratingKeys, {
+      mode,
+      onEvent,
+      signal,
+      runId,
+    });
+  }
   return api("/library/purge-candidates/delete", {
     method: "POST",
     body: JSON.stringify({ rating_keys: ratingKeys, mode }),
@@ -1662,8 +1735,17 @@ export async function deletePurgeCandidates(ratingKeys, { mode = "full" } = {}) 
 
 /** Owner-only: remove Projectionist library index rows by rating_key.
  * Pass ``mode: "full"`` to also delete via *arr (files + exclusion) and Plex.
+ * Pass ``onEvent`` to stream per-title progress instead of one batch response.
  */
-export async function deleteLibraryItems(ratingKeys, { mode = "index" } = {}) {
+export async function deleteLibraryItems(ratingKeys, { mode = "index", onEvent, signal, runId } = {}) {
+  if (onEvent || runId) {
+    return streamLibraryRemoval("/library/items/delete", ratingKeys, {
+      mode,
+      onEvent,
+      signal,
+      runId,
+    });
+  }
   return api("/library/items/delete", {
     method: "POST",
     body: JSON.stringify({ rating_keys: ratingKeys, mode }),

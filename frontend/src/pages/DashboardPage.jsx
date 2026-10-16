@@ -17,6 +17,7 @@ import DonutChart from "../components/charts/DonutChart";
 import Gauge from "../components/charts/Gauge";
 import { useBulkActionProgress } from "../components/BulkActionProgress";
 import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog";
+import { useRemovalProgressSession } from "../hooks/useRemovalProgressSession.js";
 import KnowledgeCoverageCard from "../components/KnowledgeCoverageCard";
 import OwnerHealthHero from "../components/OwnerHealthHero";
 import OwnerNowPlayingBreakdown from "../components/OwnerNowPlayingBreakdown";
@@ -28,7 +29,6 @@ import TitleDetailDrawer from "../components/TitleDetailDrawer";
 import {
   BULK_DELETE_EMPTY_SELECTION_MESSAGE,
   LIBRARY_DELETE_MODE_FULL,
-  formatBulkLibraryDeleteResultMessage,
   hasRemovalSummary,
 } from "../lib/bulkLibraryDelete.js";
 import {
@@ -120,6 +120,7 @@ function PurgeTable({
   onGroomingChanged,
 }) {
   const { start, update, finish } = useBulkActionProgress();
+  const removal = useRemovalProgressSession();
   const [sortKey, setSortKey] = useState("purge_score");
   const [sortDir, setSortDir] = useState("desc");
   const [page, setPage] = useState(0);
@@ -128,7 +129,6 @@ function PurgeTable({
   const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [purgeError, setPurgeError] = useState("");
-  const [removalSummary, setRemovalSummary] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [drawerTarget, setDrawerTarget] = useState(null);
   const [mediaTypeFilter, setMediaTypeFilter] = useState(null);
@@ -228,37 +228,28 @@ function PurgeTable({
       setPurgeError(BULK_DELETE_EMPTY_SELECTION_MESSAGE);
       return;
     }
-    const progressId = start({
-      label: "Purging selected titles",
-      total: keys.length,
-      asynchronous: true,
+    const targets = keys.map((rating_key) => {
+      const item = (candidates || []).find((row) => String(row?.rating_key || "") === String(rating_key));
+      return {
+        rating_key,
+        title: String(item?.title || "Untitled").trim() || "Untitled",
+      };
     });
+    setPurgeDialogOpen(false);
     setActionLoading(true);
     setPurgeError("");
     try {
-      const result = await deletePurgeCandidates(keys, { mode });
-      const errors = Array.isArray(result?.errors) ? result.errors : [];
-      const deleted = Number(result?.deleted) || 0;
-      const message = formatBulkLibraryDeleteResultMessage(result, {
-        titles: selectedTitles,
+      const result = await removal.run({
+        mode,
+        targets,
+        stream: (opts) => deletePurgeCandidates(keys, { mode, ...opts }),
       });
-      update(progressId, keys.length);
-      if (errors.length && deleted <= 0) {
-        setPurgeError(message);
-        finish(progressId, { label: message, state: "error" });
-        onRefresh?.();
-        return;
-      }
-      finish(progressId, { label: message });
-      setSelected(new Set());
-      setPurgeDialogOpen(false);
-      if (hasRemovalSummary(result)) setRemovalSummary(result);
+      const deleted = Number(result?.deleted) || 0;
+      if (deleted > 0) setSelected(new Set());
       onRefresh?.();
       onGroomingChanged?.();
     } catch (err) {
-      const message = err?.message || "Could not complete the purge.";
-      setPurgeError(message);
-      finish(progressId, { label: message, state: "error" });
+      setPurgeError(err?.message || "Could not complete the purge.");
     } finally {
       setActionLoading(false);
     }
@@ -436,9 +427,11 @@ function PurgeTable({
       />
 
       <RemovalSummaryDialog
-        open={Boolean(removalSummary)}
-        result={removalSummary}
-        onClose={() => setRemovalSummary(null)}
+        open={Boolean(removal.summary)}
+        result={removal.summary}
+        cancelRequested={removal.cancelRequested}
+        onCancelRemaining={removal.cancelRemaining}
+        onClose={removal.dismiss}
       />
 
       {sorted.length ? (
