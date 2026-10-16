@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [1.37.47] — 2026-10-16
+
+One patch on 1.37.46: each release can show it did not make the main pages slower.
+
+### Highlights
+- **A release can show the pages stayed fast.** Before a version is published, About, Explore, Movies, Inbox, and Live are timed on the test server. If one of them gets slower than its recorded budget, the check says which page and which number.
+
+### Added
+- **Release page-speed budgets.** `npm run test:release-perf` loads those five routes on the mocked e2e server (port 8799, lobby theater 8796, no live Plex). It records time to real content, largest contentful paint, cumulative layout shift, and server time for the document and the page’s main JSON. Budgets live in `frontend/perf/baseline.json`. Each run writes `frontend/perf/last-run.json` with the git revision. The same spec runs inside CI Playwright. GitHub Actions staying red does not block a human rollout; run the command before `./scripts/docker-release.sh`.
+- **Explore layout shift is already above the usual 0.1 line** on an empty library (median CLS 0.1604). That number is the baseline. The budget is 0.25 so sample noise does not fail the check. Other pages on this measurement were about 120–210ms to content, with server times under 30ms. Their timing budgets sit at the 1500ms / 400ms floors.
+
+### Verification
+- `npm run test:release-perf` on the mocked e2e server — passed after recording the baseline (3 samples per page).
+
 ## [1.37.46] — 2026-10-16
 
 One patch on 1.37.45: pages open on their own content. A busy library file no longer holds About, Help, and the rest of the house on a blank Loading screen.
