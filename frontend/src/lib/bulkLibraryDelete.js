@@ -131,9 +131,9 @@ export function formatRemovalFreedLabel(entryOrTotals) {
     return `~${formatRemovalBytes(bytes)} (est.)`;
   }
   if (bytes > 0) return formatRemovalBytes(bytes);
-  if (source === "unknown" || (files === 0 && folders > 0)) {
-    return "Size unknown";
-  }
+  // A folder with no file list is an unmeasured *arr delete. Zero files and
+  // zero folders is an honest 0 B — including when the title was not in *arr.
+  if (files === 0 && folders > 0) return "Size unknown";
   return "0 B";
 }
 

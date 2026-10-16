@@ -173,7 +173,108 @@ class FullRemoveWithoutArrTests(unittest.TestCase):
         self.assertEqual(result["deleted"], 1)
         self.assertEqual(result["errors"], [])
         self.assertIn("not in Sonarr", result["results"][0]["note"])
+        self.assertIn("File path was unknown", result["results"][0]["note"])
+        self.assertEqual(result["results"][0]["bytes_freed"], 0)
+        self.assertEqual(result["totals"]["bytes_freed"], 0)
+        self.assertTrue(result["results"][0]["ok"])
         self.assertFalse(result["results"][0]["arr"]["add_exclusion"])
+
+    def test_absent_sonarr_deletes_library_row_file_and_counts_bytes(self) -> None:
+        from projectionist.library.full_remove import full_remove_library_items
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp) / "The Show"
+            folder.mkdir()
+            media = folder / "S01E01.mkv"
+            media.write_bytes(b"y" * 4096)
+            db = MagicMock()
+            db.library_item_by_rating_key.return_value = _row(
+                str(media),
+                media_type="show",
+                title="The Show",
+            )
+            db.delete_library_items_by_rating_keys.return_value = 1
+            with (
+                patch("projectionist.agent.tools.SonarrClient") as lookup_cls,
+                patch("projectionist.library.full_remove.SonarrClient") as delete_cls,
+                patch("projectionist.library.full_remove.drop_cached_purge_keys"),
+            ):
+                lookup = MagicMock()
+                lookup.series_by_tvdb_id.return_value = None
+                lookup_cls.return_value = lookup
+                result = full_remove_library_items(
+                    db,
+                    _settings(sonarr_url="http://sonarr.test", sonarr_api_key="sonarr-key"),
+                    ["rk-sacrifice"],
+                )
+
+            self.assertFalse(media.exists())
+
+        delete_cls.return_value.delete_series.assert_not_called()
+        db.record_acquisition_exclusion.assert_not_called()
+        self.assertEqual(result["errors"], [])
+        self.assertEqual(result["deleted"], 1)
+        entry = result["results"][0]
+        self.assertTrue(entry["ok"])
+        self.assertTrue(entry["index_deleted"])
+        self.assertIn("not in Sonarr", entry["note"])
+        self.assertNotIn("File path was unknown", entry["note"])
+        self.assertEqual(entry["files"], [str(media)])
+        self.assertEqual(entry["bytes_freed"], 4096)
+        self.assertEqual(entry["bytes_source"], "disk")
+        self.assertEqual(result["totals"]["files"], 1)
+        self.assertEqual(result["totals"]["bytes_freed"], 4096)
+
+    def test_absent_sonarr_deletes_plex_reported_file_and_counts_bytes(self) -> None:
+        from projectionist.library.full_remove import full_remove_library_items
+
+        with tempfile.TemporaryDirectory() as tmp:
+            visible = Path(tmp) / "tv"
+            show = visible / "The Show"
+            show.mkdir(parents=True)
+            media = show / "S01E01.mkv"
+            media.write_bytes(b"z" * 2048)
+            plex_path = f"/remote/tv/The Show/{media.name}"
+            db = MagicMock()
+            db.library_item_by_rating_key.return_value = _row(media_type="show", title="The Show")
+            db.delete_library_items_by_rating_keys.return_value = 1
+            settings = _settings(
+                sonarr_url="http://sonarr.test",
+                sonarr_api_key="sonarr-key",
+                plex_url="http://plex.test",
+                plex_token="token",
+            )
+            settings.tv_root = str(visible)
+            settings.sonarr_root_folder = "/remote/tv"
+            settings.movies_root = ""
+            settings.radarr_root_folder = ""
+            with (
+                patch("projectionist.agent.tools.SonarrClient") as lookup_cls,
+                patch("projectionist.library.full_remove.SonarrClient"),
+                patch("projectionist.library.full_remove.PlexClient") as plex_cls,
+                patch("projectionist.library.full_remove.drop_cached_purge_keys"),
+            ):
+                lookup = MagicMock()
+                lookup.series_by_tvdb_id.return_value = None
+                lookup_cls.return_value = lookup
+                plex = MagicMock()
+                plex.media_file_paths.return_value = [plex_path]
+                plex_cls.return_value = plex
+                result = full_remove_library_items(db, settings, ["rk-sacrifice"])
+
+            self.assertFalse(media.exists())
+            plex.media_file_paths.assert_called_once()
+            self.assertTrue(plex.media_file_paths.call_args.kwargs.get("include_leaves"))
+
+        self.assertEqual(result["errors"], [])
+        entry = result["results"][0]
+        self.assertTrue(entry["index_deleted"])
+        self.assertIn("not in Sonarr", entry["note"])
+        self.assertNotIn("Failed", entry["note"])
+        self.assertEqual(entry["bytes_freed"], 2048)
+        self.assertEqual(result["totals"]["bytes_freed"], 2048)
+        self.assertEqual(result["totals"]["files"], 1)
+        self.assertIn(str(media), entry["files"])
 
 
 if __name__ == "__main__":
