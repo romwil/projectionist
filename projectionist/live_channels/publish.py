@@ -1,4 +1,4 @@
-"""Publish starter recipes / collections to Tunarr via OpenAPI."""
+"""Publish starter recipes and collections into Projectionist's lineup store."""
 
 from __future__ import annotations
 
@@ -8,7 +8,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from projectionist.connectors.tunarr import TunarrClient
+# Historical annotations used this name for the broadcast HTTP client.
+TunarrClient = Any
 from projectionist.facets import motif_search_expansions
 from projectionist.live_channels.recipes import (
     ChannelRecipe,
@@ -344,7 +345,7 @@ def ensure_media_libraries_enabled(
             "enabled": [],
             "scanned": [],
             "skipped": [],
-            "message": "No Plex media source in Tunarr yet.",
+            "message": "Channel fill uses titles already in the lineup.",
         }
 
     wanted = {str(t).lower() for t in media_types} or set(_PREFERRED_LIBRARY_TYPES)
@@ -3031,7 +3032,7 @@ def publish_recipes(
             "libraries": libraries,
             "published_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "note": (
-                "Could not resolve a Tunarr transcode profile; channels were not published."
+                "Could not prepare the lineup; channels were not published."
             ),
         }
 
@@ -4010,9 +4011,8 @@ def refresh_stations_with_stored_recipes(
     }
 
 
-def tunarr_client_from_settings(settings: Any) -> TunarrClient:
-    tunarr = getattr(settings, "tunarr", None)
-    url = str(getattr(tunarr, "url", "") or "").strip() if tunarr else ""
-    if not url:
-        raise ValueError("Tunarr URL is not configured")
-    return TunarrClient(url)
+def tunarr_client_from_settings(settings: Any) -> Any:
+    """Local lineup store. The name remains so existing call sites keep working."""
+    from projectionist.live_channels.lineup_client import LocalLineupClient
+
+    return LocalLineupClient(settings)

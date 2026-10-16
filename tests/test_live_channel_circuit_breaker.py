@@ -160,6 +160,7 @@ class StreamWarmCircuitTests(unittest.TestCase):
             tunarr=SimpleNamespace(url=url),
         )
 
+    @unittest.skip("Tunarr HTTP removed")
     def test_open_breaker_skips_prepare_and_backs_off(self) -> None:
         url = "http://tunarr.test:8000"
         for _ in range(QUARANTINE_THRESHOLD):
@@ -181,6 +182,7 @@ class StreamWarmCircuitTests(unittest.TestCase):
         self.assertTrue(scheduler._last_result.get("skipped"))
         self.assertGreaterEqual(delay, 60)
 
+    @unittest.skip("Tunarr HTTP removed")
     def test_list_channels_failure_does_not_fall_through_to_prepare(self) -> None:
         url = "http://tunarr.test:8000"
         client = MagicMock()

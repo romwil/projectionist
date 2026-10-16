@@ -257,165 +257,14 @@ def live_channels_lifecycle_endpoint(
     payload: LiveChannelsLifecyclePayload,
     user=Depends(require_role("owner")),
 ) -> Dict[str, Any]:
-    """Owner Docker lifecycle: pull / start / stop / ensure_running."""
-    del user
-    from projectionist.live_channels.docker import (
-        lifecycle_from_settings,
-        resolve_config_volume,
-    )
-    from projectionist.live_channels.lifecycle_progress import (
-        invalidate_lifecycle_status_cache,
-        make_phase_callback,
-        mark_waiting_after_lifecycle,
-        progress_store,
-    )
-
-    settings = _settings()
-    life = lifecycle_from_settings(settings)
-    volume = resolve_config_volume(settings, DATA_DIR)
-    action = str(payload.action or "ensure_running").strip().lower()
-    on_phase = None
-    if action in {"ensure_running", "start", "pull"}:
-        from projectionist.live_channels.job import conflicting_live_job, live_job_busy_detail
-
-        if conflicting_live_job():
-            raise HTTPException(status_code=409, detail=live_job_busy_detail())
-        store = progress_store()
-        store.begin(container_name=life.container_name)
-        on_phase = make_phase_callback(store)
-    if action == "pull":
-        result = life.pull(on_phase=on_phase)
-    elif action == "stop":
-        result = life.stop(keep_volume=True)
-    elif action == "start":
-        result = life.start(config_volume=volume, on_phase=on_phase)
-    else:
-        result = life.ensure_running(config_volume=volume, on_phase=on_phase)
-    if action in {"ensure_running", "start", "pull"}:
-        mark_waiting_after_lifecycle(result.to_dict())
-    invalidate_lifecycle_status_cache()
-
-    detail = result.detail or {}
-    url_hint = str(detail.get("url_hint") or "").strip()
-    public_url_hint = str(detail.get("public_url_hint") or "").strip()
-    if not url_hint or not public_url_hint:
-        start_payload = detail.get("start") if isinstance(detail.get("start"), dict) else {}
-        start_detail = (
-            start_payload.get("detail") if isinstance(start_payload.get("detail"), dict) else {}
-        )
-        if not url_hint:
-            url_hint = str(start_detail.get("url_hint") or "").strip()
-        if not public_url_hint:
-            public_url_hint = str(start_detail.get("public_url_hint") or "").strip()
-
-    if result.ok and result.status == "running":
-        tunarr = asdict(settings.tunarr)
-        changed = False
-        # API URL: sibling DNS for Projectionist→Tunarr (may be host.docker.internal).
-        if url_hint and not str(tunarr.get("url") or "").strip():
-            tunarr["url"] = url_hint
-            changed = True
-        # Always refresh API URL port when we know the published host port.
-        detail_host_port = detail.get("host_port")
-        if detail_host_port is None and isinstance(detail.get("start"), dict):
-            start_detail = detail.get("start", {}).get("detail") or {}
-            if isinstance(start_detail, dict):
-                detail_host_port = start_detail.get("host_port")
-        if detail_host_port and url_hint:
-            # Keep sibling host; rewrite port to the actual published mapping.
-            from urllib.parse import urlparse, urlunparse
-
-            parsed = urlparse(url_hint if "://" in url_hint else f"http://{url_hint}")
-            replaced = parsed._replace(netloc=f"{parsed.hostname}:{int(detail_host_port)}")
-            rewritten = urlunparse(replaced).rstrip("/")
-            if rewritten and rewritten != str(tunarr.get("url") or "").rstrip("/"):
-                # Only auto-rewrite when current url is empty or docker sibling.
-                current = str(tunarr.get("url") or "")
-                if (not current) or "host.docker.internal" in current or current.rstrip("/") == url_hint.rstrip("/"):
-                    tunarr["url"] = rewritten
-                    changed = True
-        if detail_host_port:
-            try:
-                port_i = int(detail_host_port)
-            except (TypeError, ValueError):
-                port_i = 0
-            if port_i and int(tunarr.get("host_port") or 0) != port_i:
-                tunarr["host_port"] = port_i
-                changed = True
-        detail_hdhr = detail.get("hdhr_port")
-        if detail_hdhr is None and isinstance(detail.get("start"), dict):
-            start_detail = detail.get("start", {}).get("detail") or {}
-            if isinstance(start_detail, dict):
-                detail_hdhr = start_detail.get("hdhr_port")
-        if detail_hdhr:
-            try:
-                hdhr_i = int(detail_hdhr)
-            except (TypeError, ValueError):
-                hdhr_i = 0
-            if hdhr_i and int(tunarr.get("hdhr_port") or 0) != hdhr_i:
-                tunarr["hdhr_port"] = hdhr_i
-                changed = True
-        # Plex-facing LAN URL — never host.docker.internal; fill when empty.
-        if public_url_hint and not str(tunarr.get("public_url") or "").strip():
-            from projectionist.live_channels.plex_attach import is_docker_only_host
-
-            host = public_url_hint.split("://", 1)[-1].split("/", 1)[0].split(":", 1)[0]
-            if not is_docker_only_host(host):
-                tunarr["public_url"] = public_url_hint.rstrip("/")
-                changed = True
-        if changed:
-            updated = Settings.from_mapping({**asdict(settings), "tunarr": tunarr})
-            save_settings(DATA_DIR, updated)
-            settings = updated
-
-    payload_out = result.to_dict()
-    payload_out["tunarr_url"] = str(settings.tunarr.url or "")
-    payload_out["tunarr_public_url"] = str(settings.tunarr.public_url or "")
-    payload_out["host_port"] = int(getattr(settings.tunarr, "host_port", 0) or 0)
-    payload_out["hdhr_port"] = int(getattr(settings.tunarr, "hdhr_port", 0) or 0)
-    payload_out["config_volume"] = volume
-
-    # With media binds, prefer Tunarr direct file reads (not Plex HTTP parts).
-    if result.ok and result.status == "running":
-        media_binds = list(getattr(settings.tunarr, "media_binds", None) or [])
-        api_url = str(settings.tunarr.url or url_hint or "").strip()
-        if media_binds and api_url:
-            try:
-                from projectionist.connectors.tunarr import TunarrClient
-
-                payload_out["plex_stream"] = TunarrClient(
-                    api_url, timeout=8
-                ).ensure_plex_stream_path_direct()
-            except Exception:  # noqa: BLE001 — best-effort; lifecycle still succeeded
-                pass
-        # Start-over deep playheads + warm HLS so the first Plex tune does not
-        # race "Stream not ready yet" / 0-byte MPEG-TS.
-        if api_url and settings.features.live_channels_enabled:
-            try:
-                from projectionist.connectors.tunarr import TunarrClient
-                from projectionist.live_channels.guide_horizon import GUIDE_HORIZON_HOURS
-
-                payload_out["guide_week"] = TunarrClient(
-                    api_url, timeout=90
-                ).ensure_xmltv_programming_hours(GUIDE_HORIZON_HOURS)
-            except Exception:  # noqa: BLE001 — horizon is also maintained by the scheduler
-                pass
-        if api_url and settings.features.live_channels_enabled:
-            try:
-                from projectionist.live_channels.publish import (
-                    prepare_channels_for_playback,
-                    resolve_channel_icon_url,
-                    tunarr_client_from_settings,
-                )
-
-                payload_out["playback_prepare"] = prepare_channels_for_playback(
-                    tunarr_client_from_settings(settings),
-                    settings=settings,
-                    icon_url=resolve_channel_icon_url(settings),
-                )
-            except Exception:  # noqa: BLE001 — lifecycle still succeeded
-                pass
-    return payload_out
+    """Live has no broadcast container to start or stop."""
+    del user, payload
+    return {
+        "ok": True,
+        "action": "not_used",
+        "status": "not_used",
+        "message": "Live channels run from Projectionist's lineup. There is no broadcast container to start.",
+    }
 
 
 @router.post("/api/admin/live-channels/starters/publish")
@@ -1798,31 +1647,12 @@ def live_channels_tune_endpoint(
         )
     except PlaybackError as error:
         raise HTTPException(status_code=error.status_code, detail=error.message) from error
-    if native_source is not None:
-        return native_source
-
-    try:
-        client = tunarr_client_from_settings(settings)
-        result = prepare_channels_for_playback(
-            client,
-            settings=settings,
-            channel_ids=[channel_id],
-            icon_url=resolve_channel_icon_url(settings),
-            # Live edge only — never start-over on channel surf / rejoin.
-            align_playhead=False,
-            # Never re-warm under an already-watching session.
-            skip_active_sessions=True,
-        )
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    except Exception as error:  # noqa: BLE001
+    if native_source is None:
         raise HTTPException(
-            status_code=502,
-            detail=_safe_error_detail(error, "Could not tune Live Channel"),
-        ) from error
-    result["channel_id"] = channel_id
-    result["stream_url"] = f"/api/live-channels/stream/{channel_id}/index.m3u8"
-    return result
+            status_code=404,
+            detail="That channel is not in the lineup.",
+        )
+    return native_source
 
 
 @router.get("/api/live-channels/stream/{channel_id}/index.m3u8")
@@ -1854,10 +1684,6 @@ def _live_channels_stream_response(
     from projectionist.live_channels.guide import (
         build_on_now_snapshot,
         youth_allows_channel_now,
-    )
-    from projectionist.live_channels.stream_proxy import (
-        iter_chunked,
-        proxy_channel_stream,
     )
     from projectionist.youth.rating_gate import resolve_youth_max_rating, youth_gate_active
 
@@ -1892,25 +1718,9 @@ def _live_channels_stream_response(
             detail="This channel plays from a library Play session. Tune the channel again.",
         )
 
-    try:
-        asset = proxy_channel_stream(settings, cid, relative_path)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    except Exception as error:  # noqa: BLE001
-        raise HTTPException(
-            status_code=502,
-            detail=_safe_error_detail(error, "Live stream unavailable"),
-        ) from error
-
-    headers = {
-        "Cache-Control": "no-store",
-        "Access-Control-Expose-Headers": "Content-Type",
-    }
-    return StreamingResponse(
-        iter_chunked(asset["body"]),
-        media_type=str(asset.get("media_type") or "application/octet-stream"),
-        status_code=int(asset.get("status") or 200),
-        headers=headers,
+    raise HTTPException(
+        status_code=404,
+        detail="This channel plays from a library Play session. Tune the channel again.",
     )
 
 

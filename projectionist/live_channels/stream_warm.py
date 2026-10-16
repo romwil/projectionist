@@ -1,17 +1,4 @@
-"""Background keepalive so Tunarr HLS sessions do not go cold between Plex tunes.
-
-When idle, Tunarr SIGKILLs transcoder/concat processes. The next Plex HDHR tune
-then races ffmpeg writing ``playlist.m3u8`` and fails with "Stream not ready yet"
-→ Plex "This live TV session has ended."
-
-Important: do **not** keep every station hot with full MPEG-TS pulls. Warming all
-six channels every few minutes drove Tunarr to 2000%+ CPU, SIGKILL storms, and
-mid-watch drops to the offline Tunarr icon. Background ticks now:
-
-- skip channels that already have an active session (never remount under viewers)
-- warm at most one cold channel per tick
-- playlist-only keepalive (no ``.ts`` pull) unless an admin prepare asks otherwise
-"""
+"""Background tick for Live. Playback is library Play, so this does not warm a stream."""
 
 from __future__ import annotations
 
@@ -23,11 +10,6 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from projectionist.config_store import load_merged_settings
-from projectionist.circuit_breaker import (
-    CircuitOpenError,
-    circuit_backoff_seconds,
-    is_host_circuit_open,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -86,123 +68,14 @@ class StreamWarmScheduler:
         features = getattr(settings, "features", None)
         if not bool(getattr(features, "live_channels_enabled", False)):
             return float(WARM_POLL_SECONDS)
-        tunarr = getattr(settings, "tunarr", None)
-        url = str(getattr(tunarr, "url", "") or "").strip() if tunarr else ""
-        from projectionist.live_channels.native_schedule import schedule_has_channels
-
-        if schedule_has_channels(settings, data_dir=self.data_dir):
-            self._last_run_at = time.time()
-            self._last_result = {
-                "ok": True,
-                "skipped": True,
-                "reason": "native_playback",
-                "message": "Live playback uses Projectionist Play; skipping Tunarr warm.",
-            }
-            return float(WARM_POLL_SECONDS)
-        if not url:
-            return float(WARM_POLL_SECONDS)
-        if is_host_circuit_open(url):
-            delay = circuit_backoff_seconds(url, floor=WARM_POLL_SECONDS)
-            self._last_run_at = time.time()
-            self._last_result = {
-                "ok": False,
-                "skipped": True,
-                "reason": "circuit_open",
-                "circuit_remaining_seconds": delay,
-                "message": "Tunarr circuit open; skipping stream-warm tick.",
-            }
-            logger.warning(
-                "Live Channels stream-warm skipped: circuit open (%ss remaining)",
-                delay,
-            )
-            return float(delay)
-        from projectionist.connectors.tunarr import TunarrClient
-        from projectionist.live_channels.publish import (
-            prepare_channels_for_playback,
-            tunarr_client_from_settings,
-        )
-
-        try:
-            client = tunarr_client_from_settings(settings)
-        except Exception:
-            client = TunarrClient(url, timeout=20)
-
-        # Rotate which cold channel we touch so every station gets a light warm
-        # over time without starting six ffmpeg pipelines at once.
-        channel_ids: list[str] = []
-        try:
-            listed = [
-                str(ch.get("id") or ch.get("uuid") or "").strip()
-                for ch in client.list_channels()
-                if isinstance(ch, dict)
-            ]
-            listed = [cid for cid in listed if cid]
-            if listed:
-                start = self._warm_cursor % len(listed)
-                channel_ids = listed[start:] + listed[:start]
-                self._warm_cursor = (start + WARM_MAX_CHANNELS_PER_TICK) % len(listed)
-        except CircuitOpenError:
-            delay = circuit_backoff_seconds(url, floor=WARM_POLL_SECONDS)
-            self._last_run_at = time.time()
-            self._last_result = {
-                "ok": False,
-                "skipped": True,
-                "reason": "circuit_open",
-                "circuit_remaining_seconds": delay,
-                "message": "Tunarr circuit open; skipping stream-warm tick.",
-            }
-            logger.warning(
-                "Live Channels stream-warm skipped: circuit open (%ss remaining)",
-                delay,
-            )
-            return float(delay)
-        except Exception as error:  # noqa: BLE001
-            # Do not fall through to prepare_channels_for_playback — an empty
-            # channel_ids list becomes None (warm all) and hammers Tunarr again.
-            self._last_run_at = time.time()
-            self._last_result = {
-                "ok": False,
-                "skipped": True,
-                "reason": "tunarr_unreachable",
-                "message": str(error)[:200],
-            }
-            logger.warning("Live Channels stream-warm skipped: Tunarr unreachable: %s", error)
-            return float(
-                circuit_backoff_seconds(url, floor=WARM_POLL_SECONDS)
-                if is_host_circuit_open(url)
-                else WARM_POLL_SECONDS
-            )
-
-        result = prepare_channels_for_playback(
-            client,
-            settings=settings,
-            channel_ids=channel_ids or None,
-            # Never start-over from background warm — that drifted schedules into
-            # flex/Continuity after viewers left a mid-episode station.
-            align_playhead=False,
-            warm_streams=True,
-            skip_active_sessions=True,
-            max_warm_channels=WARM_MAX_CHANNELS_PER_TICK,
-            pull_ts=False,
-        )
         self._last_run_at = time.time()
         self._last_result = {
-            "ok": bool(result.get("ok")),
-            "count_channels": result.get("count_channels"),
-            "count_aligned": result.get("count_aligned"),
-            "count_warmed_ok": result.get("count_warmed_ok"),
-            "count_warmed_skipped": result.get("count_warmed_skipped"),
-            "message": result.get("message") or "",
+            "ok": True,
+            "skipped": True,
+            "reason": "native_playback",
+            "message": "Live playback uses library Play.",
         }
-        logger.info(
-            "Live Channels stream-warm: channels=%s aligned=%s warmed=%s skipped=%s",
-            result.get("count_channels"),
-            result.get("count_aligned"),
-            result.get("count_warmed_ok"),
-            result.get("count_warmed_skipped"),
-        )
         return float(WARM_POLL_SECONDS)
-
 
 def get_stream_warm_scheduler() -> StreamWarmScheduler:
     global _scheduler
