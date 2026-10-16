@@ -1,7 +1,7 @@
-"""Read-only Tunarr guide snapshots for household “On now” and `/live` EPG.
+"""Guide snapshots for household “On now” and `/live` EPG.
 
-Empty-safe when the feature is off or Tunarr is unreachable. Playback itself
-goes through the auth’d stream proxy — this module only shapes guide data.
+The lineup lives in Projectionist's own store. Tunarr is only consulted when
+that store is empty. Playback of a programme on now uses library Play.
 """
 
 from __future__ import annotations
@@ -940,14 +940,28 @@ def build_on_now_snapshot(
     if not enabled:
         return _empty_snapshot(enabled=False, reason="live_channels_disabled")
 
+    ts = time.time() if now is None else float(now)
+    window = max(GUIDE_WINDOW_SECONDS, int(window_seconds or GUIDE_WINDOW_SECONDS))
+    limit = max(1, min(int(max_channels or MAX_CHANNELS), 100))
+
+    from projectionist.live_channels.native_schedule import snapshot_if_scheduled
+
+    native = snapshot_if_scheduled(
+        settings,
+        youth_max_rating=youth_max_rating,
+        now=ts,
+        window_seconds=window,
+        max_channels=limit,
+        include_programs=include_programs,
+    )
+    if native is not None:
+        return native
+
     tunarr = getattr(settings, "tunarr", None)
     url = str(getattr(tunarr, "url", "") or "").strip() if tunarr else ""
     if not url:
         return _empty_snapshot(enabled=True, reason="tunarr_url_missing")
 
-    ts = time.time() if now is None else float(now)
-    window = max(GUIDE_WINDOW_SECONDS, int(window_seconds or GUIDE_WINDOW_SECONDS))
-    limit = max(1, min(int(max_channels or MAX_CHANNELS), 100))
     try:
         tunarr_client = client or TunarrClient(url, timeout=GUIDE_PROBE_TIMEOUT_SECONDS)
         channels_meta = tunarr_client.list_channels()

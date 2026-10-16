@@ -490,8 +490,54 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
         "channels": [],
         "playable": False,
     }
+    xmltv: Dict[str, Any] = {"ok": False, "programme_count": 0, "content_programme_count": 0}
     client: Optional[TunarrClient] = None
-    if url:
+    native_doc: Dict[str, Any] = {"channels": {}}
+    native_rows: List[Dict[str, Any]] = []
+    tuner_note = ""
+    try:
+        from projectionist.live_channels.native_schedule import (
+            admin_channel_rows,
+            ensure_schedule,
+            plex_tuner_note,
+            programme_stats,
+        )
+
+        native_doc = ensure_schedule(settings)
+        if native_doc.get("channels"):
+            native_rows = admin_channel_rows(settings, native_doc)
+    except Exception:  # noqa: BLE001
+        native_doc = {"channels": {}}
+        native_rows = []
+    if native_rows:
+        channels = native_rows
+        channel_count = len(native_rows)
+        reachability = {
+            "reachable": False,
+            "native": True,
+            "error": "",
+        }
+        try:
+            on_now_snap = build_on_now_snapshot(settings)
+            airing = airing_rows_from_snapshot(on_now_snap)
+        except Exception:  # noqa: BLE001
+            airing = []
+            on_now_snap = {"channels": []}
+        content_slots = 0
+        for row in native_doc.get("channels", {}).values():
+            for item in (row or {}).get("items") or []:
+                if isinstance(item, Mapping) and item.get("type") == "content":
+                    content_slots += 1
+        lineup_health = {
+            "channel_count": channel_count,
+            "filled_count": channel_count if content_slots else 0,
+            "empty_count": 0 if content_slots else channel_count,
+            "channels": [],
+            "playable": content_slots > 0,
+        }
+        xmltv = programme_stats(native_doc)
+        tuner_note = plex_tuner_note()
+    elif url:
         reachability = tunarr_reachable(url)
         if reachability.get("reachable"):
             try:
@@ -597,7 +643,8 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
 
     facing = resolve_plex_facing_tunarr_base(settings)
     guide_url = xmltv_url(str(facing.get("base_url") or ""))
-    xmltv = _xmltv_programme_stats(guide_url)
+    if not native_rows:
+        xmltv = _xmltv_programme_stats(guide_url)
     existing_livetv = probe_existing_plex_livetv(settings)
     plex_mapping: Dict[str, Any] = {
         "ok": False,
@@ -740,6 +787,8 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
         },
         "channels": channels,
         "channel_count": channel_count,
+        "native_playback": bool(native_rows),
+        "plex_tuner_note": tuner_note,
         "airing": airing,
         "now_playing": now_playing,
         "sessions": sessions,

@@ -168,10 +168,21 @@ def _slots_from_normalized(
 
 
 def _is_trivial(settings: Any) -> Optional[Dict[str, Any]]:
-    """Disabled / unconfigured guides are instant — no cache needed."""
+    """Disabled guides are instant. A missing Tunarr URL is not empty when we own a lineup."""
     features = getattr(settings, "features", None)
     if not bool(getattr(features, "live_channels_enabled", False)):
         return _empty_snapshot(enabled=False, reason="live_channels_disabled")
+    from projectionist.live_channels.native_schedule import (
+        resolve_data_dir,
+        schedule_has_channels,
+        tunarr_store_dir,
+    )
+
+    if schedule_has_channels(settings):
+        return None
+    root = tunarr_store_dir(resolve_data_dir(settings))
+    if (root / "db.db").is_file() and (root / "channel-lineups").is_dir():
+        return None
     tunarr = getattr(settings, "tunarr", None)
     url = str(getattr(tunarr, "url", "") or "").strip() if tunarr else ""
     if not url:

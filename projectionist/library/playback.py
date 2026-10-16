@@ -788,6 +788,7 @@ def start_playback(
     rating_key: str,
     user: Any,
     start_over: bool = False,
+    offset_ms: Optional[int] = None,
     fetch: Optional[FetchFn] = None,
 ) -> Dict[str, Any]:
     fetch = fetch or fetch_plex_bytes
@@ -805,7 +806,15 @@ def start_playback(
     if not token:
         raise PlaybackError("Plex isn’t connected.", status_code=503)
 
-    offset_ms = 0 if start_over else int(playable.get("view_offset_ms") or 0)
+    # Live join passes the elapsed point in the file. That is not a resume of
+    # the viewer's Continue Watching offset.
+    live_join = offset_ms is not None
+    if live_join:
+        offset_ms = max(0, int(offset_ms))
+    elif start_over:
+        offset_ms = 0
+    else:
+        offset_ms = int(playable.get("view_offset_ms") or 0)
     session_id = str(uuid.uuid4())
     next_ep = None
     show_item_id = int(playable.get("show_item_id") or 0)
@@ -843,7 +852,10 @@ def start_playback(
     )
     start_plex_hls(session, offset_seconds=session.last_offset_s, fetch=fetch)
     _put_session(session)
-    return session_public_payload(session, can_resume=should_resume_from_offset(offset_ms) and not start_over)
+    return session_public_payload(
+        session,
+        can_resume=should_resume_from_offset(offset_ms) and not start_over and not live_join,
+    )
 
 
 def seek_playback(

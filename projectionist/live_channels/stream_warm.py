@@ -88,6 +88,17 @@ class StreamWarmScheduler:
             return float(WARM_POLL_SECONDS)
         tunarr = getattr(settings, "tunarr", None)
         url = str(getattr(tunarr, "url", "") or "").strip() if tunarr else ""
+        from projectionist.live_channels.native_schedule import schedule_has_channels
+
+        if schedule_has_channels(settings, data_dir=self.data_dir):
+            self._last_run_at = time.time()
+            self._last_result = {
+                "ok": True,
+                "skipped": True,
+                "reason": "native_playback",
+                "message": "Live playback uses Projectionist Play; skipping Tunarr warm.",
+            }
+            return float(WARM_POLL_SECONDS)
         if not url:
             return float(WARM_POLL_SECONDS)
         if is_host_circuit_open(url):

@@ -77,6 +77,7 @@ export default function LivePlayer({
   const [osdVisible, setOsdVisible] = useState(true);
   const [osdTick, setOsdTick] = useState(Date.now());
   const [status, setStatus] = useState("idle");
+  const [scheduleEpoch, setScheduleEpoch] = useState(0);
   const [streamHealth, setStreamHealth] = useState("ok");
   const [softStallPhrase, setSoftStallPhrase] = useState("");
   const [error, setError] = useState("");
@@ -365,7 +366,7 @@ export default function LivePlayer({
     const video = videoRef.current;
     if (!video || !channelId || preroll) return undefined;
 
-    const url = liveStreamUrl(channelId);
+    let url = liveStreamUrl(channelId);
     lastMediaUrlRef.current = url;
     setError("");
     setStatus("loading");
@@ -534,9 +535,26 @@ export default function LivePlayer({
     // Warm + start-over BEFORE loadSource so tune cannot reset the HLS session
     // out from under the first playlist/segment fetches. Mid-play recoveries
     // intentionally skip tuneLiveChannel (see attachHls error path).
+    const onEnded = () => {
+      if (destroyed) return;
+      setScheduleEpoch((epoch) => epoch + 1);
+    };
+    video.addEventListener("ended", onEnded);
+
     (async () => {
+      let flexHoldMs = 0;
       try {
-        await tuneLiveChannel(channelId);
+        const tuned = await tuneLiveChannel(channelId);
+        if (destroyed) return;
+        if (tuned?.is_flex) {
+          const endsAt = Number(tuned.ends_at);
+          flexHoldMs = Number.isFinite(endsAt)
+            ? Math.max(1000, endsAt * 1000 - Date.now())
+            : 15000;
+        } else if (tuned?.stream_url) {
+          url = String(tuned.stream_url);
+          lastMediaUrlRef.current = url;
+        }
       } catch (err) {
         recordLivePlaybackDiag("tune-failed", {
           channelId,
@@ -546,6 +564,13 @@ export default function LivePlayer({
         // Best-effort — player still attempts the stream; errors surface via hls.js.
       }
       if (destroyed) return;
+      if (flexHoldMs > 0) {
+        setStatus("playing");
+        recoverTimer = window.setTimeout(() => {
+          if (!destroyed) setScheduleEpoch((epoch) => epoch + 1);
+        }, flexHoldMs);
+        return;
+      }
       startPlayback();
     })();
 
@@ -565,12 +590,13 @@ export default function LivePlayer({
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
+      video.removeEventListener("ended", onEnded);
       video.removeAttribute("src");
       video.load();
     };
     // activeTrack intentionally omitted — applied in separate effect
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelId, autoFullscreen, preroll]);
+  }, [channelId, autoFullscreen, preroll, scheduleEpoch]);
 
   // Detect buffer underruns / frozen playhead while status stays "playing".
   useEffect(() => {
