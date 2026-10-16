@@ -386,6 +386,8 @@ function getFocusableElements(root) {
       <RemovalSummaryDialog
         open={Boolean(interactions.removalSummary)}
         result={interactions.removalSummary}
+        cancelRequested={interactions.removalCancelRequested}
+        onCancelRemaining={interactions.cancelRemovalRemaining}
         onClose={interactions.dismissRemovalSummary}
       />
     </>
