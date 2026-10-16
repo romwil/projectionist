@@ -206,6 +206,14 @@ def _library_media_added_index(db: "SchemaMigrationsMixin", conn: sqlite3.Connec
     )
 
 
+def _notification_read_at(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
+    """Separate \"read\" from dismiss so opening a note does not remove it."""
+    del db
+    columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(user_notifications)")}
+    if "read_at" not in columns:
+        conn.execute("ALTER TABLE user_notifications ADD COLUMN read_at REAL")
+
+
 def _build_migrations() -> List[Migration]:
     def wrap(method_name: str) -> MigrationFn:
         def _run(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
@@ -269,6 +277,7 @@ def _build_migrations() -> List[Migration]:
         (53, "holiday_rail_curator_notes", wrap("_migrate_holiday_rail_curator_notes")),
         (54, "holiday_rail_shelf_mode", wrap("_migrate_holiday_rail_shelf_mode")),
         (55, "library_media_added_index", _library_media_added_index),
+        (56, "notification_read_at", _notification_read_at),
     ]
 
 

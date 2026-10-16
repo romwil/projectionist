@@ -799,6 +799,14 @@ class NotificationsSeenPayload(BaseModel):
     all_unread: bool = False
 
 
+class NotificationsReadPayload(BaseModel):
+    ids: List[str] = Field(default_factory=list)
+
+
+class NotificationThreadPayload(BaseModel):
+    session_id: str = Field(min_length=1, max_length=128)
+
+
 class MailTestPayload(BaseModel):
     to_email: Optional[str] = Field(default=None, max_length=320)
 
@@ -5897,21 +5905,33 @@ def mark_recommendations_seen(
 def list_notifications(
     unread_only: bool = False,
     limit: int = 20,
+    offset: int = 0,
     kind: Optional[str] = None,
+    status: Optional[str] = None,
+    sort: str = "newest",
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
-    """Generalized inbox: recommendation, arrival, access-request, digest, nudge."""
+    """Mailbox page. ``status`` is unread, read, or all (not dismissed).
+
+    One SQLite connection returns the page, the filter total, and the unread
+    badge. The inbox paints one modest page; older rows use ``offset``.
+    """
     kinds = None
     if kind:
         kinds = [k.strip() for k in str(kind).split(",") if k.strip()]
-    items = _db().list_notifications_for_user(
+    mailbox = str(status or "").strip().lower() or None
+    if mailbox not in {None, "all", "unread", "read"}:
+        mailbox = None
+    order = "oldest" if str(sort or "").strip().lower() == "oldest" else "newest"
+    return _db().notification_inbox_page(
         user.id,
         unread_only=unread_only,
+        status=mailbox,
+        sort=order,
         kinds=kinds,
         limit=min(max(1, limit), 50),
+        offset=min(max(0, offset), 5000),
     )
-    unread_count = _db().count_unread_notifications(user.id)
-    return {"items": items, "count": len(items), "unread_count": unread_count}
 
 
 @app.post("/api/notifications/seen")
@@ -5940,6 +5960,29 @@ def mark_notifications_seen(
     except Exception:  # noqa: BLE001
         logger.debug("Could not sync recommendation seen state", exc_info=True)
     return {"updated": updated}
+
+
+@app.post("/api/notifications/read")
+def mark_notifications_read(
+    payload: NotificationsReadPayload,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Reading a note keeps it in the mailbox. Dismiss is a separate action."""
+    updated = _db().mark_notifications_read(user.id, payload.ids or [])
+    return {"updated": updated}
+
+
+@app.post("/api/notifications/{notification_id}/thread")
+def bind_notification_thread(
+    notification_id: str,
+    payload: NotificationThreadPayload,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Attach the existing chat thread that continues this note."""
+    row = _db().set_notification_chat_session(user.id, notification_id, payload.session_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    return {"notification": row, "session_id": payload.session_id}
 
 
 @app.post("/api/admin/mail/test")
