@@ -1,0 +1,119 @@
+{
+  "revision": "fd42d93c557ffef6baebd4ef94fb1b3085dc2239",
+  "tolerance": "content/LCP budget = max(1500ms, median × 1.75 + 500ms); document/JSON server = max(400ms, median × 2 + 200ms); CLS = max(0.25, worst sample + 0.08). Floors keep laptop-vs-CI noise from failing the job. Medians below a floor still fail once they cross it.",
+  "pages": [
+    {
+      "id": "about",
+      "path": "/about",
+      "content": "heading “The story”",
+      "jsonNeedle": "/release-notes.json",
+      "median": {
+        "contentMs": 119,
+        "lcpMs": 144,
+        "cls": 0.0253,
+        "documentServerMs": 2,
+        "jsonServerMs": 4,
+        "contentLabel": "The story"
+      },
+      "budget": {
+        "contentMs": 1500,
+        "lcpMs": 1500,
+        "cls": 0.25,
+        "documentServerMs": 400,
+        "jsonServerMs": 400
+      },
+      "notes": []
+    },
+    {
+      "id": "explore",
+      "path": "/explore",
+      "content": "Library Pulse settled (not “Loading pulse…”)",
+      "jsonNeedle": "/api/library/feeds/hub",
+      "median": {
+        "contentMs": 206,
+        "lcpMs": 196,
+        "cls": 0.1604,
+        "documentServerMs": 2,
+        "jsonServerMs": 24,
+        "contentLabel": "Library Pulse"
+      },
+      "budget": {
+        "contentMs": 1500,
+        "lcpMs": 1500,
+        "cls": 0.25,
+        "documentServerMs": 400,
+        "jsonServerMs": 400
+      },
+      "notes": [
+        "CLS 0.1604 is over 0.1; kept as the baseline"
+      ]
+    },
+    {
+      "id": "movies",
+      "path": "/search?media_type=movie",
+      "content": "movie results or empty library (not “Loading…”)",
+      "jsonNeedle": "/api/library/query",
+      "median": {
+        "contentMs": 156,
+        "lcpMs": 172,
+        "cls": 0.0023,
+        "documentServerMs": 2,
+        "jsonServerMs": 10,
+        "contentLabel": "No titles match these filters yet."
+      },
+      "budget": {
+        "contentMs": 1500,
+        "lcpMs": 1500,
+        "cls": 0.25,
+        "documentServerMs": 400,
+        "jsonServerMs": 400
+      },
+      "notes": []
+    },
+    {
+      "id": "inbox",
+      "path": "/inbox",
+      "content": "heading “Nothing waiting” or inbox rows (not “Loading inbox…”)",
+      "jsonNeedle": "/api/notifications",
+      "median": {
+        "contentMs": 156,
+        "lcpMs": 160,
+        "cls": 0.0006,
+        "documentServerMs": 2,
+        "jsonServerMs": 11,
+        "contentLabel": "Nothing waiting"
+      },
+      "budget": {
+        "contentMs": 1500,
+        "lcpMs": 1500,
+        "cls": 0.25,
+        "documentServerMs": 400,
+        "jsonServerMs": 400
+      },
+      "notes": []
+    },
+    {
+      "id": "live",
+      "path": "/live",
+      "content": "“Not on the air yet” or Live chrome (not “Filling in the guide…”)",
+      "jsonNeedle": "/api/live-channels/guide",
+      "median": {
+        "contentMs": 207,
+        "lcpMs": 172,
+        "cls": 0.0009,
+        "documentServerMs": 2,
+        "jsonServerMs": 11,
+        "contentLabel": "Not on the air yet"
+      },
+      "budget": {
+        "contentMs": 1500,
+        "lcpMs": 1500,
+        "cls": 0.25,
+        "documentServerMs": 400,
+        "jsonServerMs": 400
+      },
+      "notes": []
+    }
+  ],
+  "measuredAt": "2026-10-16T02:48:51.105Z"
+}

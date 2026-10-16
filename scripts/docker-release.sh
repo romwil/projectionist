@@ -69,6 +69,9 @@ if [[ "$DATE_TAG" -eq 1 ]]; then
   TAGS+=(-t "${IMAGE}:latest-${DATE_STAMP}")
 fi
 
+echo "Page-speed gate before Hub publish (GitHub Actions does not block this script):"
+echo "  npm run test:release-perf"
+echo "Budgets: frontend/perf/baseline.json — docs/RELEASE.md"
 echo "Generating release notes from CHANGELOG.md (require ## [${VERSION}])"
 ./scripts/generate-release-notes.sh --require-version "${VERSION}"
 

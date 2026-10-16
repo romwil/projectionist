@@ -148,6 +148,14 @@ cd frontend && npm run build
 
 Optional CA / e2e layers: [TESTING.md](TESTING.md). CI (`.github/workflows/ci.yml`) runs frontend unit + build + pytest + Playwright with the same coverage floor as local (`--cov-fail-under=74`).
 
+### Page speed (before Hub publish)
+
+```bash
+npm run test:release-perf
+```
+
+Runs on the mocked e2e server (port **8799**, lobby theater **8796** — not prod `:8791`, no live Plex). It measures About, Explore, Movies (`/search?media_type=movie`), Inbox, and Live: time to real content (heading or grid, not a full-page “Loading…”), largest contentful paint, cumulative layout shift, and server time for the document plus that page’s main JSON. Medians must stay within `frontend/perf/baseline.json`. The run writes `frontend/perf/last-run.json` (git revision + numbers). The same spec runs inside CI `npm run test:e2e` so the JSON shows up on the PR. A red Actions job does not block a human rollout — run this command before `./scripts/docker-release.sh`.
+
 ### Recommended (not CI-mandatory)
 
 Run these before tagging when the ship matches the trigger. Lab / QA only — never prod `:8788`.
@@ -343,6 +351,7 @@ A follow-up `chore: refresh release-notes.json timestamp for vX.Y.Z` commit some
 □ No conflicting WIP version bump; PR into main (no direct main push)
 □ Versions aligned (_version.py, root + frontend package.json + lockfiles, pyproject.toml, both Unraid XMLs identical, README badge) — or run ./scripts/patch-release.sh after CHANGELOG
 □ Tests: pytest (≥74% cov), npm run test:unit, npm run lint (0 errors), npm run build
+□ Page speed before Hub: npm run test:release-perf (docs/RELEASE.md; Actions red does not block rollout)
 □ CHANGELOG: release heading for X.Y.Z, Highlights + technical + Verification
 □ Docs updated if user-facing
 □ (Recommended) Security-touching: pentest harness green

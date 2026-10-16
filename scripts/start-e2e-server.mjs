@@ -57,6 +57,8 @@ const env = {
   PYTHONPATH: [ROOT, process.env.PYTHONPATH || ""].filter(Boolean).join(path.delimiter),
   // Mocked e2e is an already-provisioned LAN app, not first-boot SETUP_MODE.
   PROJECTIONIST_SETUP_STATE: process.env.PROJECTIONIST_SETUP_STATE || "active",
+  // Prod lobby theater owns :8791. Never bind it from the mocked e2e server.
+  PROJECTIONIST_THEATER_PORT: process.env.PROJECTIONIST_THEATER_PORT || "8796",
 };
 
 console.log(`Starting CuratorX E2E server on :${PORT} (DATA_DIR=${DATA_DIR})`);
