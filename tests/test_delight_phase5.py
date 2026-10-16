@@ -18,7 +18,6 @@ from projectionist.library.db import BOOTSTRAP_OWNER_ID, Database
 from projectionist.library.feeds import feed_seasonal_spotlight
 from projectionist.memory import UserMemoryService
 from projectionist.notifications.nudges import (
-    build_nudge_copy,
     deliver_enthusiast_nudges,
     pick_nudge_title,
     recently_watched_context,
@@ -57,22 +56,18 @@ class NudgeUnitTests(unittest.TestCase):
         self.assertTrue(user_wants_channel(user, kind="nudge", channel="inbox"))
 
     def test_pick_and_deliver_opt_in_only(self) -> None:
+        # An unwatched shelf title with no named link is not a Worth a look.
         pick = pick_nudge_title(self.db)
-        self.assertIsNotNone(pick)
-        assert pick is not None
-        copy = build_nudge_copy(self.db, pick=pick)
-        self.assertEqual(copy["title"], pick["title"])
-        self.assertIn("You have to see this", copy["subject"])
-        self.assertNotIn("recently watched:", copy["body"].lower())
-
+        self.assertIsNone(pick)
         self.db.update_user_profile(
             BOOTSTRAP_OWNER_ID, nudge_opt_in=True, notify_channel_inbox=True
         )
         settings = Settings()
         result = deliver_enthusiast_nudges(self.db, settings, now=1_700_000_000.0)
-        self.assertGreaterEqual(result["delivered"], 1)
+        self.assertEqual(result["delivered"], 0)
+        self.assertEqual(result.get("skipped"), "no_title")
         notes = self.db.list_notifications_for_user(BOOTSTRAP_OWNER_ID, kinds=["nudge"])
-        self.assertTrue(notes)
+        self.assertFalse(notes)
 
     def test_recently_watched_context(self) -> None:
         self.db.upsert_library_item(
