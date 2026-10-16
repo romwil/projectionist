@@ -33,6 +33,7 @@ export default function YearInReviewPage() {
   const [reel, setReel] = useState(null);
   const [status, setStatus] = useState(null);
   const [error, setError] = useState(null);
+  const [reelLoading, setReelLoading] = useState(true);
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const [shareNote, setShareNote] = useState(null);
@@ -59,14 +60,17 @@ export default function YearInReviewPage() {
     if (!authReady) return undefined;
     const effectiveRole = user?.role || role;
     if (effectiveRole === "guest") {
+      setReelLoading(false);
       setError("Guests don’t get a Year in Review — ask the owner for a member invite.");
       return undefined;
     }
     if (!Number.isFinite(year) || year < 2000) {
+      setReelLoading(false);
       setError("That year doesn’t look right.");
       return undefined;
     }
     let cancelled = false;
+    setReelLoading(true);
     getYearInReview(year)
       .then((payload) => {
         if (cancelled) return;
@@ -75,10 +79,12 @@ export default function YearInReviewPage() {
         setIndex(0);
         setView("reel");
         setError(null);
+        setReelLoading(false);
       })
       .catch((err) => {
         if (cancelled) return;
         setError(err?.message || "Year in Review isn’t ready yet.");
+        setReelLoading(false);
       });
     return () => {
       cancelled = true;
@@ -122,10 +128,13 @@ export default function YearInReviewPage() {
     await copyText(shareCardText(chapter, year));
   }, [chapter, copyText, year]);
 
-  if (!authReady) {
+  if (!authReady || reelLoading) {
     return (
-      <main className="yir-page">
-        <p className="muted">Loading…</p>
+      <main className="yir-page" data-testid="year-in-review-page">
+        <div className="yir-empty">
+          <h1 className="yir-brand">Projectionist</h1>
+          <p className="muted">Loading your year…</p>
+        </div>
       </main>
     );
   }

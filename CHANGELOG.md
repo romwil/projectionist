@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [1.37.46] — 2026-10-16
+
+One patch on 1.37.45: pages open on their own content. A busy library file no longer holds About, Help, and the rest of the house on a blank Loading screen.
+
+### Highlights
+- **About opens on the story.** The page, the license, and the release notes show as soon as you arrive. Signing in no longer keeps the whole screen on Loading.
+- **The rest of the house does the same.** Movies, TV, Help, My Journey, Whispers, and Year in Review draw their own pages first. Owner controls show up when your session is known.
+
+### Fixed
+- **Documents and the health check no longer read the library database.** Every request, including About and `/api/health`, was waiting on a setup-state read that can sit for 30 seconds while the file is busy. Those paths skip that read. Once the household is active, the setup check is remembered. Session checks for real API calls run off the request loop so they cannot freeze the whole app.
+- **The shared shell paints the page before auth returns.** About, Help, Privacy, Movies, TV, title pages, and the other browse shells no longer withhold their content. My Journey, Whispers, and Year in Review no longer replace the page with a full-screen Loading line. Help keeps owner guidance back until the session is known. Admin and Settings share the one auth read.
+
+### Verification
+- `pytest tests/test_api_authz.py tests/test_setup_mode.py tests/test_security_headers.py` — 62 passed (`PROJECTIONIST_SKIP_DOTENV=1`, coverage gate not applied to this slice).
+- Frontend `node --test` for About hash scroll, chat/live first paint, Explore layout, and Inbox paint — 22 passed.
+- Frontend lint — 0 errors (151 warnings).
+
 ## [1.37.45] — 2026-10-16
 
 One patch on 1.37.44: owners can skip typing DELETE before a library removal, and turn that prompt back on from Admin → Libraries.

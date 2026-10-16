@@ -115,14 +115,6 @@ export default function WhisperInboxPage() {
     }
   }
 
-  if (!authReady) {
-    return (
-      <div className="app-root app-loading" data-testid="whisper-auth-loading">
-        <p className="login-lede">Loading…</p>
-      </div>
-    );
-  }
-
   const headline = whisperInboxHeadline({
     memberName: state.memberName,
     count: state.items.length,

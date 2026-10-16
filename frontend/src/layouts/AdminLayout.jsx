@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Navigate, Outlet, useNavigate } from "react-router-dom";
-import { getAuthMe, getFeatures, listMediaIssues, listNotifications } from "../api/client";
+import { listMediaIssues, listNotifications } from "../api/client";
+import { applyAuthSnapshot, loadAuthSnapshot } from "../lib/authGate.js";
 import PrimaryTopbar from "../components/PrimaryTopbar";
 import { ADMIN_NAV, adminNavGroups } from "../lib/adminNav.js";
 import { ROUTES } from "../lib/backNav.js";
@@ -27,32 +28,18 @@ export default function AdminLayout() {
 
     async function guard() {
       try {
-        const features = await getFeatures();
-        const multiUser = Boolean(features?.features?.multi_user_enabled);
-        if (!cancelled) {
-          setMultiUserEnabled(multiUser);
-          setSeerrEnabled(Boolean(features?.features?.seerr_enabled));
-          applyLiveChannelsFeature(features, setLiveChannelsReady);
-        }
-        if (!multiUser) {
-          if (!cancelled) {
-            setAllowed(true);
-            setReady(true);
-          }
-          return;
-        }
-        const me = await getAuthMe();
+        const snap = await loadAuthSnapshot();
         if (cancelled) return;
-        if (!me?.user) {
-          navigate("/login", { replace: true });
+        applyLiveChannelsFeature(snap.features, setLiveChannelsReady);
+        const view = applyAuthSnapshot(snap, { redirect: true });
+        if (view.navigateTo) {
+          navigate(view.navigateTo, { replace: true });
           return;
         }
-        if (me.user.role !== "owner") {
-          setAllowed(false);
-          setReady(true);
-          return;
-        }
-        setAllowed(true);
+        setMultiUserEnabled(view.multiUserEnabled);
+        setSeerrEnabled(view.seerrEnabled);
+        const allowedNext = !view.multiUserEnabled || view.isOwner;
+        setAllowed(allowedNext);
         setReady(true);
       } catch {
         if (!cancelled) {

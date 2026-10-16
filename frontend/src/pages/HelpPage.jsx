@@ -155,8 +155,8 @@ function markdownForRole(source, { includeOwnerSections }) {
  * Role-aware: owners see curation/scheduler sections; members/guests get browse/chat.
  */
 export default function HelpPage() {
-  const { isOwner, role, multiUserEnabled } = useAuthGate({ redirect: false });
-  const showOwnerNav = isOwner || !multiUserEnabled;
+  const { authReady, isOwner, role, multiUserEnabled } = useAuthGate({ redirect: false });
+  const showOwnerNav = authReady && (isOwner || !multiUserEnabled);
   const markdown = markdownForRole(helpMarkdown, { includeOwnerSections: showOwnerNav });
   const { hash } = useLocation();
 
@@ -183,13 +183,15 @@ export default function HelpPage() {
     };
   }, [hash, markdown]);
 
-  const roleLabel = !multiUserEnabled
-    ? "Single workspace"
-    : role === "owner"
-      ? "Owner"
-      : role === "member"
-        ? "Household member"
-        : "Guest";
+  const roleLabel = !authReady
+    ? "Household"
+    : !multiUserEnabled
+      ? "Single workspace"
+      : role === "owner"
+        ? "Owner"
+        : role === "member"
+          ? "Household member"
+          : "Guest";
 
   return (
     <AppShell
