@@ -1,6 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, useLocation } from "react-router-dom";
 import { api } from "../api/client";
+import {
+  posterTrailerRequestPath,
+  trailerLookupOutcome,
+} from "../lib/posterTrailer.js";
 import {
   canWatchOnPlex,
   libraryWatchTo,
@@ -28,6 +33,8 @@ export default function PosterOverlayControls({
   const [trailerKey, setTrailerKey] = useState(() => String(item?.trailer_youtube_key || "").trim());
   const [trailerOpen, setTrailerOpen] = useState(false);
   const [trailerLoading, setTrailerLoading] = useState(false);
+  const [trailerNotice, setTrailerNotice] = useState("");
+  const noticeTimerRef = useRef(null);
   const showWatch = canWatchOnPlex(item);
   const playTo = showWatch ? libraryWatchTo(plexPlayRatingKey(item), location) : null;
   const hasWatchBadge = watchProgressState(item) !== "unwatched";
@@ -41,6 +48,28 @@ export default function PosterOverlayControls({
     return () => document.removeEventListener("keydown", close);
   }, [trailerOpen]);
 
+  useEffect(() => {
+    return () => {
+      if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+    };
+  }, []);
+
+  function showTrailerNotice(message) {
+    setTrailerNotice(message);
+    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = setTimeout(() => setTrailerNotice(""), 2800);
+  }
+
+  function applyTrailerOutcome(outcome) {
+    setTrailerLoading(false);
+    if (outcome.key) {
+      setTrailerKey(outcome.key);
+      setTrailerOpen(true);
+      return;
+    }
+    if (outcome.toast) showTrailerNotice(outcome.toast);
+  }
+
   async function handleTrailer(event) {
     event.preventDefault();
     event.stopPropagation();
@@ -48,19 +77,17 @@ export default function PosterOverlayControls({
       setTrailerOpen(true);
       return;
     }
-    if (!item?.media_type || !(item.tmdb_id || item.rating_key)) return;
+    const path = posterTrailerRequestPath(item);
+    if (!path) {
+      applyTrailerOutcome(trailerLookupOutcome({ detail: null }));
+      return;
+    }
     setTrailerLoading(true);
     try {
-      const id = item.tmdb_id || item.rating_key;
-      const idType = item.tmdb_id ? "tmdb" : "rating_key";
-      const detail = await api(`/title/${item.media_type}/${id}?id_type=${encodeURIComponent(idType)}&enrich=1`);
-      const key = String(detail?.trailer_youtube_key || "").trim();
-      if (key) {
-        setTrailerKey(key);
-        setTrailerOpen(true);
-      }
-    } catch {
-      // Trailer unavailable — title detail remains available.
+      const detail = await api(path);
+      applyTrailerOutcome(trailerLookupOutcome({ detail }));
+    } catch (error) {
+      applyTrailerOutcome(trailerLookupOutcome({ error }));
     } finally {
       setTrailerLoading(false);
     }
@@ -126,6 +153,14 @@ export default function PosterOverlayControls({
           ) : null}
         </div>
       ) : null}
+      {trailerNotice && typeof document !== "undefined"
+        ? createPortal(
+            <div className="menu-action-flash" role="status" aria-live="polite" data-testid={`${testPrefix}-trailer-flash`}>
+              {trailerNotice}
+            </div>,
+            document.body,
+          )
+        : null}
       {trailerOpen && trailerKey ? (
         <div className="trailer-modal-backdrop" data-testid={`${testPrefix}-trailer-modal`} onClick={() => setTrailerOpen(false)} role="presentation">
           <div className="trailer-modal" role="dialog" aria-modal="true" aria-label={`${item.title || "Title"} trailer`} onClick={(event) => event.stopPropagation()}>
