@@ -518,21 +518,16 @@ def build_plex_attach(
 
     docker_only = bool(facing.get("docker_only")) or is_docker_only_host(host)
     # Harden: never put sibling DNS / loopback into Plex paste fields.
-    if docker_only or not url:
-        hdhr = ""
-        xmltv = ""
-        host = ""
-        url = ""
-        manual_address = ""
-        warning = (
-            "Set a LAN Tunarr address so Plex can reach the tuner. "
-            "Projectionist talks to Tunarr over host.docker.internal internally — "
-            "that address must never be pasted into Plex. Set tunarr.public_url "
-            "(e.g. http://10.10.1.202:18765), PROJECTIONIST_HOST_IP, or "
-            "PROJECTIONIST_TUNARR_PUBLIC_URL, then reopen these steps."
-        )
-    else:
-        warning = ""
+    del docker_only
+    hdhr = ""
+    xmltv = ""
+    host = ""
+    url = ""
+    manual_address = ""
+    warning = (
+        "In-app Live plays from Projectionist's lineup through library Play. "
+        "Plex Live TV has no Projectionist tuner, so there is no address to paste."
+    )
 
     return {
         "tunarr_url": url,
@@ -1917,40 +1912,10 @@ def repair_plex_tunarr_livetv(
 
 
 def probe_tuner_discovery(tunarr_base: str, *, timeout: int = 5) -> Dict[str, Any]:
-    """Best-effort GET of Tunarr device / discover endpoint."""
-    base = normalize_tunarr_base(tunarr_base)
-    if not base:
-        return {"ok": False, "message": "Tunarr URL is not configured"}
-    from projectionist.connectors.http import request_json
+    del tunarr_base, timeout
+    return {
+        "ok": False,
+        "message": "In-app Live does not use a tuner device.",
+    }
 
-    # Prefer device.xml / discover.json style probes; fall back to system health.
-    candidates = (
-        f"{base}/discover.json",
-        f"{base}/device.xml",
-        f"{base}/api/system/health",
-    )
-    last_error = ""
-    for url in candidates:
-        try:
-            if url.endswith(".xml"):
-                # request_json may fail on XML — use raw health instead
-                continue
-            payload = request_json(url, timeout=timeout)
-            if payload is not None:
-                return {"ok": True, "message": "Tuner / Tunarr endpoint responded.", "probed": url}
-        except Exception as error:  # noqa: BLE001
-            last_error = str(error)[:200]
-    # Final health probe via client
-    try:
-        from projectionist.connectors.tunarr import tunarr_reachable
 
-        reach = tunarr_reachable(base, timeout=timeout)
-        if reach.get("reachable"):
-            return {
-                "ok": True,
-                "message": "Tunarr is reachable (health). Confirm tuner in Plex if needed.",
-            }
-        last_error = str(reach.get("error") or last_error)
-    except Exception as error:  # noqa: BLE001
-        last_error = str(error)[:200]
-    return {"ok": False, "message": last_error or "Discovery probe failed"}

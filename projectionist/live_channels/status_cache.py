@@ -49,8 +49,6 @@ def _key(settings: Any) -> str:
 
 def _warming_status(settings: Any) -> Dict[str, Any]:
     """Probe-free skeleton with the same shape the Admin UI expects."""
-    from projectionist.live_channels.docker import orchestration_enabled
-
     tunarr = getattr(settings, "tunarr", None)
     real_url = str(getattr(tunarr, "url", "") or "").strip() if tunarr else ""
     enabled = bool(getattr(getattr(settings, "features", None), "live_channels_enabled", False))
@@ -97,8 +95,8 @@ def _warming_status(settings: Any) -> Dict[str, Any]:
         "tunarr": {
             "url": real_url,
             "url_configured": bool(real_url),
-            "image_tag": image_tag or "chrisbenincasa/tunarr:1.3.9",
-            "docker_orchestration": orchestration_enabled(settings),
+            "image_tag": "",
+            "docker_orchestration": False,
             "docker_socket_available": False,
             "reachability": {
                 "reachable": False,

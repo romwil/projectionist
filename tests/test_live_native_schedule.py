@@ -95,14 +95,7 @@ class NativeScheduleTests(unittest.TestCase):
         with self._dir() as data_dir:
             save_schedule(_lineup(now=now), data_dir=data_dir)
             settings = _settings(data_dir)
-            with (
-                patch("projectionist.live_channels.guide.TunarrClient", RefuseTunarr),
-                patch("projectionist.connectors.tunarr.TunarrClient", RefuseTunarr),
-                patch(
-                    "projectionist.connectors.tunarr.tunarr_reachable",
-                    side_effect=AssertionError("tunarr reachability"),
-                ),
-            ):
+            with patch("urllib.request.urlopen", side_effect=AssertionError("no http")):
                 on_now = build_on_now_snapshot(settings, now=now)
                 guide = build_guide_snapshot(settings, now=now, hours=6)
             self.assertTrue(on_now["ready"])
@@ -142,7 +135,7 @@ class NativeScheduleTests(unittest.TestCase):
         with self._dir() as data_dir:
             save_schedule(_lineup(now=now), data_dir=data_dir)
             settings = _settings(data_dir)
-            with patch("projectionist.live_channels.guide.TunarrClient", RefuseTunarr):
+            with patch("urllib.request.urlopen", side_effect=AssertionError("no http")):
                 source = play_source_for_channel(
                     None,
                     settings,
@@ -257,7 +250,7 @@ class NativeScheduleTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            with patch("projectionist.connectors.tunarr.TunarrClient", RefuseTunarr):
+            with patch("urllib.request.urlopen", side_effect=AssertionError("no http")):
                 doc = import_tunarr_lineup(data_dir)
             self.assertIsNotNone(doc)
             channel = doc["channels"]["ch-1"]

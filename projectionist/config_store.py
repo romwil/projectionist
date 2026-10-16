@@ -966,65 +966,8 @@ def _apply_acrcloud_env_overrides(merged: Dict[str, Any]) -> Dict[str, Any]:
 def _apply_tunarr_env_overrides(
     merged: Dict[str, Any], file_data: Mapping[str, Any]
 ) -> Dict[str, Any]:
-    """Apply Tunarr nested env overrides (URL / image gap-fill; docker env wins)."""
-    from projectionist.envcompat import branded_env, env_bool
-
-    tunarr = dict(merged.get("tunarr") or {})
-    file_tunarr = file_data.get("tunarr") if isinstance(file_data.get("tunarr"), Mapping) else {}
-    if not isinstance(file_tunarr, Mapping):
-        file_tunarr = {}
-
-    # URL: gap-fill when settings.json leaves it empty.
-    url_env = branded_env("TUNARR_URL")
-    if url_env and not str(file_tunarr.get("url") or "").strip():
-        tunarr["url"] = url_env
-
-    public_env = branded_env("TUNARR_PUBLIC_URL")
-    if public_env and not str(file_tunarr.get("public_url") or "").strip():
-        tunarr["public_url"] = public_env
-
-    host_port_env = branded_env("TUNARR_HOST_PORT")
-    if host_port_env and not file_tunarr.get("host_port"):
-        try:
-            tunarr["host_port"] = int(str(host_port_env).strip())
-        except ValueError:
-            pass
-
-    hdhr_port_env = branded_env("TUNARR_HDHR_PORT")
-    if hdhr_port_env and not file_tunarr.get("hdhr_port"):
-        try:
-            tunarr["hdhr_port"] = int(str(hdhr_port_env).strip())
-        except ValueError:
-            pass
-
-    # Media binds: env wins when set (host library paths for Tunarr ffmpeg).
-    media_binds_env = branded_env("TUNARR_MEDIA_BINDS")
-    if media_binds_env is not None and str(media_binds_env).strip() != "":
-        tunarr["media_binds"] = [
-            part.strip()
-            for part in str(media_binds_env).split(",")
-            if part.strip()
-        ]
-
-    # Filler binds: env wins when set (bumper / trailer folders for continuity).
-    filler_binds_env = branded_env("TUNARR_FILLER_BINDS")
-    if filler_binds_env is not None and str(filler_binds_env).strip() != "":
-        tunarr["filler_binds"] = [
-            part.strip()
-            for part in str(filler_binds_env).split(",")
-            if part.strip()
-        ]
-
-    # Image pin + docker orchestration: env wins when set (deploy/host capability).
-    image_env = branded_env("TUNARR_IMAGE")
-    if image_env:
-        tunarr["image_tag"] = image_env
-
-    docker_env = env_bool("PROJECTIONIST_DOCKER_ORCHESTRATION")
-    if docker_env is not None:
-        tunarr["docker_orchestration"] = docker_env
-
-    merged["tunarr"] = tunarr
+    """Historical hook. Live no longer reads a broadcast URL, image, or ports from the environment."""
+    del file_data
     return merged
 
 

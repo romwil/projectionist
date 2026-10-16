@@ -250,15 +250,10 @@ def execute_continuity_repair(
     from dataclasses import asdict
 
     from projectionist.config_store import Settings
-    from projectionist.live_channels.docker import (
-        lifecycle_from_settings,
-        resolve_config_volume,
-    )
     from projectionist.live_channels.filler import (
         ensure_continuity_filler_list,
         repair_jumpstart_stations,
     )
-    from projectionist.live_channels.lifecycle_progress import wait_for_tunarr_ready
     from projectionist.live_channels.publish import (
         ensure_media_libraries_enabled,
         resolve_channel_icon_url,
@@ -280,44 +275,6 @@ def execute_continuity_repair(
     docker_state: Dict[str, Any] = {"skipped": True}
     ready_state: Dict[str, Any] = {"skipped": True}
     libraries_state: Dict[str, Any] = {"skipped": True}
-
-    if rescan:
-        life = lifecycle_from_settings(settings)
-        if life.can_orchestrate():
-            _phase("remounting", "Remounting Tunarr with current filler / media binds")
-            volume = resolve_config_volume(settings, data_dir)
-            # Recreate when filler/media binds drifted (kills active transcoder
-            # sessions — expected; Tunarr logs may show SIGKILL expected?=true).
-            start_result = life.start(config_volume=volume)
-            docker_state = start_result.to_dict()
-            if not start_result.ok:
-                raise ContinuityRepairError(
-                    start_result.message
-                    or "Could not (re)start Tunarr with current filler mounts",
-                    status_code=502,
-                )
-            detail = start_result.detail if isinstance(start_result.detail, dict) else {}
-            url_hint = str(detail.get("url_hint") or "").strip()
-            tunarr_url = (
-                url_hint or str(getattr(settings.tunarr, "url", "") or "").strip()
-            )
-            if url_hint and url_hint != str(getattr(settings.tunarr, "url", "") or ""):
-                settings.tunarr.url = url_hint
-            _phase("waiting_ready", "Waiting for Tunarr HTTP after remount")
-            ready_state = wait_for_tunarr_ready(
-                tunarr_url,
-                timeout_s=90.0,
-                interval_s=2.0,
-                lifecycle=life,
-            )
-            if not ready_state.get("ready"):
-                raise ContinuityRepairError(
-                    str(
-                        ready_state.get("message")
-                        or "Tunarr is not ready yet after recreate"
-                    ),
-                    status_code=503 if ready_state.get("still_starting") else 502,
-                )
 
     try:
         client = tunarr_client_from_settings(settings)

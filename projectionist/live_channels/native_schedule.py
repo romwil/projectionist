@@ -26,9 +26,8 @@ logger = logging.getLogger(__name__)
 SCHEDULE_FILENAME = "live_lineup.json"
 _FLEX_TYPES = {"flex", "filler", "offline", "continuity", "commercial"}
 _PLEX_TUNER_NOTE = (
-    "In-app Live plays through Projectionist's Play tool. Plex's HDHomeRun "
-    "tuner still points at Tunarr if that is how it was attached; this change "
-    "does not re-plumb that device."
+    "In-app Live plays through Projectionist's Play tool. "
+    "Plex Live TV is not required."
 )
 
 

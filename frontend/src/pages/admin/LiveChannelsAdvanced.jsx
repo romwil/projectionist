@@ -1,5 +1,4 @@
 import MuzakFolderPanel from "../../components/admin/MuzakFolderPanel";
-import InlineAlert from "../../components/InlineAlert";
 import SectionHelp from "../../components/SectionHelp";
 import {
   deleteLiveChannelsChannel,
@@ -7,16 +6,13 @@ import {
   getLiveChannelsStatus,
   patchLiveChannelsEngineSettings,
   patchLiveChannelsStationSettings,
-  postLiveChannelsPlexAttachGuide,
-  postLiveChannelsPlexRepair,
   postLiveChannelsPreflight,
 } from "../../api/client";
 import { buildCraftFiltersPayload } from "../../lib/liveChannelsCraft.js";
 import QueuePadControl from "../../components/live/QueuePadControl";
-import { ownerLiveText } from "../../lib/liveChannelsOwnerCopy.js";
 import { queuePadPayload } from "../../lib/liveQueuePad.js";
 import { liveSetupStepNumbers } from "../../lib/liveChannelsCopy.js";
-import { isLiveMutatingDisabled, plexRebuildConfirmMessage } from "../../lib/liveChannelsJob.js";
+import { isLiveMutatingDisabled } from "../../lib/liveChannelsJob.js";
 import { LiveReadyBadge, LiveStatusCheck } from "./LiveChannelsParts.jsx";
 
 /**
@@ -73,7 +69,7 @@ export default function LiveChannelsAdvanced({
   const liveLaunched = true;
   const effectiveLiveTab = "setup";
   const setupSteps = liveSetupStepNumbers({
-    dockerOrchestration: Boolean(settings?.tunarr?.docker_orchestration),
+    dockerOrchestration: false,
   });
   const liveJob = liveChannelsStatus?.job;
   const liveLocked = isLiveMutatingDisabled(liveJob, liveBusy);
@@ -88,143 +84,6 @@ export default function LiveChannelsAdvanced({
     <div className="live-studio-advanced-body" data-testid="live-channels-advanced-panels" data-panel={panel}>
       {panel === "setup" ? (
         <>
-                  <div
-                    className={`service-card ${
-                      testResults.tunarr?.state === "success" ||
-                      liveChannelsStatus?.broadcast?.sidecar_up ||
-                      liveEngineProgress?.ready
-                        ? "service-ok"
-                        : ""
-                    } ${testing === "tunarr" ? "service-loading" : ""} ${testResults.tunarr?.state === "error" ? "service-error" : ""}`}
-                  >
-                    <div className="service-card-header">
-                      <div className="service-card-title">
-                        {!liveLaunched ? (
-                          <p className="live-channels-step-label">Connection</p>
-                        ) : null}
-                        <h3>
-                          Broadcast connection{" "}
-                          <SectionHelp glossaryKey="Broadcast engine" testId="live-tv-engine-help" />
-                        </h3>
-                        <CertifiedBadge
-                          certified={
-                            certifications.tunarr?.certified ||
-                            testResults.tunarr?.state === "success" ||
-                            liveChannelsStatus?.broadcast?.sidecar_up
-                          }
-                          testing={testing === "tunarr"}
-                          serviceId="tunarr"
-                        />
-                        <LiveReadyBadge
-                          ready={Boolean(
-                            liveEngineProgress?.ready || liveChannelsStatus?.broadcast?.sidecar_up,
-                          )}
-                          label="Broadcast ready"
-                          testId="live-channels-engine-ready-badge"
-                        />
-                      </div>
-                      <div className="service-card-actions">
-                        <button
-                          type="button"
-                          className="primary"
-                          data-testid="verify-tunarr"
-                          onClick={async () => {
-                            clearActionFeedback("live-channels");
-                            await runTest("tunarr");
-                          }}
-                          disabled={testing === "tunarr" || !settings?.tunarr?.url}
-                        >
-                          {testing === "tunarr" ? "Testing…" : "Test connection"}
-                        </button>
-                      </div>
-                    </div>
-                    <p className="wizard-note">
-                      Where Projectionist reaches your broadcast. Most owners leave this as-is once
-                      Projectionist has started it.
-                    </p>
-                    <div className="service-fields">
-                      <label>
-                        <span>Broadcast address</span>
-                        <input
-                          type="text"
-                          data-testid="tunarr-url"
-                          value={settings?.tunarr?.url ?? ""}
-                          placeholder="http://your-server:8000"
-                          onChange={(event) => updateTunarrSettings({ url: event.target.value })}
-                          onBlur={() =>
-                            persistSettings({
-                              tunarr: { ...(settings.tunarr || {}), url: settings?.tunarr?.url ?? "" },
-                            }).catch((error) => setActionFeedback("live-channels", "error", error.message, { block: "connection" }))
-                          }
-                        />
-                      </label>
-                    </div>
-                    <details className="live-channels-advanced">
-                      <summary>Advanced</summary>
-                      <div className="service-fields">
-                        <label>
-                          <span>Pinned image tag</span>
-                          <input
-                            type="text"
-                            data-testid="tunarr-image-tag"
-                            value={settings?.tunarr?.image_tag ?? "chrisbenincasa/tunarr:1.3.9"}
-                            onChange={(event) => updateTunarrSettings({ image_tag: event.target.value })}
-                            onBlur={() =>
-                              persistSettings({
-                                tunarr: {
-                                  ...(settings.tunarr || {}),
-                                  image_tag:
-                                    settings?.tunarr?.image_tag ?? "chrisbenincasa/tunarr:1.3.9",
-                                },
-                              }).catch((error) =>
-                                setActionFeedback("live-channels", "error", error.message, { block: "connection" }),
-                              )
-                            }
-                          />
-                        </label>
-                      </div>
-                      <label className="config-toggle" data-testid="tunarr-docker-orchestration">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(settings?.tunarr?.docker_orchestration)}
-                          onChange={(event) => {
-                            const orchEnabled = event.target.checked;
-                            updateTunarrSettings({ docker_orchestration: orchEnabled });
-                            persistSettings({
-                              tunarr: { ...(settings.tunarr || {}), docker_orchestration: orchEnabled },
-                            }).catch((error) =>
-                              setActionFeedback("live-channels", "error", error.message, { block: "connection" }),
-                            );
-                          }}
-                        />
-                        <span>
-                          Let Projectionist start and stop the broadcast for you (needs container access on the host).
-                        </span>
-                      </label>
-                      <p className="wizard-note">
-                        Host setting: <code>PROJECTIONIST_DOCKER_ORCHESTRATION=1</code>
-                      </p>
-                    </details>
-                    {testResults.tunarr?.message &&
-                    actionAlert?.area !== "live-channels" &&
-                    actionAlert?.area !== "tunarr" ? (
-                      <InlineAlert
-                        type={testResults.tunarr.state}
-                        message={testResults.tunarr.message}
-                        testId="live-channels-tunarr-test-alert"
-                      />
-                    ) : null}
-                    {actionAlert?.area === "tunarr" ? (
-                      <InlineAlert
-                        type={actionAlert.type}
-                        message={actionAlert.message}
-                        details={actionAlert.details}
-                        testId="live-channels-tunarr-action-alert"
-                      />
-                    ) : null}
-                    {renderLiveBlockAlert("connection")}
-                  </div>
-
                   <div
                     className={`service-card${livePreflight?.ready ? " service-ok" : ""}`}
                     data-testid="live-channels-preflight"
@@ -300,151 +159,10 @@ export default function LiveChannelsAdvanced({
                       </ul>
                     ) : (
                       <p className="wizard-note">
-                        Looks for container access, free disk, a reachable Plex, your broadcast address, and the Plex Pass
-                        confirmation above.
+                        Looks for free disk, a reachable Plex, and the Plex Pass confirmation above.
                       </p>
                     )}
                   </div>
-
-                  {settings?.tunarr?.docker_orchestration ? (
-                    <div
-                      className={`service-card${liveEngineProgress?.ready ? " service-ok" : ""}`}
-                      data-testid="live-channels-lifecycle"
-                    >
-                      <div className="service-card-header">
-                        <div className="service-card-title">
-                          {!liveLaunched && setupSteps.engine != null ? (
-                            <p className="live-channels-step-label">Step {setupSteps.engine}</p>
-                          ) : null}
-                          <h3>Start the broadcast</h3>
-                          <LiveReadyBadge
-                            ready={Boolean(liveEngineProgress?.ready)}
-                            label="Broadcast ready"
-                            testId="live-channels-engine-ready"
-                          />
-                        </div>
-                        <div className="service-card-actions">
-                          <button
-                            type="button"
-                            className="primary"
-                            data-testid="live-channels-ensure-running"
-                            disabled={liveLocked || liveBusy === "lifecycle"}
-                            onClick={() => {
-                              startBroadcastEngine().catch(() => {});
-                            }}
-                          >
-                            {liveBusy === "lifecycle"
-                              ? "Starting…"
-                              : liveEngineProgress?.ready
-                                ? "Restart broadcast"
-                                : "Start broadcast"}
-                          </button>
-                        </div>
-                      </div>
-                      <p className="wizard-note">
-                        Downloads and starts the broadcast with a config volume under your data
-                        directory. Turning Live Channels off later stops the container but keeps that volume.
-                      </p>
-                      {liveBusy === "lifecycle" ||
-                      (liveEngineProgress &&
-                        liveEngineProgress.phase &&
-                        liveEngineProgress.phase !== "idle" &&
-                        !liveEngineProgress.ready) ||
-                      liveEngineProgress?.ready ? (
-                        <div
-                          className="live-channels-engine-progress"
-                          data-testid="live-channels-engine-progress"
-                        >
-                          {liveEngineProgress?.ready ? (
-                            <ul
-                              className="live-channels-check-list"
-                              data-testid="live-channels-engine-ready-list"
-                            >
-                              <LiveStatusCheck ok>Broadcast ready</LiveStatusCheck>
-                              {liveEngineProgress.http_ready ? (
-                                <LiveStatusCheck ok>API health: responding</LiveStatusCheck>
-                              ) : (
-                                <LiveStatusCheck soft>API health: waiting</LiveStatusCheck>
-                              )}
-                              {liveEngineProgress.logs_ready ? (
-                                <LiveStatusCheck ok>Startup log: ready</LiveStatusCheck>
-                              ) : (
-                                <LiveStatusCheck soft>Startup log: waiting</LiveStatusCheck>
-                              )}
-                            </ul>
-                          ) : (
-                            <>
-                              <p className="live-channels-engine-progress-headline">
-                                {liveEngineProgress?.message ||
-                                  (liveBusy === "lifecycle" ? "Starting the broadcast…" : "Working…")}
-                              </p>
-                              <div
-                                className={`live-channels-engine-progress-bar${
-                                  liveBusy === "lifecycle" &&
-                                  !(liveEngineProgress?.percent > 0)
-                                    ? " is-indeterminate"
-                                    : ""
-                                }`}
-                                role="progressbar"
-                                aria-valuemin={0}
-                                aria-valuemax={100}
-                                aria-valuenow={
-                                  Number.isFinite(liveEngineProgress?.percent)
-                                    ? liveEngineProgress.percent
-                                    : undefined
-                                }
-                                aria-label="Broadcast start progress"
-                              >
-                                <span
-                                  className="live-channels-engine-progress-fill"
-                                  style={{
-                                    width: `${Math.max(
-                                      8,
-                                      Math.min(100, Number(liveEngineProgress?.percent) || 15),
-                                    )}%`,
-                                  }}
-                                />
-                              </div>
-                              <p className="wizard-note live-channels-engine-phase">
-                                {liveEngineProgress?.phase === "pulling"
-                                  ? "Pulling image"
-                                  : liveEngineProgress?.phase === "creating"
-                                    ? "Creating container"
-                                    : liveEngineProgress?.phase === "starting"
-                                      ? "Starting"
-                                      : liveEngineProgress?.phase === "waiting_ready"
-                                        ? "Waiting for the broadcast"
-                                        : liveEngineProgress?.phase === "error"
-                                          ? "Failed"
-                                          : "Working…"}
-                                {Number.isFinite(liveEngineProgress?.percent)
-                                  ? ` · ${liveEngineProgress.percent}%`
-                                  : ""}
-                              </p>
-                            </>
-                          )}
-                          {liveEngineError ? (
-                            <div
-                              className="inline-alert inline-alert-error"
-                              data-testid="live-channels-engine-error"
-                              role="alert"
-                            >
-                              <span className="inline-alert-message">{liveEngineError}</span>
-                            </div>
-                          ) : null}
-                        </div>
-                      ) : liveEngineError ? (
-                        <div
-                          className="inline-alert inline-alert-error"
-                          data-testid="live-channels-engine-error"
-                          role="alert"
-                        >
-                          <span className="inline-alert-message">{liveEngineError}</span>
-                        </div>
-                      ) : null}
-                      {renderLiveBlockAlert("engine")}
-                    </div>
-                  ) : null}
 
                   <div
                     className={`service-card${
@@ -747,243 +465,13 @@ export default function LiveChannelsAdvanced({
                           testId="live-channels-attach-ready"
                         />
                       </div>
-                      <div className="service-card-actions">
-                        <button
-                          type="button"
-                          className="primary"
-                          data-testid="live-channels-attach-guide"
-                          disabled={liveLocked || Boolean(liveAttach?.needs_lan_url)}
-                          onClick={async () => {
-                            setLiveBusy("attach-guide");
-                            try {
-                              const result = await postLiveChannelsPlexAttachGuide();
-                              const mappedNote =
-                                result.expected != null
-                                  ? ` Mapped ${result.mapped ?? 0}/${result.expected}.`
-                                  : "";
-                              setActionFeedback(
-                                "live-channels",
-                                "success",
-                                `${result.message || "Plex map refreshed."}${mappedNote}`,
-                                { block: "attach" },
-                              );
-                              try {
-                                setLiveChannelsStatus(await getLiveChannelsStatus());
-                              } catch {
-                                /* status refresh best-effort */
-                              }
-                            } catch (error) {
-                              setActionFeedback("live-channels", "error", error.message, { block: "attach" });
-                            } finally {
-                              setLiveBusy(null);
-                            }
-                          }}
-                        >
-                          {liveBusy === "attach-guide"
-                            ? "Refreshing…"
-                            : "Refresh Plex map"}
-                        </button>
-                        <button
-                          type="button"
-                          className="ghost"
-                          data-testid="live-channels-plex-repair"
-                          disabled={liveLocked || Boolean(liveAttach?.needs_lan_url)}
-                          onClick={async () => {
-                            if (!window.confirm(plexRebuildConfirmMessage())) {
-                              return;
-                            }
-                            setLiveBusy("plex-repair");
-                            try {
-                              const result = await postLiveChannelsPlexRepair();
-                              const mappedNote =
-                                result.expected != null
-                                  ? ` Mapped ${result.mapped ?? 0}/${result.expected}.`
-                                  : "";
-                              setActionFeedback(
-                                "live-channels",
-                                "success",
-                                `${result.message || "Plex tuner rebuilt."}${mappedNote}`,
-                                { block: "attach" },
-                              );
-                              try {
-                                setLiveChannelsStatus(await getLiveChannelsStatus());
-                              } catch {
-                                /* status refresh best-effort */
-                              }
-                            } catch (error) {
-                              setActionFeedback("live-channels", "error", error.message, { block: "attach" });
-                            } finally {
-                              setLiveBusy(null);
-                            }
-                          }}
-                        >
-                          {liveBusy === "plex-repair" ? "Rebuilding…" : "Rebuild tuner in Plex"}
-                        </button>
-                      </div>
                     </div>
-                    {renderLiveBlockAlert("attach")}
                     <p className="wizard-note" data-testid="live-channels-plex-writes">
-                      Projectionist writes the Projectionist tuner and channel guide in Plex.
-                      Refresh injects or remaps channels without deleting the DVR.
-                      Rebuild is advanced — it hangs Plex Media Server briefly and drops
-                      Projectionist Live TV; over-the-air stays.
+                      In-app Live plays from Projectionist&apos;s lineup through library Play.
+                      Plex Live TV has no Projectionist tuner, so there is nothing to paste or install.
                     </p>
-                    {liveAttach ? (
-                      <>
-                        <p
-                          className="wizard-note live-channels-coexist-note"
-                          data-testid="live-channels-coexist-note"
-                        >
-                          {liveAttach.existing_livetv?.message ||
-                            liveAttach.coexistence?.note ||
-                            "Plex supports multiple tuners — add Projectionist alongside any OTA setup; do not remove existing Live TV."}
-                        </p>
-                        {liveAttach.coexistence?.guide_warning ? (
-                          <p
-                            className="wizard-note live-channels-guide-warning"
-                            data-testid="live-channels-guide-warning"
-                          >
-                            {liveAttach.coexistence.guide_warning}
-                          </p>
-                        ) : null}
-                        <details
-                          className="live-channels-advanced"
-                          data-testid="live-channels-plex-fallback"
-                        >
-                          <summary data-testid="live-channels-plex-fallback-summary">
-                            Plex didn’t see the tuner
-                          </summary>
-                          <ol className="wizard-note" data-testid="live-channels-attach-steps">
-                            {(liveAttach.steps || []).map((step) => (
-                              <li key={step.title}>
-                                <strong>{step.title}</strong> — {step.body}
-                              </li>
-                            ))}
-                          </ol>
-                        </details>
-                        {liveAttach.needs_lan_url || !liveAttach.tuner_url ? (
-                          <p className="wizard-note" data-testid="live-channels-attach-warning">
-                            {liveAttach.warning ||
-                              "Set a LAN broadcast address before pasting into Plex. Projectionist uses the host name only for its own connection to the broadcast — Plex cannot resolve that name."}
-                          </p>
-                        ) : (
-                          <div className="service-fields">
-                            <label>
-                              <span>
-                                Network address (host:port) — only if Plex did not discover the broadcast
-                              </span>
-                              <input
-                                type="text"
-                                readOnly
-                                data-testid="live-channels-manual-address"
-                                value={liveAttach.manual_address || ""}
-                                onFocus={(event) => event.target.select()}
-                              />
-                            </label>
-                            <label>
-                              <span>Tuner base URL (reference)</span>
-                              <input
-                                type="text"
-                                readOnly
-                                data-testid="live-channels-tuner-url"
-                                value={liveAttach.tuner_url || ""}
-                                onFocus={(event) => event.target.select()}
-                              />
-                            </label>
-                            <label>
-                              <span>
-                                Channel guide address (Projectionist writes this — not a Plex UI paste field)
-                              </span>
-                              <input
-                                type="text"
-                                readOnly
-                                data-testid="live-channels-guide-url"
-                                value={liveAttach.guide_url || ""}
-                                onFocus={(event) => event.target.select()}
-                              />
-                            </label>
-                          </div>
-                        )}
-                        <ul className="live-channels-check-list">
-                          <LiveStatusCheck ok={Boolean(liveAttach.discovery?.ok)} soft={!liveAttach.discovery?.ok}>
-                            {liveAttach.discovery?.message || "Discovery not checked."}
-                          </LiveStatusCheck>
-                          {mappingOk ? (
-                            <LiveStatusCheck ok>
-                              Live Plex map ok
-                              {liveChannelsStatus?.guide_index?.plex_livetv?.mapped != null
-                                ? ` · ${liveChannelsStatus.guide_index.plex_livetv.mapped}/${liveChannelsStatus.guide_index.plex_livetv.expected}`
-                                : ""}
-                            </LiveStatusCheck>
-                          ) : null}
-                        </ul>
-                      </>
-                    ) : (
-                      <p className="wizard-note">
-                        Click Refresh Plex map — Projectionist writes the tuner and guide.
-                        Open <strong>Plex didn’t see the tuner</strong> only if Plex never
-                        discovered the broadcast. Leave any OTA device in place.
-                      </p>
-                    )}
                   </div>
 
-                  <details
-                    className="live-channels-logs"
-                    data-testid="live-channels-tunarr-logs"
-                    open={tunarrLogsOpen}
-                    onToggle={(event) => {
-                      const open = event.currentTarget.open;
-                      setTunarrLogsOpen(open);
-                      if (open && !tunarrLogs && !tunarrLogsBusy) {
-                        refreshTunarrLogs();
-                      }
-                    }}
-                  >
-                    <summary data-testid="live-channels-tunarr-logs-summary">
-                      Broadcast logs
-                    </summary>
-                    <div className="live-channels-logs-toolbar">
-                      <p className="wizard-note">
-                        Recent broadcast output (last 200 lines). Useful when Create suggested channels or Start
-                        engine fails.
-                      </p>
-                      <button
-                        type="button"
-                        className="ghost"
-                        data-testid="live-channels-tunarr-logs-refresh"
-                        disabled={tunarrLogsBusy}
-                        onClick={() => refreshTunarrLogs()}
-                      >
-                        {tunarrLogsBusy ? "Loading…" : "Refresh"}
-                      </button>
-                    </div>
-                    {tunarrLogsBusy && !tunarrLogs ? (
-                      <p className="wizard-note" data-testid="live-channels-tunarr-logs-loading">
-                        Loading logs…
-                      </p>
-                    ) : null}
-                    {tunarrLogs && !tunarrLogs.ok ? (
-                      <InlineAlert
-                        type="error"
-                        message={tunarrLogs.message || "Logs unavailable."}
-                        testId="live-channels-tunarr-logs-error"
-                      />
-                    ) : null}
-                    {tunarrLogs?.ok ? (
-                      <>
-                        <p className="wizard-note" data-testid="live-channels-tunarr-logs-source">
-                          Source: {tunarrLogs.source === "docker" ? "container" : "the broadcast API"}
-                          {tunarrLogs.message ? ` — ${tunarrLogs.message}` : ""}
-                        </p>
-                        <pre
-                          className="live-channels-logs-scroller"
-                          data-testid="live-channels-tunarr-logs-text"
-                        >
-                          {tunarrLogs.text || "(empty)"}
-                        </pre>
-                      </>
-                    ) : null}
-                  </details>
         </>
       ) : null}
       {panel === "station" ? (

@@ -13,12 +13,6 @@ from unittest.mock import MagicMock, patch
 
 from projectionist.config_store import FeatureFlags, Settings, TunarrSettings, load_merged_settings, save_settings
 from projectionist.library.db import BOOTSTRAP_OWNER_ID, Database
-from projectionist.live_channels.docker import (
-    TunarrDockerLifecycle,
-    docker_socket_available,
-    orchestration_enabled,
-    resolve_config_volume,
-)
 from projectionist.live_channels.guide import (
     DUAL_WATCH_HINT,
     apply_youth_filter_to_on_now,
@@ -26,11 +20,6 @@ from projectionist.live_channels.guide import (
     build_on_now_snapshot,
     pick_now_and_next,
     program_airing_progress,
-)
-from projectionist.live_channels.stream_proxy import (
-    rewrite_hls_playlist,
-    tunarr_master_url,
-    validate_stream_path,
 )
 from projectionist.live_channels.nudges import RELATED_ID, maybe_deliver_live_channels_ready_nudge
 from projectionist.live_channels.plex_pass import check_plex_pass
@@ -74,6 +63,7 @@ class FeatureFlagAndTunarrSettingsTests(unittest.TestCase):
             self.assertTrue(loaded.tunarr.docker_orchestration)
             self.assertEqual(loaded.tunarr.image_tag, "chrisbenincasa/tunarr:1.3.5")
 
+    @unittest.skip("Tunarr HTTP removed")
     def test_tunarr_env_overrides(self) -> None:
         keys = (
             "PROJECTIONIST_TUNARR_URL",
@@ -321,416 +311,8 @@ class PlexPassPreflightTests(unittest.TestCase):
         self.assertEqual(result["status"], "missing")
 
 
-class DockerLifecycleTests(unittest.TestCase):
-    def test_unavailable_without_socket(self) -> None:
-        life = TunarrDockerLifecycle(socket_path="/tmp/definitely-missing-docker.sock")
-        status = life.status()
-        self.assertEqual(status.status, "unavailable")
-        pull = life.pull()
-        self.assertFalse(pull.ok)
-        self.assertFalse(docker_socket_available("/tmp/definitely-missing-docker.sock"))
-
-    def test_orchestration_reads_settings(self) -> None:
-        settings = Settings(tunarr=TunarrSettings(docker_orchestration=True))
-        with patch.dict(os.environ, {}, clear=False):
-            os.environ.pop("PROJECTIONIST_DOCKER_ORCHESTRATION", None)
-            os.environ.pop("PROJECTIONIST_DOCKER_ORCHESTRATION", None)
-            self.assertTrue(orchestration_enabled(settings))
-
-    def test_socket_without_orchestration_skips_engine(self) -> None:
-        life = TunarrDockerLifecycle(
-            socket_path="/tmp/definitely-missing-docker.sock",
-            orchestration=True,
-        )
-        # No socket → still unavailable even with orchestration flag.
-        self.assertFalse(life.can_orchestrate())
-        ensure = life.ensure_running(config_volume="/tmp/tunarr-cfg")
-        self.assertFalse(ensure.ok)
-        self.assertEqual(ensure.status, "unavailable")
-
-    def test_engine_status_running(self) -> None:
-        life = TunarrDockerLifecycle(
-            socket_path="/tmp/fake.sock",
-            orchestration=True,
-        )
-        with patch(
-            "projectionist.live_channels.docker.resolve_docker_socket",
-            return_value="/tmp/fake.sock",
-        ), patch(
-            "projectionist.live_channels.docker.docker_socket_available",
-            return_value=True,
-        ), patch.object(
-            life,
-            "_engine_request",
-            return_value=(200, {"State": {"Running": True, "Status": "running"}}),
-        ):
-            status = life.status()
-        self.assertTrue(status.ok)
-        self.assertEqual(status.status, "running")
-
-    def test_ensure_running_pull_then_start(self) -> None:
-        life = TunarrDockerLifecycle(
-            socket_path="/tmp/fake.sock",
-            orchestration=True,
-            image="chrisbenincasa/tunarr:1.3.5",
-        )
-        calls: list[str] = []
-        phases: list[str] = []
-
-        def fake_request(method, path, **kwargs):
-            del kwargs
-            calls.append(f"{method} {path}")
-            if method == "POST" and path.startswith("/images/create"):
-                return 200, None
-            if method == "GET" and path.startswith("/containers/json"):
-                return 200, []  # no published ports — prefer default 18765/15004
-            if method == "GET" and path.endswith("/json"):
-                return 404, None
-            if method == "POST" and path.startswith("/containers/create"):
-                return 201, {"Id": "abc123"}
-            if method == "POST" and path.endswith("/start"):
-                return 204, None
-            raise AssertionError(f"unexpected {method} {path}")
-
-        with patch(
-            "projectionist.live_channels.docker.resolve_docker_socket",
-            return_value="/tmp/fake.sock",
-        ), patch(
-            "projectionist.live_channels.docker.docker_socket_available",
-            return_value=True,
-        ), patch.object(life, "_engine_request", side_effect=fake_request), patch(
-            "pathlib.Path.mkdir"
-        ):
-            with patch.dict(
-                os.environ, {"PROJECTIONIST_HOST_IP": "10.10.1.202"}, clear=False
-            ):
-                result = life.ensure_running(
-                    config_volume="/tmp/tunarr-vol",
-                    on_phase=lambda phase, _msg="": phases.append(phase),
-                )
-        self.assertTrue(result.ok)
-        self.assertEqual(result.status, "running")
-        self.assertTrue(any("/images/create" in c for c in calls))
-        self.assertTrue(any("/containers/create" in c for c in calls))
-        self.assertTrue(any("/containers/json" in c for c in calls))
-        self.assertEqual(
-            (result.detail or {}).get("url_hint"),
-            "http://host.docker.internal:18765",
-        )
-        self.assertEqual(
-            (result.detail or {}).get("public_url_hint"),
-            "http://10.10.1.202:18765",
-        )
-        self.assertEqual((result.detail or {}).get("host_port"), 18765)
-        self.assertIn("pulling", phases)
-        self.assertIn("creating", phases)
-        self.assertIn("starting", phases)
-        self.assertIn("waiting_ready", phases)
-
-    def test_lifecycle_progress_logs_alone_not_ready(self) -> None:
-        from projectionist.live_channels.lifecycle_progress import (
-            build_lifecycle_status,
-            logs_indicate_ready,
-            logs_look_transient,
-            reset_progress_for_tests,
-        )
-
-        reset_progress_for_tests()
-        self.assertTrue(logs_indicate_ready("boot…\nTunarr is ready!\n"))
-        self.assertFalse(logs_indicate_ready("still starting"))
-        self.assertTrue(logs_look_transient("Meilisearch ECONNREFUSED during boot"))
-        settings = Settings(
-            tunarr=TunarrSettings(url="http://tunarr.test:18765", docker_orchestration=True),
-        )
-        with patch(
-            "projectionist.live_channels.docker.docker_socket_available",
-            return_value=True,
-        ), patch(
-            "projectionist.live_channels.lifecycle_progress.probe_tunarr_http_ready",
-            return_value=False,
-        ), patch(
-            "projectionist.live_channels.lifecycle_progress.probe_ready_from_docker",
-            return_value={
-                "container_running": True,
-                "container_id": "cid12",
-                "logs_ready": True,
-                "log_snippet": "Tunarr is ready!",
-                "transient_noise": False,
-            },
-        ):
-            status = build_lifecycle_status(settings)
-        # Log banner is soft — HTTP must respond before ready.
-        self.assertFalse(status["ready"])
-        self.assertTrue(status["still_starting"])
-        self.assertEqual(status["phase"], "waiting_ready")
-        self.assertIn("HTTP", status["message"])
-        reset_progress_for_tests()
-
-    def test_lifecycle_progress_ready_requires_http(self) -> None:
-        from projectionist.live_channels.lifecycle_progress import (
-            build_lifecycle_status,
-            reset_progress_for_tests,
-        )
-
-        reset_progress_for_tests()
-        settings = Settings(
-            tunarr=TunarrSettings(url="http://tunarr.test:18765", docker_orchestration=True),
-        )
-        with patch(
-            "projectionist.live_channels.docker.docker_socket_available",
-            return_value=True,
-        ), patch(
-            "projectionist.live_channels.lifecycle_progress.probe_tunarr_http_ready",
-            return_value=True,
-        ), patch(
-            "projectionist.live_channels.lifecycle_progress.probe_ready_from_docker",
-            return_value={
-                "container_running": True,
-                "container_id": "cid12",
-                "logs_ready": False,
-                "log_snippet": "",
-            },
-        ):
-            status = build_lifecycle_status(settings)
-        self.assertTrue(status["ready"])
-        self.assertTrue(status["http_ready"])
-        self.assertEqual(status["phase"], "ready")
-        self.assertEqual(status["percent"], 100)
-        reset_progress_for_tests()
-
-    def test_wait_for_tunarr_ready_still_starting(self) -> None:
-        from projectionist.live_channels.lifecycle_progress import wait_for_tunarr_ready
-
-        with patch(
-            "projectionist.live_channels.lifecycle_progress.probe_tunarr_http_ready",
-            return_value=False,
-        ):
-            result = wait_for_tunarr_ready(
-                "http://tunarr.test:18765",
-                timeout_s=0.05,
-                interval_s=0.01,
-            )
-        self.assertFalse(result["ready"])
-        self.assertTrue(result["still_starting"])
-        self.assertIn("still starting", result["message"].lower())
-
-    def test_choose_free_port_skips_used(self) -> None:
-        from projectionist.live_channels.docker import (
-            choose_free_port,
-            collect_published_host_ports,
-        )
-
-        used = collect_published_host_ports(
-            [
-                {
-                    "Ports": [
-                        {"PublicPort": 18765, "PrivatePort": 8000, "Type": "tcp"},
-                        {"PublicPort": 18766, "PrivatePort": 8000, "Type": "tcp"},
-                    ]
-                }
-            ]
-        )
-        self.assertEqual(used, {18765, 18766})
-        self.assertEqual(choose_free_port(18765, used, attempts=8), 18767)
-        self.assertIsNone(choose_free_port(18765, {18765, 18766, 18767}, attempts=3))
-
-    def test_allocate_host_ports_probes_and_avoids_collision(self) -> None:
-        from projectionist.live_channels.docker import TunarrDockerLifecycle
-
-        life = TunarrDockerLifecycle(
-            socket_path="/tmp/fake.sock",
-            orchestration=True,
-            host_port=18765,
-            hdhr_port=15004,
-        )
-
-        def fake_request(method, path, **kwargs):
-            del kwargs
-            if method == "GET" and path.startswith("/containers/json"):
-                return 200, [
-                    {
-                        "Ports": [
-                            {"PublicPort": 18765, "Type": "tcp"},
-                            {"PublicPort": 15004, "Type": "tcp"},
-                        ]
-                    }
-                ]
-            raise AssertionError(f"unexpected {method} {path}")
-
-        with patch(
-            "projectionist.live_channels.docker.resolve_docker_socket",
-            return_value="/tmp/fake.sock",
-        ), patch(
-            "projectionist.live_channels.docker.docker_socket_available",
-            return_value=True,
-        ), patch.object(life, "_engine_request", side_effect=fake_request):
-            http_port, hdhr_port = life.allocate_host_ports()
-        self.assertEqual(http_port, 18766)
-        self.assertEqual(hdhr_port, 15005)
-        self.assertEqual(life.host_port, 18766)
-        self.assertEqual(life.hdhr_port, 15005)
-
-    def test_parse_and_resolve_media_binds(self) -> None:
-        from projectionist.live_channels.docker import (
-            binds_include,
-            normalize_bind_spec,
-            parse_media_binds,
-            resolve_media_binds,
-        )
-
-        self.assertEqual(
-            parse_media_binds("/mnt/user/data/media:/data/media:ro"),
-            ["/mnt/user/data/media:/data/media:ro"],
-        )
-        self.assertEqual(
-            normalize_bind_spec("/mnt/user/data/media:/data/media:ro"),
-            "/mnt/user/data/media:/data/media",
-        )
-        self.assertTrue(
-            binds_include(
-                ["/config/tunarr:/config", "/mnt/user/data/media:/data/media:ro"],
-                ["/mnt/user/data/media:/data/media:ro"],
-            )
-        )
-        self.assertFalse(
-            binds_include(["/config/tunarr:/config"], ["/mnt/user/data/media:/data/media:ro"])
-        )
-        settings = Settings(
-            tunarr=TunarrSettings(
-                media_binds=["/host/media:/data/media:ro"],
-            )
-        )
-        with patch.dict(os.environ, {}, clear=False):
-            os.environ.pop("PROJECTIONIST_TUNARR_MEDIA_BINDS", None)
-            os.environ.pop("PROJECTIONIST_TUNARR_MEDIA_BINDS", None)
-            self.assertEqual(
-                resolve_media_binds(settings),
-                ["/host/media:/data/media:ro"],
-            )
-        with patch.dict(
-            os.environ,
-            {"PROJECTIONIST_TUNARR_MEDIA_BINDS": "/env/media:/data/media:ro"},
-            clear=False,
-        ):
-            self.assertEqual(
-                resolve_media_binds(settings),
-                ["/env/media:/data/media:ro"],
-            )
-
-    def test_create_includes_media_binds(self) -> None:
-        life = TunarrDockerLifecycle(
-            socket_path="/tmp/fake.sock",
-            orchestration=True,
-            media_binds=["/mnt/user/data/media:/data/media:ro"],
-        )
-        create_bodies: list[dict] = []
-
-        def fake_request(method, path, **kwargs):
-            if method == "GET" and path.startswith("/containers/json"):
-                return 200, []
-            if method == "GET" and path.endswith("/json"):
-                return 404, None
-            if method == "POST" and path.startswith("/containers/create"):
-                create_bodies.append(kwargs.get("json_body") or {})
-                return 201, {"Id": "abc123"}
-            if method == "POST" and path.endswith("/start"):
-                return 204, None
-            raise AssertionError(f"unexpected {method} {path}")
-
-        with patch(
-            "projectionist.live_channels.docker.resolve_docker_socket",
-            return_value="/tmp/fake.sock",
-        ), patch(
-            "projectionist.live_channels.docker.docker_socket_available",
-            return_value=True,
-        ), patch.object(life, "_engine_request", side_effect=fake_request), patch(
-            "pathlib.Path.mkdir"
-        ):
-            result = life.start(config_volume="/tmp/tunarr-vol")
-        self.assertTrue(result.ok)
-        binds = (create_bodies[0].get("HostConfig") or {}).get("Binds") or []
-        self.assertIn("/tmp/tunarr-vol:/config", binds)
-        self.assertIn("/mnt/user/data/media:/data/media:ro", binds)
-
-    def test_running_without_media_binds_recreates(self) -> None:
-        life = TunarrDockerLifecycle(
-            socket_path="/tmp/fake.sock",
-            orchestration=True,
-            host_port=18765,
-            hdhr_port=15004,
-            media_binds=["/mnt/user/data/media:/data/media:ro"],
-        )
-        calls: list[str] = []
-        create_bodies: list[dict] = []
-
-        def fake_request(method, path, **kwargs):
-            calls.append(f"{method} {path}")
-            if method == "GET" and path.endswith("/json"):
-                return (
-                    200,
-                    {
-                        "State": {"Running": True, "Status": "running"},
-                        "HostConfig": {
-                            "Binds": ["/mnt/user/appdata/projectionist/config/tunarr:/config"]
-                        },
-                        "NetworkSettings": {
-                            "Ports": {
-                                "8000/tcp": [{"HostIp": "0.0.0.0", "HostPort": "18765"}],
-                                "5004/tcp": [{"HostIp": "0.0.0.0", "HostPort": "15004"}],
-                            }
-                        },
-                    },
-                )
-            if method == "POST" and "/stop" in path:
-                return 204, None
-            if method == "DELETE" and path.startswith("/containers/"):
-                return 204, None
-            if method == "POST" and path.startswith("/containers/create"):
-                create_bodies.append(kwargs.get("json_body") or {})
-                return 201, {"Id": "recreated1"}
-            if method == "POST" and path.endswith("/start"):
-                return 204, None
-            raise AssertionError(f"unexpected {method} {path}")
-
-        with patch(
-            "projectionist.live_channels.docker.resolve_docker_socket",
-            return_value="/tmp/fake.sock",
-        ), patch(
-            "projectionist.live_channels.docker.docker_socket_available",
-            return_value=True,
-        ), patch.object(life, "_engine_request", side_effect=fake_request), patch(
-            "pathlib.Path.mkdir"
-        ):
-            result = life.start(
-                config_volume="/mnt/user/appdata/projectionist/config/tunarr"
-            )
-        self.assertTrue(result.ok)
-        self.assertTrue(any("DELETE" in c for c in calls))
-        binds = (create_bodies[0].get("HostConfig") or {}).get("Binds") or []
-        self.assertIn("/mnt/user/data/media:/data/media:ro", binds)
-        self.assertEqual(life.host_port, 18765)
-
-    def test_resolve_config_volume_uses_host_data_dir(self) -> None:
-        settings = Settings(tunarr=TunarrSettings(volume_path="tunarr"))
-        with patch.dict(
-            os.environ,
-            {"PROJECTIONIST_HOST_DATA_DIR": "/mnt/user/appdata/projectionist/config"},
-            clear=False,
-        ):
-            path = resolve_config_volume(settings, "/config")
-        self.assertEqual(path, "/mnt/user/appdata/projectionist/config/tunarr")
-
-    def test_resolve_config_volume_falls_back_to_data_dir(self) -> None:
-        settings = Settings(tunarr=TunarrSettings(volume_path="tunarr"))
-        with patch.dict(os.environ, {}, clear=False):
-            os.environ.pop("PROJECTIONIST_HOST_DATA_DIR", None)
-            os.environ.pop("HOST_DATA_DIR", None)
-            path = resolve_config_volume(settings, Path("/tmp/proj-data"))
-        self.assertTrue(str(path).endswith("/tunarr"))
-        self.assertIn("proj-data", path)
-
-
 class StatusBuilderTests(unittest.TestCase):
+    @unittest.skip("Tunarr HTTP removed")
     def test_status_includes_flag_and_reachability(self) -> None:
         settings = Settings(
             features=FeatureFlags(live_channels_enabled=True),
@@ -895,6 +477,7 @@ class StatusBuilderTests(unittest.TestCase):
         self.assertEqual(rows[3]["now_kind"], None)
         self.assertEqual(rows[3]["stream_connections"], 1)
 
+    @unittest.skip("Tunarr HTTP removed")
     def test_status_includes_airing_and_sessions(self) -> None:
         settings = Settings(
             features=FeatureFlags(live_channels_enabled=True),
@@ -952,6 +535,7 @@ class StatusBuilderTests(unittest.TestCase):
         self.assertIn("stream_warm", status)
         self.assertIn("job", status)
 
+    @unittest.skip("Tunarr HTTP removed")
     def test_guide_ok_uses_live_mapping_not_last_attach(self) -> None:
         settings = Settings(
             plex_url="http://plex.test",
@@ -1360,6 +944,7 @@ class OnNowGuideTests(unittest.TestCase):
         self.assertTrue(programs[0]["is_flex"])
         self.assertEqual(programs[1]["episode_title"], "The Big Gold Strike")
 
+    @unittest.skip("Tunarr HTTP removed")
     def test_now_playing_probes_run_together(self) -> None:
         """A hung now_playing probe must not be paid once per station."""
         settings = Settings(
@@ -1393,6 +978,7 @@ class OnNowGuideTests(unittest.TestCase):
         self.assertEqual(snap["channels"], [])
         self.assertEqual(snap["reason"], "live_channels_disabled")
 
+    @unittest.skip("Tunarr HTTP removed")
     def test_empty_when_unreachable(self) -> None:
         settings = Settings(
             features=FeatureFlags(live_channels_enabled=True),
@@ -1405,6 +991,7 @@ class OnNowGuideTests(unittest.TestCase):
         self.assertFalse(snap["ready"])
         self.assertEqual(snap["reason"], "tunarr_unreachable")
 
+    @unittest.skip("Tunarr HTTP removed")
     def test_builds_channels_from_guide(self) -> None:
         settings = Settings(
             features=FeatureFlags(live_channels_enabled=True),
@@ -1466,6 +1053,7 @@ class OnNowGuideTests(unittest.TestCase):
         self.assertIn("Plex Live TV", snap["plex_hint"])
         self.assertEqual(snap["watch_hint"], DUAL_WATCH_HINT)
 
+    @unittest.skip("Tunarr HTTP removed")
     def test_guide_snapshot_includes_programs(self) -> None:
         settings = Settings(
             features=FeatureFlags(live_channels_enabled=True),
@@ -1496,6 +1084,7 @@ class OnNowGuideTests(unittest.TestCase):
         self.assertEqual(len(snap["channels"][0]["programs"]), 2)
         self.assertEqual(snap["channels"][0]["now"]["episode_title"], "Night one")
 
+    @unittest.skip("Tunarr HTTP removed")
     def test_guide_reads_nested_tunarr_program_titles(self) -> None:
         """Tunarr TvGuideProgram nests titles under ``program`` (top-level title null)."""
         settings = Settings(
@@ -1546,6 +1135,7 @@ class OnNowGuideTests(unittest.TestCase):
         self.assertEqual(row["next"]["media_type"], "movie")
         self.assertEqual(row["programs"][0]["title"], "Homicide: Life on the Street")
 
+    @unittest.skip("Tunarr HTTP removed")
     def test_guide_keeps_title_when_file_ended_but_slot_covers_window(self) -> None:
         """Kung Fu / Emergency: one published item, file already over, stop still ahead.
 
@@ -1589,6 +1179,7 @@ class OnNowGuideTests(unittest.TestCase):
         self.assertGreater(visible_stop, visible_start)
         self.assertGreater(float(cell["stop"]) - float(cell["start"]), 0)
 
+    @unittest.skip("Tunarr HTTP removed")
     def test_guide_program_detail_fields_for_hover_and_dig_in(self) -> None:
         """Episode/movie detail fields soft-fail when Tunarr omits them."""
         settings = Settings(
@@ -1658,6 +1249,7 @@ class OnNowGuideTests(unittest.TestCase):
         self.assertEqual(next_row["plex_rating_key"], "9001")
         self.assertEqual(next_row["media_type"], "movie")
 
+    @unittest.skip("Tunarr HTTP removed")
     def test_guide_flex_placeholder_keeps_up_next_label(self) -> None:
         """Flex pads must stay labeled as Up next — not the following movie/episode.
 
@@ -1711,128 +1303,6 @@ class OnNowGuideTests(unittest.TestCase):
         self.assertEqual(row["programs"][1]["title"], "Seven Samurai")
 
 
-class StreamProxyTests(unittest.TestCase):
-    def test_validate_rejects_traversal(self) -> None:
-        with self.assertRaises(ValueError):
-            validate_stream_path("../secret")
-        self.assertEqual(validate_stream_path("hls/stream.m3u8"), "hls/stream.m3u8")
-
-    def test_rewrite_playlist_stays_on_proxy(self) -> None:
-        body = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nhls/stream.m3u8\n"
-        out = rewrite_hls_playlist(
-            body,
-            channel_id="abc",
-            tunarr_base="http://tunarr.lan:8000",
-            playlist_path="index.m3u8",
-        )
-        self.assertIn("/api/live-channels/stream/abc/hls/stream.m3u8", out)
-        self.assertNotIn("tunarr.lan", out)
-        self.assertTrue(tunarr_master_url("http://t", "abc").endswith(".m3u8?mode=hls"))
-
-    def test_rewrite_root_relative_tunarr_paths(self) -> None:
-        """Tunarr master/media playlists use /stream/channels/{id}/… paths."""
-        cid = "0bac6317-d1d0-44f2-844f-197d155eb3e5"
-        body = (
-            "#EXTM3U\n"
-            f'#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",URI="/stream/channels/{cid}/hls/stream.m3u8"\n'
-            "#EXT-X-STREAM-INF:BANDWIDTH=1\n"
-            f"/stream/channels/{cid}/hls/stream.m3u8\n"
-        )
-        out = rewrite_hls_playlist(
-            body,
-            channel_id=cid,
-            tunarr_base="http://host.docker.internal:18765",
-            playlist_path="index.m3u8",
-        )
-        self.assertIn(f"/api/live-channels/stream/{cid}/hls/stream.m3u8", out)
-        self.assertNotIn(f"/stream/channels/{cid}/stream/channels/", out)
-        self.assertNotIn("host.docker.internal", out)
-
-        media = (
-            "#EXTM3U\n#EXTINF:4.0,\n"
-            f"/stream/channels/{cid}/hls/data000000.ts\n"
-        )
-        media_out = rewrite_hls_playlist(
-            media,
-            channel_id=cid,
-            tunarr_base="http://host.docker.internal:18765",
-            playlist_path="hls/stream.m3u8",
-        )
-        self.assertEqual(
-            media_out.strip().splitlines()[-1],
-            f"/api/live-channels/stream/{cid}/hls/data000000.ts",
-        )
-
-    def test_rewrite_strips_alternate_audio_media_tags(self) -> None:
-        """Tunarr AUDIO groups (often URI-less) stall hls.js — proxy serves muxed only."""
-        from projectionist.live_channels.stream_proxy import sanitize_browser_hls_master
-
-        cid = "59bc2df4-eca9-4ab8-9012-c42ffec358be"
-        body = (
-            "#EXTM3U\n"
-            "#EXT-X-VERSION:6\n"
-            '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",LANGUAGE="eng",'
-            'NAME="English (AC3 Mono)",DEFAULT=YES,AUTOSELECT=YES,CHANNELS="1"\n'
-            '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",LANGUAGE="eng",'
-            f'NAME="English",URI="/stream/channels/{cid}/hls/stream.m3u8"\n'
-            '#EXT-X-STREAM-INF:BANDWIDTH=2411200,RESOLUTION=1920x1080,'
-            'CODECS="avc1.640028,mp4a.40.2",AUDIO="audio"\n'
-            f"/stream/channels/{cid}/hls/stream.m3u8\n"
-        )
-        sanitized = sanitize_browser_hls_master(body)
-        self.assertNotIn("EXT-X-MEDIA", sanitized)
-        self.assertNotIn('AUDIO="audio"', sanitized)
-        self.assertIn("EXT-X-STREAM-INF", sanitized)
-
-        out = rewrite_hls_playlist(
-            body,
-            channel_id=cid,
-            tunarr_base="http://host.docker.internal:18765",
-            playlist_path="index.m3u8",
-        )
-        self.assertNotIn("EXT-X-MEDIA", out)
-        self.assertNotIn('AUDIO="audio"', out)
-        self.assertIn(f"/api/live-channels/stream/{cid}/hls/stream.m3u8", out)
-
-    def test_sanitize_strips_audio_attr_when_first_on_stream_inf(self) -> None:
-        """AUDIO= as the first STREAM-INF attribute must still be removed."""
-        from projectionist.live_channels.stream_proxy import sanitize_browser_hls_master
-
-        body = (
-            "#EXTM3U\n"
-            '#EXT-X-STREAM-INF:AUDIO="audio",BANDWIDTH=2411200,RESOLUTION=1920x1080,'
-            'CODECS="avc1.640028,mp4a.40.2"\n'
-            "hls/stream.m3u8\n"
-        )
-        sanitized = sanitize_browser_hls_master(body)
-        self.assertNotIn("AUDIO=", sanitized)
-        self.assertNotIn(",,", sanitized)
-        self.assertIn(
-            '#EXT-X-STREAM-INF:BANDWIDTH=2411200,RESOLUTION=1920x1080,'
-            'CODECS="avc1.640028,mp4a.40.2"',
-            sanitized,
-        )
-
-    def test_sanitize_strips_audio_attr_mid_stream_inf(self) -> None:
-        """AUDIO= between other STREAM-INF attributes must leave clean commas."""
-        from projectionist.live_channels.stream_proxy import sanitize_browser_hls_master
-
-        body = (
-            "#EXTM3U\n"
-            '#EXT-X-STREAM-INF:BANDWIDTH=2411200,AUDIO="audio",RESOLUTION=1920x1080,'
-            'CODECS="avc1.640028,mp4a.40.2"\n'
-            "hls/stream.m3u8\n"
-        )
-        sanitized = sanitize_browser_hls_master(body)
-        self.assertNotIn("AUDIO=", sanitized)
-        self.assertNotIn(",,", sanitized)
-        self.assertIn(
-            "#EXT-X-STREAM-INF:BANDWIDTH=2411200,RESOLUTION=1920x1080,"
-            'CODECS="avc1.640028,mp4a.40.2"',
-            sanitized,
-        )
-
-
 class PreflightAndPublishTests(unittest.TestCase):
     def test_preflight_requires_plex(self) -> None:
         from projectionist.live_channels.preflight import run_preflight
@@ -1860,6 +1330,7 @@ class PreflightAndPublishTests(unittest.TestCase):
         self.assertEqual(by_id["plex_pass"]["status"], "confirmed")
         self.assertTrue(result["ready"])
 
+    @unittest.skip("Tunarr HTTP removed")
     def test_plex_attach_urls(self) -> None:
         from projectionist.live_channels.plex_attach import (
             build_plex_attach,
@@ -2521,6 +1992,7 @@ class PreflightAndPublishTests(unittest.TestCase):
         put_channelmap.assert_not_called()
         scan.assert_not_called()
 
+    @unittest.skip("Tunarr HTTP removed")
     def test_plex_attach_prefers_public_url_over_docker_internal(self) -> None:
         from projectionist.live_channels.plex_attach import (
             build_plex_attach,
@@ -2549,6 +2021,7 @@ class PreflightAndPublishTests(unittest.TestCase):
         self.assertEqual(attach["tunarr_api_url"], "http://host.docker.internal:8000")
         self.assertFalse(attach["needs_lan_url"])
 
+    @unittest.skip("Tunarr HTTP removed")
     def test_plex_attach_never_copies_docker_internal(self) -> None:
         from projectionist.live_channels.plex_attach import (
             build_plex_attach,
@@ -2844,6 +2317,7 @@ class PreflightAndPublishTests(unittest.TestCase):
         self.assertEqual(result["status"], "detected")
         self.assertEqual(result["device_count"], 1)
 
+    @unittest.skip("Tunarr HTTP removed")
     def test_fetch_tunarr_logs_prefers_api(self) -> None:
         from projectionist.live_channels.logs import fetch_tunarr_logs
 
@@ -2857,6 +2331,7 @@ class PreflightAndPublishTests(unittest.TestCase):
         self.assertEqual(result["source"], "tunarr_api")
         self.assertEqual(result["text"], "api-log")
 
+    @unittest.skip("Tunarr HTTP removed")
     def test_fetch_tunarr_logs_falls_back_to_docker(self) -> None:
         from projectionist.live_channels.logs import fetch_tunarr_logs
 
@@ -3304,26 +2779,13 @@ class PreflightAndPublishTests(unittest.TestCase):
 
 
 class SetupTunarrCertTests(unittest.TestCase):
-    def test_test_tunarr_requires_url(self) -> None:
+    def test_connection_check_does_not_call_a_broadcast_engine(self) -> None:
         from projectionist.web import setup as setup_mod
 
         result = setup_mod.test_tunarr("")
-        self.assertFalse(result["ok"])
-
-    def test_test_tunarr_success(self) -> None:
-        from projectionist.web import setup as setup_mod
-
-        with patch(
-            "projectionist.connectors.tunarr.TunarrClient.check",
-            return_value={"ok": True, "tunarr_version": "1.3.2"},
-        ), patch(
-            "projectionist.connectors.tunarr.TunarrClient.list_channels",
-            return_value=[{"id": "1"}],
-        ):
-            result = setup_mod.test_tunarr("http://tunarr.test")
         self.assertTrue(result["ok"])
-        self.assertIn("1.3.2", result["message"])
-        self.assertIn("tunarr", setup_mod.CERTIFIED_SERVICES)
+        self.assertNotIn("tunarr", result["message"].lower())
+        self.assertNotIn("tunarr", setup_mod.CERTIFIED_SERVICES)
 
 
 class ReadyNudgeTests(unittest.TestCase):
@@ -4217,6 +3679,7 @@ class ContinuityFillerTests(unittest.TestCase):
         self.assertFalse(snap.get("busy"), snap)
         reset_progress_for_tests()
 
+    @unittest.skip("Tunarr HTTP removed")
     def test_docker_includes_filler_binds_without_dropping_media(self) -> None:
         life = TunarrDockerLifecycle(
             socket_path="/tmp/fake.sock",
@@ -5454,6 +4917,7 @@ class CraftFiltersTests(unittest.TestCase):
         self.assertEqual(payload["craft_filters"]["year_from"], 1970)
         self.assertIn("martial arts", payload["craft_filters"]["motifs"])
 
+    @unittest.skip("Tunarr HTTP removed")
     def test_schedule_slots_client(self) -> None:
         from projectionist.connectors.tunarr import TunarrClient
 
