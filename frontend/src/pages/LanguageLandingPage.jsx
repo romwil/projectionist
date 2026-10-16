@@ -14,12 +14,12 @@ import MediaBrowseControls from "../components/MediaBrowseControls.jsx";
 import MediaBrowsePagination from "../components/MediaBrowsePagination.jsx";
 import MediaBrowseResults from "../components/MediaBrowseResults.jsx";
 import { useAuthGate } from "../components/UserMenu";
+import { useRemovalProgressSession } from "../hooks/useRemovalProgressSession.js";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/backNav.js";
 import {
   BULK_DELETE_EMPTY_SELECTION_MESSAGE,
   formatBulkLibraryDeleteResultMessage,
-  hasRemovalSummary,
   libraryBrowseItemKey,
   partitionBulkDeleteSelection,
 } from "../lib/bulkLibraryDelete.js";
@@ -57,6 +57,7 @@ export default function LanguageLandingPage() {
   const navigate = useNavigate();
   const { isOwner } = useAuthGate();
   const { start, update, finish } = useBulkActionProgress();
+  const removal = useRemovalProgressSession();
   const rawLanguage = searchParams.get("language");
   const browse = useMemo(() => parseMediaBrowse(searchParams), [searchParams]);
   const request = useMemo(
@@ -73,7 +74,6 @@ export default function LanguageLandingPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
-  const [removalSummary, setRemovalSummary] = useState(null);
   const [columns, setColumns] = useState(null);
   const [filterOptions, setFilterOptions] = useState({ years: [], genres: [], languages: [] });
 
@@ -276,15 +276,19 @@ export default function LanguageLandingPage() {
       setDeleteError(BULK_DELETE_EMPTY_SELECTION_MESSAGE);
       return;
     }
-    const progressId = start({
-      label: mode === "full" ? "Fully removing from stack" : "Deleting from library index",
-      total: ratingKeys.length,
-      asynchronous: true,
-    });
+    setDeleteOpen(false);
     setDeleting(true);
     setDeleteError("");
+    const targets = ratingKeys.map((rating_key, index) => ({
+      rating_key,
+      title: titles[index],
+    }));
     try {
-      const result = await deleteLibraryItems(ratingKeys, { mode });
+      const result = await removal.run({
+        mode,
+        targets,
+        stream: (opts) => deleteLibraryItems(ratingKeys, { mode, ...opts }),
+      });
       const deletedCount = Number(result?.deleted) || 0;
       const errors = Array.isArray(result?.errors) ? result.errors : [];
       const okKeys = new Set(
@@ -309,21 +313,10 @@ export default function LanguageLandingPage() {
         });
         setSelected(new Set());
       }
-      const summary = formatBulkLibraryDeleteResultMessage(result, { titles });
-      if (errors.length && !deletedCount) {
-        setDeleteError(summary);
-        finish(progressId, { label: summary, state: "error" });
-        return;
-      }
-      setDeleteOpen(false);
-      setActionStatus(summary);
-      if (hasRemovalSummary(result)) setRemovalSummary(result);
-      update(progressId, ratingKeys.length);
-      finish(progressId, { label: summary, state: errors.length ? "error" : "success" });
+      setActionStatus(formatBulkLibraryDeleteResultMessage(result, { titles }));
+      if (errors.length && !deletedCount) return;
     } catch (err) {
-      const message = err.message || "Could not delete selected titles.";
-      setDeleteError(message);
-      finish(progressId, { label: message, state: "error" });
+      setActionStatus(err.message || "Could not delete selected titles.");
     } finally {
       setDeleting(false);
     }
@@ -489,9 +482,11 @@ export default function LanguageLandingPage() {
       ) : null}
 
       <RemovalSummaryDialog
-        open={Boolean(removalSummary)}
-        result={removalSummary}
-        onClose={() => setRemovalSummary(null)}
+        open={Boolean(removal.summary)}
+        result={removal.summary}
+        cancelRequested={removal.cancelRequested}
+        onCancelRemaining={removal.cancelRemaining}
+        onClose={removal.dismiss}
       />
       <BulkLibraryDeleteDialog
         open={deleteOpen}

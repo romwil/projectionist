@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [1.37.48] — 2026-10-16
+
+One patch on 1.37.47: a library removal shows its summary while the titles are still being removed.
+
+### Highlights
+- **You can watch a removal happen.** The summary opens as soon as the removal starts. It counts how many titles are done, how much space is free so far, and whether each title is waiting, being removed, or already removed.
+- **Stop remaining leaves finished titles alone.** Titles that have not started are skipped. Titles already removed stay removed. Index only and Full remove stay, including the choice to type DELETE before a removal.
+
+### Changed
+- **The removal summary is live.** One event per title fills the same dialog that becomes “What was removed” when the batch finishes. Stop remaining cancels only titles that have not started.
+
+### Verification
+- `pytest tests/test_removal_progress.py` — 2 passed (`PROJECTIONIST_SKIP_DOTENV=1`, coverage gate not applied to this slice).
+- Frontend `node --test frontend/src/lib/removalProgress.test.mjs` — 1 passed.
+- ESLint on the removal dialog, progress helper, and the pages that open it — 0 errors.
+
 ## [1.37.47] — 2026-10-16
 
 One patch on 1.37.46: each release can show it did not make the main pages slower.

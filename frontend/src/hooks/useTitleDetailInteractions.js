@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useRemovalProgressSession } from "./useRemovalProgressSession.js";
 import {
   confirmAction,
   deleteLibraryItems,
@@ -20,7 +21,6 @@ import {
 import {
   canOwnerDeleteLibraryTitle,
   formatLibraryDeleteSuccessMessage,
-  hasRemovalSummary,
   libraryItemRatingKey,
 } from "../lib/bulkLibraryDelete.js";
 import { canMarkTitleWatched, isTitleWatched } from "../lib/titleDetailExtras.js";
@@ -53,7 +53,13 @@ export function useTitleDetailInteractions({ detail, setDetail, onDeleted, onDel
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
-  const [removalSummary, setRemovalSummary] = useState(null);
+  const {
+    summary: removalSummary,
+    run: runRemoval,
+    cancelRemaining: cancelRemovalRemaining,
+    dismiss: dismissRemovalProgress,
+    cancelRequested: removalCancelRequested,
+  } = useRemovalProgressSession();
   const [pendingDeletedPayload, setPendingDeletedPayload] = useState(null);
   const [badMediaOpen, setBadMediaOpen] = useState(false);
   const [badMediaLoading, setBadMediaLoading] = useState(false);
@@ -87,7 +93,7 @@ export function useTitleDetailInteractions({ detail, setDetail, onDeleted, onDel
     setDeleteOpen(false);
     setDeleting(false);
     setDeleteError("");
-    setRemovalSummary(null);
+    dismissRemovalProgress();
     setPendingDeletedPayload(null);
     setBadMediaOpen(false);
     setBadMediaLoading(false);
@@ -95,7 +101,7 @@ export function useTitleDetailInteractions({ detail, setDetail, onDeleted, onDel
     setBadMediaMessage("");
     setWatchStatus(null);
     setWatchMessage("");
-  }, [detail?.rating_key, detail?.tmdb_id, detail?.title]);
+  }, [detail?.rating_key, detail?.tmdb_id, detail?.title, dismissRemovalProgress]);
 
   async function handleRequestAdd() {
     const capability = resolveAddCapability({
@@ -153,46 +159,46 @@ export function useTitleDetailInteractions({ detail, setDetail, onDeleted, onDel
     deleteInFlightRef.current = true;
     setDeleting(true);
     setDeleteError("");
+    setDeleteOpen(false);
     try {
-      const result = await deleteLibraryItems([ratingKey], { mode });
+      const result = await runRemoval({
+        mode,
+        targets: [{ rating_key: ratingKey, title: detail.title || "Untitled" }],
+        stream: (opts) => deleteLibraryItems([ratingKey], { mode, ...opts }),
+      });
       const errors = Array.isArray(result?.errors) ? result.errors : [];
-      if (errors.length && !(Number(result?.deleted) > 0)) {
-        setDeleteError(formatLibraryDeleteFailure(errors[0]?.error));
-        deleteInFlightRef.current = false;
-        setDeleting(false);
-        return;
-      }
+      const deleted = Number(result?.deleted) || 0;
       const notice = formatLibraryDeleteSuccessMessage({
-        deleted: Number(result?.deleted) || 0,
+        deleted,
         title: detail.title,
         mode: result?.mode || mode,
         errorCount: errors.length,
       });
       const payload = { notice, detail, result };
-      setDeleteOpen(false);
       setDeleting(false);
-      deleteInFlightRef.current = false;
-      // Refresh lists immediately so Storage Intelligence / browse do not keep
-      // stale rows while the removal summary is still open.
-      onDeleteSuccess?.(payload);
-      if (hasRemovalSummary(result)) {
-        setRemovalSummary(result);
+      if (deleted > 0) {
+        // Refresh lists immediately so Storage Intelligence / browse do not keep
+        // stale rows while the removal summary is still open.
+        onDeleteSuccess?.(payload);
         setPendingDeletedPayload(payload);
         return;
       }
-      onDeleted?.(payload);
+      if (errors.length) {
+        setDeleteError(formatLibraryDeleteFailure(errors[0]?.error));
+      }
+      deleteInFlightRef.current = false;
     } catch (err) {
       setDeleteError(
         formatApiError(err) || "Could not delete this title from the library index.",
       );
-      deleteInFlightRef.current = false;
       setDeleting(false);
     }
   }
 
   function dismissRemovalSummary() {
     const payload = pendingDeletedPayload;
-    setRemovalSummary(null);
+    deleteInFlightRef.current = false;
+    dismissRemovalProgress();
     setPendingDeletedPayload(null);
     if (payload) onDeleted?.(payload);
   }
@@ -280,6 +286,8 @@ export function useTitleDetailInteractions({ detail, setDetail, onDeleted, onDel
     deleteError,
     setDeleteError,
     removalSummary,
+    cancelRemovalRemaining,
+    removalCancelRequested,
     dismissRemovalSummary,
     badMediaOpen,
     setBadMediaOpen,

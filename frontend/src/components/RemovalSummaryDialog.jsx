@@ -6,35 +6,121 @@ import {
   normalizeRemovalSummary,
   removalPathsNote,
 } from "../lib/bulkLibraryDelete.js";
+import {
+  REMOVAL_STOP_REMAINING_NOTE,
+  isLiveRemoval,
+  removalProgressView,
+  removalStatusLabel,
+} from "../lib/removalProgress.js";
 
 function stopBubble(event) {
   event.stopPropagation();
 }
 
-/**
- * Scrollable post-delete results for full remove (bulk or single).
- * Portaled above drawer scrims — same stacking as BulkLibraryDeleteDialog.
- */
-export default function RemovalSummaryDialog({ open, result = null, onClose }) {
-  if (!open || typeof document === "undefined") return null;
-  if (!hasRemovalSummary(result)) return null;
+function RemovalItem({ entry, showStatus }) {
+  const status = entry.status || "removed";
+  const pathNote = status === "removed" ? removalPathsNote(entry) : "";
+  const files = Array.isArray(entry.files) ? entry.files : [];
+  const folders = Array.isArray(entry.folders) ? entry.folders : [];
+  return (
+    <article
+      className={`removal-summary-item is-${status}`}
+      data-testid="removal-summary-item"
+      data-status={status}
+    >
+      <header className="removal-summary-item-head">
+        <h3>{entry.title || "Untitled"}</h3>
+        <span className="removal-summary-item-bytes">
+          {showStatus && status !== "removed" ? (
+            <span className="removal-summary-status" data-testid="removal-item-status">
+              {removalStatusLabel(status)}
+            </span>
+          ) : (
+            formatRemovalFreedLabel(entry)
+          )}
+        </span>
+      </header>
+      {status === "failed" && entry.error ? (
+        <p className="removal-summary-item-error" data-testid="removal-item-error">
+          {entry.error}
+        </p>
+      ) : null}
+      {status === "stopped" ? (
+        <p className="status status-secondary" data-testid="removal-item-stopped">
+          Left in the library. This title had not started.
+        </p>
+      ) : null}
+      {status === "removed" && files.length ? (
+        <div className="removal-summary-paths">
+          <p className="removal-summary-paths-label">Files</p>
+          <ul>
+            {files.map((path) => (
+              <li key={path} title={path}>
+                <code>{path}</code>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : status === "removed" && pathNote ? (
+        <p className="status status-secondary" data-testid="removal-summary-paths-note">
+          {pathNote}
+        </p>
+      ) : null}
+      {status === "removed" && folders.length ? (
+        <div className="removal-summary-paths">
+          <p className="removal-summary-paths-label">Folders</p>
+          <ul>
+            {folders.map((path) => (
+              <li key={path} title={path}>
+                <code>{path}</code>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </article>
+  );
+}
 
-  const summary = normalizeRemovalSummary(result);
+function RemovalSummaryPanel({
+  result,
+  onClose,
+  onCancelRemaining,
+  cancelRequested = false,
+}) {
+  const live = isLiveRemoval(result);
+  const view = live ? removalProgressView(result) : null;
+  const running = Boolean(view?.running);
+  const summarySource = live ? result.result || result : result;
+  const summary = normalizeRemovalSummary(running ? { results: [] } : summarySource);
   const { totals, results, errors, deleted } = summary;
   const titleCount = Number.isFinite(deleted) ? deleted : results.length;
-  const hasSparsePaths = results.some(
-    (entry) => !entry.files.length && entry.folders.length > 0,
+  const hasSparsePaths = (live ? result.items : results).some(
+    (entry) => entry.status !== "failed" && entry.status !== "stopped" && !((entry.files || []).length) && (entry.folders || []).length > 0,
   );
-  const eyebrow = hasSparsePaths || totals.bytes_source === "unknown"
-    ? "Removal finished"
-    : "Removal complete";
+  const eyebrow = running
+    ? "Removing"
+    : hasSparsePaths || totals.bytes_source === "unknown"
+      ? "Removal finished"
+      : "Removal complete";
+  const heading = view?.heading || "What was removed";
+  const displayItems = live
+    ? result.items
+    : results.map((entry) => ({ ...entry, status: "removed" }));
+  const showLiveStatus = running || (live && result.items.some((item) => item.status !== "removed"));
+  const indexOnly = (live ? result.mode : summarySource?.mode) === "index";
 
-  return createPortal(
+  function handleBackdrop() {
+    if (running) return;
+    onClose?.();
+  }
+
+  return (
     <div
       className="bulk-delete-modal-backdrop removal-summary-backdrop"
       data-testid="removal-summary-dialog"
       onMouseDown={stopBubble}
-      onClick={onClose}
+      onClick={handleBackdrop}
     >
       <div
         className="bulk-delete-modal removal-summary-modal"
@@ -48,7 +134,7 @@ export default function RemovalSummaryDialog({ open, result = null, onClose }) {
           <div className="removal-summary-title-row">
             <div>
               <p className="eyebrow">{eyebrow}</p>
-              <h2 id="removal-summary-title">What was removed</h2>
+              <h2 id="removal-summary-title">{heading}</h2>
             </div>
             <SectionHelp
               label="About this removal summary"
@@ -65,79 +151,46 @@ export default function RemovalSummaryDialog({ open, result = null, onClose }) {
           </div>
         </header>
 
-        <div className="removal-summary-totals" data-testid="removal-summary-totals">
+        {indexOnly ? (
+          <p className="status status-secondary" data-testid="removal-index-only-note">
+            Index only. Disk files and Radarr/Sonarr were not changed.
+          </p>
+        ) : null}
+
+        <div className="removal-summary-totals" data-testid="removal-summary-totals" aria-live="polite">
           <div>
-            <strong>{titleCount}</strong>
-            <span>title{titleCount === 1 ? "" : "s"}</span>
+            <strong data-testid={running ? "removal-progress-count" : undefined}>
+              {running ? view.titleCountLabel : titleCount}
+            </strong>
+            <span>{running ? "titles" : `title${titleCount === 1 ? "" : "s"}`}</span>
           </div>
           <div>
-            <strong>{totals.files}</strong>
-            <span>file{totals.files === 1 ? "" : "s"}</span>
+            <strong>{running ? view.filesLabel : totals.files}</strong>
+            <span>file{Number(running ? view.filesLabel : totals.files) === 1 ? "" : "s"}</span>
           </div>
           <div>
-            <strong>{totals.folders}</strong>
-            <span>folder{totals.folders === 1 ? "" : "s"}</span>
+            <strong>{running ? view.foldersLabel : totals.folders}</strong>
+            <span>folder{Number(running ? view.foldersLabel : totals.folders) === 1 ? "" : "s"}</span>
           </div>
           <div>
             <strong data-testid="removal-summary-freed">
-              {formatRemovalFreedLabel(totals)}
+              {running ? view.freedLabel : formatRemovalFreedLabel(totals)}
             </strong>
             <span>freed</span>
           </div>
         </div>
 
         <div className="removal-summary-scroll" data-testid="removal-summary-list">
-          {results.map((entry) => {
-            const pathNote = removalPathsNote(entry);
-            return (
-              <article
-                key={entry.rating_key || entry.title}
-                className="removal-summary-item"
-                data-testid="removal-summary-item"
-              >
-                <header className="removal-summary-item-head">
-                  <h3>{entry.title || "Untitled"}</h3>
-                  <span className="removal-summary-item-bytes">
-                    {formatRemovalFreedLabel(entry)}
-                  </span>
-                </header>
-                {entry.files.length ? (
-                  <div className="removal-summary-paths">
-                    <p className="removal-summary-paths-label">Files</p>
-                    <ul>
-                      {entry.files.map((path) => (
-                        <li key={path} title={path}>
-                          <code>{path}</code>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : pathNote ? (
-                  <p
-                    className="status status-secondary"
-                    data-testid="removal-summary-paths-note"
-                  >
-                    {pathNote}
-                  </p>
-                ) : null}
-                {entry.folders.length ? (
-                  <div className="removal-summary-paths">
-                    <p className="removal-summary-paths-label">Folders</p>
-                    <ul>
-                      {entry.folders.map((path) => (
-                        <li key={path} title={path}>
-                          <code>{path}</code>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </article>
-            );
-          })}
+          {displayItems.map((entry) => (
+            <RemovalItem
+              key={entry.rating_key || entry.title}
+              entry={entry}
+              showStatus={showLiveStatus}
+            />
+          ))}
         </div>
 
-        {errors.length ? (
+        {!live && errors.length ? (
           <div className="removal-summary-errors" data-testid="removal-summary-errors">
             <p className="removal-summary-paths-label">Could not fully remove</p>
             <ul>
@@ -151,18 +204,66 @@ export default function RemovalSummaryDialog({ open, result = null, onClose }) {
           </div>
         ) : null}
 
+        {result?.error && running === false ? (
+          <p className="error" data-testid="removal-progress-error">
+            {result.error}
+          </p>
+        ) : null}
+
         <div className="bulk-delete-modal-actions">
-          <button
-            type="button"
-            className="primary"
-            data-testid="removal-summary-done"
-            onClick={onClose}
-          >
-            Done
-          </button>
+          {running ? (
+            <>
+              <p className="removal-progress-note">{REMOVAL_STOP_REMAINING_NOTE}</p>
+              <button
+                type="button"
+                className="ghost removal-summary-stop"
+                data-testid="removal-stop-remaining"
+                disabled={cancelRequested}
+                onClick={onCancelRemaining}
+              >
+                {cancelRequested ? "Stopping…" : "Stop remaining"}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="primary"
+              data-testid="removal-summary-done"
+              onClick={onClose}
+            >
+              Done
+            </button>
+          )}
         </div>
       </div>
-    </div>,
-    document.body,
+    </div>
   );
 }
+
+/**
+ * Scrollable removal summary. While a delete is running this is the same
+ * layout, filled in as each title finishes. Done closes the finished summary.
+ */
+export default function RemovalSummaryDialog({
+  open,
+  result = null,
+  onClose,
+  onCancelRemaining,
+  cancelRequested = false,
+}) {
+  if (!open) return null;
+  const live = isLiveRemoval(result);
+  if (!live && !hasRemovalSummary(result)) return null;
+  const panel = (
+    <RemovalSummaryPanel
+      result={result}
+      onClose={onClose}
+      onCancelRemaining={onCancelRemaining}
+      cancelRequested={cancelRequested}
+    />
+  );
+  if (typeof document === "undefined") return panel;
+  return createPortal(panel, document.body);
+}
+
+export { RemovalSummaryPanel };
