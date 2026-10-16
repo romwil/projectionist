@@ -481,6 +481,28 @@ class ApiAuthzTests(unittest.TestCase):
         )
         self.assertNotIn("application/json", (slash.headers.get("content-type") or "").lower())
 
+    def test_health_and_documents_skip_setup_sqlite(self) -> None:
+        import projectionist.web.setup_mode as setup_mode
+
+        def boom(_db):
+            raise AssertionError("document path consulted setup sqlite")
+
+        with patch.object(setup_mode, "is_setup_mode", boom):
+            health = self.client.get("/api/health")
+            self.assertEqual(health.status_code, 200, health.text)
+            about = self.client.get("/about")
+            self.assertNotEqual(about.status_code, 500)
+
+    def test_active_setup_mode_is_remembered_on_the_database(self) -> None:
+        from projectionist.web.jobs import get_job_manager
+        from projectionist.web import setup_mode
+
+        db = get_job_manager().db
+        with patch.object(setup_mode, "resolve_setup_state", return_value="active") as resolve:
+            self.assertFalse(setup_mode.is_setup_mode(db))
+            self.assertFalse(setup_mode.is_setup_mode(db))
+            self.assertEqual(resolve.call_count, 1)
+
 
 if __name__ == "__main__":
     unittest.main()
