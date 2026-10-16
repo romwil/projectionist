@@ -83,25 +83,24 @@ class NotificationsMixin:
         assert row is not None
         return self._row_to_notification(row)
 
-    def _notification_list_sql(
+    def _notification_where(
         self,
         user_id: str,
         *,
         unread_only: bool = False,
+        status: Optional[str] = None,
         kinds: Optional[Sequence[str]] = None,
-        limit: int = 20,
-        offset: int = 0,
     ) -> tuple[str, List[Any]]:
-        query = """
-            SELECT n.*,
-                   COALESCE(fu.preferred_name, fu.display_name) AS from_display_name,
-                   fu.avatar_url AS from_avatar_url
-            FROM user_notifications n
-            LEFT JOIN users fu ON fu.id = n.from_user_id
-            WHERE n.user_id = ?
-        """
+        query = "n.user_id = ?"
         params: List[Any] = [user_id]
-        if unread_only:
+        mailbox = str(status or "").strip().lower()
+        if mailbox in {"all", "unread", "read"}:
+            query += " AND n.seen_at IS NULL"
+            if mailbox == "unread":
+                query += " AND n.read_at IS NULL"
+            elif mailbox == "read":
+                query += " AND n.read_at IS NOT NULL"
+        elif unread_only:
             query += " AND n.seen_at IS NULL"
         cleaned_kinds = [
             str(k).strip().lower()
@@ -112,9 +111,38 @@ class NotificationsMixin:
             placeholders = ",".join("?" for _ in cleaned_kinds)
             query += f" AND n.kind IN ({placeholders})"
             params.extend(cleaned_kinds)
+        return query, params
+
+    def _notification_list_sql(
+        self,
+        user_id: str,
+        *,
+        unread_only: bool = False,
+        status: Optional[str] = None,
+        sort: str = "newest",
+        kinds: Optional[Sequence[str]] = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> tuple[str, List[Any]]:
+        where, params = self._notification_where(
+            user_id,
+            unread_only=unread_only,
+            status=status,
+            kinds=kinds,
+        )
+        direction = "ASC" if str(sort or "").strip().lower() == "oldest" else "DESC"
+        query = f"""
+            SELECT n.*,
+                   COALESCE(fu.preferred_name, fu.display_name) AS from_display_name,
+                   fu.avatar_url AS from_avatar_url
+            FROM user_notifications n
+            LEFT JOIN users fu ON fu.id = n.from_user_id
+            WHERE {where}
+            ORDER BY n.created_at {direction}, n.id {direction}
+            LIMIT ? OFFSET ?
+        """
         safe_limit = max(1, min(int(limit), 50))
-        safe_offset = max(0, min(int(offset), 200))
-        query += " ORDER BY n.created_at DESC LIMIT ? OFFSET ?"
+        safe_offset = max(0, min(int(offset), 5000))
         params.extend([safe_limit, safe_offset])
         return query, params
 
@@ -123,6 +151,8 @@ class NotificationsMixin:
         user_id: str,
         *,
         unread_only: bool = False,
+        status: Optional[str] = None,
+        sort: str = "newest",
         kinds: Optional[Sequence[str]] = None,
         limit: int = 20,
         offset: int = 0,
@@ -130,6 +160,8 @@ class NotificationsMixin:
         query, params = self._notification_list_sql(
             user_id,
             unread_only=unread_only,
+            status=status,
+            sort=sort,
             kinds=kinds,
             limit=limit,
             offset=offset,
@@ -143,37 +175,60 @@ class NotificationsMixin:
         user_id: str,
         *,
         unread_only: bool = False,
+        status: Optional[str] = None,
+        sort: str = "newest",
         kinds: Optional[Sequence[str]] = None,
         limit: int = 20,
         offset: int = 0,
     ) -> Dict[str, Any]:
-        """Unread page plus badge count on one connection.
+        """One page of the mailbox plus counts, on a single connection.
 
-        The inbox used to open SQLite twice (list, then count). Each open runs
-        ``journal_mode=WAL`` and can sit on the 30s busy timeout while another
-        writer holds the file.
+        Opening SQLite twice (list, then count) made each inbox load pay
+        ``journal_mode=WAL`` and the 30s busy timeout while a writer held the file.
         """
         query, params = self._notification_list_sql(
             user_id,
             unread_only=unread_only,
+            status=status,
+            sort=sort,
             kinds=kinds,
             limit=limit,
             offset=offset,
         )
+        where, where_params = self._notification_where(
+            user_id,
+            unread_only=unread_only,
+            status=status,
+            kinds=kinds,
+        )
         with self.connect() as conn:
             rows = conn.execute(query, tuple(params)).fetchall()
-            count_row = conn.execute(
+            total_row = conn.execute(
+                f"SELECT COUNT(*) AS cnt FROM user_notifications n WHERE {where}",
+                tuple(where_params),
+            ).fetchone()
+            unread_row = conn.execute(
                 """
                 SELECT COUNT(*) AS cnt FROM user_notifications
-                WHERE user_id = ? AND seen_at IS NULL
+                WHERE user_id = ? AND seen_at IS NULL AND read_at IS NULL
                 """,
                 (user_id,),
             ).fetchone()
+            kind_rows = conn.execute(
+                """
+                SELECT DISTINCT kind FROM user_notifications
+                WHERE user_id = ? AND seen_at IS NULL
+                ORDER BY kind ASC
+                """,
+                (user_id,),
+            ).fetchall()
         items = [self._row_to_notification(row) for row in rows]
         return {
             "items": items,
             "count": len(items),
-            "unread_count": int(count_row["cnt"] if count_row else 0),
+            "total": int(total_row["cnt"] if total_row else 0),
+            "unread_count": int(unread_row["cnt"] if unread_row else 0),
+            "kinds": [str(row["kind"]) for row in kind_rows if row["kind"]],
         }
 
     def count_unread_notifications(self, user_id: str) -> int:
@@ -181,7 +236,7 @@ class NotificationsMixin:
             row = conn.execute(
                 """
                 SELECT COUNT(*) AS cnt FROM user_notifications
-                WHERE user_id = ? AND seen_at IS NULL
+                WHERE user_id = ? AND seen_at IS NULL AND read_at IS NULL
                 """,
                 (user_id,),
             ).fetchone()
@@ -201,7 +256,7 @@ class NotificationsMixin:
                     """
                     UPDATE user_notifications
                     SET seen_at = ?
-                    WHERE user_id = ? AND seen_at IS NULL
+                    WHERE user_id = ? AND seen_at IS NULL AND read_at IS NULL
                     """,
                     (now, user_id),
                 )
@@ -219,6 +274,75 @@ class NotificationsMixin:
                 (now, user_id, *ids),
             )
             return int(cursor.rowcount or 0)
+
+    def mark_notifications_read(
+        self,
+        user_id: str,
+        notification_ids: Sequence[str],
+    ) -> int:
+        """Mark rows read without dismissing them."""
+        ids = [str(i).strip() for i in notification_ids if str(i).strip()]
+        if not ids:
+            return 0
+        now = time.time()
+        placeholders = ",".join("?" for _ in ids)
+        with self.connect() as conn:
+            cursor = conn.execute(
+                f"""
+                UPDATE user_notifications
+                SET read_at = ?
+                WHERE user_id = ? AND seen_at IS NULL AND read_at IS NULL
+                  AND id IN ({placeholders})
+                """,
+                (now, user_id, *ids),
+            )
+            return int(cursor.rowcount or 0)
+
+    def set_notification_chat_session(
+        self,
+        user_id: str,
+        notification_id: str,
+        session_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Remember the chat thread that continues this note."""
+        sid = str(session_id or "").strip()
+        nid = str(notification_id or "").strip()
+        if not sid or not nid:
+            return None
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM user_notifications
+                WHERE id = ? AND user_id = ?
+                """,
+                (nid, user_id),
+            ).fetchone()
+            if row is None:
+                return None
+            payload: Dict[str, Any] = {}
+            raw = row["payload_json"]
+            if raw:
+                try:
+                    parsed = json.loads(str(raw))
+                    if isinstance(parsed, dict):
+                        payload = parsed
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    payload = {}
+            payload["chat_session_id"] = sid
+            conn.execute(
+                """
+                UPDATE user_notifications
+                SET payload_json = ?
+                WHERE id = ? AND user_id = ?
+                """,
+                (json.dumps(payload, separators=(",", ":"), sort_keys=True), nid, user_id),
+            )
+            updated = conn.execute(
+                "SELECT * FROM user_notifications WHERE id = ?",
+                (nid,),
+            ).fetchone()
+        assert updated is not None
+        return self._row_to_notification(updated)
 
     def find_notification_by_related(
         self,
@@ -290,6 +414,11 @@ class NotificationsMixin:
             "related_id": str(row["related_id"]) if row["related_id"] is not None else None,
             "created_at": float(row["created_at"]),
             "seen_at": float(row["seen_at"]) if row["seen_at"] is not None else None,
+            "read_at": (
+                float(row["read_at"])
+                if "read_at" in keys and row["read_at"] is not None
+                else None
+            ),
             "from_display_name": (
                 str(row["from_display_name"])
                 if "from_display_name" in keys and row["from_display_name"] is not None
