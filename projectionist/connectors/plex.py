@@ -6,7 +6,7 @@ import time
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Callable, List, Optional
+from typing import TYPE_CHECKING, Callable, List, Optional, Sequence
 
 from projectionist.connectors.http import merge_plex_provider_ids, optional_int, request_empty, request_xml
 
@@ -274,6 +274,19 @@ def _plex_part_files(root) -> List[str]:
             continue
         seen.add(file_path)
         paths.append(file_path)
+    return paths
+
+
+def _plex_part_files_merged(*groups: Sequence[str]) -> List[str]:
+    paths: List[str] = []
+    seen: set[str] = set()
+    for group in groups:
+        for raw in group:
+            file_path = str(raw or "").strip()
+            if not file_path or file_path in seen:
+                continue
+            seen.add(file_path)
+            paths.append(file_path)
     return paths
 
 
@@ -761,9 +774,9 @@ class PlexClient:
     def media_file_paths(self, rating_key: str, *, include_leaves: bool = False) -> List[str]:
         """File paths Plex already reports on this item (Part ``file`` attributes).
 
-        Show metadata often has no parts; ``include_leaves`` reads episode files
-        from ``allLeaves`` only when the item itself has none. A failed leaves
-        request returns the paths already collected.
+        Show metadata often has no episode parts (or only a trailer). ``include_leaves``
+        also reads ``allLeaves`` and merges those paths. A failed leaves request
+        returns the paths already collected from the item itself.
         """
         key = str(rating_key or "").strip()
         if not key:
@@ -771,13 +784,13 @@ class PlexClient:
         quoted = urllib.parse.quote(key)
         root = self._request_xml(f"/library/metadata/{quoted}")
         paths = _plex_part_files(root)
-        if paths or not include_leaves:
+        if not include_leaves:
             return paths
         try:
             leaves = self._request_xml(f"/library/metadata/{quoted}/allLeaves")
         except Exception:
             return paths
-        return _plex_part_files(leaves)
+        return _plex_part_files_merged(paths, _plex_part_files(leaves))
 
     def delete_metadata(self, rating_key: str) -> None:
         """Remove a library item from Plex (metadata only; does not delete disk files)."""

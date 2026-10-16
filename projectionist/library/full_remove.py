@@ -32,6 +32,7 @@ from projectionist.scheduler.tasks.purge_candidates import drop_cached_purge_key
 logger = logging.getLogger("projectionist.library.full_remove")
 
 LIBRARY_DELETE_MODES = frozenset({"index", "full"})
+PATH_UNKNOWN_NOTE = "File path was unknown."
 
 
 def normalize_library_delete_mode(value: Any) -> str:
@@ -395,6 +396,31 @@ def _plex_known_media_paths(settings: Settings, rating_key: str, media_type: str
         return []
 
 
+def _append_note(note: str, extra: str) -> str:
+    base = str(note or "").strip()
+    more = str(extra or "").strip()
+    if not more:
+        return base
+    if more.lower() in base.lower():
+        return base
+    return f"{base} {more}".strip()
+
+
+def _visible_media_paths(paths: Sequence[str], settings: Settings) -> List[str]:
+    """Prefer a file this container can see when Plex names a host path.
+
+    Imported lazily: the investigate package imports ``resolve_arr_file_path``
+    from this module, so a top-level import here is a cycle.
+    """
+    from projectionist.library.episode_investigate.path_map import resolve_visible_media_path
+
+    visible: List[str] = []
+    for raw in _dedupe_paths(paths):
+        resolved = resolve_visible_media_path(raw, settings)
+        visible.append(resolved or raw)
+    return _dedupe_paths(visible)
+
+
 def delete_known_media_files(paths: Sequence[str]) -> Dict[str, Any]:
     """Unlink files this app already has paths for.
 
@@ -600,17 +626,23 @@ def _finish_absent_arr_remove(
 ) -> Dict[str, Any]:
     """Continue full remove after Radarr/Sonarr reports the title is absent.
 
-    Deletes files only when a path is already known (library row, the *arr
-    snapshot taken before a 404 delete, or the file path Plex already reports).
+    Deletes files when a path is already known (library row, the *arr snapshot
+    taken before a 404 delete, or the file path Plex already reports). A path
+    Plex names on the host is used when that file is visible in this container.
     Does not add an import exclusion. Permission errors and a Plex reject fail
-    the title and leave the index row.
+    the title and leave the index row. An unknown path still drops the index
+    and says so — it does not claim bytes were freed.
     """
-    known = _known_media_paths(row)
-    known.extend(_dedupe_paths(list(arr_result.get("files") or [])))
-    if not _dedupe_paths(known):
-        known.extend(_plex_known_media_paths(settings, key, media_type))
+    known = _dedupe_paths(
+        list(_known_media_paths(row))
+        + list(arr_result.get("files") or [])
+        + list(_plex_known_media_paths(settings, key, media_type))
+    )
+    note = str(arr_result.get("note") or "").strip()
+    if not known:
+        note = _append_note(note, PATH_UNKNOWN_NOTE)
     try:
-        disk = delete_known_media_files(known)
+        disk = delete_known_media_files(_visible_media_paths(known, settings))
     except OSError as error:
         return _failed_step(key, title, str(error) or "Could not delete media files")
 
@@ -624,7 +656,6 @@ def _finish_absent_arr_remove(
         bytes_source = "library_estimate"
     else:
         bytes_source = "unknown"
-    note = str(arr_result.get("note") or "").strip()
     arr_meta = {
         key_name: value
         for key_name, value in arr_result.items()

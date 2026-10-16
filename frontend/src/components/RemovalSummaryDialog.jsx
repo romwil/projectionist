@@ -151,9 +151,14 @@ function RemovalSummaryPanel({
               <p>
                 Projectionist asked Radarr/Sonarr what files and folders belonged to
                 each title before deleting them, then reports those paths and the
-                storage freed. When *arr has a folder but no episode file list, the
-                summary says so instead of pretending 0 B was measured. Empty folders
-                listed here are inferred from known paths — not from a full disk scan.
+                storage freed. A title that is not in either app still deletes files
+                whose path is already on the library row or reported by Plex, and
+                those bytes stay in the totals. The “not in Sonarr” or “not in Radarr”
+                line is only a note on that title. When no file path can be found,
+                the note says so and the freed total stays 0 B. When *arr has a folder
+                but no episode file list, the summary says the size is unknown instead
+                of pretending 0 B was measured. Empty folders listed here are inferred
+                from known paths — not from a full disk scan.
               </p>
             </SectionHelp>
           </div>
