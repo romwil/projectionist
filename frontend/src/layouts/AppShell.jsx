@@ -19,6 +19,10 @@ import { applyUiTheme, loadStoredUiTheme } from "../lib/uiPrefs.js";
  * does not redirect anonymous visitors to /login.
  *
  * Logged-out Help / Privacy / About / Tour use minimal chrome (no hamburger).
+ *
+ * Children paint immediately. Auth-only chrome (Admin) appears when the
+ * shared auth snapshot returns. Opt in with blockUntilAuth only when the
+ * page body itself must stay hidden — public pages must not.
  */
 export default function AppShell({
   children,
@@ -35,7 +39,7 @@ export default function AppShell({
   chrome,
   showPrimaryNav,
   inboxUnreadCount = 0,
-  blockUntilAuth = true,
+  blockUntilAuth = false,
 }) {
   const {
     authReady,
@@ -63,10 +67,8 @@ export default function AppShell({
     applyUiTheme(uiTheme);
   }, [uiTheme]);
 
-  // useAuthGate failure-opens as owner until /auth/me settles. Keep the
-  // public topbar mounted (Search, Chat, Explore, …) and withhold page
-  // children. Admin stays out of primaryNav until authReady. Explore opts
-  // out of this gate so the hub can paint and fetch while auth is in flight.
+  // Opt-in only. The default paints children while auth is in flight.
+  // Admin stays out of primaryNav until authReady.
   if (blockUntilAuth && !authReady) {
     return (
       <div className="app-root" data-testid={testId || "app-shell-auth-loading"}>

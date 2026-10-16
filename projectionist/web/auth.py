@@ -446,6 +446,14 @@ async def multi_user_api_auth_middleware(request: Request, call_next):
     if path.startswith("/mcp"):
         return await call_next(request)
 
+    # Documents, assets, and the health probe do not consult SQLite. A contended
+    # library file waits up to SQLITE_BUSY_TIMEOUT_MS (30s) and was stalling
+    # first paint on every page, including About.
+    if (method == "GET" and path == "/api/health") or not path.startswith("/api/"):
+        return await call_next(request)
+
+    from starlette.concurrency import run_in_threadpool
+
     from projectionist.web.ingress import WAN_INTERLOCK_DETAIL, wan_interlock_blocks
     from projectionist.web.jobs import get_job_manager
     from projectionist.web.setup_mode import (
@@ -454,15 +462,19 @@ async def multi_user_api_auth_middleware(request: Request, call_next):
         setup_endpoint_locked,
     )
 
-    try:
+    def _open_perimeter():
         db = get_job_manager().db
+        return db, is_setup_mode(db)
+
+    try:
+        db, setup = await run_in_threadpool(_open_perimeter)
     except Exception:
         logger.exception("auth middleware: database unavailable")
-        if not path.startswith("/api/") or path in {"/api/health", "/api/features"}:
+        if path == "/api/features":
             return await call_next(request)
         return JSONResponse({"detail": "Service unavailable"}, status_code=503)
 
-    if is_setup_mode(db):
+    if setup:
         if not path.startswith("/api/"):
             return await call_next(request)
         if wan_interlock_blocks(request, multi_user_enabled=False):
@@ -493,7 +505,7 @@ async def multi_user_api_auth_middleware(request: Request, call_next):
     if is_public_handshake(method, path):
         return await call_next(request)
 
-    user = _user_from_session(request, db)
+    user = await run_in_threadpool(_user_from_session, request, db)
     if user is None:
         if method == "POST" and path == "/api/auth/local/register":
             return JSONResponse({"detail": JOIN_LINK_DETAIL}, status_code=403)

@@ -158,15 +158,7 @@ export default function MyJourneyPage() {
     reload();
   }, [authReady, role, multiUserEnabled]);
 
-  if (!authReady) {
-    return (
-      <div className="app-root app-loading" data-testid="my-journey-auth-loading">
-        <p className="login-lede">Loading…</p>
-      </div>
-    );
-  }
-
-  if (guestDeepLinkBlocked({ role, multiUserEnabled, authReady: true })) {
+  if (authReady && guestDeepLinkBlocked({ role, multiUserEnabled, authReady: true })) {
     return <Navigate to={ROUTES.explore} replace />;
   }
 

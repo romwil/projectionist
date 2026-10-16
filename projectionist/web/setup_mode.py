@@ -85,7 +85,19 @@ def resolve_setup_state(db: Database) -> str:
 
 
 def is_setup_mode(db: Database) -> bool:
-    return resolve_setup_state(db) == SETUP_STATE_SETUP
+    """True only while the one-way setup ratchet is still open.
+
+    Active mode is terminal, so the first successful read is remembered on the
+    database object. Later requests — including ones that arrive while a writer
+    holds SQLite — do not sit on ``SQLITE_BUSY_TIMEOUT_MS`` just to learn that
+    setup already finished.
+    """
+    if getattr(db, "_projectionist_active_mode", False):
+        return False
+    setup = resolve_setup_state(db) == SETUP_STATE_SETUP
+    if not setup:
+        db._projectionist_active_mode = True
+    return setup
 
 
 def is_active_mode(db: Database) -> bool:

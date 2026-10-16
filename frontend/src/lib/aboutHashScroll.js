@@ -1,4 +1,4 @@
-/** Hash targets on /about that should scroll after AppShell authReady. */
+/** Hash targets on /about. Sections paint with the page, then this scrolls. */
 export const ABOUT_HASH_IDS = Object.freeze(["license", "release-notes"]);
 
 export function aboutHashTargetId(hash) {
@@ -11,9 +11,8 @@ export function aboutHashTargetId(hash) {
 /**
  * Scroll an About page hash target into view.
  *
- * AppShell withholds children until authReady, so the browser's native
- * `#license` / `#release-notes` jump lands at the top. Call this after
- * the About sections are in the DOM.
+ * Call this once the About sections are in the DOM so `#license` and
+ * `#release-notes` land on the section instead of the top of the page.
  *
  * @param {string} hash location.hash (`#license`)
  * @param {(id: string) => { scrollIntoView?: Function } | null} [getElementById]

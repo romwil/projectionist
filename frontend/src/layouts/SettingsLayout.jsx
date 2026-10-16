@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
-import { getAuthMe, getFeatures, listNotifications } from "../api/client";
+import { listNotifications } from "../api/client";
+import { applyAuthSnapshot, loadAuthSessionUser, loadAuthSnapshot } from "../lib/authGate.js";
 import PrimaryTopbar from "../components/PrimaryTopbar";
 import { ROUTES } from "../lib/backNav.js";
 import { SETTINGS_NAV } from "../lib/settingsNav.js";
@@ -28,37 +29,26 @@ export default function SettingsLayout() {
 
     async function gate() {
       try {
-        const features = await getFeatures();
-        const multiUser = Boolean(features?.features?.multi_user_enabled);
-        const seerrReady = Boolean(features?.features?.seerr_enabled);
-        const liveFromFeatures = applyLiveChannelsFeature(features);
-        const me = await getAuthMe().catch(() => null);
-        if (me?.user?.ui_font_size || me?.user?.ui_theme) {
-          const { applyUiFontSize, applyUiTheme: applyTheme } = await import("../lib/uiPrefs.js");
-          if (me.user.ui_font_size) applyUiFontSize(me.user.ui_font_size);
-          if (me.user.ui_theme) applyTheme(me.user.ui_theme);
-        }
-        if (!multiUser) {
-          if (!cancelled) {
-            setIsOwner(true);
-            setRole("owner");
-            setMultiUserEnabled(false);
-            setSeerrEnabled(seerrReady);
-            if (liveFromFeatures !== null) setLiveChannelsReady(liveFromFeatures);
-            setReady(true);
-          }
-          return;
-        }
+        const snap = await loadAuthSnapshot();
         if (cancelled) return;
-        if (!me?.user) {
-          navigate("/login", { replace: true });
+        const view = applyAuthSnapshot(snap, { redirect: true });
+        const liveFromFeatures = applyLiveChannelsFeature(snap.features);
+        const user = snap.user || (snap.multiUserEnabled ? null : await loadAuthSessionUser());
+        if (cancelled) return;
+        if (user?.ui_font_size || user?.ui_theme) {
+          const { applyUiFontSize, applyUiTheme: applyTheme } = await import("../lib/uiPrefs.js");
+          if (user.ui_font_size) applyUiFontSize(user.ui_font_size);
+          if (user.ui_theme) applyTheme(user.ui_theme);
+        }
+        if (view.navigateTo) {
+          navigate(view.navigateTo, { replace: true });
           return;
         }
-        setIsOwner(me.user.role === "owner");
-        setRole(String(me.user.role || "member"));
-        setIsYouth(Boolean(me.user.is_youth));
-        setMultiUserEnabled(true);
-        setSeerrEnabled(seerrReady);
+        setIsOwner(view.isOwner);
+        setRole(view.role || "member");
+        setIsYouth(view.isYouth);
+        setMultiUserEnabled(view.multiUserEnabled);
+        setSeerrEnabled(view.seerrEnabled);
         if (liveFromFeatures !== null) setLiveChannelsReady(liveFromFeatures);
         setReady(true);
       } catch {
