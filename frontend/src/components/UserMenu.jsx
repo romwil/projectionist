@@ -98,8 +98,8 @@ export function useAuthGate({ redirect = true } = {}) {
   const seededView = seeded ? applyAuthSnapshot(seeded, { redirect }) : null;
   const [authReady, setAuthReady] = useState(Boolean(seededView?.authReady));
   const [multiUserEnabled, setMultiUserEnabled] = useState(Boolean(seededView?.multiUserEnabled));
-  const [isOwner, setIsOwner] = useState(seededView ? seededView.isOwner : true);
-  const [role, setRole] = useState(seededView?.role || "owner");
+  const [isOwner, setIsOwner] = useState(seededView ? seededView.isOwner : false);
+  const [role, setRole] = useState(seededView?.role || "member");
   const [isYouth, setIsYouth] = useState(Boolean(seededView?.isYouth));
   const [authenticated, setAuthenticated] = useState(Boolean(seededView?.authenticated));
   const [liveChannelsReady, setLiveChannelsReady] = useState(initialLiveChannelsReady);
