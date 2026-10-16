@@ -183,10 +183,27 @@ export async function markRecommendationsSeen(payload) {
 export async function listNotifications(params = {}) {
   const query = new URLSearchParams();
   if (params.unread_only) query.set("unread_only", "true");
+  if (params.status) query.set("status", String(params.status));
+  if (params.sort) query.set("sort", String(params.sort));
   if (params.limit) query.set("limit", String(params.limit));
+  if (params.offset) query.set("offset", String(params.offset));
   if (params.kind) query.set("kind", String(params.kind));
   const suffix = query.toString() ? `?${query}` : "";
   return api(`/notifications${suffix}`);
+}
+
+export async function markNotificationsRead(payload) {
+  return api("/notifications/read", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function bindNotificationThread(notificationId, sessionId) {
+  return api(`/notifications/${encodeURIComponent(notificationId)}/thread`, {
+    method: "POST",
+    body: JSON.stringify({ session_id: sessionId }),
+  });
 }
 
 export async function markNotificationsSeen(payload) {
@@ -1399,17 +1416,18 @@ export async function getLibraryStats() {
 }
 
 /** Knowledge-depth coverage (% overview, motifs, keywords, neighbors, loglines). */
-export async function getLibraryKnowledgeCoverage() {
-  return api("/library/knowledge-coverage");
+export async function getLibraryKnowledgeCoverage(options = {}) {
+  return api("/library/knowledge-coverage", options);
 }
 
 export async function getLibraryOverview() {
   return api("/library/overview");
 }
 
-export async function getLibraryAggregate(groupBy, { mediaType } = {}) {
+export async function getLibraryAggregate(groupBy, { mediaType, topExamples } = {}) {
   const params = new URLSearchParams({ group_by: groupBy });
   if (mediaType === "movie" || mediaType === "show") params.set("media_type", mediaType);
+  if (topExamples != null) params.set("top_examples", String(topExamples));
   return api(`/library/aggregate?${params}`);
 }
 

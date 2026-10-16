@@ -193,6 +193,27 @@ def _backfill_show_file_size_rollups(
     logger.info("Backfilled show file_size rollups for %s shows", len(show_ids))
 
 
+def _library_media_added_index(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
+    """Browse movies by date added without sorting the whole title list.
+
+    Migration 7 already ran on existing libraries, so the composite index is
+    applied again here. ``added_at`` exists by the time this version runs.
+    """
+    del db
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_library_media_added "
+        "ON library_items(media_type, added_at DESC, title)"
+    )
+
+
+def _notification_read_at(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
+    """Separate \"read\" from dismiss so opening a note does not remove it."""
+    del db
+    columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(user_notifications)")}
+    if "read_at" not in columns:
+        conn.execute("ALTER TABLE user_notifications ADD COLUMN read_at REAL")
+
+
 def _build_migrations() -> List[Migration]:
     def wrap(method_name: str) -> MigrationFn:
         def _run(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
@@ -255,6 +276,8 @@ def _build_migrations() -> List[Migration]:
         (52, "knowledge_fetch_state", wrap("_migrate_knowledge_fetch_state")),
         (53, "holiday_rail_curator_notes", wrap("_migrate_holiday_rail_curator_notes")),
         (54, "holiday_rail_shelf_mode", wrap("_migrate_holiday_rail_shelf_mode")),
+        (55, "library_media_added_index", _library_media_added_index),
+        (56, "notification_read_at", _notification_read_at),
     ]
 
 

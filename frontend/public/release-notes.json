@@ -1,6 +1,43 @@
 {
-  "generated_at": "2026-10-15T22:45:57Z",
+  "generated_at": "2026-10-16T00:48:32Z",
   "releases": [
+    {
+      "version": "1.37.44",
+      "date": "2026-10-15",
+      "summary": "One patch on 1.37.43: Movies opens on the newest titles, Explore rails drop the extra sentence, a failed knowledge strip stays quiet, Inbox behaves like a mailbox, and recommendations name a real link to something you watched.",
+      "highlights": [
+        "**Movies opens on what just arrived.** Explore → Movies starts with the newest titles, newest first. Year, genre, and language lists fill in after the first page of posters. The language filter stays.",
+        "**Explore rails are just the title.** The sentence under a hub rail is gone. Browse labels such as “Every film” stay. If the knowledge strip beside Library Pulse cannot load, it stays quiet instead of printing “Failed to fetch,” and the hub still opens.",
+        "**Inbox is a mailbox.** Open a note to read the whole message. Reading it keeps it; Dismiss still removes it. Newest first, with unread, read, or everything, select-all on the page, and pages of twelve. A curator note has a reply box in the note, and sending a reply stays there.",
+        "**A recommendation has to earn its place.** Worth a look and the weekly note include a title only when it shares a named subject, creator, or franchise with something you actually watched. The reason is a full sentence. If nothing qualifies, you get fewer items — not a list of whatever was added this week."
+      ],
+      "sections": [
+        {
+          "title": "Changed",
+          "bullets": [
+            "**Movies browse sorts by date added.** The default wall is newest `added_at` first and uses `idx_library_media_added` (schema migration 55). Year, genre, and language catalogs load after the first poster page.",
+            "**Explore hub rails no longer render a descriptive sentence under the title.** Row labels on browse walls stay.",
+            "**A failed knowledge-coverage fetch does not surface the browser error string** and does not block the Explore hub.",
+            "**Inbox reading is separate from dismiss.** Opening a note sets `read_at` (schema migration 56) and leaves `seen_at` alone. Dismiss still sets `seen_at`. The first screen paints before a long unread scan. Agent notes include an in-note composer; a reply does not navigate to the main chat page.",
+            "**Worth a look and the weekly curator note require a named library link.** A title is included only when it shares a plot subject, creator, or franchise with something watched. The stored reason is a complete sentence. There is no bare “new this week” list and no “Open CuratorX anytime to chat” closer."
+          ]
+        },
+        {
+          "title": "Fixed",
+          "bullets": [
+            "**Migration numbers.** Movies and Inbox both added schema version 55. The date-added index stays 55; `notification_read_at` is 56. Both apply."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend `pytest tests/` — 2584 passed, 6 skipped, coverage 76.89% (floor 74%), run with `PROJECTIONIST_SKIP_DOTENV=1` on `release/1.37.44`. Nine authz cases failed only while `frontend/dist` was still building; they passed on rerun.",
+            "Frontend unit 1016/1016.",
+            "Lint 0 errors (149 warnings); `npm run build` OK."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.43",
       "date": "2026-10-15",

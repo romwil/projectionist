@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getLibraryKnowledgeCoverage } from "../api/client";
 import {
+  KNOWLEDGE_COVERAGE_REQUEST_MS,
   buildKnowledgeCoverageRows,
+  knowledgeCoverageFailureCopy,
+  knowledgeStripContent,
   summarizeKnowledgeCoverage,
 } from "../lib/knowledgeCoverage.js";
 import { helpAnchor } from "../lib/backNav.js";
@@ -23,8 +26,10 @@ export default function KnowledgeCoverageCard({
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), KNOWLEDGE_COVERAGE_REQUEST_MS);
     setLoading(true);
-    getLibraryKnowledgeCoverage()
+    getLibraryKnowledgeCoverage({ signal: controller.signal })
       .then((data) => {
         if (cancelled) return;
         setCoverage(data);
@@ -33,13 +38,17 @@ export default function KnowledgeCoverageCard({
       .catch((err) => {
         if (cancelled) return;
         setCoverage(null);
-        setError(err.message || "Could not load knowledge coverage.");
+        // Transport failures stay blank. The strip then renders nothing.
+        setError(knowledgeCoverageFailureCopy(err));
       })
       .finally(() => {
+        window.clearTimeout(timer);
         if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
+      controller.abort();
     };
   }, []);
 
@@ -47,34 +56,28 @@ export default function KnowledgeCoverageCard({
   const summary = summarizeKnowledgeCoverage(coverage);
 
   if (variant === "strip") {
+    const line = knowledgeStripContent({ loading, error, summary });
+    if (!line) return null;
     return (
       <aside
         className={`knowledge-coverage-strip ${className}`.trim()}
         data-testid="knowledge-coverage-strip"
       >
-        {loading ? (
-          <p className="status status-secondary">Loading coverage…</p>
-        ) : error ? (
-          <p className="status status-secondary">{error}</p>
-        ) : summary ? (
-          <p className="knowledge-coverage-strip-line">
-            <span className="knowledge-coverage-strip-label">Knowledge</span>
-            <span data-testid="knowledge-coverage-summary">{summary}</span>
-            {showHelpLink ? (
-              <>
-                {" "}
-                <Link
-                  to={helpAnchor("what-knowledge-coverage-means")}
-                  className="app-topbar-link"
-                >
-                  Why this matters
-                </Link>
-              </>
-            ) : null}
-          </p>
-        ) : (
-          <p className="status status-secondary">No coverage stats yet.</p>
-        )}
+        <p className="knowledge-coverage-strip-line">
+          <span className="knowledge-coverage-strip-label">Knowledge</span>
+          <span data-testid="knowledge-coverage-summary">{line}</span>
+          {showHelpLink ? (
+            <>
+              {" "}
+              <Link
+                to={helpAnchor("what-knowledge-coverage-means")}
+                className="app-topbar-link"
+              >
+                Why this matters
+              </Link>
+            </>
+          ) : null}
+        </p>
       </aside>
     );
   }

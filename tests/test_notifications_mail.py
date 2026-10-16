@@ -443,16 +443,19 @@ class NotificationPlatformTests(unittest.TestCase):
         content = build_member_newsletter(self.db, settings, user=refreshed)
         self.assertIn("This week", content["subject"])
         self.assertTrue(content.get("blurb"))
-        self.assertTrue(content.get("picks"))
-        self.assertEqual(content["picks"][0]["tmdb_id"], 949)
+        # Added this week, with nothing watched to link it to, is not a pick.
+        self.assertEqual(content.get("picks"), [])
+        self.assertNotIn("New in the library this week", content["body"])
+        self.assertNotIn("Open CuratorX", content["body"])
+        self.assertNotIn("• Heat", content["body"])
         result = deliver_weekly_newsletters(self.db, settings)
         self.assertGreaterEqual(result["delivered"], 1)
         notes = self.db.list_notifications_for_user(user["id"], kinds=["digest"])
         self.assertTrue(notes)
         payload = notes[0].get("payload") or {}
         self.assertEqual(payload.get("newsletter"), "weekly")
-        self.assertTrue(payload.get("picks"))
-        self.assertEqual(payload["picks"][0]["title"], "Heat")
+        self.assertEqual(payload.get("picks"), [])
+        self.assertNotIn("Open CuratorX", notes[0].get("body") or "")
         self.assertTrue(payload.get("blurb"))
 
     def test_weekly_newsletter_scoped_skips_opt_out(self) -> None:

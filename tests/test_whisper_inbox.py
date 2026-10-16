@@ -33,6 +33,10 @@ from projectionist.web.session_tokens import clear_session_secret_cache
 from tests.admin_job_helpers import reset_admin_jobs
 
 
+BAKE_PLOT = "Amateur bakers compete around a signature bake inside a failing colony."
+SPY_PLOT = "Rivals reunite after amateur bakers compete and ruin a signature bake tonight."
+
+
 def _movie(
     *,
     rating_key: str,
@@ -43,6 +47,7 @@ def _movie(
     view_count: int = 0,
     last_viewed_at: float | None = None,
     vote_average: float = 7.0,
+    summary: str = "",
 ) -> dict:
     return {
         "rating_key": rating_key,
@@ -54,20 +59,42 @@ def _movie(
         "view_count": view_count,
         "last_viewed_at": last_viewed_at,
         "vote_average": vote_average,
+        "summary": summary,
         "in_radarr": 0,
     }
 
 
+def _neighbor(db: Database, seed_id: int, peer_id: int) -> None:
+    with db.connect() as conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO item_neighbors (item_id, neighbor_id, score, surprise_score)
+            VALUES (?, ?, ?, ?)
+            """,
+            (int(seed_id), int(peer_id), 0.9, 0.1),
+        )
+
+
 class WhisperCopyTests(unittest.TestCase):
     def test_why_is_named_and_twelve_words(self) -> None:
-        why = format_whisper_why(
+        # A recent title alone is not the why, and it must not be clipped in.
+        bare = format_whisper_why(
             member_name="Ada",
             title="Heat",
             seed_title="Thief",
             preset_id="classic-curator",
         )
-        self.assertLessEqual(word_count(why), WHY_WORD_LIMIT)
+        self.assertNotIn("Thief", bare)
+        self.assertNotIn("after Thief", bare)
+        why = format_whisper_why(
+            member_name="Ada",
+            title="Thief",
+            reason="Thief (1981) follows Heat (1995) because both stories turn on amateur bakers.",
+            preset_id="classic-curator",
+        )
         self.assertIn("Ada", why)
+        self.assertIn("amateur bakers", why)
+        self.assertTrue(why.endswith("."))
         self.assertNotIn("download complete", why.lower())
         self.assertNotIn("grabbed", why.lower())
 
@@ -135,7 +162,7 @@ class WhisperDeliveryTests(unittest.TestCase):
             role="member",
         )
         self.db.update_user_profile(member["id"], preferred_name="Will")
-        self.db.upsert_library_items(
+        ids = self.db.upsert_library_items(
             [
                 _movie(
                     rating_key="rk-heat",
@@ -145,6 +172,7 @@ class WhisperDeliveryTests(unittest.TestCase):
                     genres=["Crime", "Drama"],
                     view_count=1,
                     last_viewed_at=1_700_000_000.0,
+                    summary=BAKE_PLOT,
                 ),
                 _movie(
                     rating_key="rk-thief",
@@ -153,9 +181,11 @@ class WhisperDeliveryTests(unittest.TestCase):
                     tmdb_id=11334,
                     genres=["Crime", "Thriller"],
                     vote_average=8.2,
+                    summary=SPY_PLOT,
                 ),
             ]
         )
+        _neighbor(self.db, ids[0], ids[1])
         result = deliver_member_whispers(self.db, self.settings, now=1_710_000_000.0)
         self.assertGreaterEqual(result["created"], 2)
         owner_rows = list_whispers_for_user(self.db, owner["id"])
@@ -167,6 +197,12 @@ class WhisperDeliveryTests(unittest.TestCase):
         self.assertLessEqual(word_count(member_rows[0]["why"]), WHY_WORD_LIMIT)
         self.assertIn("Will", member_rows[0]["why"])
         self.assertNotIn("download complete", member_rows[0]["why"].lower())
+        stored = self.db.list_notifications_for_user(member["id"], kinds=["nudge"])
+        self.assertTrue(stored)
+        stored_body = str(stored[0].get("body") or "")
+        self.assertIn("amateur bakers", stored_body)
+        self.assertTrue(stored_body.rstrip().endswith("."))
+        self.assertNotIn("still belongs", stored_body)
         self.assertNotEqual(member_rows[0]["id"], owner_rows[0]["id"])
 
     def test_skips_youth_and_does_not_repeat_the_week(self) -> None:
@@ -184,9 +220,27 @@ class WhisperDeliveryTests(unittest.TestCase):
         )
         with self.db.connect() as conn:
             conn.execute("UPDATE users SET is_youth = 1 WHERE id = ?", (youth["id"],))
-        self.db.upsert_library_items(
-            [_movie(rating_key="rk-1", title="Heat", year=1995, tmdb_id=949)]
+        ids = self.db.upsert_library_items(
+            [
+                _movie(
+                    rating_key="rk-1",
+                    title="Heat",
+                    year=1995,
+                    tmdb_id=949,
+                    view_count=1,
+                    last_viewed_at=1_700_000_000.0,
+                    summary=BAKE_PLOT,
+                ),
+                _movie(
+                    rating_key="rk-2",
+                    title="Thief",
+                    year=1981,
+                    tmdb_id=11334,
+                    summary=SPY_PLOT,
+                ),
+            ]
         )
+        _neighbor(self.db, ids[0], ids[1])
         first = deliver_member_whispers(self.db, self.settings, now=1_710_000_000.0)
         second = deliver_member_whispers(self.db, self.settings, now=1_710_000_100.0)
         self.assertGreaterEqual(first["created"], 1)
@@ -223,9 +277,7 @@ class WhisperDeliveryTests(unittest.TestCase):
             ]
         )
         pick = pick_whisper_title(self.db, user_id=member["id"])
-        self.assertIsNotNone(pick)
-        self.assertEqual(pick["title"], "The Killers")
-        self.assertEqual(pick["cluster"], "noir")
+        self.assertIsNone(pick)
 
     def test_clear_all_whispers_leaves_good_news(self) -> None:
         member = self.db.create_local_user(
@@ -234,9 +286,27 @@ class WhisperDeliveryTests(unittest.TestCase):
             password_hash="x",
             role="member",
         )
-        self.db.upsert_library_items(
-            [_movie(rating_key="rk-1", title="Heat", year=1995, tmdb_id=949)]
+        ids = self.db.upsert_library_items(
+            [
+                _movie(
+                    rating_key="rk-1",
+                    title="Heat",
+                    year=1995,
+                    tmdb_id=949,
+                    view_count=1,
+                    last_viewed_at=1_700_000_000.0,
+                    summary=BAKE_PLOT,
+                ),
+                _movie(
+                    rating_key="rk-2",
+                    title="Thief",
+                    year=1981,
+                    tmdb_id=11334,
+                    summary=SPY_PLOT,
+                ),
+            ]
         )
+        _neighbor(self.db, ids[0], ids[1])
         deliver_member_whispers(self.db, self.settings, now=1_710_000_000.0)
         deliver_notification(
             self.db,
@@ -319,7 +389,7 @@ class WhisperApiTests(unittest.TestCase):
         owner = self._login(plex_id=11, title="Owner", email="owner@example.com")
         member = self._login(plex_id=12, title="Member", email="member@example.com")
         self.db.update_user_profile(member["id"], preferred_name="Will")
-        self.db.upsert_library_items(
+        ids = self.db.upsert_library_items(
             [
                 _movie(
                     rating_key="rk-heat",
@@ -329,6 +399,7 @@ class WhisperApiTests(unittest.TestCase):
                     genres=["Crime"],
                     view_count=1,
                     last_viewed_at=1_700_000_000.0,
+                    summary=BAKE_PLOT,
                 ),
                 _movie(
                     rating_key="rk-thief",
@@ -336,9 +407,11 @@ class WhisperApiTests(unittest.TestCase):
                     year=1981,
                     tmdb_id=11334,
                     genres=["Crime"],
+                    summary=SPY_PLOT,
                 ),
             ]
         )
+        _neighbor(self.db, ids[0], ids[1])
         deliver_notification(
             self.db,
             Settings.load(Path(self._tmpdir.name) / "settings.json"),

@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { getAuthMe, getFeatures, logout } from "../api/client";
+import { logout } from "../api/client";
+import {
+  applyAuthSnapshot,
+  clearAuthSnapshot,
+  loadAuthSessionUser,
+  loadAuthSnapshot,
+  peekAuthSnapshot,
+} from "../lib/authGate.js";
 import { applyLiveChannelsFeature, initialLiveChannelsReady } from "../lib/liveNavReady.js";
 import UserAvatar from "./UserAvatar";
 import { useAnchoredPopover } from "../hooks/useAnchoredPopover";
@@ -11,9 +18,18 @@ export default function UserMenu() {
   const { open, setOpen, rootRef: menuRef } = useAnchoredPopover();
 
   useEffect(() => {
-    getAuthMe()
-      .then((payload) => setUser(payload?.user || null))
-      .catch(() => setUser(null));
+    let cancelled = false;
+    loadAuthSnapshot()
+      .then(async (snap) => {
+        const next = snap.user || (snap.multiUserEnabled ? null : await loadAuthSessionUser());
+        if (!cancelled) setUser(next);
+      })
+      .catch(() => {
+        if (!cancelled) setUser(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function handleLogout() {
@@ -22,6 +38,7 @@ export default function UserMenu() {
     } catch {
       // Still redirect after clearing cookie attempt.
     }
+    clearAuthSnapshot();
     navigate("/login", { replace: true });
   }
 
@@ -77,99 +94,43 @@ export default function UserMenu() {
  */
 export function useAuthGate({ redirect = true } = {}) {
   const navigate = useNavigate();
-  const [authReady, setAuthReady] = useState(false);
-  const [multiUserEnabled, setMultiUserEnabled] = useState(false);
-  const [isOwner, setIsOwner] = useState(true);
-  const [role, setRole] = useState("owner");
-  const [isYouth, setIsYouth] = useState(false);
-  const [authenticated, setAuthenticated] = useState(false);
+  const seeded = peekAuthSnapshot();
+  const seededView = seeded ? applyAuthSnapshot(seeded, { redirect }) : null;
+  const [authReady, setAuthReady] = useState(Boolean(seededView?.authReady));
+  const [multiUserEnabled, setMultiUserEnabled] = useState(Boolean(seededView?.multiUserEnabled));
+  const [isOwner, setIsOwner] = useState(seededView ? seededView.isOwner : true);
+  const [role, setRole] = useState(seededView?.role || "owner");
+  const [isYouth, setIsYouth] = useState(Boolean(seededView?.isYouth));
+  const [authenticated, setAuthenticated] = useState(Boolean(seededView?.authenticated));
   const [liveChannelsReady, setLiveChannelsReady] = useState(initialLiveChannelsReady);
-  const [seerrEnabled, setSeerrEnabled] = useState(false);
+  const [seerrEnabled, setSeerrEnabled] = useState(Boolean(seededView?.seerrEnabled));
 
   useEffect(() => {
     let cancelled = false;
 
-    async function checkAuth() {
-      let enabled = false;
-      try {
-        const features = await getFeatures();
-        enabled = Boolean(features?.features?.multi_user_enabled);
-        if (cancelled) return;
-        if (features?.setup_state === "setup") {
-          navigate("/setup", { replace: true });
-          return;
-        }
-        setMultiUserEnabled(enabled);
-        setSeerrEnabled(Boolean(features?.features?.seerr_enabled));
-        applyLiveChannelsFeature(features, setLiveChannelsReady);
-        if (!enabled) {
-          setIsOwner(true);
-          setRole("owner");
-          setIsYouth(false);
-          setAuthenticated(true);
-          setAuthReady(true);
-          try {
-            const me = await getAuthMe();
-            if (!cancelled && (me?.user?.ui_font_size || me?.user?.ui_theme)) {
-              const { applyUiFontSize, applyUiTheme } = await import("../lib/uiPrefs.js");
-              if (me.user.ui_font_size) applyUiFontSize(me.user.ui_font_size);
-              if (me.user.ui_theme) applyUiTheme(me.user.ui_theme);
-            }
-          } catch {
-            // ignore
-          }
-          return;
-        }
-        const me = await getAuthMe();
-        if (cancelled) return;
-        if (!me?.user) {
-          if (redirect) {
-            navigate("/login", { replace: true });
-            return;
-          }
-          setIsOwner(false);
-          setRole("");
-          setIsYouth(false);
-          setAuthenticated(false);
-          setAuthReady(true);
-          return;
-        }
-        if (me.user?.ui_font_size || me.user?.ui_theme) {
-          const { applyUiFontSize, applyUiTheme } = await import("../lib/uiPrefs.js");
-          if (me.user.ui_font_size) applyUiFontSize(me.user.ui_font_size);
-          if (me.user.ui_theme) applyUiTheme(me.user.ui_theme);
-        }
-        const rawRole = String(me.user?.role || "member").toLowerCase();
-        const nextRole = rawRole === "owner" ? "owner" : "member";
-        setRole(nextRole);
-        setIsOwner(nextRole === "owner");
-        setIsYouth(Boolean(me.user?.is_youth));
-        setAuthenticated(true);
-        setAuthReady(true);
-      } catch {
-        if (cancelled) return;
-        // Multi-user must not failure-open into the app on auth/network errors.
-        if (enabled) {
-          if (redirect) {
-            navigate("/login", { replace: true });
-            return;
-          }
-          setIsOwner(false);
-          setRole("");
-          setIsYouth(false);
-          setAuthenticated(false);
-          setAuthReady(true);
-          return;
-        }
-        setIsOwner(true);
-        setRole("owner");
-        setIsYouth(false);
-        setAuthenticated(true);
-        setAuthReady(true);
+    loadAuthSnapshot().then(async (snap) => {
+      if (cancelled) return;
+      applyLiveChannelsFeature(snap.features, setLiveChannelsReady);
+      const view = applyAuthSnapshot(snap, { redirect });
+      if (view.navigateTo) {
+        navigate(view.navigateTo, { replace: true });
+        return;
       }
-    }
+      setMultiUserEnabled(view.multiUserEnabled);
+      setSeerrEnabled(view.seerrEnabled);
+      setIsOwner(view.isOwner);
+      setRole(view.role);
+      setIsYouth(view.isYouth);
+      setAuthenticated(view.authenticated);
+      setAuthReady(true);
+      const user = snap.user || (snap.multiUserEnabled ? null : await loadAuthSessionUser());
+      if (cancelled || !user || !(user.ui_font_size || user.ui_theme)) return;
+      const { applyUiFontSize, applyUiTheme } = await import("../lib/uiPrefs.js");
+      if (cancelled) return;
+      if (user.ui_font_size) applyUiFontSize(user.ui_font_size);
+      if (user.ui_theme) applyUiTheme(user.ui_theme);
+    });
 
-    checkAuth();
     return () => {
       cancelled = true;
     };

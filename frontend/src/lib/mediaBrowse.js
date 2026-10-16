@@ -14,7 +14,7 @@ export const MEDIA_BROWSE_SORTS = [
   { id: "title", label: "Title" },
   { id: "year", label: "Year" },
   { id: "vote_average", label: "Rating" },
-  { id: "added_at", label: "Recently added" },
+  { id: "added_at", label: "Date added" },
   { id: "episode_added_at", label: "Recently added episodes" },
   { id: "last_viewed_at", label: "Last watched" },
   { id: "runtime_minutes", label: "Runtime" },
@@ -52,6 +52,29 @@ export const DEFAULT_TV_MEDIA_BROWSE = {
   sort: "episode_added_at",
   sort_dir: "desc",
 };
+
+/** Movies landing only (`/search?media_type=movie`): newest additions first. */
+export function movieLandingBrowseDefaults() {
+  return { sort: "added_at", sort_dir: "desc" };
+}
+
+/** True for Explore → Movies, not for other grids that happen to filter movies. */
+export function isMovieBrowseLanding(pathname, searchParams) {
+  const path = String(pathname || "");
+  const onSearch = path === "/search" || path.startsWith("/search/");
+  const media = String(searchParams?.get?.("media_type") || "")
+    .trim()
+    .toLowerCase();
+  return onSearch && media === "movie";
+}
+
+/**
+ * Year/genre/language catalogs scan the library. The poster page must not wait
+ * on that work — call this with the grid's settled flag before fetching them.
+ */
+export function browseFacetsFollowGrid(gridSettled) {
+  return gridSettled === true;
+}
 
 /** Page sizes surfaced in the shared "Show" selector. "all" is a capped fetch. */
 export const MEDIA_BROWSE_PAGE_SIZES = [48, 100, 500, "all"];
