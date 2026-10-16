@@ -83,14 +83,15 @@ class NotificationsMixin:
         assert row is not None
         return self._row_to_notification(row)
 
-    def list_notifications_for_user(
+    def _notification_list_sql(
         self,
         user_id: str,
         *,
         unread_only: bool = False,
         kinds: Optional[Sequence[str]] = None,
         limit: int = 20,
-    ) -> List[Dict[str, Any]]:
+        offset: int = 0,
+    ) -> tuple[str, List[Any]]:
         query = """
             SELECT n.*,
                    COALESCE(fu.preferred_name, fu.display_name) AS from_display_name,
@@ -111,11 +112,69 @@ class NotificationsMixin:
             placeholders = ",".join("?" for _ in cleaned_kinds)
             query += f" AND n.kind IN ({placeholders})"
             params.extend(cleaned_kinds)
-        query += " ORDER BY n.created_at DESC LIMIT ?"
-        params.append(limit)
+        safe_limit = max(1, min(int(limit), 50))
+        safe_offset = max(0, min(int(offset), 200))
+        query += " ORDER BY n.created_at DESC LIMIT ? OFFSET ?"
+        params.extend([safe_limit, safe_offset])
+        return query, params
+
+    def list_notifications_for_user(
+        self,
+        user_id: str,
+        *,
+        unread_only: bool = False,
+        kinds: Optional[Sequence[str]] = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        query, params = self._notification_list_sql(
+            user_id,
+            unread_only=unread_only,
+            kinds=kinds,
+            limit=limit,
+            offset=offset,
+        )
         with self.connect() as conn:
             rows = conn.execute(query, tuple(params)).fetchall()
         return [self._row_to_notification(row) for row in rows]
+
+    def notification_inbox_page(
+        self,
+        user_id: str,
+        *,
+        unread_only: bool = False,
+        kinds: Optional[Sequence[str]] = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
+        """Unread page plus badge count on one connection.
+
+        The inbox used to open SQLite twice (list, then count). Each open runs
+        ``journal_mode=WAL`` and can sit on the 30s busy timeout while another
+        writer holds the file.
+        """
+        query, params = self._notification_list_sql(
+            user_id,
+            unread_only=unread_only,
+            kinds=kinds,
+            limit=limit,
+            offset=offset,
+        )
+        with self.connect() as conn:
+            rows = conn.execute(query, tuple(params)).fetchall()
+            count_row = conn.execute(
+                """
+                SELECT COUNT(*) AS cnt FROM user_notifications
+                WHERE user_id = ? AND seen_at IS NULL
+                """,
+                (user_id,),
+            ).fetchone()
+        items = [self._row_to_notification(row) for row in rows]
+        return {
+            "items": items,
+            "count": len(items),
+            "unread_count": int(count_row["cnt"] if count_row else 0),
+        }
 
     def count_unread_notifications(self, user_id: str) -> int:
         with self.connect() as conn:

@@ -184,6 +184,7 @@ export async function listNotifications(params = {}) {
   const query = new URLSearchParams();
   if (params.unread_only) query.set("unread_only", "true");
   if (params.limit) query.set("limit", String(params.limit));
+  if (params.offset) query.set("offset", String(params.offset));
   if (params.kind) query.set("kind", String(params.kind));
   const suffix = query.toString() ? `?${query}` : "";
   return api(`/notifications${suffix}`);

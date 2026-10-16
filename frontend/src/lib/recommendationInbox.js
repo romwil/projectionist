@@ -21,6 +21,35 @@ export const NOTIFICATION_KINDS = [
  */
 export const INBOX_LIST_PARAMS = Object.freeze({ unread_only: true, limit: 50 });
 
+/**
+ * First paint asks for a short unread page. The rest of the same unread
+ * window (up to INBOX_LIST_PARAMS.limit) loads after those cards are visible.
+ */
+export const INBOX_FIRST_PAINT_LIMIT = 12;
+
+export const INBOX_FIRST_PAINT_PARAMS = Object.freeze({
+  unread_only: true,
+  limit: INBOX_FIRST_PAINT_LIMIT,
+});
+
+/**
+ * Follow-up query for older unread rows, or null when the first page is enough.
+ * @param {number} firstCount
+ * @param {number} unreadCount
+ */
+export function inboxFollowUpParams(firstCount, unreadCount) {
+  const shown = Number(firstCount) || 0;
+  const unread = Number(unreadCount) || 0;
+  if (shown < INBOX_FIRST_PAINT_LIMIT || unread <= shown) return null;
+  const remaining = INBOX_LIST_PARAMS.limit - shown;
+  if (remaining <= 0) return null;
+  return Object.freeze({
+    unread_only: true,
+    limit: remaining,
+    offset: shown,
+  });
+}
+
 export const ACCESS_REQUEST_ADMIN_PATH = "/admin/access";
 export const LIVE_CHANNELS_PATH = "/live";
 
