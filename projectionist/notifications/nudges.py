@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from projectionist.config_store import Settings
 from projectionist.library.db import Database
+from projectionist.notifications.recommendation_reasons import pick_linked_unwatched
 from projectionist.notifications.service import deliver_notification
 
 logger = logging.getLogger(__name__)
@@ -88,75 +89,13 @@ def pick_nudge_title(
     *,
     recent: Optional[List[Dict[str, Any]]] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Pick one unwatched title, preferring neighbors of recent watches when available."""
-    recent = recent or recently_watched_context(db, limit=3)
-    seed_ids: List[int] = []
-    if recent:
-        with db.connect() as conn:
-            for item in recent[:3]:
-                rk = item.get("rating_key")
-                tmdb = item.get("tmdb_id")
-                row = None
-                if rk:
-                    row = conn.execute(
-                        "SELECT id FROM library_items WHERE rating_key = ? LIMIT 1",
-                        (str(rk),),
-                    ).fetchone()
-                elif tmdb is not None:
-                    row = conn.execute(
-                        "SELECT id FROM library_items WHERE tmdb_id = ? LIMIT 1",
-                        (int(tmdb),),
-                    ).fetchone()
-                if row is not None:
-                    seed_ids.append(int(row["id"]))
+    """Pick one unwatched title that shares a named link with a real watch.
 
-    if seed_ids and hasattr(db, "get_neighbors"):
-        for seed_id in seed_ids:
-            try:
-                neighbors = db.get_neighbors(seed_id, limit=8) or []
-            except Exception:  # noqa: BLE001
-                neighbors = []
-            for neighbor in neighbors:
-                try:
-                    view_count = int(neighbor["view_count"] or 0)
-                    title = str(neighbor["title"] or "").strip()
-                except (TypeError, KeyError, IndexError):
-                    continue
-                if view_count > 0 or not title:
-                    continue
-                return {
-                    "title": title,
-                    "year": neighbor["year"],
-                    "media_type": neighbor["media_type"] or "movie",
-                    "tmdb_id": neighbor["tmdb_id"],
-                    "tvdb_id": neighbor["tvdb_id"],
-                    "rating_key": neighbor["rating_key"],
-                    "poster_url": neighbor["poster_url"],
-                    "why": f"Because you recently watched {recent[0]['title']}" if recent else None,
-                }
-
-    with db.connect() as conn:
-        row = conn.execute(
-            """
-            SELECT title, year, media_type, tmdb_id, tvdb_id, rating_key, poster_url, genres
-            FROM library_items
-            WHERE COALESCE(view_count, 0) = 0
-            ORDER BY RANDOM()
-            LIMIT 1
-            """
-        ).fetchone()
-    if row is None:
-        return None
-    return {
-        "title": str(row["title"] or "Untitled"),
-        "year": int(row["year"]) if row["year"] is not None else None,
-        "media_type": str(row["media_type"] or "movie"),
-        "tmdb_id": int(row["tmdb_id"]) if row["tmdb_id"] is not None else None,
-        "tvdb_id": int(row["tvdb_id"]) if row["tvdb_id"] is not None else None,
-        "rating_key": str(row["rating_key"]) if row["rating_key"] else None,
-        "poster_url": str(row["poster_url"]) if row["poster_url"] else None,
-        "why": None,
-    }
+    Embedding neighbors and a random unwatched shelf title are not picks.
+    ``recent`` is accepted for callers; the link itself is read from the graph.
+    """
+    del recent
+    return pick_linked_unwatched(db)
 
 
 def build_nudge_copy(
@@ -177,12 +116,12 @@ def build_nudge_copy(
     label = f"{title} ({year})" if year else title
     why = str(pick.get("why") or "").strip()
     subject = f"You have to see this — {label}"
-    # Inbox card lead prefers the media title; subject stays the full email line.
-    body = (
-        f"{voice} here: you have to see {label}.\n"
-        f"{why or 'An unwatched pick from your shelves that fits the moment.'}\n"
-        "Open CuratorX when you’re ready — this is an opt-in nudge, not a live session alert."
-    )
+    # Inbox card lead prefers the media title; the why line is the recognizable link.
+    lines = [f"{voice} here: you have to see {label}."]
+    if why:
+        lines.append(why)
+    lines.append("This is an opt-in nudge, not a live session alert.")
+    body = "\n".join(lines)
     return {"subject": subject, "body": body, "title": title}
 
 

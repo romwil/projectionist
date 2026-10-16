@@ -12,6 +12,11 @@ from projectionist.config_store import Settings
 from projectionist.digest.service import build_weekly_digest
 from projectionist.library.db import Database
 from projectionist.library.feeds import feed_recently_added
+from projectionist.notifications.recommendation_reasons import (
+    library_row_for_ref,
+    specific_reason,
+    watched_library_rows,
+)
 from projectionist.notifications.service import deliver_notification
 
 logger = logging.getLogger(__name__)
@@ -120,6 +125,9 @@ def structured_digest_picks(
             pick["poster_url"] = poster
             # Alias for clients that expect TMDB-style naming.
             pick["poster_path"] = poster
+        why = str(item.get("why") or "").strip()
+        if why:
+            pick["why"] = why
         picks.append(pick)
         if len(picks) >= cap:
             break
@@ -142,22 +150,40 @@ def build_member_newsletter(
     voice = _persona_voice_line(db, for_guest=for_guest)
     new_block = digest.get("new_this_week") or {}
     titles = list(new_block.get("titles") or [])
-    count = int(new_block.get("count") or len(titles))
-    picks = structured_digest_picks(titles)
-    title_lines = _format_title_lines(titles) or "• Quiet week — nothing new landed yet."
+    watched = watched_library_rows(db)
+    linked: List[Dict[str, Any]] = []
+    for item in titles:
+        if not isinstance(item, dict):
+            continue
+        row = library_row_for_ref(db, item)
+        if row is None:
+            continue
+        try:
+            if int(row.get("view_count") or 0) > 0:
+                continue
+        except (TypeError, ValueError):
+            continue
+        why = specific_reason(db, row, watched)
+        if not why:
+            continue
+        linked.append({**item, "why": why})
+        if len(linked) >= DIGEST_PICK_CAP:
+            break
+    picks = structured_digest_picks(linked)
+    if linked:
+        reason_block = "\n".join(str(item["why"]) for item in linked)
+    else:
+        reason_block = (
+            "Nothing new this week shares a subject, a creator, or a franchise "
+            "with what you have watched."
+        )
     subject = f"This week for you, {preferred}"
-    body = (
-        f"Hi {preferred},\n\n"
-        f"{voice}\n\n"
-        f"New in the library this week: {count} title{'s' if count != 1 else ''}.\n"
-        f"{title_lines}\n\n"
-        "Open CuratorX anytime to chat about what to watch next.\n"
-    )
+    body = f"Hi {preferred},\n\n{voice}\n\n{reason_block}\n"
     return {
         "subject": subject,
         "body": body,
         "title": subject,
-        "blurb": voice,
+        "blurb": reason_block.split("\n", 1)[0],
         "picks": picks,
     }
 
