@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  KNOWLEDGE_COVERAGE_REQUEST_MS,
   buildKnowledgeCoverageRows,
   formatCoverageDetail,
   formatCoveragePct,
+  knowledgeCoverageFailureCopy,
+  knowledgeStripContent,
   summarizeKnowledgeCoverage,
 } from "./knowledgeCoverage.js";
 
@@ -86,4 +89,46 @@ test("summarizeKnowledgeCoverage builds explore honesty line", () => {
   assert.match(line, /5,355 titles/);
   assert.match(line, /Overview 99%/);
   assert.match(line, /Motifs 100%/);
+});
+
+test("optional coverage failure does not surface Failed to fetch", () => {
+  const transport = new TypeError("Failed to fetch");
+  assert.equal(knowledgeCoverageFailureCopy(transport), "");
+  const aborted = new Error("The operation was aborted.");
+  aborted.name = "AbortError";
+  assert.equal(knowledgeCoverageFailureCopy(aborted), "");
+  assert.equal(knowledgeCoverageFailureCopy(new TypeError("Load failed")), "");
+
+  const hidden = knowledgeStripContent({
+    loading: false,
+    error: "Failed to fetch",
+    summary: null,
+  });
+  assert.equal(hidden, null);
+  assert.equal(String(hidden || "").includes("Failed to fetch"), false);
+
+  // A stored transport string must not paint even if a summary is also present.
+  assert.equal(
+    knowledgeStripContent({
+      loading: false,
+      error: transport.message,
+      summary: "5,632 titles · Overview 99%",
+    }),
+    null,
+  );
+});
+
+test("coverage strip does not wait on the explore hub", () => {
+  // The strip's content is its own fetch. Hub loading is not an input, and the
+  // request bound is short enough that a hung coverage call cannot sit on the page.
+  assert.equal(KNOWLEDGE_COVERAGE_REQUEST_MS > 0, true);
+  assert.equal(KNOWLEDGE_COVERAGE_REQUEST_MS <= 8000, true);
+  const line = knowledgeStripContent({
+    loading: false,
+    error: "",
+    summary: summarizeKnowledgeCoverage(SAMPLE),
+  });
+  assert.match(line, /titles/);
+  assert.equal(line.includes("Failed to fetch"), false);
+  assert.equal(knowledgeStripContent({ loading: true, error: "", summary: line }), null);
 });

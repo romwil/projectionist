@@ -1399,8 +1399,8 @@ export async function getLibraryStats() {
 }
 
 /** Knowledge-depth coverage (% overview, motifs, keywords, neighbors, loglines). */
-export async function getLibraryKnowledgeCoverage() {
-  return api("/library/knowledge-coverage");
+export async function getLibraryKnowledgeCoverage(options = {}) {
+  return api("/library/knowledge-coverage", options);
 }
 
 export async function getLibraryOverview() {
