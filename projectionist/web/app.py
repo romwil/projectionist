@@ -5895,21 +5895,25 @@ def mark_recommendations_seen(
 def list_notifications(
     unread_only: bool = False,
     limit: int = 20,
+    offset: int = 0,
     kind: Optional[str] = None,
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
-    """Generalized inbox: recommendation, arrival, access-request, digest, nudge."""
+    """Generalized inbox: recommendation, arrival, access-request, digest, nudge.
+
+    One SQLite connection returns the page and the unread badge. Callers paint
+    a short first page (``limit``) and ask for older rows with ``offset``.
+    """
     kinds = None
     if kind:
         kinds = [k.strip() for k in str(kind).split(",") if k.strip()]
-    items = _db().list_notifications_for_user(
+    return _db().notification_inbox_page(
         user.id,
         unread_only=unread_only,
         kinds=kinds,
         limit=min(max(1, limit), 50),
+        offset=min(max(0, offset), 200),
     )
-    unread_count = _db().count_unread_notifications(user.id)
-    return {"items": items, "count": len(items), "unread_count": unread_count}
 
 
 @app.post("/api/notifications/seen")
