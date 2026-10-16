@@ -153,6 +153,7 @@ export function liveStationState({
   const engineUp = Boolean(
     status.broadcast?.sidecar_up || engineProgress?.ready || engineProgress?.http_ready,
   );
+  const nativePlayback = Boolean(status.native_playback);
   if (channels === 0) {
     return {
       key: "empty",
@@ -161,7 +162,7 @@ export function liveStationState({
       detail: "Create your first channel — it takes about a minute.",
     };
   }
-  if (!engineUp) {
+  if (!engineUp && !nativePlayback) {
     return {
       key: "ready_to_launch",
       tone: "warn",

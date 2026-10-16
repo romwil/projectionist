@@ -1460,7 +1460,7 @@ export default function ConfigPage() {
     if (
       !enabled &&
       !window.confirm(
-        "Turn off Live Channels? On now hides for the household. If Docker management is on, the broadcast engine stops — your channel data stays on disk.",
+        "Turn off Live Channels? On now hides for the household. Saved channels stay on disk.",
       )
     ) {
       return;
@@ -1472,13 +1472,6 @@ export default function ConfigPage() {
       await persistSettings({
         features: { ...(settings.features || {}), live_channels_enabled: enabled },
       });
-      if (!enabled && settings?.tunarr?.docker_orchestration) {
-        try {
-          await postLiveChannelsLifecycle("stop");
-        } catch {
-          /* stop is best-effort on disable */
-        }
-      }
       if (enabled) {
         getLiveChannelsStatus().then(setLiveChannelsStatus).catch(() => {});
       } else {

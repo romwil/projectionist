@@ -861,14 +861,6 @@ class SeerrSettingsPayload(BaseModel):
 
 
 class TunarrSettingsPayload(BaseModel):
-    url: str = ""
-    public_url: str = ""
-    host_port: int = 0
-    hdhr_port: int = 0
-    docker_orchestration: bool = False
-    image_tag: str = "chrisbenincasa/tunarr:1.3.9"
-    volume_path: str = "tunarr"
-    media_binds: List[str] = Field(default_factory=list)
     filler_binds: List[str] = Field(default_factory=list)
     continuity_filler_list_id: str = ""
     pad_flex_max_minutes: int = 15

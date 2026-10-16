@@ -5,15 +5,18 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from projectionist.live_channels.docker import (
-    disk_free_bytes,
-    docker_socket_status,
-    orchestration_enabled,
-)
+import shutil
+
 from projectionist.live_channels.plex_pass import check_plex_pass
 
-# Soft floor for Tunarr image + headroom (~1GB).
 _MIN_FREE_BYTES = 1_200_000_000
+
+
+def disk_free_bytes(path: Path | str | None = None) -> int | None:
+    try:
+        return int(shutil.disk_usage(Path(path or ".")).free)
+    except OSError:
+        return None
 
 
 def run_preflight(
@@ -24,26 +27,8 @@ def run_preflight(
 ) -> Dict[str, Any]:
     """Return structured preflight checklist for the owner enable flow."""
     tunarr = getattr(settings, "tunarr", None)
-    url = str(getattr(tunarr, "url", "") or "").strip() if tunarr else ""
     features = getattr(settings, "features", None)
     enabled = bool(getattr(features, "live_channels_enabled", False))
-
-    orch = orchestration_enabled(settings)
-    sock = docker_socket_status()
-    socket_ok = bool(sock.get("accessible"))
-    # Soft: managed Docker is optional when a Tunarr URL is already healthy (BYO).
-    docker_check = {
-        "id": "docker_orchestration",
-        "ok": (orch and socket_ok) or bool(url),
-        "soft": True,
-        "label": "Docker orchestration",
-        "message": _docker_message(orch, sock, byo_url=bool(url)),
-        "orchestration_enabled": orch,
-        "socket_available": socket_ok,
-        "socket_present": bool(sock.get("present")),
-        "socket_error": sock.get("error"),
-        "socket_path": sock.get("path"),
-    }
 
     free = disk_free_bytes(data_dir or Path.cwd())
     disk_ok = free is None or free >= _MIN_FREE_BYTES
@@ -51,15 +36,11 @@ def run_preflight(
         "id": "disk_space",
         "ok": disk_ok,
         "soft": True,
-        "label": "Disk space (~1 GB for Tunarr image)",
+        "label": "Disk space",
         "message": (
-            "Could not measure free disk; ensure ~1 GB is available for the Tunarr image."
+            "Could not measure free disk."
             if free is None
-            else (
-                f"{free // (1024 * 1024)} MB free — enough for the pinned Tunarr image."
-                if disk_ok
-                else f"Only {free // (1024 * 1024)} MB free; Tunarr image needs ~1 GB."
-            )
+            else f"{free // (1024 * 1024)} MB free."
         ),
         "free_bytes": free,
     }
@@ -106,21 +87,19 @@ def run_preflight(
         "detection": plex_pass.get("detection"),
     }
 
-    tunarr_url_check = {
-        "id": "tunarr_url",
-        "ok": bool(url) or (orch and socket_ok),
-        "soft": False,
-        "label": "Tunarr URL or managed Docker",
+    from projectionist.live_channels.native_schedule import schedule_has_channels
+
+    lineup_ready = schedule_has_channels(settings)
+    lineup_check = {
+        "id": "lineup",
+        "ok": True,
+        "soft": True,
+        "label": "Lineup",
         "message": (
-            f"Tunarr URL configured: {url}"
-            if url
-            else (
-                "No Tunarr URL yet — managed Docker can start a sibling, or set a BYO URL."
-                if orch and socket_ok
-                else "Set a BYO Tunarr URL (Docker orchestration is not available)."
-            )
+            "Channels are saved in Projectionist."
+            if lineup_ready
+            else "No lineup saved yet. Create a channel when you are ready."
         ),
-        "url": url,
     }
 
     gpu_check = {
@@ -135,15 +114,14 @@ def run_preflight(
     }
 
     checks: List[Dict[str, Any]] = [
-        docker_check,
         disk_check,
         plex_check,
         pass_check,
-        tunarr_url_check,
+        lineup_check,
         gpu_check,
     ]
     hard_failures = [c for c in checks if not c["ok"] and not c.get("soft")]
-    ready = not hard_failures and plex_check["ok"] and tunarr_url_check["ok"]
+    ready = not hard_failures and plex_check["ok"]
 
     return {
         "ok": ready,

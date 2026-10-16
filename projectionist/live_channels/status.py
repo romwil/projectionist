@@ -6,12 +6,6 @@ import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 from urllib.request import Request, urlopen
 
-from projectionist.connectors.tunarr import TunarrClient, tunarr_reachable
-from projectionist.live_channels.docker import (
-    docker_socket_available,
-    lifecycle_from_settings,
-    orchestration_enabled,
-)
 from projectionist.live_channels.guide import build_on_now_snapshot
 from projectionist.live_channels.plex_attach import (
     probe_existing_plex_livetv,
@@ -92,7 +86,7 @@ def _xmltv_programme_stats(guide_url: str, *, timeout: int = 8) -> Dict[str, Any
     }
 
 
-def _media_library_index(client: TunarrClient) -> Dict[str, Any]:
+def _media_library_index(client: Any) -> Dict[str, Any]:
     """Enabled libraries + scan state for the first Plex media source."""
     try:
         sources = client.list_media_sources()
@@ -161,7 +155,7 @@ def _media_library_index(client: TunarrClient) -> Dict[str, Any]:
     }
 
 
-def _lineup_health(client: TunarrClient, channels: Sequence[Mapping[str, Any]] | List) -> Dict[str, Any]:
+def _lineup_health(client: Any, channels: Sequence[Mapping[str, Any]] | List) -> Dict[str, Any]:
     """Per-channel Tunarr programming depth (empty → Plex session ends immediately)."""
     rows: List[Dict[str, Any]] = []
     empty = 0
@@ -490,106 +484,57 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
         "channels": [],
         "playable": False,
     }
-    client: Optional[TunarrClient] = None
-    if url:
-        reachability = tunarr_reachable(url)
-        if reachability.get("reachable"):
-            try:
-                client = TunarrClient(url, timeout=8)
-                listed = client.list_channels()
-                listed_raw = [ch for ch in listed if isinstance(ch, Mapping)]
-                channel_count = len(listed_raw)
-                from projectionist.live_channels.filler import (
-                    channel_has_continuity,
-                    enrich_channels_with_filler_collections,
-                    find_continuity_filler_list,
-                )
-                from projectionist.live_channels.publish import (
-                    resolve_media_scope,
-                    resolve_subtitles_enabled,
-                    station_craft_snapshot,
-                )
+    xmltv: Dict[str, Any] = {"ok": False, "programme_count": 0, "content_programme_count": 0}
+    client: Any = None
+    native_doc: Dict[str, Any] = {"channels": {}}
+    native_rows: List[Dict[str, Any]] = []
+    tuner_note = ""
+    try:
+        from projectionist.live_channels.native_schedule import (
+            admin_channel_rows,
+            ensure_schedule,
+            plex_tuner_note,
+            programme_stats,
+        )
 
-                continuity_fid = str(
-                    getattr(tunarr, "continuity_filler_list_id", "") or ""
-                )
-                enriched = enrich_channels_with_filler_collections(
-                    client, listed_raw[:40]
-                )
-                # Prefer live Continuity list id over a stale settings cache.
-                try:
-                    live_list = find_continuity_filler_list(client)
-                    if live_list and live_list.get("id"):
-                        continuity_fid = str(live_list.get("id") or continuity_fid)
-                except Exception:  # noqa: BLE001
-                    pass
-
-                channels = []
-                for ch in enriched:
-                    cid = str(ch.get("id") or ch.get("uuid") or "")
-                    cols = ch.get("fillerCollections") or []
-                    # Prefer live Tunarr flag; fall back to Projectionist station_meta.
-                    if "subtitlesEnabled" in ch:
-                        subs_on = bool(ch.get("subtitlesEnabled"))
-                    else:
-                        subs_on = resolve_subtitles_enabled(settings, channel_id=cid)
-                    craft = station_craft_snapshot(settings, cid)
-                    channels.append(
-                        {
-                            "id": cid,
-                            "name": ch.get("name"),
-                            "number": ch.get("number"),
-                            "has_continuity": channel_has_continuity(
-                                ch, filler_list_id=continuity_fid
-                            ),
-                            "filler_collections_count": (
-                                len(cols) if isinstance(cols, list) else 0
-                            ),
-                            "guide_flex_title": str(ch.get("guideFlexTitle") or ""),
-                            "media_scope": resolve_media_scope(
-                                settings, channel_id=cid, default="both"
-                            ),
-                            "subtitles_enabled": subs_on,
-                            "source": craft.get("source") or "",
-                            "motif": craft.get("motif") or "",
-                            "cluster_tag": craft.get("cluster_tag") or "",
-                            "collection_id": craft.get("collection_id") or "",
-                            "collection_title": craft.get("collection_title") or "",
-                            "programming_mode": craft.get("programming_mode") or "",
-                            "craft_filters": dict(craft.get("craft_filters") or {}),
-                            "youth_safe": bool(craft.get("youth_safe")),
-                            "queue_pad": dict(craft.get("queue_pad") or {}),
-                        }
-                    )
-            except Exception:  # noqa: BLE001
-                client = None
-            if client is not None:
-                try:
-                    sessions = summarize_sessions(client.list_sessions())
-                except Exception:  # noqa: BLE001
-                    sessions = summarize_sessions({})
-                try:
-                    guide_status = dict(client.get_guide_status() or {})
-                except Exception:  # noqa: BLE001
-                    guide_status = {}
-                try:
-                    on_now_snap = build_on_now_snapshot(settings, client=client)
-                    airing = airing_rows_from_snapshot(on_now_snap)
-                except Exception:  # noqa: BLE001
-                    airing = []
-                    on_now_snap = {"channels": []}
-                try:
-                    media_libraries = _media_library_index(client)
-                except Exception:  # noqa: BLE001
-                    media_libraries = {"ok": False, "libraries": []}
-                try:
-                    lineup_health = _lineup_health(client, listed_raw)
-                except Exception:  # noqa: BLE001
-                    pass
+        native_doc = ensure_schedule(settings)
+        if native_doc.get("channels"):
+            native_rows = admin_channel_rows(settings, native_doc)
+    except Exception:  # noqa: BLE001
+        native_doc = {"channels": {}}
+        native_rows = []
+    if native_rows:
+        channels = native_rows
+        channel_count = len(native_rows)
+        reachability = {
+            "reachable": False,
+            "native": True,
+            "error": "",
+        }
+        try:
+            on_now_snap = build_on_now_snapshot(settings)
+            airing = airing_rows_from_snapshot(on_now_snap)
+        except Exception:  # noqa: BLE001
+            airing = []
+            on_now_snap = {"channels": []}
+        content_slots = 0
+        for row in native_doc.get("channels", {}).values():
+            for item in (row or {}).get("items") or []:
+                if isinstance(item, Mapping) and item.get("type") == "content":
+                    content_slots += 1
+        lineup_health = {
+            "channel_count": channel_count,
+            "filled_count": channel_count if content_slots else 0,
+            "empty_count": 0 if content_slots else channel_count,
+            "channels": [],
+            "playable": content_slots > 0,
+        }
+        xmltv = programme_stats(native_doc)
+        tuner_note = plex_tuner_note()
     else:
-        reachability = {"reachable": False, "error": "Tunarr URL is not configured"}
+        reachability = {"reachable": False, "native": False, "error": ""}
 
-    docker = lifecycle_from_settings(settings).status().to_dict()
+    docker = {"ok": True, "status": "not_used", "message": "Live uses the local lineup."}
     plex_pass = check_plex_pass(
         settings=settings,
         owner_confirmed=True if plex_pass_confirmed else None,
@@ -597,7 +542,8 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
 
     facing = resolve_plex_facing_tunarr_base(settings)
     guide_url = xmltv_url(str(facing.get("base_url") or ""))
-    xmltv = _xmltv_programme_stats(guide_url)
+    if not native_rows:
+        xmltv = _xmltv_programme_stats(guide_url)
     existing_livetv = probe_existing_plex_livetv(settings)
     plex_mapping: Dict[str, Any] = {
         "ok": False,
@@ -673,19 +619,18 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
             and int(xmltv.get("content_programme_count") or 0) > 0
             else (
                 "Stations exist but lineups are empty — Publish starters again (fills "
-                "from your Plex library after Tunarr finishes scanning)."
+                "from your Plex library)."
                 if channel_count and lineup_health.get("empty_count")
                 else (
-                    "Enable Live Channels, start the engine, then Propose / Publish "
-                    "starter stations."
+                    "Enable Live Channels, then propose or publish channels."
                     if not channel_count
-                    else "Waiting on Tunarr library scan or guide attach."
+                    else "Waiting on a published lineup."
                 )
             )
         ),
     }
 
-    sidecar_up = bool(reachability.get("reachable")) or docker.get("status") == "running"
+    sidecar_up = bool(native_rows)
 
     continuity: Dict[str, Any] = {
         "ok": False,
@@ -710,7 +655,7 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
         icon_probe = probe_icon_url(icon_url) if icon_url else {
             "ok": False,
             "url": "",
-            "message": "No plex-facing Tunarr icon base (set tunarr.public_url / HOST_IP).",
+            "message": "No channel icon configured.",
         }
     except Exception as error:  # noqa: BLE001
         icon_probe = {"ok": False, "url": "", "message": str(error)[:200]}
@@ -740,6 +685,8 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
         },
         "channels": channels,
         "channel_count": channel_count,
+        "native_playback": bool(native_rows),
+        "plex_tuner_note": tuner_note,
         "airing": airing,
         "now_playing": now_playing,
         "sessions": sessions,
@@ -751,9 +698,9 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
         "tunarr": {
             "url": url,
             "url_configured": bool(url),
-            "image_tag": image_tag or "chrisbenincasa/tunarr:1.3.9",
-            "docker_orchestration": orchestration_enabled(settings),
-            "docker_socket_available": docker_socket_available(),
+            "image_tag": "",
+            "docker_orchestration": False,
+            "docker_socket_available": False,
             "reachability": reachability,
             "docker": docker,
             "plex_pass_confirmed": plex_pass_confirmed,
