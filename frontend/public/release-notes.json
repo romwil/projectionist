@@ -1,6 +1,35 @@
 {
-  "generated_at": "2026-10-16T02:57:27Z",
+  "generated_at": "2026-10-16T15:08:02Z",
   "releases": [
+    {
+      "version": "1.37.49",
+      "date": "2026-10-16",
+      "summary": "One patch on 1.37.48: a title that is not in Radarr or Sonarr still finishes a full remove, and an empty browse wall shows it is loading until posters arrive.",
+      "highlights": [
+        "**A title missing from Radarr or Sonarr still leaves the library.** Full remove notes that absence, deletes the files Projectionist already knows, removes the Plex entry when Plex is set up, and drops the title from the index. Index only stays the same.",
+        "**A real failure still stops that title.** If those files cannot be deleted, or Plex refuses the removal, that title stays and the summary says why.",
+        "**An empty wall shows it is loading.** Movies, TV, search, and tag walls say Loading titles and show poster placeholders until the first posters arrive.",
+        "**Posters stay quiet once they are up.** Year, genre, and language lists can still be loading. The faint Loading line does not sit over titles that are already on screen."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "**Full remove no longer stops when the title is absent from Radarr or Sonarr.** That absence is a note, not a failure. Known media paths (library row, the *arr snapshot, or the path Plex already reports) are unlinked. Missing files are skipped. Empty parent folders are removed only when the folder is already empty. No import exclusion is added for a title *arr does not have. Permission errors and a Plex reject fail that title and leave the index row. When Radarr or Sonarr is not configured, or returns another error, the title still fails and stays in the index. After a successful *arr delete, a later Plex cleanup failure still allows the index delete.",
+            "**Browse grids hide the loading line once posters are on screen.** An empty grid shows “Loading titles” and poster skeletons in the results region. A follow-up library query, and year, genre, and language catalogs, do not paint “Loading…” over titles that have already appeared."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend `pytest tests/` — 2596 passed, 6 skipped, coverage 76.91% (floor 74%), run with `PROJECTIONIST_SKIP_DOTENV=1` and `PYTHONPATH` on `release/1.37.49`.",
+            "Frontend unit 1021/1021.",
+            "Lint 0 errors (151 warnings); `npm run build` OK.",
+            "`npm run test:release-perf` on the mocked e2e server (port 8808, lobby theater 8796) — passed. About, Explore, Movies, Inbox, and Live stayed inside `frontend/perf/baseline.json`."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.48",
       "date": "2026-10-16",
