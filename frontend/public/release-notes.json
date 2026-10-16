@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-16T21:32:41Z",
+  "generated_at": "2026-10-16T21:33:10Z",
   "releases": [
     {
       "version": "1.37.52",
@@ -23,7 +23,7 @@
             "Backend `pytest tests/` — 2530 passed, 43 skipped, coverage 76.17% (floor 74%), with `PROJECTIONIST_SKIP_DOTENV=1`. The first pass failed 8 API cases because `frontend/dist/assets` was not built yet; those 8 passed after `npm run build`.",
             "Frontend unit 1026/1026, including `frontend/src/lib/posterTrailer.test.mjs`.",
             "Lint 0 errors (166 warnings); `npm run build` OK.",
-            "`npm run test:release-perf` — pending."
+            "`npm run test:release-perf` on the mocked e2e server (port 8808, lobby theater 8796) — passed. About, Explore, Movies, Inbox, and Live stayed inside `frontend/perf/baseline.json`."
           ]
         }
       ]
