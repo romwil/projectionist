@@ -1786,6 +1786,21 @@ def live_channels_tune_endpoint(
                 detail="This channel’s current program is above your youth rating limit.",
             )
 
+    from projectionist.library.playback import PlaybackError
+    from projectionist.live_channels.native_schedule import play_source_for_channel
+
+    try:
+        native_source = play_source_for_channel(
+            _db(),
+            settings,
+            user,
+            channel_id,
+        )
+    except PlaybackError as error:
+        raise HTTPException(status_code=error.status_code, detail=error.message) from error
+    if native_source is not None:
+        return native_source
+
     try:
         client = tunarr_client_from_settings(settings)
         result = prepare_channels_for_playback(
@@ -1868,6 +1883,14 @@ def _live_channels_stream_response(
                     status_code=403,
                     detail="This channel’s current program is above your youth rating limit.",
                 )
+
+    from projectionist.live_channels.native_schedule import schedule_has_channels
+
+    if schedule_has_channels(settings):
+        raise HTTPException(
+            status_code=404,
+            detail="This channel plays from a library Play session. Tune the channel again.",
+        )
 
     try:
         asset = proxy_channel_stream(settings, cid, relative_path)

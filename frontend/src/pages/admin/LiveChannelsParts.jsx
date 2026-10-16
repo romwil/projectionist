@@ -3,7 +3,10 @@ import { liveJobRailCopy } from "../../lib/liveChannelsJob.js";
 /** True once the broadcast side is up and at least one channel exists. */
 export function isLiveChannelsLaunched(status, engineProgress) {
   const engineUp = Boolean(
-    status?.broadcast?.sidecar_up || engineProgress?.ready || engineProgress?.http_ready,
+    status?.broadcast?.sidecar_up ||
+      status?.native_playback ||
+      engineProgress?.ready ||
+      engineProgress?.http_ready,
   );
   return engineUp && Number(status?.channel_count ?? 0) > 0;
 }
