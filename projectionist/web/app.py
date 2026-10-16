@@ -244,6 +244,7 @@ from projectionist.web.setup import (
     invalidate_certifications_on_settings_change,
     merge_secret_fields,
     merge_theater_settings_payload,
+    preserve_omitted_ask_delete_confirmation,
     record_service_integration,
     resolve_test_payload,
     sync_settings_to_db,
@@ -957,6 +958,7 @@ class SettingsPayload(BaseModel):
     tv_page_size: int = Field(default=500, ge=50, le=2000)
     library_enrich_workers: int = Field(default=6, ge=1, le=16)
     sync_reviews_to_plex: bool = True
+    ask_delete_confirmation: bool = True
     auto_repair_issue_codes: List[str] = Field(default_factory=list)
     mcp_api_key: str = ""
     mcp_full_api_key: str = ""

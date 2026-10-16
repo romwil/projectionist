@@ -40,6 +40,7 @@ def register_setup_routes(app):
     logger = app_mod.logger
     merge_secret_fields = app_mod.merge_secret_fields
     merge_theater_settings_payload = app_mod.merge_theater_settings_payload
+    preserve_omitted_ask_delete_confirmation = app_mod.preserve_omitted_ask_delete_confirmation
     normalize_path_settings = app_mod.normalize_path_settings
     normalize_plex_type = app_mod.normalize_plex_type
     normalize_settings_llm = app_mod.normalize_settings_llm
@@ -175,6 +176,7 @@ def register_setup_routes(app):
         existing = _settings()
         merged = merge_secret_fields(payload.model_dump(), existing)
         merge_theater_settings_payload(payload, existing, merged)
+        preserve_omitted_ask_delete_confirmation(payload, existing, merged)
         settings = _normalize_mcp_image_sizes(
             normalize_path_settings(normalize_settings_llm(Settings.from_mapping(merged)))
         )
@@ -223,6 +225,40 @@ def register_setup_routes(app):
             except Exception:  # noqa: BLE001
                 logger.exception("Owner seeding after settings update failed (continuing)")
         return _mask_settings(settings)
+
+
+    class AskDeleteConfirmationPayload(BaseModel):
+        ask_delete_confirmation: bool
+
+
+    @router.get("/api/settings/ask-delete-confirmation")
+    def get_ask_delete_confirmation(user=Depends(require_role("owner"))) -> Dict[str, Any]:
+        """Owner-only typed-DELETE preference. Missing installs still ask."""
+        del user
+        settings = _settings()
+        return {
+            "ask_delete_confirmation": bool(getattr(settings, "ask_delete_confirmation", True))
+        }
+
+
+    @router.put("/api/settings/ask-delete-confirmation")
+    def put_ask_delete_confirmation(
+        payload: AskDeleteConfirmationPayload,
+        user=Depends(require_role("owner")),
+    ) -> Dict[str, Any]:
+        """Turn the typed DELETE step on or off without rewriting other settings."""
+        del user
+        existing = _settings()
+        updated = Settings.from_mapping(
+            {
+                **asdict(existing),
+                "ask_delete_confirmation": bool(payload.ask_delete_confirmation),
+            }
+        )
+        save_settings(DATA_DIR, updated)
+        return {
+            "ask_delete_confirmation": bool(updated.ask_delete_confirmation),
+        }
 
 
     def _mcp_key_field(which: str) -> str:

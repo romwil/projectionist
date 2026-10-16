@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { DeleteConfirmPhrase, useDeleteConfirmationPref } from "./DeleteConfirmPhrase.jsx";
 import {
-  BULK_DELETE_CONFIRM_PHRASE,
-  isBulkDeleteConfirmPhrase,
+  canConfirmLibraryRemoval,
+  libraryRemovalNeedsTypedDelete,
 } from "../lib/bulkLibraryDelete.js";
 
 function stopBubble(event) {
@@ -22,6 +23,15 @@ export default function ScopedTvRemoveDialog({
   onConfirm,
 }) {
   const [phrase, setPhrase] = useState("");
+  const {
+    askDeleteConfirmation,
+    prefReady,
+    prefSaving,
+    dontAskAgain,
+    setDontAskAgain,
+    saveError,
+    persistDontAskAgain,
+  } = useDeleteConfirmationPref(open);
 
   useEffect(() => {
     if (!open) return;
@@ -31,7 +41,19 @@ export default function ScopedTvRemoveDialog({
   if (!open || typeof document === "undefined") return null;
 
   const isSeason = String(scope) === "season";
-  const canConfirm = isBulkDeleteConfirmPhrase(phrase) && Boolean(label) && !loading;
+  const needsTypedDelete = libraryRemovalNeedsTypedDelete(askDeleteConfirmation);
+  const canConfirm = canConfirmLibraryRemoval({
+    needsTypedDelete,
+    phrase,
+    hasTarget: Boolean(label),
+    loading: loading || !prefReady || prefSaving,
+  });
+
+  async function handleConfirm() {
+    const saved = await persistDontAskAgain();
+    if (!saved) return;
+    onConfirm?.();
+  }
 
   return createPortal(
     <div
@@ -66,23 +88,27 @@ export default function ScopedTvRemoveDialog({
           <strong>{label || "Untitled"}</strong>
         </p>
 
-        <label className="bulk-delete-confirm-label" htmlFor="scoped-tv-remove-phrase">
-          Type <kbd>{BULK_DELETE_CONFIRM_PHRASE}</kbd> to confirm
-        </label>
-        <input
-          id="scoped-tv-remove-phrase"
-          className="bulk-delete-confirm-input"
-          data-testid="scoped-tv-remove-phrase"
-          autoComplete="off"
-          spellCheck={false}
-          value={phrase}
-          disabled={loading}
-          onChange={(event) => setPhrase(event.target.value)}
-        />
+        {prefReady ? (
+          <DeleteConfirmPhrase
+            askDeleteConfirmation={askDeleteConfirmation}
+            phrase={phrase}
+            onPhraseChange={setPhrase}
+            dontAskAgain={dontAskAgain}
+            onDontAskAgainChange={setDontAskAgain}
+            disabled={loading || prefSaving || !label}
+            inputId="scoped-tv-remove-phrase"
+            phraseTestId="scoped-tv-remove-phrase"
+            dontAskTestId="scoped-tv-remove-dont-ask"
+          />
+        ) : (
+          <p className="status status-secondary" data-testid="scoped-tv-remove-pref-loading">
+            Checking confirmation…
+          </p>
+        )}
 
-        {error ? (
+        {saveError || error ? (
           <p className="dash-panel-error" data-testid="scoped-tv-remove-error">
-            {error}
+            {saveError || error}
           </p>
         ) : null}
 
@@ -101,7 +127,7 @@ export default function ScopedTvRemoveDialog({
             className="primary danger"
             data-testid="scoped-tv-remove-confirm"
             disabled={!canConfirm}
-            onClick={() => onConfirm?.()}
+            onClick={handleConfirm}
           >
             {loading ? "Removing…" : isSeason ? "Remove season" : "Remove episode"}
           </button>

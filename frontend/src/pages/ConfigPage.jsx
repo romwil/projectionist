@@ -21,6 +21,7 @@ import {
   getLlmModelCatalog,
   getPersona,
   getSettings,
+  saveAskDeleteConfirmation,
   getWizardStatus,
   getPlexSections,
   listJobs,
@@ -1385,6 +1386,25 @@ export default function ConfigPage() {
       setActionFeedback("persona", "error", error.message);
     } finally {
       setSavingPersona(false);
+    }
+  }
+
+  async function handleAskDeleteConfirmationToggle(enabled) {
+    const previous = settings?.ask_delete_confirmation !== false;
+    updateSettings({ ask_delete_confirmation: enabled });
+    try {
+      const saved = await saveAskDeleteConfirmation(enabled);
+      updateSettings({ ask_delete_confirmation: saved?.ask_delete_confirmation !== false });
+      setActionFeedback(
+        "plex-sections",
+        "success",
+        enabled
+          ? "Removing titles will ask you to type DELETE."
+          : "Removing titles no longer asks you to type DELETE.",
+      );
+    } catch (error) {
+      updateSettings({ ask_delete_confirmation: previous });
+      setActionFeedback("plex-sections", "error", error.message);
     }
   }
 
@@ -2935,6 +2955,7 @@ export default function ConfigPage() {
             movieSections={movieSections}
             tvSections={tvSections}
             handleSyncReviewsToggle={handleSyncReviewsToggle}
+            handleAskDeleteConfirmationToggle={handleAskDeleteConfirmationToggle}
             handlePlexCollectionsToggle={handlePlexCollectionsToggle}
             handleEphemeralCollectionGcToggle={handleEphemeralCollectionGcToggle}
             handleEphemeralCollectionGcDryRunToggle={handleEphemeralCollectionGcDryRunToggle}

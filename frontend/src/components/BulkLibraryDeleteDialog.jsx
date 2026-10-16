@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { DeleteConfirmPhrase, useDeleteConfirmationPref } from "./DeleteConfirmPhrase.jsx";
 import {
-  BULK_DELETE_CONFIRM_PHRASE,
   LIBRARY_DELETE_MODE_FULL,
   LIBRARY_DELETE_MODE_INDEX,
+  canConfirmLibraryRemoval,
   formatBulkDeletePreviewTitles,
-  isBulkDeleteConfirmPhrase,
   libraryDeleteModeLabel,
+  libraryRemovalNeedsTypedDelete,
   normalizeLibraryDeleteMode,
 } from "../lib/bulkLibraryDelete.js";
 
@@ -37,6 +38,15 @@ export default function BulkLibraryDeleteDialog({
   const [phrase, setPhrase] = useState("");
   const [mode, setMode] = useState(() => normalizeLibraryDeleteMode(defaultMode));
   const isPurgeSurface = String(surface || "").trim().toLowerCase() === "purge";
+  const {
+    askDeleteConfirmation,
+    prefReady,
+    prefSaving,
+    dontAskAgain,
+    setDontAskAgain,
+    saveError,
+    persistDontAskAgain,
+  } = useDeleteConfirmationPref(open);
 
   useEffect(() => {
     if (!open) return;
@@ -49,12 +59,24 @@ export default function BulkLibraryDeleteDialog({
   const preview = formatBulkDeletePreviewTitles(titles, 5);
   const normalizedMode = normalizeLibraryDeleteMode(mode);
   const isFull = normalizedMode === LIBRARY_DELETE_MODE_FULL;
-  const canConfirm = isBulkDeleteConfirmPhrase(phrase) && preview.total > 0 && !loading;
+  const needsTypedDelete = libraryRemovalNeedsTypedDelete(askDeleteConfirmation);
+  const canConfirm = canConfirmLibraryRemoval({
+    needsTypedDelete,
+    phrase,
+    hasTarget: preview.total > 0,
+    loading: loading || !prefReady || prefSaving,
+  });
   const countLabel = preview.total === 1 ? "title" : "titles";
 
   function selectMode(nextMode, event) {
     stopBubble(event);
     setMode(nextMode);
+  }
+
+  async function handleConfirm() {
+    const saved = await persistDontAskAgain();
+    if (!saved) return;
+    onConfirm?.({ mode: normalizedMode });
   }
 
   return createPortal(
@@ -200,24 +222,27 @@ export default function BulkLibraryDeleteDialog({
           </p>
         ) : null}
 
-        <label className="bulk-delete-modal-confirm-label" htmlFor="bulk-library-delete-phrase">
-          Type <kbd>{BULK_DELETE_CONFIRM_PHRASE}</kbd> to confirm
-          <input
-            id="bulk-library-delete-phrase"
-            className="bulk-delete-modal-confirm-input"
-            data-testid="bulk-library-delete-phrase"
-            type="text"
-            autoComplete="off"
-            spellCheck={false}
-            value={phrase}
-            disabled={loading || preview.total === 0}
-            onChange={(event) => setPhrase(event.target.value)}
+        {prefReady ? (
+          <DeleteConfirmPhrase
+            askDeleteConfirmation={askDeleteConfirmation}
+            phrase={phrase}
+            onPhraseChange={setPhrase}
+            dontAskAgain={dontAskAgain}
+            onDontAskAgainChange={setDontAskAgain}
+            disabled={loading || prefSaving || preview.total === 0}
+            inputId="bulk-library-delete-phrase"
+            phraseTestId="bulk-library-delete-phrase"
+            dontAskTestId="bulk-library-delete-dont-ask"
           />
-        </label>
+        ) : (
+          <p className="status status-secondary" data-testid="bulk-library-delete-pref-loading">
+            Checking confirmation…
+          </p>
+        )}
 
-        {error ? (
+        {saveError || error ? (
           <p className="error" data-testid="bulk-library-delete-error">
-            {error}
+            {saveError || error}
           </p>
         ) : null}
 
@@ -227,7 +252,7 @@ export default function BulkLibraryDeleteDialog({
             className="btn-danger"
             data-testid="bulk-library-delete-confirm"
             disabled={!canConfirm}
-            onClick={() => onConfirm?.({ mode: normalizedMode })}
+            onClick={handleConfirm}
           >
             {loading
               ? isFull

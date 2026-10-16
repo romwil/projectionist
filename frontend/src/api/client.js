@@ -1754,6 +1754,17 @@ export async function getSettings() {
   return api("/settings");
 }
 
+export async function getAskDeleteConfirmation() {
+  return api("/settings/ask-delete-confirmation");
+}
+
+export async function saveAskDeleteConfirmation(askDeleteConfirmation) {
+  return api("/settings/ask-delete-confirmation", {
+    method: "PUT",
+    body: JSON.stringify({ ask_delete_confirmation: Boolean(askDeleteConfirmation) }),
+  });
+}
+
 export async function saveSettings(payload) {
   return api("/settings", {
     method: "PUT",
