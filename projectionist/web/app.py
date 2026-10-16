@@ -1735,8 +1735,9 @@ async def delete_library_items(
 
     ``mode=full``: delete via Radarr/Sonarr (files + import exclusion), remove
     Plex metadata when configured, then drop the Projectionist index row.
-    Per-title *arr failures leave the index intact and are listed under
-    ``errors`` — never reported as a silent full success.
+    A title that is not in Radarr/Sonarr is still removed (known files, Plex,
+    index) and noted; it is not an import exclusion. Other per-title failures
+    leave the index intact and are listed under ``errors``.
     """
     from projectionist.library.full_remove import (
         full_remove_library_items,

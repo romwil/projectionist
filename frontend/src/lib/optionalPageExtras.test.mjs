@@ -73,7 +73,7 @@ describe("optional page extras", () => {
       new URL("../pages/LibraryBrowsePage.jsx", import.meta.url),
       "utf8",
     );
-    const results = page.indexOf('data-testid="library-browse-results"');
+    const results = page.indexOf('testId="library-browse-results"');
     const extras = page.indexOf('data-testid="search-optional-beyond"');
     assert.ok(results > 0 && extras > results);
     const tag = detailsTag(page, "search-optional-beyond");

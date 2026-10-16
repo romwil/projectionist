@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { getLibraryAggregate, queryLibrary } from "../api/client";
 import BackLink from "../components/BackLink";
+import BrowseResultsRegion from "../components/BrowseResultsRegion.jsx";
 import LibraryMediaCard from "../components/LibraryMediaCard";
 import MediaBrowseControls from "../components/MediaBrowseControls";
 import MediaBrowsePagination from "../components/MediaBrowsePagination";
@@ -62,7 +63,9 @@ export default function TagPage() {
         genres: [
           ...new Set((genreAgg?.buckets || []).map((bucket) => bucket.genre).filter(Boolean)),
         ].sort(),
-        languages: browseLanguageOptions((languageAgg?.buckets || []).map((bucket) => bucket.value)),
+        languages: browseLanguageOptions(
+          (languageAgg?.buckets || []).map((bucket) => bucket.value),
+        ),
       });
     });
     return () => {
@@ -162,26 +165,28 @@ export default function TagPage() {
         </div>
       </section>
 
-      <section className="tag-results" data-testid="tag-results">
-        {state.loading ? <p className="status status-secondary">Loading…</p> : null}
-        {state.error ? <p className="error">{state.error}</p> : null}
-        {!state.loading && !state.error && !state.items.length ? (
+      <BrowseResultsRegion
+        className="tag-results"
+        testId="tag-results"
+        loading={state.loading}
+        error={state.error}
+        hasItems={state.items.length > 0}
+        empty={
           <p className="explore-empty status status-secondary" data-testid="tag-empty">
             No library titles match {keywords.length > 1 ? "these tags" : "this tag"} yet.
           </p>
-        ) : null}
-        {state.items.length ? (
-          <MediaBrowseResults
-            state={browse}
-            items={state.items}
-            columns={columns || undefined}
-            cardProps={{
-              testId: "tag-title-card",
-              showRecommend: multiUserEnabled,
-              onRecommend: multiUserEnabled ? setRecommendItem : undefined,
-            }}
-          />
-        ) : null}
+        }
+      >
+        <MediaBrowseResults
+          state={browse}
+          items={state.items}
+          columns={columns || undefined}
+          cardProps={{
+            testId: "tag-title-card",
+            showRecommend: multiUserEnabled,
+            onRecommend: multiUserEnabled ? setRecommendItem : undefined,
+          }}
+        />
         {!state.loading && !state.error && state.total ? (
           <MediaBrowsePagination
             summary={paginationSummary}
@@ -197,7 +202,7 @@ export default function TagPage() {
             testIdPrefix="tag-browse"
           />
         ) : null}
-      </section>
+      </BrowseResultsRegion>
 
       <RecommendModal
         item={recommendItem}
