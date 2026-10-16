@@ -1,6 +1,31 @@
 {
-  "generated_at": "2026-10-16T15:09:54Z",
+  "generated_at": "2026-10-16T18:02:24Z",
   "releases": [
+    {
+      "version": "1.37.50",
+      "date": "2026-10-16",
+      "summary": "One patch on 1.37.49: a full remove of a title that is not in Sonarr or Radarr still shows the drive space that was freed.",
+      "highlights": [
+        "**You still see the space a full remove freed when the title is not in Sonarr or Radarr.** Files the library or Plex already pointed at are deleted and counted with the other titles, files, folders, and freed space. “Not in Sonarr” or “Not in Radarr” stays a note on that title.",
+        "**A missing file path is said plainly.** If Projectionist cannot find the file, the note says the file path was unknown, the freed total stays 0 B, and the title still leaves the index. A permission error or a Plex refusal still stops that title."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "**Full remove no longer stops at the “not in Sonarr” / “not in Radarr” note when a file path is already known.** The library row and the paths Plex reports (including episode files under a show) are unlinked without a successful Radarr or Sonarr lookup. A host path is used when that file is visible in this container. Deleted bytes are `bytes_source=disk` and roll into the summary totals. The absence note does not mark the title failed and does not replace those totals. When no path is known, the note adds “File path was unknown.” and `bytes_freed` stays 0. Permission errors and a Plex reject still fail the title and leave the index row."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend `pytest tests/` — 2599 passed, 6 skipped, coverage 76.88% (floor 74%). The first pass failed 39 API cases because `frontend/dist/assets` was not built yet; those 39 passed after `npm run build`.",
+            "Frontend unit 1021/1021.",
+            "Lint 0 errors (151 warnings); `npm run build` OK."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.49",
       "date": "2026-10-16",

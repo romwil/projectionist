@@ -302,6 +302,47 @@ describe("owner title-detail delete gating", () => {
     );
     assert.equal(
       formatRemovalFreedLabel({
+        bytes_freed: 4096,
+        bytes_source: "disk",
+        files: ["/tv/Show/S01E01.mkv"],
+        folders: ["/tv/Show"],
+        note: '"The Show" is not in Sonarr',
+      }),
+      "4.0 KB",
+    );
+    assert.equal(
+      formatRemovalFreedLabel({
+        bytes_freed: 0,
+        bytes_source: "unknown",
+        files: 0,
+        folders: 0,
+        note: '"The Show" is not in Sonarr. File path was unknown.',
+      }),
+      "0 B",
+    );
+    const absent = normalizeRemovalSummary({
+      mode: LIBRARY_DELETE_MODE_FULL,
+      deleted: 1,
+      results: [
+        {
+          title: "The Show",
+          ok: true,
+          files: ["/tv/Show/S01E01.mkv"],
+          folders: ["/tv/Show"],
+          bytes_freed: 4096,
+          bytes_source: "disk",
+          note: '"The Show" is not in Sonarr',
+        },
+      ],
+      totals: { files: 1, folders: 1, bytes_freed: 4096 },
+      errors: [],
+    });
+    assert.equal(absent.totals.bytes_freed, 4096);
+    assert.equal(absent.totals.files, 1);
+    assert.equal(absent.results[0].note, '"The Show" is not in Sonarr');
+    assert.equal(absent.errors.length, 0);
+    assert.equal(
+      formatRemovalFreedLabel({
         bytes_freed: 1024 ** 3,
         bytes_source: "library_estimate",
         files: [],
