@@ -176,7 +176,7 @@ Youth-mode accounts see youth-safe achievements only. Member-facing copy never s
 
 ### Inbox & notifications
 
-**[Inbox](/inbox)** is a top-bar peer (the notifications icon). Unread items show a badge. Household recommendations (including **Watch together** invites), shared Library pages, title arrivals, digests, and curator **nudges** all land there — not inside Chat. Recommendation cards can dig into the title or open **Chat about this**.
+**[Inbox](/inbox)** is a top-bar peer (the notifications icon). Unread items show a badge. Household recommendations (including **Watch together** invites), shared Library pages, title arrivals, digests, and curator **nudges** all land there — not inside Chat. Open a note to read the whole message. Reading it marks it read and leaves it in the list; **Dismiss** still removes it. Newest notes are first. Filter to unread, read, or everything, select the notes on the page, and step through pages of twelve. A curator note includes a reply box in the note, so answering stays on that note.
 
 Under **Settings → Notifications** you can:
 
@@ -184,8 +184,8 @@ Under **Settings → Notifications** you can:
 - Turn the **in-app inbox** on or off (always self-serve)
 - Opt into **email alerts** when the owner has mail configured (**Needs owner setup**)
 - Opt into **Apprise alerts** and add your own Discord / Telegram / push destinations with the destination builder (**Self-serve**; optional household URLs can also be configured by the owner)
-- Subscribe to the **weekly newsletter** — a short, personalized note in your default curator’s voice (guest accounts get a guest-friendly voice when available). It usually arrives on the weekly schedule; the owner can also push one early from Admin.
-- Opt into **curator nudges** — occasional “you have to see this” picks (optionally reacting to what you recently watched / continue-watching). These are never live Plex session alerts.
+- Subscribe to the **weekly newsletter** — a short, personalized note in your default curator’s voice (guest accounts get a guest-friendly voice when available). Each title names a subject, creator, or franchise it shares with something you have watched. If nothing qualifies, the note says so instead of listing new arrivals. It usually arrives on the weekly schedule; the owner can also push one early from Admin.
+- Opt into **curator nudges** — occasional “you have to see this” picks that name a shared subject, creator, or franchise with something you have watched. A recent watch by itself is not enough. These are never live Plex session alerts.
 - Opt into **Year in Review** — a private year-end recap built from *your* tracked finishes (not household Plex totals). You get a short reel, then a linger sheet: totals, top movie genre vs top TV genre, catalog hours, and the titles that defined the year. Late December may tease the reel; early January drops the full link to your inbox (and email if you’ve enabled it).
 
 Dismiss a card when you’re done; **Dismiss all** clears the unread stack.

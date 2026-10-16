@@ -121,3 +121,38 @@ export function summarizeKnowledgeCoverage(coverage, { maxMetrics = 4 } = {}) {
   const bits = rows.slice(0, maxMetrics).map((row) => `${row.label} ${row.pctLabel}`);
   return [head, bits.join(" · ")].filter(Boolean).join(" · ");
 }
+
+/**
+ * Bound for the optional coverage fetch. The Explore hub does not wait on it;
+ * this only stops a hung socket from sitting open.
+ */
+export const KNOWLEDGE_COVERAGE_REQUEST_MS = 8000;
+
+const TRANSPORT_FAILURE_RE = /failed to fetch|load failed|networkerror|network error|failed to load/i;
+
+/**
+ * Copy for a coverage fetch failure. Browser transport errors ("Failed to fetch",
+ * abort, Safari "Load failed") stay blank so optional UI can degrade quietly.
+ */
+export function knowledgeCoverageFailureCopy(error) {
+  if (!error) return "";
+  const name = String(error.name || "");
+  const message = String(error.message || "").trim();
+  if (name === "AbortError" || name === "TypeError" || TRANSPORT_FAILURE_RE.test(message)) {
+    return "";
+  }
+  return message;
+}
+
+/**
+ * Explore footer strip. Independent of hub loading: render only a real summary.
+ * A failed optional request returns null and must not paint a raw error string.
+ */
+export function knowledgeStripContent({ loading = false, error = "", summary = null } = {}) {
+  if (loading) return null;
+  if (error || TRANSPORT_FAILURE_RE.test(String(error || ""))) return null;
+  if (!summary) return null;
+  const text = String(summary);
+  if (TRANSPORT_FAILURE_RE.test(text)) return null;
+  return text;
+}

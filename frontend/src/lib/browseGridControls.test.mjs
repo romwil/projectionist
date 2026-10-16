@@ -5,7 +5,10 @@ import { libraryBrowsePath } from "./browseLinks.js";
 import {
   MEDIA_BROWSE_SORTS,
   MEDIA_BROWSE_TV_SORTS,
+  browseFacetsFollowGrid,
   browseTypeChoices,
+  isMovieBrowseLanding,
+  movieLandingBrowseDefaults,
   parseMediaBrowse,
   queryFiltersFromBrowse,
 } from "./mediaBrowse.js";
@@ -30,10 +33,32 @@ function toolbarBlock(source, testId) {
 }
 
 test("movie and TV landings keep their shelf and a labeled title sort", () => {
-  const movies = parseMediaBrowse(new URLSearchParams("media_type=movie"));
+  const movieParams = new URLSearchParams("media_type=movie");
+  assert.equal(isMovieBrowseLanding("/search", movieParams), true);
+  const movies = parseMediaBrowse(movieParams, movieLandingBrowseDefaults());
   assert.equal(movies.media_type, "movie");
-  assert.equal(movies.sort, "title");
-  assert.equal(movies.sort_dir, "asc");
+  assert.equal(movies.sort, "added_at");
+  assert.equal(movies.sort_dir, "desc");
+  assert.equal(MEDIA_BROWSE_SORTS.find((option) => option.id === "added_at")?.label, "Date added");
+  const movieFilters = queryFiltersFromBrowse(movies);
+  assert.equal(movieFilters.sort, "added_at");
+  assert.equal(movieFilters.sort_dir, "desc");
+  assert.equal(movieFilters.limit, 48);
+  assert.equal(movieFilters.offset, 0);
+
+  const titled = parseMediaBrowse(
+    new URLSearchParams("media_type=movie&sort=title&sort_dir=asc"),
+    movieLandingBrowseDefaults(),
+  );
+  assert.equal(titled.sort, "title");
+  assert.equal(titled.sort_dir, "asc");
+
+  const unscoped = queryFiltersFromBrowse(parseMediaBrowse(new URLSearchParams("")));
+  assert.equal(unscoped.sort, "title");
+  assert.equal(unscoped.sort_dir, "asc");
+  assert.equal(isMovieBrowseLanding("/search", new URLSearchParams("")), false);
+  assert.equal(isMovieBrowseLanding("/tags/drama", movieParams), false);
+
   assert.equal(MEDIA_BROWSE_SORTS.find((option) => option.id === "title")?.label, "Title");
 
   const shows = parseMediaBrowse(new URLSearchParams("media_type=show"));
@@ -65,6 +90,16 @@ test("movies and TV results render the shared browse controls outside a closed d
   assert.match(page, /<MediaBrowsePagination/);
   assert.match(page, /getLibraryAggregate\("year", aggregateOptions\)/);
   assert.match(page, /getLibraryAggregate\("genre", aggregateOptions\)/);
+  assert.match(page, /getLibraryAggregate\("language", aggregateOptions\)/);
+  assert.match(page, /topExamples: 0/);
+  assert.match(page, /browseFacetsFollowGrid\(gridSettled\)/);
+  assert.equal(browseFacetsFollowGrid(false), false);
+  assert.equal(browseFacetsFollowGrid(true), true);
+  const facetEffect = page.slice(page.indexOf("browseFacetsFollowGrid"));
+  const queryAt = page.indexOf("queryLibrary(filters)");
+  const facetAt = page.indexOf("browseFacetsFollowGrid(gridSettled)");
+  assert.ok(queryAt > 0 && facetAt > 0);
+  assert.match(facetEffect, /if \(!browseFacetsFollowGrid\(gridSettled\)/);
   assert.match(controls, /Sort by/);
   assert.match(controls, /Genres/);
   assert.match(controls, /Posters/);
@@ -83,6 +118,16 @@ test("movies browse bar filters the library query by original language", () => {
   assert.match(controls, /<option value="">Any<\/option>/);
   assert.match(page, /getLibraryAggregate\("language", aggregateOptions\)/);
   assert.match(page, /queryLibrary\(filters\)/);
+  const withLanguage = queryFiltersFromBrowse(
+    parseMediaBrowse(
+      new URLSearchParams("media_type=movie&language=ja&offset=48"),
+      movieLandingBrowseDefaults(),
+    ),
+  );
+  assert.equal(withLanguage.sort, "added_at");
+  assert.equal(withLanguage.sort_dir, "desc");
+  assert.equal(withLanguage.original_language, "ja");
+  assert.equal(withLanguage.offset, 48);
 
   const state = parseMediaBrowse(
     new URLSearchParams("media_type=movie&language=en&year=2016&watch_state=unwatched&genres=Drama"),
