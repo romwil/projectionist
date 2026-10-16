@@ -68,8 +68,8 @@ describe("explore and recommendations responsive layout", () => {
     assert.match(explorePage, /getExploreHub/);
     assert.match(explorePage, /"unfinished"/);
     assert.match(explorePage, /"afterglow"/);
-    assert.match(explorePage, /Leftover runtime you can still finish/);
-    assert.match(explorePage, /Still warm — a few questions while the credits fade/);
+    assert.match(explorePage, /title="Unfinished"/);
+    assert.match(explorePage, /title="Afterglow"/);
     assert.match(explorePage, /Review while it's warm/);
     assert.doesNotMatch(explorePage, /id="tonight-table"/);
     assert.doesNotMatch(explorePage, /"tonight_table"/);
@@ -84,10 +84,12 @@ describe("explore and recommendations responsive layout", () => {
     assert.ok(afterglowIdx > seasonalIdx);
     assert.ok(pulseIdx > afterglowIdx);
     const unfinishedBlock = explorePage.slice(unfinishedIdx, revisitIdx);
-    assert.match(unfinishedBlock, /Leftover runtime you can still finish/);
-    assert.doesNotMatch(unfinishedBlock, /haven.t touched in over two months/);
-    const revisitBlock = explorePage.slice(revisitIdx, revisitIdx + 400);
-    assert.match(revisitBlock, /haven.t touched in over two months/);
+    assert.match(unfinishedBlock, /title="Unfinished"/);
+    assert.match(unfinishedBlock, /leftover_label/);
+    assert.doesNotMatch(unfinishedBlock, /explore-section-subtitle/);
+    const revisitBlock = explorePage.slice(revisitIdx, revisitIdx + 500);
+    assert.match(revisitBlock, /title="Revisit These"/);
+    assert.doesNotMatch(revisitBlock, /explore-section-subtitle/);
   });
 
   it("renders Explore destinations as navigation guides with the search", () => {
@@ -144,9 +146,30 @@ describe("explore and recommendations responsive layout", () => {
     );
   });
 
+  it("does not render descriptive subtitles under hub rail headers", () => {
+    const sectionFn = explorePage.slice(
+      explorePage.indexOf("function ExploreSection("),
+      explorePage.indexOf("function FeedRail("),
+    );
+    assert.match(sectionFn, /<h2>/);
+    assert.doesNotMatch(sectionFn, /explore-section-subtitle/);
+    assert.doesNotMatch(sectionFn, /subtitle/);
+    assert.match(sectionFn, /explore-empty/);
+    assert.doesNotMatch(explorePage, /className="explore-section-subtitle"/);
+    assert.doesNotMatch(explorePage, /A daily rotating corner of your collection/);
+    assert.doesNotMatch(explorePage, /A light seasonal turn through your library/);
+    assert.doesNotMatch(explorePage, /A daily rotating filmography from your shelves/);
+    assert.doesNotMatch(explorePage, /Pick up where you left off/);
+    assert.doesNotMatch(explorePage, /Leftover runtime you can still finish/);
+    assert.doesNotMatch(explorePage, /Still warm — a few questions while the credits fade/);
+    assert.match(explorePage, /title="Continue Watching"/);
+    assert.match(explorePage, /Genre"} in your library/);
+    assert.match(explorePage, /explore-hub-guide-line">Every film/);
+  });
+
   it("puts seasonal staff-pick notes and chat on Explore for members", () => {
     assert.match(explorePage, /SeasonalSpotlightRail/);
-    assert.match(explorePage, /Staff picks from your library for this season/);
+    assert.doesNotMatch(explorePage, /Staff picks from your library for this season/);
     assert.match(styles, /\.explore-seasonal-rail--chat-open/);
     assert.match(styles, /\.seasonal-pick-chat\s*\{/);
     assert.match(styles, /\.explore-seasonal-chat-btn/);
