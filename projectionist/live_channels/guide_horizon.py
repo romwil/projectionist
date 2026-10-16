@@ -181,12 +181,17 @@ def maintain_guide_week(
     if not _live_enabled(settings):
         return {"skipped": "live_off", "extended": False, "rolled": False}
     if client is None:
-        base = _tunarr_url(settings)
-        if not base:
-            return {"skipped": "no_engine", "extended": False, "rolled": False}
-        from projectionist.connectors.tunarr import TunarrClient
+        from projectionist.live_channels.native_schedule import ensure_schedule, programme_stats
 
-        client = TunarrClient(base, timeout=120)
+        doc = ensure_schedule(settings)
+        stats = programme_stats(doc)
+        return {
+            "skipped": "local_lineup" if doc.get("channels") else "no_lineup",
+            "extended": False,
+            "rolled": False,
+            "source": "projectionist",
+            "programme_count": int(stats.get("programme_count") or 0),
+        }
 
     moment = now or datetime.now(timezone.utc)
     if moment.tzinfo is None:

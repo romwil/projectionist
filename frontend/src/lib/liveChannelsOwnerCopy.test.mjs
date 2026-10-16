@@ -112,6 +112,11 @@ describe("liveStationState", () => {
       },
     });
     assert.equal(onAir.key, "on_air");
+    const native = liveStationState({
+      enabled: true,
+      status: { channel_count: 8, native_playback: true, broadcast: { sidecar_up: false } },
+    });
+    assert.equal(native.key, "on_air");
     assert.equal(onAir.title, "4 channels on the air");
   });
 

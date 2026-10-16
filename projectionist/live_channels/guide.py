@@ -1,7 +1,7 @@
-"""Read-only Tunarr guide snapshots for household “On now” and `/live` EPG.
+"""Guide snapshots for household “On now” and `/live` EPG.
 
-Empty-safe when the feature is off or Tunarr is unreachable. Playback itself
-goes through the auth’d stream proxy — this module only shapes guide data.
+The lineup lives in Projectionist's own store. Playback of a programme on now
+uses library Play.
 """
 
 from __future__ import annotations
@@ -11,7 +11,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
-from projectionist.connectors.tunarr import TunarrClient
 from projectionist.youth.rating_gate import content_rating_allowed, normalize_content_rating
 
 logger = logging.getLogger(__name__)
@@ -929,7 +928,7 @@ def build_on_now_snapshot(
     *,
     youth_max_rating: Optional[str] = None,
     now: Optional[float] = None,
-    client: Optional[TunarrClient] = None,
+    client: Any = None,
     window_seconds: int = GUIDE_WINDOW_SECONDS,
     max_channels: int = MAX_CHANNELS,
     include_programs: bool = False,
@@ -940,128 +939,32 @@ def build_on_now_snapshot(
     if not enabled:
         return _empty_snapshot(enabled=False, reason="live_channels_disabled")
 
-    tunarr = getattr(settings, "tunarr", None)
-    url = str(getattr(tunarr, "url", "") or "").strip() if tunarr else ""
-    if not url:
-        return _empty_snapshot(enabled=True, reason="tunarr_url_missing")
-
     ts = time.time() if now is None else float(now)
     window = max(GUIDE_WINDOW_SECONDS, int(window_seconds or GUIDE_WINDOW_SECONDS))
     limit = max(1, min(int(max_channels or MAX_CHANNELS), 100))
-    try:
-        tunarr_client = client or TunarrClient(url, timeout=GUIDE_PROBE_TIMEOUT_SECONDS)
-        channels_meta = tunarr_client.list_channels()
-        guide_by_id = tunarr_client.get_all_channel_guides(ts, ts + window)
-    except Exception as error:  # noqa: BLE001
-        logger.debug("Live Channels on-now unavailable: %s", error)
-        return _empty_snapshot(
-            enabled=True,
-            reason="tunarr_unreachable",
-            error=str(error)[:240],
-        )
 
-    meta_by_id: Dict[str, Mapping[str, Any]] = {}
-    for item in channels_meta or []:
-        if not isinstance(item, Mapping):
-            continue
-        cid = str(item.get("id") or item.get("uuid") or "").strip()
-        if cid:
-            meta_by_id[cid] = item
+    from projectionist.live_channels.native_schedule import snapshot_if_scheduled
 
-    # Prefer guide keys; fall back to channel list alone.
-    channel_ids: List[str] = []
-    if isinstance(guide_by_id, dict) and guide_by_id:
-        channel_ids = [str(k) for k in guide_by_id.keys()]
-    else:
-        channel_ids = list(meta_by_id.keys())
+    native = snapshot_if_scheduled(
+        settings,
+        youth_max_rating=youth_max_rating,
+        now=ts,
+        window_seconds=window,
+        max_channels=limit,
+        include_programs=include_programs,
+    )
+    del client
+    if native is not None:
+        return native
 
-    prepared: List[tuple[str, Mapping[str, Any], Any, List[Any], Dict[str, Any]]] = []
-    needs_probe: List[str] = []
-    for cid in channel_ids[:limit]:
-        meta = meta_by_id.get(cid) or {}
-        lineup = guide_by_id.get(cid) if isinstance(guide_by_id, dict) else None
-        programs: List[Any] = []
-        if isinstance(lineup, Mapping):
-            programs = _lineup_programs(lineup)
-            if not meta:
-                meta = lineup
-        slots = pick_now_and_next(programs, now=ts)
-        if _needs_now_playing(slots, programs):
-            needs_probe.append(cid)
-        prepared.append((cid, meta, lineup, programs, slots))
-
-    playing_by_id = _fetch_now_playing_batch(tunarr_client, needs_probe)
-
-    channels: List[Dict[str, Any]] = []
-    for cid, meta, lineup, programs, slots in prepared:
-        playing = playing_by_id.get(cid)
-        if slots["now"] is None and slots["next"] is None and not programs:
-            # Best-effort now_playing fallback when the guide window is empty.
-            if playing and not now_playing_past_file_eof(playing, now=ts):
-                slots = {"now": _normalize_program(playing, now=ts), "next": None}
-        # Nested Tunarr content + now_playing often beats an empty guide parse;
-        # also prefer real titles over guideFlexTitle pads for OSD / on-now.
-        if slots["now"] is None or (
-            isinstance(slots.get("now"), Mapping)
-            and slots["now"].get("is_flex")
-            and _is_guide_flex_placeholder(str(slots["now"].get("title") or ""))
-        ):
-            playing_norm = _normalize_program(playing, now=ts) if playing else None
-            # Past file EOF: now_playing often keeps the ended title with a padded
-            # stop while the guide/stream already rolled to the next airing.
-            if playing_norm and now_playing_past_file_eof(playing, now=ts):
-                playing_norm = None
-            if playing_norm and not playing_norm.get("is_flex"):
-                next_slot = slots.get("next")
-                slots = {"now": playing_norm, "next": next_slot}
-                if next_slot is None:
-                    guide_next = pick_now_and_next(programs, now=ts).get("next")
-                    if guide_next and not guide_next.get("is_flex"):
-                        slots["next"] = guide_next
-        slots = _prefer_real_titles_over_flex(slots)
-        slots = clamp_flex_progress_to_next(slots, now=ts)
-        channels.append(
-            _channel_row_from_guide(
-                cid,
-                meta=meta,
-                lineup=lineup,
-                programs=programs,
-                slots=slots,
-                include_programs=include_programs,
-            )
-        )
-
-    _sort_channels(channels)
-
-    ceiling = str(youth_max_rating or "").strip()
-    if ceiling:
-        channels = apply_youth_filter_to_on_now(channels, max_rating=ceiling)
-
-    from projectionist.live_channels.airing_why import enrich_channels_with_airing_why
-
-    channels = enrich_channels_with_airing_why(settings, channels)
-
-    ready = bool(channels)
-    return {
-        "enabled": True,
-        "ready": ready,
-        "channels": channels,
-        "count": len(channels),
-        "generated_at": ts,
-        "window_seconds": window,
-        "reason": "" if ready else "no_channels",
-        "error": "",
-        "plex_hint": DUAL_WATCH_HINT,
-        "watch_hint": DUAL_WATCH_HINT,
-    }
-
+    return _empty_snapshot(enabled=True, reason="no_lineup")
 
 def build_guide_snapshot(
     settings: Any,
     *,
     youth_max_rating: Optional[str] = None,
     now: Optional[float] = None,
-    client: Optional[TunarrClient] = None,
+    client: Any = None,
     hours: float = 6.0,
 ) -> Dict[str, Any]:
     """Wider channel × time guide for the `/live` newspaper EPG."""

@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [1.37.51] — 2026-10-16
+
+One patch on 1.37.50: Live plays the programme that is on now from this house’s lineup. Setup no longer asks you to install or point at a separate broadcast app.
+
+### Highlights
+- **Live plays what is on now.** Open Live and the current programme starts in the library player. The guide for the week lives with Projectionist.
+- **Setup stays in Admin.** Live setup no longer asks for a broadcast address, image, or API key, and it does not start another container.
+- **An existing week can come across once.** If the lineup file is not there yet, the first guide read can copy the schedule that is already on disk. That copy is read-only. The old database is left where it is.
+
+### Changed
+- **Guide, now-playing, and `/live` use `DATA_DIR/live_lineup.json` and a library Play session.** A missing lineup file imports once, read-only, from the existing schedule database when that file is present. Playback does not call that app’s HTTP API and does not proxy port 18765.
+- **Admin Live setup no longer collects a broadcast URL, image, or API key, and it does not manage a broadcast container.** The HTTP client and the port 18765 proxy are gone from the running path.
+
+### Verification
+- Backend `pytest tests/` — 2530 passed, 43 skipped, coverage 76.19% (floor 74%), with `PROJECTIONIST_SKIP_DOTENV=1`. Includes `tests/test_tunarr_removed.py` and the native-schedule cases that resolve a library Play session while that HTTP port is refused.
+- Frontend unit 1021/1021.
+- Lint 0 errors (166 warnings); `npm run build` OK.
+- `npm run test:release-perf` on the mocked e2e server (port 8808, lobby theater 8796) — passed. About, Explore, Movies, Inbox, and Live stayed inside `frontend/perf/baseline.json`.
+
 ## [1.37.50] — 2026-10-16
 
 One patch on 1.37.49: a full remove of a title that is not in Sonarr or Radarr still shows the drive space that was freed.

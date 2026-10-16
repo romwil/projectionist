@@ -64,7 +64,6 @@ CERTIFIED_SERVICES = (
     "fanart",
     "tautulli",
     "seerr",
-    "tunarr",
 )
 
 ONBOARDING_HINTS = [
@@ -269,31 +268,29 @@ def test_seerr(url: str, api_key: str) -> CheckResult:
 
 
 def test_tunarr(url: str) -> CheckResult:
-    """Reachability check for Tunarr when Live Channels is in use."""
-    cleaned = str(url or "").strip().rstrip("/")
-    if not cleaned:
-        return {"ok": False, "message": "Tunarr URL is required."}
-    try:
-        from projectionist.connectors.tunarr import TunarrClient
+    """Live no longer has a broadcast-engine connection test."""
+    del url
+    from projectionist.live_channels.native_schedule import schedule_has_channels
 
-        client = TunarrClient(cleaned, timeout=8)
-        result = client.check()
-        version = str(result.get("tunarr_version") or "").strip()
-        message = f"Connected — Tunarr{f' v{version}' if version else ''}."
-        channels: list[Any] = []
-        try:
-            channels = list(client.list_channels())
-            message = f"{message} | {len(channels)} channel(s)"
-        except Exception:  # noqa: BLE001
-            pass
-        return {
-            "ok": True,
-            "message": message,
-            "tunarr_version": version,
-            "channel_count": len(channels),
-        }
-    except Exception as error:  # noqa: BLE001
-        return {"ok": False, "message": str(error)}
+    count = 0
+    try:
+        from projectionist.config_store import load_merged_settings
+        import os
+        from pathlib import Path
+
+        settings = load_merged_settings(Path(os.environ.get("DATA_DIR", "/config")))
+        doc_ready = schedule_has_channels(settings)
+        count = 1 if doc_ready else 0
+    except Exception:  # noqa: BLE001
+        doc_ready = False
+    return {
+        "ok": True,
+        "message": (
+            "Live uses Projectionist's lineup."
+            + (" Channels are saved." if doc_ready else " No lineup saved yet.")
+        ),
+        "channel_count": count,
+    }
 
 
 async def _ping_llm(settings: Settings) -> None:

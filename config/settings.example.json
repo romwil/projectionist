@@ -52,8 +52,7 @@
     "require_linked_user_for_requests": false
   },
   "tunarr": {
-    "url": "",
-    "docker_orchestration": false,
-    "image_tag": "chrisbenincasa/tunarr:1.3.9"
+    "pad_flex_max_minutes": 15,
+    "channel_number_base": 100
   }
 }

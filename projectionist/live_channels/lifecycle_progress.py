@@ -205,28 +205,9 @@ def logs_look_transient(text: str) -> bool:
 
 
 def probe_tunarr_http_ready(base_url: str, *, timeout: float = 2.0) -> bool:
-    """True when Tunarr ``/api/version`` (or ``/api/system/health``) responds OK."""
-    url = str(base_url or "").strip().rstrip("/")
-    if not url:
-        return False
-    try:
-        from projectionist.circuit_breaker import bypass_host_circuits
-        from projectionist.connectors.tunarr import TunarrClient
-
-        with bypass_host_circuits():
-            client = TunarrClient(url, timeout=timeout)
-            client.version()
-            return True
-    except Exception:  # noqa: BLE001
-        try:
-            from projectionist.circuit_breaker import bypass_host_circuits
-            from projectionist.connectors.tunarr import TunarrClient
-
-            with bypass_host_circuits():
-                TunarrClient(url, timeout=timeout).health()
-            return True
-        except Exception:  # noqa: BLE001
-            return False
+    """Live does not probe a broadcast process."""
+    del base_url, timeout
+    return False
 
 
 def wait_for_tunarr_ready(
@@ -373,11 +354,29 @@ def build_lifecycle_status(settings: Any) -> Dict[str, Any]:
     Success requires HTTP. Log ``Tunarr is ready!`` only upgrades the waiting
     message — it never flips ``ready`` by itself.
     """
-    from projectionist.live_channels.docker import lifecycle_from_settings
+    del settings
+    return {
+        "phase": "idle",
+        "percent": 100,
+        "message": "Live uses Projectionist's lineup.",
+        "ready": True,
+        "busy": False,
+        "ok": True,
+        "error": "",
+        "container_id": "",
+        "container_name": "",
+        "http_ready": False,
+        "logs_ready": False,
+        "container_running": False,
+        "still_starting": False,
+        "tunarr_url": "",
+        "determinate": True,
+        "updated_at": 0,
+    }
 
     store = progress_store()
     snap = store.snapshot()
-    life = lifecycle_from_settings(settings)
+    life = None
 
     docker_probe: Dict[str, Any] = {}
     if life.available() and life.orchestration:
@@ -497,10 +496,25 @@ def _lifecycle_cache_key(settings: Any) -> str:
 
 def _warming_lifecycle_status(settings: Any) -> Dict[str, Any]:
     """Probe-free skeleton from the in-process progress store only."""
-    from projectionist.live_channels.docker import lifecycle_from_settings
-
+    del settings
     snap = progress_store().snapshot()
-    life = lifecycle_from_settings(settings)
+    return {
+        "phase": snap.get("phase") or "idle",
+        "percent": int(snap.get("percent") or 0),
+        "message": "Live uses Projectionist's lineup.",
+        "ready": True,
+        "busy": False,
+        "ok": True,
+        "error": "",
+        "http_ready": False,
+        "logs_ready": False,
+        "container_running": False,
+        "still_starting": False,
+        "tunarr_url": "",
+        "determinate": True,
+        "updated_at": snap.get("updated_at") or 0,
+    }
+    life = None
     url = _resolve_probe_url(settings, life)
     return {
         "phase": snap.get("phase") or "idle",
