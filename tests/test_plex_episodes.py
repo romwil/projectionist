@@ -45,6 +45,31 @@ class PlexEpisodeParsingTests(unittest.TestCase):
         self.assertEqual(episodes[0].episode_number, 1)
         self.assertEqual(episodes[0].runtime_minutes, 60)
 
+    def test_media_file_paths_merges_episode_leaves_when_show_has_a_part(self) -> None:
+        show = ET.fromstring(
+            """
+            <MediaContainer>
+              <Directory ratingKey="1">
+                <Media><Part file="/trailers/extra.mkv" size="1" /></Media>
+              </Directory>
+            </MediaContainer>
+            """
+        )
+        leaves = ET.fromstring(
+            """
+            <MediaContainer>
+              <Video ratingKey="2">
+                <Media><Part file="/tv/Show/S01E01.mkv" size="9" /></Media>
+              </Video>
+            </MediaContainer>
+            """
+        )
+        client = self._client()
+        with patch.object(client, "_request_xml", side_effect=[show, leaves]) as requested:
+            paths = client.media_file_paths("1", include_leaves=True)
+        self.assertEqual(paths, ["/trailers/extra.mkv", "/tv/Show/S01E01.mkv"])
+        self.assertIn("/allLeaves", requested.call_args_list[1].args[0])
+
     def test_parse_video_captures_added_at(self) -> None:
         xml = """
         <Video ratingKey="401" title="Inception" year="2010" addedAt="1704067200" viewCount="3" />
