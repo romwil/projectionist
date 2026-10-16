@@ -387,6 +387,59 @@ def clamp_flex_progress_to_next(
     return {"now": clamped, "next": dict(next_prog)}
 
 
+def collapse_touching_duplicate_airings(
+    programs: Sequence[Mapping[str, Any]],
+) -> List[Dict[str, Any]]:
+    """One span when the same rating key is listed twice with no gap.
+
+    A one-title cycle (no flex between loops) walks the same file again as soon
+    as it ends, so the guide shows that episode in adjacent slots whose times
+    touch. Those are one airing. A later repeat after filler or another title
+    stays. Flex pads are never merged into the title.
+    """
+    merged: List[Dict[str, Any]] = []
+    for program in programs:
+        if not isinstance(program, Mapping):
+            continue
+        item = dict(program)
+        if not merged:
+            merged.append(item)
+            continue
+        prev = merged[-1]
+        key = str(item.get("plex_rating_key") or "").strip()
+        prev_key = str(prev.get("plex_rating_key") or "").strip()
+        if (
+            not key
+            or key != prev_key
+            or item.get("is_flex")
+            or prev.get("is_flex")
+        ):
+            merged.append(item)
+            continue
+        try:
+            start = float(item.get("start"))
+            prev_stop = float(prev.get("stop"))
+        except (TypeError, ValueError):
+            merged.append(item)
+            continue
+        # Overlap, or the next copy starts as this one ends (cycle seam).
+        if start > prev_stop + 1.0:
+            merged.append(item)
+            continue
+        try:
+            stop = float(item.get("stop"))
+        except (TypeError, ValueError):
+            stop = prev_stop
+        if stop > prev_stop:
+            prev["stop"] = stop
+            prev["ends_at"] = stop
+        try:
+            prev["duration_seconds"] = int(round(float(prev["stop"]) - float(prev["start"])))
+        except (TypeError, ValueError):
+            pass
+    return merged
+
+
 def separate_channel_programs(programs: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
     """One channel, no overlapping programmes.
 
@@ -872,7 +925,9 @@ def _channel_row_from_guide(
             if item:
                 normalized.append(item)
         row["programs"] = separate_channel_programs(
-            _relabel_flex_program_placeholders(normalized)
+            collapse_touching_duplicate_airings(
+                _relabel_flex_program_placeholders(normalized)
+            )
         )
     return row
 
