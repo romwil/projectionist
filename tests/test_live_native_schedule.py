@@ -15,6 +15,7 @@ from projectionist.live_channels.native_schedule import (
     import_tunarr_lineup,
     play_source_for_channel,
     save_schedule,
+    snapshot_if_scheduled,
 )
 
 
@@ -257,6 +258,115 @@ class NativeScheduleTests(unittest.TestCase):
             self.assertEqual(channel["name"], "Gilligan's Island")
             self.assertEqual(channel["items"][0]["plex_rating_key"], "185000")
             self.assertEqual(channel["items"][1]["type"], "flex")
+
+    def test_touching_same_rating_key_is_one_airing_later_repeat_stays(self) -> None:
+        """A one-title loop emits the same key in back-to-back slots.
+
+        The Repair Shop cycle is a single episode and no flex, so each lap
+        touches the next. Those collapse to one span. The same episode after
+        filler is a later airing and stays, and the filler stays too.
+        """
+        now = 1_700_000_000.0
+        ten = 10 * 60 * 1000
+        flex = 15 * 60 * 1000
+        lineup = {
+            "version": 1,
+            "imported_from": "test",
+            "channels": {
+                "ch-repair": {
+                    "id": "ch-repair",
+                    "name": "The Repair Shop",
+                    "number": 109,
+                    "guide_flex_title": "The Repair Shop · Up next",
+                    "icon_url": "",
+                    "start_time_ms": int(now * 1000),
+                    "items": [
+                        {
+                            "type": "content",
+                            "duration_ms": ten,
+                            "program_id": "acc-1",
+                            "title": "Accordion",
+                            "show_title": "The Repair Shop",
+                            "season": 1,
+                            "episode": 1,
+                            "media_type": "episode",
+                            "plex_rating_key": "167715",
+                        },
+                        {
+                            "type": "content",
+                            "duration_ms": ten,
+                            "program_id": "acc-1-copy",
+                            "title": "Accordion",
+                            "show_title": "The Repair Shop",
+                            "season": 1,
+                            "episode": 1,
+                            "media_type": "episode",
+                            "plex_rating_key": "167715",
+                        },
+                        {"type": "flex", "duration_ms": flex},
+                        {
+                            "type": "content",
+                            "duration_ms": ten,
+                            "program_id": "acc-later",
+                            "title": "Accordion",
+                            "show_title": "The Repair Shop",
+                            "season": 1,
+                            "episode": 1,
+                            "media_type": "episode",
+                            "plex_rating_key": "167715",
+                        },
+                        {"type": "flex", "duration_ms": flex},
+                        {
+                            "type": "content",
+                            "duration_ms": ten,
+                            "title": "Clock",
+                            "media_type": "episode",
+                            "plex_rating_key": "167800",
+                        },
+                    ],
+                }
+            },
+        }
+        with self._dir() as data_dir:
+            save_schedule(lineup, data_dir=data_dir)
+            settings = _settings(data_dir)
+            guide = snapshot_if_scheduled(
+                settings,
+                now=now,
+                window_seconds=60 * 60,
+                include_programs=True,
+            )
+            source = play_source_for_channel(
+                None,
+                settings,
+                SimpleNamespace(id="owner"),
+                "ch-repair",
+                now=now + 12 * 60,
+                start_playback_fn=lambda *args, **kwargs: {
+                    "session_id": "sess",
+                    "stream_url": "/api/library/playback/sess/index.m3u8",
+                    "rating_key": kwargs.get("rating_key"),
+                },
+            )
+        # Playback stays on the current lap. The merged guide cell must not
+        # seek twelve minutes into a ten-minute file.
+        self.assertEqual(source["rating_key"], "167715")
+        self.assertGreaterEqual(source["offset_ms"], 110_000)
+        self.assertLessEqual(source["offset_ms"], 130_000)
+        programs = guide["channels"][0]["programs"]
+        accordion = [row for row in programs if row.get("plex_rating_key") == "167715"]
+        self.assertEqual(len(accordion), 2)
+        self.assertEqual(accordion[0]["stop"] - accordion[0]["start"], 20 * 60)
+        self.assertEqual(accordion[1]["stop"] - accordion[1]["start"], 10 * 60)
+        self.assertGreater(accordion[1]["start"], accordion[0]["stop"])
+        flex_rows = [row for row in programs if row.get("is_flex")]
+        self.assertEqual(len(flex_rows), 2)
+        self.assertTrue(all(str(row["title"]).endswith("· Up next") for row in flex_rows))
+        self.assertEqual(int(flex_rows[0]["stop"] - flex_rows[0]["start"]), 15 * 60)
+        self.assertEqual(
+            [row.get("plex_rating_key") for row in programs if not row.get("is_flex")],
+            ["167715", "167715"],
+        )
 
     def _dir(self):
         import tempfile
