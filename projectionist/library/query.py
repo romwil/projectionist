@@ -625,6 +625,11 @@ def _build_where(filters: LibraryFilters) -> Tuple[str, List[Any]]:
 
 
 def _sort_clause(sort: SortField, sort_dir: Literal["asc", "desc"] | None = None) -> str:
+    # DESC already places NULLs last in SQLite, so this matches the old
+    # "added_at IS NULL, added_at DESC" order and can use idx_library_media_added
+    # for a LIMIT page instead of sorting every title.
+    if sort == "added_at" and sort_dir != "asc":
+        return "added_at DESC, title ASC"
     if sort == "episode_added_at":
         direction = (sort_dir or "desc").upper()
         if direction not in {"ASC", "DESC"}:
@@ -1215,24 +1220,22 @@ def _aggregate_language(
     with db.connect() as conn:
         rows = conn.execute(
             f"""
-            SELECT original_language FROM library_items
-            WHERE {where_sql} AND original_language IS NOT NULL AND original_language != ''
+            SELECT original_language AS value, COUNT(*) AS cnt
+            FROM library_items
+            WHERE {where_sql} AND original_language IS NOT NULL AND TRIM(original_language) != ''
+            GROUP BY original_language
+            ORDER BY cnt DESC, original_language ASC
             """,
             params,
         ).fetchall()
-    counts: Dict[str, int] = {}
-    for row in rows:
-        value = str(row["original_language"] or "").strip()
-        if not value:
-            continue
-        counts[value] = counts.get(value, 0) + 1
     buckets = [
-        {"value": value, "count": count}
-        for value, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+        {"value": str(row["value"]).strip(), "count": int(row["cnt"])}
+        for row in rows
+        if str(row["value"] or "").strip()
     ]
     return {
         "group_by": "language",
-        "total_matched": sum(counts.values()),
+        "total_matched": sum(bucket["count"] for bucket in buckets),
         "buckets": buckets[:50],
     }
 

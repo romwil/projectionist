@@ -280,6 +280,10 @@ class SchemaMigrationsMixin:
             "CREATE INDEX IF NOT EXISTS idx_library_media_year ON library_items(media_type, year)"
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_library_added_at ON library_items(added_at)")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_library_media_added "
+            "ON library_items(media_type, added_at DESC, title)"
+        )
 
     def _migrate_library_metadata_enrichment(self, conn: sqlite3.Connection) -> None:
         """Add full release/air dates, collections, status, networks, and companies.

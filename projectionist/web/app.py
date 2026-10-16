@@ -3018,6 +3018,7 @@ def library_aggregate_endpoint(
     genres: Optional[str] = None,
     directors: Optional[str] = None,
     keywords: Optional[str] = None,
+    top_examples: int = 3,
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
     normalized = group_by.strip().lower()
@@ -3052,8 +3053,9 @@ def library_aggregate_endpoint(
         }
     )
     filters = _apply_youth_filters(filters, user)
+    example_limit = max(0, min(int(top_examples), 10))
     return _sanitize_library_payload(
-        aggregate_library(_db(), normalized, filters),  # type: ignore[arg-type]
+        aggregate_library(_db(), normalized, filters, top_examples=example_limit),  # type: ignore[arg-type]
         user,
     )
 

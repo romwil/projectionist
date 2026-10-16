@@ -56,8 +56,11 @@ import {
 import {
   MEDIA_BROWSE_PAGE_SIZES,
   MEDIA_BROWSE_TV_SORTS,
+  browseFacetsFollowGrid,
   buildMediaBrowseParams,
   isAllPageSize,
+  isMovieBrowseLanding,
+  movieLandingBrowseDefaults,
   parseMediaBrowse,
   queryFiltersFromBrowse,
   resolvePageSizeLimit,
@@ -93,7 +96,14 @@ export default function LibraryBrowsePage({ embedded = false }) {
   const isSearchRoute =
     location.pathname === ROUTES.search || location.pathname.startsWith(`${ROUTES.search}/`);
 
-  const browse = useMemo(() => parseMediaBrowse(searchParams), [searchParams]);
+  const browse = useMemo(
+    () =>
+      parseMediaBrowse(
+        searchParams,
+        isMovieBrowseLanding(location.pathname, searchParams) ? movieLandingBrowseDefaults() : {},
+      ),
+    [location.pathname, searchParams],
+  );
   const initialMediaType = String(searchParams.get("media_type") || "")
     .trim()
     .toLowerCase();
@@ -116,6 +126,8 @@ export default function LibraryBrowsePage({ embedded = false }) {
   });
   const [columns, setColumns] = useState(null);
   const [filterOptions, setFilterOptions] = useState({ years: [], genres: [], languages: [] });
+  const [gridSettled, setGridSettled] = useState(false);
+  const [facetScope, setFacetScope] = useState(null);
   const [recommendItem, setRecommendItem] = useState(null);
   const [selected, setSelected] = useState(() => new Set());
   const [actionStatus, setActionStatus] = useState("");
@@ -188,10 +200,10 @@ export default function LibraryBrowsePage({ embedded = false }) {
   }, []);
 
   useEffect(() => {
+    if (!browseFacetsFollowGrid(gridSettled) || facetScope === null) return undefined;
     let cancelled = false;
-    const mediaType =
-      browse.media_type === "movie" || browse.media_type === "show" ? browse.media_type : "";
-    const aggregateOptions = mediaType ? { mediaType } : {};
+    const mediaType = facetScope === "movie" || facetScope === "show" ? facetScope : "";
+    const aggregateOptions = { ...(mediaType ? { mediaType } : {}), topExamples: 0 };
     Promise.all([
       getLibraryAggregate("year", aggregateOptions).catch(() => ({ buckets: [] })),
       getLibraryAggregate("genre", aggregateOptions).catch(() => ({ buckets: [] })),
@@ -211,7 +223,7 @@ export default function LibraryBrowsePage({ embedded = false }) {
     return () => {
       cancelled = true;
     };
-  }, [browse.media_type]);
+  }, [gridSettled, facetScope]);
 
   useEffect(() => {
     let cancelled = false;
@@ -261,6 +273,12 @@ export default function LibraryBrowsePage({ embedded = false }) {
           offset: 0,
           error: err.message || "Could not load titles.",
         });
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setGridSettled(true);
+        const nextScope = browse.media_type || "";
+        setFacetScope((current) => (current === nextScope ? current : nextScope));
       });
     return () => {
       cancelled = true;
