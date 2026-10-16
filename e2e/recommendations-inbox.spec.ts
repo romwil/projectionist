@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { mockAuthUser, mockCuratorApis, mockFeatures } from "./fixtures/api-mocks";
 
-test("inbox dismisses visible cards and exposes Play for library titles", async ({ page }) => {
+test("inbox lists notes, opens a library title, and dismisses unread", async ({ page }) => {
   const dismissedPayloads: unknown[] = [];
 
   await mockCuratorApis(page);
@@ -52,12 +52,16 @@ test("inbox dismisses visible cards and exposes Play for library titles", async 
   await page.goto("/inbox");
   await expect(page.getByTestId("inbox-page")).toBeVisible();
 
-  const inbox = page.getByTestId("recommendations-inbox");
-  await expect(inbox).toContainText("2 new notifications");
-  await expect(inbox.getByTestId("recommendation-card-detailed")).toBeVisible();
-  await expect(inbox.getByTestId("recommendation-card-other")).toBeVisible();
-  await expect(inbox.getByTestId("recommendation-watch-plex")).toBeVisible();
+  const list = page.getByTestId("inbox-list");
+  await expect(list.getByTestId("inbox-row-detailed")).toContainText("Heat");
+  await expect(list.getByTestId("inbox-row-other")).toContainText("Pulp Fiction");
 
-  await inbox.getByTestId("recommendations-dismiss-all").click();
+  await list.getByTestId("inbox-row-detailed").getByRole("button", { name: "Read" }).click();
+  const note = page.getByTestId("inbox-note");
+  await expect(note.getByTestId("inbox-message-body")).toContainText("A tense Los Angeles crime classic.");
+  await expect(note.getByTestId("inbox-open-title")).toBeVisible();
+
+  await note.getByTestId("inbox-note-back").click();
+  await list.getByTestId("inbox-dismiss-all").click();
   await expect.poll(() => dismissedPayloads).toEqual([{ all_unread: true }]);
 });
