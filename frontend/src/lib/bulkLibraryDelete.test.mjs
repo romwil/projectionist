@@ -19,8 +19,10 @@ import {
   normalizeRemovalSummary,
   removalPathsNote,
   formatLibraryDeleteSuccessMessage,
+  canConfirmLibraryRemoval,
   isBulkDeleteConfirmPhrase,
   libraryDeleteModeLabel,
+  libraryRemovalNeedsTypedDelete,
   libraryDeleteNoticeFromState,
   libraryBrowseItemKey,
   libraryItemRatingKey,
@@ -124,6 +126,83 @@ describe("bulkLibraryDelete typed confirm", () => {
       assert.match(page, /setDeleteError\(BULK_DELETE_EMPTY_SELECTION_MESSAGE\)/);
       assert.match(page, /titles=\{deletePartition\.titles\}/);
     }
+  });
+});
+
+describe("typed DELETE preference", () => {
+  it("requires DELETE until the owner opts out", () => {
+    assert.equal(libraryRemovalNeedsTypedDelete(undefined), true);
+    assert.equal(libraryRemovalNeedsTypedDelete(true), true);
+    assert.equal(libraryRemovalNeedsTypedDelete(false), false);
+    assert.equal(
+      canConfirmLibraryRemoval({
+        needsTypedDelete: true,
+        phrase: "",
+        hasTarget: true,
+        loading: false,
+      }),
+      false,
+    );
+    assert.equal(
+      canConfirmLibraryRemoval({
+        needsTypedDelete: true,
+        phrase: "delete",
+        hasTarget: true,
+      }),
+      false,
+    );
+    assert.equal(
+      canConfirmLibraryRemoval({
+        needsTypedDelete: true,
+        phrase: "DELETE",
+        hasTarget: true,
+      }),
+      true,
+    );
+  });
+
+  it("lets removal proceed without the typed word when the setting is off", () => {
+    assert.equal(
+      canConfirmLibraryRemoval({
+        needsTypedDelete: libraryRemovalNeedsTypedDelete(false),
+        phrase: "",
+        hasTarget: true,
+        loading: false,
+      }),
+      true,
+    );
+    assert.equal(
+      canConfirmLibraryRemoval({
+        needsTypedDelete: false,
+        phrase: "",
+        hasTarget: false,
+      }),
+      false,
+    );
+  });
+
+  it("keeps scope choice and hides the DELETE field when confirmation is off", () => {
+    const libDir = join(dirname(fileURLToPath(import.meta.url)), "..");
+    const dialog = readFileSync(join(libDir, "components", "BulkLibraryDeleteDialog.jsx"), "utf8");
+    const phrase = readFileSync(join(libDir, "components", "DeleteConfirmPhrase.jsx"), "utf8");
+    const scoped = readFileSync(join(libDir, "components", "ScopedTvRemoveDialog.jsx"), "utf8");
+    const libraries = readFileSync(join(libDir, "pages", "admin", "LibrariesSection.jsx"), "utf8");
+    const styles = readFileSync(join(libDir, "styles", "10-explore-delight.css"), "utf8");
+
+    assert.match(dialog, /bulk-library-delete-modes/);
+    assert.match(dialog, /libraryRemovalNeedsTypedDelete/);
+    assert.match(dialog, /canConfirmLibraryRemoval/);
+    assert.match(dialog, /DeleteConfirmPhrase/);
+    assert.match(phrase, /Don&apos;t ask again/);
+    assert.match(phrase, /if \(!libraryRemovalNeedsTypedDelete\(askDeleteConfirmation\)\) return null/);
+    assert.match(phrase, /saveAskDeleteConfirmation\(false\)/);
+    assert.match(scoped, /DeleteConfirmPhrase/);
+    assert.match(scoped, /This deletes media files through Sonarr/);
+    assert.match(libraries, /Ask me to type DELETE before removing titles/);
+    assert.match(libraries, /ask-delete-confirmation-toggle/);
+    assert.match(styles, /\.bulk-delete-dont-ask\s*\{[^}]*min-height:\s*44px/s);
+    assert.match(styles, /\[data-testid="ask-delete-confirmation-toggle"\] \.settings-switch\s*\{[^}]*min-height:\s*44px/s);
+    assert.match(styles, /\.bulk-delete-dont-ask\s*\{[^}]*color:\s*var\(--text\)/s);
   });
 });
 

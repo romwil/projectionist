@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import InlineAlert from "../../components/InlineAlert";
+import SettingsToggle from "../../components/settings/SettingsToggle";
 import AdminExecutionCard from "../../components/AdminExecutionCard";
 import InvestigateShowCombobox from "../../components/InvestigateShowCombobox";
 import { api } from "../../api/client";
@@ -87,6 +88,7 @@ export default function LibrariesSection({
   movieSections,
   tvSections,
   handleSyncReviewsToggle,
+  handleAskDeleteConfirmationToggle,
   handlePlexCollectionsToggle,
   handleEphemeralCollectionGcToggle,
   handleEphemeralCollectionGcDryRunToggle,
@@ -613,6 +615,14 @@ export default function LibrariesSection({
           <p className="wizard-note">
             A 1–5 star review in Projectionist becomes the matching Plex rating (2, 4, 6, 8, or 10).
           </p>
+          <SettingsToggle
+            id="ask-delete-confirmation"
+            testId="ask-delete-confirmation-toggle"
+            checked={settings?.ask_delete_confirmation !== false}
+            onChange={handleAskDeleteConfirmationToggle}
+            label="Ask me to type DELETE before removing titles"
+            help="Checked means removal still asks you to type DELETE. Uncheck it to skip that step. You still choose index only or full remove in the dialog."
+          />
           <label className="config-toggle" data-testid="plex-collections-enabled">
             <input
               type="checkbox"
