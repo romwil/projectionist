@@ -1637,9 +1637,95 @@ def _normalize_rating_keys(payload: Dict[str, Any]) -> List[str]:
     return keys
 
 
+def _pull_removal_event(iterator: Any) -> Any:
+    try:
+        return next(iterator)
+    except StopIteration:
+        return None
+
+
+def _dump_removal_event(event: Dict[str, Any]) -> str:
+    return json.dumps(event, separators=(",", ":"), default=str) + "\n"
+
+
+async def _iter_removal_ndjson(request: Request, run: Any):
+    """Yield NDJSON progress. Disconnect stops titles that have not started."""
+    import anyio
+    from functools import partial
+
+    iterator = run.events()
+    sent_complete = False
+    try:
+        while True:
+            if await request.is_disconnected():
+                break
+            event = await anyio.to_thread.run_sync(partial(_pull_removal_event, iterator))
+            if event is None:
+                break
+            if event.get("type") == "complete":
+                sent_complete = True
+            yield _dump_removal_event(event)
+    finally:
+        iterator.close()
+    if not sent_complete and isinstance(getattr(run, "result", None), dict):
+        disconnected = await request.is_disconnected()
+        if not disconnected:
+            yield _dump_removal_event({"type": "complete", "result": run.result})
+
+
+def _removal_stream_response(request: Request, run: Any) -> StreamingResponse:
+    return StreamingResponse(
+        _iter_removal_ndjson(request, run),
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+def _record_purge_index_undo(db: Any, user: Any, snapshot: Dict[str, Any], deleted: int) -> Optional[str]:
+    items = list(snapshot.get("items") or [])
+    if deleted <= 0 or not items:
+        return None
+    titles = [str(item.get("title") or "") for item in items if item.get("title")]
+    preview = ", ".join(titles[:3])
+    if len(titles) > 3:
+        preview += f" +{len(titles) - 3} more"
+    summary = f"Deleted {deleted} purge candidate{'s' if deleted != 1 else ''} (index only)"
+    if preview:
+        summary += f": {preview}"
+    action = db.record_grooming_action(
+        action_id=str(uuid.uuid4()),
+        action_type="purge_delete",
+        actor_user_id=getattr(user, "id", None),
+        summary=summary,
+        item_count=deleted,
+        snapshot=snapshot,
+    )
+    return action["id"]
+
+
+def _snapshot_for_deleted_keys(snapshot: Dict[str, Any], deleted_keys: List[str]) -> Dict[str, Any]:
+    wanted = {str(key) for key in deleted_keys}
+    items = [
+        item
+        for item in (snapshot.get("items") or [])
+        if str(item.get("rating_key") or "") in wanted
+    ]
+    item_ids = {item.get("id") for item in items}
+    episodes = [
+        episode
+        for episode in (snapshot.get("episodes") or [])
+        if episode.get("show_item_id") in item_ids
+    ]
+    return {"items": items, "episodes": episodes}
+
+
 @app.post("/api/library/items/delete")
-def delete_library_items(
+async def delete_library_items(
     payload: Dict[str, Any],
+    request: Request,
     user=Depends(require_role("owner")),
 ):
     """Owner-only library delete.
@@ -1664,13 +1750,55 @@ def delete_library_items(
         raise HTTPException(status_code=400, detail=str(error)) from error
 
     db = _db()
+    settings = _settings()
     del user
+    if payload.get("stream"):
+        from projectionist.library.full_remove import RemovalProgress
+        from projectionist.library.removal_cancel import arm_removal_cancel, clear_removal_cancel
+
+        run_id = str(payload.get("run_id") or "").strip()
+        cancel_event = arm_removal_cancel(run_id) if run_id else None
+
+        def _clear(run: Any) -> None:
+            del run
+            if run_id:
+                clear_removal_cancel(run_id)
+
+        run = RemovalProgress(
+            db,
+            settings,
+            keys,
+            mode=mode,
+            cancel_event=cancel_event,
+            on_before_complete=_clear,
+        )
+        return _removal_stream_response(request, run)
+
     if mode == "full":
-        return full_remove_library_items(db, _settings(), keys)
+        return full_remove_library_items(db, settings, keys)
 
     deleted = db.delete_library_items_by_rating_keys(keys)
     drop_cached_purge_keys(db, keys)
     return {"mode": "index", "deleted": deleted}
+
+
+@app.post("/api/library/items/delete/cancel")
+def cancel_library_item_delete(
+    payload: Dict[str, Any],
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Stop a streamed removal before titles that have not started.
+
+    Titles already removed stay removed. The in-flight title finishes.
+    """
+    del user
+    from projectionist.library.removal_cancel import request_removal_cancel
+
+    run_id = str(payload.get("run_id") or "").strip()
+    if not run_id:
+        raise HTTPException(status_code=400, detail="run_id is required")
+    request_removal_cancel(run_id)
+    return {"ok": True, "run_id": run_id}
 
 
 @app.post("/api/library/items/mark-bad-media")
@@ -1845,8 +1973,9 @@ def library_item_subtitle_file_endpoint(
 
 
 @app.post("/api/library/purge-candidates/delete")
-def delete_purge_candidates(
+async def delete_purge_candidates(
     payload: Dict[str, Any],
+    request: Request,
     background_tasks: BackgroundTasks,
     user=Depends(require_role("owner")),
 ):
@@ -1875,8 +2004,42 @@ def delete_purge_candidates(
             raise HTTPException(status_code=400, detail=str(error)) from error
 
     db = _db()
+    settings = _settings()
+    if payload.get("stream"):
+        from projectionist.library.full_remove import RemovalProgress
+        from projectionist.library.removal_cancel import arm_removal_cancel, clear_removal_cancel
+
+        run_id = str(payload.get("run_id") or "").strip()
+        cancel_event = arm_removal_cancel(run_id) if run_id else None
+        snapshot = db.snapshot_library_items_by_rating_keys(keys) if mode == "index" else None
+
+        def _before_complete(run: Any) -> None:
+            if run_id:
+                clear_removal_cancel(run_id)
+            if mode == "index":
+                partial = _snapshot_for_deleted_keys(snapshot or {}, run.deleted_keys)
+                action_id = _record_purge_index_undo(db, user, partial, len(run.deleted_keys))
+                run.result = {
+                    **(run.result or {}),
+                    "action_id": action_id,
+                    "undoable": action_id is not None,
+                }
+            else:
+                run.result = {**(run.result or {}), "action_id": None, "undoable": False}
+
+        run = RemovalProgress(
+            db,
+            settings,
+            keys,
+            mode=mode,
+            cancel_event=cancel_event,
+            on_before_complete=_before_complete,
+        )
+        _queue_purge_buffer_top_up(background_tasks)
+        return _removal_stream_response(request, run)
+
     if mode == "full":
-        result = full_remove_library_items(db, _settings(), keys)
+        result = full_remove_library_items(db, settings, keys)
         _queue_purge_buffer_top_up(background_tasks)
         return {**result, "action_id": None, "undoable": False}
 
@@ -1885,26 +2048,7 @@ def delete_purge_candidates(
     deleted = db.delete_library_items_by_rating_keys(keys)
     drop_cached_purge_keys(db, keys)
     _queue_purge_buffer_top_up(background_tasks)
-    action_id: Optional[str] = None
-    if deleted > 0 and snapshot.get("items"):
-        titles = [str(item.get("title") or "") for item in snapshot["items"] if item.get("title")]
-        preview = ", ".join(titles[:3])
-        if len(titles) > 3:
-            preview += f" +{len(titles) - 3} more"
-        summary = (
-            f"Deleted {deleted} purge candidate{'s' if deleted != 1 else ''} (index only)"
-        )
-        if preview:
-            summary += f": {preview}"
-        action = db.record_grooming_action(
-            action_id=str(uuid.uuid4()),
-            action_type="purge_delete",
-            actor_user_id=getattr(user, "id", None),
-            summary=summary,
-            item_count=deleted,
-            snapshot=snapshot,
-        )
-        action_id = action["id"]
+    action_id = _record_purge_index_undo(db, user, snapshot, deleted)
     return {
         "mode": "index",
         "deleted": deleted,

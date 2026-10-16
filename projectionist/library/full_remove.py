@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import PurePosixPath, PureWindowsPath
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any, Callable, Dict, Iterator, List, Mapping, Optional, Sequence
 
 from projectionist.agent.tools import resolve_arr_removal_target
 from projectionist.config_store import Settings, plex_configuration_error
@@ -436,6 +436,292 @@ def _remove_from_plex(settings: Settings, rating_key: str) -> Dict[str, Any]:
     return {"removed": True, "skipped": False}
 
 
+def _not_found_error(key: str, title: str) -> Dict[str, Any]:
+    return {
+        "rating_key": key,
+        "title": title,
+        "error": "Title not found in the Projectionist library index",
+        "index_deleted": False,
+    }
+
+
+def _full_remove_one(
+    db: Database,
+    settings: Settings,
+    *,
+    key: str,
+    row: Any,
+    title: str,
+) -> Dict[str, Any]:
+    """Remove one title. Returns ``{"status": "removed"|"failed", ...}``."""
+    if row is None:
+        return {"status": "failed", "error": _not_found_error(key, title)}
+
+    media_type = str(_row_value(row, "media_type") or "movie")
+    tmdb_id = _optional_int(_row_value(row, "tmdb_id"))
+    tvdb_id = _optional_int(_row_value(row, "tvdb_id"))
+    library_bytes = _as_nonneg_int(_row_value(row, "file_size"))
+    entry: Dict[str, Any] = {
+        "rating_key": key,
+        "title": title,
+        "media_type": media_type,
+        "ok": False,
+        "index_deleted": False,
+        "files": [],
+        "folders": [],
+        "bytes_freed": 0,
+        "bytes_source": "unknown",
+        "note": "",
+    }
+
+    try:
+        arr_result = _remove_from_arr(
+            db,
+            settings,
+            media_type=media_type,
+            title=title,
+            tmdb_id=tmdb_id,
+            tvdb_id=tvdb_id,
+        )
+    except ArrTitleNotFoundError as error:
+        return {
+            "status": "failed",
+            "error": {
+                "rating_key": key,
+                "title": title,
+                "error": str(error),
+                "index_deleted": False,
+            },
+        }
+    except RuntimeError as error:
+        return {
+            "status": "failed",
+            "error": {
+                "rating_key": key,
+                "title": title,
+                "error": str(error),
+                "index_deleted": False,
+            },
+        }
+
+    snapshot = apply_library_bytes_fallback(
+        {
+            "files": list(arr_result.pop("files", []) or []),
+            "folders": list(arr_result.pop("folders", []) or []),
+            "bytes_freed": int(arr_result.pop("bytes_freed", 0) or 0),
+            "bytes_source": str(arr_result.pop("bytes_source", "") or ""),
+            "note": str(arr_result.pop("note", "") or ""),
+        },
+        library_bytes=library_bytes,
+    )
+    files = list(snapshot.get("files") or [])
+    folders = list(snapshot.get("folders") or [])
+    bytes_freed = int(snapshot.get("bytes_freed") or 0)
+    entry["arr"] = arr_result
+    entry["files"] = files
+    entry["folders"] = folders
+    entry["bytes_freed"] = bytes_freed
+    entry["bytes_source"] = str(snapshot.get("bytes_source") or "unknown")
+    entry["note"] = str(snapshot.get("note") or "")
+
+    entry["plex"] = _remove_from_plex(settings, key)
+    removed = db.delete_library_items_by_rating_keys([key])
+    entry["index_deleted"] = removed > 0
+    entry["ok"] = removed > 0
+    if removed > 0:
+        _log_title_removal(
+            title=title,
+            rating_key=key,
+            media_type=media_type,
+            files=files,
+            folders=folders,
+            bytes_freed=bytes_freed,
+        )
+    return {"status": "removed", "entry": entry, "deleted": removed > 0}
+
+
+def _index_remove_one(db: Database, *, key: str, row: Any, title: str) -> Dict[str, Any]:
+    if row is None:
+        return {"status": "failed", "error": _not_found_error(key, title)}
+    removed = db.delete_library_items_by_rating_keys([key])
+    if removed <= 0:
+        return {"status": "failed", "error": _not_found_error(key, title)}
+    return {
+        "status": "removed",
+        "deleted": True,
+        "entry": {
+            "rating_key": key,
+            "title": title,
+            "media_type": str(_row_value(row, "media_type") or ""),
+            "ok": True,
+            "index_deleted": True,
+            "files": [],
+            "folders": [],
+            "bytes_freed": 0,
+            "bytes_source": "index",
+            "note": "",
+        },
+    }
+
+
+class RemovalProgress:
+    """Per-title library removal that can yield progress before each delete.
+
+    ``cancel_event.is_set()`` stops titles that have not started. The title
+    already in ``_step`` always finishes. Closing the generator does the same:
+    it does not roll back titles already removed.
+    """
+
+    def __init__(
+        self,
+        db: Database,
+        settings: Settings,
+        rating_keys: Sequence[str],
+        *,
+        mode: str = "full",
+        cancel_event: Any = None,
+        on_before_complete: Optional[Callable[["RemovalProgress"], None]] = None,
+    ) -> None:
+        self.db = db
+        self.settings = settings
+        self.keys = [str(key).strip() for key in rating_keys if str(key).strip()]
+        self.mode = "full" if str(mode or "full").strip().lower() == "full" else "index"
+        self.cancel_event = cancel_event
+        self.on_before_complete = on_before_complete
+        self.results: List[Dict[str, Any]] = []
+        self.errors: List[Dict[str, Any]] = []
+        self.deleted_keys: List[str] = []
+        self.cancelled = False
+        self.result: Optional[Dict[str, Any]] = None
+        self._finalized = False
+        self._prepared = False
+
+    def _stop_requested(self) -> bool:
+        event = self.cancel_event
+        if event is None:
+            return False
+        is_set = getattr(event, "is_set", None)
+        return bool(is_set()) if callable(is_set) else False
+
+    def _counts(self) -> Dict[str, int]:
+        totals = aggregate_removal_totals(self.results)
+        return {
+            "done": len(self.results) + len(self.errors),
+            "files_so_far": totals["files"],
+            "folders_so_far": totals["folders"],
+            "bytes_freed_so_far": totals["bytes_freed"],
+        }
+
+    def _payload(self) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "mode": self.mode,
+            "deleted": len(self.deleted_keys),
+            "results": list(self.results),
+            "errors": list(self.errors),
+            "totals": aggregate_removal_totals(self.results),
+        }
+        if self.cancelled:
+            payload["cancelled"] = True
+        return payload
+
+    def _prepare(self) -> List[Dict[str, Any]]:
+        prepared: List[Dict[str, Any]] = []
+        for key in self.keys:
+            row = self.db.library_item_by_rating_key(key)
+            title = str(_row_value(row, "title") or key)
+            prepared.append({"key": key, "row": row, "title": title})
+        self._prepared = True
+        return prepared
+
+    def _remember(self, step: Dict[str, Any], *, key: str) -> None:
+        if step.get("status") == "failed":
+            self.errors.append(dict(step.get("error") or _not_found_error(key, key)))
+            return
+        entry = dict(step.get("entry") or {})
+        self.results.append(entry)
+        if step.get("deleted"):
+            self.deleted_keys.append(key)
+
+    def finalize(self) -> None:
+        if self._finalized:
+            return
+        self._finalized = True
+        if self.deleted_keys:
+            drop_cached_purge_keys(self.db, self.deleted_keys)
+        if self.result is None:
+            self.result = self._payload()
+            if self.on_before_complete is not None:
+                self.on_before_complete(self)
+
+    def events(self) -> Iterator[Dict[str, Any]]:
+        prepared = self._prepare()
+        total = len(prepared)
+        try:
+            yield {
+                "type": "start",
+                "mode": self.mode,
+                "total": total,
+                "items": [
+                    {"rating_key": item["key"], "title": item["title"], "status": "waiting"}
+                    for item in prepared
+                ],
+            }
+            for index, item in enumerate(prepared):
+                if self._stop_requested():
+                    self.cancelled = True
+                    counts = self._counts()
+                    yield {"type": "cancelled", **counts, "total": total}
+                    break
+                counts = self._counts()
+                yield {
+                    "type": "title",
+                    "status": "removing",
+                    "rating_key": item["key"],
+                    "title": item["title"],
+                    "index": index,
+                    "total": total,
+                    **counts,
+                }
+                if self.mode == "full":
+                    step = _full_remove_one(
+                        self.db,
+                        self.settings,
+                        key=item["key"],
+                        row=item["row"],
+                        title=item["title"],
+                    )
+                else:
+                    step = _index_remove_one(
+                        self.db,
+                        key=item["key"],
+                        row=item["row"],
+                        title=item["title"],
+                    )
+                self._remember(step, key=item["key"])
+                counts = self._counts()
+                event: Dict[str, Any] = {
+                    "type": "title",
+                    "status": "failed" if step.get("status") == "failed" else "removed",
+                    "rating_key": item["key"],
+                    "title": item["title"],
+                    "index": index,
+                    "total": total,
+                    **counts,
+                }
+                if step.get("status") == "failed":
+                    error = step.get("error") or {}
+                    event["error"] = str(error.get("error") or "Could not remove this title")
+                else:
+                    event["entry"] = dict(step.get("entry") or {})
+                yield event
+            self.result = self._payload()
+            if self.on_before_complete is not None:
+                self.on_before_complete(self)
+            yield {"type": "complete", "result": self.result}
+        finally:
+            self.finalize()
+
+
 def full_remove_library_items(
     db: Database,
     settings: Settings,
@@ -450,115 +736,17 @@ def full_remove_library_items(
     Successful results include ``files``, ``folders``, and ``bytes_freed`` snapshotted
     from *arr before DELETE. Aggregate ``totals`` sums those fields across results.
     """
-    keys = [str(key).strip() for key in rating_keys if str(key).strip()]
-    results: List[Dict[str, Any]] = []
-    errors: List[Dict[str, Any]] = []
-    deleted_keys: List[str] = []
-
-    for key in keys:
-        row = db.library_item_by_rating_key(key)
-        title = str(_row_value(row, "title") or key)
-        if row is None:
-            errors.append(
-                {
-                    "rating_key": key,
-                    "title": title,
-                    "error": "Title not found in the Projectionist library index",
-                    "index_deleted": False,
-                }
-            )
-            continue
-
-        media_type = str(_row_value(row, "media_type") or "movie")
-        tmdb_id = _optional_int(_row_value(row, "tmdb_id"))
-        tvdb_id = _optional_int(_row_value(row, "tvdb_id"))
-        library_bytes = _as_nonneg_int(_row_value(row, "file_size"))
-        entry: Dict[str, Any] = {
-            "rating_key": key,
-            "title": title,
-            "media_type": media_type,
-            "ok": False,
-            "index_deleted": False,
-            "files": [],
-            "folders": [],
-            "bytes_freed": 0,
-            "bytes_source": "unknown",
-            "note": "",
-        }
-
-        try:
-            arr_result = _remove_from_arr(
-                db,
-                settings,
-                media_type=media_type,
-                title=title,
-                tmdb_id=tmdb_id,
-                tvdb_id=tvdb_id,
-            )
-        except ArrTitleNotFoundError as error:
-            errors.append(
-                {
-                    "rating_key": key,
-                    "title": title,
-                    "error": str(error),
-                    "index_deleted": False,
-                }
-            )
-            continue
-        except RuntimeError as error:
-            errors.append(
-                {
-                    "rating_key": key,
-                    "title": title,
-                    "error": str(error),
-                    "index_deleted": False,
-                }
-            )
-            continue
-
-        snapshot = apply_library_bytes_fallback(
-            {
-                "files": list(arr_result.pop("files", []) or []),
-                "folders": list(arr_result.pop("folders", []) or []),
-                "bytes_freed": int(arr_result.pop("bytes_freed", 0) or 0),
-                "bytes_source": str(arr_result.pop("bytes_source", "") or ""),
-                "note": str(arr_result.pop("note", "") or ""),
-            },
-            library_bytes=library_bytes,
-        )
-        files = list(snapshot.get("files") or [])
-        folders = list(snapshot.get("folders") or [])
-        bytes_freed = int(snapshot.get("bytes_freed") or 0)
-        entry["arr"] = arr_result
-        entry["files"] = files
-        entry["folders"] = folders
-        entry["bytes_freed"] = bytes_freed
-        entry["bytes_source"] = str(snapshot.get("bytes_source") or "unknown")
-        entry["note"] = str(snapshot.get("note") or "")
-
-        entry["plex"] = _remove_from_plex(settings, key)
-        removed = db.delete_library_items_by_rating_keys([key])
-        entry["index_deleted"] = removed > 0
-        entry["ok"] = removed > 0
-        if removed > 0:
-            deleted_keys.append(key)
-            _log_title_removal(
-                title=title,
-                rating_key=key,
-                media_type=media_type,
-                files=files,
-                folders=folders,
-                bytes_freed=bytes_freed,
-            )
-        results.append(entry)
-
-    if deleted_keys:
-        drop_cached_purge_keys(db, deleted_keys)
-
-    return {
+    run = RemovalProgress(db, settings, rating_keys, mode="full")
+    final: Optional[Dict[str, Any]] = None
+    for event in run.events():
+        if event.get("type") == "complete":
+            final = event.get("result")
+    if isinstance(final, dict):
+        return final
+    return run.result or {
         "mode": "full",
-        "deleted": len(deleted_keys),
-        "results": results,
-        "errors": errors,
-        "totals": aggregate_removal_totals(results),
+        "deleted": 0,
+        "results": [],
+        "errors": [],
+        "totals": aggregate_removal_totals([]),
     }
