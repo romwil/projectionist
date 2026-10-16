@@ -7,11 +7,14 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from projectionist.library.db import Database
 from projectionist.library.facets import library_facet_catalog
 from projectionist.library.query import (
     LibraryFilters,
+    _build_where,
+    _sort_clause,
     aggregate_library,
     audit_context_label_for_filters,
     compute_library_overview,
@@ -257,6 +260,72 @@ class LibraryQueryTests(unittest.TestCase):
             self.assertEqual(result["group_by"], "country")
             self.assertEqual(buckets["United States of America"], 1)
             self.assertEqual(buckets["France"], 1)
+
+    def test_movie_page_is_newest_added_without_a_facet_scan(self) -> None:
+        """The first movies page sorts by date added and does not walk per-year examples."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            for rating_key, title, added_at, year in (
+                ("old", "Zebra", 100, 1990),
+                ("new", "Alpha", 300, 2024),
+                ("mid", "Middle", 200, 2001),
+            ):
+                db.upsert_library_item(
+                    {
+                        "rating_key": rating_key,
+                        "media_type": "movie",
+                        "title": title,
+                        "year": year,
+                        "added_at": added_at,
+                        "original_language": "en",
+                    }
+                )
+            filters = LibraryFilters(
+                media_type="movie",
+                sort="added_at",
+                sort_dir="desc",
+                limit=48,
+                offset=0,
+            )
+            result = query_library(db, filters)
+            self.assertEqual([item["title"] for item in result["items"]], ["Alpha", "Middle", "Zebra"])
+            self.assertEqual(result["returned"], 3)
+            self.assertEqual(result["total_matched"], 3)
+
+            where_sql, params = _build_where(filters)
+            sort_sql = _sort_clause(filters.sort, filters.sort_dir)
+            self.assertEqual(sort_sql, "added_at DESC, title ASC")
+            with db.connect() as conn:
+                plan = conn.execute(
+                    f"""
+                    EXPLAIN QUERY PLAN
+                    SELECT * FROM library_items
+                    WHERE {where_sql}
+                    ORDER BY {sort_sql}
+                    LIMIT 48
+                    """,
+                    params,
+                ).fetchall()
+            detail = " ".join(str(row[-1]) for row in plan)
+            self.assertIn("idx_library_media_added", detail)
+            self.assertNotIn("TEMP B-TREE", detail.upper())
+
+            with mock.patch(
+                "projectionist.library.query._top_examples_for_year"
+            ) as examples:
+                years = aggregate_library(
+                    db,
+                    "year",
+                    LibraryFilters(media_type="movie"),
+                    top_examples=0,
+                )
+            examples.assert_not_called()
+            self.assertEqual(
+                [bucket["year"] for bucket in years["buckets"]],
+                [1990, 2001, 2024],
+            )
+            for bucket in years["buckets"]:
+                self.assertNotIn("examples", bucket)
 
     def test_aggregate_language_without_facets(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
