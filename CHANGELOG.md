@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [1.37.53] — 2026-10-19
+
+One patch on 1.37.52: a Live station that was looping one title fills back in from its show, collection, or theme, and the guide draws back-to-back copies of the same file as one block.
+
+### Highlights
+- **A looping station plays the rest of its library.** The next time you open the guide, a station stuck on one movie or episode fills in from that station’s show, collection, or theme.
+- **Breaks between titles stay.** Quarter-hour filler still holds the station until the next boundary, then the next title starts.
+- **The same file back-to-back is one block.** When two copies of a title touch, the guide draws one span. A later repeat after another title or a break stays its own cell.
+
+### Fixed
+- **One-title Live cycles are rebuilt from the station recipe.** On the next guide read, a channel whose cycle is a single rating key is replaced from the local library (show episodes, collection or filtered movies, or theme). Channels that already rotate more than one title are left alone. Quarter-hour flex pads stay. A library that really has one playable item still repeats that title.
+- **Adjacent guide cells that share a rating key and touch collapse into one span.** Flex pads are not merged into the title. A later repeat with a gap, or with another title between, stays separate.
+
+### Verification
+- Backend `pytest tests/` — 2539 passed, 43 skipped, coverage 76.22% (floor 74%), with `PROJECTIONIST_SKIP_DOTENV=1`. A subset of `tests/test_live_schedule_cycles.py` and `tests/test_live_native_schedule.py` passed 13 tests, then exited 1 because coverage on that subset was 8.8% under the 74% floor.
+- Frontend unit 1026/1026.
+- Lint 0 errors (166 warnings); `npm run build` OK.
+
 ## [1.37.52] — 2026-10-16
 
 One patch on 1.37.51: the poster trailer button stops spinning and says what happened when a title has no trailer or the lookup fails.
