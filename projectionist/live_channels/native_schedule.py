@@ -90,15 +90,24 @@ def schedule_has_channels(settings: Any = None, *, data_dir: Optional[Path] = No
 
 
 def ensure_schedule(settings: Any = None, *, data_dir: Optional[Path] = None) -> Dict[str, Any]:
-    """Return the stored lineup, importing from Tunarr's sqlite once if needed."""
-    doc = load_schedule(settings, data_dir=data_dir)
-    if doc.get("channels"):
-        return doc
+    """Return the stored lineup, importing from Tunarr's sqlite once if needed.
+
+    A channel whose saved cycle is a single rating key is rebuilt from that
+    station's recipe and the local library before the guide is served. The
+    rebuilt cycle is written back to ``live_lineup.json``.
+    """
     root = Path(data_dir) if data_dir is not None else resolve_data_dir(settings)
-    imported = import_tunarr_lineup(root)
-    if imported and imported.get("channels"):
-        save_schedule(imported, data_dir=root)
-        return imported
+    doc = load_schedule(settings, data_dir=root)
+    if not doc.get("channels"):
+        imported = import_tunarr_lineup(root)
+        if imported and imported.get("channels"):
+            doc = imported
+            save_schedule(doc, data_dir=root)
+    from projectionist.live_channels.cycle_rebuild import rebuild_single_title_cycles
+
+    report = rebuild_single_title_cycles(doc, settings, data_dir=root)
+    if report.get("changed"):
+        save_schedule(doc, data_dir=root)
     return doc
 
 
