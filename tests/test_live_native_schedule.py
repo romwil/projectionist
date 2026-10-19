@@ -154,26 +154,92 @@ class NativeScheduleTests(unittest.TestCase):
         self.assertNotIn("tunarr", source["stream_url"].lower())
         self.assertFalse(source["is_flex"])
 
-    def test_flex_slot_does_not_start_a_play_session(self) -> None:
+    def test_flex_slot_starts_filler_then_next_title(self) -> None:
         now = 1_700_000_000.0
         # First title is 120s and began 5s before `now`, so flex starts at +115s.
         flex_now = now + 115 + 1
+        after_pad = flex_now + (15 * 60)
+        lineup = _lineup(now=now)
+        lineup["channels"]["ch-mystery"]["filler_rating_keys"] = ["filler-88"]
+        seen = []
 
-        def fail_start(*args, **kwargs):
-            raise AssertionError("flex must not start library playback")
+        def fake_start(db, settings, *, rating_key, user, start_over, offset_ms, fetch=None):
+            del db, settings, user, fetch
+            seen.append(
+                {
+                    "rating_key": rating_key,
+                    "start_over": start_over,
+                    "offset_ms": offset_ms,
+                }
+            )
+            return {
+                "session_id": f"sess-{rating_key}",
+                "stream_url": f"/api/library/playback/sess-{rating_key}/index.m3u8",
+                "duration_ms": 90_000,
+                "rating_key": rating_key,
+            }
 
         with self._dir() as data_dir:
-            save_schedule(_lineup(now=now), data_dir=data_dir)
-            source = play_source_for_channel(
+            save_schedule(lineup, data_dir=data_dir)
+            settings = _settings(data_dir)
+            during = play_source_for_channel(
                 None,
-                _settings(data_dir),
+                settings,
                 SimpleNamespace(id="owner"),
                 "ch-mystery",
                 now=flex_now,
-                start_playback_fn=fail_start,
+                start_playback_fn=fake_start,
             )
+            after = play_source_for_channel(
+                None,
+                settings,
+                SimpleNamespace(id="owner"),
+                "ch-mystery",
+                now=after_pad,
+                start_playback_fn=fake_start,
+            )
+        self.assertTrue(during["is_flex"])
+        self.assertTrue(str(during["title"]).endswith("· Up next"))
+        self.assertEqual(during["rating_key"], "filler-88")
+        self.assertEqual(during["playback_kind"], "hls")
+        self.assertIn("/api/library/playback/sess-filler-88/index.m3u8", during["stream_url"])
+        self.assertEqual(seen[0]["rating_key"], "filler-88")
+        self.assertTrue(seen[0]["start_over"])
+        self.assertEqual(seen[0]["offset_ms"], 0)
+        self.assertFalse(after["is_flex"])
+        self.assertEqual(after["rating_key"], "163545")
+        self.assertEqual(seen[1]["rating_key"], "163545")
+
+    def test_flex_without_library_filler_uses_progressive_bumper(self) -> None:
+        now = 1_700_000_000.0
+        flex_now = now + 115 + 1
+
+        def fail_start(*args, **kwargs):
+            raise AssertionError("progressive bumper must not start library playback")
+
+        bumper = {
+            "id": "abc123bumper",
+            "path": "/preroll/drive-in.mp4",
+            "title": "Drive In",
+        }
+        with self._dir() as data_dir:
+            save_schedule(_lineup(now=now), data_dir=data_dir)
+            with patch(
+                "projectionist.theater.preroll.list_preroll_videos",
+                return_value=[bumper],
+            ):
+                source = play_source_for_channel(
+                    None,
+                    _settings(data_dir),
+                    SimpleNamespace(id="owner"),
+                    "ch-mystery",
+                    now=flex_now,
+                    start_playback_fn=fail_start,
+                )
         self.assertTrue(source["is_flex"])
-        self.assertEqual(source["stream_url"], "")
+        self.assertEqual(source["rating_key"], "abc123bumper")
+        self.assertEqual(source["stream_url"], "/api/preroll/asset/abc123bumper")
+        self.assertEqual(source["playback_kind"], "progressive")
         self.assertTrue(str(source["title"]).endswith("· Up next"))
 
     def test_sqlite_import_does_not_need_tunarr_process(self) -> None:

@@ -19,6 +19,7 @@ import {
   LIVE_STALL_NOTICE_MS,
   liveGuideHref,
   liveProgramKey,
+  flexPlaybackPlan,
   liveStreamUrl,
   liveWatchHref,
   mergeLiveCcTracks,
@@ -299,6 +300,40 @@ describe("liveChannels helpers", () => {
     assert.equal(osd.secondsElapsed, 600);
     assert.equal(osd.secondsRemaining, 3000);
     assert.ok(osd.percent > 0);
+  });
+
+  it("flex tune with a filler URL plays instead of leaving a black video", () => {
+    const nowMs = 1_700_000_000_000;
+    const plan = flexPlaybackPlan(
+      {
+        is_flex: true,
+        ends_at: nowMs / 1000 + 50,
+        stream_url: "/api/library/playback/sess-filler/index.m3u8",
+        playback_kind: "hls",
+        rating_key: "filler-88",
+      },
+      nowMs,
+    );
+    assert.equal(plan.play, true);
+    assert.equal(plan.progressive, false);
+    assert.equal(plan.url, "/api/library/playback/sess-filler/index.m3u8");
+    assert.equal(plan.holdMs, 50_000);
+
+    const bumper = flexPlaybackPlan(
+      {
+        is_flex: true,
+        ends_at: nowMs / 1000 + 20,
+        stream_url: "/api/preroll/asset/abc",
+        playback_kind: "progressive",
+      },
+      nowMs,
+    );
+    assert.equal(bumper.play, true);
+    assert.equal(bumper.progressive, true);
+
+    const black = flexPlaybackPlan({ is_flex: true, ends_at: nowMs / 1000 + 20, stream_url: "" }, nowMs);
+    assert.equal(black.play, false);
+    assert.equal(black.holdMs, 20_000);
   });
 
   it("OSD keeps flex honest and surfaces next episode as Up next", () => {
