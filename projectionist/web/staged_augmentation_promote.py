@@ -142,7 +142,7 @@ async def _enrich_library_metadata(db: Database, settings: Settings, item_id: in
 
 
 async def _enrich_library_motifs(db: Database, item_id: int) -> Dict[str, Any]:
-    all_rows = extract_motif_rows(db)
+    all_rows, _demand = extract_motif_rows(db)
     item_rows = [row for row in all_rows if int(row[0]) == int(item_id)]
     if not item_rows:
         return {"action": "motif_no_tokens", "item_id": int(item_id), "motifs_written": 0}

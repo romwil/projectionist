@@ -119,7 +119,7 @@ class KillBillMotifExtractionTests(unittest.TestCase):
                     }
                 )
 
-            rows = extract_motif_rows(db)
+            rows, _demand = extract_motif_rows(db)
             by_item: dict[int, set[str]] = {}
             for item_id, facet_type, value in rows:
                 self.assertEqual(facet_type, "motif")

@@ -15,7 +15,7 @@ describe("buildHealthHeroTiles", () => {
         stale_adds: 12,
         rating_coverage_pct: 55,
       },
-      coverage: { with_overview_pct: 91 },
+      coverage: { with_overview_pct: 91, with_explainable_neighbors_pct: 42 },
       openIssues: 3,
     });
     const byId = Object.fromEntries(tiles.map((t) => [t.id, t]));
@@ -24,9 +24,10 @@ describe("buildHealthHeroTiles", () => {
     assert.equal(byId.titles.to, "/explore/browse");
     assert.equal(byId.unwatched.value, "68%");
     assert.match(byId.unwatched.to, /watch_state=unwatched/);
-    assert.equal(byId.coverage.value, "91%");
-    assert.equal(byId.coverage.tone, "good");
-    assert.equal(byId.coverage.to, "/admin/taxonomy");
+    assert.equal(byId.coverage.label, "Named kinship");
+    assert.equal(byId.coverage.value, "42%");
+    assert.equal(byId.coverage.tone, "warn");
+    assert.equal(byId.coverage.to, "/admin/scheduled-tasks");
     assert.equal(byId.rating.value, "55%");
     assert.equal(byId.rating.detail, "Watched titles rated");
     assert.match(byId.rating.to, /watch_state=watched/);
@@ -44,7 +45,7 @@ describe("buildHealthHeroTiles", () => {
         rating_coverage_pct: 0,
         rating_coverage_note: "Ratings not yet linked to watched titles",
       },
-      coverage: { with_overview_pct: 30 },
+      coverage: { with_overview_pct: 30, with_explainable_neighbors_pct: 12 },
       openIssues: 0,
     });
     const byId = Object.fromEntries(tiles.map((t) => [t.id, t]));
@@ -58,7 +59,7 @@ describe("buildHealthHeroTiles", () => {
   it("marks issues clear and coverage warn when sparse", () => {
     const tiles = buildHealthHeroTiles({
       health: { total: 10, unwatched_pct: 20 },
-      coverage: { with_overview_pct: 30 },
+      coverage: { with_overview_pct: 30, with_explainable_neighbors_pct: 8 },
       openIssues: 0,
     });
     const byId = Object.fromEntries(tiles.map((t) => [t.id, t]));

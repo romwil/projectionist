@@ -24,6 +24,12 @@ from projectionist.telemetry.explore import (
     schedule_bad_neighbor_match,
     schedule_explore_miss,
 )
+from projectionist.telemetry.kinship_miss import (
+    EVENT_KINSHIP_MISS,
+    KINSHIP_MISS_QUEUE_CAP,
+    preferred_item_ids as preferred_kinship_miss_item_ids,
+    schedule_kinship_miss,
+)
 from projectionist.telemetry.ingestion import (
     TelemetryIngester,
     schedule_closed_loop_event,
@@ -50,6 +56,8 @@ __all__ = [
     "EVENT_METADATA_DEMAND",
     "EVENT_EXPLORE_MISS",
     "EVENT_BAD_NEIGHBOR",
+    "EVENT_KINSHIP_MISS",
+    "KINSHIP_MISS_QUEUE_CAP",
     "schedule_closed_loop_event",
     "schedule_closed_loop_events",
     "schedule_coverage_deficit",
@@ -57,6 +65,8 @@ __all__ = [
     "schedule_metadata_demand",
     "schedule_explore_miss",
     "schedule_bad_neighbor_match",
+    "schedule_kinship_miss",
+    "preferred_kinship_miss_item_ids",
     "scrub_closed_loop_payload",
     "upsert_closed_loop_event",
     "upsert_closed_loop_event_sync",
