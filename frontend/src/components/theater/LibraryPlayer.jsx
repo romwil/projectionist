@@ -1399,6 +1399,8 @@ export default function LibraryPlayer({
         onKeyDown={handleKeyDown}
         onOsdVisibility={onOsdVisibility}
         pausedFrameClean={pausedFrameClean}
+        holdToDoubleSpeed
+        bufferingEnabled={!error && !resumeOpen && !ended && !preroll}
       >
         {subPresentation.showOverlay ? (
           <SubtitleOverlay

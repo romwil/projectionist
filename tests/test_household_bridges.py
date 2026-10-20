@@ -467,6 +467,15 @@ class HouseholdBridgeTests(unittest.TestCase):
         self.assertEqual(feed["items"][0]["title"], "Covert Kitchen")
         self.assertFalse(any(item.get("title") == "Gravity" for item in feed["items"]))
 
+    def test_for_you_empty_without_bridges_is_honest(self) -> None:
+        empty = feed_for_you(self.db, limit=8)
+        self.assertEqual(empty["feed"], "for-you")
+        self.assertEqual(empty["mode"], "watched_bridge")
+        self.assertEqual(empty["items"], [])
+        self.assertTrue(empty["empty"])
+        self.assertIn("no named link to something you finished", empty["note"].lower())
+        self.assertIn("not a cosine guess", empty["note"].lower())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -605,8 +605,9 @@ export default function ScheduledTasksPage() {
       >
         Catch-up priority: titles that returned an empty More Like This, Related shelf,
         or recommendation bridge run first in metadata, synopsis, motif, and neighbor
-        tasks. Watch Named kinship on the coverage strip — that is the health that
-        matters, not raw similar-cache %.
+        tasks. Named kinship % is the number to watch — catch-up is the lever, not
+        raw similar-cache %. Idle still annotates remaining cosine-only neighbors
+        without a full graph rebuild.
       </p>
 
       {loading ? (

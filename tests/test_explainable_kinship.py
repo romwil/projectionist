@@ -8,7 +8,10 @@ from pathlib import Path
 
 from projectionist.library.db import Database
 from projectionist.library.feeds import neighbors_payload
-from projectionist.library.neighbors import enrich_neighbors_with_explanations
+from projectionist.library.neighbors import (
+    annotate_explainable_neighbors,
+    enrich_neighbors_with_explanations,
+)
 from projectionist.library.plot_kinship import build_explanation, specific_plot_link
 from projectionist.library.query import compute_knowledge_coverage
 from projectionist.library.relations import (
@@ -118,6 +121,40 @@ class ExplainableNeighborMaterializeTests(unittest.TestCase):
             self.assertEqual(int(rows[0]["neighbor_id"]), peer)
             self.assertEqual(int(rows[0]["explainable"]), 1)
 
+    def test_idle_annotate_scores_legacy_cosine_only_neighbors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "kin.db")
+            seed = _title(
+                db,
+                rating_key="bake",
+                tmdb_id=1,
+                title="Bake Show",
+                summary=BAKE_PLOT,
+            )
+            peer = _title(
+                db,
+                rating_key="spy",
+                tmdb_id=2,
+                title="Covert Kitchen",
+                summary=SPY_PLOT,
+            )
+            with db.connect() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO item_neighbors
+                        (item_id, neighbor_id, score, surprise_score, explainable, plot_link_json)
+                    VALUES (?, ?, 0.9, 0.1, 0, NULL)
+                    """,
+                    (seed, peer),
+                )
+            needing = db.item_ids_needing_neighbor_explanation(limit=10)
+            self.assertIn(seed, needing)
+            annotated = annotate_explainable_neighbors(db, needing)
+            self.assertGreaterEqual(annotated, 1)
+            rows = db.get_neighbors(seed, explainable_only=True)
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(int(rows[0]["neighbor_id"]), peer)
+
 
 class ExplainableCoverageTests(unittest.TestCase):
     def test_coverage_includes_raw_and_explainable_percents(self) -> None:
@@ -150,7 +187,10 @@ class ExplainableCoverageTests(unittest.TestCase):
                     db, seed, [(peer, 0.84, 0.6), (noise, 0.99, 0.5)]
                 ),
             )
+            db.set_embeddings([(seed, [0.1, 0.2], "h-seed")], embedding_model="hash-fallback")
             coverage = compute_knowledge_coverage(db)
+            self.assertEqual(coverage.get("embedding_model"), "hash-fallback")
+            self.assertTrue(coverage.get("embedding_is_hash_fallback"))
             self.assertIn("with_neighbors_pct", coverage)
             self.assertIn("with_explainable_neighbors_pct", coverage)
             self.assertEqual(coverage["total_titles"], 3)

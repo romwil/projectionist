@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  HOLD_PLAYBACK_RATE,
   OSD_IDLE_MS,
   RESUME_THRESHOLD_MS,
   SCRUB_MAX,
@@ -24,8 +25,16 @@ import {
   pictureTapIntent,
   canResumeAttachedStream,
   clampTime,
+  applyHoldPlaybackRate,
   createStageGesture,
   formatClockMs,
+  holdToRateShouldCancelTap,
+  libraryBufferingCopy,
+  libraryBufferingHealth,
+  restoreHoldPlaybackRate,
+  shouldShowHoldRateChip,
+  shouldShowLibraryBufferingChip,
+  stepLibraryBufferingUi,
   EXPLORE_PATH,
   NEXT_EPISODE_MISSING_MESSAGE,
   NEXT_EPISODE_UNAVAILABLE_MESSAGE,
@@ -258,6 +267,110 @@ test("library play arrows seek ±15 and space toggles unless typing", () => {
     ["toggle"],
     ["toggle"],
   ]);
+});
+
+test("hold-to-2x sets rate, restores on release, and cancels the pending tap", async () => {
+  const video = { playbackRate: 1 };
+  assert.equal(HOLD_PLAYBACK_RATE, 2);
+  assert.equal(applyHoldPlaybackRate(video), 2);
+  assert.equal(video.playbackRate, 2);
+  assert.equal(shouldShowHoldRateChip(video.playbackRate), true);
+  assert.equal(restoreHoldPlaybackRate(video), 1);
+  assert.equal(video.playbackRate, 1);
+  assert.equal(shouldShowHoldRateChip(1), false);
+  assert.equal(shouldShowHoldRateChip(2), true);
+
+  assert.equal(holdToRateShouldCancelTap({ downAtMs: 0, upAtMs: 120, delayMs: 300 }), false);
+  assert.equal(holdToRateShouldCancelTap({ downAtMs: 0, upAtMs: 300, delayMs: 300 }), true);
+  assert.equal(holdToRateShouldCancelTap({ downAtMs: 0, upAtMs: 800, delayMs: 300 }), true);
+
+  const singles = [];
+  const doubles = [];
+  const handle = createStageGesture({
+    onSingle: () => singles.push(1),
+    onDouble: () => doubles.push(1),
+    delay: 40,
+  });
+  handle({});
+  handle.cancel();
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.equal(singles.length, 0);
+  assert.equal(doubles.length, 0);
+});
+
+test("library buffering chip waits for holdMs then hides when playing with a frame", () => {
+  assert.equal(
+    libraryBufferingHealth({ playbackStatus: "playing", waiting: true, waitingMs: 200 }),
+    "ok",
+  );
+  assert.equal(
+    libraryBufferingHealth({ playbackStatus: "playing", waiting: true, waitingMs: 1200 }),
+    "buffering",
+  );
+  assert.equal(
+    libraryBufferingHealth({ playbackStatus: "playing", waiting: true, waitingMs: 4000 }),
+    "stalled",
+  );
+  assert.equal(
+    libraryBufferingHealth({ playbackStatus: "paused", waiting: true, waitingMs: 5000 }),
+    "ok",
+  );
+  assert.equal(libraryBufferingCopy("buffering"), "Buffering");
+  assert.equal(libraryBufferingCopy("stalled"), "Still waiting for this title…");
+  assert.equal(
+    shouldShowLibraryBufferingChip({
+      displayedHealth: "buffering",
+      waiting: true,
+      readyState: 0,
+      videoWidth: 0,
+    }),
+    true,
+  );
+  assert.equal(
+    shouldShowLibraryBufferingChip({
+      displayedHealth: "buffering",
+      waiting: false,
+      readyState: 4,
+      videoWidth: 1920,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldShowLibraryBufferingChip({
+      displayedHealth: "buffering",
+      hasError: true,
+      waiting: true,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldShowLibraryBufferingChip({
+      displayedHealth: "buffering",
+      seekFailed: true,
+      waiting: true,
+    }),
+    false,
+  );
+  const shown = stepLibraryBufferingUi(
+    { displayed: "ok", stickyUntil: null },
+    { rawHealth: "buffering", nowMs: 1000 },
+  );
+  assert.equal(shown.displayed, "buffering");
+});
+
+test("library Play wires hold-to-2x and buffering; Live TV does not", () => {
+  const root = dirname(fileURLToPath(import.meta.url));
+  const library = readFileSync(join(root, "../components/theater/LibraryPlayer.jsx"), "utf8");
+  const theater = readFileSync(join(root, "../components/theater/TheaterPlayer.jsx"), "utf8");
+  const live = readFileSync(join(root, "../components/live/LivePlayer.jsx"), "utf8");
+  assert.match(library, /holdToDoubleSpeed/);
+  assert.match(library, /bufferingEnabled=\{!error/);
+  assert.match(theater, /holdToDoubleSpeed = false/);
+  assert.match(theater, /applyHoldPlaybackRate/);
+  assert.match(theater, /BufferingIndicator/);
+  assert.doesNotMatch(live, /holdToDoubleSpeed/);
+  assert.doesNotMatch(live, /playbackRate\s*=\s*2/);
+  assert.doesNotMatch(live, /HOLD_PLAYBACK_RATE/);
 });
 
 test("stage gesture ignores the click that completes a double-tap", async () => {

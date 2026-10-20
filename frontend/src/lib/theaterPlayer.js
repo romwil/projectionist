@@ -1,3 +1,8 @@
+import {
+  classifyLiveStreamHealth,
+  stepLiveStreamHealthUi,
+} from "./liveChannels.js";
+
 /** Shared in-app theater helpers — skip zones, resume, progress, HLS attach. */
 
 export const SKIP_SECONDS = 15;
@@ -8,6 +13,8 @@ export const LONG_SKIP_MIN_WIDTH = 1000;
 export const RESUME_THRESHOLD_MS = 2 * 60 * 1000;
 export const PROGRESS_THROTTLE_MS = 10_000;
 export const DOUBLE_TAP_MS = 300;
+/** Library Play press-and-hold rate. Live TV must not set this. */
+export const HOLD_PLAYBACK_RATE = 2;
 export const OSD_IDLE_MS = 3200;
 /** Collapse rapid Play scrub session-restarts into one seek. */
 export const SEEK_RESTART_DEBOUNCE_MS = 280;
@@ -175,6 +182,78 @@ export function createStageGesture({ onSingle, onDouble, delay = DOUBLE_TAP_MS }
     lastAt = 0;
   };
   return handle;
+}
+
+/**
+ * Hold-to-2x: a press longer than the single-tap window must not pause on release.
+ * Live TV must not call this — linear clock stays 1x.
+ */
+export function holdToRateShouldCancelTap({
+  downAtMs,
+  upAtMs,
+  delayMs = DOUBLE_TAP_MS,
+} = {}) {
+  const down = Number(downAtMs);
+  const up = Number(upAtMs);
+  const delay = Number(delayMs);
+  if (!Number.isFinite(down) || !Number.isFinite(up) || !Number.isFinite(delay)) return false;
+  return up - down >= delay;
+}
+
+/** Set playbackRate; return the rate the element actually reports. */
+export function applyHoldPlaybackRate(video, rate = HOLD_PLAYBACK_RATE) {
+  if (!video) return 1;
+  const next = Number(rate);
+  if (!Number.isFinite(next) || next <= 0) return Number(video.playbackRate) || 1;
+  try {
+    video.playbackRate = next;
+  } catch {
+    // iPad Safari often ignores playbackRate on live-like Plex HLS.
+  }
+  return Number(video.playbackRate) || 1;
+}
+
+export function restoreHoldPlaybackRate(video) {
+  return applyHoldPlaybackRate(video, 1);
+}
+
+/** 2x chip only when the element actually doubled — never a fake badge. */
+export function shouldShowHoldRateChip(playbackRate) {
+  return Number(playbackRate) === HOLD_PLAYBACK_RATE;
+}
+
+/** Library Play stall contract — same delay as Live so brief underruns do not flash. */
+export function libraryBufferingHealth(input = {}) {
+  return classifyLiveStreamHealth(input);
+}
+
+export function stepLibraryBufferingUi(state, input) {
+  return stepLiveStreamHealthUi(state, input);
+}
+
+/**
+ * Obvious buffering OSD after the Live holdMs delay.
+ * Hide when a current frame is present and we are no longer waiting.
+ * Seek-fail copy owns the stage — do not fight it.
+ */
+export function shouldShowLibraryBufferingChip({
+  displayedHealth = "ok",
+  hasError = false,
+  seekFailed = false,
+  readyState = 0,
+  videoWidth = 0,
+  waiting = false,
+} = {}) {
+  if (hasError || seekFailed) return false;
+  if (displayedHealth !== "buffering" && displayedHealth !== "stalled") return false;
+  if (!waiting && Number(readyState) >= 2 && Number(videoWidth) > 0) return false;
+  return true;
+}
+
+export function libraryBufferingCopy(health) {
+  if (health === "stalled") return "Still waiting for this title…";
+  if (health === "buffering") return "Buffering";
+  return "";
 }
 
 export function theaterHlsConfig() {
