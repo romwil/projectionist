@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+## [1.37.57] — 2026-10-20
+
+One patch on 1.37.56: titles owners actually hit with empty kinship shelves get enrichment priority, and Admin treats Named kinship % as the health that matters.
+
+### Highlights
+- **Empty shelves queue catch-up.** More Like This, Related titles (embedded seeds), and zero-peer recommendation bridges write `kinship_miss` telemetry.
+- **Idle tasks prefer that backlog.** Metadata, long synopsis, motifs, and plot neighbors pull demand titles first (bounded batch; queue cap blocks stampede).
+- **Admin promotes Named kinship.** Knowledge hero and coverage strip lead with explainable % and link to Scheduled Tasks catch-up copy.
+- **Episode plot tranche skipped.** Show-level bridges after R1–R3 are enough; episode KG stays next-horizon.
+
+### Changed
+- **`telemetry.kinship_miss`:** schedule + prefer helpers; soft `KINSHIP_MISS_QUEUE_CAP`.
+- **Feeds / relations / recommendation_reasons:** emit miss signals on empty honest shelves.
+- **Idle tasks:** prefer demand item ids before cold backlog rotation.
+- **Admin UI:** Owner health + Knowledge coverage + Scheduled Tasks catch-up copy.
+- **Docs:** [docs/MEDIA_INTELLIGENCE.md](docs/MEDIA_INTELLIGENCE.md) marks the media-intelligence series complete.
+
+### Verification
+- Backend `pytest` (`tests/test_demand_catchup.py`, `tests/test_summary_motifs.py`, `tests/test_explainable_kinship.py`, `tests/test_household_bridges.py`, `tests/test_relations_api.py`) — 26 passed with `--no-cov`.
+- Frontend `node --test src/lib/ownerHealth.test.mjs src/lib/knowledgeCoverage.test.mjs` — 13/13.
+
 ## [1.37.56] — 2026-10-20
 
 One patch on 1.37.55: Related titles and Plot Lab use genres, crew, and keywords the library already has — fewer empty AND walls when TMDB keywords match.

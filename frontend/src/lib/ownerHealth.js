@@ -38,7 +38,10 @@ export function buildHealthHeroTiles({ health, coverage, openIssues } = {}) {
   const total = num(h.total);
   const unwatched = pct(h.unwatched_pct);
   const rating = pct(h.rating_coverage_pct);
+  // Named kinship is the health that matters for More Like This / inbox bridges.
+  const explainable = pct(c.with_explainable_neighbors_pct);
   const overview = pct(c.with_overview_pct);
+  const kinshipPct = explainable != null ? explainable : overview;
   const issues = typeof openIssues === "number" ? openIssues : null;
   const ratingNote =
     typeof h.rating_coverage_note === "string" && h.rating_coverage_note.trim()
@@ -64,11 +67,14 @@ export function buildHealthHeroTiles({ health, coverage, openIssues } = {}) {
     },
     {
       id: "coverage",
-      label: "Plot knowledge",
-      value: overview == null ? "—" : `${overview}%`,
-      detail: "Overview coverage",
-      to: "/admin/taxonomy",
-      tone: overview != null && overview < 50 ? "warn" : "good",
+      label: "Named kinship",
+      value: kinshipPct == null ? "—" : `${kinshipPct}%`,
+      detail:
+        explainable != null
+          ? "Titles with a named More Like This link"
+          : "Overview coverage",
+      to: "/admin/scheduled-tasks",
+      tone: kinshipPct != null && kinshipPct < 50 ? "warn" : "good",
     },
     {
       id: "rating",

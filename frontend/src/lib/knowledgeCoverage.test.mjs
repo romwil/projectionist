@@ -50,11 +50,11 @@ test("formatCoverageDetail formats averages and counts", () => {
 test("buildKnowledgeCoverageRows omits empty themes and missing synopsis", () => {
   const rows = buildKnowledgeCoverageRows(SAMPLE);
   const ids = rows.map((r) => r.id);
+  assert.equal(ids[0], "explainableNeighbors");
+  assert.equal(ids[1], "neighbors");
   assert.ok(ids.includes("overview"));
   assert.ok(ids.includes("motifs"));
   assert.ok(ids.includes("keywords"));
-  assert.ok(ids.includes("neighbors"));
-  assert.ok(ids.includes("explainableNeighbors"));
   assert.ok(ids.includes("loglines"));
   assert.ok(!ids.includes("themes"));
   assert.ok(!ids.includes("synopsis"));
@@ -94,8 +94,8 @@ test("buildKnowledgeCoverageRows returns empty for null payload", () => {
 test("summarizeKnowledgeCoverage builds explore honesty line", () => {
   const line = summarizeKnowledgeCoverage(SAMPLE, { maxMetrics: 3 });
   assert.match(line, /5,355 titles/);
-  assert.match(line, /Overview 99%/);
-  assert.match(line, /Motifs 100%/);
+  assert.match(line, /Named kinship 4%/);
+  assert.match(line, /Similar cache/);
 });
 
 test("optional coverage failure does not surface Failed to fetch", () => {

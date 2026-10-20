@@ -54,7 +54,19 @@ async def run(
     batch_size = resolve_batch_size(db, TASK_NAME, DEFAULT_BATCH_SIZE)
     # Parked titles (retry backoff / exhausted) are skipped, so ``batch_size``
     # bounds TMDB calls per run regardless of how big the gap is.
-    backlog = db.items_needing_metadata_enrichment(limit=batch_size)
+    from projectionist.telemetry.kinship_miss import prioritize_enrichment_rows
+
+    def _prefer_metadata(database: Database, item_id: int):
+        if not database.item_still_needs_metadata(int(item_id)):
+            return None
+        return database.library_item_by_id(int(item_id))
+
+    backlog = prioritize_enrichment_rows(
+        db,
+        db.items_needing_metadata_enrichment(limit=batch_size),
+        limit=batch_size,
+        include_item_id=_prefer_metadata,
+    )
     if not backlog:
         coverage_signals = emit_metadata_backlog_signals(db, limit=batch_size)
         return {
@@ -195,9 +207,9 @@ def register(scheduler: IdleScheduler) -> None:
             run_fn=run,
             description=(
                 "Trickles through titles that have a TMDB id but still lack release/air "
-                f"dates or plot text. Processes about {DEFAULT_BATCH_SIZE} titles per run "
-                "with paced TMDB requests so free-tier limits stay safe "
-                "(batch auto-tunes from measured history)."
+                f"dates or plot text. Prefers titles owners hit with empty kinship shelves, "
+                f"then about {DEFAULT_BATCH_SIZE} backlog titles per run with paced TMDB "
+                "requests so free-tier limits stay safe (batch auto-tunes from measured history)."
             ),
             items_per_cycle=DEFAULT_BATCH_SIZE,
             catchup_gap_seconds=CATCHUP_GAP_SECONDS,

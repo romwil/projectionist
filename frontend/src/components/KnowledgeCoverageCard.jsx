@@ -109,10 +109,13 @@ export default function KnowledgeCoverageCard({
         ) : null}
       </div>
       <p className="status status-secondary knowledge-coverage-blurb">
-        How deep the curator knows your shelves — overviews, plot motifs, keywords,
-        cosine neighbor cache vs named kinship, and optional loglines. Similar cache
-        can look full while Named kinship stays low: More Like This only shows peers
-        with a concrete story link. Sparse bars mean idle tasks still have work.
+        Named kinship is the health that matters for More Like This and inbox bridges.
+        Similar cache can look full while Named kinship stays low — empty shelves queue
+        catch-up on{" "}
+        <Link to="/admin/scheduled-tasks" className="app-topbar-link">
+          Scheduled Tasks
+        </Link>
+        . Sparse bars mean enrichment still has work.
       </p>
       {loading ? (
         <div className="dash-skeleton" aria-label="Loading coverage">

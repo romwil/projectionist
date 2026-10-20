@@ -28,6 +28,7 @@ from projectionist.library.neighbors import (
 )
 from projectionist.scheduler.autotune import resolve_batch_size
 from projectionist.scheduler.engine import IdleScheduler, TaskDefinition
+from projectionist.telemetry.kinship_miss import merge_preferred_ids, preferred_item_ids
 
 logger = logging.getLogger(__name__)
 
@@ -54,12 +55,19 @@ async def run(
 
     batch_size = resolve_batch_size(db, TASK_NAME, SEEDS_PER_CYCLE)
     missing = db.item_ids_missing_neighbors(limit=batch_size)
+    emb_id_set = set(emb_ids)
+    # Owner demand (empty More Like This / relations / bridge) before cold catch-up.
+    demand_seeds = [
+        item_id
+        for item_id in preferred_item_ids(db, limit=batch_size)
+        if item_id in emb_id_set
+    ]
+    ordered = merge_preferred_ids(demand_seeds, missing, limit=batch_size)
 
     unique_seeds: List[int] = []
     seen: set[int] = set()
 
-    # Prefer catch-up seeds that still have no neighbor rows.
-    for seed_id in missing:
+    for seed_id in ordered:
         if seed_id in seen:
             continue
         seen.add(seed_id)
@@ -127,6 +135,7 @@ async def run(
         "status": "completed",
         "processed": processed,
         "seeds": len(unique_seeds),
+        "demand_prioritized": len(demand_seeds),
         "annotated_explanations": annotated,
         "top_k": DEFAULT_TOP_K,
         "cursor": last_seed,
@@ -145,9 +154,10 @@ def register(scheduler: IdleScheduler) -> None:
             off_loop=True,
             run_fn=run,
             description=(
-                "Refreshes similar-title links from plot-similarity data. Starts with titles "
-                f"that have no matches yet, then revisits about {SEEDS_PER_CYCLE} titles per "
-                "run so large libraries catch up gradually."
+                "Refreshes similar-title links from plot-similarity data. Prefers titles "
+                "owners hit with an empty More Like This or Related shelf, then titles "
+                f"that have no matches yet, then revisits about {SEEDS_PER_CYCLE} titles "
+                "per run so large libraries catch up gradually."
             ),
             items_per_cycle=SEEDS_PER_CYCLE,
             catchup_gap_seconds=CATCHUP_GAP_SECONDS,
