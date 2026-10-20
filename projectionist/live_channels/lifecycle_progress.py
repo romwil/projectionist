@@ -355,6 +355,7 @@ def build_lifecycle_status(settings: Any) -> Dict[str, Any]:
     message — it never flips ``ready`` by itself.
     """
     del settings
+    # Native Live — no Tunarr Docker lifecycle probe.
     return {
         "phase": "idle",
         "percent": 100,
@@ -372,118 +373,6 @@ def build_lifecycle_status(settings: Any) -> Dict[str, Any]:
         "tunarr_url": "",
         "determinate": True,
         "updated_at": 0,
-    }
-
-    store = progress_store()
-    snap = store.snapshot()
-    life = None
-
-    docker_probe: Dict[str, Any] = {}
-    if life.available() and life.orchestration:
-        docker_probe = probe_ready_from_docker(life)
-        if docker_probe.get("container_id"):
-            store.set_container(
-                container_id=str(docker_probe["container_id"]),
-                container_name=life.container_name,
-            )
-
-    url = _resolve_probe_url(settings, life)
-    http_ready = probe_tunarr_http_ready(url) if url else False
-    logs_ready = bool(docker_probe.get("logs_ready"))
-    # HTTP is authoritative. Logs are a soft "still booting / almost there" hint.
-    ready = bool(http_ready)
-
-    waiting_message = "Waiting for Tunarr ready"
-    if docker_probe.get("container_running") and not http_ready:
-        if logs_ready:
-            waiting_message = (
-                "Startup log seen — waiting for Tunarr HTTP to respond"
-            )
-        elif docker_probe.get("transient_noise"):
-            waiting_message = (
-                "Container is up — Meili/scan boot noise is normal; waiting for HTTP"
-            )
-        else:
-            waiting_message = "Container is up — waiting for Tunarr HTTP"
-
-    # When an ensure_running is in flight, prefer the live phase over a cold probe.
-    if snap.get("busy") and snap.get("phase") not in {"ready", "error", "idle"}:
-        if ready:
-            store.set_ready(
-                "Tunarr is ready!",
-                container_id=str(docker_probe.get("container_id") or ""),
-            )
-            snap = store.snapshot()
-        else:
-            # Soft bump into waiting_ready once the container is up.
-            if (
-                docker_probe.get("container_running")
-                and snap.get("phase") in {"pulling", "creating", "starting", "waiting_ready"}
-            ):
-                store.set_phase(
-                    "waiting_ready",
-                    waiting_message,
-                    container_id=str(docker_probe.get("container_id") or ""),
-                    percent=85 if logs_ready else None,
-                )
-                snap = store.snapshot()
-            payload = dict(snap)
-            payload.update(
-                {
-                    "http_ready": http_ready,
-                    "logs_ready": logs_ready,
-                    "container_running": bool(docker_probe.get("container_running")),
-                    "tunarr_url": url,
-                    "still_starting": bool(
-                        docker_probe.get("container_running") and not http_ready
-                    ),
-                    "determinate": True,
-                }
-            )
-            return payload
-
-    if ready:
-        store.set_ready(
-            "Tunarr is ready!",
-            container_id=str(docker_probe.get("container_id") or snap.get("container_id") or ""),
-        )
-        snap = store.snapshot()
-    elif snap.get("phase") == "error":
-        pass
-    elif docker_probe.get("container_running"):
-        store.set_phase(
-            "waiting_ready",
-            waiting_message,
-            container_id=str(docker_probe.get("container_id") or ""),
-            percent=85 if logs_ready else 80,
-        )
-        snap = store.snapshot()
-    elif snap.get("phase") not in {"error"} and not snap.get("busy"):
-        # Idle / not started yet.
-        if snap.get("phase") != "idle":
-            # Keep last error; otherwise show idle.
-            pass
-
-    snap = store.snapshot()
-    return {
-        "phase": snap.get("phase") or "idle",
-        "percent": int(snap.get("percent") or 0),
-        "message": str(snap.get("message") or ""),
-        "ready": bool(snap.get("ready") or ready),
-        "busy": bool(snap.get("busy")),
-        "ok": bool(snap.get("ok", True)),
-        "error": str(snap.get("error") or ""),
-        "container_id": str(snap.get("container_id") or docker_probe.get("container_id") or ""),
-        "container_name": str(snap.get("container_name") or life.container_name),
-        "http_ready": http_ready,
-        "logs_ready": logs_ready,
-        "container_running": bool(docker_probe.get("container_running")),
-        "still_starting": bool(
-            docker_probe.get("container_running") and not http_ready
-        ),
-        "tunarr_url": url,
-        "determinate": True,
-        "updated_at": snap.get("updated_at") or 0,
     }
 
 
@@ -511,26 +400,6 @@ def _warming_lifecycle_status(settings: Any) -> Dict[str, Any]:
         "container_running": False,
         "still_starting": False,
         "tunarr_url": "",
-        "determinate": True,
-        "updated_at": snap.get("updated_at") or 0,
-    }
-    life = None
-    url = _resolve_probe_url(settings, life)
-    return {
-        "phase": snap.get("phase") or "idle",
-        "percent": int(snap.get("percent") or 0),
-        "message": str(snap.get("message") or PHASE_META["idle"][1]),
-        "ready": bool(snap.get("ready")),
-        "busy": bool(snap.get("busy")),
-        "ok": bool(snap.get("ok", True)),
-        "error": str(snap.get("error") or ""),
-        "container_id": str(snap.get("container_id") or ""),
-        "container_name": str(snap.get("container_name") or life.container_name),
-        "http_ready": False,
-        "logs_ready": False,
-        "container_running": False,
-        "still_starting": False,
-        "tunarr_url": url,
         "determinate": True,
         "updated_at": snap.get("updated_at") or 0,
         "warming": True,

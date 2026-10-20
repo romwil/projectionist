@@ -8,8 +8,6 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-# Historical annotations used this name for the broadcast HTTP client.
-TunarrClient = Any
 from projectionist.facets import motif_search_expansions
 from projectionist.live_channels.recipes import (
     ChannelRecipe,
@@ -22,6 +20,9 @@ from projectionist.live_channels.recipes import (
     recipe_from_mapping,
     replace_recipe,
 )
+
+# Historical annotations used this name for the broadcast HTTP client.
+TunarrClient = Any
 
 # Prefer these Plex library mediaTypes when enabling Tunarr libraries for fill.
 _PREFERRED_LIBRARY_TYPES = frozenset({"movies", "shows"})

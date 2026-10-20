@@ -451,7 +451,6 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
     enabled = bool(getattr(features, "live_channels_enabled", False))
     tunarr = getattr(settings, "tunarr", None)
     url = str(getattr(tunarr, "url", "") or "").strip() if tunarr else ""
-    image_tag = str(getattr(tunarr, "image_tag", "") or "").strip() if tunarr else ""
     last_publish_at = str(getattr(tunarr, "last_publish_at", "") or "") if tunarr else ""
     last_error = str(getattr(tunarr, "last_error", "") or "") if tunarr else ""
     plex_pass_confirmed = bool(getattr(tunarr, "plex_pass_confirmed", False)) if tunarr else False
