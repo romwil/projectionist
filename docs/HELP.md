@@ -4,7 +4,7 @@ Projectionist is a private cinema companion for the library you already own. It 
 
 New here? Start with **[Chat](/chat)** and just ask for something in plain language. The top bar keeps Search, Chat, Explore, Live (when stations are on the air), Inbox, My Journey, and Settings as peer destinations (owners also see Admin). Prefer names to icons? The hamburger menu lists those same destinations by label under **Navigate**, then **More** for Related titles, Tags, Watchlist, Library, Help, Privacy, and About — so nothing is reachable from only one of the two. Everything below shows you the shortest path to a result, then explains how it works so you can trust it.
 
-Deep dive: [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) · [About](/about) · [Privacy](/privacy)
+Deep dive: [PRODUCT.md](PRODUCT.md) · [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) · [About](/about) · [Privacy](/privacy)
 
 ---
 
@@ -116,20 +116,19 @@ Those discovery rails only appear when your library has enough matching metadata
 
 ### Live
 
-When the household owner turns **Live Channels** on and publishes stations, **[Live](/live)** appears in the top bar after Explore. It's cable-box TV from *your* library — the same stations you can also open in **Plex → Live TV**. Both are first-class; pick whichever fits the room.
+When the household owner turns **Live Channels** on and publishes stations, **[Live](/live)** appears in the top bar after Explore. It's cable-box TV from *your* library — Guide, Watch, and Weather in Projectionist, playing through the same library player as **Play**. Antenna / **Plex → Live TV** (if you have it) is separate Plex gear; Projectionist does not run that tuner stack.
 
 **Shortest path tonight**
 
 1. Open **[Live](/live)** from the top bar (after Explore).
 2. On Live, use **Guide** for the channel × time grid, or **Watch** to tune the selected station. Click a channel’s name and number on the left — or a show in the grid — to start watching. Hover a show to read the synopsis; near the bottom of the guide the card opens upward so **Open title details** stays on screen. **Weather** sits at the end of the lineup. A guide you have already seen paints immediately; if a refresh never finishes, Live says so instead of leaving “Filling in the guide…” up.
 3. Prefer a dedicated TV window? Tap **Pop out** — Projectionist opens a watch-first window and leaves the original tab on the guide so you aren't running two streams of the same channel.
-4. Prefer living-room apps? Use **Open in Plex Live TV** from Live chrome — same stations, Plex clients.
 
 **While you watch.** Arrow keys change channels; Space / `K` pauses; `C` opens captions when available; `F` toggles fullscreen. Tap the video stage to pause or resume. When a station is between shows (Continuity / pad), a quiet lower-third stays on screen with what’s up next and a countdown to the next real title — even after the full cable OSD fades. Ch±, captions, and fullscreen still motion-reveal on idle.
 
-> **Example:** Live’s Guide shows **101 · Chaos Night** with *Heat* at 45%. Tap the cell → Watch opens on that station mid-airing. Later on the couch, **Open in Plex Live TV** opens the same lineup in the Plex app — you didn't lose the channel.
+> **Example:** Live’s Guide shows **101 · Chaos Night** with *Heat* at 45%. Tap the cell → Watch opens on that station mid-airing in Projectionist — same living-room player as library Play.
 
-**How it works / honest limits.** Live only appears when stations are on the air. Youth mode may hide some stations by content rating. Guests see Live when the owner enabled it for the household — empty states invite you to ask the owner rather than dump Admin steps. Projectionist Live and Plex Live TV share the guide; neither replaces the other. That guide carries about a week of real titles, so the evening grid stays named instead of turning into Unknown Airing at the end of the day. A station that was repeating one title fills in from that station’s show, collection, or theme the next time the guide loads. When the same file is listed twice with no break between, the guide draws one block; a later repeat after another title or a break stays its own cell.
+**How it works / honest limits.** Live only appears when stations are on the air. Youth mode may hide some stations by content rating. Guests see Live when the owner enabled it for the household — empty states invite you to ask the owner rather than dump Admin steps. The guide carries about a week of real titles from Projectionist’s lineup, so the evening grid stays named instead of turning into Unknown Airing at the end of the day. A station that was repeating one title fills in from that station’s show, collection, or theme the next time the guide loads. When the same file is listed twice with no break between, the guide draws one block; a later repeat after another title or a break stays its own cell.
 
 **Tuning & pause.** Channel changes and cold tunes show the same static + wry **tuning** interstitial as Play seeks. A random movie trailer plays only when a movie is starting on that station — not on every tune, and not before a show. It plays through with no title and no skip. Projectionist picks that trailer for this browser. If you pause and the scheduled program ends while you’re still paused, Projectionist asks clearly: **Rejoin live** (jump to what’s airing now) or **Finish this, then rejoin live** (keep the piece you paused, then catch wherever live has moved — Projectionist owns the schedule, so finishing stretches reality on purpose).
 
@@ -797,23 +796,23 @@ When `header_mode` is **dynamic**, idle boards show **RECENTLY ADDED**, **RECENT
 
 ## Live Channels (owners)
 
-Live turns your library into always-on channels. They show up in Projectionist **[Live](/live)** **and** in **Plex Live TV**, beside any antenna channels you already have. You pick what’s on a channel; Projectionist builds and runs the lineup. Household members watch in either place (see **Live** above for the member how-to).
+Live turns your library into always-on channels that household members watch in Projectionist **[Live](/live)** (Guide / Watch / Weather). You pick what’s on a channel; Projectionist builds and runs the lineup from its own schedule (`live_lineup.json`). Playback uses the same library Play path as `/watch` — not a separate broadcast container, and not a Projectionist-managed Plex Live TV tuner. If you already have antenna / HDHomeRun Live TV in Plex, keep it; that stack stays yours.
 
-**Guide length.** Plex reads a guide that is seven days of real programme titles (168 hours). It does not stop at the end of the day: later slots stay titled instead of **Unknown Airing**, and playback does not end just because the evening slice ran out. A background job loads the next week when fewer than two days remain. It refills a station from its saved lineup only when that station’s own cycle is shorter than a week. It asks Plex to re-read the guide. It does not recreate the tuner. After an upgrade that lengthens the guide, use **Refresh Plex map** once under Setup (not **Rebuild tuner in Plex**, which briefly freezes Plex and drops Live TV). A station whose saved cycle is a single title is rewritten from its show, collection, or theme the next time the guide is read. Quarter-hour breaks between titles stay. If the library really has only one playable item, that title still repeats.
+**Guide length.** The household guide carries about a week of real programme titles. It does not stop at the end of the day: later slots stay titled instead of **Unknown Airing**, and playback does not end just because the evening slice ran out. A background job loads the next week when fewer than two days remain. It refills a station from its saved lineup only when that station’s own cycle is shorter than a week. A station whose saved cycle is a single title is rewritten from its show, collection, or theme the next time the guide is read. Quarter-hour breaks between titles stay. If the library really has only one playable item, that title still repeats.
 
 **Turn it on and make a channel (Admin → Live Channels):**
 1. **Turn on Live.** One button; you can turn it off any time and your channels are kept.
 2. **What’s on it.** Pick one: a **show, nonstop**; a **collection or list**; a **mood or taste** (a story mood, your taste, or family-safe); or **Suggest some for me**.
 3. **Make it yours.** Name, channel number, play order (**In order** or **Shuffled**), and whether it includes movies, TV, or both. Under **Fine-tune what qualifies** you can narrow by genre, decade, and rating, and ask how many titles match. Titles in your **NoLive** Plex collection are always skipped.
-4. **Go on air.** Projectionist checks your setup (including that you have **Plex Pass**, which Plex needs for Live TV), starts the broadcast if it isn’t running, builds the lineup, and adds the channel to Plex Live TV. Anything that blocks the launch is named in plain words.
+4. **Go on air.** Projectionist builds the lineup and puts the station on **[Live](/live)**. Anything that blocks the launch is named in plain words.
 
 **Keep up to N on rotation.** Each channel has one setting: **Keep on rotation — No padding, or up to 1–5 titles** — and **Fill spare slots from — Recently added or Recently released**. What’s playing fills the slots first; any spare slots (N minus what’s playing) are filled from the feed you picked, and the padded titles play *after* the playing block, so the channel doesn’t snap back to the start the moment it ends. Four playing with up to 5 adds one title; five or more adds none; nothing playing with up to 3 fills three from the feed. New channels default to **up to 5, Recently added**. Change it later from the channel’s **Settings**, then **Rebuild lineup**. Padded channels keep their order (they don’t use the random shuffle schedule), and a feed title is never one that’s already playing.
 
-**Channels tab.** One board for every channel: number and name, what’s on now and next, and health (**Airing**, **Empty lineup**, **Idle**, **Not reachable**), with links to Watch, the Guide, and the channel’s **Settings**. Settings lets you rename the channel, change what qualifies, switch captions, set rotation padding, and delete it. **Rebuild lineup** re-applies it. Placeholder slots read **Between programs**. Stations without their own artwork publish no logo, so **Plex → Live TV** shows the channel number and name instead of a blank logo cell. A real station icon is still used when one is set. After an upgrade that changes how logos are published, use **Refresh Plex map** under Setup (not **Rebuild tuner in Plex**, which briefly freezes Plex and drops Live TV).
+**Channels tab.** One board for every channel: number and name, what’s on now and next, and health (**Airing**, **Empty lineup**, **Idle**, **Not reachable**), with links to Watch, the Guide, and the channel’s **Settings**. Settings lets you rename the channel, change what qualifies, switch captions, set rotation padding, and delete it. **Rebuild lineup** re-applies it. Placeholder slots read **Between programs**.
 
 **Seasonal shelves.** Under the board, **Seasonal shelves** lists the holidays Explore shelves are built around — the same shelves as **Admin → Holidays**, not a second system. Open one to see the titles from your library that Explore will show for that season. **Ask the professor to curate** replaces that shelf with an ordered mix of familiar and lesser-known titles already in the library, each with a short staff-pick note. You do not have to clear the old picks first. If the professor cannot answer, the shelf says so under the button. **↑ / ↓** reorders them, **Not a fit** takes a bad match off the shelf, you can edit a note, and **Add a title from your library** puts one at the front. **Chat about this** opens the same docked conversation members see, so you can vet a pick without leaving the page. A shelf with those picks is what Explore shows for that season, ahead of the automatic anniversary list. **Name, date & window** retitles the shelf, moves its date, widens or narrows the days before and after, edits the matching keywords, and switches it on or off. Edits are saved as you make them in the same store Explore reads. Adding or deleting whole holidays stays on **Admin → Holidays**.
 
-**Setup tab (after launch).** **Health** shows whether the broadcast is running, whether Plex sees every channel, and whether the Plex tuner is responding, with **Refresh Plex lineup**, **Rebuild in Plex** (a full recreate; it briefly freezes Plex Media Server and drops Plex Live TV — antenna channels stay), and **Refresh status**. **Advanced** holds the connection address, the ready check, **Between-show breaks** and gap fill, Plex Live TV hookup, and broadcast logs. Before the first launch the same panels sit under **Connection & health** at the bottom of the page.
+**Setup tab.** **Health** and **Refresh status** cover whether stations have lineups and whether Live is on. **Advanced** holds **Between-show breaks**, gap fill, Weather Channel music, and related craft controls. Setup no longer asks for a separate broadcast address, image, or API key, and it does not start another container or rebuild a Plex tuner.
 
 **Preroll bumpers (Play + Live):** Bind a host folder of short videos at `/preroll` — Automat default `/mnt/user/data/media/preroll`. Unraid CA / Compose / `rollout.sh` all accept `PROJECTIONIST_PREROLL_MEDIA`. Each movie play draws a random video from that library. Live draws one only when the guide says a movie is starting now or about to air (within a few minutes); a show or a movie already underway does not. Bumpers are not skippable and do not show a title. Each browser picks on its own (there is no shared bumper clock). Missing folder → the picture starts with no bumper (HTTP 204).
 
@@ -823,11 +822,9 @@ Live turns your library into always-on channels. They show up in Projectionist *
 
 **Break length and shuffle.** Under **Advanced → Between-show breaks**, set gap fill toward :00/:30 cuts; **0** means back-to-back. After a library sync, channels with a stored recipe refill automatically when auto-refresh is on. Shuffled channels reshuffle within their full resolved pool across days; show and collection channels fill with every episode, not a short loop. A channel with rotation padding keeps its order instead.
 
-If you already have an antenna / HDHomeRun DVR, keep it — Plex supports multiple tuners. Projectionist adds its own tuner and channel guide and never deletes your existing ones. Virtual channels use numbers from 100 up.
+While a Live job is running, a sticky rail says what is working and other mutating Live buttons stay off — you can still refresh status, switch tabs, and edit forms.
 
-While a Live job is running, a sticky rail says what is working and other mutating Live buttons stay off — you can still refresh status, copy addresses, switch tabs, and edit forms. Admin **Overview** echoes the Plex lineup and the same rail if a job is in flight.
-
-**If play fails with “This live TV session has ended”:** If the Plex grid has turned to **Unknown Airing** after tonight, the guide file was too short. The published guide is now a week long and reloads itself; use **Refresh Plex map** once so Plex picks that up — not **Rebuild tuner in Plex**. If titles are already in the grid and only a desktop app fails, prefer **Plex Web** (`http://your-plex:32400/web`). Desktop clients often hit a known Direct Stream quirk ([Tunarr#718](https://github.com/chrisbenincasa/tunarr/issues/718)) — in that client, open Settings → Debug (or Video) and **disable Direct Stream**, then retry. Also confirm the Plex hookup used the broadcast’s LAN address (the one Setup → Advanced shows), not a dead leftover tuner.
+**Honest limits.** Projectionist does not attach HDHomeRun / XMLTV devices to Plex or rebuild Plex Live TV tuners. Those Tunarr-era paths are sunset — see [PRODUCT.md](PRODUCT.md). If a station won’t play, rebuild its lineup from the channel’s Settings and confirm the title still has a playable Plex rating key.
 
 ---
 
@@ -835,6 +832,7 @@ While a Live job is running, a sticky rail says what is working and other mutati
 
 | Doc | Audience |
 |-----|----------|
+| [PRODUCT.md](PRODUCT.md) | Surface map, SWOT, top 10, parked Live non-goals |
 | [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) | Why / what / how of library knowledge |
 | [ONBOARDING.md](ONBOARDING.md) | First-run wizard & sync |
 | [WEB_UI.md](WEB_UI.md) | Routes & chat features |

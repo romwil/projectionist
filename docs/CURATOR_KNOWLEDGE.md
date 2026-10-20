@@ -291,6 +291,8 @@ Owner-configured auto-repair begins disabled and is limited to allowlisted codes
 | Doc | Role |
 |-----|------|
 | [HELP.md](HELP.md) | In-app Help source (`/help`) |
+| [PRODUCT.md](PRODUCT.md) | Product surface map, SWOT, roadmap parking lot |
+| [MEDIA_INTELLIGENCE.md](MEDIA_INTELLIGENCE.md) | Explainable kinship and demand catch-up |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Scheduler boundary, trickle, Explore APIs |
 | [DATA_MODEL.md](DATA_MODEL.md) | Tables and provenance |
 | [WEB_UI.md](WEB_UI.md) | Routes and Related titles UX |

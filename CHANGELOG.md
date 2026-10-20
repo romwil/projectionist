@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- **Product-truth docs for native Live.** [docs/PRODUCT.md](docs/PRODUCT.md) captures SWOT, surface map, top 10, and parked Tunarr-era items. README and Help key capabilities lead with library **Play** and native **Live** (`/live` + lineup) — not Tunarr dual-watch. Plex Live TV / OTA is called out as owner-managed, not a Projectionist tuner path. Tunarr HDHR/XMLTV/daypart/orchestration leftovers in the Live deferred log are marked sunset/parked; DELIGHT Phase 6 is no longer “in flight.”
+
 ## [1.37.57] — 2026-10-20
 
 One patch on 1.37.56: titles owners actually hit with empty kinship shelves get enrichment priority, and Admin treats Named kinship % as the health that matters.

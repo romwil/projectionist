@@ -4,7 +4,7 @@ Living backlog for experiences that make Projectionist feel more generous. Tags 
 
 The backlog is delivered in **phases**, each one a self-contained milestone that ships and releases on its own. Phases 1 and 2 are done; Phases 3–5 below reflect a **full persona re-survey** (human + AI archetypes) and the locked planning decisions that close the former open questions. A contributor can pick up any remaining phase and plan it without re-deriving the groundwork.
 
-**Phases 1–5 are complete.** The next program is **Phase 6 / 1.36** — honesty and identity, adult evening, owner story, scholar, and craft — specified in [2026-09-24-delight-phase-6.md](superpowers/specs/2026-09-24-delight-phase-6.md). Prefer that spec (and the Cursor plan `persona_delight_top_10_a8ebd6a0`) over inventing a new phase here. The older post–Phase-5 Cursor plan `unified_gaps_and_delight_b1cef49d` is historical.
+**Phases 1–5 are complete.** **Phase 6 / 1.36** (honesty, evening, owner story, scholar, craft — [spec](superpowers/specs/2026-09-24-delight-phase-6.md)) is **historical substrate** absorbed into the **1.37** line; it is no longer the “in flight” program. Living product sequencing (native Live truth, Explore For you, sunset pass, episode bridges) lives in [PRODUCT.md](PRODUCT.md). The older post–Phase-5 Cursor plan `unified_gaps_and_delight_b1cef49d` and Tunarr dual-watch leftovers are parked — see [live-channels-deferred](superpowers/plans/2026-07-29-live-channels-deferred.md).
 
 Jump to: [Roadmap at a glance](#roadmap-at-a-glance) · [Locked decisions](#locked-decisions) · [Phase 3 — adult everyday](#phase-3--adult-everyday--notifications--engagement) · [Phase 4 — youth & guest](#phase-4--distinct-youth--guest-doors) · [Phase 5 — curator depth](#phase-5--giving-the-curators-room-to-shine) · [Phase 6 — 1.36](#phase-6--136-honesty-evening-owner-scholar-craft) · [Persona backlog](#persona--archetype-backlog-the-source-of-the-phases)
 
@@ -24,7 +24,7 @@ The delight work is sequenced by *who* it serves, easiest-to-reach substrate fir
 | **3** | Adult everyday — where-to-watch, synced lists, continue-watching, inbox + mail, taste/weekly rail, **engagement substrate**   | Adult household member (+ owner mail platform)  | ✅ P3a **1.20.0**; P3b **1.21.0**; P3c **1.22.0** |
 | **4** | Distinct youth + guest doors — fail-closed rating gate, youth-safe engagement presets, tour shell, Projectionist request-access    | Youth members, guests                           | ✅ Shipped **1.23.0** |
 | **5** | Curator depth — Enthusiast nudge (no live now-watching), Scholar syllabus, Concierge acquire path, Companion mood + callbacks | The four curator archetypes                     | ✅ Shipped **1.24.0** |
-| **6** | Honesty, evening, owner story, scholar, craft — Investigate / Identify, rematch + Good News, afterglow, whisper, house letter, scholar walks | Owner + adult household + Scholar / Concierge / Companion | **In flight — 1.36** ([spec](superpowers/specs/2026-09-24-delight-phase-6.md)) |
+| **6** | Honesty, evening, owner story, scholar, craft — Investigate / Identify, rematch + Good News, afterglow, whisper, house letter, scholar walks | Owner + adult household + Scholar / Concierge / Companion | **Absorbed into 1.37** ([spec](superpowers/specs/2026-09-24-delight-phase-6.md) historical; living map [PRODUCT.md](PRODUCT.md)) |
 
 
 ```mermaid
@@ -173,9 +173,9 @@ Resolved from the Phase 3–5 planning re-survey. These replace the former open-
 
 **Why this matters / who it delights.** Phases 1–5 shipped memory, owner tools, adult everyday, youth/guest doors, and curator depth. Phase 6 is the next honesty layer: the owner can investigate a misnamed episode, rematch a movie that is not the movie on disk, and hear Good News instead of “download complete.” Adults get afterglow, an unfinished rail, whisper, and tonight’s table. The owner gets a house letter. The Scholar gets footnotes and walks. Craft stays incremental — no rewrite.
 
-**Status:** In flight on `release/1.36`. Prod stays **1.35.5** until the end gate. GitHub tags each sprint (`v1.36.x`); Automat `:8788` waits for Interactive UI QA on **`:8792`**. Never steal smartmap **`:8790`**. Never Repair Plex.
+**Status:** **Absorbed into 1.37** — not “in flight” as a competing program. Residual Phase 6 musts (if any) triage into [PRODUCT.md](PRODUCT.md) top 10 / park; Tunarr-era Live leftovers are **sunset/parked** in [live-channels-deferred](superpowers/plans/2026-07-29-live-channels-deferred.md). Never steal smartmap **`:8790`**. Never Repair Plex.
 
-**Read this, not a new invention here:** [2026-09-24-delight-phase-6.md](superpowers/specs/2026-09-24-delight-phase-6.md) — waves, file locks, vision-default fusion, ACRCloud Identify, CuratorX keep-vs-sunset, end-gate QA.
+**Historical spec (do not invent a new phase from it):** [2026-09-24-delight-phase-6.md](superpowers/specs/2026-09-24-delight-phase-6.md) — waves, file locks, vision-default fusion, ACRCloud Identify, CuratorX keep-vs-sunset, end-gate QA.
 
 **Must (program)**
 

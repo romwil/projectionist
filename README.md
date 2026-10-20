@@ -59,7 +59,8 @@ Teaching principles: **sync vs idle trickle**, **materialize similarity**, **hon
 ## Key capabilities
 
 - **Chat + Explore** — cinema workspace with Lights Up / Lights Down themes; `/explore` browse hub; title detail with trailer, Watch on Plex, and **More Like This** neighbors
-- **Live Channels** — library-aware stations via Tunarr; household **On now** + gasp `/live` (Guide / Watch / pop-out); **Plex Live TV** remains first-class dual-watch (Admin → Live Channels)
+- **Library Play** — in-app `/watch` for movies and episodes (HLS via Plex); shrink / pop-out / phone; captions and resume on the same stage Live uses
+- **Live Channels** — native household stations from your library (`/live` Guide / Watch / Weather / pop-out; lineup under `DATA_DIR`); craft in Admin → Live Channels. **Plex Live TV / OTA** is your Plex setup — Projectionist does not manage that tuner stack
 - **Lobby Theater** — open-LAN kiosk lightbox on a dedicated port (`8791` by default): live **now playing** from Plex sessions, idle poster carousel from your library; pick the idle feed with `?feed=recently_added`, `recently_released`, or `trending` (aliases: `recently-added`, `recent-releases`, `popular`); adaptive Plex polling + shared poster cache for Pi-class wall hardware (Admin → Lobby)
 - **Library-grounded curator** — RAG + facet query over structured credits/motifs and layered plot text; explainable “why this?”; agent tools for similar titles, relations, and people
 - **Confirm before you grab** — Radarr / Sonarr (and optional Seerr) writes need an explicit confirm in chat or the status dock
@@ -213,7 +214,7 @@ Default install is **single-owner** — no login screen. Household features are 
 |------|---------|--------|
 | `features.multi_user_enabled` | `false` | Login + session cookies; owner vs member partitioning |
 | `features.seerr_enabled` | `false` | Seerr discovery / request path for members |
-| `features.live_channels_enabled` | `false` | Tunarr-backed Live Channels → additional Plex Live TV tuner (Admin → Live Channels; keeps OTA) |
+| `features.live_channels_enabled` | `false` | Native Live Channels → household `/live` from the library lineup (Admin → Live Channels) |
 
 Auth methods are opt-in: **Sign in with Plex** (PIN), **local password** (owner registration), and/or **OIDC** (Authelia, Authentik, Keycloak, etc.). The login page shows whatever is configured (`auth_methods` from `GET /api/features`). Plex token paste remains an advanced fallback.
 
@@ -231,6 +232,7 @@ Details: [Wiki → Multi-User](docs/wiki/Multi-User.md) · [Wiki → Seerr](docs
 | [Penetration tests](docs/security/pentests/README.md) | Repeatable Protocol v1.0 + harness |
 | [FAQ](docs/FAQ.md) | Common questions |
 | [Help](docs/HELP.md) | In-app Help source (`/help`); role-aware product guide |
+| [Product map](docs/PRODUCT.md) | Positioning, surface map, SWOT, top 10, parked Tunarr-era items |
 | [Curator knowledge](docs/CURATOR_KNOWLEDGE.md) | Library knowledge depth, motifs, idle curation |
 | [Onboarding](docs/ONBOARDING.md) | First-run checklist |
 | [Web UI](docs/WEB_UI.md) | Workspace layout and routes |

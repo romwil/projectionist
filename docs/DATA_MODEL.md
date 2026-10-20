@@ -647,6 +647,8 @@ erDiagram
 ## Related documentation
 
 - [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) — knowledge dimensions, motifs, idle curation
+- [PRODUCT.md](PRODUCT.md) — product surface map and parked Live non-goals
+- [MEDIA_INTELLIGENCE.md](MEDIA_INTELLIGENCE.md) — kinship layers and miss telemetry
 - [ARCHITECTURE.md](ARCHITECTURE.md) — sync and chat data flows
 - [DESIGN.md](DESIGN.md) — block schema and API usage
 - Historical PRD (`curatorx_prd.md`) — retained locally under `archive/docs/archive/` (gitignored)

@@ -110,7 +110,7 @@ Default values (also in `config/settings.example.json`):
 | `features.ephemeral_collection_gc_enabled` | `true` | Idle prune of expired `[Projectionist]` movie-night / agent collections |
 | `features.ephemeral_collection_gc_dry_run` | `false` | Log what `collection_gc` would delete without calling Plex DELETE |
 | `features.seerr_enabled` | `false` | Activates Seerr connector for household discovery and requests |
-| `features.live_channels_enabled` | `false` | Tunarr-backed Live Channels (additional Plex Live TV tuner alongside OTA); owner toggle in Admin → Live Channels |
+| `features.live_channels_enabled` | `false` | Native Live Channels (household `/live` from the library lineup); owner toggle in Admin → Live Channels |
 | `tunarr.url` | `""` | BYO Tunarr base URL for Projectionist→Tunarr API; may be `host.docker.internal` for sibling containers |
 | `tunarr.public_url` | `""` | LAN-reachable Tunarr base for **Plex** Live TV attach paste URLs (never `host.docker.internal`). Example: `http://10.10.1.202:18765` |
 | `tunarr.host_port` | `0` | Preferred host port for managed Tunarr HTTP (default candidate **18765**; probed for freeness). `0` = built-in default |
