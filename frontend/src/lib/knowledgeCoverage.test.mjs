@@ -18,11 +18,13 @@ const SAMPLE = {
   with_keywords_pct: 92.6,
   with_themes_pct: 0,
   with_neighbors_pct: 16.1,
+  with_explainable_neighbors_pct: 4.2,
   with_loglines_pct: 3.2,
   avg_motifs_per_title: 8.0,
   avg_keywords_per_title: 11.4,
   avg_themes_per_title: 0,
   neighbor_edges: 8625,
+  explainable_neighbor_edges: 1200,
   motif_rows: 42581,
   keyword_rows: 61185,
   theme_rows: 0,
@@ -52,6 +54,7 @@ test("buildKnowledgeCoverageRows omits empty themes and missing synopsis", () =>
   assert.ok(ids.includes("motifs"));
   assert.ok(ids.includes("keywords"));
   assert.ok(ids.includes("neighbors"));
+  assert.ok(ids.includes("explainableNeighbors"));
   assert.ok(ids.includes("loglines"));
   assert.ok(!ids.includes("themes"));
   assert.ok(!ids.includes("synopsis"));
@@ -59,8 +62,12 @@ test("buildKnowledgeCoverageRows omits empty themes and missing synopsis", () =>
   assert.equal(motifs.pctLabel, "100%");
   assert.equal(motifs.detail, "8.0/title");
   const similarTitles = rows.find((r) => r.id === "neighbors");
-  assert.equal(similarTitles.label, "Similar titles");
-  assert.equal(similarTitles.detail, "8625 similarity links");
+  assert.equal(similarTitles.label, "Similar cache");
+  assert.equal(similarTitles.detail, "8625 cosine links");
+  const named = rows.find((r) => r.id === "explainableNeighbors");
+  assert.equal(named.label, "Named kinship");
+  assert.equal(named.detail, "1200 explainable links");
+  assert.equal(named.pctLabel, "4%");
 });
 
 test("buildKnowledgeCoverageRows includes themes and synopsis when present", () => {

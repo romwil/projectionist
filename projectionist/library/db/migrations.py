@@ -214,6 +214,24 @@ def _notification_read_at(db: "SchemaMigrationsMixin", conn: sqlite3.Connection)
         conn.execute("ALTER TABLE user_notifications ADD COLUMN read_at REAL")
 
 
+def _item_neighbors_explainable(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
+    """Materialize whether each neighbor row has a named plot link (Release 1)."""
+    del db
+    columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(item_neighbors)")}
+    if "explainable" not in columns:
+        conn.execute(
+            "ALTER TABLE item_neighbors ADD COLUMN explainable INTEGER NOT NULL DEFAULT 0"
+        )
+    if "plot_link_json" not in columns:
+        conn.execute("ALTER TABLE item_neighbors ADD COLUMN plot_link_json TEXT")
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_neighbors_item_explainable
+            ON item_neighbors(item_id, explainable, score DESC)
+        """
+    )
+
+
 def _build_migrations() -> List[Migration]:
     def wrap(method_name: str) -> MigrationFn:
         def _run(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
@@ -278,6 +296,7 @@ def _build_migrations() -> List[Migration]:
         (54, "holiday_rail_shelf_mode", wrap("_migrate_holiday_rail_shelf_mode")),
         (55, "library_media_added_index", _library_media_added_index),
         (56, "notification_read_at", _notification_read_at),
+        (57, "item_neighbors_explainable", _item_neighbors_explainable),
     ]
 
 

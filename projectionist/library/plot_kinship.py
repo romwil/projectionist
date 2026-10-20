@@ -6,7 +6,8 @@ keyword, or credit overlap is not itself a reason to recommend a title.
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Optional, Sequence, Set
+import json
+from typing import Any, Dict, Mapping, Optional, Sequence, Set
 
 # Cosine below "solid plot kinship" is too weak to explain as a story link.
 MIN_SURPRISE_COSINE = 0.55
@@ -246,6 +247,95 @@ def _sentence(terms: Sequence[str]) -> str:
     if len(chosen) == 1:
         return f"Both stories turn on {_phrase(chosen[0])}."
     return f"Both stories turn on {_phrase(chosen[0])} and {_phrase(chosen[1])}."
+
+
+def build_explanation(
+    *,
+    kind: str,
+    sentence: str,
+    terms: Optional[Sequence[str]] = None,
+    seed_ids: Optional[Sequence[int]] = None,
+    peer_id: Optional[int] = None,
+    evidence: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Shared explanation object for relations, More Like This, and inbox bridges.
+
+    ``kind`` is one of ``plot_link``, ``shared_crew``, ``collection``
+    (and later ``watched_bridge``). Cosine proximity alone is never a kind.
+    """
+    cleaned_kind = str(kind or "").strip().lower() or "plot_link"
+    payload: Dict[str, Any] = {
+        "kind": cleaned_kind,
+        "sentence": " ".join(str(sentence or "").split()),
+        "terms": [str(term).strip() for term in (terms or []) if str(term).strip()],
+        "evidence": dict(evidence or {}),
+    }
+    if seed_ids is not None:
+        payload["seed_ids"] = [int(item_id) for item_id in seed_ids]
+    if peer_id is not None:
+        payload["peer_id"] = int(peer_id)
+    return payload
+
+
+def explanation_from_plot_link(
+    link: Mapping[str, Any],
+    *,
+    peer_id: Optional[int] = None,
+    seed_ids: Optional[Sequence[int]] = None,
+    evidence: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Wrap a ``specific_plot_link`` result as a shared explanation object."""
+    extra = dict(evidence or {})
+    if "shelf_note" in link and link.get("shelf_note"):
+        extra.setdefault("shelf_note", link["shelf_note"])
+    return build_explanation(
+        kind="plot_link",
+        sentence=str(link.get("sentence") or ""),
+        terms=[str(term) for term in (link.get("terms") or [])],
+        seed_ids=seed_ids,
+        peer_id=peer_id,
+        evidence=extra,
+    )
+
+
+def plot_link_json(link: Optional[Mapping[str, Any]]) -> Optional[str]:
+    """Serialize a plot-link dict for ``item_neighbors.plot_link_json``."""
+    if not link:
+        return None
+    sentence = str(link.get("sentence") or "").strip()
+    if not sentence:
+        return None
+    return json.dumps(
+        {
+            "sentence": sentence,
+            "terms": [str(term) for term in (link.get("terms") or [])][:3],
+        },
+        separators=(",", ":"),
+    )
+
+
+def parse_plot_link_json(raw: Any) -> Optional[Dict[str, Any]]:
+    """Parse stored ``plot_link_json`` back into ``{sentence, terms}``."""
+    if raw is None:
+        return None
+    if isinstance(raw, dict):
+        sentence = str(raw.get("sentence") or "").strip()
+        if not sentence:
+            return None
+        return {
+            "sentence": sentence,
+            "terms": [str(term) for term in (raw.get("terms") or [])][:3],
+        }
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = json.loads(text)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    return parse_plot_link_json(parsed)
 
 
 def specific_plot_link(

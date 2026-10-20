@@ -1361,10 +1361,18 @@ class NeighborsFeedTests(unittest.TestCase):
                     ),
                 }
             )
-            db.set_neighbors(seed, [(twin, 0.99, 0.1), (odd, 0.9, 0.85)])
+            from projectionist.library.neighbors import enrich_neighbors_with_explanations
+
+            db.set_neighbors(
+                seed,
+                enrich_neighbors_with_explanations(
+                    db, seed, [(twin, 0.99, 0.1), (odd, 0.9, 0.85)]
+                ),
+            )
             similar = neighbors_payload(db, seed, mode="similar", limit=5)
             surprising = neighbors_payload(db, seed, mode="surprising", limit=5)
-            self.assertEqual(similar["items"][0]["title"], "Twin")
+            # Twin has no plot text → not explainable; Odd shares amateur bakers.
+            self.assertEqual([item["title"] for item in similar["items"]], ["Odd"])
             self.assertEqual(surprising["items"][0]["title"], "Odd")
             self.assertIn("amateur bakers", surprising["items"][0]["plot_link"].lower())
             self.assertNotIn("almost no shared", surprising["items"][0]["plot_link"].lower())
@@ -1449,6 +1457,10 @@ class ExploreFeedApiTests(unittest.TestCase):
         self.assertEqual(motifs.json()["facet_type"], "motif")
 
     def test_neighbors_endpoint_by_item_id(self) -> None:
+        from projectionist.library.neighbors import enrich_neighbors_with_explanations
+
+        bake = "Amateur bakers compete around a signature bake inside a failing colony."
+        spy = "Rivals reunite after amateur bakers compete and ruin a signature bake tonight."
         seed = self.db.upsert_library_item(
             {
                 "rating_key": "s1",
@@ -1456,6 +1468,7 @@ class ExploreFeedApiTests(unittest.TestCase):
                 "title": "Seed",
                 "year": 1982,
                 "tmdb_id": 1,
+                "summary": bake,
             }
         )
         other = self.db.upsert_library_item(
@@ -1465,9 +1478,13 @@ class ExploreFeedApiTests(unittest.TestCase):
                 "title": "Neighbor",
                 "year": 1984,
                 "tmdb_id": 2,
+                "summary": spy,
             }
         )
-        self.db.set_neighbors(seed, [(other, 0.88, 0.4)])
+        self.db.set_neighbors(
+            seed,
+            enrich_neighbors_with_explanations(self.db, seed, [(other, 0.88, 0.4)]),
+        )
         response = self.client.get(
             f"/api/library/neighbors/{seed}",
             params={"mode": "similar", "limit": 5},

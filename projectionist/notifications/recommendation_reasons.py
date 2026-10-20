@@ -208,7 +208,7 @@ def _candidate_ids(db: Database, seed_ids: Sequence[int]) -> List[int]:
 
     for seed_id in seed_ids:
         try:
-            neighbors = db.get_neighbors(int(seed_id), limit=8) or []
+            neighbors = db.get_neighbors(int(seed_id), limit=8, explainable_only=True) or []
         except Exception:  # noqa: BLE001
             neighbors = []
         for neighbor in neighbors:

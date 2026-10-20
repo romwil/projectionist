@@ -1253,7 +1253,9 @@ class ToolRegistry:
         if seed_row is None:
             return json.dumps({"error": "Seed title not found in library", "items": []})
 
-        neighbors = self.db.get_neighbors(int(seed_row["id"]), mode=mode, limit=limit)
+        neighbors = self.db.get_neighbors(
+            int(seed_row["id"]), mode=mode, limit=limit, explainable_only=True
+        )
         cards = []
         items = []
         for row in neighbors:

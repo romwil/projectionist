@@ -1,6 +1,6 @@
 # Projectionist — Data Model
 
-Reference for persistent storage: SQLite tables, settings fields, and Pydantic schemas. Schema definitions live in `projectionist/library/db.py` and `projectionist/models/schemas.py`.
+Reference for persistent storage: SQLite tables, settings fields, and Pydantic schemas. Ordered migrations live in `projectionist/library/db/migrations.py`; migration bodies in `projectionist/library/db/_schema.py` (plus a few inline helpers in `migrations.py`). Pydantic request/response models: `projectionist/models/schemas.py`.
 
 ---
 
@@ -127,13 +127,15 @@ Layered embedding input uses summary + TMDB overview/tagline + optional `long_sy
 
 #### `item_neighbors`
 
-Materialized plot similarity cache (idle `plot_neighbors`). Read by Explore, Title Detail, and `find_similar_titles`.
+Materialized plot similarity cache (idle `plot_neighbors`). More Like This, relations, and `find_similar_titles` surface **explainable** rows only (named plot link). Raw cosine peers may still sit in the cache for annotate / diagnostics.
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `item_id` / `neighbor_id` | INTEGER PK | Library item pair |
 | `score` | REAL | Cosine similarity |
 | `surprise_score` | REAL | High cosine with low genre/keyword/credit overlap |
+| `explainable` | INTEGER | `1` when `specific_plot_link` named a shared subject |
+| `plot_link_json` | TEXT | `{"sentence","terms"}` when explainable; `{}` once evaluated with no link |
 
 #### `title_relations`
 
@@ -153,7 +155,7 @@ Lightweight title graph (idle `title_relations_refresh`).
 | Column | Type | Description |
 |--------|------|-------------|
 | `item_id` | INTEGER FK | References `library_items.id` |
-| `facet_type` | TEXT | Sync types (`genre`, `director`, …) plus idle `motif` / `theme` |
+| `facet_type` | TEXT | Sync types today: `director`, `actor`, `keyword`, `country`, `language` (plus idle `motif` / `theme`). **`genre` facets are not emitted yet** — genres live on `library_items.genres` JSON until Release 3. |
 | `facet_value` | TEXT | Facet string |
 
 Idle motif/theme replaces only its own `facet_type` so sync-managed facets are preserved.
@@ -171,9 +173,9 @@ Current extraction:
 
 **Themes (no LLM):** idle `keyword_theme_tagging` maps frequent TMDB keywords onto a small controlled vocabulary and writes `facet_type='theme'`.
 
-Knowledge coverage stats (`GET /api/library/stats` → `knowledge_coverage`, or `/api/library/knowledge-coverage`) expose % with overview / motifs / keywords / neighbors / loglines so sparsity stays visible to Admin/Explore.
+Knowledge coverage stats (`GET /api/library/stats` → `knowledge_coverage`, or `/api/library/knowledge-coverage`) expose % with overview / motifs / keywords / raw neighbors / **explainable neighbors** / loglines so sparsity stays visible to Admin/Explore.
 
-Product explanation: [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md). Durable `scheduled_task_runs` history + auto-tune: [ARCHITECTURE.md](ARCHITECTURE.md#why-last-run-only-failed-and-what-replaced-it).
+Product explanation: [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) · [MEDIA_INTELLIGENCE.md](MEDIA_INTELLIGENCE.md). Durable `scheduled_task_runs` history + auto-tune: [ARCHITECTURE.md](ARCHITECTURE.md#why-last-run-only-failed-and-what-replaced-it).
 
 #### `preference_facts`
 
@@ -617,6 +619,8 @@ erDiagram
         int neighbor_id FK
         real score
         real surprise_score
+        int explainable
+        text plot_link_json
     }
     title_relations {
         int from_id FK

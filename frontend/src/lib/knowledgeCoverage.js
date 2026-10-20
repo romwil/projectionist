@@ -38,9 +38,16 @@ export const KNOWLEDGE_COVERAGE_METRICS = [
   {
     id: "neighbors",
     pctKey: "with_neighbors_pct",
-    label: "Similar titles",
+    label: "Similar cache",
     detailKey: "neighbor_edges",
-    detailSuffix: " similarity links",
+    detailSuffix: " cosine links",
+  },
+  {
+    id: "explainableNeighbors",
+    pctKey: "with_explainable_neighbors_pct",
+    label: "Named kinship",
+    detailKey: "explainable_neighbor_edges",
+    detailSuffix: " explainable links",
   },
   {
     id: "loglines",

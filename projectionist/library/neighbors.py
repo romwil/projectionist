@@ -13,6 +13,11 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, 
 
 from projectionist.library.db import Database
 from projectionist.library.embeddings import COSINE_OFFLOAD_THRESHOLD, cosine_similarity
+from projectionist.library.plot_kinship import (
+    plot_blob,
+    plot_link_json,
+    specific_plot_link,
+)
 from projectionist.library.vec_index import ann_candidate_ids, vec_available
 
 DEFAULT_TOP_K = 25
@@ -132,6 +137,90 @@ def build_item_token_map(
     return out
 
 
+def _shelf_label_set(tokens: Set[str]) -> Set[str]:
+    """Strip person: tokens so plot-link blocklist stays shelf-shaped."""
+    return {
+        token
+        for token in tokens
+        if token and not str(token).startswith("person:")
+    }
+
+
+def enrich_neighbors_with_explanations(
+    db: Database,
+    seed_id: int,
+    neighbors: Sequence[Tuple[int, float, float]],
+) -> List[Tuple[int, float, float, int, Optional[str]]]:
+    """Mark each cosine peer explainable when ``specific_plot_link`` names a subject."""
+    seed = db.library_item_by_id(int(seed_id))
+    if seed is None:
+        return [
+            (int(nid), float(score), float(surprise), 0, None)
+            for nid, score, surprise in neighbors
+        ]
+    seed_plot = plot_blob(seed)
+    seed_tokens = metadata_overlap_tokens(seed)
+    peer_ids = [int(nid) for nid, _s, _u in neighbors]
+    peer_rows = {
+        int(row["id"]): row
+        for row in (db.library_item_by_id(pid) for pid in peer_ids)
+        if row is not None
+    }
+    enriched: List[Tuple[int, float, float, int, Optional[str]]] = []
+    for neighbor_id, score, surprise in neighbors:
+        peer = peer_rows.get(int(neighbor_id))
+        if peer is None:
+            enriched.append((int(neighbor_id), float(score), float(surprise), 0, None))
+            continue
+        peer_tokens = metadata_overlap_tokens(peer)
+        link = specific_plot_link(
+            seed_text=seed_plot,
+            peer_text=plot_blob(peer),
+            shelf_labels=_shelf_label_set(seed_tokens | peer_tokens),
+        )
+        # Non-null JSON (including "{}") marks the row as evaluated so idle
+        # annotate does not revisit cosine-only peers forever.
+        link_json = plot_link_json(link) or "{}"
+        enriched.append(
+            (
+                int(neighbor_id),
+                float(score),
+                float(surprise),
+                1 if link else 0,
+                link_json,
+            )
+        )
+    return enriched
+
+
+def annotate_explainable_neighbors(
+    db: Database,
+    seed_ids: Sequence[int],
+) -> int:
+    """Backfill ``explainable`` / ``plot_link_json`` on existing neighbor rows.
+
+    Cheap idle pass: does not re-run cosine; re-evaluates plot text only.
+    Returns the number of seed ids annotated.
+    """
+    annotated = 0
+    for seed_id in seed_ids:
+        seed_id = int(seed_id)
+        raw = db.get_neighbors(seed_id, mode="similar", limit=100, explainable_only=False)
+        if not raw:
+            continue
+        triples = [
+            (
+                int(row["neighbor_id"]),
+                float(row["score"] or 0),
+                float(row["surprise_score"] or 0) if "surprise_score" in row.keys() else 0.0,
+            )
+            for row in raw
+        ]
+        db.set_neighbors(seed_id, enrich_neighbors_with_explanations(db, seed_id, triples))
+        annotated += 1
+    return annotated
+
+
 def refresh_neighbors_for_items(
     db: Database,
     seed_ids: Sequence[int],
@@ -181,6 +270,9 @@ def refresh_neighbors_for_items(
             candidates,
             top_k=top_k,
         )
-        db.set_neighbors(seed_id, neighbors)
+        db.set_neighbors(
+            seed_id,
+            enrich_neighbors_with_explanations(db, seed_id, neighbors),
+        )
         processed += 1
     return processed
