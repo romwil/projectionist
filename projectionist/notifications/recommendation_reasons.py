@@ -853,14 +853,21 @@ def _pick_from_row(
     }
 
 
-def pick_linked_unwatched(
+def list_linked_unwatched(
     db: Database,
     *,
+    limit: int = 12,
     watched_rows: Optional[Sequence[Mapping[str, Any]]] = None,
     user_id: Optional[str] = None,
     multi_user_enabled: bool = False,
-) -> Optional[Dict[str, Any]]:
-    """First unwatched title with a named ``watched_bridge`` to household evidence."""
+) -> List[Dict[str, Any]]:
+    """Unwatched titles with named ``watched_bridge`` explanations (inbox refusal rules).
+
+    Same seed ledger, explainable-only candidates, and ``bridge_between`` gate as
+    ``pick_linked_unwatched`` — returns up to ``limit`` distinct peers, or [] when
+    there is no honest why (never cosine-only filler).
+    """
+    capped = max(1, min(int(limit or 12), 50))
     watched = (
         list(watched_rows)
         if watched_rows is not None
@@ -869,7 +876,7 @@ def pick_linked_unwatched(
         )
     )
     if not watched:
-        return None
+        return []
     seed_ids = []
     for row in watched[:8]:
         try:
@@ -877,10 +884,13 @@ def pick_linked_unwatched(
         except (TypeError, ValueError, KeyError):
             continue
     if not seed_ids:
-        return None
+        return []
     candidate_ids = _candidate_ids(db, seed_ids)
     loaded = _load_items(db, candidate_ids)
+    picks: List[Dict[str, Any]] = []
     for item_id in candidate_ids:
+        if len(picks) >= capped:
+            break
         row = loaded.get(item_id)
         if row is None:
             continue
@@ -896,12 +906,16 @@ def pick_linked_unwatched(
         evidence = explanation.get("evidence") if isinstance(explanation.get("evidence"), dict) else {}
         if evidence:
             seed_title = str(evidence.get("seed_title") or "") or None
-        return _pick_from_row(
-            row,
-            why=str(explanation.get("sentence") or ""),
-            seed_title=seed_title,
-            explanation=explanation,
+        picks.append(
+            _pick_from_row(
+                row,
+                why=str(explanation.get("sentence") or ""),
+                seed_title=seed_title,
+                explanation=explanation,
+            )
         )
+    if picks:
+        return picks
     # Seeds existed but no named peer — prioritize enrichment for those seeds.
     try:
         from projectionist.telemetry.kinship_miss import schedule_kinship_miss
@@ -912,9 +926,27 @@ def pick_linked_unwatched(
                 reason="bridge_zero_peers",
                 context_source="recommendation_bridge",
             )
-    except Exception:  # noqa: BLE001 — never break inbox / nudge picks
+    except Exception:  # noqa: BLE001 — never break inbox / explore / nudge picks
         pass
-    return None
+    return []
+
+
+def pick_linked_unwatched(
+    db: Database,
+    *,
+    watched_rows: Optional[Sequence[Mapping[str, Any]]] = None,
+    user_id: Optional[str] = None,
+    multi_user_enabled: bool = False,
+) -> Optional[Dict[str, Any]]:
+    """First unwatched title with a named ``watched_bridge`` to household evidence."""
+    picks = list_linked_unwatched(
+        db,
+        limit=1,
+        watched_rows=watched_rows,
+        user_id=user_id,
+        multi_user_enabled=multi_user_enabled,
+    )
+    return picks[0] if picks else None
 
 
 def library_row_for_ref(db: Database, item: Mapping[str, Any]) -> Optional[Dict[str, Any]]:

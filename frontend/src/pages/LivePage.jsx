@@ -84,7 +84,13 @@ export default function LivePage({ popout = false }) {
       });
       const enabled = Boolean(snapshot?.enabled);
       setFeatureOn(enabled);
-      setFeatureReady(enabled && snapshot?.reason !== "tunarr_url_missing");
+      // Ready when Live is on and we are not stuck on an empty-lineup reason
+      // (legacy tunarr_url_missing still appears in old cached snapshots).
+      const emptyLineup =
+        snapshot?.reason === "lineup_missing" ||
+        snapshot?.reason === "tunarr_url_missing" ||
+        snapshot?.reason === "no_lineup";
+      setFeatureReady(enabled && !emptyLineup);
       if (!enabled) {
         setGuide(null);
         setError("");
@@ -184,7 +190,7 @@ export default function LivePage({ popout = false }) {
   function handleTune(channelId, program = null) {
     const id = String(channelId || "").trim();
     if (!id) return;
-    // LivePlayer warms Tunarr before loadSource — do not race tune here.
+    // LivePlayer warms the native lineup stream before loadSource — do not race tune here.
     setActiveChannelId(id);
     setSelectedProgram(program && typeof program === "object" ? program : null);
     setMode("watch");
@@ -227,7 +233,7 @@ export default function LivePage({ popout = false }) {
     // Must open synchronously inside the click gesture (popup blockers).
     const popup = window.open(popoutHref, "projectionist-live-tv", features);
     if (!popup) return;
-    // Hand off: unload opener LivePlayer so only the pop-out holds the Tunarr session.
+    // Hand off: unload opener LivePlayer so only the pop-out holds the Live session.
     setMode("guide");
     setSearchParams(
       (prev) => {

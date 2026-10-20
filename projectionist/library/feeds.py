@@ -2227,3 +2227,53 @@ def feed_tonight_table(
         },
         "note": note,
     }
+
+
+def feed_for_you(
+    db: Database,
+    *,
+    limit: int = DEFAULT_FEED_LIMIT,
+    user_id: Optional[str] = None,
+    multi_user_enabled: bool = False,
+) -> Dict[str, Any]:
+    """Explore For you — unwatched titles with named household ``watched_bridge`` whys.
+
+    Reuses the Release 2 bridge builder (same refusal rules as inbox nudges /
+    whispers). Empty means no named link yet — never cosine-only filler.
+    """
+    from projectionist.notifications.recommendation_reasons import list_linked_unwatched
+
+    capped = _cap_limit(limit)
+    raw = list_linked_unwatched(
+        db,
+        limit=capped,
+        user_id=user_id,
+        multi_user_enabled=multi_user_enabled,
+    )
+    items: List[Dict[str, Any]] = []
+    for pick in raw:
+        if not isinstance(pick, dict):
+            continue
+        item = dict(pick)
+        why = str(item.get("why") or item.get("recommendation_reason") or "").strip()
+        if why:
+            item["why"] = why
+            item["recommendation_reason"] = why
+        if item.get("rating_key") or item.get("id") is not None:
+            item["in_library"] = True
+        items.append(item)
+    note = None
+    if not items:
+        note = (
+            "No named links from what you've watched yet — finish a title, "
+            "or let Scheduled Tasks catch up Named kinship."
+        )
+    return {
+        "feed": "for-you",
+        "items": items,
+        "total": len(items),
+        "limit": capped,
+        "note": note,
+        "mode": "watched_bridge",
+        "empty": not items,
+    }

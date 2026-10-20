@@ -2042,6 +2042,21 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
   flex-wrap: wrap;
   margin-bottom: 0.75rem;
 }
+.owner-health-story-headline {
+  margin: 0 0 0.35rem;
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+.owner-health-story-body {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--muted);
+  max-width: 48rem;
+  line-height: 1.45;
+}
+.owner-health-story-body.tone-warn {
+  color: var(--text);
+}
 .owner-health-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

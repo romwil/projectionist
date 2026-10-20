@@ -110,6 +110,10 @@ Watch ledger (`watch_completions` / `watch_sessions` / terminal `watch_events`) 
 
 ---
 
+## Consumed by Explore For you
+
+Explore’s **For you** rail (`feed_for_you` / hub `for_you`) lists unwatched titles through the same `list_linked_unwatched` → `watched_bridge` path as inbox nudges. Weekly persona rails remain a separate taste feature; they are not a cosine fallback for this shelf.
+
 ## Next horizon (out of this series)
 
 - Full closed-loop promote from kinship_miss into staged augmentations (not just idle priority).
