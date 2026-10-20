@@ -64,14 +64,29 @@ def _movie(
     }
 
 
-def _neighbor(db: Database, seed_id: int, peer_id: int) -> None:
+def _neighbor(db: Database, seed_id: int, peer_id: int, *, seed_plot: str = "", peer_plot: str = "") -> None:
+    from projectionist.library.plot_kinship import plot_link_json, specific_plot_link
+
+    link = None
+    if seed_plot and peer_plot:
+        link = specific_plot_link(
+            seed_text=seed_plot, peer_text=peer_plot, shelf_labels=set()
+        )
+    if link is None and seed_plot == "" and peer_plot == "":
+        # Call sites that omit plots still need an explainable edge for R1+ picks.
+        link = specific_plot_link(
+            seed_text=BAKE_PLOT, peer_text=SPY_PLOT, shelf_labels=set()
+        )
+    link_json = plot_link_json(link) if link else "{}"
+    explainable = 1 if link else 0
     with db.connect() as conn:
         conn.execute(
             """
-            INSERT OR REPLACE INTO item_neighbors (item_id, neighbor_id, score, surprise_score)
-            VALUES (?, ?, ?, ?)
+            INSERT OR REPLACE INTO item_neighbors
+                (item_id, neighbor_id, score, surprise_score, explainable, plot_link_json)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (int(seed_id), int(peer_id), 0.9, 0.1),
+            (int(seed_id), int(peer_id), 0.9, 0.1, explainable, link_json or "{}"),
         )
 
 
