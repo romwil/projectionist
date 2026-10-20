@@ -60,6 +60,34 @@ test("relationWhyCopy surfaces shared genres when the main label does not", () =
   );
 });
 
+test("relationWhyCopy prefers shared keywords over genres for detail", () => {
+  assert.deepEqual(
+    relationWhyCopy({
+      label: "Directed by Ava Director",
+      shared_keywords: ["heist", "double cross"],
+      shared_genres: ["Crime"],
+    }),
+    {
+      label: "Directed by Ava Director",
+      detail: "Shared keywords: heist, double cross.",
+    },
+  );
+});
+
+test("relationWhyCopy cites keywords under a plot link when shelf_note is empty", () => {
+  assert.deepEqual(
+    relationWhyCopy({
+      label: "Related",
+      plot_link: "Both stories turn on museum exhibits.",
+      shared_keywords: ["museum"],
+    }),
+    {
+      label: "Both stories turn on museum exhibits.",
+      detail: "Shared keywords: museum.",
+    },
+  );
+});
+
 test("filterRelationEdges supports relation types and surprising similarity", () => {
   const edges = [
     { relation: "collection", why: { label: "Same collection" } },

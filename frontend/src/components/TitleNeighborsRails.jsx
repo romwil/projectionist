@@ -81,7 +81,9 @@ export default function TitleNeighborsRails({
   }, [mediaType, itemId, idType]);
 
   const collectionEdges = (relations || []).filter((edge) => edge.relation === "collection");
-  const crewEdges = (relations || []).filter((edge) => edge.relation === "shared_crew");
+  const crewEdges = (relations || []).filter((edge) =>
+    ["shared_crew", "directed_by", "written_by"].includes(edge.relation),
+  );
   const plotEdges = (relations || []).filter(
     (edge) => edge.relation === "neighbor" && hasSpecificStoryLink(edge.why),
   );

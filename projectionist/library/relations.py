@@ -3,7 +3,8 @@
 v1 edges:
 - ``collection`` — same ``tmdb_collection_id`` (bidirectional)
 - ``neighbor`` — optional mirror of top cosine neighbors from ``item_neighbors``
-- ``shared_crew`` — optional top person overlaps (Directing/Writing)
+- ``shared_crew`` — optional top person overlaps (Directing/Writing, ≥2 shared)
+- ``directed_by`` / ``written_by`` — solo auteur edges (one shared director/writer)
 
 LLM theme tagging is a separate optional idle stub that skips without an API key.
 """
@@ -29,9 +30,13 @@ RelationRow = Tuple[int, int, str, float, str]
 COLLECTION_SOURCE = "tmdb_collection"
 NEIGHBOR_SOURCE = "item_neighbors"
 SHARED_CREW_SOURCE = "credits_overlap"
+DIRECTED_BY_SOURCE = "credits_director"
+WRITTEN_BY_SOURCE = "credits_writer"
 CREW_DEPARTMENTS = {"Directing", "Writing", "Directors", "Creator"}
 MAX_SHARED_CREW_PER_ITEM = 8
 MIN_SHARED_CREW = 2
+MAX_PERSON_EDGE_PER_ITEM = 8
+PERSON_EDGE_WEIGHT = 0.45
 
 
 def _json_labels(value: Any) -> List[str]:
@@ -124,16 +129,39 @@ def _shelf_labels(row: Any, people: Sequence[str]) -> Set[str]:
     return labels
 
 
+def _is_director_credit(department: str, job: str) -> bool:
+    dept = str(department or "").strip()
+    role = str(job or "").strip().casefold()
+    return dept in {"Directing", "Directors"} or role == "director"
+
+
+def _is_writer_credit(department: str, job: str) -> bool:
+    dept = str(department or "").strip()
+    role = str(job or "").strip().casefold()
+    return dept in {"Writing", "Creator"} or role in {
+        "writer",
+        "screenplay",
+        "creator",
+    }
+
+
 def _relation_context(
     db: Database,
     item_id: int,
     rows: Sequence[Any],
-) -> Tuple[Mapping[int, Any], Mapping[int, List[str]]]:
+) -> Tuple[
+    Mapping[int, Any],
+    Mapping[int, List[str]],
+    Mapping[int, List[str]],
+    Mapping[int, List[str]],
+]:
     ids = {int(item_id)}
     ids.update(int(row["to_id"]) for row in rows)
     placeholders = ",".join("?" for _ in ids)
     metadata: Dict[int, Any] = {}
     crew_by_item: Dict[int, List[str]] = defaultdict(list)
+    directors_by_item: Dict[int, List[str]] = defaultdict(list)
+    writers_by_item: Dict[int, List[str]] = defaultdict(list)
     with db.connect() as conn:
         for row in conn.execute(
             f"""
@@ -148,12 +176,12 @@ def _relation_context(
             metadata[int(row["id"])] = row
         for row in conn.execute(
             f"""
-            SELECT c.item_id, p.name
+            SELECT c.item_id, c.department, c.job, p.name
             FROM credits c
             JOIN people p ON p.id = c.person_id
             WHERE c.item_id IN ({placeholders})
               AND (
-                c.department IN ('Directing', 'Writing')
+                c.department IN ('Directing', 'Writing', 'Directors', 'Creator')
                 OR lower(c.job) IN ('director', 'writer', 'screenplay', 'creator')
               )
             ORDER BY c.billing_order ASC, p.name ASC
@@ -161,9 +189,18 @@ def _relation_context(
             tuple(sorted(ids)),
         ).fetchall():
             name = str(row["name"] or "").strip()
-            if name and name not in crew_by_item[int(row["item_id"])]:
-                crew_by_item[int(row["item_id"])].append(name)
-    return metadata, crew_by_item
+            if not name:
+                continue
+            item_key = int(row["item_id"])
+            if name not in crew_by_item[item_key]:
+                crew_by_item[item_key].append(name)
+            dept = str(row["department"] or "")
+            job = str(row["job"] or "")
+            if _is_director_credit(dept, job) and name not in directors_by_item[item_key]:
+                directors_by_item[item_key].append(name)
+            if _is_writer_credit(dept, job) and name not in writers_by_item[item_key]:
+                writers_by_item[item_key].append(name)
+    return metadata, crew_by_item, directors_by_item, writers_by_item
 
 
 def _why_payload(
@@ -181,6 +218,9 @@ def _why_payload(
     seed_genres = _json_labels(seed["genres"]) if seed is not None else []
     peer_genres = _json_labels(peer["genres"]) if peer is not None else []
     shared_genres = _shared_labels(seed_genres, peer_genres)
+    seed_keywords = _json_labels(seed["keywords"]) if seed is not None else []
+    peer_keywords = _json_labels(peer["keywords"]) if peer is not None else []
+    shared_keywords = _shared_labels(seed_keywords, peer_keywords)
     collection_name: Optional[str] = None
     plot_kinship: Optional[str] = None
     surprise_flavor: Optional[str] = None
@@ -208,6 +248,7 @@ def _why_payload(
             evidence={
                 "collection_name": collection_name,
                 "shared_genres": shared_genres,
+                "shared_keywords": shared_keywords,
             },
         )
     elif relation == "shared_crew":
@@ -225,6 +266,49 @@ def _why_payload(
             evidence={
                 "shared_people": names,
                 "shared_genres": shared_genres,
+                "shared_keywords": shared_keywords,
+            },
+        )
+    elif relation == "directed_by":
+        names = list(shared_people)
+        label = (
+            f"Directed by {names[0]}"
+            if names
+            else "Same director"
+        )
+        if len(names) > 1:
+            label = f"Directed by {', '.join(names[:3])}"
+        explanation = build_explanation(
+            kind="directed_by",
+            sentence=label,
+            seed_ids=seed_ids,
+            peer_id=peer_id,
+            terms=names[:3],
+            evidence={
+                "shared_people": names,
+                "shared_genres": shared_genres,
+                "shared_keywords": shared_keywords,
+            },
+        )
+    elif relation == "written_by":
+        names = list(shared_people)
+        label = (
+            f"Written by {names[0]}"
+            if names
+            else "Same writer"
+        )
+        if len(names) > 1:
+            label = f"Written by {', '.join(names[:3])}"
+        explanation = build_explanation(
+            kind="written_by",
+            sentence=label,
+            seed_ids=seed_ids,
+            peer_id=peer_id,
+            terms=names[:3],
+            evidence={
+                "shared_people": names,
+                "shared_genres": shared_genres,
+                "shared_keywords": shared_keywords,
             },
         )
     elif relation == "neighbor":
@@ -252,13 +336,18 @@ def _why_payload(
                 peer_text=peer_plot,
                 shelf_labels=shelf,
             )
-            evidence: Dict[str, Any] = {"shared_story": shared_story}
+            evidence: Dict[str, Any] = {
+                "shared_story": shared_story,
+                "shared_keywords": shared_keywords,
+            }
             if link:
                 plot_kinship = _plot_kinship_label(weight)
                 shelf_note = str(link["shelf_note"] or "") or None
                 surprise_flavor = plot_link
                 evidence["shelf_note"] = shelf_note
                 evidence["plot_kinship"] = plot_kinship
+            if shared_keywords and not shelf_note:
+                shelf_note = f"Shared keywords: {', '.join(shared_keywords[:3])}"
             explanation = explanation_from_plot_link(
                 specific,
                 seed_ids=seed_ids,
@@ -273,6 +362,7 @@ def _why_payload(
         "label": label,
         "shared_people": list(shared_people),
         "shared_genres": shared_genres,
+        "shared_keywords": shared_keywords,
         "collection_name": collection_name,
         "plot_kinship": plot_kinship,
         "surprise_flavor": surprise_flavor,
@@ -413,29 +503,135 @@ def build_shared_crew_relations(
     return rows
 
 
+def _person_pair_edges(
+    person_items: Mapping[int, Set[int]],
+    *,
+    relation: str,
+    source: str,
+    max_per_item: int,
+    per_item: Dict[int, int],
+    skip_pairs: Set[Tuple[int, int]],
+) -> List[RelationRow]:
+    """Emit capped bidirectional person edges, skipping pairs already covered."""
+    rows: List[RelationRow] = []
+    candidates: List[Tuple[int, int, int]] = []  # a, b, filmography size
+    for items in person_items.values():
+        if len(items) < 2:
+            continue
+        ordered = sorted(items)
+        size = len(ordered)
+        for i, a in enumerate(ordered):
+            for b in ordered[i + 1 :]:
+                candidates.append((a, b, size))
+    # Prefer smaller filmographies so niche auteurs surface before megastars fill the cap.
+    candidates.sort(key=lambda t: (t[2], t[0], t[1]))
+    for a, b, _size in candidates:
+        if (a, b) in skip_pairs or (b, a) in skip_pairs:
+            continue
+        if per_item[a] < max_per_item:
+            rows.append((a, b, relation, PERSON_EDGE_WEIGHT, source))
+            per_item[a] += 1
+            skip_pairs.add((a, b))
+        if per_item[b] < max_per_item:
+            rows.append((b, a, relation, PERSON_EDGE_WEIGHT, source))
+            per_item[b] += 1
+            skip_pairs.add((b, a))
+    return rows
+
+
+def build_person_centric_relations(
+    db: Database,
+    *,
+    max_per_item: int = MAX_PERSON_EDGE_PER_ITEM,
+    skip_pairs: Optional[Set[Tuple[int, int]]] = None,
+) -> Dict[str, List[RelationRow]]:
+    """Solo-auteur edges: ``directed_by`` / ``written_by`` with one shared person."""
+    directors: Dict[int, Set[int]] = defaultdict(set)
+    writers: Dict[int, Set[int]] = defaultdict(set)
+    with db.connect() as conn:
+        credit_rows = conn.execute(
+            """
+            SELECT c.item_id, c.person_id, c.department, c.job
+            FROM credits c
+            JOIN library_items li ON li.id = c.item_id
+            WHERE c.department IN ('Directing', 'Writing', 'Directors', 'Creator')
+               OR lower(c.job) IN ('director', 'writer', 'screenplay', 'creator')
+            """
+        ).fetchall()
+    for row in credit_rows:
+        person_id = int(row["person_id"])
+        item_id = int(row["item_id"])
+        dept = str(row["department"] or "")
+        job = str(row["job"] or "")
+        if _is_director_credit(dept, job):
+            directors[person_id].add(item_id)
+        if _is_writer_credit(dept, job):
+            writers[person_id].add(item_id)
+
+    covered: Set[Tuple[int, int]] = set(skip_pairs or ())
+    per_item: Dict[int, int] = defaultdict(int)
+    directed = _person_pair_edges(
+        directors,
+        relation="directed_by",
+        source=DIRECTED_BY_SOURCE,
+        max_per_item=max_per_item,
+        per_item=per_item,
+        skip_pairs=covered,
+    )
+    written = _person_pair_edges(
+        writers,
+        relation="written_by",
+        source=WRITTEN_BY_SOURCE,
+        max_per_item=max_per_item,
+        per_item=per_item,
+        skip_pairs=covered,
+    )
+    return {"directed_by": directed, "written_by": written}
+
+
 def refresh_title_relations(
     db: Database,
     *,
     include_neighbors: bool = True,
     include_shared_crew: bool = True,
+    include_person_edges: bool = True,
 ) -> Dict[str, Any]:
     """Replace graph edges derived from DB (collection + optional mirrors)."""
     collection = build_collection_relations(db)
     neighbor = build_neighbor_relations(db) if include_neighbors else []
     shared = build_shared_crew_relations(db) if include_shared_crew else []
+    # Avoid duplicate person shelves when multi-crew overlap already links a pair.
+    shared_pairs = {(int(a), int(b)) for a, b, _rel, _w, _src in shared}
+    person_edges = (
+        build_person_centric_relations(db, skip_pairs=shared_pairs)
+        if include_person_edges
+        else {"directed_by": [], "written_by": []}
+    )
+    directed = person_edges["directed_by"]
+    written = person_edges["written_by"]
 
     db.replace_relations_of_types(
         {
             "collection": collection,
             "neighbor": neighbor,
             "shared_crew": shared,
+            "directed_by": directed,
+            "written_by": written,
         }
     )
     return {
         "collection": len(collection),
         "neighbor": len(neighbor),
         "shared_crew": len(shared),
-        "total": len(collection) + len(neighbor) + len(shared),
+        "directed_by": len(directed),
+        "written_by": len(written),
+        "total": (
+            len(collection)
+            + len(neighbor)
+            + len(shared)
+            + len(directed)
+            + len(written)
+        ),
     }
 
 
@@ -448,7 +644,9 @@ def list_relations_for_item(
 ) -> Dict[str, Any]:
     """Read enriched outgoing edges for one seed and their peer title cards."""
     rows = db.list_title_relations(int(item_id), relation=relation, limit=limit)
-    metadata, crew_by_item = _relation_context(db, item_id, rows)
+    metadata, crew_by_item, directors_by_item, writers_by_item = _relation_context(
+        db, item_id, rows
+    )
     seed = metadata.get(int(item_id))
     items: List[Dict[str, Any]] = []
     for row in rows:
@@ -460,11 +658,20 @@ def list_relations_for_item(
             continue
         seed_crew = crew_by_item.get(int(item_id), [])
         peer_crew = crew_by_item.get(to_id, [])
-        shared_people = (
-            _shared_labels(seed_crew, peer_crew)
-            if relation_type == "shared_crew"
-            else []
-        )
+        if relation_type == "directed_by":
+            shared_people = _shared_labels(
+                directors_by_item.get(int(item_id), []),
+                directors_by_item.get(to_id, []),
+            )
+        elif relation_type == "written_by":
+            shared_people = _shared_labels(
+                writers_by_item.get(int(item_id), []),
+                writers_by_item.get(to_id, []),
+            )
+        elif relation_type == "shared_crew":
+            shared_people = _shared_labels(seed_crew, peer_crew)
+        else:
+            shared_people = []
         peer = {
             "library_item_id": to_id,
             "title": str(row["title"] or ""),
