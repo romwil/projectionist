@@ -59,6 +59,8 @@ import {
   SUBTITLE_EMPTY_TRACKS,
   clampSubtitleDelay,
   normalizeSubtitleTracks,
+  resolveSubtitlePresentation,
+  silenceNativeTextTracks,
 } from "../../lib/subtitleCues.js";
 import SubtitleOverlay from "./SubtitleOverlay.jsx";
 import SubtitlePicker from "./SubtitlePicker.jsx";
@@ -228,7 +230,30 @@ export default function LibraryPlayer({
   const [subDelay, setSubDelay] = useState(0);
   const activeSubTrack = subTracks.find((track) => track.index === activeSub) || null;
   const subs = useSubtitleCues(activeSubTrack?.proxyUrl || "");
-  const getSubtitleTimeSec = useCallback(() => videoRef.current?.currentTime ?? Number.NaN, []);
+  const subPresentation = resolveSubtitlePresentation({
+    softTrackSelected: Boolean(activeSubTrack),
+    softTrackReady: subs.state === "ready",
+  });
+  /** Absolute title seconds (includes 0-based seek origin) so delay/sync match the picture. */
+  const getSubtitleTimeSec = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return Number.NaN;
+    return (
+      playheadMsFromMedia({
+        currentTimeSec: video.currentTime || 0,
+        originMs: seekTimelineOriginRef.current,
+      }) / 1000
+    );
+  }, []);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    const hls = hlsRef.current;
+    if (hls && typeof hls.subtitleTrack === "number") {
+      hls.subtitleTrack = -1;
+    }
+    if (subPresentation.disableAllNative) silenceNativeTextTracks(video);
+  }, [subPresentation.disableAllNative, activeSub, seekEpoch, session?.stream_url]);
 
   useEffect(() => {
     setActiveSub(-1);
@@ -1352,7 +1377,7 @@ export default function LibraryPlayer({
         onOsdVisibility={onOsdVisibility}
         pausedFrameClean={pausedFrameClean}
       >
-        {activeSubTrack && subs.state === "ready" ? (
+        {subPresentation.showOverlay ? (
           <SubtitleOverlay
             cues={subs.cues}
             getTimeSec={getSubtitleTimeSec}
