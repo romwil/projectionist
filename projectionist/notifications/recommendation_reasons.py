@@ -1,8 +1,10 @@
 """Reasons a person would recognize for an inbox recommendation.
 
 Seeds come from real household evidence (completions, sessions, terminal watch
-events, watchlist pins) — not raw view_count alone. Peers must share a named
-link (explainable neighbor, shared crew, or collection). The resulting
+events, watchlist pins) — not raw view_count alone. TV episode watches overlay
+that episode's plot (or title) onto the show seed so Live / For you / inbox
+peers match what actually finished. Peers must share a named link (explainable
+neighbor, shared crew, collection, or episode-plot phrase). The resulting
 explanation kind is ``watched_bridge`` when a seed exists; cosine proximity
 alone is never a reason.
 """
@@ -15,6 +17,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 from projectionist.library.db import Database
 from projectionist.library.plot_kinship import (
     build_explanation,
+    distinctive_plot_phrases,
     parse_plot_link_json,
     plot_blob,
     specific_plot_link,
@@ -54,7 +57,11 @@ def _labels(value: Any) -> set[str]:
 def _title_label(row: Mapping[str, Any]) -> str:
     title = str(row.get("title") or "Untitled").strip() or "Untitled"
     year = row.get("year")
-    return f"{title} ({year})" if year else title
+    label = f"{title} ({year})" if year else title
+    episode = str(row.get("episode_title") or "").strip()
+    if episode:
+        return f"{label} — {episode}"
+    return label
 
 
 def _finish(sentence: str) -> str:
@@ -74,6 +81,22 @@ def _table_exists(conn: Any, name: str) -> bool:
     return row is not None
 
 
+def _copy_episode_overlay(dst: Dict[str, Any], src: Mapping[str, Any]) -> None:
+    """Keep the newest finished episode on a show seed (plot + identity)."""
+    if not src.get("episode_rating_key"):
+        return
+    for key in (
+        "episode_rating_key",
+        "episode_title",
+        "episode_season",
+        "episode_number",
+        "episode_summary",
+        "summary",
+    ):
+        if key in src:
+            dst[key] = src.get(key)
+
+
 def _merge_seed(
     by_id: Dict[int, Dict[str, Any]],
     row: Mapping[str, Any],
@@ -87,6 +110,9 @@ def _merge_seed(
         return
     if item_id <= 0:
         return
+    payload = _as_dict(row)
+    payload["seed_source"] = seed_source
+    payload["seed_at"] = float(seed_at or 0)
     existing = by_id.get(item_id)
     # Prefer completions over sessions/events/views; prefer earlier-listed sources.
     priority = {
@@ -99,12 +125,10 @@ def _merge_seed(
     if existing is not None:
         if priority.get(existing.get("seed_source"), 99) <= priority.get(seed_source, 99):
             # Keep better source; bump recency if this row is newer.
-            if float(existing.get("seed_at") or 0) < float(seed_at or 0):
-                existing["seed_at"] = float(seed_at or 0)
+            if float(existing.get("seed_at") or 0) < float(payload["seed_at"]):
+                existing["seed_at"] = payload["seed_at"]
+                _copy_episode_overlay(existing, payload)
             return
-    payload = _as_dict(row)
-    payload["seed_source"] = seed_source
-    payload["seed_at"] = float(seed_at or 0)
     by_id[item_id] = payload
 
 
@@ -122,6 +146,94 @@ def _join_library_on_rating_keys(conn: Any, rating_keys: Sequence[str]) -> Dict[
         tuple(keys),
     ).fetchall()
     return {str(row["rating_key"]): _as_dict(row) for row in rows}
+
+
+def _watch_lookup_key(row: Mapping[str, Any]) -> Tuple[str, str]:
+    """Show/movie library rating_key plus episode rating_key when the watch is an episode."""
+    media = str(row["media_type"] or "")
+    parent = str(row["parent_rating_key"] or "").strip()
+    key = str(row["rating_key"] or "").strip()
+    if media == "episode" and parent:
+        return parent, key
+    return key, ""
+
+
+def _join_episodes_on_rating_keys(
+    conn: Any, rating_keys: Sequence[str]
+) -> Dict[str, Dict[str, Any]]:
+    keys = [str(key).strip() for key in rating_keys if str(key or "").strip()]
+    if not keys or not _table_exists(conn, "library_episodes"):
+        return {}
+    placeholders = ",".join("?" for _ in keys)
+    try:
+        rows = conn.execute(
+            f"SELECT * FROM library_episodes WHERE rating_key IN ({placeholders})",
+            tuple(keys),
+        ).fetchall()
+    except Exception:  # noqa: BLE001 — missing table/column on partial fixtures
+        return {}
+    return {str(row["rating_key"]): _as_dict(row) for row in rows}
+
+
+def _overlay_episode(
+    item: Mapping[str, Any],
+    episode_key: str,
+    episode: Optional[Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Copy the show row and layer the finished episode's plot onto ``summary``."""
+    overlaid = dict(item)
+    if not episode_key:
+        return overlaid
+    overlaid["episode_rating_key"] = episode_key
+    if not episode:
+        return overlaid
+    title = str(episode.get("title") or "").strip()
+    summary = str(episode.get("summary") or "").strip()
+    overlaid["episode_title"] = title
+    overlaid["episode_season"] = episode.get("season_number")
+    overlaid["episode_number"] = episode.get("episode_number")
+    overlaid["episode_summary"] = summary
+    extra = summary or (f"{title}." if title else "")
+    if extra:
+        show_summary = str(overlaid.get("summary") or "").strip()
+        overlaid["summary"] = f"{extra}\n{show_summary}".strip() if show_summary else extra
+    return overlaid
+
+
+def _seeds_from_watch_rows(
+    conn: Any,
+    rows: Sequence[Any],
+    *,
+    at_field: str,
+    limit: int,
+) -> List[Tuple[Dict[str, Any], float]]:
+    lookup_keys: List[str] = []
+    episode_keys: List[str] = []
+    parsed: List[Tuple[Any, str, str]] = []
+    for row in rows:
+        lib_key, ep_key = _watch_lookup_key(row)
+        if not lib_key:
+            continue
+        lookup_keys.append(lib_key)
+        if ep_key:
+            episode_keys.append(ep_key)
+        parsed.append((row, lib_key, ep_key))
+    by_key = _join_library_on_rating_keys(conn, lookup_keys)
+    by_ep = _join_episodes_on_rating_keys(conn, episode_keys)
+    out: List[Tuple[Dict[str, Any], float]] = []
+    for row, lib_key, ep_key in parsed:
+        item = by_key.get(lib_key)
+        if item is None:
+            continue
+        item = _overlay_episode(item, ep_key, by_ep.get(ep_key) if ep_key else None)
+        try:
+            at_ms = float(row[at_field] or 0)
+        except (TypeError, ValueError, KeyError):
+            at_ms = 0.0
+        out.append((item, at_ms / 1000.0 if at_ms > 1e12 else at_ms))
+        if len(out) >= limit:
+            break
+    return out
 
 
 def _load_completion_seeds(
@@ -168,33 +280,7 @@ def _load_completion_seeds(
             """,
             (limit * 3,),
         ).fetchall()
-    lookup_keys: List[str] = []
-    for row in rows:
-        media = str(row["media_type"] or "")
-        parent = str(row["parent_rating_key"] or "").strip()
-        key = str(row["rating_key"] or "").strip()
-        if media == "episode" and parent:
-            lookup_keys.append(parent)
-        elif key:
-            lookup_keys.append(key)
-    by_key = _join_library_on_rating_keys(conn, lookup_keys)
-    out: List[Tuple[Dict[str, Any], float]] = []
-    for row in rows:
-        media = str(row["media_type"] or "")
-        parent = str(row["parent_rating_key"] or "").strip()
-        key = str(row["rating_key"] or "").strip()
-        lib_key = parent if media == "episode" and parent else key
-        item = by_key.get(lib_key)
-        if item is None:
-            continue
-        try:
-            at_ms = float(row["completed_at_ms"] or 0)
-        except (TypeError, ValueError):
-            at_ms = 0.0
-        out.append((item, at_ms / 1000.0 if at_ms > 1e12 else at_ms))
-        if len(out) >= limit:
-            break
-    return out
+    return _seeds_from_watch_rows(conn, rows, at_field="completed_at_ms", limit=limit)
 
 
 def _load_session_seeds(
@@ -241,33 +327,7 @@ def _load_session_seeds(
             """,
             (limit * 3,),
         ).fetchall()
-    lookup_keys: List[str] = []
-    for row in rows:
-        media = str(row["media_type"] or "")
-        parent = str(row["parent_rating_key"] or "").strip()
-        key = str(row["rating_key"] or "").strip()
-        if media == "episode" and parent:
-            lookup_keys.append(parent)
-        elif key:
-            lookup_keys.append(key)
-    by_key = _join_library_on_rating_keys(conn, lookup_keys)
-    out: List[Tuple[Dict[str, Any], float]] = []
-    for row in rows:
-        media = str(row["media_type"] or "")
-        parent = str(row["parent_rating_key"] or "").strip()
-        key = str(row["rating_key"] or "").strip()
-        lib_key = parent if media == "episode" and parent else key
-        item = by_key.get(lib_key)
-        if item is None:
-            continue
-        try:
-            at_ms = float(row["seed_ms"] or 0)
-        except (TypeError, ValueError):
-            at_ms = 0.0
-        out.append((item, at_ms / 1000.0 if at_ms > 1e12 else at_ms))
-        if len(out) >= limit:
-            break
-    return out
+    return _seeds_from_watch_rows(conn, rows, at_field="seed_ms", limit=limit)
 
 
 def _load_terminal_event_seeds(
@@ -317,33 +377,7 @@ def _load_terminal_event_seeds(
             """,
             (limit * 3,),
         ).fetchall()
-    lookup_keys: List[str] = []
-    for row in rows:
-        media = str(row["media_type"] or "")
-        parent = str(row["parent_rating_key"] or "").strip()
-        key = str(row["rating_key"] or "").strip()
-        if media == "episode" and parent:
-            lookup_keys.append(parent)
-        elif key:
-            lookup_keys.append(key)
-    by_key = _join_library_on_rating_keys(conn, lookup_keys)
-    out: List[Tuple[Dict[str, Any], float]] = []
-    for row in rows:
-        media = str(row["media_type"] or "")
-        parent = str(row["parent_rating_key"] or "").strip()
-        key = str(row["rating_key"] or "").strip()
-        lib_key = parent if media == "episode" and parent else key
-        item = by_key.get(lib_key)
-        if item is None:
-            continue
-        try:
-            at_ms = float(row["occurred_at_ms"] or 0)
-        except (TypeError, ValueError):
-            at_ms = 0.0
-        out.append((item, at_ms / 1000.0 if at_ms > 1e12 else at_ms))
-        if len(out) >= limit:
-            break
-    return out
+    return _seeds_from_watch_rows(conn, rows, at_field="occurred_at_ms", limit=limit)
 
 
 def _load_watchlist_seeds(
@@ -605,6 +639,29 @@ def _inner_link(
     if candidate_id <= 0 or seed_id <= 0 or candidate_id == seed_id:
         return None
 
+    shelf = _labels(candidate.get("genres")) | _labels(candidate.get("keywords"))
+    shelf |= _labels(seed.get("genres")) | _labels(seed.get("keywords"))
+
+    def _live_plot_link() -> Optional[Dict[str, Any]]:
+        link = specific_plot_link(
+            seed_text=plot_blob(seed),
+            peer_text=plot_blob(candidate),
+            shelf_labels=shelf,
+        )
+        if link and link.get("sentence"):
+            return {
+                "link_kind": "plot_link",
+                "sentence": str(link["sentence"]),
+                "terms": list(link.get("terms") or []),
+            }
+        return None
+
+    # Finished-episode overlay: live plot first so show-level cosine cache cannot win.
+    if seed.get("episode_rating_key"):
+        live = _live_plot_link()
+        if live:
+            return live
+
     # Prefer materialized explainable neighbor plot link when present.
     try:
         neighbors = db.get_neighbors(seed_id, limit=24, explainable_only=True) or []
@@ -624,19 +681,9 @@ def _inner_link(
                 "terms": list(stored.get("terms") or []),
             }
 
-    shelf = _labels(candidate.get("genres")) | _labels(candidate.get("keywords"))
-    shelf |= _labels(seed.get("genres")) | _labels(seed.get("keywords"))
-    link = specific_plot_link(
-        seed_text=plot_blob(seed),
-        peer_text=plot_blob(candidate),
-        shelf_labels=shelf,
-    )
-    if link and link.get("sentence"):
-        return {
-            "link_kind": "plot_link",
-            "sentence": str(link["sentence"]),
-            "terms": list(link.get("terms") or []),
-        }
+    live = _live_plot_link()
+    if live:
+        return live
 
     creator = _shared_creator(db, candidate_id, seed_id)
     if creator:
@@ -707,6 +754,8 @@ def bridge_between(
             "seed_source": str(seed.get("seed_source") or ""),
             "link_kind": str(inner.get("link_kind") or ""),
             "seed_title": str(seed.get("title") or ""),
+            "episode_rating_key": str(seed.get("episode_rating_key") or "") or None,
+            "episode_title": str(seed.get("episode_title") or "") or None,
         },
     )
 
@@ -744,15 +793,79 @@ def specific_bridge(
     return None
 
 
-def _candidate_ids(db: Database, seed_ids: Sequence[int]) -> List[int]:
+def _plot_phrase_candidate_ids(
+    db: Database, seed: Mapping[str, Any], *, limit: int = 16
+) -> List[int]:
+    """Bounded unwatched ids whose plot text mentions episode story phrases."""
+    text = str(seed.get("episode_summary") or seed.get("summary") or "")
+    phrases = distinctive_plot_phrases(text, limit=3)
+    if not phrases:
+        return []
+    try:
+        seed_id = int(seed.get("id") or 0)
+    except (TypeError, ValueError):
+        return []
+    if seed_id <= 0:
+        return []
+    blob = (
+        "lower(COALESCE(summary, '') || ' ' || COALESCE(tmdb_overview, '') "
+        "|| ' ' || COALESCE(long_synopsis, ''))"
+    )
+    needles: List[str] = []
+    for phrase in phrases:
+        needle = "".join(ch for ch in phrase.casefold() if ch not in "%_")
+        if needle:
+            needles.append(f"%{needle}%")
+    if not needles:
+        return []
+    clauses = [f"{blob} LIKE ?" for _ in needles]
+    params: List[Any] = [seed_id, *needles, max(1, min(int(limit or 16), 16))]
+    try:
+        with db.connect() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT id
+                FROM library_items
+                WHERE id != ?
+                  AND COALESCE(view_count, 0) = 0
+                  AND ({" OR ".join(clauses)})
+                LIMIT ?
+                """,
+                tuple(params),
+            ).fetchall()
+    except Exception:  # noqa: BLE001
+        return []
     found: List[int] = []
-    seen = {int(seed_id) for seed_id in seed_ids}
+    for row in rows:
+        try:
+            found.append(int(row["id"]))
+        except (TypeError, ValueError, KeyError):
+            continue
+    return found
+
+
+def _candidate_ids(db: Database, seeds: Sequence[Mapping[str, Any]]) -> List[int]:
+    seed_ids: List[int] = []
+    for seed in seeds:
+        try:
+            seed_ids.append(int(seed["id"]))
+        except (TypeError, ValueError, KeyError):
+            continue
+    found: List[int] = []
+    seen = set(seed_ids)
 
     def _add(item_id: int) -> None:
         if item_id <= 0 or item_id in seen:
             return
         seen.add(item_id)
         found.append(item_id)
+
+    for seed in seeds:
+        if seed.get("episode_rating_key"):
+            for item_id in _plot_phrase_candidate_ids(db, seed, limit=16):
+                _add(item_id)
+        if len(found) >= 40:
+            return found[:40]
 
     for seed_id in seed_ids:
         try:
@@ -885,7 +998,7 @@ def list_linked_unwatched(
             continue
     if not seed_ids:
         return []
-    candidate_ids = _candidate_ids(db, seed_ids)
+    candidate_ids = _candidate_ids(db, watched[:8])
     loaded = _load_items(db, candidate_ids)
     picks: List[Dict[str, Any]] = []
     for item_id in candidate_ids:

@@ -2,14 +2,35 @@
 
 ## [Unreleased]
 
+## [1.37.58] — 2026-10-20
+
+One patch on 1.37.57: the platform tranche for owners and household users — Play captions, Live filler, product truth, For you, Library health, sunset, Play resume, episode-aware TV bridges, and Phase 6 leftovers parked.
+
+### Highlights
+- **Play captions stay in one place.** Subtitles no longer double on the picture, and the CC menu can nudge sync by half a second.
+- **Live flex filler shows a picture.** Continuity pad is not a black frame; the lower-third still names what’s up next.
+- **Explore For you** is unwatched titles with a named household link — same refusal rules as inbox. Empty means no named link yet.
+- **Admin Library health** tells one story: Named kinship %, open issues, purge pressure, and Scheduled Tasks catch-up.
+- **Finishing a TV episode recommends from that episode.** For you, inbox, and Live “next like this” use the episode plot (or the episode you actually finished), not a random cosine movie.
+- **Phase 6 leftovers are parked.** Gift queue, trust diary, and Admin House seasonal preview stay off the 1.37 roadmap; Investigate, rematch, afterglow, whisper, house letter, and scholar walks already shipped.
+
 ### Added
 - **Explore For you** hub rail from household `watched_bridge` picks (same refusal rules as inbox / whisper). Empty means no named link yet — never cosine-only filler.
 - **Owner Library health ritual** — Admin hero narrative tying Named kinship %, open issues, purge pressure, and Scheduled Tasks catch-up into one story.
+- **Episode-aware TV bridges.** Completing an episode overlays `library_episodes.summary` onto the show seed; bounded plot-phrase search finds peers that share that episode’s story. Cosine-only show neighbors stay refused.
 
 ### Changed
-- **Product-truth docs for native Live.** [docs/PRODUCT.md](docs/PRODUCT.md) captures SWOT, surface map, top 10, and parked Tunarr-era items. README and Help key capabilities lead with library **Play** and native **Live** (`/live` + lineup) — not Tunarr dual-watch. Plex Live TV / OTA is called out as owner-managed, not a Projectionist tuner path. Tunarr HDHR/XMLTV/daypart/orchestration leftovers in the Live deferred log are marked sunset/parked; DELIGHT Phase 6 is no longer “in flight.”
+- **Play captions.** Stop subtitle doubling on library Play; wire the existing ±0.5s sync offset in the CC menu.
+- **Live flex filler.** Play the continuity/pad asset so the video element is not a black frame during flex.
+- **Product-truth docs for native Live.** [docs/PRODUCT.md](docs/PRODUCT.md) captures SWOT, surface map, top 10, and parked Tunarr-era items. README and Help key capabilities lead with library **Play** and native **Live** (`/live` + lineup) — not Tunarr dual-watch. Plex Live TV / OTA is called out as owner-managed, not a Projectionist tuner path. Tunarr HDHR/XMLTV/daypart/orchestration leftovers in the Live deferred log are marked sunset/parked.
+- **Phase 6 triage.** [docs/DELIGHT-WISHLIST.md](docs/DELIGHT-WISHLIST.md) inventories 1.36 MUST items vs 1.37: shipped vs **parked** (gift queue, trust diary, Admin House seasonal preview/veto). 1.37 is the living roadmap; do not invent a new Phase 6.
 - **Sunset pass.** Dead unmounted `RecommendationsInbox` removed (Inbox is `/inbox`). HELP guest→member role drift cleaned. Guide empty reason is `lineup_missing`. Coverage UI labels hash-fallback embeddings honestly.
 - **Play / Continue Watching (iPad Safari).** `pagehide` with bfcache (`persisted`) no longer kills the library session; `pageshow` resumes the open→resume→done path.
+- **Docs:** [docs/MEDIA_INTELLIGENCE.md](docs/MEDIA_INTELLIGENCE.md) records episode overlay (not an episode KG); Help Explore lists **For you**.
+
+### Verification
+- Backend `pytest` (`tests/test_household_bridges.py`, `tests/test_plex_ratings.py`, `tests/test_library_episodes.py`, `tests/test_taste_engagement.py`, `tests/test_architecture_a_trains.py`, `tests/test_explore_wave3.py`, `tests/test_whisper_inbox.py`, `tests/test_inbox_recommendation_reasons.py`, `tests/test_demand_catchup.py`, `tests/test_closed_loop_telemetry.py`) — 136 passed with `--no-cov`.
+- Focused: TV episode completion prefers an episode-plot peer and refuses a cosine-only movie neighbor.
 
 ## [1.37.57] — 2026-10-20
 

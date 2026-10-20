@@ -98,6 +98,7 @@ Saved pages preserve the structured text, title cards, reply chips, and any quot
 **[Explore](/explore) is cinema browse** over the same SQLite feeds the curator uses. Open it to skim:
 
 - **Continue Watching** — titles you started and have not finished. Play, pause, or skip ahead in this app and that spot shows on the rail right away. Plays from another device still arrive from Plex On Deck. This is not a live list of what is on in another room.
+- **For you** — unwatched titles with a named link to something this house finished or pinned. Finishing a TV episode uses that episode’s plot (not a random similar movie). An empty rail means no named link yet — not a broken shelf.
 - **Recently Added** (movies and shows) and **Recently added episodes** (fresh episode arrivals, not whole series)
 - **Recent Releases**
 - **Revisit These** — partially watched TV that's been idle 60+ days
@@ -136,7 +137,7 @@ When the household owner turns **Live Channels** on and publishes stations, **[L
 
 ### Weekly taste picks
 
-Projectionist still rebuilds personalized unwatched picks about once a week alongside the library digest (taste clusters + your default curator's voice). Those picks feed chat recommendations — they are **not** a separate Explore hub rail, so Explore stays focused on browse and what's on now.
+Projectionist still rebuilds personalized unwatched picks about once a week alongside the library digest (taste clusters + your default curator's voice). Those weekly notes feed chat and the newsletter. Explore’s **For you** rail is a different shelf: it only shows unwatched titles with a named link to something this house finished or pinned.
 
 Tune the underlying weights under **Settings → Taste** — raise a cluster, lower another, and **Lock** anything you don't want the automatic refresh to drift. Locked weights stay put; unlocked ones can still learn from reviews and chat feedback.
 

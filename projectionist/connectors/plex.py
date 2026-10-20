@@ -161,6 +161,7 @@ class PlexEpisode:
     file_size: int = 0
     aired_at: str = ""
     user_rating_stars: Optional[float] = None
+    summary: str = ""
 
 
 @dataclass
@@ -719,6 +720,7 @@ class PlexClient:
                     user_rating_stars=plex_rating_to_stars(
                         optional_int(element.attrib.get("userRating"))
                     ),
+                    summary=str(element.attrib.get("summary") or ""),
                 )
             )
         return episodes
