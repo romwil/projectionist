@@ -26,6 +26,7 @@ import {
   canResumeAttachedStream,
   clampTime,
   applyHoldPlaybackRate,
+  clearTheaterTextSelection,
   createStageGesture,
   formatClockMs,
   holdToRateShouldCancelTap,
@@ -58,6 +59,7 @@ import {
   shouldStopSessionOnPageHide,
   shouldSendProgress,
   skipDeltaForZone,
+  suppressHoldTextSelection,
   skipZoneFromClientX,
   theaterHlsConfig,
   dispatchLibraryPlayKey,
@@ -298,6 +300,39 @@ test("hold-to-2x sets rate, restores on release, and cancels the pending tap", a
   assert.equal(doubles.length, 0);
 });
 
+test("hold pointerdown suppresses iOS text selection outside chrome", () => {
+  const calls = [];
+  const selection = {
+    removeAllRanges() {
+      calls.push("clear");
+    },
+  };
+  const stageEvent = {
+    target: { closest: () => null },
+    preventDefault() {
+      calls.push("prevent");
+    },
+  };
+  assert.equal(suppressHoldTextSelection(stageEvent, { getSelection: () => selection }), true);
+  assert.deepEqual(calls, ["prevent", "clear"]);
+  assert.equal(clearTheaterTextSelection(() => selection), true);
+
+  calls.length = 0;
+  const chromeEvent = {
+    target: {
+      closest(selector) {
+        return String(selector).includes("input") ? {} : null;
+      },
+    },
+    preventDefault() {
+      calls.push("prevent");
+    },
+  };
+  assert.equal(suppressHoldTextSelection(chromeEvent, { getSelection: () => selection }), false);
+  assert.deepEqual(calls, []);
+  assert.equal(suppressHoldTextSelection(null), false);
+});
+
 test("library buffering chip waits for holdMs then hides when playing with a frame", () => {
   assert.equal(
     libraryBufferingHealth({ playbackStatus: "playing", waiting: true, waitingMs: 200 }),
@@ -363,14 +398,32 @@ test("library Play wires hold-to-2x and buffering; Live TV does not", () => {
   const library = readFileSync(join(root, "../components/theater/LibraryPlayer.jsx"), "utf8");
   const theater = readFileSync(join(root, "../components/theater/TheaterPlayer.jsx"), "utf8");
   const live = readFileSync(join(root, "../components/live/LivePlayer.jsx"), "utf8");
+  const css = readFileSync(join(root, "../styles/13-watch.css"), "utf8");
   assert.match(library, /holdToDoubleSpeed/);
   assert.match(library, /bufferingEnabled=\{!error/);
   assert.match(theater, /holdToDoubleSpeed = false/);
   assert.match(theater, /applyHoldPlaybackRate/);
+  assert.match(theater, /suppressHoldTextSelection/);
+  assert.match(theater, /clearTheaterTextSelection/);
   assert.match(theater, /BufferingIndicator/);
   assert.doesNotMatch(live, /holdToDoubleSpeed/);
   assert.doesNotMatch(live, /playbackRate\s*=\s*2/);
   assert.doesNotMatch(live, /HOLD_PLAYBACK_RATE/);
+  for (const selector of [
+    ".theater-player.live-player",
+    ".theater-player-video.live-player-video",
+    ".theater-osd.live-osd",
+    ".theater-rate-chip",
+  ]) {
+    const idx = css.indexOf(selector);
+    assert.ok(idx >= 0, selector);
+    const brace = css.indexOf("{", idx);
+    const end = css.indexOf("}", brace);
+    const rule = css.slice(brace, end);
+    assert.match(rule, /user-select:\s*none/);
+    assert.match(rule, /-webkit-user-select:\s*none/);
+    assert.match(rule, /-webkit-touch-callout:\s*none/);
+  }
 });
 
 test("stage gesture ignores the click that completes a double-tap", async () => {

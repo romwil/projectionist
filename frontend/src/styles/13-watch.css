@@ -59,6 +59,9 @@ html:has([data-theater-mode="true"]) #root {
 .theater-player.live-player {
   position: relative;
   overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 /* Atmosphere: cover art fills the stage; video sits on top as contain. */
@@ -87,6 +90,9 @@ html:has([data-theater-mode="true"]) #root {
   object-fit: contain;
   background: transparent;
   z-index: 1;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 /* Seek reload: keep the last frame (or the poster) until the new video track paints. */
@@ -114,6 +120,9 @@ html:has([data-theater-mode="true"]) #root {
   padding: 0 max(0.75rem, env(safe-area-inset-right, 0px))
     max(0.65rem, env(safe-area-inset-bottom, 0px)) max(0.75rem, env(safe-area-inset-left, 0px));
   box-sizing: border-box;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 /* Keep the visible OSD inside the player (short landscape). */
@@ -416,6 +425,9 @@ html:has([data-theater-mode="true"]) #root {
   pointer-events: none;
   z-index: 3;
   animation: theater-skip-pop 280ms ease;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .theater-rate-chip {
