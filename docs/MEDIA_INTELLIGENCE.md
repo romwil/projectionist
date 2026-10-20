@@ -94,7 +94,8 @@ Watch ledger (`watch_completions` / `watch_sessions` / terminal `watch_events`) 
 
 - **Miss signals** — empty More Like This, empty Related titles (for an embedded seed), or a recommendation bridge with zero peers write `telemetry_events` rows with `event_type=kinship_miss` (soft queue cap; hit_count bumps still allowed).
 - **Idle priority** — `metadata_enrichment`, `long_synopsis_enrichment`, `summary_motifs`, and `plot_neighbors` prefer that backlog on a bounded batch before cold catch-up.
-- **Admin** — knowledge hero and coverage strip lead with Named kinship % and link to Scheduled Tasks catch-up copy.
+- **Admin** — knowledge hero and coverage strip lead with Named kinship % and link to Scheduled Tasks catch-up copy. Coverage payloads include `embedding_model` / `embedding_is_hash_fallback` so hash vectors are never implied as a remote model.
+- **After overnight idle** — re-curl `GET /api/library/knowledge-coverage` and watch `with_explainable_neighbors_pct` (Automat 1.37.58 snapshot ~72.9%). Target is higher on *opened* titles, not a fake 100%. Idle `plot_neighbors` still annotates remaining cosine-only neighbors (`plot_link_json` NULL) without a full graph rebuild. Primary DB file: `{DATA_DIR}/projectionist.db`.
 - **Episode-aware TV seeds (1.37.58).** Completing an episode overlays that episode’s Plex plot (or title) onto the show seed before `watched_bridge` / For you / inbox peers are built. Bounded phrase search finds peers that share the episode’s story; cosine-only show neighbors stay refused. This is **not** an episode knowledge graph — no per-episode embeddings or `item_neighbors`.
 
 ---

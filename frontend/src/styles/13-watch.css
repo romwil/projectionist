@@ -401,7 +401,8 @@ html:has([data-theater-mode="true"]) #root {
   color: var(--ink-on-media);
 }
 
-.theater-skip-chip {
+.theater-skip-chip,
+.theater-rate-chip {
   position: absolute;
   top: 18%;
   left: 50%;
@@ -415,6 +416,80 @@ html:has([data-theater-mode="true"]) #root {
   pointer-events: none;
   z-index: 3;
   animation: theater-skip-pop 280ms ease;
+}
+
+.theater-rate-chip {
+  top: 12%;
+}
+
+.buffering-indicator {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.buffering-indicator--chip {
+  inset: auto;
+  top: 22%;
+  left: 50%;
+  transform: translateX(-50%);
+  flex-direction: row;
+  padding: 0.55rem 1rem;
+  border-radius: 999px;
+  background: rgba(255, 184, 0, 0.94);
+  color: var(--accent-text);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.buffering-indicator-label {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.buffering-reel {
+  position: relative;
+  width: 1.55rem;
+  height: 1.55rem;
+  flex: 0 0 auto;
+}
+
+.buffering-reel-ring,
+.buffering-reel-sprockets,
+.buffering-reel-hub {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+
+.buffering-reel-ring {
+  border: 3px solid currentColor;
+}
+
+.buffering-reel-sprockets {
+  inset: 2px;
+  background:
+    repeating-conic-gradient(from 0deg, currentColor 0 12deg, transparent 12deg 30deg);
+  mask: radial-gradient(circle, transparent 42%, #000 44%);
+  animation: buffering-reel-spin 0.9s linear infinite;
+}
+
+.buffering-reel-hub {
+  inset: 38%;
+  background: currentColor;
+}
+
+@keyframes buffering-reel-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes theater-skip-pop {
@@ -431,7 +506,9 @@ html:has([data-theater-mode="true"]) #root {
 @media (prefers-reduced-motion: reduce) {
   .theater-osd-play,
   .theater-center-play,
-  .theater-skip-chip {
+  .theater-skip-chip,
+  .theater-rate-chip,
+  .buffering-reel-sprockets {
     transition: none;
     animation: none;
   }

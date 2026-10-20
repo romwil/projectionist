@@ -23,7 +23,7 @@ export const JOURNEY_CATALOG = [
   { id: "watch-continue", slug: "watch-continue", name: "Pick up where you left off", description: "Open Continue Watching from Explore.", tier: "easy", category: "watching", hidden: false, youthSafe: true, prerequisites: [], personaId: null, hint: "Explore → Continue Watching" },
   { id: "watch-finish-1", slug: "watch-finish-1", name: "First curtain call", description: "Finish a title you started.", tier: "easy", category: "watching", hidden: false, youthSafe: true, prerequisites: ["watch-continue"], personaId: null },
   { id: "watch-streak-3", slug: "chat-streak-3", name: "Three-day chat streak", description: "Talk with the curator three days in a row.", tier: "mid", category: "watching", hidden: false, youthSafe: true, prerequisites: [], personaId: null },
-  { id: "watch-for-you", slug: "watch-for-you", name: "Trust the weekly rail", description: "Open a title from For you this week.", tier: "easy", category: "watching", hidden: false, youthSafe: true, prerequisites: [], personaId: null },
+  { id: "watch-for-you", slug: "watch-for-you", name: "Trust For you", description: "Open a title from Explore For you.", tier: "easy", category: "watching", hidden: false, youthSafe: true, prerequisites: [], personaId: null },
   { id: "journey-ultimate-watching", slug: "journey-ultimate-watching", name: "Screen-side companion", description: "Ultimate Watching pathway badge.", tier: "deep", category: "watching", hidden: false, youthSafe: true, prerequisites: ["watch-continue", "watch-finish-1", "watch-for-you"], personaId: null, ultimate: true },
 
   // Taste

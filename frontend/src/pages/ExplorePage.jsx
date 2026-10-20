@@ -510,32 +510,6 @@ function ExploreHubPage() {
         </div>
 
         <ExploreSection
-          id="continue-watching"
-          title="Continue Watching"
-          isOwner={ownerChrome}
-          empty={
-            continueWatching.error ||
-            (!continueWatching.loading && !continueWatching.items.length ? continueWatching.note : null)
-          }
-        >
-          <FeedRail
-            testId="explore-continue-watching-rail"
-            items={continueWatching.items}
-            loading={continueWatching.loading}
-            cardMeta={(item) => item.resume_label || null}
-            chatHref={
-              continueWatching.items.length
-                ? chatFromRailHref({
-                    railTitle: "Continue Watching",
-                    items: continueWatching.items,
-                  })
-                : null
-            }
-            {...recommendProps}
-          />
-        </ExploreSection>
-
-        <ExploreSection
           id="for-you"
           title="For you"
           isOwner={ownerChrome}
@@ -554,6 +528,32 @@ function ExploreHubPage() {
                 ? chatFromRailHref({
                     railTitle: "For you",
                     items: forYou.items,
+                  })
+                : null
+            }
+            {...recommendProps}
+          />
+        </ExploreSection>
+
+        <ExploreSection
+          id="continue-watching"
+          title="Continue Watching"
+          isOwner={ownerChrome}
+          empty={
+            continueWatching.error ||
+            (!continueWatching.loading && !continueWatching.items.length ? continueWatching.note : null)
+          }
+        >
+          <FeedRail
+            testId="explore-continue-watching-rail"
+            items={continueWatching.items}
+            loading={continueWatching.loading}
+            cardMeta={(item) => item.resume_label || null}
+            chatHref={
+              continueWatching.items.length
+                ? chatFromRailHref({
+                    railTitle: "Continue Watching",
+                    items: continueWatching.items,
                   })
                 : null
             }

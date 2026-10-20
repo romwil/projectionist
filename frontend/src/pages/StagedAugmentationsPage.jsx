@@ -13,6 +13,7 @@ import SettingsPageHeader from "../components/settings/SettingsPageHeader";
 import SettingsPanel from "../components/settings/SettingsPanel";
 import {
   buildKnowledgeCoverageRows,
+  embeddingCoverageLabel,
   summarizeKnowledgeCoverage,
 } from "../lib/knowledgeCoverage.js";
 import {
@@ -431,6 +432,10 @@ export default function StagedAugmentationsPage() {
     () => summarizeKnowledgeCoverage(summary?.coverage),
     [summary?.coverage],
   );
+  const coverageEmbedding = useMemo(
+    () => embeddingCoverageLabel(summary?.coverage),
+    [summary?.coverage],
+  );
 
   const reloadSummary = useCallback(async () => {
     try {
@@ -653,6 +658,11 @@ export default function StagedAugmentationsPage() {
         >
           {coverageSummary ? (
             <p data-testid="knowledge-ops-coverage-summary">{coverageSummary}</p>
+          ) : null}
+          {coverageEmbedding ? (
+            <p className="status status-secondary" data-testid="knowledge-ops-coverage-embedding">
+              {coverageEmbedding}
+            </p>
           ) : null}
           <ul className="knowledge-coverage-grid" data-testid="knowledge-ops-coverage-grid">
             {coverageRows.map((row) => (

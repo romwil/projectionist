@@ -61,7 +61,7 @@ export default function YearInReviewPage() {
     const effectiveRole = user?.role || role;
     if (effectiveRole === "guest") {
       setReelLoading(false);
-      setError("Guests don’t get a Year in Review — ask the owner for a member invite.");
+      setError("Year in Review is for household members — ask the owner for an invite.");
       return undefined;
     }
     if (!Number.isFinite(year) || year < 2000) {

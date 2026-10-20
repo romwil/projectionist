@@ -2,6 +2,8 @@
 
 Living backlog for experiences that make Projectionist feel more generous. Tags are target persona and priority; promotion into a delivery plan remains an owner decision.
 
+The living product plan is **[PRODUCT.md](PRODUCT.md)** (1.37.59). This file is the historical delight backlog. Do not read Phase 6 leftovers (gift queue, trust diary, Admin House seasonal veto) as in-product doors.
+
 The backlog is delivered in **phases**, each one a self-contained milestone that ships and releases on its own. Phases 1 and 2 are done; Phases 3–5 below reflect a **full persona re-survey** (human + AI archetypes) and the locked planning decisions that close the former open questions. A contributor can pick up any remaining phase and plan it without re-deriving the groundwork.
 
 **Phases 1–5 are complete.** **Phase 6 / 1.36** (honesty, evening, owner story, scholar, craft — [spec](superpowers/specs/2026-09-24-delight-phase-6.md)) is **historical substrate**. The 1.37 line is the living roadmap ([PRODUCT.md](PRODUCT.md)). Phase 6 leftovers that did not stay in product were **parked in 1.37.58** (do not invent a new Phase 6). Tunarr dual-watch leftovers are sunset — see [live-channels-deferred](superpowers/plans/2026-07-29-live-channels-deferred.md).
