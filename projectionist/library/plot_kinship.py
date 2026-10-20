@@ -260,9 +260,9 @@ def build_explanation(
 ) -> Dict[str, Any]:
     """Shared explanation object for relations, More Like This, and inbox bridges.
 
-    ``kind`` is one of ``plot_link``, ``shared_crew``, ``collection``,
-    or ``watched_bridge`` (household seed + named peer link). Cosine
-    proximity alone is never a kind.
+    ``kind`` is one of ``plot_link``, ``shared_crew``, ``directed_by``,
+    ``written_by``, ``collection``, or ``watched_bridge`` (household seed
+    + named peer link). Cosine proximity alone is never a kind.
     """
     cleaned_kind = str(kind or "").strip().lower() or "plot_link"
     payload: Dict[str, Any] = {
