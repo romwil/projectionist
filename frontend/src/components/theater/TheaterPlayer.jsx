@@ -7,6 +7,7 @@ import {
   OSD_IDLE_MS,
   applyHoldPlaybackRate,
   bottomThirdTapResult,
+  clearTheaterTextSelection,
   createStageGesture,
   dispatchPictureTap,
   holdToRateShouldCancelTap,
@@ -20,6 +21,7 @@ import {
   shouldShowLibraryBufferingChip,
   skipZoneFromClientX,
   stepLibraryBufferingUi,
+  suppressHoldTextSelection,
   theaterHlsConfig,
   toggleTheaterFullscreen,
 } from "../../lib/theaterPlayer.js";
@@ -155,6 +157,7 @@ export default function TheaterPlayer({
     const video = videoRef.current;
     if (!video || video.paused || video.ended) return false;
     holdRef.current = { active: true, downAt: Date.now() };
+    clearTheaterTextSelection();
     applyHoldPlaybackRate(video);
     syncHoldChip();
     return true;
@@ -469,6 +472,7 @@ export default function TheaterPlayer({
       onMouseMove={handlePointerMove}
       onFocus={bumpOsd}
       onPointerDown={(event) => {
+        if (!isTheaterChromeTarget(event.target)) suppressHoldTextSelection(event);
         const rect = rootRef.current?.getBoundingClientRect();
         const y = (event.clientY ?? 0) - (rect?.top || 0);
         if (pictureTapIntent(y, rect?.height || 0) === "osd") {

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Play hold-to-2x no longer selects the page on iPad Safari.** Press-and-hold still doubles speed; the 2x chip and theater stage do not pick up the system text highlight. Scrubber and inputs keep working.
+
 ## [1.37.59] — 2026-10-20
 
 One patch on 1.37.58: For you leads Explore, the owner Monday pass names the ritual, and library Play shows buffering plus press-and-hold 2x.
