@@ -21,7 +21,7 @@ import json
 import logging
 import re
 from collections import Counter
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Set, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Set, Tuple
 
 from projectionist.config_store import Settings
 from projectionist.library.db import Database
@@ -317,8 +317,21 @@ def _select_motifs_for_item(
     return ordered
 
 
-def extract_motif_rows(db: Database) -> List[Tuple[int, str, str]]:
-    """Return ``(item_id, 'motif', token)`` rows after DF filtering."""
+def extract_motif_rows(
+    db: Database,
+    *,
+    prefer_item_ids: Optional[Iterable[int]] = None,
+) -> Tuple[List[Tuple[int, str, str]], int]:
+    """Return ``(item_id, 'motif', token)`` rows after DF filtering.
+
+    When ``prefer_item_ids`` is set, those titles are scored first so owner-demand
+    catch-up titles land at the head of the write batch (bounded by the prefer list).
+    """
+    prefer_order = {
+        int(item_id): idx
+        for idx, item_id in enumerate(prefer_item_ids or ())
+        if int(item_id) > 0
+    }
     docs: List[Tuple[int, Set[str], Set[str]]] = []
     for row in db.all_library_items():
         summary, overview, tagline, long_synopsis, logline = _row_plot_parts(row)
@@ -331,7 +344,10 @@ def extract_motif_rows(db: Database) -> List[Tuple[int, str, str]]:
         docs.append((int(row["id"]), tokens, stems))
 
     if not docs:
-        return []
+        return [], 0
+
+    if prefer_order:
+        docs.sort(key=lambda entry: prefer_order.get(entry[0], 10_000_000))
 
     df: Counter[str] = Counter()
     for _, tokens, _ in docs:
@@ -345,9 +361,10 @@ def extract_motif_rows(db: Database) -> List[Tuple[int, str, str]]:
         if count >= MIN_DF and count <= max_df
     }
     if not allowed:
-        return []
+        return [], 0
 
     rows: List[Tuple[int, str, str]] = []
+    demand_hit = 0
     for item_id, tokens, stems in docs:
         ranked = _select_motifs_for_item(
             tokens,
@@ -355,9 +372,11 @@ def extract_motif_rows(db: Database) -> List[Tuple[int, str, str]]:
             df=df,
             keyword_stems_for_item=stems,
         )
+        if ranked and item_id in prefer_order:
+            demand_hit += 1
         for token in ranked:
             rows.append((item_id, "motif", token))
-    return rows
+    return rows, demand_hit
 
 
 async def run(
@@ -366,21 +385,26 @@ async def run(
     if should_stop():
         return {"status": "interrupted", "motifs": 0}
 
-    rows = extract_motif_rows(db)
+    from projectionist.telemetry.kinship_miss import preferred_item_ids
+
+    prefer_ids = preferred_item_ids(db, limit=25)
+    rows, demand_prioritized = extract_motif_rows(db, prefer_item_ids=prefer_ids)
     if should_stop():
         return {"status": "interrupted", "motifs": 0}
 
     count = db.replace_facets_of_type("motif", rows)
     signals = emit_motif_deficit_signals(db)
     logger.info(
-        "Summary motifs: wrote %s motif facet rows; emitted %s deficit signals",
+        "Summary motifs: wrote %s motif facet rows; demand_prioritized=%s; emitted %s deficit signals",
         count,
+        demand_prioritized,
         signals,
     )
     return {
         "status": "completed",
         "motifs": count,
         "unique_items": len({r[0] for r in rows}),
+        "demand_prioritized": demand_prioritized,
         "coverage_signals": signals,
     }
 
@@ -395,7 +419,8 @@ def register(scheduler: IdleScheduler) -> None:
             run_fn=run,
             description=(
                 "Finds recurring plot patterns in available summaries across the whole "
-                "library so discovery filters can group titles by story ideas."
+                "library so discovery filters can group titles by story ideas. Titles "
+                "owners hit with empty kinship shelves are scored first when present."
             ),
         )
     )

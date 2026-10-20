@@ -157,7 +157,23 @@ async def run(
     batch_size = resolve_batch_size(db, TASK_NAME, DEFAULT_BATCH_SIZE)
     # Parked titles (backoff / exhausted) are skipped, so the batch cap bounds
     # upstream calls per run no matter how large the gap is.
-    backlog = db.items_needing_long_synopsis(limit=batch_size)
+    from projectionist.telemetry.kinship_miss import prioritize_enrichment_rows
+
+    def _prefer_synopsis(database: Database, item_id: int):
+        row = database.library_item_by_id(int(item_id))
+        if row is None:
+            return None
+        synopsis = str(row["long_synopsis"] or "") if "long_synopsis" in row.keys() else ""
+        if synopsis.strip():
+            return None
+        return row
+
+    backlog = prioritize_enrichment_rows(
+        db,
+        db.items_needing_long_synopsis(limit=batch_size),
+        limit=batch_size,
+        include_item_id=_prefer_synopsis,
+    )
     if not backlog:
         coverage_signals = emit_synopsis_backlog_signals(db, limit=5)
         return {
@@ -258,8 +274,9 @@ def register(scheduler: IdleScheduler) -> None:
             run_fn=run,
             description=(
                 "Longer plot text from Wikipedia (default) or OMDb into long_synopsis "
-                f"(never overwrites Plex/TMDB). About {DEFAULT_BATCH_SIZE} titles per run; "
-                "set long_synopsis_source=off to disable, or omdb/auto when preferred."
+                f"(never overwrites Plex/TMDB). Prefers empty-kinship demand titles, then "
+                f"about {DEFAULT_BATCH_SIZE} backlog titles per run; set "
+                "long_synopsis_source=off to disable, or omdb/auto when preferred."
             ),
             items_per_cycle=DEFAULT_BATCH_SIZE,
             catchup_gap_seconds=CATCHUP_GAP_SECONDS,
