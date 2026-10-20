@@ -4,7 +4,7 @@ Projectionist does not “remember” every plot the way a streaming catalog’s
 
 This guide explains **why** motif walls can feel sparse, **what** each knowledge layer is, **how** idle tasks fill them, and **what** owners should expect over time.
 
-In-app entry point: `/help` ([HELP.md](HELP.md)) · related: [ARCHITECTURE.md](ARCHITECTURE.md) · [DATA_MODEL.md](DATA_MODEL.md) · [WEB_UI.md](WEB_UI.md)
+In-app entry point: `/help` ([HELP.md](HELP.md)) · related: [MEDIA_INTELLIGENCE.md](MEDIA_INTELLIGENCE.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [DATA_MODEL.md](DATA_MODEL.md) · [WEB_UI.md](WEB_UI.md)
 
 ---
 
@@ -35,7 +35,7 @@ Phase work landing in parallel aims to unlock bride∩coma-style discovery **wit
 | **C** | Optional long synopsis sources + local keyword→theme mapping; LLM loglines/themes stay last-resort |
 | **D** | Coverage UI, title “Plot knowledge” panel, chat tools that prefer structured layers before semantic search |
 
-Until those land, treat empty intersections as **honest**: the motif cache or the 8-slot budget did not retain every salient word.
+Until those land, treat empty intersections as **honest**: the motif cache or the per-title motif budget (18 slots: 12 rare + 6 keyword-bonus) did not retain every salient word.
 
 ---
 
@@ -109,15 +109,15 @@ flowchart LR
 
 ### Stored
 
-Primary store: `{DATA_DIR}/curatorx.db` (SQLite). Key tables:
+Primary store: `{DATA_DIR}/projectionist.db` (SQLite; legacy `curatorx.db` still opened if the new file is absent). Key tables:
 
-- `library_items` — identity + plot text columns + keyword JSON
-- `library_facets` — genres/people facets from sync; `motif` / `theme` from idle
+- `library_items` — identity + plot text columns + keyword/genre JSON
+- `library_facets` — people/keyword/country/language facets from sync; `motif` / `theme` from idle (genre facets are not emitted yet — see [MEDIA_INTELLIGENCE.md](MEDIA_INTELLIGENCE.md))
 - `embeddings` — per-title vectors
-- `item_neighbors` — materialized top-K similarity (+ surprise)
+- `item_neighbors` — materialized top-K similarity (+ surprise) with `explainable` / `plot_link_json` for named kinship
 - `title_relations` — collection / neighbor / shared-crew edges
 
-See [DATA_MODEL.md](DATA_MODEL.md) for column-level detail.
+See [DATA_MODEL.md](DATA_MODEL.md) for column-level detail · product map: [MEDIA_INTELLIGENCE.md](MEDIA_INTELLIGENCE.md).
 
 ### Preprocessed (idle)
 
@@ -132,7 +132,7 @@ Agent tools and Explore feeds **read caches**; they do not recompute embeddings 
 | **Chat** | Tools over library, facets, neighbors, semantic search |
 | **Explore** | Feed rails (recently added, releases, On This Day), Pulse |
 | **Related titles** | Motif chip catalog + AND wall + Why? excerpts; surprising neighbors from seed title |
-| **Title detail** | Overview, “More Like This” from `item_neighbors` |
+| **Title detail** | Overview, “More Like This” from **explainable** `item_neighbors` only |
 | **Admin → Scheduled Tasks** | Owner cadence + batch, durable recent runs, measured items/hour when history exists, ETA (measured or theoretical) |
 
 ---

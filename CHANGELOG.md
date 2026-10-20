@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [1.37.54] — 2026-10-20
+
+One patch on 1.37.53: More Like This and relation shelves only show peers with a named story link, and Admin coverage separates the cosine cache from that named kinship.
+
+### Highlights
+- **More Like This tells the truth.** Cosine-only neighbors stay off the shelf until a concrete plot subject links the two titles.
+- **Coverage shows both numbers.** Admin and Explore list the raw similar-title cache and the share of titles with at least one explainable peer.
+- **A shared explanation shape.** Relations and feeds carry `{kind, sentence, terms, evidence}` so inbox bridges can reuse the same why later.
+
+### Changed
+- **`item_neighbors` gains `explainable` and `plot_link_json`** (migration 57), filled when neighbors are built and via a cheap annotate pass for legacy rows.
+- **`compute_knowledge_coverage`** adds `with_explainable_neighbors_pct` and `explainable_neighbor_edges`; KnowledgeCoverageCard labels Similar cache vs Named kinship.
+- **Docs:** new [docs/MEDIA_INTELLIGENCE.md](docs/MEDIA_INTELLIGENCE.md); curatorx.db → projectionist.db, motif budget, genre-facet, and schema-location drift fixed where touched.
+
+### Verification
+- Backend subset `pytest` (explainable kinship, relations, neighbors API, plot multi-signal, explore neighbors feeds, agent find_similar, plot_lab_wave2, vec_index, knowledge_ops) — 52 passed with `--no-cov`. A coverage-enabled subset run exited 1 because total coverage was 24.2% under the 74% floor (tests themselves passed aside from one agent case fixed in this patch).
+- Frontend `node --test src/lib/knowledgeCoverage.test.mjs` — 8/8.
+
 ## [1.37.53] — 2026-10-19
 
 One patch on 1.37.52: a Live station that was looping one title fills back in from its show, collection, or theme, and the guide draws back-to-back copies of the same file as one block.

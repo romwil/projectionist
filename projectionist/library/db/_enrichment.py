@@ -73,29 +73,58 @@ class EnrichmentMixin:
     def set_neighbors(
         self,
         item_id: int,
-        neighbors: Sequence[Tuple[int, float, float]],
+        neighbors: Sequence[
+            Tuple[int, float, float]
+            | Tuple[int, float, float, int]
+            | Tuple[int, float, float, int, Optional[str]]
+        ],
     ) -> None:
         """Replace neighbor rows for ``item_id``.
 
-        Each neighbor is ``(neighbor_id, score, surprise_score)``.
+        Each neighbor is ``(neighbor_id, score, surprise_score)`` or
+        ``(neighbor_id, score, surprise_score, explainable[, plot_link_json])``.
+        Cosine-only peers should pass ``explainable=0``.
         """
         seed = int(item_id)
-        rows = [
-            (seed, int(neighbor_id), float(score), float(surprise_score))
-            for neighbor_id, score, surprise_score in neighbors
-            if int(neighbor_id) != seed
-        ]
+        rows: list[Tuple[int, int, float, float, int, Optional[str]]] = []
+        for entry in neighbors:
+            neighbor_id = int(entry[0])
+            if neighbor_id == seed:
+                continue
+            score = float(entry[1])
+            surprise_score = float(entry[2])
+            explainable = int(entry[3]) if len(entry) >= 4 else 0
+            plot_link_json = (
+                str(entry[4]).strip() or None
+                if len(entry) >= 5 and entry[4] is not None
+                else None
+            )
+            rows.append(
+                (seed, neighbor_id, score, surprise_score, 1 if explainable else 0, plot_link_json)
+            )
 
         def _write() -> None:
             with self.connect() as conn:
+                cols = self._table_columns(conn, "item_neighbors")
                 conn.execute("DELETE FROM item_neighbors WHERE item_id = ?", (seed,))
-                if rows:
+                if not rows:
+                    return
+                if "explainable" in cols:
+                    conn.executemany(
+                        """
+                        INSERT INTO item_neighbors
+                            (item_id, neighbor_id, score, surprise_score, explainable, plot_link_json)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        rows,
+                    )
+                else:
                     conn.executemany(
                         """
                         INSERT INTO item_neighbors (item_id, neighbor_id, score, surprise_score)
                         VALUES (?, ?, ?, ?)
                         """,
-                        rows,
+                        [(r[0], r[1], r[2], r[3]) for r in rows],
                     )
 
         self.run_write(_write, label="set_neighbors")
@@ -122,11 +151,27 @@ class EnrichmentMixin:
         *,
         mode: str = "similar",
         limit: int = 20,
+        explainable_only: bool = False,
     ) -> List[sqlite3.Row]:
-        """Return cached neighbors ordered by cosine (``similar``) or surprise score."""
+        """Return cached neighbors ordered by cosine (``similar``) or surprise score.
+
+        Pass ``explainable_only=True`` for More Like This / relations (named plot
+        link only). Raw cosine rows remain available for annotate / diagnostics.
+        """
         capped = min(max(1, int(limit or 20)), 100)
         order_col = "surprise_score" if str(mode or "").strip().lower() == "surprising" else "score"
         with self.connect() as conn:
+            cols = self._table_columns(conn, "item_neighbors")
+            has_explainable = "explainable" in cols
+            explainable_select = (
+                "n.explainable, n.plot_link_json," if has_explainable else "0 AS explainable, NULL AS plot_link_json,"
+            )
+            explainable_clause = ""
+            if explainable_only and has_explainable:
+                explainable_clause = "AND COALESCE(n.explainable, 0) = 1"
+            elif explainable_only and not has_explainable:
+                # Pre-migration schema cannot prove a named link — return nothing.
+                return []
             return list(
                 conn.execute(
                     f"""
@@ -135,6 +180,7 @@ class EnrichmentMixin:
                         n.neighbor_id,
                         n.score,
                         n.surprise_score,
+                        {explainable_select}
                         li.id,
                         li.rating_key,
                         li.media_type,
@@ -162,6 +208,7 @@ class EnrichmentMixin:
                     FROM item_neighbors n
                     JOIN library_items li ON li.id = n.neighbor_id
                     WHERE n.item_id = ?
+                    {explainable_clause}
                     ORDER BY n.{order_col} DESC
                     LIMIT ?
                     """,
@@ -366,6 +413,32 @@ class EnrichmentMixin:
                     SELECT 1 FROM item_neighbors n WHERE n.item_id = e.item_id
                 )
                 ORDER BY e.item_id ASC
+                LIMIT ?
+                """,
+                (capped,),
+            ).fetchall()
+            return [int(row["item_id"]) for row in rows]
+
+    def item_ids_needing_neighbor_explanation(self, *, limit: int = 50) -> List[int]:
+        """Seeds with neighbor rows that have not been scored for explainability yet.
+
+        After migration 57, legacy rows default to ``explainable=0`` with a NULL
+        ``plot_link_json``. Annotating them is cheaper than a full cosine refresh.
+        """
+        capped = max(1, int(limit))
+        with self.connect() as conn:
+            cols = self._table_columns(conn, "item_neighbors")
+            if "explainable" not in cols:
+                return []
+            rows = conn.execute(
+                """
+                SELECT DISTINCT n.item_id AS item_id
+                FROM item_neighbors n
+                WHERE EXISTS (
+                    SELECT 1 FROM item_neighbors u
+                    WHERE u.item_id = n.item_id AND u.plot_link_json IS NULL
+                )
+                ORDER BY n.item_id ASC
                 LIMIT ?
                 """,
                 (capped,),

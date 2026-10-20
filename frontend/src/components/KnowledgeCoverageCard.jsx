@@ -110,7 +110,9 @@ export default function KnowledgeCoverageCard({
       </div>
       <p className="status status-secondary knowledge-coverage-blurb">
         How deep the curator knows your shelves — overviews, plot motifs, keywords,
-        neighbors, and optional loglines. Sparse bars mean idle tasks still have work.
+        cosine neighbor cache vs named kinship, and optional loglines. Similar cache
+        can look full while Named kinship stays low: More Like This only shows peers
+        with a concrete story link. Sparse bars mean idle tasks still have work.
       </p>
       {loading ? (
         <div className="dash-skeleton" aria-label="Loading coverage">

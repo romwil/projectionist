@@ -21,7 +21,11 @@ from typing import Any, Callable, Dict, List
 from projectionist.config_store import Settings
 from projectionist.library.db import Database
 from projectionist.library.db_io import run_db
-from projectionist.library.neighbors import DEFAULT_TOP_K, refresh_neighbors_for_items
+from projectionist.library.neighbors import (
+    DEFAULT_TOP_K,
+    annotate_explainable_neighbors,
+    refresh_neighbors_for_items,
+)
 from projectionist.scheduler.autotune import resolve_batch_size
 from projectionist.scheduler.engine import IdleScheduler, TaskDefinition
 
@@ -100,11 +104,22 @@ async def run(
     last_seed = unique_seeds[-1]
     db.set_config(CURSOR_KEY, str(last_seed))
 
+    # Cheap pass: annotate legacy cosine-only rows with explainable + plot_link_json.
+    legacy_seeds = [
+        seed_id
+        for seed_id in db.item_ids_needing_neighbor_explanation(limit=batch_size)
+        if seed_id not in seen
+    ]
+    annotated = 0
+    if legacy_seeds and not should_stop():
+        annotated = await run_db(annotate_explainable_neighbors, db, legacy_seeds)
+
     remaining_missing = db.count_items_missing_neighbors()
     logger.info(
-        "Plot neighbors trickle: processed=%s seeds=%s missing=%s library_embeddings=%s",
+        "Plot neighbors trickle: processed=%s seeds=%s annotated=%s missing=%s library_embeddings=%s",
         processed,
         len(unique_seeds),
+        annotated,
         remaining_missing,
         len(emb_ids),
     )
@@ -112,11 +127,12 @@ async def run(
         "status": "completed",
         "processed": processed,
         "seeds": len(unique_seeds),
+        "annotated_explanations": annotated,
         "top_k": DEFAULT_TOP_K,
         "cursor": last_seed,
         "batch_size": batch_size,
         "missing_neighbors": remaining_missing,
-        "has_more": remaining_missing > 0,
+        "has_more": remaining_missing > 0 or bool(legacy_seeds),
     }
 
 
