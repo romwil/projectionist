@@ -2700,14 +2700,21 @@ def library_feed_for_you(
     limit: int = 12,
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
-    """Explore For you rail — personalized weekly picks with persona-voiced whys."""
-    from projectionist.taste import feed_for_you_weekly
+    """Explore For you — watched_bridge picks (same refusal rules as inbox)."""
+    from projectionist.library.feeds import feed_for_you
 
-    user_id = user.id if _settings().features.multi_user_enabled else (
-        getattr(user, "id", None) or "bootstrap-owner"
+    settings = _settings()
+    multi_user = bool(settings.features.multi_user_enabled)
+    user_id = str(user.id) if multi_user and getattr(user, "id", None) else (
+        str(getattr(user, "id", None) or "bootstrap-owner")
     )
     return _sanitize_library_payload(
-        feed_for_you_weekly(_db(), user_id=str(user_id), limit=limit),
+        feed_for_you(
+            _db(),
+            limit=limit,
+            user_id=user_id,
+            multi_user_enabled=multi_user,
+        ),
         user,
     )
 

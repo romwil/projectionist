@@ -32,6 +32,7 @@ from projectionist.library.feeds import (
     feed_afterglow,
     feed_continue_watching,
     feed_director_spotlight,
+    feed_for_you,
     feed_genre_spotlight,
     feed_on_this_day,
     feed_recent_releases,
@@ -73,6 +74,7 @@ _CONTEXT_LOCK = threading.Lock()
 
 _RAIL_KEYS = (
     "continue_watching",
+    "for_you",
     "unfinished",
     "recently_added",
     "recently_added_episodes",
@@ -128,6 +130,7 @@ def _empty_rail(feed_name: str, *, pending: bool = False) -> Dict[str, Any]:
 def _warming_payload(*, rail_limit: int, is_youth: bool) -> Dict[str, Any]:
     rails: Dict[str, Any] = {
         "continue_watching": _empty_rail("continue-watching", pending=True),
+        "for_you": _empty_rail("for-you", pending=True),
         "unfinished": _empty_rail("unfinished", pending=True),
         "recently_added": _empty_rail("recently-added", pending=True),
         "recently_added_episodes": _empty_rail("recently-added-episodes", pending=True),
@@ -275,8 +278,18 @@ def _fast_rail_builders(
     *,
     capped: int,
     user_id: Optional[str],
+    multi_user_enabled: bool = False,
 ) -> tuple[tuple[str, Callable[[], Any]], ...]:
     return (
+        (
+            "for_you",
+            lambda: feed_for_you(
+                db,
+                limit=capped,
+                user_id=user_id,
+                multi_user_enabled=multi_user_enabled,
+            ),
+        ),
         ("unfinished", lambda: feed_unfinished(db, limit=capped, idle_days=60)),
         ("recently_added", lambda: feed_recently_added(db, limit=capped, days=30)),
         ("recently_added_episodes", lambda: feed_recently_added_episodes(db, limit=capped, days=30)),
@@ -292,10 +305,13 @@ def _fill_fast_rails(
     *,
     capped: int,
     user_id: Optional[str],
+    multi_user_enabled: bool = False,
 ) -> None:
     """Local SQL shelves only. No Plex, no full-library scan, no overview rebuild."""
     rails = payload["rails"]
-    for key, builder in _fast_rail_builders(db, capped=capped, user_id=user_id):
+    for key, builder in _fast_rail_builders(
+        db, capped=capped, user_id=user_id, multi_user_enabled=multi_user_enabled
+    ):
         rails[key] = _coerce_rail(rails[key], builder, key=key)
     payload["overview"] = _read_cached_overview(db)
     payload["generated_at"] = int(time.time())
@@ -322,11 +338,18 @@ def _fast_partial(
     is_youth: bool,
     user_id: Optional[str],
     rail_limit: int,
+    multi_user_enabled: bool = False,
 ) -> Dict[str, Any]:
     """First paint: local shelves, slow rails still pending."""
     capped = _cap_rail_limit(rail_limit)
     payload = _warming_payload(rail_limit=capped, is_youth=is_youth)
-    _fill_fast_rails(payload, db, capped=capped, user_id=user_id)
+    _fill_fast_rails(
+        payload,
+        db,
+        capped=capped,
+        user_id=user_id,
+        multi_user_enabled=multi_user_enabled,
+    )
     payload["warming"] = True
     return payload
 
@@ -348,11 +371,18 @@ def build_explore_hub(
     """
     capped = _cap_rail_limit(rail_limit)
     plex = _plex_client(settings)
+    multi_user = bool(getattr(getattr(settings, "features", None), "multi_user_enabled", False))
     payload = _warming_payload(rail_limit=capped, is_youth=is_youth)
     rails = payload["rails"]
 
     # Publish local shelves before any full-library pulse or slow rail.
-    _fill_fast_rails(payload, db, capped=capped, user_id=user_id)
+    _fill_fast_rails(
+        payload,
+        db,
+        capped=capped,
+        user_id=user_id,
+        multi_user_enabled=multi_user,
+    )
     _emit_partial(payload, on_partial)
 
     payload["overview"] = library_overview(db, use_cache=True)
@@ -563,6 +593,9 @@ def get_explore_hub(
         is_youth=is_youth,
         user_id=user_id,
         rail_limit=rail_limit,
+        multi_user_enabled=bool(
+            getattr(getattr(settings, "features", None), "multi_user_enabled", False)
+        ),
     )
     _cache_set(cache_key, partial, soft_ttl=0.0)
     _schedule_refresh(

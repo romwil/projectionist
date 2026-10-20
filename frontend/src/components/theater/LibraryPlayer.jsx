@@ -44,7 +44,9 @@ import {
   seekTimelineOriginMs,
   shouldAutoResumePlayback,
   shouldPauseOnVisibilityHide,
+  shouldResumeOnPageShow,
   shouldResumeFromOffset,
+  shouldStopSessionOnPageHide,
   shouldSendProgress,
   skipDeltaForZone,
   centerPlayHoldAfterOsdHide,
@@ -612,8 +614,8 @@ export default function LibraryPlayer({
       }
     }
 
-    function onPageHide() {
-      // Real navigation / close — free the transcoder. Do not disarm on mere hide.
+    function onPageHide(event) {
+      // Flush shrunk playhead whenever we leave the foreground.
       if (floatedRef.current) {
         const video = videoRef.current;
         onPlayheadRef.current?.({
@@ -622,14 +624,35 @@ export default function LibraryPlayer({
           flush: true,
         });
       }
+      // iPad Safari fires pagehide on lock / app switch with persisted=true (bfcache).
+      // Keep the session so pageshow can resume open→resume→done.
+      if (!shouldStopSessionOnPageHide({ persisted: Boolean(event?.persisted) })) {
+        return;
+      }
+      // Real navigation / close — free the transcoder.
       stopSession();
+    }
+
+    function onPageShow(event) {
+      if (
+        !shouldResumeOnPageShow({
+          persisted: Boolean(event?.persisted),
+          wasPlaying: wasPlayingBeforeHideRef.current,
+        })
+      ) {
+        return;
+      }
+      wasPlayingBeforeHideRef.current = false;
+      resumeAfterVisible();
     }
 
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("pageshow", onPageShow);
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("pageshow", onPageShow);
     };
     // begin / sendProgress / session are stable enough via refs for this lifecycle.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- visibility controller

@@ -168,7 +168,7 @@ def _slots_from_normalized(
 
 
 def _is_trivial(settings: Any) -> Optional[Dict[str, Any]]:
-    """Disabled guides are instant. A missing Tunarr URL is not empty when we own a lineup."""
+    """Disabled guides are instant. Empty when Live is on but no native lineup exists."""
     features = getattr(settings, "features", None)
     if not bool(getattr(features, "live_channels_enabled", False)):
         return _empty_snapshot(enabled=False, reason="live_channels_disabled")
@@ -183,11 +183,8 @@ def _is_trivial(settings: Any) -> Optional[Dict[str, Any]]:
     root = tunarr_store_dir(resolve_data_dir(settings))
     if (root / "db.db").is_file() and (root / "channel-lineups").is_dir():
         return None
-    tunarr = getattr(settings, "tunarr", None)
-    url = str(getattr(tunarr, "url", "") or "").strip() if tunarr else ""
-    if not url:
-        return _empty_snapshot(enabled=True, reason="tunarr_url_missing")
-    return None
+    # Legacy Tunarr URL alone does not make a guide — native lineup is required.
+    return _empty_snapshot(enabled=True, reason="lineup_missing")
 
 
 def _finish(result: SwrResult) -> Dict[str, Any]:

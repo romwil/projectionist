@@ -277,7 +277,7 @@ class LiveGuideSwrTests(unittest.TestCase):
         )
         self.assertEqual(self.gc.get_guide_snapshot(off)["reason"], "live_channels_disabled")
         nourl = _live_settings(url="")
-        self.assertEqual(self.gc.get_on_now_snapshot(nourl)["reason"], "tunarr_url_missing")
+        self.assertEqual(self.gc.get_on_now_snapshot(nourl)["reason"], "lineup_missing")
 
     def test_rebase_matches_builder_when_not_stale(self) -> None:
         ts = time.time()
