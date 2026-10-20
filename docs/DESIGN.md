@@ -285,7 +285,7 @@ Background **idle scheduler** tasks pre-warm health metrics, taste refresh, embe
 When `features.multi_user_enabled` is on:
 
 1. Any title card can **Recommend** to household peers (`RecommendModal`).
-2. Recipients see an unread **RecommendationsInbox** at the top of chat home.
+2. Recipients see unread items in the household **Inbox** (`/inbox`) with a chrome badge.
 3. Dismiss one or dismiss-all clears the inbox items.
 
 Local curated lists (Settings → Lists) remain separate from peer recommendations.

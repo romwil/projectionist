@@ -17,6 +17,10 @@ const OWNER_EMPTY_CTA_RULES = [
     test: /metadata_enrichment|not enriched|enrich release|release dates|release_date|first_air_date/i,
     label: "Refresh title details",
   },
+  {
+    test: /named kinship|no named links from what you've watched/i,
+    label: "Open Scheduled Tasks",
+  },
   { test: /library sync|added_at yet/i, label: "Open Scheduled Tasks" },
 ];
 

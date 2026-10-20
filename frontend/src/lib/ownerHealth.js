@@ -25,13 +25,74 @@ function browseHref({ watch_state, sort, sort_dir } = {}) {
 }
 
 /**
+ * One clear Library health narrative for the Admin hero.
+ * Ties Named kinship, open issues, purge pressure, and Scheduled Tasks catch-up.
+ *
+ * @param {object} args
+ * @param {object} [args.health]
+ * @param {object} [args.coverage]
+ * @param {number|null} [args.openIssues]
+ * @param {number|null} [args.purgeCount]
+ * @returns {{headline:string, body:string, tone:string}|null}
+ */
+export function buildLibraryHealthStory({ health, coverage, openIssues, purgeCount } = {}) {
+  const h = health || {};
+  const c = coverage || {};
+  const explainable = pct(c.with_explainable_neighbors_pct);
+  const overview = pct(c.with_overview_pct);
+  const kinshipPct = explainable != null ? explainable : overview;
+  const issues = typeof openIssues === "number" ? openIssues : null;
+  const purge = typeof purgeCount === "number" ? purgeCount : null;
+  const staleAdds = num(h.stale_adds);
+  if (kinshipPct == null && issues == null && purge == null) return null;
+
+  const bits = [];
+  if (kinshipPct != null) {
+    bits.push(
+      kinshipPct < 50
+        ? `Named kinship is at ${kinshipPct}% — empty More Like This shelves queue catch-up on Scheduled Tasks.`
+        : `Named kinship is at ${kinshipPct}% — titles can cite a plot, crew, or collection link.`,
+    );
+  }
+  if (issues != null) {
+    bits.push(
+      issues > 0
+        ? `${issues} open issue${issues === 1 ? "" : "s"} need review.`
+        : "No open media issues.",
+    );
+  }
+  if (purge != null) {
+    bits.push(
+      purge > 0
+        ? `${purge.toLocaleString()} purge candidate${purge === 1 ? "" : "s"} add disk pressure${
+            staleAdds > 0 ? ` (${staleAdds.toLocaleString()} stale adds)` : ""
+          }.`
+        : "Purge buffer is clear.",
+    );
+  } else if (staleAdds > 0) {
+    bits.push(`${staleAdds.toLocaleString()} stale adds still unwatched.`);
+  }
+
+  const warn =
+    (kinshipPct != null && kinshipPct < 50) ||
+    (issues != null && issues > 0) ||
+    (purge != null && purge > 0);
+  return {
+    headline: "Library health",
+    body: bits.join(" "),
+    tone: warn ? "warn" : "good",
+  };
+}
+
+/**
  * @param {object} args
  * @param {object} [args.health]   - GET /api/library/health payload
  * @param {object} [args.coverage] - GET /api/library/knowledge-coverage payload
  * @param {number|null} [args.openIssues] - open media-issue count (null = unknown)
+ * @param {number|null} [args.purgeCount] - cached purge-candidate count (null = unknown)
  * @returns {Array<{id:string,label:string,value:string,detail:string,to:string,tone:string}>}
  */
-export function buildHealthHeroTiles({ health, coverage, openIssues } = {}) {
+export function buildHealthHeroTiles({ health, coverage, openIssues, purgeCount } = {}) {
   const h = health || {};
   const c = coverage || {};
 
@@ -43,12 +104,13 @@ export function buildHealthHeroTiles({ health, coverage, openIssues } = {}) {
   const overview = pct(c.with_overview_pct);
   const kinshipPct = explainable != null ? explainable : overview;
   const issues = typeof openIssues === "number" ? openIssues : null;
+  const purge = typeof purgeCount === "number" ? purgeCount : null;
   const ratingNote =
     typeof h.rating_coverage_note === "string" && h.rating_coverage_note.trim()
       ? h.rating_coverage_note.trim()
       : null;
 
-  return [
+  const tiles = [
     {
       id: "titles",
       label: "Titles indexed",
@@ -77,14 +139,6 @@ export function buildHealthHeroTiles({ health, coverage, openIssues } = {}) {
       tone: kinshipPct != null && kinshipPct < 50 ? "warn" : "good",
     },
     {
-      id: "rating",
-      label: "Rating coverage",
-      value: rating == null ? "—" : `${rating}%`,
-      detail: ratingNote || "Watched titles rated",
-      to: browseHref({ watch_state: "watched" }),
-      tone: ratingNote ? "warn" : "neutral",
-    },
-    {
       id: "issues",
       label: "Open issues",
       value: issues == null ? "—" : String(issues),
@@ -92,5 +146,22 @@ export function buildHealthHeroTiles({ health, coverage, openIssues } = {}) {
       to: "/admin/health?tab=issues",
       tone: issues ? "warn" : "good",
     },
+    {
+      id: "purge",
+      label: "Purge pressure",
+      value: purge == null ? "—" : String(purge),
+      detail: purge ? "Candidates in buffer" : "Buffer clear",
+      to: "/admin#storage-intelligence",
+      tone: purge ? "warn" : "good",
+    },
+    {
+      id: "rating",
+      label: "Rating coverage",
+      value: rating == null ? "—" : `${rating}%`,
+      detail: ratingNote || "Watched titles rated",
+      to: browseHref({ watch_state: "watched" }),
+      tone: ratingNote ? "warn" : "neutral",
+    },
   ];
+  return tiles;
 }

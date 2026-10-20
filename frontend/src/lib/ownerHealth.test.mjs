@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildHealthHeroTiles } from "./ownerHealth.js";
+import { buildHealthHeroTiles, buildLibraryHealthStory } from "./ownerHealth.js";
 import { readAllStyles } from "./readStyles.mjs";
 
 const styles = readAllStyles();
 
 describe("buildHealthHeroTiles", () => {
-  it("derives five tiles from aggregations without curator streak", () => {
+  it("derives tiles from aggregations including purge pressure", () => {
     const tiles = buildHealthHeroTiles({
       health: {
         total: 1234,
@@ -17,9 +17,10 @@ describe("buildHealthHeroTiles", () => {
       },
       coverage: { with_overview_pct: 91, with_explainable_neighbors_pct: 42 },
       openIssues: 3,
+      purgeCount: 8,
     });
     const byId = Object.fromEntries(tiles.map((t) => [t.id, t]));
-    assert.equal(tiles.length, 5);
+    assert.equal(tiles.length, 6);
     assert.equal(byId.titles.value, "1,234");
     assert.equal(byId.titles.to, "/explore/browse");
     assert.equal(byId.unwatched.value, "68%");
@@ -34,6 +35,9 @@ describe("buildHealthHeroTiles", () => {
     assert.equal(byId.issues.value, "3");
     assert.equal(byId.issues.tone, "warn");
     assert.equal(byId.issues.to, "/admin/health?tab=issues");
+    assert.equal(byId.purge.value, "8");
+    assert.equal(byId.purge.tone, "warn");
+    assert.match(byId.purge.to, /storage-intelligence/);
     assert.equal(byId.streak, undefined);
   });
 
@@ -73,12 +77,43 @@ describe("buildHealthHeroTiles", () => {
     const byId = Object.fromEntries(tiles.map((t) => [t.id, t]));
     assert.equal(byId.titles.value, "—");
     assert.equal(byId.issues.value, "—");
+    assert.equal(byId.purge.value, "—");
+  });
+});
+
+describe("buildLibraryHealthStory", () => {
+  it("ties kinship, issues, purge, and catch-up into one narrative", () => {
+    const story = buildLibraryHealthStory({
+      health: { stale_adds: 4 },
+      coverage: { with_explainable_neighbors_pct: 18 },
+      openIssues: 2,
+      purgeCount: 5,
+    });
+    assert.equal(story.headline, "Library health");
+    assert.equal(story.tone, "warn");
+    assert.match(story.body, /Named kinship is at 18%/);
+    assert.match(story.body, /Scheduled Tasks/);
+    assert.match(story.body, /2 open issues/);
+    assert.match(story.body, /5 purge candidates/);
+  });
+
+  it("reads calm when kinship is healthy and queues are clear", () => {
+    const story = buildLibraryHealthStory({
+      coverage: { with_explainable_neighbors_pct: 72 },
+      openIssues: 0,
+      purgeCount: 0,
+    });
+    assert.equal(story.tone, "good");
+    assert.match(story.body, /72%/);
+    assert.match(story.body, /No open media issues/);
+    assert.match(story.body, /Purge buffer is clear/);
   });
 });
 
 describe("owner health hero theme-safe styles", () => {
   it("defines hero tile styles using shared theme tokens (light/dark parity)", () => {
     assert.match(styles, /\.owner-health-hero\b/);
+    assert.match(styles, /\.owner-health-story-headline\b/);
     assert.match(styles, /\.owner-health-tile\b/);
     assert.match(styles, /\.owner-health-tile\.tone-warn\b/);
     assert.match(styles, /\.admin-rail-badge\b/);

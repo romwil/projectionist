@@ -1,12 +1,13 @@
 """Stale-while-revalidate guide snapshots for ``/live``, On Now, and youth picks.
 
-``build_on_now_snapshot`` / ``build_guide_snapshot`` call Tunarr synchronously
-(channel list + guide window + up to two ``now_playing`` probes per channel, 8s
-timeouts). That is fine for a background worker and fatal for first paint.
+``build_on_now_snapshot`` / ``build_guide_snapshot`` read the native lineup and
+can be slow on a cold disk / large schedule. That is fine for a background
+worker and fatal for first paint.
 
 Request handlers should use :func:`get_guide_snapshot` / :func:`get_on_now_snapshot`:
 the last good guide is served immediately (with "now / next" re-derived from the
-cached programs so stale never lies), and Tunarr is only asked in the background.
+cached programs so stale never lies), and the lineup is only re-read in the
+background.
 """
 
 from __future__ import annotations
@@ -27,15 +28,15 @@ from projectionist.swr_cache import SwrCache, SwrResult
 
 logger = logging.getLogger(__name__)
 
-# Guide rows are cheap to re-derive; Tunarr guide generation is not.
+# Guide rows are cheap to re-derive; native lineup rebuilds are not.
 GUIDE_SOFT_TTL_SECONDS = 30.0
 # Window is 6h+; a two-hour-old guide still has hours of valid programming.
 GUIDE_HARD_TTL_SECONDS = 2 * 3600.0
 # Briefly show an honest upstream error when there is nothing better cached.
 GUIDE_DEGRADED_SOFT_TTL_SECONDS = 5.0
-# Never wait on Tunarr/Docker/Plex on the request path. A cold start returns
-# the warming skeleton immediately; the last guide (memory or disk) paints
-# while a refresh runs behind it.
+# Never wait on lineup I/O on the request path. A cold start returns the
+# warming skeleton immediately; the last guide (memory or disk) paints while
+# a refresh runs behind it.
 GUIDE_COLD_WAIT_SECONDS = 0.0
 
 GUIDE_CACHE = SwrCache(
@@ -59,8 +60,11 @@ def invalidate_live_guide_cache() -> None:
 
 
 def _accept_snapshot(snapshot: Mapping[str, Any]) -> bool:
-    """Do not let an unreachable-Tunarr error replace a good cached guide."""
-    return str(snapshot.get("reason") or "") != "tunarr_unreachable"
+    """Do not let a failed/empty lineup read replace a good cached guide."""
+    reason = str(snapshot.get("reason") or "")
+    if reason in {"no_lineup", "lineup_missing", "tunarr_unreachable"}:
+        return False
+    return bool(snapshot.get("ready"))
 
 
 def _cache_key(settings: Any, *, youth_max_rating: Optional[str], extra: str) -> str:
@@ -168,7 +172,7 @@ def _slots_from_normalized(
 
 
 def _is_trivial(settings: Any) -> Optional[Dict[str, Any]]:
-    """Disabled guides are instant. A missing Tunarr URL is not empty when we own a lineup."""
+    """Disabled guides are instant. Empty when Live is on but no native lineup exists."""
     features = getattr(settings, "features", None)
     if not bool(getattr(features, "live_channels_enabled", False)):
         return _empty_snapshot(enabled=False, reason="live_channels_disabled")
@@ -183,11 +187,8 @@ def _is_trivial(settings: Any) -> Optional[Dict[str, Any]]:
     root = tunarr_store_dir(resolve_data_dir(settings))
     if (root / "db.db").is_file() and (root / "channel-lineups").is_dir():
         return None
-    tunarr = getattr(settings, "tunarr", None)
-    url = str(getattr(tunarr, "url", "") or "").strip() if tunarr else ""
-    if not url:
-        return _empty_snapshot(enabled=True, reason="tunarr_url_missing")
-    return None
+    # Legacy Tunarr URL alone does not make a guide — native lineup is required.
+    return _empty_snapshot(enabled=True, reason="lineup_missing")
 
 
 def _finish(result: SwrResult) -> Dict[str, Any]:
@@ -207,7 +208,7 @@ def get_guide_snapshot(
     cold_wait: float = GUIDE_COLD_WAIT_SECONDS,
     db: Any = None,
 ) -> Dict[str, Any]:
-    """``/live`` EPG guide — cached, never blocks on Tunarr."""
+    """``/live`` EPG guide — cached, never blocks on lineup rebuild."""
     trivial = _is_trivial(settings)
     if trivial is not None:
         trivial.update({"cached": False, "stale": False, "warming": False})
@@ -242,10 +243,10 @@ def get_on_now_snapshot(
     cold_wait: float = GUIDE_COLD_WAIT_SECONDS,
     db: Any = None,
 ) -> Dict[str, Any]:
-    """Household On Now rows — cached, never blocks on Tunarr.
+    """Household On Now rows — cached, never blocks on lineup rebuild.
 
     Served from the (richer) guide cache when it already holds this audience so
-    one Tunarr round-trip feeds ``/live`` and every On Now widget.
+    one lineup read feeds ``/live`` and every On Now widget.
     """
     trivial = _is_trivial(settings)
     if trivial is not None:

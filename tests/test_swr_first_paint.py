@@ -124,10 +124,20 @@ class SwrCacheTests(unittest.TestCase):
             self.assertTrue(second.wait_idle(3))
 
 
-def _live_settings(url: str = "http://tunarr.test") -> SimpleNamespace:
+def _live_settings(*, data_dir: str = "/tmp/projectionist-live-swr") -> SimpleNamespace:
+    """Native Live settings — guide SWR keys off the household data dir."""
     return SimpleNamespace(
+        data_dir=data_dir,
         features=SimpleNamespace(live_channels_enabled=True),
-        tunarr=SimpleNamespace(url=url),
+        tunarr=SimpleNamespace(url=""),
+    )
+
+
+def _with_native_lineup():
+    """Bypass disk lineup checks so SWR tests exercise the cache path only."""
+    return patch(
+        "projectionist.live_channels.native_schedule.schedule_has_channels",
+        return_value=True,
     )
 
 
@@ -174,12 +184,15 @@ class LiveGuideSwrTests(unittest.TestCase):
         guide_cache.ON_NOW_CACHE.clear()
         self.gc = guide_cache
 
-    def test_cold_guide_returns_warming_quickly_when_tunarr_hangs(self) -> None:
+    def test_cold_guide_returns_warming_quickly_when_lineup_hangs(self) -> None:
         def hang(*_a, **_k):
             time.sleep(0.6)
             return _guide(time.time())
 
-        with patch("projectionist.live_channels.guide.build_guide_snapshot", side_effect=hang):
+        with (
+            _with_native_lineup(),
+            patch("projectionist.live_channels.guide.build_guide_snapshot", side_effect=hang),
+        ):
             snap, took = _elapsed(
                 lambda: self.gc.get_guide_snapshot(_live_settings(), cold_wait=0.0)
             )
@@ -188,14 +201,17 @@ class LiveGuideSwrTests(unittest.TestCase):
         self.assertLess(took, 0.25)
         self.gc.GUIDE_CACHE.wait_idle(3)
 
-    def test_default_cold_wait_does_not_block_on_hung_tunarr(self) -> None:
-        """The live guide request path must not sit on a slow Tunarr build."""
+    def test_default_cold_wait_does_not_block_on_hung_lineup(self) -> None:
+        """The live guide request path must not sit on a slow native lineup build."""
 
         def hang(*_a, **_k):
             time.sleep(1.5)
             return _guide(time.time())
 
-        with patch("projectionist.live_channels.guide.build_guide_snapshot", side_effect=hang):
+        with (
+            _with_native_lineup(),
+            patch("projectionist.live_channels.guide.build_guide_snapshot", side_effect=hang),
+        ):
             snap, took = _elapsed(lambda: self.gc.get_guide_snapshot(_live_settings()))
         self.assertTrue(snap["warming"])
         self.assertFalse(snap["ready"])
@@ -207,7 +223,7 @@ class LiveGuideSwrTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "guide.db")
-            settings = _live_settings()
+            settings = _live_settings(data_dir=tmp)
             key = self.gc._cache_key(settings, youth_max_rating=None, extra="guide|h=6.0")
             self.gc.GUIDE_CACHE.put(key, _guide(time.time()), db=db)
             self.gc.GUIDE_CACHE.clear()
@@ -216,7 +232,10 @@ class LiveGuideSwrTests(unittest.TestCase):
                 time.sleep(1.5)
                 return _guide(time.time(), title_now="Fresh")
 
-            with patch("projectionist.live_channels.guide.build_guide_snapshot", side_effect=hang):
+            with (
+                _with_native_lineup(),
+                patch("projectionist.live_channels.guide.build_guide_snapshot", side_effect=hang),
+            ):
                 snap, took = _elapsed(
                     lambda: self.gc.get_guide_snapshot(settings, db=db)
                 )
@@ -226,7 +245,7 @@ class LiveGuideSwrTests(unittest.TestCase):
         self.assertEqual(snap["channels"][0]["now"]["title"], "Now Show")
         self.gc.GUIDE_CACHE.wait_idle(3)
 
-    def test_stale_guide_never_waits_on_tunarr_and_rebases_now(self) -> None:
+    def test_stale_guide_never_waits_on_lineup_and_rebases_now(self) -> None:
         ts = time.time()
         settings = _live_settings()
         key = self.gc._cache_key(settings, youth_max_rating=None, extra="guide|h=6.0")
@@ -239,7 +258,10 @@ class LiveGuideSwrTests(unittest.TestCase):
             time.sleep(0.5)
             return _guide(time.time(), title_now="Fresh")
 
-        with patch("projectionist.live_channels.guide.build_guide_snapshot", side_effect=hang):
+        with (
+            _with_native_lineup(),
+            patch("projectionist.live_channels.guide.build_guide_snapshot", side_effect=hang),
+        ):
             snap, took = _elapsed(lambda: self.gc.get_guide_snapshot(settings))
         self.assertLess(took, 0.25)
         self.assertTrue(snap["stale"])
@@ -249,7 +271,7 @@ class LiveGuideSwrTests(unittest.TestCase):
         self.assertGreaterEqual(row["now"]["percent"], 0)
         self.gc.GUIDE_CACHE.wait_idle(3)
 
-    def test_unreachable_tunarr_does_not_replace_good_guide(self) -> None:
+    def test_empty_lineup_rebuild_does_not_replace_good_guide(self) -> None:
         ts = time.time()
         settings = _live_settings()
         key = self.gc._cache_key(settings, youth_max_rating=None, extra="guide|h=6.0")
@@ -260,10 +282,13 @@ class LiveGuideSwrTests(unittest.TestCase):
             "ready": False,
             "channels": [],
             "count": 0,
-            "reason": "tunarr_unreachable",
+            "reason": "no_lineup",
             "error": "boom",
         }
-        with patch("projectionist.live_channels.guide.build_guide_snapshot", return_value=down):
+        with (
+            _with_native_lineup(),
+            patch("projectionist.live_channels.guide.build_guide_snapshot", return_value=down),
+        ):
             self.gc.get_guide_snapshot(settings)
             self.gc.GUIDE_CACHE.wait_idle(3)
             kept = self.gc.get_guide_snapshot(settings)
@@ -276,8 +301,8 @@ class LiveGuideSwrTests(unittest.TestCase):
             tunarr=SimpleNamespace(url=""),
         )
         self.assertEqual(self.gc.get_guide_snapshot(off)["reason"], "live_channels_disabled")
-        nourl = _live_settings(url="")
-        self.assertEqual(self.gc.get_on_now_snapshot(nourl)["reason"], "tunarr_url_missing")
+        missing = _live_settings()
+        self.assertEqual(self.gc.get_on_now_snapshot(missing)["reason"], "lineup_missing")
 
     def test_rebase_matches_builder_when_not_stale(self) -> None:
         ts = time.time()

@@ -4,6 +4,7 @@ import { getLibraryKnowledgeCoverage } from "../api/client";
 import {
   KNOWLEDGE_COVERAGE_REQUEST_MS,
   buildKnowledgeCoverageRows,
+  embeddingCoverageLabel,
   knowledgeCoverageFailureCopy,
   knowledgeStripContent,
   summarizeKnowledgeCoverage,
@@ -54,6 +55,7 @@ export default function KnowledgeCoverageCard({
 
   const rows = buildKnowledgeCoverageRows(coverage);
   const summary = summarizeKnowledgeCoverage(coverage);
+  const embeddingLabel = embeddingCoverageLabel(coverage);
 
   if (variant === "strip") {
     const line = knowledgeStripContent({ loading, error, summary });
@@ -66,6 +68,14 @@ export default function KnowledgeCoverageCard({
         <p className="knowledge-coverage-strip-line">
           <span className="knowledge-coverage-strip-label">Knowledge</span>
           <span data-testid="knowledge-coverage-summary">{line}</span>
+          {embeddingLabel ? (
+            <>
+              {" "}
+              <span className="knowledge-coverage-embedding" data-testid="knowledge-coverage-embedding">
+                · {embeddingLabel}
+              </span>
+            </>
+          ) : null}
           {showHelpLink ? (
             <>
               {" "}
@@ -116,6 +126,12 @@ export default function KnowledgeCoverageCard({
           Scheduled Tasks
         </Link>
         . Sparse bars mean enrichment still has work.
+        {embeddingLabel ? (
+          <>
+            {" "}
+            <span data-testid="knowledge-coverage-embedding">{embeddingLabel}.</span>
+          </>
+        ) : null}
       </p>
       {loading ? (
         <div className="dash-skeleton" aria-label="Loading coverage">

@@ -2,8 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+- **Explore For you** hub rail from household `watched_bridge` picks (same refusal rules as inbox / whisper). Empty means no named link yet — never cosine-only filler.
+- **Owner Library health ritual** — Admin hero narrative tying Named kinship %, open issues, purge pressure, and Scheduled Tasks catch-up into one story.
+
 ### Changed
 - **Product-truth docs for native Live.** [docs/PRODUCT.md](docs/PRODUCT.md) captures SWOT, surface map, top 10, and parked Tunarr-era items. README and Help key capabilities lead with library **Play** and native **Live** (`/live` + lineup) — not Tunarr dual-watch. Plex Live TV / OTA is called out as owner-managed, not a Projectionist tuner path. Tunarr HDHR/XMLTV/daypart/orchestration leftovers in the Live deferred log are marked sunset/parked; DELIGHT Phase 6 is no longer “in flight.”
+- **Sunset pass.** Dead unmounted `RecommendationsInbox` removed (Inbox is `/inbox`). HELP guest→member role drift cleaned. Guide empty reason is `lineup_missing`. Coverage UI labels hash-fallback embeddings honestly.
+- **Play / Continue Watching (iPad Safari).** `pagehide` with bfcache (`persisted`) no longer kills the library session; `pageshow` resumes the open→resume→done path.
 
 ## [1.37.57] — 2026-10-20
 

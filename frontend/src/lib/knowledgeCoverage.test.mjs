@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   KNOWLEDGE_COVERAGE_REQUEST_MS,
   buildKnowledgeCoverageRows,
+  embeddingCoverageLabel,
   formatCoverageDetail,
   formatCoveragePct,
   knowledgeCoverageFailureCopy,
@@ -96,6 +97,18 @@ test("summarizeKnowledgeCoverage builds explore honesty line", () => {
   assert.match(line, /5,355 titles/);
   assert.match(line, /Named kinship 4%/);
   assert.match(line, /Similar cache/);
+});
+
+test("embeddingCoverageLabel is honest about hash-fallback vectors", () => {
+  assert.equal(
+    embeddingCoverageLabel({ embedding_is_hash_fallback: true, embedding_model: "hash-fallback" }),
+    "Vectors: local hash embeddings (no embedding API)",
+  );
+  assert.equal(
+    embeddingCoverageLabel({ embedding_is_hash_fallback: false, embedding_model: "text-embedding-3-small" }),
+    "Vectors: text-embedding-3-small",
+  );
+  assert.equal(embeddingCoverageLabel({}), null);
 });
 
 test("optional coverage failure does not surface Failed to fetch", () => {

@@ -131,6 +131,20 @@ export function summarizeKnowledgeCoverage(coverage, { maxMetrics = 4 } = {}) {
 }
 
 /**
+ * Honest embedding-model label for coverage UI.
+ * When vectors are hash-fallback (no embedding API), say so — never imply a remote model.
+ */
+export function embeddingCoverageLabel(coverage) {
+  if (!coverage || typeof coverage !== "object") return null;
+  if (coverage.embedding_is_hash_fallback) {
+    return "Vectors: local hash embeddings (no embedding API)";
+  }
+  const model = String(coverage.embedding_model || "").trim();
+  if (!model) return null;
+  return `Vectors: ${model}`;
+}
+
+/**
  * Bound for the optional coverage fetch. The Explore hub does not wait on it;
  * this only stops a hung socket from sitting open.
  */

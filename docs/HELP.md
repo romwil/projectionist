@@ -68,7 +68,7 @@ Try one of these — they're good first prompts because each exercises a differe
 
 **Curator personas have nicknames.** The persona picker shows **Nickname — Name** for builtins (for example **The Professor — Academic Critic**). Thread chips and village consults use the nickname only — **The Professor**, **Spark**, **The Steward**, **The Host** — so peer chatter stays short.
 
-**Curator village.** Sometimes your active curator will ask a sibling for a short take — The Professor for cited depth, The Host for mood memory, The Steward for find→request paths, Spark for tonight heat — and quote it as *“I asked {Nickname} and they said…”*. If the sibling needs longer, your curator leaves a message and keeps helping without inventing a quote; when the sibling calls back, their clearly labeled addendum appears in the same thread automatically. You don't have to switch personas to taste those specialties. Youth and guest accounts don't get village consults.
+**Curator village.** Sometimes your active curator will ask a sibling for a short take — The Professor for cited depth, The Host for mood memory, The Steward for find→request paths, Spark for tonight heat — and quote it as *“I asked {Nickname} and they said…”*. If the sibling needs longer, your curator leaves a message and keeps helping without inventing a quote; when the sibling calls back, their clearly labeled addendum appears in the same thread automatically. You don't have to switch personas to taste those specialties. Youth-mode members don't get village consults.
 
 **Slash commands** (instant, no LLM call): type `/help` for the list. The handy ones:
 
@@ -128,7 +128,7 @@ When the household owner turns **Live Channels** on and publishes stations, **[L
 
 > **Example:** Live’s Guide shows **101 · Chaos Night** with *Heat* at 45%. Tap the cell → Watch opens on that station mid-airing in Projectionist — same living-room player as library Play.
 
-**How it works / honest limits.** Live only appears when stations are on the air. Youth mode may hide some stations by content rating. Guests see Live when the owner enabled it for the household — empty states invite you to ask the owner rather than dump Admin steps. The guide carries about a week of real titles from Projectionist’s lineup, so the evening grid stays named instead of turning into Unknown Airing at the end of the day. A station that was repeating one title fills in from that station’s show, collection, or theme the next time the guide loads. When the same file is listed twice with no break between, the guide draws one block; a later repeat after another title or a break stays its own cell.
+**How it works / honest limits.** Live only appears when stations are on the air. Youth mode may hide some stations by content rating. Members see Live when the owner enabled it for the household — empty states invite you to ask the owner rather than dump Admin steps. The guide carries about a week of real titles from Projectionist’s lineup, so the evening grid stays named instead of turning into Unknown Airing at the end of the day. A station that was repeating one title fills in from that station’s show, collection, or theme the next time the guide loads. When the same file is listed twice with no break between, the guide draws one block; a later repeat after another title or a break stays its own cell.
 
 **Tuning & pause.** Channel changes and cold tunes show the same static + wry **tuning** interstitial as Play seeks. A random movie trailer plays only when a movie is starting on that station — not on every tune, and not before a show. It plays through with no title and no skip. Projectionist picks that trailer for this browser. If you pause and the scheduled program ends while you’re still paused, Projectionist asks clearly: **Rejoin live** (jump to what’s airing now) or **Finish this, then rejoin live** (keep the piece you paused, then catch wherever live has moved — Projectionist owns the schedule, so finishing stretches reality on purpose).
 
@@ -183,7 +183,7 @@ Under **Settings → Notifications** you can:
 - Turn the **in-app inbox** on or off (always self-serve)
 - Opt into **email alerts** when the owner has mail configured (**Needs owner setup**)
 - Opt into **Apprise alerts** and add your own Discord / Telegram / push destinations with the destination builder (**Self-serve**; optional household URLs can also be configured by the owner)
-- Subscribe to the **weekly newsletter** — a short, personalized note in your default curator’s voice (guest accounts get a guest-friendly voice when available). Each title names a subject, creator, or franchise it shares with something you have watched. If nothing qualifies, the note says so instead of listing new arrivals. It usually arrives on the weekly schedule; the owner can also push one early from Admin.
+- Subscribe to the **weekly newsletter** — a short, personalized note in your default curator’s voice (youth-safe when the member is in Youth mode). Each title names a subject, creator, or franchise it shares with something you have watched. If nothing qualifies, the note says so instead of listing new arrivals. It usually arrives on the weekly schedule; the owner can also push one early from Admin.
 - Opt into **curator nudges** — occasional “you have to see this” picks that name a shared subject, creator, or franchise with something you have watched. A recent watch by itself is not enough. These are never live Plex session alerts.
 - Opt into **Year in Review** — a private year-end recap built from *your* tracked finishes (not household Plex totals). You get a short reel, then a linger sheet: totals, top movie genre vs top TV genre, catalog hours, and the titles that defined the year. Late December may tease the reel; early January drops the full link to your inbox (and email if you’ve enabled it).
 
@@ -211,7 +211,7 @@ What the button on each beyond result does depends on your role, and Projectioni
 
 - **Owners** get **Add to Radarr** (movies) or **Add to Sonarr** (shows), which queues the title for download.
 - **Members** get **Request in Seerr**, sending it to the household request queue for approval.
-- **Guests** see a gentle *"Ask owner"* note instead of a button — browsing and discovery stay open to everyone, but only owners and members can bring titles in.
+- Signed-out visitors see a gentle *"Ask owner"* note instead of a button — browsing and discovery stay open on the LAN, but only owners and members can bring titles in.
 
 Anything already in your library (or already queued to download) is shown with an **In library** or **In queue** badge and no add button, so you can see it exists without accidentally requesting a duplicate. If external search isn't available, the button steps aside with a short note rather than failing loudly.
 
@@ -263,7 +263,7 @@ Play keeps going when you switch Mac Spaces or hide the Chrome tab. Prefer pause
 
 **Mark as watched — a guided one-tap.** For any title that lives in your Plex library, the grip offers **Mark as watched**. Say you just finished *Heat* on the TV downstairs but forgot to press play in Plex — open the ⋮ menu on its poster and choose **Mark as watched**. Projectionist records the view and tells Plex, using the episode on the card when the poster is an episode, so the poster's watched overlay turns on, the title leaves Continue Watching, and it stops showing up as "unwatched" everywhere it appears. Changed your mind, or marked the wrong one? The same spot now reads **Mark as unwatched** and reverses it. The action only appears on real library titles (the same rule as **Play**) — discovery cards for things you don't own never show it — and, like everything else, it's tied to *your* signed-in Plex context.
 
-**Reporting a title problem — safely.** Anyone who can browse can submit a typed **Report issue** (wrong language, bad video/audio, wrong title, missing subtitles, duplicate, or other) with an optional note. The report captures the title identity and a snapshot of what you saw, then lands in the owner queue at **Admin → Issues**. Members and guests never invoke Radarr or Sonarr commands from a report — this separation protects your files and downloads from accidental changes. An owner decides whether to resolve it or run a supported, logged repair.
+**Reporting a title problem — safely.** Anyone who can browse can submit a typed **Report issue** (wrong language, bad video/audio, wrong title, missing subtitles, duplicate, or other) with an optional note. The report captures the title identity and a snapshot of what you saw, then lands in the owner queue at **Admin → Issues**. Members never invoke Radarr or Sonarr commands from a report — this separation protects your files and downloads from accidental changes. An owner decides whether to resolve it or run a supported, logged repair.
 
 ### Title detail — Plot knowledge
 
@@ -306,7 +306,7 @@ See [About](/about#license) for the in-app note.
 
 ## For owners — curation & scheduler
 
-Owners (or single-workspace installs with no login) also configure sync and idle enrichment. This half is hidden from members and guests, so API and config depth is welcome here.
+Owners (or single-workspace installs with no login) also configure sync and idle enrichment. This half is hidden from members, so API and config depth is welcome here.
 
 ### Curator persona (Admin → Persona)
 
@@ -442,7 +442,7 @@ The add/request buttons on beyond results reuse the same **propose → confirm**
 
 - **Owners** propose `add_radarr` (by `tmdb_id`) or `add_sonarr` (by `tvdb_id`, which shows results carry via TMDB enrichment). Requires Radarr/Sonarr configured with a valid root folder.
 - **Members** propose `request_seerr` — routed to Seerr for approval. With `seerr.require_linked_user_for_requests` on, the member must have a linked Seerr account.
-- **Guests** get no write path at all; the API rejects acquisition just as it does elsewhere.
+- Signed-out callers get no write path at all; the API rejects acquisition just as it does elsewhere.
 
 Owned or already-queued titles are returned for context (so members see they exist) but never carry an add/request button. This is a read-only discovery surface: nothing is downloaded until someone with the right role confirms the proposal.
 
@@ -454,7 +454,7 @@ Plex's movie `viewCount` remains a per-user **completed-or-marked-played event**
 
 The confidence model is intentionally conservative: `certain` means a mapped user's logical viewing crossed the 90% tracker boundary in observed progress, `likely` means a terminal completion was reconstructed from monotonic evidence, and `plex_event_only` means Plex emitted a unique played/scrobble/history event without enough progress evidence. Even `certain` does not prove uninterrupted or attentive viewing.
 
-Which Plex identity gets the write depends on how the member signed in: if they authenticated with **Sign in with Plex**, their own account token is used so the watched flag lands on *their* Plex profile. If no per-account token is available, Projectionist falls back to the server `plex_token`, which applies watched state to the admin/account that owns that token — effectively household-wide. Guests cannot change watched state while multi-user is on.
+Which Plex identity gets the write depends on how the member signed in: if they authenticated with **Sign in with Plex**, their own account token is used so the watched flag lands on *their* Plex profile. If no per-account token is available, Projectionist falls back to the server `plex_token`, which applies watched state to the admin/account that owns that token — effectively household-wide. Signed-out callers cannot change watched state while multi-user is on.
 
 If Plex is unreachable or not configured, the local index is still updated and the member sees an honest note (for example *"saved locally; Plex sync failed"*) rather than a silent failure.
 
@@ -526,7 +526,7 @@ Owner delete from a title detail page, browse multi-select, or Explore section t
 
 On a **TV show** title detail page, owners also see **Seasons & episodes** (counts and per-episode rows from the library index). From that list you can fully remove one **season** or one **episode** (typed `DELETE`) — Sonarr deletes the matching episode files, Plex metadata is cleaned up, and Projectionist drops those episode rows. Season/episode remove does not add an import exclusion for the whole show.
 
-Full remove is owner-only (same gate as index delete). Youth and guests never see it. If Radarr or Sonarr is not configured, or the service returns another error, Projectionist leaves the index row alone and reports that title as failed. A title that is simply not in Radarr or Sonarr is different: the summary notes that absence, then Projectionist deletes media files whose path is already on the library row or reported by Plex (including episode files under a show), removes the Plex entry when Plex is configured, and drops the index row. Those deleted bytes stay in the files / folders / freed totals; the “not in Sonarr” or “not in Radarr” line is a note on the title and does not mark it failed. If no file path can be found, the note says the file path was unknown, the freed total stays 0 B, and the index row is still dropped. It does not add an import exclusion for a title those apps do not have. A permission error while deleting those files, or a Plex reject, still fails that title and leaves the index row. Index only is unchanged.
+Full remove is owner-only (same gate as index delete). Youth-mode members never see it. If Radarr or Sonarr is not configured, or the service returns another error, Projectionist leaves the index row alone and reports that title as failed. A title that is simply not in Radarr or Sonarr is different: the summary notes that absence, then Projectionist deletes media files whose path is already on the library row or reported by Plex (including episode files under a show), removes the Plex entry when Plex is configured, and drops the index row. Those deleted bytes stay in the files / folders / freed totals; the “not in Sonarr” or “not in Radarr” line is a note on the title and does not mark it failed. If no file path can be found, the note says the file path was unknown, the freed total stays 0 B, and the index row is still dropped. It does not add an import exclusion for a title those apps do not have. A permission error while deleting those files, or a Plex reject, still fails that title and leaves the index row. Index only is unchanged.
 
 ```bash
 # Index-only (default) — same as today's delete
@@ -688,9 +688,9 @@ curl -s -X POST http://localhost:8788/api/auth/me/apprise/test \
 
 **How it works / honest limits.** Apprise ships with the web extras (`pip install '.[web]'`). Email still uses Admin → Mail; Apprise does not replace SMTP/Resend. Without any URLs configured, inbox delivery is unchanged.
 
-### Youth gate & guest access requests
+### Youth gate & access requests
 
-Under **Admin → Household**, set **Youth max content rating** (default `PG-13`). Youth-mode members never see empty/`content_rating` titles or anything above that max — browse, feeds, title detail, and chat cards all fail closed.
+Under **Admin → Household**, set **Youth max content rating** (default `PG-13`). Youth-mode members never see empty/`content_rating` titles or anything above that max — browse, feeds, title detail, and chat cards all fail closed. Household accounts are **owner** or **member** (legacy guest rows map to member).
 
 ```bash
 # Inspect current youth gate (owner session cookie)
