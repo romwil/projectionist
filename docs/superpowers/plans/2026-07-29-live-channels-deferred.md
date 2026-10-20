@@ -1,12 +1,12 @@
-# Live Channels — Deferred & discoveries (living)
+# Live Channels — Deferred & discoveries (historical / parked)
 
 **Date seeded:** 2026-07-29  
-**Status:** Living log — append freely; do not treat as a shipping checklist  
-**Related:** [implementation plan](./2026-07-29-live-channels-tunarr.md) · [product spec](../specs/2026-07-29-live-channels-tunarr.md)
+**Status:** **Sunset / parked (2026-10-20)** — Tunarr-era parking lot. Native Live (**1.37.51+**) plays from `DATA_DIR/live_lineup.json` + library Play. **Do not schedule** HDHomeRun / XMLTV attach, Tunarr Docker orchestration, daypart / `schedule_slots` Chaos wiring, newspaper EPG against Tunarr, or a Plex tuner rebuild. Living product truth: [PRODUCT.md](../../PRODUCT.md).  
+**Related (historical):** [implementation plan](./2026-07-29-live-channels-tunarr.md) · [product spec](../specs/2026-07-29-live-channels-tunarr.md)
 
-Durable parking lot for product deferrals, engineering gaps, and mid-build discoveries so parallel agents do not lose intelligence. Reconciled **2026-07-29** with [implementation plan Status](./2026-07-29-live-channels-tunarr.md): Phases 1–3 core done (Admin Live Channels enable flow, publish APIs, `CERTIFIED_SERVICES` `tunarr`, household on-now). Starter pack propose/publish + `TunarrClient.schedule_slots` client landed (see bullets below).
+This file keeps mid-build discoveries for archaeology. Bullets below that still say `deferred` / `in_progress` about Tunarr HDHR, XMLTV, Docker lifecycle, OpenAPI pins, or Plex attach are **parked non-goals** unless product intent reverses — flip them only to record history, do not reopen as a shipping checklist.
 
-**Hygiene reconciliation 2026-09-24** (vs CHANGELOG through **1.35.5**): HELP/CHANGELOG Task 7, mocked e2e `FeatureFlags` + on-now (`e2e/on-now-live-guide.spec.ts`), ready-nudge reset on disable (`reset_live_channels_ready_nudge`), and Plex XMLTV attach API (**1.29.10+**) are **shipped** — do not re-open them. Remaining residual: Automat Phase 0 pin/OpenAPI + measured RAM/CPU, richer Tunarr program IDs / wiring schedule-slots into shuffle/Chaos publish, guide field-shape validation on Automat, newspaper EPG / remote chrome, weekly-rail Live slot, first-run `WIZARD_STEPS` Live integration, auto-refresh after sync, owner re-run starter pack. Active delight program is **Phase 6 / 1.36** ([spec](../specs/2026-09-24-delight-phase-6.md)), not the older unified-gaps Cursor plan.
+**Hygiene reconciliation 2026-09-24** (vs CHANGELOG through **1.35.5**): HELP/CHANGELOG Task 7, mocked e2e `FeatureFlags` + on-now (`e2e/on-now-live-guide.spec.ts`), ready-nudge reset on disable (`reset_live_channels_ready_nudge`), and the former Plex XMLTV attach path (**1.29.10+**, Tunarr-era) were shipped in that stack — do not re-open them as native-Live work. Delight Phase 6 / 1.36 is absorbed into **1.37**; sequencing lives in [PRODUCT.md](../../PRODUCT.md), not here.
 
 ---
 
@@ -23,41 +23,41 @@ Statuses: `deferred` | `in_progress` | `blocked` | `done`
 
 ---
 
-## Explicitly later (product)
+## Explicitly later (product) — Tunarr-era; **parked / sunset**
 
 ### Full newspaper EPG / remote in Projectionist
 
-- **Status:** `deferred`
-- **Why / note:** Spec locks dual-watch (Projectionist `/live` + Plex Live TV); Projectionist already ships Guide ↔ Watch gasp UX — richer newspaper EPG / remote chrome stays later. See also **2026-08-01 — Persona UX Phase 4 park**.
-- **Suggested next phase:** Post–persona UX Phase 1–2 polish (if ever); not a Phase 1 blocker.
+- **Status:** `parked` (sunset with Tunarr dual-watch era)
+- **Why / note:** Historical dual-watch spec (Projectionist `/live` + Plex Live TV). Native Live already ships Guide ↔ Watch; richer newspaper EPG is not scheduled. See also **2026-08-01 — Persona UX Phase 4 park**.
+- **Suggested next phase:** None unless product intent reverses — see [PRODUCT.md](../../PRODUCT.md).
 - **Owner surface:** household / product
 
 ### Daypart programming beyond shuffle / sequential
 
-- **Status:** `deferred`
-- **Why / note:** `ProgrammingMode` today is `sequential` | `shuffle` | `chaos` only (`recipes.py`). Multi-lineup dayparts are explicitly later in the spec.
-- **Suggested next phase:** After publish path is solid; wire existing `TunarrClient.schedule_slots` into recipe/daypart models.
+- **Status:** `parked` (Tunarr `schedule_slots` / daypart — sunset)
+- **Why / note:** Was blocked on Tunarr OpenAPI dayparts. Native Live keeps sequential / shuffle / chaos recipes without Tunarr orchestration.
+- **Suggested next phase:** None — no Tunarr daypart rebuild.
 - **Owner surface:** backend / recipes
 
 ### Docker-less cloud AIO as first-class
 
-- **Status:** `deferred`
-- **Why / note:** Without Docker socket, path is BYO Tunarr URL only. Cloud AIO without a sibling container is out of v1 scope.
-- **Suggested next phase:** Post-v1 packaging decision.
+- **Status:** `parked` (Tunarr sibling packaging — sunset)
+- **Why / note:** BYO Tunarr URL / managed sibling are obsolete on the running path (**1.37.51+**).
+- **Suggested next phase:** None.
 - **Owner surface:** ops / product
 
 ### Replacing Plex Live TV chrome
 
-- **Status:** `deferred`
-- **Why / note:** Product intent: Plex remains the watch surface; Projectionist is management + delight only.
-- **Suggested next phase:** Never for v1; revisit only if product intent changes.
+- **Status:** `parked` (intent flipped)
+- **Why / note:** Historical “Plex remains the watch surface.” Native Live watches in Projectionist via library Play. Plex Live TV / OTA stays owner-managed outside Projectionist — not a rebuild target.
+- **Suggested next phase:** None — no Plex tuner rebuild.
 - **Owner surface:** product
 
 ### Coax clone / in-app watch
 
-- **Status:** `deferred`
-- **Why / note:** Spec out of scope — Coax is config vocabulary reference only; no Projectionist player.
-- **Suggested next phase:** Never for v1.
+- **Status:** `done` (superseded by native library Play on `/live`)
+- **Why / note:** In-app Live watch shipped with native Live (**1.37.51+**); Coax remains vocabulary history only.
+- **Suggested next phase:** None.
 - **Owner surface:** product
 
 ---
@@ -371,6 +371,15 @@ Parked from the persona UX build plan. **Do not schedule these until Phase 1 (Li
 Reconciled this living log against CHANGELOG through **1.35.5** as part of **v1.36.3** craft hygiene. No product behavior change.
 
 - **Status:** `done` (docs reconciliation)
-- **Why / note:** Several discovery bullets still said `deferred` / `open` after the feature shipped (mocked on-now e2e, ready-nudge reset, HELP/CHANGELOG Task 7, XMLTV attach). Flipped those to `done` and pointed residual Live trust at Automat Phase 0 + schedule-slots wiring. Active delight program is [Phase 6 / 1.36](../specs/2026-09-24-delight-phase-6.md).
-- **Suggested next phase:** Leave residual engineering gaps; do not schedule newspaper EPG or `WIZARD_STEPS` Live hard-gate in 1.36.
+- **Why / note:** Several discovery bullets still said `deferred` / `open` after the feature shipped (mocked on-now e2e, ready-nudge reset, HELP/CHANGELOG Task 7, XMLTV attach). Flipped those to `done`. Residual Tunarr Phase 0 / schedule-slots items are **parked** (see banner) — not a 1.37 shipping checklist. Living roadmap: [PRODUCT.md](../../PRODUCT.md).
+- **Suggested next phase:** None for Tunarr leftovers; do not schedule newspaper EPG or `WIZARD_STEPS` Live hard-gate.
 - **Owner surface:** docs / coordinator
+
+---
+
+## 2026-10-20 — Native Live sunset pass (docs only)
+
+- **Status:** `done` (park Tunarr-era deferred list)
+- **Why / note:** Runtime is native Live (`live_lineup.json` + library Play). Marked HDHR/XMLTV/daypart/orchestration / Plex tuner rebuild as **sunset/parked**. Product sequencing moved to [PRODUCT.md](../../PRODUCT.md).
+- **Suggested next phase:** Tranche B sunset pass for residual Tunarr copy in CONFIGURATION / UI strings (not this file).
+- **Owner surface:** docs / product
