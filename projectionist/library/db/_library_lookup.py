@@ -461,8 +461,8 @@ class LibraryLookupMixin:
                 INSERT INTO library_episodes (
                     show_item_id, rating_key, season_number, episode_number, title,
                     runtime_minutes, view_count, last_viewed_at, file_size, aired_at,
-                    view_offset_ms, duration_ms, plex_user_rating_stars, added_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    summary, view_offset_ms, duration_ms, plex_user_rating_stars, added_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(rating_key) DO UPDATE SET
                     show_item_id=excluded.show_item_id,
                     season_number=excluded.season_number,
@@ -473,6 +473,7 @@ class LibraryLookupMixin:
                     last_viewed_at=excluded.last_viewed_at,
                     file_size=excluded.file_size,
                     aired_at=excluded.aired_at,
+                    summary=excluded.summary,
                     view_offset_ms=excluded.view_offset_ms,
                     duration_ms=excluded.duration_ms,
                     plex_user_rating_stars=excluded.plex_user_rating_stars,
@@ -492,6 +493,7 @@ class LibraryLookupMixin:
             episode.get("last_viewed_at"),
             episode.get("file_size", 0),
             episode.get("aired_at"),
+            str(episode.get("summary") or "").strip(),
             episode.get("view_offset_ms"),
             episode.get("duration_ms"),
             episode.get("plex_user_rating_stars"),

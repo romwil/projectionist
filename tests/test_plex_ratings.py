@@ -108,11 +108,13 @@ class PlexClientRatingTests(unittest.TestCase):
 
         client = PlexClient("http://plex.test:32400", "token")
         element = ET.fromstring(
-            '<Video ratingKey="99" title="Pilot" type="episode" userRating="6" parentIndex="1" index="1" />'
+            '<Video ratingKey="99" title="Pilot" type="episode" userRating="6" '
+            'parentIndex="1" index="1" summary="Mark wakes in a severed office." />'
         )
         episodes = client._parse_episode_elements([element])
         self.assertEqual(len(episodes), 1)
         self.assertEqual(episodes[0].user_rating_stars, 3)
+        self.assertEqual(episodes[0].summary, "Mark wakes in a severed office.")
 
     def test_parse_episode_accepts_float_user_rating(self) -> None:
         import xml.etree.ElementTree as ET
@@ -142,15 +144,17 @@ class PlexClientRatingTests(unittest.TestCase):
                 season_number=1,
                 episode_number=1,
                 user_rating_stars=4,
+                summary="Mark wakes in a severed office.",
             )
             synced = _upsert_episodes_for_show(db, show_id, [episode])
             self.assertEqual(synced, 1)
             with db.connect() as conn:
                 row = conn.execute(
-                    "SELECT plex_user_rating_stars FROM library_episodes WHERE rating_key = ?",
+                    "SELECT plex_user_rating_stars, summary FROM library_episodes WHERE rating_key = ?",
                     ("ep-1",),
                 ).fetchone()
             self.assertEqual(int(row["plex_user_rating_stars"]), 4)
+            self.assertEqual(row["summary"], "Mark wakes in a severed office.")
 
 
 class PlexReviewSyncTests(unittest.TestCase):
