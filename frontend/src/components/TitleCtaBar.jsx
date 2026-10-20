@@ -235,7 +235,7 @@ export default function TitleCtaBar({
             <span
               className="title-cta title-cta-ghost title-cta-disabled"
               data-testid="title-detail-ask-owner"
-              title={askOwner.tooltip || "Guests cannot request or add media"}
+              title={askOwner.tooltip || "Ask the owner to request or add this title"}
             >
               <CtaIcon name={TITLE_CTA_ICONS.lock} />
               {askOwner.label}

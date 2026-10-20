@@ -137,7 +137,7 @@ const markdownComponents = {
 
 const OWNER_SECTION_MARKER = "## For owners";
 
-/** Drop owner/scheduler sections for members/guests; keep full doc for owners. */
+/** Drop owner/scheduler sections for members; keep full doc for owners. */
 function markdownForRole(source, { includeOwnerSections }) {
   const text = typeof source === "string" ? source.trim() : "";
   if (!text) return "";
@@ -152,7 +152,7 @@ function markdownForRole(source, { includeOwnerSections }) {
 
 /**
  * In-app Help — content from docs/HELP.md (vite @docs alias).
- * Role-aware: owners see curation/scheduler sections; members/guests get browse/chat.
+ * Role-aware: owners see curation/scheduler sections; members get browse/chat.
  */
 export default function HelpPage() {
   const { authReady, isOwner, role, multiUserEnabled } = useAuthGate({ redirect: false });

@@ -1,6 +1,6 @@
 # Product map
 
-Living product truth for Projectionist — positioning, surface map, SWOT, sequenced top 10, and parked Tunarr-era non-goals. Baseline tip: Automat **1.37.58+**. Media intelligence R1–R4 (1.37.54–57) is **done**; episode-aware household bridges landed in **1.37.58**. Do not reopen the R1–R4 series.
+Living product truth for Projectionist — positioning, surface map, SWOT, sequenced top 10, and parked Tunarr-era non-goals. Baseline tip: Automat **1.37.58** substrate; this ship is **1.37.59**. Media intelligence R1–R4 (1.37.54–57) and the 1.37.58 platform tranche are **done**. Do not reopen those series.
 
 Related: [HELP.md](HELP.md) · [MEDIA_INTELLIGENCE.md](MEDIA_INTELLIGENCE.md) · [DELIGHT-WISHLIST.md](DELIGHT-WISHLIST.md) · [README](../README.md)
 
@@ -34,9 +34,9 @@ Runtime watch surfaces: **library Play** (`/watch`) and **native Live** (`/live`
 
 | | |
 |--|--|
-| **Strengths** | Honest why + local index; Play / Explore / Inbox / native Live; owner stewardship; Hub-first Unraid |
-| **Weaknesses** | Surface sprawl; couch trust gaps (captions, Live filler); stale Tunarr copy in older docs; cold shelves vs coverage % |
-| **Opportunities** | Own the living-room TV path + named kinship as owner KPI; ruthless sunset of Tunarr-era surface area |
+| **Strengths** | Honest why + local index; Play / Explore For you / Inbox / native Live; Named kinship as owner KPI; Hub-first Unraid |
+| **Weaknesses** | Surface sprawl; iPad Safari may ignore Play 2x on live-like HLS; Named kinship still catching up vs similar-cache % |
+| **Opportunities** | Warm explainable kinship on opened titles; Monday pass as the owner ritual; keep Tunarr-era doors closed |
 | **Threats** | Plex / Seerr absorbing discovery; couch breakage → “just use Plex”; scope into a full media OS |
 
 ---
@@ -55,21 +55,27 @@ Runtime watch surfaces: **library Play** (`/watch`) and **native Live** (`/live`
 | Owner Library health ritual | 1.37.58 |
 | Phase 6 triage (shipped vs parked) | 1.37.58 |
 | Episode-aware TV bridges | 1.37.58 |
+| Play captions + Live flex filler | 1.37.58 |
+| Play buffering OSD + hold-to-2x | 1.37.59 |
+| For you as first Explore rail | 1.37.59 |
+| Monday pass owner ritual | 1.37.59 |
 
 ---
 
 ## Sequenced top 10
 
-1. **Ship Play captions** — caption collision / sync trust on Play. *(code on main; Hub/Automat is a follow-up ship)*
-2. **Ship Live flex filler** — flex pad picture / lower-third honesty. *(code on main; Hub/Automat is a follow-up ship)*
-3. **Product-truth + PR triage** — this doc; README/HELP; park Tunarr deferred list. **Done 1.37.58.**
-4. **Prove media intelligence on Automat** — explainable % vs raw; More Like This; inbox bridge. *(post-ship Automat check)*
-5. **Explore For you** — `watched_bridge` rails (same refusal rules as inbox). **Done 1.37.58.**
-6. **Owner Library health ritual** — single Admin narrative (Named kinship + issues + purge + catch-up). **Done 1.37.58.**
-7. **Sunset pass** — Tunarr copy/ghosts, dead UI, honest hash-embedding label, guest doc drift. **Done 1.37.58.**
-8. **CW / shrunk Play nightly** — iPad open → resume → done. **Done 1.37.58.**
-9. **Phase 6 triage** — leftovers parked in [DELIGHT-WISHLIST.md](DELIGHT-WISHLIST.md). **Done 1.37.58.**
-10. **Episode-aware bridges** — TV seeds use the finished episode’s plot. **Done 1.37.58.**
+**1.37.58 substrate is done.** This ship (1.37.59) closes remaining owner/user gaps:
+
+1. **Warm explainable kinship** — idle still annotates cosine-only neighbors; Named kinship % is the owner KPI (Automat 1.37.58 snapshot ~72.9% — higher on opened titles, not a fake 100%).
+2. **Couch-check Play + Live** — one caption layer + offset; Live flex filler shows a picture. Buffering OSD + hold-to-2x on library Play.
+3. **For you as Explore default** — first rail; empty means no named link to something you finished; never cosine filler; one For you, not a leftover weekly persona rail.
+4. **Owner Monday pass** — ~20 minutes: Named kinship → open issues → purge pressure → Scheduled Tasks catch-up.
+5. **Hash-embedding honesty** — `hash-fallback` labeled on Admin knowledge and the Explore coverage strip.
+6. **Continue Watching nightly path** — Explore/CW → Play → shrink/resume. Lobby `:8791` and MCP are optional owner tools.
+7. **Episode bridges** — finishing a TV episode seeds For you from **that episode’s plot**, not a random movie. No episode KG.
+8. **Ghost doors closed** — Tunarr not in README key capabilities or Live HELP lead; guest is not a household role; unmounted inbox is gone.
+9. **Phase 6 parked** — gift queue, trust diary, Admin House seasonal veto are not in product. See [DELIGHT-WISHLIST.md](DELIGHT-WISHLIST.md).
+10. **Play buffering + press-and-hold 2x** — library Play only. Live TV stays 1x. iPad Safari may ignore `playbackRate`; the 2x chip shows only when the element reports rate 2.
 
 ---
 
@@ -86,4 +92,4 @@ From the Tunarr dual-watch era and [live-channels-deferred](superpowers/plans/20
 - External “on Netflix” where-to-watch
 - Lobby kiosk polish (unless the house relies on `:8791`)
 
-Delight Phase 6 / 1.36 is **historical substrate**. 1.37.58 parked remaining house-page extras (gift queue, trust diary, Admin House seasonal preview) — see [DELIGHT-WISHLIST.md](DELIGHT-WISHLIST.md). Living platform sequencing lives here.
+Delight Phase 6 / 1.36 is **historical substrate**. Gift queue, trust diary, and Admin House seasonal preview/veto stay parked — they are not implied doors. Living platform sequencing lives here.

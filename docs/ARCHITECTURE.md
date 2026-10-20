@@ -552,7 +552,7 @@ save_repo_insight  → memory_insights (+ citations {source, ref, note})
 | Topic | Behavior |
 |-------|----------|
 | Authentication | **None by default** — single implicit owner on trusted LAN. With `features.multi_user_enabled`, login via **Plex PIN**, optional **local password**, and/or **OIDC** (login page shows configured `auth_methods`); session cookies + middleware protect `/api/*` (allowlist: health/features/auth/webhooks) |
-| Roles | Owner-only: settings, setup tests, library sync mutate, persona/lens writes. Guests cannot request media / *arr writes |
+| Roles | Owner-only: settings, setup tests, library sync mutate, persona/lens writes. Members confirm before *arr writes; youth is fail-closed |
 | Partitioning | Chat, pending actions, watchlist, reviews, preferences scoped by `user_id` when multi-user is on (shared library remains household-wide) |
 | Feature gates | `GET /api/features` exposes enabled flags; auth UI, Seerr, and Plex collection tools stay hidden until opted in |
 | Webhooks | Require non-empty `webhook_secret` / `PROJECTIONIST_WEBHOOK_SECRET` + matching `X-Projectionist-Webhook-Secret` |

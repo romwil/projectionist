@@ -1,15 +1,25 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Hls from "hls.js";
+import { LIVE_STALL_ESCALATE_MS, LIVE_STALL_NOTICE_MS } from "../../lib/liveChannels.js";
+import BufferingIndicator from "./BufferingIndicator.jsx";
 import TuningInterstitial from "./TuningInterstitial.jsx";
 import {
   OSD_IDLE_MS,
+  applyHoldPlaybackRate,
   bottomThirdTapResult,
   createStageGesture,
   dispatchPictureTap,
+  holdToRateShouldCancelTap,
   isTheaterChromeTarget,
+  libraryBufferingCopy,
+  libraryBufferingHealth,
   pictureTapIntent,
+  restoreHoldPlaybackRate,
   shouldRevealPlaybackPicture,
+  shouldShowHoldRateChip,
+  shouldShowLibraryBufferingChip,
   skipZoneFromClientX,
+  stepLibraryBufferingUi,
   theaterHlsConfig,
   toggleTheaterFullscreen,
 } from "../../lib/theaterPlayer.js";
@@ -61,6 +71,10 @@ export default function TheaterPlayer({
   /** After a shrunk-play reload, start muted if unmuted autoplay is blocked. */
   resumeMutedIfBlocked = false,
   onAutoplayResult,
+  /** Library Play only: press-and-hold 2x. Live TV must leave this false. */
+  holdToDoubleSpeed = false,
+  /** Library Play only: delayed buffering OSD. Live has its own chips. */
+  bufferingEnabled = false,
   children,
 }) {
   const rootRef = useRef(null);
@@ -81,7 +95,15 @@ export default function TheaterPlayer({
   const pictureHoldRef = useRef(pictureHold);
   const resumeMutedIfBlockedRef = useRef(resumeMutedIfBlocked);
   const onAutoplayResultRef = useRef(onAutoplayResult);
+  const holdToDoubleSpeedRef = useRef(holdToDoubleSpeed);
+  const bufferingEnabledRef = useRef(bufferingEnabled);
   const bottomTapRef = useRef(null);
+  const holdRef = useRef({ active: false, downAt: 0 });
+  const waitingSinceRef = useRef(null);
+  const bufferUiRef = useRef({ displayed: "ok", stickyUntil: null });
+  const bufferTimerRef = useRef(null);
+  const [holdRateOn, setHoldRateOn] = useState(false);
+  const [bufferUi, setBufferUi] = useState({ displayed: "ok", stickyUntil: null });
   useEffect(() => {
     onStatusRef.current = onStatus;
     onHlsRefRef.current = onHlsRef;
@@ -92,6 +114,8 @@ export default function TheaterPlayer({
     pictureHoldRef.current = pictureHold;
     resumeMutedIfBlockedRef.current = resumeMutedIfBlocked;
     onAutoplayResultRef.current = onAutoplayResult;
+    holdToDoubleSpeedRef.current = holdToDoubleSpeed;
+    bufferingEnabledRef.current = bufferingEnabled;
   });
   const [internalOsd, setInternalOsd] = useState(true);
   const osdVisible = osdVisibleProp ?? internalOsd;
@@ -122,6 +146,81 @@ export default function TheaterPlayer({
     else bumpOsd();
   }
 
+  function syncHoldChip() {
+    setHoldRateOn(shouldShowHoldRateChip(videoRef.current?.playbackRate));
+  }
+
+  function startHoldToRate() {
+    if (!holdToDoubleSpeedRef.current) return false;
+    const video = videoRef.current;
+    if (!video || video.paused || video.ended) return false;
+    holdRef.current = { active: true, downAt: Date.now() };
+    applyHoldPlaybackRate(video);
+    syncHoldChip();
+    return true;
+  }
+
+  function endHoldToRate() {
+    if (!holdRef.current.active) return { held: false, downAt: 0 };
+    const downAt = holdRef.current.downAt;
+    holdRef.current = { active: false, downAt: 0 };
+    restoreHoldPlaybackRate(videoRef.current);
+    syncHoldChip();
+    return { held: true, downAt };
+  }
+
+  function refreshBufferHealth({ mediaStalled = false } = {}) {
+    if (!bufferingEnabledRef.current) {
+      waitingSinceRef.current = null;
+      bufferUiRef.current = { displayed: "ok", stickyUntil: null };
+      setBufferUi(bufferUiRef.current);
+      return;
+    }
+    const video = videoRef.current;
+    const nowMs = Date.now();
+    const waitingSince = waitingSinceRef.current;
+    const waiting = waitingSince != null;
+    const waitingMs = waiting ? Math.max(0, nowMs - waitingSince) : 0;
+    const paused = Boolean(video?.paused && !video?.ended);
+    const raw = libraryBufferingHealth({
+      playbackStatus: showTuning || paused ? (paused ? "paused" : "loading") : "playing",
+      waiting: waiting || Boolean(pictureHoldRef.current),
+      mediaStalled,
+      waitingMs,
+    });
+    const next = stepLibraryBufferingUi(bufferUiRef.current, { rawHealth: raw, nowMs });
+    bufferUiRef.current = next;
+    setBufferUi(next);
+    if (bufferTimerRef.current) {
+      window.clearTimeout(bufferTimerRef.current);
+      bufferTimerRef.current = null;
+    }
+    if (waiting && (next.displayed === "ok" || next.displayed === "buffering")) {
+      const edge = next.displayed === "ok" ? LIVE_STALL_NOTICE_MS : LIVE_STALL_ESCALATE_MS;
+      const delay = Math.max(0, edge - waitingMs);
+      bufferTimerRef.current = window.setTimeout(() => refreshBufferHealth(), delay + 16);
+    }
+  }
+
+  function noteWaiting() {
+    if (waitingSinceRef.current == null) waitingSinceRef.current = Date.now();
+    refreshBufferHealth();
+  }
+
+  function notePlayingFrame() {
+    const video = videoRef.current;
+    if (
+      shouldRevealPlaybackPicture({
+        holdingSeek: false,
+        readyState: video?.readyState ?? 0,
+        videoWidth: video?.videoWidth ?? 0,
+      })
+    ) {
+      waitingSinceRef.current = null;
+    }
+    refreshBufferHealth();
+  }
+
   useEffect(() => {
     onVideoRefRef.current?.(videoRef.current);
     return () => onVideoRefRef.current?.(null);
@@ -136,6 +235,7 @@ export default function TheaterPlayer({
     bumpOsd();
     return () => {
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      if (bufferTimerRef.current) window.clearTimeout(bufferTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reveal OSD when the stream changes
   }, [src]);
@@ -349,9 +449,11 @@ export default function TheaterPlayer({
         videoWidth: video?.videoWidth ?? 0,
       })
     ) {
+      noteWaiting();
       return;
     }
     if (held) onPictureReadyRef.current?.();
+    notePlayingFrame();
     onPlaying?.();
     onStatus?.("playing");
   }
@@ -375,10 +477,29 @@ export default function TheaterPlayer({
         }
         bottomTapRef.current = null;
         handlePointerMove(event);
+        if (!isTheaterChromeTarget(event.target)) startHoldToRate();
       }}
       onPointerUp={(event) => {
         if (event.pointerType === "mouse" && event.button !== 0) return;
+        const endedHold = endHoldToRate();
+        if (
+          endedHold.held &&
+          holdToRateShouldCancelTap({ downAtMs: endedHold.downAt, upAtMs: Date.now() })
+        ) {
+          gestureRef.current?.cancel?.();
+          return;
+        }
         gestureRef.current?.(event);
+      }}
+      onPointerCancel={() => {
+        endHoldToRate();
+        gestureRef.current?.cancel?.();
+      }}
+      onPointerLeave={() => {
+        if (holdRef.current.active) {
+          endHoldToRate();
+          gestureRef.current?.cancel?.();
+        }
       }}
       onKeyDown={handleKeyDown}
     >
@@ -404,8 +525,16 @@ export default function TheaterPlayer({
         onResize={() => {
           if (pictureHoldRef.current) publishPlaying();
         }}
-        onPause={() => onStatus?.("paused")}
-        onWaiting={() => onWaiting?.()}
+        onPause={() => {
+          endHoldToRate();
+          onStatus?.("paused");
+        }}
+        onWaiting={() => {
+          noteWaiting();
+          onWaiting?.();
+        }}
+        onStalled={() => noteWaiting()}
+        onRateChange={syncHoldChip}
       />
 
       {pictureHold && holdFrame ? (
@@ -424,6 +553,26 @@ export default function TheaterPlayer({
       />
 
       {healthNode}
+      {holdRateOn ? (
+        <div className="theater-rate-chip" role="status" data-testid={`${testId}-rate-chip`}>
+          2x
+        </div>
+      ) : null}
+      {bufferingEnabled &&
+      shouldShowLibraryBufferingChip({
+        displayedHealth: bufferUi.displayed,
+        hasError: Boolean(error),
+        seekFailed: false,
+        readyState: videoRef.current?.readyState ?? 0,
+        videoWidth: videoRef.current?.videoWidth ?? 0,
+        waiting: waitingSinceRef.current != null || pictureHold,
+      }) ? (
+        <BufferingIndicator
+          label={libraryBufferingCopy(bufferUi.displayed)}
+          testId={`${testId}-buffering`}
+          variant="chip"
+        />
+      ) : null}
       {error ? (
         errorNode || (
           <div className="live-player-status live-player-status--error" data-testid={`${testId}-error`}>

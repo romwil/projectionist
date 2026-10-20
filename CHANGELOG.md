@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+## [1.37.59] — 2026-10-20
+
+One patch on 1.37.58: For you leads Explore, the owner Monday pass names the ritual, and library Play shows buffering plus press-and-hold 2x.
+
+### Highlights
+- **For you is the first Explore rail.** Empty means no named link to something you finished — never a cosine guess.
+- **Monday pass on Admin.** About 20 minutes: Named kinship → open issues → purge pressure → Scheduled Tasks catch-up.
+- **Play says when it is buffering.** An obvious chip waits out brief stalls, then hides when a real frame is on screen.
+- **Hold the picture for 2x.** Release returns to normal speed and does not pause. Live TV stays 1x. iPad Safari may ignore the rate; the 2x chip appears only when playback actually doubled.
+
+### Added
+- Library Play buffering OSD (Live `ok` / `buffering` / `stalled` delay contract) and press-and-hold `playbackRate = 2` on the stage outside chrome.
+- Explore For you as the first hub rail; honest empty copy; one For you (weekly persona rails stay chat/newsletter, not a second Explore shelf).
+- Admin Monday pass narrative and Scheduled Tasks copy that Named kinship % is the number to watch.
+
+### Changed
+- Hash-fallback embedding label on Admin Library knowledge coverage as well as Dashboard / Explore / Tasks strips.
+- Purge-pressure tile links to Admin health storage intelligence.
+- Docs: PRODUCT/README/HELP/DELIGHT/MEDIA_INTELLIGENCE/CURATOR_KNOWLEDGE for 1.37.59 — night path, Phase 6 parks, hold-for-2x iPad caveat, overnight kinship curl. Guest leftover copy closed on request/add affordances.
+
+### Verification
+- Frontend unit: theater hold 2x / tap cancel / buffering delay; Explore For you first rail; hash-fallback on coverage surfaces; owner Monday pass.
+- Backend: `tests/test_household_bridges.py` empty For you honesty; `tests/test_explainable_kinship.py` idle annotate; `tests/test_tunarr_removed.py` README key capabilities and Live HELP lead omit Tunarr.
+
 ## [1.37.58] — 2026-10-20
 
 One patch on 1.37.57: the platform tranche for owners and household users — Play captions, Live filler, product truth, For you, Library health, sunset, Play resume, episode-aware TV bridges, and Phase 6 leftovers parked.

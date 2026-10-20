@@ -4,7 +4,7 @@ import { getLibraryKnowledgeCoverage, getPurgeCandidates, listMediaIssues } from
 import { buildHealthHeroTiles, buildLibraryHealthStory } from "../lib/ownerHealth.js";
 
 /**
- * At-a-glance owner health: one Library health story plus tiles for Named kinship,
+ * At-a-glance owner health: one Monday pass story plus tiles for Named kinship,
  * issues, purge pressure, and Scheduled Tasks catch-up.
  */
 export default function OwnerHealthHero({ health }) {
@@ -50,7 +50,7 @@ export default function OwnerHealthHero({ health }) {
   });
 
   return (
-    <section className="owner-health-hero" data-testid="owner-health-hero" aria-label="Library health">
+    <section className="owner-health-hero" data-testid="owner-health-hero" aria-label="Monday pass">
       {story ? (
         <div className="owner-health-hero-head" data-testid="owner-health-story">
           <div>

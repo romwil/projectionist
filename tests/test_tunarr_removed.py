@@ -48,6 +48,22 @@ class TunarrRemovedTests(unittest.TestCase):
         self.assertNotIn("Start the broadcast", text)
         self.assertNotIn('data-testid="live-channels-tuner-url"', text)
 
+    def test_readme_key_capabilities_and_help_live_lead_omit_tunarr(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        help_doc = (ROOT / "docs" / "HELP.md").read_text(encoding="utf-8")
+        cap_start = readme.find("## Key capabilities")
+        cap_end = readme.find("\n## ", cap_start + 1)
+        capabilities = readme[cap_start:cap_end]
+        self.assertIn("Library Play", capabilities)
+        self.assertIn("Live Channels", capabilities)
+        self.assertNotIn("Tunarr", capabilities)
+
+        live_start = help_doc.find("### Live\n")
+        live_end = help_doc.find("\n### ", live_start + 1)
+        live_lead = help_doc[live_start:live_end]
+        self.assertIn("[Live](/live)", live_lead)
+        self.assertNotIn("Tunarr", live_lead)
+
     def test_live_play_does_not_need_tunarr(self) -> None:
         from tests.test_live_native_schedule import NativeScheduleTests
 

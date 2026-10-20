@@ -287,7 +287,7 @@ export default function TitleDetailContent({
             }
             askOwner={
               !playTo && showAskOwner
-                ? { label: addCapability.guidedCopy, tooltip: "Guests cannot request or add media" }
+                ? { label: addCapability.guidedCopy, tooltip: "Ask the owner to request or add this title" }
                 : null
             }
             trailerKey={trailerKey}

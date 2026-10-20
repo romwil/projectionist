@@ -3,11 +3,11 @@
 [![License: AGPL-3.0-only](https://img.shields.io/badge/License-AGPL--3.0--only-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Docker Hub](https://img.shields.io/badge/docker-romwil%2Fprojectionist-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/romwil/projectionist)
-[![Version](https://img.shields.io/badge/version-1.37.58-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.37.59-green.svg)](CHANGELOG.md)
 
 **Cinema intelligence for your personal archive.**
 
-Projectionist is an open-source, self-hosted cinema intelligence engine and agentic companion for personal media libraries — local-first, zero-telemetry, with vector mapping, multi-signal taste modeling, MCP access, and hardened multi-tenant roles (Owner / Member / Youth / Guest).
+Projectionist is an open-source, self-hosted cinema intelligence engine and agentic companion for personal media libraries — local-first, zero-telemetry, with vector mapping, multi-signal taste modeling, MCP access, and hardened multi-tenant roles (Owner / Member / Youth).
 
 It sits between Plex and your *arr stack: talk about taste, browse Explore rails, find gaps and purge candidates, rate what you watched, and add titles to Radarr or Sonarr only after you confirm. Bring your own LLM (cloud or local). Built for Unraid and Docker.
 
@@ -58,9 +58,10 @@ Teaching principles: **sync vs idle trickle**, **materialize similarity**, **hon
 
 ## Key capabilities
 
-- **Chat + Explore** — cinema workspace with Lights Up / Lights Down themes; `/explore` browse hub; title detail with trailer, Watch on Plex, and **More Like This** neighbors
-- **Library Play** — in-app `/watch` for movies and episodes (HLS via Plex); shrink / pop-out / phone; captions and resume on the same stage Live uses
+- **Chat + Explore** — cinema workspace with Lights Up / Lights Down themes; `/explore` browse hub with **For you** first (named household links, never cosine filler); title detail with trailer, Watch on Plex, and **More Like This** neighbors
+- **Library Play** — in-app `/watch` for movies and episodes (HLS via Plex); shrink / pop-out / phone; captions, buffering chip, hold-to-2x, and resume on the same stage Live uses
 - **Live Channels** — native household stations from your library (`/live` Guide / Watch / Weather / pop-out; lineup under `DATA_DIR`); craft in Admin → Live Channels. **Plex Live TV / OTA** is your Plex setup — Projectionist does not manage that tuner stack
+- **Named kinship** — owner KPI on Admin Monday pass / coverage strip (`with_explainable_neighbors_pct`); catch-up is the lever, not raw similar-cache %
 - **Lobby Theater** — open-LAN kiosk lightbox on a dedicated port (`8791` by default): live **now playing** from Plex sessions, idle poster carousel from your library; pick the idle feed with `?feed=recently_added`, `recently_released`, or `trending` (aliases: `recently-added`, `recent-releases`, `popular`); adaptive Plex polling + shared poster cache for Pi-class wall hardware (Admin → Lobby)
 - **Library-grounded curator** — RAG + facet query over structured credits/motifs and layered plot text; explainable “why this?”; agent tools for similar titles, relations, and people
 - **Confirm before you grab** — Radarr / Sonarr (and optional Seerr) writes need an explicit confirm in chat or the status dock

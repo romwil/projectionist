@@ -291,7 +291,7 @@ export default function TitleCard({
         <span
           className="title-card-add-guidance"
           data-testid="ask-owner-guidance"
-          title="Guests cannot request or add media"
+          title="Ask the owner to request or add this title"
         >
           {capability.guidedCopy}
         </span>

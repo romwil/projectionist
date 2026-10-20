@@ -2265,8 +2265,8 @@ def feed_for_you(
     note = None
     if not items:
         note = (
-            "No named links from what you've watched yet — finish a title, "
-            "or let Scheduled Tasks catch up Named kinship."
+            "No named link to something you finished — not a cosine guess. "
+            "Finish a title, or let Scheduled Tasks catch up Named kinship."
         )
     return {
         "feed": "for-you",
