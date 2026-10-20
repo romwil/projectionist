@@ -1264,7 +1264,9 @@ class RelationsTests(unittest.IsolatedAsyncioTestCase):
                     "year": 2021,
                 }
             )
-            db.set_neighbors(a, [(b, 0.95, 0.1)])
+            # Relations only mirror explainable neighbors; orphans below also mark
+            # explainable so the JOIN (not the flag) is what excludes them.
+            db.set_neighbors(a, [(b, 0.95, 0.1, 1)])
 
             # Simulate pre–FK-enforcement orphans still sitting in item_neighbors.
             raw = sqlite3.connect(db_path)
@@ -1272,15 +1274,17 @@ class RelationsTests(unittest.IsolatedAsyncioTestCase):
                 raw.execute("PRAGMA foreign_keys=OFF")
                 raw.execute(
                     """
-                    INSERT INTO item_neighbors (item_id, neighbor_id, score, surprise_score)
-                    VALUES (?, ?, 0.99, 0.0)
+                    INSERT INTO item_neighbors
+                        (item_id, neighbor_id, score, surprise_score, explainable)
+                    VALUES (?, ?, 0.99, 0.0, 1)
                     """,
                     (a, 9_999_999),
                 )
                 raw.execute(
                     """
-                    INSERT INTO item_neighbors (item_id, neighbor_id, score, surprise_score)
-                    VALUES (?, ?, 0.98, 0.0)
+                    INSERT INTO item_neighbors
+                        (item_id, neighbor_id, score, surprise_score, explainable)
+                    VALUES (?, ?, 0.98, 0.0, 1)
                     """,
                     (9_999_998, b),
                 )
