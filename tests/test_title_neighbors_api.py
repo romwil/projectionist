@@ -45,6 +45,10 @@ class TitleNeighborsApiTests(unittest.TestCase):
         self.assertEqual(payload["total"], 0)
 
     def test_neighbors_returns_cached_rows(self) -> None:
+        from projectionist.library.neighbors import enrich_neighbors_with_explanations
+
+        bake = "Amateur bakers compete around a signature bake inside a failing colony."
+        spy = "Rivals reunite after amateur bakers compete and ruin a signature bake tonight."
         seed_id = self.db.upsert_library_item(
             {
                 "rating_key": "rk-1",
@@ -54,6 +58,7 @@ class TitleNeighborsApiTests(unittest.TestCase):
                 "tmdb_id": 78,
                 "poster_url": "https://example.com/seed.jpg",
                 "genres": ["Sci-Fi"],
+                "summary": bake,
             }
         )
         neighbor_id = self.db.upsert_library_item(
@@ -65,10 +70,15 @@ class TitleNeighborsApiTests(unittest.TestCase):
                 "tmdb_id": 79,
                 "poster_url": "https://example.com/n.jpg",
                 "genres": ["Sci-Fi"],
-                "summary": "Close twin",
+                "summary": spy,
             }
         )
-        self.db.set_neighbors(seed_id, [(neighbor_id, 0.91, 0.2)])
+        self.db.set_neighbors(
+            seed_id,
+            enrich_neighbors_with_explanations(
+                self.db, seed_id, [(neighbor_id, 0.91, 0.2)]
+            ),
+        )
 
         response = self.client.get("/api/title/movie/78/neighbors")
         self.assertEqual(response.status_code, 200)
@@ -78,6 +88,7 @@ class TitleNeighborsApiTests(unittest.TestCase):
         self.assertEqual(item["title"], "Neighbor")
         self.assertEqual(item["tmdb_id"], 79)
         self.assertAlmostEqual(item["score"], 0.91, places=2)
+        self.assertIn("amateur bakers", str(item.get("plot_link") or "").lower())
 
 
 if __name__ == "__main__":

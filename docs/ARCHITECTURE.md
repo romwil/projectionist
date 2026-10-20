@@ -408,7 +408,7 @@ Batch sizes for (1)–(3) and loglines are **auto-tuned** from durable run histo
 Homelab SQLite cannot afford full pairwise cosine on every “more like this” click. Pattern:
 
 1. Store vectors in `embeddings` (with `embedding_model` for rebuild hygiene).
-2. Idle task writes top neighbors to `item_neighbors` (`score`, `surprise_score`).
+2. Idle task writes top neighbors to `item_neighbors` (`score`, `surprise_score`, plus `explainable` / `plot_link_json` when a named plot link exists). More Like This and relations read explainable rows only.
 3. Optional graph mirror in `title_relations` (`collection`, `neighbor`, `shared_crew`, optional `llm_theme`).
 4. UI/API/agent tools SELECT from those tables.
 
@@ -424,7 +424,7 @@ Empty neighbor/relation responses are **honest** — they mean the idle cache ha
 | `GET /api/library/feeds/recent-releases` | `release_date` / `first_air_date` | Empty + note if no enriched dates (no year faking) |
 | `GET /api/library/feeds/revisit-these` | partially watched TV + idle `last_viewed_at` / `last_episode_watched_at` ≥ 60d | Random ≤20; empty + note when none qualify |
 | `GET /api/library/feeds/on-this-day` | calendar month-day match, else milestone-year fallback | `mode` field discloses which path ran |
-| `GET /api/library/neighbors/{item_id}` | `item_neighbors` | Empty until `plot_neighbors` ran |
+| `GET /api/library/neighbors/{item_id}` | `item_neighbors` (explainable only) | Empty until named plot links exist |
 | `GET /api/library/motifs` | `library_facets` where `facet_type='motif'` | Empty until motif task ran |
 | `GET /api/library/knowledge-coverage` | facet/neighbor/plot column counts | Honest % coverage for Admin/Explore |
 | `GET /api/library/query?motifs=…` | hybrid by default (`plot_match_mode`) | Motif ∪ keyword ∪ theme ∪ plot-text AND; `motifs` mode = facet-only |
@@ -508,7 +508,7 @@ Phase B is implemented: Admin Scheduled Tasks show durable recent runs, measured
 
 ## Curator memory subsystem
 
-Projectionist persists knowledge across sessions in **two distinct scopes** so the curator behaves as if it remembers rather than starting cold each turn. The dual-scope model is installed by `_migrate_curator_memory` in `db.py`; per-scope tables are in [DATA_MODEL.md](DATA_MODEL.md#curator-memory).
+Projectionist persists knowledge across sessions in **two distinct scopes** so the curator behaves as if it remembers rather than starting cold each turn. The dual-scope model is installed by `_migrate_curator_memory` in `projectionist/library/db/_schema.py` (migration order in `migrations.py`); per-scope tables are in [DATA_MODEL.md](DATA_MODEL.md#curator-memory).
 
 | Scope | Store | Trust | Written by | Read by |
 |-------|-------|-------|-----------|---------|

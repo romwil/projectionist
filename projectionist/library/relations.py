@@ -17,6 +17,8 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, 
 from projectionist.library.db import Database
 from projectionist.library.neighbors import measured_metadata_overlap
 from projectionist.library.plot_kinship import (
+    build_explanation,
+    explanation_from_plot_link,
     plot_blob,
     specific_plot_link,
     surprising_plot_link,
@@ -173,6 +175,8 @@ def _why_payload(
     shared_people: Sequence[str],
     seed_people: Sequence[str] = (),
     peer_people: Sequence[str] = (),
+    seed_id: Optional[int] = None,
+    peer_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     seed_genres = _json_labels(seed["genres"]) if seed is not None else []
     peer_genres = _json_labels(peer["genres"]) if peer is not None else []
@@ -183,6 +187,8 @@ def _why_payload(
     plot_link: Optional[str] = None
     shelf_note: Optional[str] = None
     shared_story: List[str] = []
+    explanation: Optional[Dict[str, Any]] = None
+    seed_ids = [int(seed_id)] if seed_id is not None else None
 
     if relation == "collection":
         for row in (seed, peer):
@@ -194,12 +200,32 @@ def _why_payload(
             if collection_name
             else "Same collection"
         )
+        explanation = build_explanation(
+            kind="collection",
+            sentence=label,
+            seed_ids=seed_ids,
+            peer_id=peer_id,
+            evidence={
+                "collection_name": collection_name,
+                "shared_genres": shared_genres,
+            },
+        )
     elif relation == "shared_crew":
         names = list(shared_people)
         label = (
             f"Shared director/writer: {', '.join(names[:3])}"
             if names
             else "Shared directors or writers"
+        )
+        explanation = build_explanation(
+            kind="shared_crew",
+            sentence=label,
+            seed_ids=seed_ids,
+            peer_id=peer_id,
+            evidence={
+                "shared_people": names,
+                "shared_genres": shared_genres,
+            },
         )
     elif relation == "neighbor":
         seed_shelf = _shelf_labels(seed, seed_people)
@@ -226,10 +252,19 @@ def _why_payload(
                 peer_text=peer_plot,
                 shelf_labels=shelf,
             )
+            evidence: Dict[str, Any] = {"shared_story": shared_story}
             if link:
                 plot_kinship = _plot_kinship_label(weight)
                 shelf_note = str(link["shelf_note"] or "") or None
                 surprise_flavor = plot_link
+                evidence["shelf_note"] = shelf_note
+                evidence["plot_kinship"] = plot_kinship
+            explanation = explanation_from_plot_link(
+                specific,
+                seed_ids=seed_ids,
+                peer_id=peer_id,
+                evidence=evidence,
+            )
     else:
         label = "Related title"
 
@@ -244,6 +279,7 @@ def _why_payload(
         "plot_link": plot_link,
         "shelf_note": shelf_note,
         "shared_story": shared_story,
+        "explanation": explanation,
     }
 
 
@@ -283,18 +319,27 @@ def build_neighbor_relations(
     *,
     top_k: int = 10,
 ) -> List[RelationRow]:
-    """Mirror high-cosine neighbors into ``title_relations`` (optional)."""
+    """Mirror explainable neighbors into ``title_relations`` (optional).
+
+    Cosine-only peers are excluded — a neighbor edge needs a named plot link
+    (``item_neighbors.explainable = 1``).
+    """
     rows: List[RelationRow] = []
     with db.connect() as conn:
+        cols = {str(row[1]) for row in conn.execute("PRAGMA table_info(item_neighbors)")}
+        explainable_clause = (
+            "AND COALESCE(n.explainable, 0) = 1" if "explainable" in cols else "AND 0"
+        )
         # Join both ends so legacy orphan neighbor rows (pre–FK enforcement)
         # cannot produce title_relations inserts that fail FOREIGN KEY checks.
         neighbor_rows = conn.execute(
-            """
+            f"""
             SELECT n.item_id, n.neighbor_id, n.score
             FROM item_neighbors n
             JOIN library_items seed ON seed.id = n.item_id
             JOIN library_items peer ON peer.id = n.neighbor_id
             WHERE n.score > 0
+            {explainable_clause}
             ORDER BY n.item_id ASC, n.score DESC
             """
         ).fetchall()
@@ -454,6 +499,8 @@ def list_relations_for_item(
             shared_people=shared_people,
             seed_people=seed_crew,
             peer_people=peer_crew,
+            seed_id=int(item_id),
+            peer_id=to_id,
         )
         if relation_type == "neighbor" and not why.get("plot_link"):
             continue

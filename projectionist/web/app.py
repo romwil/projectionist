@@ -4580,7 +4580,11 @@ def title_neighbors(
         return _sanitize_library_payload({"items": [], "total": 0}, user)
     seed_id = int(row["id"])
     capped = min(max(1, int(limit or 12)), 24)
-    neighbor_rows = db.get_neighbors(seed_id, mode=mode, limit=capped)
+    neighbor_rows = db.get_neighbors(
+        seed_id, mode=mode, limit=capped, explainable_only=True
+    )
+    from projectionist.library.plot_kinship import parse_plot_link_json
+
     items: List[Dict[str, Any]] = []
     for neighbor in neighbor_rows:
         genres_raw = neighbor["genres"] if "genres" in neighbor.keys() else "[]"
@@ -4591,22 +4595,28 @@ def title_neighbors(
         if not isinstance(genres, list):
             genres = []
         score = float(neighbor["score"] or 0)
-        items.append(
-            {
-                "media_type": str(neighbor["media_type"] or media_type),
-                "title": str(neighbor["title"] or ""),
-                "year": int(neighbor["year"]) if neighbor["year"] is not None else None,
-                "tmdb_id": int(neighbor["tmdb_id"]) if neighbor["tmdb_id"] is not None else None,
-                "tvdb_id": int(neighbor["tvdb_id"]) if neighbor["tvdb_id"] is not None else None,
-                "rating_key": str(neighbor["rating_key"] or ""),
-                "poster_url": str(neighbor["poster_url"] or ""),
-                "overview": str(neighbor["summary"] or ""),
-                "genres": [str(g) for g in genres if g],
-                "in_library": True,
-                "score": score,
-                "match_score": score,
-            }
+        stored = (
+            parse_plot_link_json(neighbor["plot_link_json"])
+            if "plot_link_json" in neighbor.keys()
+            else None
         )
+        entry: Dict[str, Any] = {
+            "media_type": str(neighbor["media_type"] or media_type),
+            "title": str(neighbor["title"] or ""),
+            "year": int(neighbor["year"]) if neighbor["year"] is not None else None,
+            "tmdb_id": int(neighbor["tmdb_id"]) if neighbor["tmdb_id"] is not None else None,
+            "tvdb_id": int(neighbor["tvdb_id"]) if neighbor["tvdb_id"] is not None else None,
+            "rating_key": str(neighbor["rating_key"] or ""),
+            "poster_url": str(neighbor["poster_url"] or ""),
+            "overview": str(neighbor["summary"] or ""),
+            "genres": [str(g) for g in genres if g],
+            "in_library": True,
+            "score": score,
+            "match_score": score,
+        }
+        if stored:
+            entry["plot_link"] = stored["sentence"]
+        items.append(entry)
     return _sanitize_library_payload({"items": items, "total": len(items)}, user)
 
 
