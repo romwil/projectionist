@@ -42,6 +42,33 @@ export function liveStreamUrl(channelId) {
   return `/api/live-channels/stream/${id}/index.m3u8`;
 }
 
+/**
+ * What to put in the live video element after tune.
+ * A flex pad keeps its Up next chrome (`holdMs`) and still plays when tune
+ * returned a filler stream. An empty flex URL is the black frame — do not
+ * pretend the default channel playlist is that filler.
+ * @param {object|null|undefined} tuned
+ * @param {number} [nowMs]
+ */
+export function flexPlaybackPlan(tuned, nowMs = Date.now()) {
+  const url = String(tuned?.stream_url || "").trim();
+  const isFlex = Boolean(tuned?.is_flex);
+  let holdMs = 0;
+  if (isFlex) {
+    const endsAt = Number(tuned?.ends_at);
+    holdMs = Number.isFinite(endsAt) ? Math.max(1000, endsAt * 1000 - nowMs) : 15000;
+  }
+  const kind = String(tuned?.playback_kind || "").trim().toLowerCase();
+  const progressive =
+    kind === "progressive" || /\.(mp4|m4v|webm|mov)(\?|$)/i.test(url);
+  return {
+    url,
+    holdMs,
+    progressive,
+    play: Boolean(url),
+  };
+}
+
 export function liveWatchHref(channelId, { popout = false } = {}) {
   const params = new URLSearchParams();
   const id = String(channelId || "").trim();

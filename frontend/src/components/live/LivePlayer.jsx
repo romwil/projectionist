@@ -17,6 +17,7 @@ import {
   LIVE_CC_EMPTY_STREAM,
   LIVE_STALL_ESCALATE_MS,
   LIVE_STALL_NOTICE_MS,
+  flexPlaybackPlan,
   liveStreamUrl,
   mergeLiveCcTracks,
   OSD_IDLE_MS,
@@ -553,18 +554,30 @@ export default function LivePlayer({
     };
     video.addEventListener("ended", onEnded);
 
+    const startProgressive = () => {
+      if (destroyed || !video) return;
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+      const onReady = () => {
+        if (destroyed) return;
+        setError("");
+        beginPlay();
+        syncTracks();
+      };
+      video.addEventListener("loadedmetadata", onReady, { once: true });
+      video.src = url;
+    };
+
     (async () => {
-      let flexHoldMs = 0;
+      let plan = flexPlaybackPlan(null);
       try {
         const tuned = await tuneLiveChannel(channelId);
         if (destroyed) return;
-        if (tuned?.is_flex) {
-          const endsAt = Number(tuned.ends_at);
-          flexHoldMs = Number.isFinite(endsAt)
-            ? Math.max(1000, endsAt * 1000 - Date.now())
-            : 15000;
-        } else if (tuned?.stream_url) {
-          url = String(tuned.stream_url);
+        plan = flexPlaybackPlan(tuned);
+        if (plan.url) {
+          url = plan.url;
           lastMediaUrlRef.current = url;
         }
       } catch (err) {
@@ -576,11 +589,21 @@ export default function LivePlayer({
         // Best-effort — player still attempts the stream; errors surface via hls.js.
       }
       if (destroyed) return;
-      if (flexHoldMs > 0) {
-        setStatus("playing");
+      if (plan.holdMs > 0) {
         recoverTimer = window.setTimeout(() => {
           if (!destroyed) setScheduleEpoch((epoch) => epoch + 1);
-        }, flexHoldMs);
+        }, plan.holdMs);
+      }
+      // Flex with a filler URL plays in this element. Returning early used to
+      // leave the empty <video> (background #000) covering the stage while the
+      // Up next clock kept moving.
+      if (plan.play) {
+        if (plan.progressive) startProgressive();
+        else startPlayback();
+        return;
+      }
+      if (plan.holdMs > 0) {
+        setStatus("playing");
         return;
       }
       startPlayback();
