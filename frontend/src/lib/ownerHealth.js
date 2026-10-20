@@ -25,7 +25,7 @@ function browseHref({ watch_state, sort, sort_dir } = {}) {
 }
 
 /**
- * One clear Library health narrative for the Admin hero.
+ * One Monday-pass narrative for the Admin hero.
  * Ties Named kinship, open issues, purge pressure, and Scheduled Tasks catch-up.
  *
  * @param {object} args
@@ -77,9 +77,11 @@ export function buildLibraryHealthStory({ health, coverage, openIssues, purgeCou
     (kinshipPct != null && kinshipPct < 50) ||
     (issues != null && issues > 0) ||
     (purge != null && purge > 0);
+  const order =
+    "About 20 minutes, in order: Named kinship → open issues → purge pressure → Scheduled Tasks catch-up.";
   return {
-    headline: "Library health",
-    body: bits.join(" "),
+    headline: "Monday pass",
+    body: [order, ...bits].join(" "),
     tone: warn ? "warn" : "good",
   };
 }
@@ -151,7 +153,7 @@ export function buildHealthHeroTiles({ health, coverage, openIssues, purgeCount 
       label: "Purge pressure",
       value: purge == null ? "—" : String(purge),
       detail: purge ? "Candidates in buffer" : "Buffer clear",
-      to: "/admin#storage-intelligence",
+      to: "/admin/health?tab=sync#storage-intelligence",
       tone: purge ? "warn" : "good",
     },
     {

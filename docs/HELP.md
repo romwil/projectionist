@@ -98,7 +98,7 @@ Saved pages preserve the structured text, title cards, reply chips, and any quot
 **[Explore](/explore) is cinema browse** over the same SQLite feeds the curator uses. Open it to skim:
 
 - **Continue Watching** — titles you started and have not finished. Play, pause, or skip ahead in this app and that spot shows on the rail right away. Plays from another device still arrive from Plex On Deck. This is not a live list of what is on in another room.
-- **For you** — unwatched titles with a named link to something this house finished or pinned. Finishing a TV episode uses that episode’s plot (not a random similar movie). An empty rail means no named link yet — not a broken shelf.
+- **For you** — the first Explore rail. Unwatched titles with a named link to something this house finished or pinned — same honesty as inbox, never a cosine filler. Finishing a TV episode uses that episode’s plot (not a random similar movie). Empty copy: *no named link to something you finished.*
 - **Recently Added** (movies and shows) and **Recently added episodes** (fresh episode arrivals, not whole series)
 - **Recent Releases**
 - **Revisit These** — partially watched TV that's been idle 60+ days
@@ -258,9 +258,17 @@ Use the grip's **Add to list or playlist** chooser to place a title in more than
 
 Dragging the scrubber holds the last frame. Letting go jumps once. The picture stays hidden until that new spot has a real frame. A bigger skip that restarts the stream still shows a short **tuning** interstitial — fuzzy TV static plus a wry living-room line — then the picture crossfades in when frames arrive. Every movie play can open with a **random trailer** from the household preroll library — the next play of the same film may lead with a different one. The trailer plays through: no title on screen, and no skip. Episodes skip it. Friends watching the same title are not locked to one bumper.
 
-On the player: Space, `k`, or `s` play/pause; `j` / `a` or ← skip back 15 seconds; `l` / `d` or → skip forward 15 seconds; double-click (or double-tap on a phone) the left or right third to skip, the center to go fullscreen; `f` fullscreen; `m` mute; `c` captions. A tap in the bottom third shows the controls and leaves playback alone; they stay up for the usual few seconds, and a second tap there hides them. **Close** sits on the bar and leaves the player. Escape closes captions, then fullscreen, then leaves the player. **Shrink onto page** keeps the picture and sound going in a small panel on the page you came from, so chat, Explore, and search stay usable. Drag the panel if it sits on something you need. A reload, including after the iPad locks, brings that small player back on the same title at the same spot. **Return to player** opens the full page again; **Close** stops playback and does not come back after a reload. **Pop out of the window** is a separate action under More: it moves Play into its own window. A phone can also use the browser picture-in-picture under More, plus fullscreen, so chat can stay up. Rotate to landscape on a phone or tablet — video fills the usable viewport and the transport (±15, play/pause, scrubber) stays inside the safe area (notch / home indicator) with thumb-sized taps; Safari may ignore the Fullscreen API, in which case Play already fills the screen and **Fullscreen** uses an immersive CSS fallback that keeps custom controls. If you were more than two minutes in, you get **Resume** or **Start over**. If the stream will not start, **Open in Plex** is still there.
+When the stream is waiting for frames after a seek or underrun, an obvious **Buffering** chip appears (not a faint “Loading…”). Brief hiccups stay quiet; the chip hides once a real frame is on screen. If a jump cannot restart, you still get **Couldn’t jump in this title.**
+
+Press and hold the picture (outside the controls) to play at **2x**. Release returns to normal speed and does not pause. Space / A / S / D and ±15 stay the same. Live TV does not use 2x — the linear clock stays 1x. **iPad Safari caveat:** Plex HLS without `#EXT-X-ENDLIST` is often treated as live, and Safari may ignore `playbackRate`. Projectionist still sets 2x; the 2x chip appears only when the video actually reports rate 2. If it stays 1, there is no fake chip.
+
+On the player: Space, `k`, or `s` play/pause; `j` / `a` or ← skip back 15 seconds; `l` / `d` or → skip forward 15 seconds; double-click (or double-tap on a phone) the left or right third to skip, the center to go fullscreen; `f` fullscreen; `m` mute; `c` captions. Captions are one overlay — the CC menu can nudge sync by half a second. A tap in the bottom third shows the controls and leaves playback alone; they stay up for the usual few seconds, and a second tap there hides them. **Close** sits on the bar and leaves the player. Escape closes captions, then fullscreen, then leaves the player. **Shrink onto page** keeps the picture and sound going in a small panel on the page you came from, so chat, Explore, and search stay usable. Drag the panel if it sits on something you need. A reload, including after the iPad locks, brings that small player back on the same title at the same spot. **Return to player** opens the full page again; **Close** stops playback and does not come back after a reload. **Pop out of the window** is a separate action under More: it moves Play into its own window. A phone can also use the browser picture-in-picture under More, plus fullscreen, so chat can stay up. Rotate to landscape on a phone or tablet — video fills the usable viewport and the transport (±15, play/pause, scrubber) stays inside the safe area (notch / home indicator) with thumb-sized taps; Safari may ignore the Fullscreen API, in which case Play already fills the screen and **Fullscreen** uses an immersive CSS fallback that keeps custom controls. If you were more than two minutes in, you get **Resume** or **Start over**. If the stream will not start, **Open in Plex** is still there.
 
 Play keeps going when you switch Mac Spaces or hide the Chrome tab. Prefer pause-on-background for a wall display? Turn on **Pause when backgrounded** under **Settings → Profile** (this browser only; off by default).
+
+### How we watch at night
+
+Household door: **Explore → Continue Watching → Play**. Finish, shrink onto the page, or lock the iPad — Play resumes that title. **Lobby Theater** (`:8791`) and MCP are optional owner tools, not the nightly path.
 
 **Mark as watched — a guided one-tap.** For any title that lives in your Plex library, the grip offers **Mark as watched**. Say you just finished *Heat* on the TV downstairs but forgot to press play in Plex — open the ⋮ menu on its poster and choose **Mark as watched**. Projectionist records the view and tells Plex, using the episode on the card when the poster is an episode, so the poster's watched overlay turns on, the title leaves Continue Watching, and it stops showing up as "unwatched" everywhere it appears. Changed your mind, or marked the wrong one? The same spot now reads **Mark as unwatched** and reverses it. The action only appears on real library titles (the same rule as **Play**) — discovery cards for things you don't own never show it — and, like everything else, it's tied to *your* signed-in Plex context.
 
@@ -343,6 +351,23 @@ Identify is usually **show-level** (theme or score). It does **not** pick season
 2. Leave the server **idle** so scheduled tasks can refresh title details, plot-similarity data, plot patterns, and similar-title links.
 3. Open **Admin → Scheduled Tasks** (`/admin/tasks`) — confirm knowledge tasks are enabled; adjust cadence after large imports.
 4. Open **Admin → Library knowledge** (`/admin/taxonomy`) — start with **name mappings**; a title appears under **Couldn't fill in** only after automatic lookup failed.
+
+### Monday pass
+
+Admin Dashboard leads with a **Monday pass** — about 20 minutes, in this order:
+
+1. **Named kinship %** (the number to watch — catch-up is the lever)
+2. **Open issues**
+3. **Purge pressure**
+4. **Scheduled Tasks catch-up**
+
+Each tile links to that page. Similar-cache % can look full while Named kinship stays low; empty More Like This shelves queue idle catch-up. After overnight idle, re-read coverage:
+
+```bash
+# Automat LAN (authoritative). Watch with_explainable_neighbors_pct.
+# 1.37.58 snapshot was ~72.9% — the target is higher on *opened* titles, not a fake 100%.
+curl -s http://10.10.1.202:8788/api/library/knowledge-coverage | python3 -m json.tool
+```
 
 ### Library knowledge
 
@@ -477,8 +502,8 @@ curl -s "http://localhost:32400/:/scrobble?identifier=com.plexapp.plugins.librar
 
 **Where to read coverage in the app**
 
-- **Admin → Dashboard** — full **Knowledge coverage** panel (% with overview, motifs, keywords, neighbors, loglines; themes/synopsis when present).
-- **Admin → Scheduled Tasks** and **Explore** — compact honesty strip so sparsity stays visible while you tune cadence.
+- **Admin → Dashboard** — full **Knowledge coverage** panel (% with overview, motifs, keywords, neighbors, loglines; themes/synopsis when present). Hash-fallback embeddings are labeled when that is the actual model.
+- **Admin → Scheduled Tasks** and **Explore** — compact honesty strip so sparsity stays visible while you tune cadence. The same hash-fallback line appears on the strip.
 
 Read the same numbers over HTTP when you're scripting a health check:
 
@@ -506,7 +531,7 @@ The safety model is deliberately conservative: auto-repair is an owner policy ov
 
 ### Library-health hero & issue badge
 
-The **Admin → Dashboard** (**Library intelligence**) opens with a **library-health hero**: at-a-glance tiles for title count, unwatched share, knowledge coverage, **rating coverage** (watched titles you’ve rated — with an honest note when ratings aren’t linked to watched titles yet), and **open issues**, each linking into the page that fixes it. Weekly digest stat cards are drillable the same way. The Admin rail carries the open-issue count as a badge next to **Issues**.
+The **Admin → Dashboard** (**Library intelligence**) opens with a **Monday pass** hero: about 20 minutes, in order — **Named kinship** → **open issues** → **purge pressure** → **Scheduled Tasks catch-up**. Tiles also include title count, unwatched share, and **rating coverage** (watched titles you’ve rated — with an honest note when ratings aren’t linked to watched titles yet). Each tile links into the page that fixes it. Weekly digest stat cards are drillable the same way. The Admin rail carries the open-issue count as a badge next to **Issues**.
 
 The hero reuses the same aggregations the rest of the Dashboard already loads — nothing new is fetched per tile. The open-issue count comes from the existing queue:
 
@@ -826,6 +851,12 @@ Live turns your library into always-on channels that household members watch in 
 While a Live job is running, a sticky rail says what is working and other mutating Live buttons stay off — you can still refresh status, switch tabs, and edit forms.
 
 **Honest limits.** Projectionist does not attach HDHomeRun / XMLTV devices to Plex or rebuild Plex Live TV tuners. Those Tunarr-era paths are sunset — see [PRODUCT.md](PRODUCT.md). If a station won’t play, rebuild its lineup from the channel’s Settings and confirm the title still has a playable Plex rating key.
+
+---
+
+## Not in product (Phase 6 leftovers)
+
+Gift queue, trust diary, and Admin House seasonal veto/preview are **parked** — they are not household doors. See [DELIGHT-WISHLIST.md](DELIGHT-WISHLIST.md). Living sequencing lives in [PRODUCT.md](PRODUCT.md).
 
 ---
 

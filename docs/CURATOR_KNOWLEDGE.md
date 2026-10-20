@@ -113,7 +113,7 @@ Primary store: `{DATA_DIR}/projectionist.db` (SQLite; legacy `curatorx.db` still
 
 - `library_items` — identity + plot text columns + keyword/genre JSON
 - `library_facets` — people/keyword/genre/country/language facets from sync; `motif` / `theme` from idle (see [MEDIA_INTELLIGENCE.md](MEDIA_INTELLIGENCE.md))
-- `embeddings` — per-title vectors
+- `embeddings` — per-title vectors (`embedding_model` records the producer; `hash-fallback` when there is no embedding API)
 - `item_neighbors` — materialized top-K similarity (+ surprise) with `explainable` / `plot_link_json` for named kinship
 - `title_relations` — collection / neighbor / shared-crew edges
 
@@ -250,7 +250,7 @@ facets from current plot text; a full library reindex is unnecessary.
 
 ## Using knowledge in the product
 
-### End users (members / guests)
+### End users (members)
 
 - **Chat** — ask for plot-ish intersections (“revenge martial arts under 2 hours”); the agent uses tools over library + facets when available.
 - **Explore** — browse rails; a compact **Knowledge** strip shows coverage honesty (overview / motifs / keywords / neighbors %); empty rails usually mean cold caches.

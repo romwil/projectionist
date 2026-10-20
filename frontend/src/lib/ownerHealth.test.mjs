@@ -37,7 +37,7 @@ describe("buildHealthHeroTiles", () => {
     assert.equal(byId.issues.to, "/admin/health?tab=issues");
     assert.equal(byId.purge.value, "8");
     assert.equal(byId.purge.tone, "warn");
-    assert.match(byId.purge.to, /storage-intelligence/);
+    assert.equal(byId.purge.to, "/admin/health?tab=sync#storage-intelligence");
     assert.equal(byId.streak, undefined);
   });
 
@@ -89,8 +89,10 @@ describe("buildLibraryHealthStory", () => {
       openIssues: 2,
       purgeCount: 5,
     });
-    assert.equal(story.headline, "Library health");
+    assert.equal(story.headline, "Monday pass");
     assert.equal(story.tone, "warn");
+    assert.match(story.body, /About 20 minutes/);
+    assert.match(story.body, /Named kinship → open issues → purge pressure → Scheduled Tasks catch-up/);
     assert.match(story.body, /Named kinship is at 18%/);
     assert.match(story.body, /Scheduled Tasks/);
     assert.match(story.body, /2 open issues/);
