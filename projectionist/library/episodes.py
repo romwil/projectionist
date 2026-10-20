@@ -239,6 +239,7 @@ def _episode_row(
         "added_at": episode.added_at,
         "file_size": episode.file_size,
         "aired_at": episode.aired_at,
+        "summary": str(episode.summary or "").strip(),
         "view_offset_ms": episode.view_offset_ms,
         "duration_ms": episode.duration_ms,
         "plex_user_rating_stars": episode.user_rating_stars,

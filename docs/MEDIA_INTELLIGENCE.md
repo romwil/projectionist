@@ -78,8 +78,8 @@ Watch ledger (`watch_completions` / `watch_sessions` / terminal `watch_events`) 
 
 ### Release 2 notes
 
-- **Seeds** prefer `watch_completions`, then recent `watch_sessions`, then terminal `watch_events`, plus `watchlist_pins`. Library `view_count` / `last_viewed_at` is a last resort only when the ledger is empty.
-- **Bridge builder** (`recommendation_reasons.bridge_between`) finds peers via explainable neighbors, shared crew, or collection and emits `kind=watched_bridge` (“You finished *X*; *Y* — …”). No seed → no fake “because you watched.”
+- **Seeds** prefer `watch_completions`, then recent `watch_sessions`, then terminal `watch_events`, plus `watchlist_pins`. Library `view_count` / `last_viewed_at` is a last resort only when the ledger is empty. Episode watches still resolve to the **show** library row, then overlay `library_episodes.summary` (Plex episode plot) onto that seed’s plot blob.
+- **Bridge builder** (`recommendation_reasons.bridge_between`) finds peers via explainable neighbors, shared crew, collection, or a bounded episode-plot phrase match, and emits `kind=watched_bridge` (“You finished *Show — Episode*; *Y* — …”). No seed → no fake “because you watched.”
 - **Nudges, whispers, and weekly member newsletters** pick through the same path. When `multi_user_enabled`, prefer the acting member’s evidence, then fall back to the household.
 - Cosine-only neighbors stay excluded from candidate discovery (`explainable_only=True`).
 
@@ -95,7 +95,7 @@ Watch ledger (`watch_completions` / `watch_sessions` / terminal `watch_events`) 
 - **Miss signals** — empty More Like This, empty Related titles (for an embedded seed), or a recommendation bridge with zero peers write `telemetry_events` rows with `event_type=kinship_miss` (soft queue cap; hit_count bumps still allowed).
 - **Idle priority** — `metadata_enrichment`, `long_synopsis_enrichment`, `summary_motifs`, and `plot_neighbors` prefer that backlog on a bounded batch before cold catch-up.
 - **Admin** — knowledge hero and coverage strip lead with Named kinship % and link to Scheduled Tasks catch-up copy.
-- **Episode plot tranche — skipped.** After R1–R3, show-level plot text + explainable neighbors + crew/collection bridges are enough for TV seeds in inbox bridges. Deeper episode-level KG stays next-horizon (not required for honest show-level “why”).
+- **Episode-aware TV seeds (1.37.58).** Completing an episode overlays that episode’s Plex plot (or title) onto the show seed before `watched_bridge` / For you / inbox peers are built. Bounded phrase search finds peers that share the episode’s story; cosine-only show neighbors stay refused. This is **not** an episode knowledge graph — no per-episode embeddings or `item_neighbors`.
 
 ---
 
@@ -114,8 +114,10 @@ Watch ledger (`watch_completions` / `watch_sessions` / terminal `watch_events`) 
 
 Explore’s **For you** rail (`feed_for_you` / hub `for_you`) lists unwatched titles through the same `list_linked_unwatched` → `watched_bridge` path as inbox nudges. Weekly persona rails remain a separate taste feature; they are not a cosine fallback for this shelf.
 
+After a TV episode finish, that path uses the **episode plot** (when Plex stored one) so Live / next-like-this peers match the episode you actually watched, not a generic show blurb or a cosine movie neighbor.
+
 ## Next horizon (out of this series)
 
 - Full closed-loop promote from kinship_miss into staged augmentations (not just idle priority).
-- Deeper episode knowledge graph for per-episode bridges when show-level plot is too coarse.
+- Deeper episode knowledge graph (per-episode embeddings / neighbors) if show+episode overlay is still too coarse.
 - IdleScheduler rewrite for global priority across all trickle tasks.

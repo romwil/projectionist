@@ -502,6 +502,7 @@ class SchemaMigrationsMixin:
                 last_viewed_at INTEGER,
                 file_size INTEGER DEFAULT 0,
                 aired_at TEXT,
+                summary TEXT NOT NULL DEFAULT '',
                 FOREIGN KEY(show_item_id) REFERENCES library_items(id) ON DELETE CASCADE
             );
             CREATE INDEX IF NOT EXISTS idx_episodes_show ON library_episodes(show_item_id);

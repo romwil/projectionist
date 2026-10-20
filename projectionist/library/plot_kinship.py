@@ -220,6 +220,12 @@ def _story_bigrams(tokens: Set[str], blocked: Set[str]) -> list[str]:
     return found
 
 
+def distinctive_plot_phrases(text: str, *, limit: int = 3) -> list[str]:
+    """Longest story bigrams from plot text — bounded search keys, not a KG."""
+    tokens = _tokenize(text)
+    return _story_bigrams(tokens, set())[: max(0, int(limit or 0))]
+
+
 def _phrase(term: str) -> str:
     words = term.split()
     if not words:
