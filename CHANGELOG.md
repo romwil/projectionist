@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [1.37.55] — 2026-10-20
+
+One patch on 1.37.54: inbox, whisper, and weekly picks recommend titles because of something this house finished or pinned, with a named link — not an embedding neighbor of the last play.
+
+### Highlights
+- **Recommendations cite a household seed.** Nudges, whispers, and weekly notes say you finished or pinned a title, then name the plot, crew, or collection link.
+- **Watch evidence over view counts.** Seeds prefer completions, sessions, and terminal watch events, plus watchlist pins; raw Plex view_count is only a fallback.
+- **Multi-user prefers the acting member.** When multi-user is on, member evidence comes first, then the household.
+
+### Changed
+- **`recommendation_reasons`** builds `watched_bridge` explanation objects; `pick_linked_unwatched` / `watched_library_rows` take optional `user_id` + `multi_user_enabled`.
+- **Nudges, whispers, and member newsletters** wire through the bridge path and carry `explanation` / `seed_title` in payloads.
+- **Docs:** [docs/MEDIA_INTELLIGENCE.md](docs/MEDIA_INTELLIGENCE.md) Release 2 done notes.
+
+### Verification
+- Backend `pytest` (`tests/test_household_bridges.py`, `tests/test_inbox_recommendation_reasons.py`, `tests/test_whisper_inbox.py`) — 18 passed with `--no-cov`.
+
 ## [1.37.54] — 2026-10-20
 
 One patch on 1.37.53: More Like This and relation shelves only show peers with a named story link, and Admin coverage separates the cosine cache from that named kinship.

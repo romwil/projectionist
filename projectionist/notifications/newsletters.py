@@ -14,7 +14,7 @@ from projectionist.library.db import Database
 from projectionist.library.feeds import feed_recently_added
 from projectionist.notifications.recommendation_reasons import (
     library_row_for_ref,
-    specific_reason,
+    specific_bridge,
     watched_library_rows,
 )
 from projectionist.notifications.service import deliver_notification
@@ -142,7 +142,10 @@ def build_member_newsletter(
     now: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Build a personalized weekly newsletter subject + body for one member."""
-    del settings
+    multi_user = bool(
+        getattr(getattr(settings, "features", None), "multi_user_enabled", False)
+    ) if settings is not None else False
+    member_id = str(user.get("id") or "").strip() or None
     digest = build_weekly_digest(db, now=now)
     preferred = str(user.get("preferred_name") or user.get("display_name") or "there").strip()
     role = str(user.get("role") or "member")
@@ -150,7 +153,9 @@ def build_member_newsletter(
     voice = _persona_voice_line(db, for_guest=for_guest)
     new_block = digest.get("new_this_week") or {}
     titles = list(new_block.get("titles") or [])
-    watched = watched_library_rows(db)
+    watched = watched_library_rows(
+        db, user_id=member_id, multi_user_enabled=multi_user
+    )
     linked: List[Dict[str, Any]] = []
     for item in titles:
         if not isinstance(item, dict):
@@ -163,10 +168,11 @@ def build_member_newsletter(
                 continue
         except (TypeError, ValueError):
             continue
-        why = specific_reason(db, row, watched)
+        explanation = specific_bridge(db, row, watched)
+        why = str(explanation.get("sentence") or "") if explanation else ""
         if not why:
             continue
-        linked.append({**item, "why": why})
+        linked.append({**item, "why": why, "explanation": explanation})
         if len(linked) >= DIGEST_PICK_CAP:
             break
     picks = structured_digest_picks(linked)
