@@ -12,8 +12,10 @@ from typing import Optional
 from projectionist.library.db import Database
 from projectionist.library.plot_kinship import plot_link_json, specific_plot_link
 from projectionist.notifications.nudges import pick_nudge_title
+from projectionist.library.feeds import feed_for_you
 from projectionist.notifications.recommendation_reasons import (
     bridge_between,
+    list_linked_unwatched,
     pick_linked_unwatched,
     watched_library_rows,
 )
@@ -320,6 +322,63 @@ class HouseholdBridgeTests(unittest.TestCase):
         self.assertIsNotNone(stranger_pick)
         assert stranger_pick is not None
         self.assertIn("Heat", stranger_pick["why"])
+
+    def test_list_and_feed_for_you_reuse_watched_bridge_refusal(self) -> None:
+        seed = _title(
+            self.db,
+            rating_key="rk-heat",
+            tmdb_id=949,
+            title="Heat",
+            year=1995,
+            summary=BAKE_PLOT,
+        )
+        peer = _title(
+            self.db,
+            rating_key="rk-thief",
+            tmdb_id=11334,
+            title="Thief",
+            year=1981,
+            summary=SPY_PLOT,
+        )
+        noise = _title(
+            self.db,
+            rating_key="rk-gravity",
+            tmdb_id=2,
+            title="Gravity",
+            summary=GRAVITY_PLOT,
+        )
+        _explainable_neighbor(
+            self.db, seed, peer, seed_text=BAKE_PLOT, peer_text=SPY_PLOT
+        )
+        with self.db.connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO item_neighbors
+                    (item_id, neighbor_id, score, surprise_score, explainable, plot_link_json)
+                VALUES (?, ?, ?, ?, 0, ?)
+                """,
+                (seed, noise, 0.99, 0.9, "{}"),
+            )
+        _insert_completion(
+            self.db,
+            user_id="will",
+            rating_key="rk-heat",
+            completed_at_ms=1_700_000_000_000,
+        )
+
+        picks = list_linked_unwatched(self.db, limit=8)
+        self.assertEqual(len(picks), 1)
+        self.assertEqual(picks[0]["title"], "Thief")
+        self.assertEqual((picks[0].get("explanation") or {}).get("kind"), "watched_bridge")
+
+        feed = feed_for_you(self.db, limit=8)
+        self.assertEqual(feed["feed"], "for-you")
+        self.assertEqual(feed["mode"], "watched_bridge")
+        self.assertEqual(feed["total"], 1)
+        self.assertEqual(feed["items"][0]["title"], "Thief")
+        self.assertIn("Heat", feed["items"][0]["why"])
+        # Cosine-only Gravity stays refused.
+        self.assertFalse(any(item.get("title") == "Gravity" for item in feed["items"]))
 
 
 if __name__ == "__main__":

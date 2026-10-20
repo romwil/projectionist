@@ -430,6 +430,10 @@ export function dispatchLibraryPlayKey(event, { skipBy, togglePlayback } = {}) {
  * resumes when visible again if the user had been playing.
  * Real leave still uses pagehide / unmount stopSession — never kill the session
  * solely because visibility flipped to hidden.
+ *
+ * iPad Safari often fires `pagehide` when locking the screen or switching apps.
+ * When `event.persisted` is true (bfcache), keep the session so `pageshow` can
+ * resume open→resume→done without re-arming from zero.
  */
 export function shouldPauseOnVisibilityHide({ pauseWhenBackgrounded, visibilityState }) {
   return Boolean(pauseWhenBackgrounded) && visibilityState === "hidden";
@@ -442,6 +446,16 @@ export function notePlayingBeforeHide({ playing, visibilityState }) {
 
 export function shouldAutoResumePlayback({ wasPlaying, visibilityState }) {
   return visibilityState === "visible" && Boolean(wasPlaying);
+}
+
+/** True when pagehide means a real unload (not bfcache / soft background). */
+export function shouldStopSessionOnPageHide({ persisted = false } = {}) {
+  return !persisted;
+}
+
+/** True when pageshow should try to continue after a bfcache restore. */
+export function shouldResumeOnPageShow({ persisted = false, wasPlaying = false } = {}) {
+  return Boolean(persisted) && Boolean(wasPlaying);
 }
 
 /** True when local media is still attached and can try play() without re-arm. */

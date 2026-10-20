@@ -237,7 +237,7 @@ Topbar and hamburger drawer share one model (`primaryNav.js`): whatever peers a 
 
 - **roles:** `member`, `owner`, `youth`
 - **tags:** `inbox`
-- **source:** `frontend/src/pages/InboxPage.jsx`, `frontend/src/components/RecommendationsInbox.jsx`
+- **source:** `frontend/src/pages/InboxPage.jsx`, `frontend/src/pages/InboxPage.jsx`
 - **steps:** Open `/inbox` via topbar. If empty, follow empty CTA to Chat or Explore. If items exist, open or dismiss one card.
 - **pass:** Empty state (`inbox-empty`) with usable CTA **or** recommendation card actions work. No crash.
 
@@ -261,7 +261,7 @@ Topbar and hamburger drawer share one model (`primaryNav.js`): whatever peers a 
 
 - **roles:** `member`, `owner`, `youth`
 - **tags:** `inbox`
-- **source:** `frontend/src/components/RecommendationsInbox.jsx`, `frontend/src/pages/InboxPage.jsx`
+- **source:** `frontend/src/pages/InboxPage.jsx`, `frontend/src/pages/InboxPage.jsx`
 - **steps:** With at least one notification present (`recommendations-inbox`), identify card `data-kind` (recommendation / arrival / digest / access-request / nudge). Dismiss one card via `recommendation-dismiss-*` **or** open via primary CTA (`recommendation-open-*`, `recommendation-review-access-*`, `recommendation-open-live-*`, or digest pick `recommendation-pick-*`).
 - **pass:** Card removes from stack (or navigates after open). No crash. If inbox empty, N/A (use `inbox.empty-state`). Multi-kind: when several kinds are present, note each `data-kind` observed; a single kind is still PASS.
 
@@ -269,7 +269,7 @@ Topbar and hamburger drawer share one model (`primaryNav.js`): whatever peers a 
 
 - **roles:** `member`, `owner`, `youth`
 - **tags:** `inbox`, `layout`
-- **source:** `frontend/src/components/RecommendationsInbox.jsx`, `frontend/src/styles/08-dashboard-coverage-cards.css`
+- **source:** `frontend/src/pages/InboxPage.jsx`, `frontend/src/styles/08-dashboard-coverage-cards.css`
 - **steps:** Open `/inbox` with at least one card. Prefer a mix that includes a **text-only** kind (digest without picks / access-request / live nudge → `recommendation-card--text-only`) and a poster kind (recommendation / arrival / enthusiast nudge). At desktop width, inspect card geometry. Digests should show `recommendation-blurb-*` + optional `recommendation-pick-strip-*`, **not** the full email body as the main surface (`recommendation-curator-note-*` disclosure is OK).
 - **pass:** Every card spans the inbox reading column (not a ~64px strip). Lead/blurb wraps as normal lines — **not** character-by-character vertically. Huge empty vertical gaps from collapsed columns are FAIL. If inbox empty, N/A.
 
@@ -277,7 +277,7 @@ Topbar and hamburger drawer share one model (`primaryNav.js`): whatever peers a 
 
 - **roles:** `member`, `owner`, `youth`
 - **tags:** `inbox`
-- **source:** `frontend/src/components/RecommendationsInbox.jsx`, `frontend/src/pages/InboxPage.jsx`, `frontend/src/lib/recommendationInbox.js`
+- **source:** `frontend/src/pages/InboxPage.jsx`, `frontend/src/pages/InboxPage.jsx`, `frontend/src/lib/recommendationInbox.js`
 - **steps:** With **two or more** cards, click `recommendations-dismiss-all`. Confirm stack clears. Reload `/inbox` (or leave and reopen via `topbar-inbox-button`).
 - **pass:** Stack clears to empty state (or loading then empty). After reload, dismissed items stay gone (`inbox-empty` or fewer cards) — dismiss must stick because list uses unread-only (`INBOX_LIST_PARAMS.unread_only`). Button absent with <2 cards → N/A.
 
@@ -285,7 +285,7 @@ Topbar and hamburger drawer share one model (`primaryNav.js`): whatever peers a 
 
 - **roles:** `member`, `owner`, `youth`
 - **tags:** `inbox`, `digest`
-- **source:** `frontend/src/components/RecommendationsInbox.jsx`
+- **source:** `frontend/src/pages/InboxPage.jsx`
 - **steps:** When a `data-kind="digest"` card is present with `recommendation-pick-strip-*`, open one pick (`recommendation-pick-*-N`) **or** primary `recommendation-open-*` (“Open picks”). Optionally expand `recommendation-curator-note-*`.
 - **pass:** Dig-in opens title detail (or overlay); full body stays behind disclosure by default. No pick strip + empty picks → short lead + Dismiss only is PASS. No digest card → N/A.
 
@@ -293,7 +293,7 @@ Topbar and hamburger drawer share one model (`primaryNav.js`): whatever peers a 
 
 - **roles:** `owner`
 - **tags:** `inbox`, `access`
-- **source:** `frontend/src/components/RecommendationsInbox.jsx`
+- **source:** `frontend/src/pages/InboxPage.jsx`
 - **steps:** With an `access-request` card, click `recommendation-review-access-*`.
 - **pass:** Navigates to `/admin/access`. Member role: CTA absent (Dismiss only) is PASS. No access-request card → N/A.
 
@@ -301,7 +301,7 @@ Topbar and hamburger drawer share one model (`primaryNav.js`): whatever peers a 
 
 - **roles:** `member`, `owner`
 - **tags:** `inbox`, `live`
-- **source:** `frontend/src/components/RecommendationsInbox.jsx`
+- **source:** `frontend/src/pages/InboxPage.jsx`
 - **steps:** With a Live Channels ready nudge (`data-kind="nudge"` + Open Live), click `recommendation-open-live-*`.
 - **pass:** Navigates to `/live`. No live nudge → N/A.
 
@@ -853,7 +853,7 @@ and role/youth gates. Prefer member↔owner pairs so both ends verify.
 
 - **roles:** `member`, `owner`
 - **tags:** `recommend`, `inbox`, `notifications`
-- **source:** `projectionist/web/app.py:create_recommendations`, `frontend/src/components/RecommendationsInbox.jsx`
+- **source:** `projectionist/web/app.py:create_recommendations`, `frontend/src/pages/InboxPage.jsx`
 - **steps:** As sender (e.g. owner), send a recommendation to the other role via `recommend-send` (see `recommend.send-to-peer`). Sign in as the **recipient**; open `/inbox`.
 - **pass:** A recommendation card appears whose lead reads **"{sender} recommended {title}"** — composed once, not double-wrapped (regression guard for the inbox-title-composition fix; title must not repeat). `recommendation-open-*`/`recommendation-dismiss-*` work.
 
@@ -877,7 +877,7 @@ and role/youth gates. Prefer member↔owner pairs so both ends verify.
 
 - **roles:** `owner`, `member`
 - **tags:** `recommend`, `inbox`, `youth`, `gating`
-- **source:** `projectionist/youth/apply.py`, `projectionist/web/app.py`, `frontend/src/components/RecommendationsInbox.jsx`
+- **source:** `projectionist/youth/apply.py`, `projectionist/web/app.py`, `frontend/src/pages/InboxPage.jsx`
 - **steps:** As owner/member, open the Recommend modal for an **over-ceiling** title (e.g. R-rated). If `qa-youth` appears in `recommend-peer-list`, send it, then sign in as youth and open `/inbox`.
 - **pass:** The youth inbox/title surfaces must **not** render an openable over-ceiling title (fail-closed: the title detail deep link 404s for youth — `youth.filter.title-deeplink`). Record whether youth is even offered as a peer. Negative assertion: prohibited content never becomes viewable via a shared recommendation.
 

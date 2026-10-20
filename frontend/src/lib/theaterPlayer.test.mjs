@@ -44,7 +44,9 @@ import {
   shouldRevealPlaybackPicture,
   shouldAutoResumePlayback,
   shouldPauseOnVisibilityHide,
+  shouldResumeOnPageShow,
   shouldResumeFromOffset,
+  shouldStopSessionOnPageHide,
   shouldSendProgress,
   skipDeltaForZone,
   skipZoneFromClientX,
@@ -299,6 +301,14 @@ test("visibility hide remembers wasPlaying; visible resumes only when remembered
   assert.equal(shouldAutoResumePlayback({ wasPlaying: true, visibilityState: "visible" }), true);
   assert.equal(shouldAutoResumePlayback({ wasPlaying: true, visibilityState: "hidden" }), false);
   assert.equal(shouldAutoResumePlayback({ wasPlaying: false, visibilityState: "visible" }), false);
+});
+
+test("pagehide keeps session on bfcache; pageshow resumes when was playing", () => {
+  assert.equal(shouldStopSessionOnPageHide({ persisted: true }), false);
+  assert.equal(shouldStopSessionOnPageHide({ persisted: false }), true);
+  assert.equal(shouldResumeOnPageShow({ persisted: true, wasPlaying: true }), true);
+  assert.equal(shouldResumeOnPageShow({ persisted: true, wasPlaying: false }), false);
+  assert.equal(shouldResumeOnPageShow({ persisted: false, wasPlaying: true }), false);
 });
 
 test("canResumeAttachedStream requires stream URL and media src", () => {

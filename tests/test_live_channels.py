@@ -3681,40 +3681,8 @@ class ContinuityFillerTests(unittest.TestCase):
 
     @unittest.skip("Tunarr HTTP removed")
     def test_docker_includes_filler_binds_without_dropping_media(self) -> None:
-        life = TunarrDockerLifecycle(
-            socket_path="/tmp/fake.sock",
-            orchestration=True,
-            media_binds=["/mnt/user/data/media:/data/media:ro"],
-            filler_binds=["/mnt/user/bumpers:/data/filler/bumpers:ro"],
-        )
-        create_bodies: list[dict] = []
-
-        def fake_request(method, path, **kwargs):
-            if method == "GET" and path.startswith("/containers/json"):
-                return 200, []
-            if method == "GET" and path.endswith("/json"):
-                return 404, None
-            if method == "POST" and path.startswith("/containers/create"):
-                create_bodies.append(kwargs.get("json_body") or {})
-                return 201, {"Id": "abc123"}
-            if method == "POST" and path.endswith("/start"):
-                return 204, None
-            raise AssertionError(f"unexpected {method} {path}")
-
-        with patch(
-            "projectionist.live_channels.docker.resolve_docker_socket",
-            return_value="/tmp/fake.sock",
-        ), patch(
-            "projectionist.live_channels.docker.docker_socket_available",
-            return_value=True,
-        ), patch.object(life, "_engine_request", side_effect=fake_request), patch(
-            "pathlib.Path.mkdir"
-        ):
-            result = life.start(config_volume="/tmp/tunarr-vol")
-        self.assertTrue(result.ok)
-        binds = (create_bodies[0].get("HostConfig") or {}).get("Binds") or []
-        self.assertIn("/mnt/user/data/media:/data/media:ro", binds)
-        self.assertIn("/mnt/user/bumpers:/data/filler/bumpers:ro", binds)
+        # TunarrDockerLifecycle removed with native Live — keep skip stub for history.
+        return
 
 
 class CollectionIdMatchTests(unittest.TestCase):

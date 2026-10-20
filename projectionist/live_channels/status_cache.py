@@ -52,7 +52,6 @@ def _warming_status(settings: Any) -> Dict[str, Any]:
     tunarr = getattr(settings, "tunarr", None)
     real_url = str(getattr(tunarr, "url", "") or "").strip() if tunarr else ""
     enabled = bool(getattr(getattr(settings, "features", None), "live_channels_enabled", False))
-    image_tag = str(getattr(tunarr, "image_tag", "") or "").strip() if tunarr else ""
     return {
         "live_channels_enabled": enabled,
         "broadcast": {

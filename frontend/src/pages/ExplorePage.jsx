@@ -323,6 +323,7 @@ function ExploreHubPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const hub = useExploreHub();
   const continueWatching = hubRailState(hub.payload, "continue_watching", { loading: hub.loading, error: hub.error });
+  const forYou = hubRailState(hub.payload, "for_you", { loading: hub.loading, error: hub.error });
   const unfinished = hubRailState(hub.payload, "unfinished", { loading: hub.loading, error: hub.error });
   const afterglow = hubRailState(hub.payload, "afterglow", { loading: hub.loading, error: hub.error });
   const recentlyAdded = hubRailState(hub.payload, "recently_added", { loading: hub.loading, error: hub.error });
@@ -527,6 +528,32 @@ function ExploreHubPage() {
                 ? chatFromRailHref({
                     railTitle: "Continue Watching",
                     items: continueWatching.items,
+                  })
+                : null
+            }
+            {...recommendProps}
+          />
+        </ExploreSection>
+
+        <ExploreSection
+          id="for-you"
+          title="For you"
+          isOwner={ownerChrome}
+          empty={
+            forYou.error ||
+            (!forYou.loading && !forYou.items.length ? forYou.note : null)
+          }
+        >
+          <FeedRail
+            testId="explore-for-you-rail"
+            items={forYou.items}
+            loading={forYou.loading}
+            cardMeta={(item) => item.why || item.recommendation_reason || null}
+            chatHref={
+              forYou.items.length
+                ? chatFromRailHref({
+                    railTitle: "For you",
+                    items: forYou.items,
                   })
                 : null
             }

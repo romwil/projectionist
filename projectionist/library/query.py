@@ -1637,6 +1637,8 @@ def compute_knowledge_coverage(db: Database) -> Dict[str, Any]:
                 "keyword_rows": 0,
                 "theme_rows": 0,
                 "logline_count": 0,
+                "embedding_model": None,
+                "embedding_is_hash_fallback": False,
             }
 
         cols = {row[1] for row in conn.execute("PRAGMA table_info(library_items)")}
@@ -1728,9 +1730,33 @@ def compute_knowledge_coverage(db: Database) -> Dict[str, Any]:
             explainable_edges = int(explainable_row["edges"] or 0)
             explainable_seeds = int(explainable_row["seeds"] or 0)
 
+        embedding_model = ""
+        emb_tables = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='embeddings'"
+            )
+        }
+        if "embeddings" in emb_tables:
+            emb_cols = {row[1] for row in conn.execute("PRAGMA table_info(embeddings)")}
+            if "embedding_model" in emb_cols:
+                model_row = conn.execute(
+                    """
+                    SELECT embedding_model, COUNT(*) AS cnt
+                    FROM embeddings
+                    WHERE TRIM(COALESCE(embedding_model, '')) != ''
+                    GROUP BY embedding_model
+                    ORDER BY cnt DESC
+                    LIMIT 1
+                    """
+                ).fetchone()
+                if model_row:
+                    embedding_model = str(model_row["embedding_model"] or "").strip()
+
     def _pct(count: int) -> float:
         return round((count / total) * 100.0, 1)
 
+    hash_fallback = embedding_model == "hash-fallback" or embedding_model.startswith("hash-")
     result = {
         "total_titles": total,
         "with_overview_pct": _pct(with_overview),
@@ -1749,6 +1775,8 @@ def compute_knowledge_coverage(db: Database) -> Dict[str, Any]:
         "keyword_rows": keyword_rows,
         "theme_rows": theme_rows,
         "logline_count": logline_count,
+        "embedding_model": embedding_model or None,
+        "embedding_is_hash_fallback": hash_fallback,
     }
     # Phase C may add long_synopsis — only expose when the column exists.
     if has_synopsis_col:

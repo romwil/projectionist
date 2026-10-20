@@ -164,10 +164,12 @@ class TasteEngagementApiTests(unittest.TestCase):
         gen = self.client.post("/api/admin/weekly-rail/generate")
         self.assertEqual(gen.status_code, 200)
         wait_admin_job(self.client, "/api/admin/weekly-rail/status")
+        # Explore For you is watched_bridge (inbox refusal rules), not the weekly rail cache.
         feed = self.client.get("/api/library/feeds/for-you")
         self.assertEqual(feed.status_code, 200)
         payload = feed.json()
         self.assertEqual(payload.get("feed"), "for-you")
+        self.assertEqual(payload.get("mode"), "watched_bridge")
         self.assertIn("items", payload)
 
     def test_deliver_weekly_rails_helper(self) -> None:

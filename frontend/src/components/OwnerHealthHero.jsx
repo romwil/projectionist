@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { getLibraryKnowledgeCoverage, listMediaIssues } from "../api/client";
-import { buildHealthHeroTiles } from "../lib/ownerHealth.js";
+import { getLibraryKnowledgeCoverage, getPurgeCandidates, listMediaIssues } from "../api/client";
+import { buildHealthHeroTiles, buildLibraryHealthStory } from "../lib/ownerHealth.js";
 
 /**
- * At-a-glance owner health tiles. Reuses the dashboard's existing health fetch
- * (passed as a prop) and adds only knowledge coverage + open-issue count.
+ * At-a-glance owner health: one Library health story plus tiles for Named kinship,
+ * issues, purge pressure, and Scheduled Tasks catch-up.
  */
 export default function OwnerHealthHero({ health }) {
   const [coverage, setCoverage] = useState(null);
   const [openIssues, setOpenIssues] = useState(null);
+  const [purgeCount, setPurgeCount] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -23,19 +24,44 @@ export default function OwnerHealthHero({ health }) {
         setOpenIssues(count);
       })
       .catch(() => !cancelled && setOpenIssues(null));
+    getPurgeCandidates()
+      .then((data) => {
+        if (cancelled) return;
+        const list = Array.isArray(data) ? data : data?.candidates ?? data?.items ?? [];
+        setPurgeCount(Array.isArray(list) ? list.length : null);
+      })
+      .catch(() => !cancelled && setPurgeCount(null));
     return () => {
       cancelled = true;
     };
   }, []);
 
+  const story = buildLibraryHealthStory({
+    health,
+    coverage,
+    openIssues,
+    purgeCount,
+  });
   const tiles = buildHealthHeroTiles({
     health,
     coverage,
     openIssues,
+    purgeCount,
   });
 
   return (
     <section className="owner-health-hero" data-testid="owner-health-hero" aria-label="Library health">
+      {story ? (
+        <div className="owner-health-hero-head" data-testid="owner-health-story">
+          <div>
+            <h2 className="owner-health-story-headline">{story.headline}</h2>
+            <p className={`owner-health-story-body tone-${story.tone}`}>{story.body}</p>
+          </div>
+          <Link to="/admin/scheduled-tasks" className="app-topbar-link" data-testid="owner-health-catchup">
+            Scheduled Tasks catch-up
+          </Link>
+        </div>
+      ) : null}
       <div className="owner-health-grid">
         {tiles.map((tile) => (
           <Link
