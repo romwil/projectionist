@@ -723,6 +723,25 @@ def list_relations_for_item(
                 "why": why,
             }
         )
+    if not items:
+        # Only queue catch-up when the seed is already embedded (has plot vectors).
+        try:
+            with db.connect() as conn:
+                embedded = conn.execute(
+                    "SELECT 1 FROM embeddings WHERE item_id = ? LIMIT 1",
+                    (int(item_id),),
+                ).fetchone()
+            if embedded is not None:
+                from projectionist.telemetry.kinship_miss import schedule_kinship_miss
+
+                schedule_kinship_miss(
+                    item_id=int(item_id),
+                    reason="relations_empty",
+                    context_source="title_relations",
+                    extra={"relation": str(relation or "all")},
+                )
+        except Exception:  # noqa: BLE001 — never break relations reads
+            pass
     return {
         "item_id": int(item_id),
         "relation": relation,

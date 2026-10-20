@@ -1422,6 +1422,18 @@ def neighbors_payload(
         note = "No named plot link yet — similar titles need a concrete story overlap."
     else:
         note = "Empty — plot_neighbors cache not built yet for this title."
+    if not items:
+        try:
+            from projectionist.telemetry.kinship_miss import schedule_kinship_miss
+
+            schedule_kinship_miss(
+                item_id=int(item_id),
+                reason="more_like_this_empty",
+                context_source="more_like_this",
+                extra={"mode": normalized, "note": str(note or "")[:200]},
+            )
+        except Exception:  # noqa: BLE001 — never break More Like This
+            pass
     return {
         "item_id": int(item_id),
         "seed": {

@@ -902,6 +902,18 @@ def pick_linked_unwatched(
             seed_title=seed_title,
             explanation=explanation,
         )
+    # Seeds existed but no named peer — prioritize enrichment for those seeds.
+    try:
+        from projectionist.telemetry.kinship_miss import schedule_kinship_miss
+
+        for seed_id in seed_ids[:8]:
+            schedule_kinship_miss(
+                item_id=int(seed_id),
+                reason="bridge_zero_peers",
+                context_source="recommendation_bridge",
+            )
+    except Exception:  # noqa: BLE001 — never break inbox / nudge picks
+        pass
     return None
 
 

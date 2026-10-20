@@ -3,8 +3,23 @@
  * Consumes GET /api/library/knowledge-coverage (or stats.knowledge_coverage).
  */
 
-/** Ordered metric keys shown in the coverage strip (optional keys omitted when absent). */
+/** Ordered metric keys shown in the coverage strip (optional keys omitted when absent).
+ * Named kinship leads — that is the health that matters for More Like This. */
 export const KNOWLEDGE_COVERAGE_METRICS = [
+  {
+    id: "explainableNeighbors",
+    pctKey: "with_explainable_neighbors_pct",
+    label: "Named kinship",
+    detailKey: "explainable_neighbor_edges",
+    detailSuffix: " explainable links",
+  },
+  {
+    id: "neighbors",
+    pctKey: "with_neighbors_pct",
+    label: "Similar cache",
+    detailKey: "neighbor_edges",
+    detailSuffix: " cosine links",
+  },
   {
     id: "overview",
     pctKey: "with_overview_pct",
@@ -34,20 +49,6 @@ export const KNOWLEDGE_COVERAGE_METRICS = [
     detailSuffix: "/title",
     /** Hide when zero and no theme rows (Phase C not populated yet). */
     omitWhenEmpty: true,
-  },
-  {
-    id: "neighbors",
-    pctKey: "with_neighbors_pct",
-    label: "Similar cache",
-    detailKey: "neighbor_edges",
-    detailSuffix: " cosine links",
-  },
-  {
-    id: "explainableNeighbors",
-    pctKey: "with_explainable_neighbors_pct",
-    label: "Named kinship",
-    detailKey: "explainable_neighbor_edges",
-    detailSuffix: " explainable links",
   },
   {
     id: "loglines",

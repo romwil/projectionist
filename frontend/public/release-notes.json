@@ -1,6 +1,36 @@
 {
-  "generated_at": "2026-10-20T04:04:51Z",
+  "generated_at": "2026-10-20T04:08:59Z",
   "releases": [
+    {
+      "version": "1.37.57",
+      "date": "2026-10-20",
+      "summary": "One patch on 1.37.56: titles owners actually hit with empty kinship shelves get enrichment priority, and Admin treats Named kinship % as the health that matters.",
+      "highlights": [
+        "**Empty shelves queue catch-up.** More Like This, Related titles (embedded seeds), and zero-peer recommendation bridges write `kinship_miss` telemetry.",
+        "**Idle tasks prefer that backlog.** Metadata, long synopsis, motifs, and plot neighbors pull demand titles first (bounded batch; queue cap blocks stampede).",
+        "**Admin promotes Named kinship.** Knowledge hero and coverage strip lead with explainable % and link to Scheduled Tasks catch-up copy.",
+        "**Episode plot tranche skipped.** Show-level bridges after R1–R3 are enough; episode KG stays next-horizon."
+      ],
+      "sections": [
+        {
+          "title": "Changed",
+          "bullets": [
+            "**`telemetry.kinship_miss`:** schedule + prefer helpers; soft `KINSHIP_MISS_QUEUE_CAP`.",
+            "**Feeds / relations / recommendation_reasons:** emit miss signals on empty honest shelves.",
+            "**Idle tasks:** prefer demand item ids before cold backlog rotation.",
+            "**Admin UI:** Owner health + Knowledge coverage + Scheduled Tasks catch-up copy.",
+            "**Docs:** [docs/MEDIA_INTELLIGENCE.md](docs/MEDIA_INTELLIGENCE.md) marks the media-intelligence series complete."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend `pytest` (`tests/test_demand_catchup.py`, `tests/test_summary_motifs.py`, `tests/test_explainable_kinship.py`, `tests/test_household_bridges.py`, `tests/test_relations_api.py`) — 26 passed with `--no-cov`.",
+            "Frontend `node --test src/lib/ownerHealth.test.mjs src/lib/knowledgeCoverage.test.mjs` — 13/13."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.56",
       "date": "2026-10-20",
@@ -24,8 +54,8 @@
         {
           "title": "Verification",
           "bullets": [
-            "Backend `pytest` (`tests/test_catalog_graph_free_data.py`, `tests/test_library_facets.py`, `tests/test_plot_multi_signal.py`, `tests/test_relations_api.py`, `tests/test_motif_why.py`) — see PR checks.",
-            "Frontend `node --test src/lib/relationUx.test.mjs src/lib/exploreFeeds.test.mjs`."
+            "Backend `pytest` (`tests/test_catalog_graph_free_data.py`, `tests/test_library_facets.py`, `tests/test_plot_multi_signal.py`, `tests/test_relations_api.py`, `tests/test_motif_why.py`) — 24 passed with `--no-cov`.",
+            "Frontend `node --test src/lib/relationUx.test.mjs src/lib/exploreFeeds.test.mjs` — 36/36."
           ]
         }
       ]

@@ -599,6 +599,15 @@ export default function ScheduledTasksPage() {
       ) : null}
 
       <KnowledgeCoverageCard variant="strip" className="scheduled-tasks-coverage" />
+      <p
+        className="status status-secondary scheduled-tasks-catchup-copy"
+        data-testid="scheduled-tasks-catchup-copy"
+      >
+        Catch-up priority: titles that returned an empty More Like This, Related shelf,
+        or recommendation bridge run first in metadata, synopsis, motif, and neighbor
+        tasks. Watch Named kinship on the coverage strip — that is the health that
+        matters, not raw similar-cache %.
+      </p>
 
       {loading ? (
         <p className="status status-secondary">Loading tasks…</p>

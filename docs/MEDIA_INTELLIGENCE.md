@@ -22,6 +22,8 @@ flowchart LR
   neigh[item_neighbors]
   rel[title_relations]
   ui[More Like This / relations / inbox]
+  miss[kinship_miss telemetry]
+  idle[idle enrichment priority]
   sources --> items
   items --> emb
   emb --> neigh
@@ -29,6 +31,9 @@ flowchart LR
   items --> rel
   neigh --> ui
   rel --> ui
+  ui --> miss
+  miss --> idle
+  idle --> items
 ```
 
 | Layer | Store | Idle / sync |
@@ -39,6 +44,7 @@ flowchart LR
 | Vectors | `embeddings` | `semantic_embeddings` |
 | Similarity cache | `item_neighbors` (`score`, `surprise_score`, **`explainable`**, **`plot_link_json`**) | `plot_neighbors` |
 | Graph edges | `title_relations` (`collection`, `neighbor`, `shared_crew`, `directed_by`, `written_by`) | `title_relations_refresh` |
+| Demand queue | `telemetry_events` (`event_type=kinship_miss`) | prefer on enrichment batches |
 
 Watch ledger (`watch_completions` / `watch_sessions` / terminal `watch_events`) plus `watchlist_pins` seed inbox bridges (Release 2).
 
@@ -46,7 +52,7 @@ Watch ledger (`watch_completions` / `watch_sessions` / terminal `watch_events`) 
 
 ## Critical tensions
 
-1. **Coverage over-counts.** Raw `with_neighbors_pct` counts any cosine peer. Owners used to read that as “useful relatedness.” Release 1 splits **Similar cache** vs **Named kinship** (`with_explainable_neighbors_pct`).
+1. **Coverage over-counts.** Raw `with_neighbors_pct` counts any cosine peer. Owners used to read that as “useful relatedness.” Release 1 splits **Similar cache** vs **Named kinship** (`with_explainable_neighbors_pct`). Release 4 promotes Named kinship in the Admin health hero.
 2. **Cosine ≠ why.** `_why_payload` / `specific_plot_link` already refused generic neighbor labels at read time; Release 1 **materializes** that gate on `item_neighbors` so feeds never surface cosine-only peers.
 3. **Genre facets.** Sync emits `facet_type='genre'` from `library_items.genres` (Release 3); JSON on the item row remains the source of truth and a query fallback.
 4. **Motif budget.** Each title keeps at most **18** motifs (`MAX_MOTIFS_PER_ITEM` = 12 rare + 6 keyword-bonus), not the historical 8-slot hard cap.
@@ -61,7 +67,7 @@ Watch ledger (`watch_completions` / `watch_sessions` / terminal `watch_events`) 
 | **1** | Explainable kinship — materialize `explainable` + explanation objects; coverage split; `MEDIA_INTELLIGENCE.md` | Done (1.37.54) |
 | **2** | Household bridges — inbox/whisper/weekly cite watch/watchlist seeds with named links | Done (1.37.55) |
 | **3** | Catalog graph — genre facets, person-centric edges, keyword-first Related titles | Done (1.37.56) |
-| **4** | Owner demand catch-up — miss signals → idle priority; Admin promotes explainable % | Planned |
+| **4** | Owner demand catch-up — miss signals → idle priority; Admin promotes explainable % | Done (1.37.57) — **series complete** |
 
 ### Release 1 notes
 
@@ -84,6 +90,13 @@ Watch ledger (`watch_completions` / `watch_sessions` / terminal `watch_events`) 
 - **Keywords as first-class why** — Related titles carry `shared_keywords` on every why payload; Plot Lab Why? merges facet + item JSON keywords into `match_layers`.
 - **Softer empty walls** — Plot Lab default remains multi-signal (`hybrid` AND). `plot_match_mode=any` is ranked OR across tokens when a strict AND would miss keyword/plot hits.
 
+### Release 4 notes
+
+- **Miss signals** — empty More Like This, empty Related titles (for an embedded seed), or a recommendation bridge with zero peers write `telemetry_events` rows with `event_type=kinship_miss` (soft queue cap; hit_count bumps still allowed).
+- **Idle priority** — `metadata_enrichment`, `long_synopsis_enrichment`, `summary_motifs`, and `plot_neighbors` prefer that backlog on a bounded batch before cold catch-up.
+- **Admin** — knowledge hero and coverage strip lead with Named kinship % and link to Scheduled Tasks catch-up copy.
+- **Episode plot tranche — skipped.** After R1–R3, show-level plot text + explainable neighbors + crew/collection bridges are enough for TV seeds in inbox bridges. Deeper episode-level KG stays next-horizon (not required for honest show-level “why”).
+
 ---
 
 ## Success signals
@@ -94,3 +107,11 @@ Watch ledger (`watch_completions` / `watch_sessions` / terminal `watch_events`) 
 | R2 | New inbox/whisper rows cite a watched/pinned seed + named link |
 | R3 | Genre facet filter works; solo-director shelves where credits exist |
 | R4 | Missed titles show accelerated enrichment in task metrics / Admin |
+
+---
+
+## Next horizon (out of this series)
+
+- Full closed-loop promote from kinship_miss into staged augmentations (not just idle priority).
+- Deeper episode knowledge graph for per-episode bridges when show-level plot is too coarse.
+- IdleScheduler rewrite for global priority across all trickle tasks.
