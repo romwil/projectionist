@@ -202,6 +202,8 @@ class PlotMultiSignalTests(unittest.TestCase):
             self.assertEqual(coverage["with_keywords_pct"], 50.0)
             self.assertEqual(coverage["with_themes_pct"], 0.0)
             self.assertEqual(coverage["with_neighbors_pct"], 50.0)
+            # Cosine-only insert without explainable flag → named kinship stays 0.
+            self.assertEqual(coverage["with_explainable_neighbors_pct"], 0.0)
             self.assertEqual(coverage["with_loglines_pct"], 50.0)
             self.assertEqual(coverage["motif_rows"], 2)
             self.assertEqual(coverage["theme_rows"], 0)

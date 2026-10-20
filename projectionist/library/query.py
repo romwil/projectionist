@@ -1563,11 +1563,13 @@ def compute_knowledge_coverage(db: Database) -> Dict[str, Any]:
                 "with_keywords_pct": 0.0,
                 "with_themes_pct": 0.0,
                 "with_neighbors_pct": 0.0,
+                "with_explainable_neighbors_pct": 0.0,
                 "with_loglines_pct": 0.0,
                 "avg_motifs_per_title": 0.0,
                 "avg_keywords_per_title": 0.0,
                 "avg_themes_per_title": 0.0,
                 "neighbor_edges": 0,
+                "explainable_neighbor_edges": 0,
                 "motif_rows": 0,
                 "keyword_rows": 0,
                 "theme_rows": 0,
@@ -1648,6 +1650,21 @@ def compute_knowledge_coverage(db: Database) -> Dict[str, Any]:
         neighbor_edges = int(neighbor_row["edges"] or 0)
         neighbor_seeds = int(neighbor_row["seeds"] or 0)
 
+        neighbor_cols = {row[1] for row in conn.execute("PRAGMA table_info(item_neighbors)")}
+        explainable_edges = 0
+        explainable_seeds = 0
+        if "explainable" in neighbor_cols:
+            explainable_row = conn.execute(
+                """
+                SELECT COUNT(*) AS edges,
+                       COUNT(DISTINCT item_id) AS seeds
+                FROM item_neighbors
+                WHERE COALESCE(explainable, 0) = 1
+                """
+            ).fetchone()
+            explainable_edges = int(explainable_row["edges"] or 0)
+            explainable_seeds = int(explainable_row["seeds"] or 0)
+
     def _pct(count: int) -> float:
         return round((count / total) * 100.0, 1)
 
@@ -1658,11 +1675,13 @@ def compute_knowledge_coverage(db: Database) -> Dict[str, Any]:
         "with_keywords_pct": _pct(keyword_titles),
         "with_themes_pct": _pct(theme_titles),
         "with_neighbors_pct": _pct(neighbor_seeds),
+        "with_explainable_neighbors_pct": _pct(explainable_seeds),
         "with_loglines_pct": _pct(logline_count),
         "avg_motifs_per_title": round(motif_rows / total, 2),
         "avg_keywords_per_title": round(keyword_rows / total, 2),
         "avg_themes_per_title": round(theme_rows / total, 2),
         "neighbor_edges": neighbor_edges,
+        "explainable_neighbor_edges": explainable_edges,
         "motif_rows": motif_rows,
         "keyword_rows": keyword_rows,
         "theme_rows": theme_rows,

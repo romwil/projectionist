@@ -1,6 +1,33 @@
 {
-  "generated_at": "2026-10-19T22:01:25Z",
+  "generated_at": "2026-10-20T03:55:39Z",
   "releases": [
+    {
+      "version": "1.37.54",
+      "date": "2026-10-20",
+      "summary": "One patch on 1.37.53: More Like This and relation shelves only show peers with a named story link, and Admin coverage separates the cosine cache from that named kinship.",
+      "highlights": [
+        "**More Like This tells the truth.** Cosine-only neighbors stay off the shelf until a concrete plot subject links the two titles.",
+        "**Coverage shows both numbers.** Admin and Explore list the raw similar-title cache and the share of titles with at least one explainable peer.",
+        "**A shared explanation shape.** Relations and feeds carry `{kind, sentence, terms, evidence}` so inbox bridges can reuse the same why later."
+      ],
+      "sections": [
+        {
+          "title": "Changed",
+          "bullets": [
+            "**`item_neighbors` gains `explainable` and `plot_link_json`** (migration 57), filled when neighbors are built and via a cheap annotate pass for legacy rows.",
+            "**`compute_knowledge_coverage`** adds `with_explainable_neighbors_pct` and `explainable_neighbor_edges`; KnowledgeCoverageCard labels Similar cache vs Named kinship.",
+            "**Docs:** new [docs/MEDIA_INTELLIGENCE.md](docs/MEDIA_INTELLIGENCE.md); curatorx.db → projectionist.db, motif budget, genre-facet, and schema-location drift fixed where touched."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend subset `pytest` (explainable kinship, relations, neighbors API, plot multi-signal, explore neighbors feeds, agent find_similar, plot_lab_wave2, vec_index, knowledge_ops) — 52 passed with `--no-cov`. A coverage-enabled subset run exited 1 because total coverage was 24.2% under the 74% floor (tests themselves passed aside from one agent case fixed in this patch).",
+            "Frontend `node --test src/lib/knowledgeCoverage.test.mjs` — 8/8."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.53",
       "date": "2026-10-19",

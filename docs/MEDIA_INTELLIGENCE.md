@@ -1,0 +1,82 @@
+# Media intelligence
+
+Living map of how Projectionist turns library text and watch evidence into **honest** relatedness. Cosine similarity alone is not a reason to recommend a title.
+
+Related: [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) · [DATA_MODEL.md](DATA_MODEL.md) · [ARCHITECTURE.md](ARCHITECTURE.md)
+
+---
+
+## North star
+
+Recommendations and discovery must cite a **concrete link** to something this household watched, saved, or cares about — a named plot subject, shared director/writer, or shared collection. Empty shelves mean “no named link,” not a silent embedding miss.
+
+---
+
+## System map (baseline)
+
+```mermaid
+flowchart LR
+  sources[Plex / TMDB / wiki]
+  items[library_items + people/credits + facets]
+  emb[embeddings]
+  neigh[item_neighbors]
+  rel[title_relations]
+  ui[More Like This / relations / inbox]
+  sources --> items
+  items --> emb
+  emb --> neigh
+  neigh --> rel
+  items --> rel
+  neigh --> ui
+  rel --> ui
+```
+
+| Layer | Store | Idle / sync |
+|-------|--------|-------------|
+| Identity + plot text | `library_items` | sync + `metadata_enrichment` / synopsis |
+| Credits | `people` / `credits` | TMDB enrichment |
+| Lexical facets | `library_facets` (`motif`, `keyword`, `theme`, …) | `summary_motifs`, sync facets |
+| Vectors | `embeddings` | `semantic_embeddings` |
+| Similarity cache | `item_neighbors` (`score`, `surprise_score`, **`explainable`**, **`plot_link_json`**) | `plot_neighbors` |
+| Graph edges | `title_relations` (`collection`, `neighbor`, `shared_crew`) | `title_relations_refresh` |
+
+Watch ledger / sessions exist for personalization; household bridges that cite “you finished X” land in a later release.
+
+---
+
+## Critical tensions
+
+1. **Coverage over-counts.** Raw `with_neighbors_pct` counts any cosine peer. Owners used to read that as “useful relatedness.” Release 1 splits **Similar cache** vs **Named kinship** (`with_explainable_neighbors_pct`).
+2. **Cosine ≠ why.** `_why_payload` / `specific_plot_link` already refused generic neighbor labels at read time; Release 1 **materializes** that gate on `item_neighbors` so feeds never surface cosine-only peers.
+3. **Genre facets documented ahead of code.** Sync currently emits director/actor/keyword/country/language facets — not `facet_type='genre'` yet (planned Release 3). Genres remain on `library_items.genres` JSON.
+4. **Motif budget.** Each title keeps at most **18** motifs (`MAX_MOTIFS_PER_ITEM` = 12 rare + 6 keyword-bonus), not the historical 8-slot hard cap.
+5. **Schema location.** Ordered migrations live in `projectionist/library/db/migrations.py`; migration bodies in `projectionist/library/db/_schema.py` (and a few inline helpers in `migrations.py`). Primary DB file: `{DATA_DIR}/projectionist.db` (legacy `curatorx.db` still opened if present).
+
+---
+
+## Release series
+
+| Release | Theme | Status |
+|---------|--------|--------|
+| **1** | Explainable kinship — materialize `explainable` + explanation objects; coverage split; `MEDIA_INTELLIGENCE.md` | This doc lands here |
+| **2** | Household bridges — inbox/whisper/weekly cite watch/watchlist seeds with named links | Planned |
+| **3** | Catalog graph — genre facets, person-centric edges, keyword-first Related titles | Planned |
+| **4** | Owner demand catch-up — miss signals → idle priority; Admin promotes explainable % | Planned |
+
+### Release 1 notes
+
+- Shared explanation shape: `{kind, sentence, seed_ids?, peer_id?, terms[], evidence}` for `plot_link` | `shared_crew` | `collection` (later `watched_bridge`). Built next to `specific_plot_link` / `_why_payload`.
+- `item_neighbors.explainable` + `plot_link_json` filled on neighbor build (and a cheap annotate pass for legacy rows).
+- Relations mirror and More Like This read **explainable** rows only.
+- Admin / Explore coverage shows raw neighbor % and explainable %.
+
+---
+
+## Success signals
+
+| Release | Signal |
+|---------|--------|
+| R1 | Explainable neighbor % visible; More Like This never shows cosine-only peers |
+| R2 | New inbox/whisper rows cite a watched/pinned seed + named link |
+| R3 | Genre facet filter works; solo-director shelves where credits exist |
+| R4 | Missed titles show accelerated enrichment in task metrics / Admin |

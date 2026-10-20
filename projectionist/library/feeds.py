@@ -1327,7 +1327,13 @@ def neighbors_payload(
             "total": 0,
             "note": "Library item not found",
         }
-    neighbor_rows = db.get_neighbors(int(item_id), mode=normalized, limit=capped)
+    # Explainable-only: cosine peers without a named plot link stay off More Like This.
+    neighbor_rows = db.get_neighbors(
+        int(item_id), mode=normalized, limit=capped, explainable_only=True
+    )
+    raw_neighbor_count = len(
+        db.get_neighbors(int(item_id), mode=normalized, limit=1, explainable_only=False)
+    )
     seed_genres = []
     if "genres" in seed.keys() and seed["genres"]:
         raw_seed_genres = seed["genres"]
@@ -1344,12 +1350,18 @@ def neighbors_payload(
     surprise_link = None
     seed_labels: set[str] = set()
     seed_plot = ""
+    from projectionist.library.plot_kinship import (
+        explanation_from_plot_link,
+        parse_plot_link_json,
+        plot_blob,
+    )
+
     if normalized == "surprising":
         from projectionist.library.neighbors import (
             measured_metadata_overlap,
             metadata_overlap_tokens,
         )
-        from projectionist.library.plot_kinship import plot_blob, surprising_plot_link
+        from projectionist.library.plot_kinship import surprising_plot_link
 
         surprise_link = surprising_plot_link
         seed_labels = metadata_overlap_tokens(seed)
@@ -1372,6 +1384,9 @@ def neighbors_payload(
             item["metadata_overlap"] = None
         item["overview"] = str(neighbor["summary"] or "") if "summary" in neighbor.keys() else ""
         item["in_library"] = True
+        stored_link = None
+        if "plot_link_json" in neighbor.keys():
+            stored_link = parse_plot_link_json(neighbor["plot_link_json"])
         if normalized == "surprising" and surprise_link is not None:
             peer_labels = metadata_overlap_tokens(neighbor)
             link = surprise_link(
@@ -1385,11 +1400,26 @@ def neighbors_payload(
                 continue
             item["plot_link"] = link["sentence"]
             item["shelf_note"] = link["shelf_note"]
+            item["explanation"] = explanation_from_plot_link(
+                link,
+                seed_ids=[int(item_id)],
+                peer_id=nid,
+                evidence={"shelf_note": link["shelf_note"]},
+            )
+        elif stored_link:
+            item["plot_link"] = stored_link["sentence"]
+            item["explanation"] = explanation_from_plot_link(
+                stored_link,
+                seed_ids=[int(item_id)],
+                peer_id=nid,
+            )
         items.append(item)
     if items:
         note = None
-    elif normalized == "surprising" and neighbor_rows:
+    elif normalized == "surprising" and (neighbor_rows or raw_neighbor_count):
         note = "No surprising story link is ready for this title."
+    elif raw_neighbor_count:
+        note = "No named plot link yet — similar titles need a concrete story overlap."
     else:
         note = "Empty — plot_neighbors cache not built yet for this title."
     return {
