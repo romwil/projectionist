@@ -65,15 +65,83 @@ export function parseVtt(source) {
   return cues;
 }
 
-/** Text of every cue showing at ``timeSec`` (overlapping cues stack). */
+/**
+ * Media seconds used to look up soft-subtitle cues.
+ * Adds seek-origin (0-based Plex restart timeline) then applies sync delay:
+ * positive delaySec = show cues later; negative = earlier.
+ */
+export function subtitleLookupTimeSec({ currentTimeSec, originMs = 0, delaySec = 0 } = {}) {
+  const media = Number(currentTimeSec);
+  if (!Number.isFinite(media)) return Number.NaN;
+  const originSec = Math.max(0, (Number(originMs) || 0) / 1000);
+  const delay = Number(delaySec);
+  const shift = Number.isFinite(delay) ? delay : 0;
+  return Math.max(0, media) + originSec - shift;
+}
+
+/**
+ * One presentation path only: soft DOM overlay, native TextTrack, or none.
+ * Soft selectable tracks win when the user turns CC on — never stack systems.
+ */
+export function resolveSubtitlePresentation({
+  softTrackSelected = false,
+  softTrackReady = false,
+  nativeTrackIndex = -1,
+} = {}) {
+  if (softTrackSelected) {
+    return {
+      mode: softTrackReady ? "soft" : "soft-loading",
+      showOverlay: Boolean(softTrackReady),
+      enableNativeTrack: false,
+      disableAllNative: true,
+    };
+  }
+  if (typeof nativeTrackIndex === "number" && nativeTrackIndex >= 0) {
+    return {
+      mode: "native",
+      showOverlay: false,
+      enableNativeTrack: true,
+      disableAllNative: false,
+      nativeTrackIndex,
+    };
+  }
+  return {
+    mode: "off",
+    showOverlay: false,
+    enableNativeTrack: false,
+    disableAllNative: true,
+  };
+}
+
+/** Disable every TextTrack on a media element (burn-in / HLS WebVTT must not stack). */
+export function silenceNativeTextTracks(video) {
+  const list = video?.textTracks;
+  if (!list || typeof list.length !== "number") return 0;
+  let n = 0;
+  for (let i = 0; i < list.length; i += 1) {
+    const track = list[i];
+    if (!track) continue;
+    if (track.mode !== "disabled") {
+      track.mode = "disabled";
+      n += 1;
+    }
+  }
+  return n;
+}
+
+/**
+ * Text of the active cue at ``timeSec``.
+ * Overlapping cues: keep the latest-started line so SDH stacks do not paint
+ * unreadably on top of each other (multi-system doubling is handled elsewhere).
+ */
 export function activeCueText(cues, timeSec) {
   if (!Array.isArray(cues) || !cues.length || !Number.isFinite(timeSec)) return "";
-  const active = [];
+  let best = null;
   for (const cue of cues) {
     if (cue.start > timeSec) break;
-    if (timeSec < cue.end) active.push(cue.text);
+    if (timeSec < cue.end) best = cue;
   }
-  return active.join("\n");
+  return best?.text || "";
 }
 
 export function clampSubtitleDelay(value) {

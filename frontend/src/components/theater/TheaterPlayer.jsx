@@ -13,6 +13,7 @@ import {
   theaterHlsConfig,
   toggleTheaterFullscreen,
 } from "../../lib/theaterPlayer.js";
+import { silenceNativeTextTracks } from "../../lib/subtitleCues.js";
 import { playShrunkAfterReload } from "../../lib/inAppPip.js";
 
 /**
@@ -158,6 +159,13 @@ export default function TheaterPlayer({
       video.play?.().then(() => onStatusRef.current?.("playing")).catch(() => onStatusRef.current?.("paused"));
     };
 
+    const muteNativeSubs = () => {
+      if (destroyed) return;
+      const hls = hlsRef.current;
+      if (hls && typeof hls.subtitleTrack === "number") hls.subtitleTrack = -1;
+      silenceNativeTextTracks(video);
+    };
+
     const attachHls = () => {
       if (destroyed || !video || !Hls.isSupported()) return;
       if (hlsRef.current) {
@@ -171,9 +179,11 @@ export default function TheaterPlayer({
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         if (destroyed) return;
+        muteNativeSubs();
         onStatusRef.current?.("ready");
         startAutoplay();
       });
+      hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, muteNativeSubs);
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (destroyed || !data?.fatal) return;
         if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
@@ -193,12 +203,15 @@ export default function TheaterPlayer({
       });
     };
 
+    video.textTracks?.addEventListener?.("addtrack", muteNativeSubs);
+
     if (Hls.isSupported()) {
       attachHls();
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = src;
       video.addEventListener("loadedmetadata", () => {
         if (!destroyed) {
+          muteNativeSubs();
           onStatusRef.current?.("ready");
           startAutoplay();
         }
@@ -213,6 +226,7 @@ export default function TheaterPlayer({
 
     return () => {
       destroyed = true;
+      video.textTracks?.removeEventListener?.("addtrack", muteNativeSubs);
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;

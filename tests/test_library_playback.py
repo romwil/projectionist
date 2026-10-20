@@ -30,6 +30,7 @@ from projectionist.library.playback import (
     should_send_progress,
     start_playback,
     strip_secret_query,
+    universal_start_url,
     validate_playback_path,
     validate_rating_key,
 )
@@ -257,6 +258,17 @@ class YouthAndProgressTests(unittest.TestCase):
         self.assertTrue(should_send_progress(None, 10))
         self.assertFalse(should_send_progress(1.0, 9.0))
         self.assertTrue(should_send_progress(1.0, 11.1))
+
+    def test_universal_start_disables_burned_in_subtitles(self) -> None:
+        url = universal_start_url(
+            "http://plex.test:32400",
+            "42",
+            session_id="sess-1",
+            offset_seconds=15,
+        )
+        self.assertIn("subtitles=none", url)
+        self.assertIn("offset=15", url)
+        self.assertNotIn("subtitleStreamID=", url)
 
 
 class PlaybackStartMockTests(unittest.TestCase):

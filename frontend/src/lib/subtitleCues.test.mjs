@@ -10,6 +10,9 @@ import {
   normalizeSubtitleTracks,
   parseCueTimestamp,
   parseVtt,
+  resolveSubtitlePresentation,
+  silenceNativeTextTracks,
+  subtitleLookupTimeSec,
 } from "./subtitleCues.js";
 
 const VTT = `WEBVTT
@@ -41,15 +44,78 @@ test("parseVtt strips markup, ignores cue settings, keeps numeric-only text", ()
   assert.equal(cues[2].start, 3600);
 });
 
-test("activeCueText finds cues and stacks overlaps", () => {
+test("activeCueText finds cues and prefers the latest-started overlap", () => {
   const cues = parseVtt(VTT);
   assert.equal(activeCueText(cues, 0.5), "");
   assert.equal(activeCueText(cues, 1.5), "Hello there");
-  assert.equal(activeCueText(cues, 2.75), "Hello there\nGeneral Kenobi\nsecond line");
+  assert.equal(activeCueText(cues, 2.75), "General Kenobi\nsecond line");
   assert.equal(activeCueText(cues, 3.5), "General Kenobi\nsecond line");
   assert.equal(activeCueText(cues, 4.0), "");
   assert.equal(activeCueText([], 1), "");
   assert.equal(activeCueText(cues, Number.NaN), "");
+});
+
+test("subtitleLookupTimeSec applies seek origin and sync delay", () => {
+  assert.equal(subtitleLookupTimeSec({ currentTimeSec: 10, delaySec: 0 }), 10);
+  assert.equal(subtitleLookupTimeSec({ currentTimeSec: 10, delaySec: 1.5 }), 8.5);
+  assert.equal(subtitleLookupTimeSec({ currentTimeSec: 10, delaySec: -0.5 }), 10.5);
+  // 0-based Plex restart: media clock is near 0 but title offset is 10 minutes.
+  assert.equal(
+    subtitleLookupTimeSec({ currentTimeSec: 0.4, originMs: 600_000, delaySec: 0 }),
+    600.4,
+  );
+  assert.equal(
+    subtitleLookupTimeSec({ currentTimeSec: 0.4, originMs: 600_000, delaySec: 1 }),
+    599.4,
+  );
+  assert.ok(Number.isNaN(subtitleLookupTimeSec({ currentTimeSec: Number.NaN })));
+});
+
+test("resolveSubtitlePresentation never stacks soft overlay with native tracks", () => {
+  assert.deepEqual(resolveSubtitlePresentation({ softTrackSelected: true, softTrackReady: true }), {
+    mode: "soft",
+    showOverlay: true,
+    enableNativeTrack: false,
+    disableAllNative: true,
+  });
+  assert.deepEqual(resolveSubtitlePresentation({ softTrackSelected: true, softTrackReady: false }), {
+    mode: "soft-loading",
+    showOverlay: false,
+    enableNativeTrack: false,
+    disableAllNative: true,
+  });
+  assert.deepEqual(resolveSubtitlePresentation({ nativeTrackIndex: 2 }), {
+    mode: "native",
+    showOverlay: false,
+    enableNativeTrack: true,
+    disableAllNative: false,
+    nativeTrackIndex: 2,
+  });
+  assert.deepEqual(resolveSubtitlePresentation({}), {
+    mode: "off",
+    showOverlay: false,
+    enableNativeTrack: false,
+    disableAllNative: true,
+  });
+  // Soft selection wins even if a native index is also set.
+  const stacked = resolveSubtitlePresentation({
+    softTrackSelected: true,
+    softTrackReady: true,
+    nativeTrackIndex: 0,
+  });
+  assert.equal(stacked.mode, "soft");
+  assert.equal(stacked.enableNativeTrack, false);
+  assert.equal(stacked.disableAllNative, true);
+});
+
+test("silenceNativeTextTracks disables every TextTrack mode", () => {
+  const tracks = [{ mode: "showing" }, { mode: "hidden" }, { mode: "disabled" }];
+  assert.equal(silenceNativeTextTracks({ textTracks: tracks }), 2);
+  assert.deepEqual(
+    tracks.map((track) => track.mode),
+    ["disabled", "disabled", "disabled"],
+  );
+  assert.equal(silenceNativeTextTracks(null), 0);
 });
 
 test("cleanCueText never leaves HTML or ASS overrides", () => {
