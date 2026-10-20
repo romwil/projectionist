@@ -405,6 +405,9 @@ def universal_start_url(
         "directPlay": "0",
         "directStream": "1",
         "directStreamAudio": "1",
+        # Soft tracks are drawn by Projectionist. Never ask PMS to burn or
+        # sidecar-mux captions into the HLS — that stacks with our overlay.
+        "subtitles": "none",
         "subtitleSize": "100",
         "audioBoost": "100",
         "location": "lan",

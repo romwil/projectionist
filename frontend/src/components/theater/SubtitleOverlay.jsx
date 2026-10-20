@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { activeCueText } from "../../lib/subtitleCues.js";
+import { activeCueText, subtitleLookupTimeSec } from "../../lib/subtitleCues.js";
 
 /**
  * Renders the active cue over the stage. `getTimeSec` returns media seconds
- * (video.currentTime for Play, program elapsed for Live); `delaySec` shifts cues.
+ * already corrected for seek origin (Play) or program elapsed (Live).
+ * `delaySec` shifts cues via {@link subtitleLookupTimeSec}.
  */
 export default function SubtitleOverlay({ cues, getTimeSec, delaySec = 0, testId = "subtitle-overlay" }) {
   const [text, setText] = useState("");
@@ -12,7 +13,8 @@ export default function SubtitleOverlay({ cues, getTimeSec, delaySec = 0, testId
     if (!cues?.length) return undefined;
     const tick = () => {
       const t = getTimeSec?.();
-      setText(Number.isFinite(t) ? activeCueText(cues, t - delaySec) : "");
+      const lookup = subtitleLookupTimeSec({ currentTimeSec: t, delaySec });
+      setText(Number.isFinite(lookup) ? activeCueText(cues, lookup) : "");
     };
     tick();
     const id = setInterval(tick, 200);

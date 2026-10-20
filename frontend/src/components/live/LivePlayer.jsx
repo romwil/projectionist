@@ -28,7 +28,12 @@ import {
   tryPlayLiveVideo,
 } from "../../lib/liveChannels.js";
 import { theaterHlsConfig } from "../../lib/theaterPlayer.js";
-import { clampSubtitleDelay, liveProgramClockSec } from "../../lib/subtitleCues.js";
+import {
+  clampSubtitleDelay,
+  liveProgramClockSec,
+  resolveSubtitlePresentation,
+  silenceNativeTextTracks,
+} from "../../lib/subtitleCues.js";
 import { formatLiveStreamError, liveStreamHealthCopy } from "../../lib/liveChannelsCopy.js";
 import { pickLiveSoftStallPhrase } from "../../lib/liveStreamSoftStallCopy.js";
 import {
@@ -114,6 +119,13 @@ export default function LivePlayer({
   // whether or not the Live encode carries captions.
   const activePlexTrack = ccMerged.plexTracks.find((track) => track.index === activeTrack) || null;
   const plexSubs = useSubtitleCues(activePlexTrack?.proxyUrl || "");
+  const nativeTrackIndex =
+    typeof activeTrack === "number" && activeTrack >= 0 && !activePlexTrack ? activeTrack : -1;
+  const subPresentation = resolveSubtitlePresentation({
+    softTrackSelected: Boolean(activePlexTrack),
+    softTrackReady: plexSubs.state === "ready",
+    nativeTrackIndex,
+  });
   const osdRef = useRef(osd);
   osdRef.current = osd;
   const getSubtitleTimeSec = useCallback(() => liveProgramClockSec(osdRef.current, Date.now()), []);
@@ -663,22 +675,26 @@ export default function LivePlayer({
     const video = videoRef.current;
     const hls = hlsRef.current;
     if (!video) return;
-    const plexActive = typeof activeTrack === "string" && String(activeTrack).startsWith("plex-");
+    // Soft Plex overlay owns presentation — never leave HLS/browser cues showing too.
+    if (subPresentation.disableAllNative) {
+      if (hls && typeof hls.subtitleTrack === "number") hls.subtitleTrack = -1;
+      silenceNativeTextTracks(video);
+      return;
+    }
     if (hls && typeof hls.subtitleTrack === "number") {
-      hls.subtitleTrack = plexActive || activeTrack < 0 ? -1 : activeTrack;
+      hls.subtitleTrack = subPresentation.enableNativeTrack ? nativeTrackIndex : -1;
     }
     for (let i = 0; i < video.textTracks.length; i += 1) {
       const track = video.textTracks[i];
-      const isPlexSidecar = track?.label === "projectionist-plex-cc";
-      if (plexActive && isPlexSidecar) {
-        track.mode = "showing";
-      } else if (!plexActive && typeof activeTrack === "number" && i === activeTrack) {
-        track.mode = "showing";
-      } else {
-        track.mode = "disabled";
-      }
+      track.mode =
+        subPresentation.enableNativeTrack && i === nativeTrackIndex ? "showing" : "disabled";
     }
-  }, [activeTrack]);
+  }, [
+    activeTrack,
+    nativeTrackIndex,
+    subPresentation.disableAllNative,
+    subPresentation.enableNativeTrack,
+  ]);
 
   function selectCcTrack(track) {
     if (!track || track.index === -1) {
@@ -871,7 +887,7 @@ export default function LivePlayer({
         }}
       />
 
-      {activePlexTrack && plexSubs.state === "ready" ? (
+      {subPresentation.showOverlay ? (
         <SubtitleOverlay
           cues={plexSubs.cues}
           getTimeSec={getSubtitleTimeSec}

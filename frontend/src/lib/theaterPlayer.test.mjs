@@ -116,6 +116,7 @@ test("formatClockMs is living-room readable", () => {
 test("theaterHlsConfig uses credentialed XHR (session cookies on proxy)", () => {
   const cfg = theaterHlsConfig();
   assert.equal(cfg.enableWorker, false);
+  assert.equal(cfg.renderTextTracksNatively, false);
   assert.equal(typeof cfg.xhrSetup, "function");
   const xhr = { withCredentials: false };
   cfg.xhrSetup(xhr);
