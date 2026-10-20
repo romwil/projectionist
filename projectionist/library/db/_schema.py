@@ -433,7 +433,8 @@ class SchemaMigrationsMixin:
         """Theme / franchise / crew relation graph (Stage 4 v1).
 
         Collection edges are built from ``tmdb_collection_id`` without an LLM.
-        Optional mirrors: ``neighbor`` (from item_neighbors), ``shared_crew``.
+        Optional mirrors: ``neighbor`` (from item_neighbors), ``shared_crew``,
+        ``directed_by`` / ``written_by`` (solo auteur).
         Optional LLM themes write ``relation='llm_theme'`` or ``facet_type='theme'``.
         """
         conn.executescript(

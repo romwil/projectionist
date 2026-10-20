@@ -93,6 +93,11 @@ test("buildMotifQueryParams accepts pure motifs mode", () => {
   assert.equal(params.get("plot_match_mode"), "motifs");
 });
 
+test("buildMotifQueryParams accepts ranked OR any mode", () => {
+  const params = buildMotifQueryParams(["coma", "bride"], { plotMatchMode: "any" });
+  assert.equal(params.get("plot_match_mode"), "any");
+});
+
 test("buildMotifQueryParams encodes themes csv when present", () => {
   const params = buildMotifQueryParams(["coma"], {
     themes: ["revenge", "found family"],

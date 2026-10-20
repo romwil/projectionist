@@ -2,6 +2,8 @@ export const RELATION_FILTERS = [
   { id: "all", label: "All connections" },
   { id: "collection", label: "Same collection" },
   { id: "shared_crew", label: "Shared cast & crew" },
+  { id: "directed_by", label: "Same director" },
+  { id: "written_by", label: "Same writer" },
   { id: "neighbor", label: "Similar plot" },
   { id: "surprising", label: "Surprisingly similar" },
 ];
@@ -55,12 +57,24 @@ export function relationWhyCopy(why = {}) {
   const sharedGenres = Array.isArray(why.shared_genres)
     ? why.shared_genres.map((genre) => String(genre).trim()).filter(Boolean)
     : [];
+  const sharedKeywords = Array.isArray(why.shared_keywords)
+    ? why.shared_keywords.map((keyword) => String(keyword).trim()).filter(Boolean)
+    : [];
   if (link) {
     const shelf = String(why.shelf_note || "").trim();
-    return {
-      label: link,
-      detail: shelf ? (shelf.endsWith(".") ? shelf : `${shelf}.`) : "",
-    };
+    if (shelf) {
+      return {
+        label: link,
+        detail: shelf.endsWith(".") ? shelf : `${shelf}.`,
+      };
+    }
+    if (sharedKeywords.length) {
+      return {
+        label: link,
+        detail: `Shared keywords: ${sharedKeywords.slice(0, 3).join(", ")}.`,
+      };
+    }
+    return { label: link, detail: "" };
   }
   const surprise = String(why.surprise_flavor || "").trim();
   // Do not turn "no shared labels" into the recommendation.
@@ -68,7 +82,9 @@ export function relationWhyCopy(why = {}) {
     return { label, detail: surprise.endsWith(".") ? surprise : `${surprise}.` };
   }
   let detail = "";
-  if (sharedGenres.length && !label.toLowerCase().includes("shared genres")) {
+  if (sharedKeywords.length && !label.toLowerCase().includes("keyword")) {
+    detail = `Shared keywords: ${sharedKeywords.slice(0, 3).join(", ")}.`;
+  } else if (sharedGenres.length && !label.toLowerCase().includes("shared genres")) {
     detail = `Shared genres: ${sharedGenres.slice(0, 3).join(", ")}.`;
   }
   return {

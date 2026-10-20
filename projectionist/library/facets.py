@@ -57,13 +57,16 @@ def _facet_catalog_from_items(db: Database, facet_type: str, *, limit: int) -> D
 
 
 def ensure_library_facet_index(db: Database) -> int:
-    """Rebuild facets when item columns have country/language data but the facet index does not."""
+    """Rebuild facets when item columns have data the facet index has not indexed yet."""
     with db.connect() as conn:
         country_facet_count = conn.execute(
             "SELECT COUNT(*) AS cnt FROM library_facets WHERE facet_type = 'country'"
         ).fetchone()["cnt"]
         language_facet_count = conn.execute(
             "SELECT COUNT(*) AS cnt FROM library_facets WHERE facet_type = 'language'"
+        ).fetchone()["cnt"]
+        genre_facet_count = conn.execute(
+            "SELECT COUNT(*) AS cnt FROM library_facets WHERE facet_type = 'genre'"
         ).fetchone()["cnt"]
         items_with_countries = conn.execute(
             """
@@ -77,9 +80,16 @@ def ensure_library_facet_index(db: Database) -> int:
             WHERE original_language IS NOT NULL AND original_language != ''
             """
         ).fetchone()["cnt"]
+        items_with_genres = conn.execute(
+            """
+            SELECT COUNT(*) AS cnt FROM library_items
+            WHERE genres IS NOT NULL AND genres != '' AND genres != '[]'
+            """
+        ).fetchone()["cnt"]
     needs_rebuild = (
         (items_with_countries > 0 and country_facet_count == 0)
         or (items_with_language > 0 and language_facet_count == 0)
+        or (items_with_genres > 0 and genre_facet_count == 0)
     )
     if not needs_rebuild:
         return 0
@@ -107,6 +117,10 @@ def _emit_rebuild_progress(
         last_log[0] = now
 
 
+def _genre_values_from_row(row: Mapping[str, Any]) -> List[str]:
+    return _parse_json_list(row["genres"] if "genres" in row.keys() else [])
+
+
 def _collect_facet_rows(row: Mapping[str, Any]) -> List[Tuple[int, str, str]]:
     item_id = int(row["id"])
     collected: List[Tuple[int, str, str]] = []
@@ -116,6 +130,8 @@ def _collect_facet_rows(row: Mapping[str, Any]) -> List[Tuple[int, str, str]]:
         collected.append((item_id, "actor", actor))
     for keyword in _parse_json_list(row["keywords"]):
         collected.append((item_id, "keyword", keyword))
+    for genre in _genre_values_from_row(row):
+        collected.append((item_id, "genre", genre))
     for country in _country_values_from_row(row):
         collected.append((item_id, "country", country))
     language = _language_value_from_row(row)
@@ -226,7 +242,16 @@ def library_facet_catalog(
     q: Optional[str] = None,
 ) -> Dict[str, Any]:
     normalized = facet_type.strip().lower()
-    allowed = {"director", "actor", "keyword", "country", "language", "motif", "theme"}
+    allowed = {
+        "director",
+        "actor",
+        "keyword",
+        "genre",
+        "country",
+        "language",
+        "motif",
+        "theme",
+    }
     if normalized not in allowed:
         raise ValueError(f"facet_type must be one of: {', '.join(sorted(allowed))}")
     capped = min(max(1, limit), 200)
