@@ -148,6 +148,38 @@ export function isTheaterChromeTarget(target) {
   return Boolean(target.closest("button, a, input, [role='slider'], [data-theater-chrome='true']"));
 }
 
+function theaterSelectionGetter(getSelection) {
+  if (typeof getSelection === "function") return getSelection;
+  if (typeof window !== "undefined" && typeof window.getSelection === "function") {
+    return () => window.getSelection();
+  }
+  return null;
+}
+
+/** Drop a Safari / iOS selection so the 2x chip and stage do not stay highlighted. */
+export function clearTheaterTextSelection(getSelection) {
+  const getter = theaterSelectionGetter(getSelection);
+  if (!getter) return false;
+  try {
+    getter()?.removeAllRanges?.();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * iPad Safari starts a system text-selection / callout on press-and-hold.
+ * Call from stage pointerdown outside chrome. Never for scrubber or inputs.
+ * @returns {boolean} true when preventDefault ran
+ */
+export function suppressHoldTextSelection(event, { getSelection } = {}) {
+  if (!event || isTheaterChromeTarget(event.target)) return false;
+  event.preventDefault?.();
+  clearTheaterTextSelection(getSelection);
+  return true;
+}
+
 /**
  * Collapse a second tap/click inside DOUBLE_TAP_MS into onDouble; otherwise onSingle.
  * The completing click of a double must not fire play/pause.
