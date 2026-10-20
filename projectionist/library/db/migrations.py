@@ -232,6 +232,18 @@ def _item_neighbors_explainable(db: "SchemaMigrationsMixin", conn: sqlite3.Conne
     )
 
 
+def _library_episodes_summary(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
+    """Store Plex episode plot text for TV seed overlays (no episode KG)."""
+    del db
+    columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(library_episodes)")}
+    if not columns:
+        return
+    if "summary" not in columns:
+        conn.execute(
+            "ALTER TABLE library_episodes ADD COLUMN summary TEXT NOT NULL DEFAULT ''"
+        )
+
+
 def _build_migrations() -> List[Migration]:
     def wrap(method_name: str) -> MigrationFn:
         def _run(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
@@ -297,6 +309,7 @@ def _build_migrations() -> List[Migration]:
         (55, "library_media_added_index", _library_media_added_index),
         (56, "notification_read_at", _notification_read_at),
         (57, "item_neighbors_explainable", _item_neighbors_explainable),
+        (58, "library_episodes_summary", _library_episodes_summary),
     ]
 
 

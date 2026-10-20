@@ -1,6 +1,6 @@
 # Product map
 
-Living product truth for Projectionist — positioning, surface map, SWOT, sequenced top 10, and parked Tunarr-era non-goals. Baseline tip: Automat **1.37.57+**. Media intelligence R1–R4 (1.37.54–57) is **done**; do not reopen that series.
+Living product truth for Projectionist — positioning, surface map, SWOT, sequenced top 10, and parked Tunarr-era non-goals. Baseline tip: Automat **1.37.58+**. Media intelligence R1–R4 (1.37.54–57) is **done**; episode-aware household bridges landed in **1.37.58**. Do not reopen the R1–R4 series.
 
 Related: [HELP.md](HELP.md) · [MEDIA_INTELLIGENCE.md](MEDIA_INTELLIGENCE.md) · [DELIGHT-WISHLIST.md](DELIGHT-WISHLIST.md) · [README](../README.md)
 
@@ -51,21 +51,25 @@ Runtime watch surfaces: **library Play** (`/watch`) and **native Live** (`/live`
 | Language landing + Movies/TV language filter | 1.37.43 |
 | Inbox mailbox + named recommendation reasons | 1.37.44 |
 | Full remove without *arr + progress | 1.37.48–50 |
+| Explore For you (`watched_bridge`) | 1.37.58 |
+| Owner Library health ritual | 1.37.58 |
+| Phase 6 triage (shipped vs parked) | 1.37.58 |
+| Episode-aware TV bridges | 1.37.58 |
 
 ---
 
 ## Sequenced top 10
 
-1. **Ship Play captions** — caption collision / sync trust on Play.
-2. **Ship Live flex filler** — flex pad picture / lower-third honesty.
-3. **Product-truth + PR triage** — this doc; README/HELP; park Tunarr deferred list; Phase 6 status honesty.
-4. **Prove media intelligence on Automat** — explainable % vs raw; More Like This; inbox bridge.
-5. **Explore For you** — `watched_bridge` rails (same refusal rules as inbox).
-6. **Owner Library health ritual** — single Admin narrative (Named kinship + issues + purge + catch-up).
-7. **Sunset pass** — Tunarr copy/ghosts, dead UI, honest hash-embedding label, guest doc drift.
-8. **CW / shrunk Play nightly** — iPad open → resume → done.
-9. **Phase 6 triage** — finish musts or park leftovers in DELIGHT-WISHLIST so 1.37 is the living roadmap.
-10. **Episode-aware bridges** — TV seed depth (media intel next horizon).
+1. **Ship Play captions** — caption collision / sync trust on Play. *(code on main; Hub/Automat is a follow-up ship)*
+2. **Ship Live flex filler** — flex pad picture / lower-third honesty. *(code on main; Hub/Automat is a follow-up ship)*
+3. **Product-truth + PR triage** — this doc; README/HELP; park Tunarr deferred list. **Done 1.37.58.**
+4. **Prove media intelligence on Automat** — explainable % vs raw; More Like This; inbox bridge. *(post-ship Automat check)*
+5. **Explore For you** — `watched_bridge` rails (same refusal rules as inbox). **Done 1.37.58.**
+6. **Owner Library health ritual** — single Admin narrative (Named kinship + issues + purge + catch-up). **Done 1.37.58.**
+7. **Sunset pass** — Tunarr copy/ghosts, dead UI, honest hash-embedding label, guest doc drift. **Done 1.37.58.**
+8. **CW / shrunk Play nightly** — iPad open → resume → done. **Done 1.37.58.**
+9. **Phase 6 triage** — leftovers parked in [DELIGHT-WISHLIST.md](DELIGHT-WISHLIST.md). **Done 1.37.58.**
+10. **Episode-aware bridges** — TV seeds use the finished episode’s plot. **Done 1.37.58.**
 
 ---
 
@@ -82,4 +86,4 @@ From the Tunarr dual-watch era and [live-channels-deferred](superpowers/plans/20
 - External “on Netflix” where-to-watch
 - Lobby kiosk polish (unless the house relies on `:8791`)
 
-Delight Phase 6 / 1.36 is **historical substrate** absorbed into 1.37 — see [DELIGHT-WISHLIST.md](DELIGHT-WISHLIST.md). Living platform sequencing lives here, not in Tunarr parking-lot bullets.
+Delight Phase 6 / 1.36 is **historical substrate**. 1.37.58 parked remaining house-page extras (gift queue, trust diary, Admin House seasonal preview) — see [DELIGHT-WISHLIST.md](DELIGHT-WISHLIST.md). Living platform sequencing lives here.

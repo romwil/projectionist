@@ -55,6 +55,10 @@ Canonical Plex index enriched during sync and idle `metadata_enrichment`.
 
 **Indexes:** `tmdb_id`, `tvdb_id`, `media_type`, `added_at`, `release_date`, `tmdb_collection_id`.
 
+#### `library_episodes`
+
+Per-episode index for a show (`show_item_id` → `library_items`). Sync stores Plex episode identity, progress, and **`summary`** (episode plot text). Household bridges overlay that summary onto the show seed when you finish an episode — they do not embed each episode.
+
 #### Plex watch evidence ledger
 
 Plex played history, live progress, webhook terminal signals, and manual watched

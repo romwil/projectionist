@@ -64,7 +64,15 @@ def _ensure_user(db: Database, user_id: str) -> None:
     )
 
 
-def _insert_completion(db: Database, *, user_id: Optional[str], rating_key: str, completed_at_ms: int) -> None:
+def _insert_completion(
+    db: Database,
+    *,
+    user_id: Optional[str],
+    rating_key: str,
+    completed_at_ms: int,
+    media_type: str = "movie",
+    parent_rating_key: Optional[str] = None,
+) -> None:
     if user_id:
         _ensure_user(db, user_id)
     session_id = f"sess-{uuid.uuid4().hex[:12]}"
@@ -79,7 +87,7 @@ def _insert_completion(db: Database, *, user_id: Optional[str], rating_key: str,
                 id, source, source_event_id, source_event_kind, server_machine_id,
                 source_user_key, user_id, rating_key, parent_rating_key, media_type,
                 occurred_at_ms, terminal, manual, payload_hash, ingested_at
-            ) VALUES (?, 'plex', ?, 'scrobble', 'server', ?, ?, ?, NULL, 'movie', ?, 1, 0, ?, ?)
+            ) VALUES (?, 'plex', ?, 'scrobble', 'server', ?, ?, ?, ?, ?, ?, 1, 0, ?, ?)
             """,
             (
                 event_id,
@@ -87,6 +95,8 @@ def _insert_completion(db: Database, *, user_id: Optional[str], rating_key: str,
                 source_user_key,
                 user_id,
                 rating_key,
+                parent_rating_key,
+                media_type,
                 completed_at_ms,
                 f"hash-{event_id}",
                 now,
@@ -98,13 +108,15 @@ def _insert_completion(db: Database, *, user_id: Optional[str], rating_key: str,
                 id, user_id, source_user_key, rating_key, parent_rating_key, media_type,
                 started_at_ms, ended_at_ms, first_event_id, last_event_id,
                 client_count, event_count, algorithm_version, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, NULL, 'movie', ?, ?, ?, ?, 1, 1, 1, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, 1, ?, ?)
             """,
             (
                 session_id,
                 user_id,
                 source_user_key,
                 rating_key,
+                parent_rating_key,
+                media_type,
                 completed_at_ms - 1000,
                 completed_at_ms,
                 event_id,
@@ -119,13 +131,15 @@ def _insert_completion(db: Database, *, user_id: Optional[str], rating_key: str,
                 id, session_id, user_id, rating_key, parent_rating_key, media_type,
                 completed_at_ms, confidence, basis, threshold_pct, evidence_event_id,
                 algorithm_version, created_at
-            ) VALUES (?, ?, ?, ?, NULL, 'movie', ?, 'certain', 'threshold', 0.9, ?, 1, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'certain', 'threshold', 0.9, ?, 1, ?)
             """,
             (
                 completion_id,
                 session_id,
                 user_id,
                 rating_key,
+                parent_rating_key,
+                media_type,
                 completed_at_ms,
                 event_id,
                 now,
@@ -378,6 +392,79 @@ class HouseholdBridgeTests(unittest.TestCase):
         self.assertEqual(feed["items"][0]["title"], "Thief")
         self.assertIn("Heat", feed["items"][0]["why"])
         # Cosine-only Gravity stays refused.
+        self.assertFalse(any(item.get("title") == "Gravity" for item in feed["items"]))
+
+    def test_tv_episode_completion_prefers_episode_plot_peer_not_cosine_movie(self) -> None:
+        show = _title(
+            self.db,
+            rating_key="rk-colony",
+            tmdb_id=101,
+            title="Colony Bake-Off",
+            year=2018,
+            media_type="show",
+            summary="A workplace competition series about craft and teamwork.",
+        )
+        peer = _title(
+            self.db,
+            rating_key="rk-spy",
+            tmdb_id=2,
+            title="Covert Kitchen",
+            year=2019,
+            summary=SPY_PLOT,
+        )
+        noise = _title(
+            self.db,
+            rating_key="rk-gravity",
+            tmdb_id=3,
+            title="Gravity",
+            year=2013,
+            summary=GRAVITY_PLOT,
+        )
+        with self.db.connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO item_neighbors
+                    (item_id, neighbor_id, score, surprise_score, explainable, plot_link_json)
+                VALUES (?, ?, ?, ?, 0, ?)
+                """,
+                (show, noise, 0.99, 0.9, "{}"),
+            )
+        self.db.upsert_library_episode(
+            {
+                "show_item_id": show,
+                "rating_key": "ep-signature",
+                "season_number": 1,
+                "episode_number": 8,
+                "title": "Signature Bake",
+                "summary": BAKE_PLOT,
+            }
+        )
+        _insert_completion(
+            self.db,
+            user_id="will",
+            rating_key="ep-signature",
+            parent_rating_key="rk-colony",
+            media_type="episode",
+            completed_at_ms=1_700_000_000_000,
+        )
+
+        pick = pick_linked_unwatched(self.db)
+        self.assertIsNotNone(pick)
+        assert pick is not None
+        self.assertEqual(pick["title"], "Covert Kitchen")
+        why = str(pick["why"]).lower()
+        self.assertIn("colony bake-off", why)
+        self.assertIn("signature bake", why)
+        self.assertIn("amateur bakers", why)
+        self.assertTrue(str(pick["why"]).lower().startswith("you finished"))
+        evidence = (pick.get("explanation") or {}).get("evidence") or {}
+        self.assertEqual(evidence.get("episode_rating_key"), "ep-signature")
+        self.assertEqual(evidence.get("episode_title"), "Signature Bake")
+        self.assertNotEqual(pick["title"], "Gravity")
+
+        feed = feed_for_you(self.db, limit=8)
+        self.assertEqual(feed["mode"], "watched_bridge")
+        self.assertEqual(feed["items"][0]["title"], "Covert Kitchen")
         self.assertFalse(any(item.get("title") == "Gravity" for item in feed["items"]))
 
 
