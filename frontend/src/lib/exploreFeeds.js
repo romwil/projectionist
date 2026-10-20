@@ -245,13 +245,16 @@ export const PLOT_LAB_PAGE_SIZES = [20, 40, 50];
 export const DEFAULT_PLOT_LAB_PAGE_SIZE = 20;
 export const PLOT_LAB_MOTIF_CATALOG_LIMIT = 160;
 
-/** Plot Lab match modes: hybrid (default) unions motif ∪ keyword ∪ plot text. */
-export const PLOT_MATCH_MODES = ["hybrid", "motifs"];
+/** Plot Lab match modes: hybrid (default) AND; any = ranked OR across tokens. */
+export const PLOT_MATCH_MODES = ["hybrid", "motifs", "any"];
 export const DEFAULT_PLOT_MATCH_MODE = "hybrid";
 
 export function normalizePlotMatchMode(raw) {
   const value = String(raw || "").trim().toLowerCase();
   if (value === "motifs" || value === "motif" || value === "pure") return "motifs";
+  if (value === "any" || value === "or" || value === "ranked" || value === "ranked_or") {
+    return "any";
+  }
   return DEFAULT_PLOT_MATCH_MODE;
 }
 

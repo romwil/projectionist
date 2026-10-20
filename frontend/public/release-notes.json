@@ -1,6 +1,35 @@
 {
-  "generated_at": "2026-10-20T04:01:15Z",
+  "generated_at": "2026-10-20T04:04:51Z",
   "releases": [
+    {
+      "version": "1.37.56",
+      "date": "2026-10-20",
+      "summary": "One patch on 1.37.55: Related titles and Plot Lab use genres, crew, and keywords the library already has — fewer empty AND walls when TMDB keywords match.",
+      "highlights": [
+        "**Genre facets work.** Sync indexes `facet_type='genre'` so owners can browse and filter by genre from the facet catalog.",
+        "**Solo director and writer shelves.** Titles that share one director or writer get `directed_by` / `written_by` edges with a named person in Why?",
+        "**Keywords show up in Why?** Related titles and Plot Lab cite shared keywords without requiring a motif chip.",
+        "**Ranked OR softens empty walls.** Multi-signal AND stays the default; `plot_match_mode=any` ranks titles by how many tokens match via motif, keyword, or plot text."
+      ],
+      "sections": [
+        {
+          "title": "Changed",
+          "bullets": [
+            "**`facets`:** emit genre rows; ensure-backfill when genres exist but genre facets do not.",
+            "**`relations`:** build capped person-centric edges; why payloads always include `shared_keywords`.",
+            "**`query`:** genre filter prefers facets with JSON fallback; Plot Lab `any` mode + keyword merge in motif Why?",
+            "**Docs:** [docs/MEDIA_INTELLIGENCE.md](docs/MEDIA_INTELLIGENCE.md) Release 3 done notes; DATA_MODEL / CURATOR_KNOWLEDGE genre-facet drift cleared."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend `pytest` (`tests/test_catalog_graph_free_data.py`, `tests/test_library_facets.py`, `tests/test_plot_multi_signal.py`, `tests/test_relations_api.py`, `tests/test_motif_why.py`) — see PR checks.",
+            "Frontend `node --test src/lib/relationUx.test.mjs src/lib/exploreFeeds.test.mjs`."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.55",
       "date": "2026-10-20",

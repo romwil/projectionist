@@ -112,7 +112,7 @@ flowchart LR
 Primary store: `{DATA_DIR}/projectionist.db` (SQLite; legacy `curatorx.db` still opened if the new file is absent). Key tables:
 
 - `library_items` — identity + plot text columns + keyword/genre JSON
-- `library_facets` — people/keyword/country/language facets from sync; `motif` / `theme` from idle (genre facets are not emitted yet — see [MEDIA_INTELLIGENCE.md](MEDIA_INTELLIGENCE.md))
+- `library_facets` — people/keyword/genre/country/language facets from sync; `motif` / `theme` from idle (see [MEDIA_INTELLIGENCE.md](MEDIA_INTELLIGENCE.md))
 - `embeddings` — per-title vectors
 - `item_neighbors` — materialized top-K similarity (+ surprise) with `explainable` / `plot_link_json` for named kinship
 - `title_relations` — collection / neighbor / shared-crew edges

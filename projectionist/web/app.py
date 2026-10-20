@@ -4335,7 +4335,9 @@ def title_relations(
     media_type: str,
     item_id: str,
     id_type: str = "tmdb",
-    relation: Optional[Literal["collection", "shared_crew", "neighbor"]] = None,
+    relation: Optional[
+        Literal["collection", "shared_crew", "neighbor", "directed_by", "written_by"]
+    ] = None,
     limit: int = Query(default=25, ge=1, le=50),
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
@@ -4356,7 +4358,9 @@ def title_relations_walk(
     media_type: str,
     item_id: str,
     id_type: str = "tmdb",
-    relation: Optional[Literal["collection", "shared_crew", "neighbor"]] = None,
+    relation: Optional[
+        Literal["collection", "shared_crew", "neighbor", "directed_by", "written_by"]
+    ] = None,
     depth: int = Query(default=1, ge=1, le=2),
     limit: int = Query(default=25, ge=1, le=50),
     user=Depends(get_current_user_dep),

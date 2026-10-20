@@ -85,7 +85,8 @@ class LibraryFilters:
     semantic_query: Optional[str] = None
     # Plot Lab: hybrid = motif ∪ keyword ∪ live plot-text per token (AND across tokens).
     # motifs = pure library_facets motif AND (legacy motif walls).
-    plot_match_mode: Literal["hybrid", "motifs"] = "hybrid"
+    # any = ranked OR across tokens (softens empty AND walls when keywords/plot match).
+    plot_match_mode: Literal["hybrid", "motifs", "any"] = "hybrid"
     unwatched_only: bool = False
     min_view_count: Optional[int] = None
     max_view_count: Optional[int] = None
@@ -164,9 +165,13 @@ def filters_from_mapping(data: Mapping[str, Any]) -> LibraryFilters:
         added_from = max(added_from, cutoff) if added_from is not None else cutoff
 
     plot_match_mode_raw = str(data.get("plot_match_mode") or "hybrid").strip().lower()
-    plot_match_mode: Literal["hybrid", "motifs"] = (
-        "motifs" if plot_match_mode_raw in {"motifs", "motif", "pure"} else "hybrid"
-    )
+    plot_match_mode: Literal["hybrid", "motifs", "any"]
+    if plot_match_mode_raw in {"motifs", "motif", "pure"}:
+        plot_match_mode = "motifs"
+    elif plot_match_mode_raw in {"any", "or", "ranked", "ranked_or"}:
+        plot_match_mode = "any"
+    else:
+        plot_match_mode = "hybrid"
 
     return LibraryFilters(
         media_type=str(data["media_type"]).strip() if data.get("media_type") else None,
@@ -446,6 +451,20 @@ def _plot_signal_subquery(token: str) -> Tuple[str, List[Any]]:
     return sql, [needle, needle, needle, needle, needle, needle, needle]
 
 
+def _plot_signal_match_rank_sort(tokens: Sequence[str]) -> Tuple[str, List[Any]]:
+    """ORDER BY how many Plot Lab tokens match (desc), then title."""
+    cleaned = [str(token).strip() for token in tokens if str(token).strip()]
+    if not cleaned:
+        return "title ASC", []
+    parts: List[str] = []
+    params: List[Any] = []
+    for token in cleaned:
+        signal_sql, signal_params = _plot_signal_subquery(token)
+        parts.append(f"(CASE WHEN {signal_sql} THEN 1 ELSE 0 END)")
+        params.extend(signal_params)
+    return f"({' + '.join(parts)}) DESC, title ASC", params
+
+
 def _effective_added_from(filters: LibraryFilters) -> Optional[int]:
     added_from = filters.added_from
     if filters.recently_added_days is not None:
@@ -511,11 +530,17 @@ def _build_where(filters: LibraryFilters) -> Tuple[str, List[Any]]:
         clauses.append("last_viewed_at <= ?")
         params.append(filters.last_viewed_to)
     if filters.genres:
+        # Prefer genre facets (Release 3); keep JSON LIKE as a sync-lag fallback.
+        facet_sql, facet_params = _facet_subquery("genre", filters.genres)
         genre_clauses = []
+        genre_params: List[Any] = []
         for genre in filters.genres:
             genre_clauses.append("lower(genres) LIKE ?")
-            params.append(f"%{genre.lower()}%")
-        clauses.append(f"({' OR '.join(genre_clauses)})")
+            genre_params.append(f"%{genre.lower()}%")
+        json_sql = f"({' OR '.join(genre_clauses)})"
+        clauses.append(f"(({facet_sql}) OR {json_sql})")
+        params.extend(facet_params)
+        params.extend(genre_params)
     if filters.directors:
         facet_sql, facet_params = _facet_subquery("director", filters.directors)
         clauses.append(facet_sql)
@@ -534,13 +559,20 @@ def _build_where(filters: LibraryFilters) -> Tuple[str, List[Any]]:
         clauses.append("lower(collection_name) = ?")
         params.append(filters.collection_name.lower())
     if filters.motifs:
-        # Multiple tokens are AND. Hybrid (default) unions motif ∪ keyword ∪ plot text
-        # per token so sparse motif facets do not brick Plot Lab intersections.
+        # Hybrid (default): AND across tokens; each token may match via motif ∪ keyword ∪ plot.
+        # motifs: pure motif-facet AND. any: ranked OR across tokens (sort applied in query_library).
         if filters.plot_match_mode == "motifs":
             for motif in filters.motifs:
                 facet_sql, facet_params = _facet_subquery("motif", [motif])
                 clauses.append(facet_sql)
                 params.extend(facet_params)
+        elif filters.plot_match_mode == "any":
+            or_parts: List[str] = []
+            for motif in filters.motifs:
+                signal_sql, signal_params = _plot_signal_subquery(motif)
+                or_parts.append(f"({signal_sql})")
+                params.extend(signal_params)
+            clauses.append(f"({' OR '.join(or_parts)})")
         else:
             for motif in filters.motifs:
                 signal_sql, signal_params = _plot_signal_subquery(motif)
@@ -669,6 +701,7 @@ def _fetch_rows(
     limit: int,
     offset: int,
     item_ids: Optional[Sequence[int]] = None,
+    sort_params: Optional[Sequence[Any]] = None,
 ) -> Tuple[int, List[Any]]:
     id_filter = ""
     id_params: List[Any] = []
@@ -678,6 +711,7 @@ def _fetch_rows(
         placeholders = ",".join("?" for _ in item_ids)
         id_filter = f" AND id IN ({placeholders})"
         id_params = list(item_ids)
+    order_params = list(sort_params or [])
 
     with db.connect() as conn:
         total = conn.execute(
@@ -691,7 +725,7 @@ def _fetch_rows(
             ORDER BY {sort_sql}
             LIMIT ? OFFSET ?
             """,
-            [*params, *id_params, limit, offset],
+            [*params, *id_params, *order_params, limit, offset],
         ).fetchall()
     from projectionist.library.play_counts import enrich_rows_with_episode_play_sums
 
@@ -707,6 +741,9 @@ async def query_library_async(
     limit = filters.normalized_limit()
     offset = filters.normalized_offset()
     sort_sql = _sort_clause(filters.sort, filters.sort_dir)
+    sort_params: List[Any] = []
+    if filters.plot_match_mode == "any" and filters.motifs:
+        sort_sql, sort_params = _plot_signal_match_rank_sort(filters.motifs)
 
     semantic_ids: Optional[List[int]] = None
     if filters.semantic_query and settings is not None:
@@ -786,6 +823,7 @@ async def query_library_async(
         sort_sql=sort_sql,
         limit=limit,
         offset=offset,
+        sort_params=sort_params,
     )
     items = [row_to_query_item(row) for row in rows]
     if filters.motifs:
@@ -797,6 +835,7 @@ async def query_library_async(
         "offset": offset,
         "has_more": offset + returned < total_matched,
         "items": items,
+        "plot_match_mode": filters.plot_match_mode,
     }
     if filters.fts_query:
         payload["search_mode"] = "fts"
@@ -918,6 +957,20 @@ def build_motif_why(
     }
 
 
+def _item_keyword_labels(item: Mapping[str, Any]) -> List[str]:
+    raw = item.get("keywords")
+    if isinstance(raw, list):
+        return [str(v).strip() for v in raw if str(v).strip()]
+    if isinstance(raw, str) and raw.strip():
+        try:
+            parsed = json.loads(raw)
+        except (TypeError, json.JSONDecodeError):
+            return []
+        if isinstance(parsed, list):
+            return [str(v).strip() for v in parsed if str(v).strip()]
+    return []
+
+
 def attach_motif_why(
     db: Database,
     items: List[Dict[str, Any]],
@@ -937,11 +990,16 @@ def attach_motif_why(
         if item_id is None:
             continue
         key = int(item_id)
+        # Facet keywords plus item JSON so Why? cites TMDB keywords even when facets lag.
+        keyword_values = list(keywords_by_id.get(key) or [])
+        for label in _item_keyword_labels(item):
+            if label.casefold() not in {v.casefold() for v in keyword_values}:
+                keyword_values.append(label)
         why = build_motif_why(
             selected,
             motifs_by_id.get(key) or [],
             plot_text=plots_by_id.get(key) or "",
-            item_keyword_values=keywords_by_id.get(key) or [],
+            item_keyword_values=keyword_values,
             item_theme_values=themes_by_id.get(key) or [],
         )
         item["matched_motifs"] = why["matched_motifs"]
@@ -956,6 +1014,9 @@ def query_library(db: Database, filters: LibraryFilters) -> Dict[str, Any]:
     limit = filters.normalized_limit()
     offset = filters.normalized_offset()
     sort_sql = _sort_clause(filters.sort, filters.sort_dir)
+    sort_params: List[Any] = []
+    if filters.plot_match_mode == "any" and filters.motifs:
+        sort_sql, sort_params = _plot_signal_match_rank_sort(filters.motifs)
     total_matched, rows = _fetch_rows(
         db,
         where_sql,
@@ -963,6 +1024,7 @@ def query_library(db: Database, filters: LibraryFilters) -> Dict[str, Any]:
         sort_sql=sort_sql,
         limit=limit,
         offset=offset,
+        sort_params=sort_params,
     )
     items = [row_to_query_item(row) for row in rows]
     if filters.motifs:
@@ -974,6 +1036,7 @@ def query_library(db: Database, filters: LibraryFilters) -> Dict[str, Any]:
         "offset": offset,
         "has_more": offset + returned < total_matched,
         "items": items,
+        "plot_match_mode": filters.plot_match_mode,
     }
     if filters.semantic_query:
         payload["hint"] = "semantic_query requires async query path with LLM settings"

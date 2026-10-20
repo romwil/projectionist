@@ -155,7 +155,7 @@ Lightweight title graph (idle `title_relations_refresh`).
 | Column | Type | Description |
 |--------|------|-------------|
 | `item_id` | INTEGER FK | References `library_items.id` |
-| `facet_type` | TEXT | Sync types today: `director`, `actor`, `keyword`, `country`, `language` (plus idle `motif` / `theme`). **`genre` facets are not emitted yet** — genres live on `library_items.genres` JSON until Release 3. |
+| `facet_type` | TEXT | Sync types: `director`, `actor`, `keyword`, `genre`, `country`, `language` (plus idle `motif` / `theme`). Genres also remain on `library_items.genres` JSON as the source for facet rebuild. |
 | `facet_value` | TEXT | Facet string |
 
 Idle motif/theme replaces only its own `facet_type` so sync-managed facets are preserved.
