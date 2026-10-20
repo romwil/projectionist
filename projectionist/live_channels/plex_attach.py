@@ -516,9 +516,7 @@ def build_plex_attach(
     else:
         discovery_message = "Discovery check not run yet."
 
-    docker_only = bool(facing.get("docker_only")) or is_docker_only_host(host)
     # Harden: never put sibling DNS / loopback into Plex paste fields.
-    del docker_only
     hdhr = ""
     xmltv = ""
     host = ""
@@ -539,8 +537,8 @@ def build_plex_attach(
         "manual_address": manual_address,
         "host_hint": host,
         "url_source": facing.get("source") or "",
-        "docker_only_url": docker_only or not bool(hdhr),
-        "needs_lan_url": not bool(hdhr),
+        "docker_only_url": True,
+        "needs_lan_url": True,
         "warning": warning,
         "steps": steps,
         "coexistence": {

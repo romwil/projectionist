@@ -12,7 +12,6 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Literal, Mapping, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from projectionist.config_store import Settings, save_settings
@@ -1606,11 +1605,6 @@ def live_channels_tune_endpoint(
     from projectionist.live_channels.guide import (
         build_on_now_snapshot,
         youth_allows_channel_now,
-    )
-    from projectionist.live_channels.publish import (
-        prepare_channels_for_playback,
-        resolve_channel_icon_url,
-        tunarr_client_from_settings,
     )
     from projectionist.youth.rating_gate import resolve_youth_max_rating, youth_gate_active
 
