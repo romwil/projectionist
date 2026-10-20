@@ -120,14 +120,16 @@ def pick_whisper_title(
     db: Database,
     *,
     user_id: str,
+    multi_user_enabled: bool = False,
 ) -> Optional[Dict[str, Any]]:
     """Pick one unwatched title with a named link to something already watched.
 
     A taste tag, a shared genre, or the highest-rated shelf title is not a pick.
-    ``user_id`` stays in the signature for callers; the link is household graph.
+    When multi-user is on, prefer this member's watch evidence, then household.
     """
-    del user_id
-    return pick_linked_unwatched(db)
+    return pick_linked_unwatched(
+        db, user_id=str(user_id), multi_user_enabled=multi_user_enabled
+    )
 
 
 def serialize_whisper(row: Mapping[str, Any]) -> Dict[str, Any]:
@@ -228,6 +230,7 @@ def _deliver_one(
             "member_name": member_name,
             "cluster": pick.get("cluster"),
             "seed_title": pick.get("seed_title"),
+            "explanation": pick.get("explanation"),
         },
         media_type=pick.get("media_type"),
         tmdb_id=pick.get("tmdb_id"),
@@ -257,7 +260,8 @@ def ensure_member_whisper(
     existing = db.find_notification_by_related(user_id, kind=WHISPER_KIND, related_id=related)
     if existing and is_whisper_row(existing):
         return serialize_whisper(existing)
-    pick = pick_whisper_title(db, user_id=user_id)
+    multi_user = bool(getattr(getattr(settings, "features", None), "multi_user_enabled", False))
+    pick = pick_whisper_title(db, user_id=user_id, multi_user_enabled=multi_user)
     if pick is None:
         return None
     delivered = _deliver_one(db, settings, user=user, pick=pick, now=now)
@@ -275,6 +279,7 @@ def deliver_member_whispers(
     created = 0
     skipped = 0
     considered = 0
+    multi_user = bool(getattr(getattr(settings, "features", None), "multi_user_enabled", False))
     for user in db.list_users(limit=500):
         if not _eligible_member(user):
             skipped += 1
@@ -285,7 +290,7 @@ def deliver_member_whispers(
         existing = db.find_notification_by_related(user_id, kind=WHISPER_KIND, related_id=related)
         if existing and is_whisper_row(existing):
             continue
-        pick = pick_whisper_title(db, user_id=user_id)
+        pick = pick_whisper_title(db, user_id=user_id, multi_user_enabled=multi_user)
         if pick is None:
             continue
         delivered = _deliver_one(db, settings, user=user, pick=pick, now=now)

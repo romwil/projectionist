@@ -24,14 +24,24 @@ BAKE_PLOT = "Amateur bakers compete around a signature bake inside a failing col
 SPY_PLOT = "Rivals reunite after amateur bakers compete and ruin a signature bake tonight."
 
 
-def _neighbor(db: Database, seed_id: int, peer_id: int) -> None:
+def _neighbor(db: Database, seed_id: int, peer_id: int, *, seed_plot: str = "", peer_plot: str = "") -> None:
+    from projectionist.library.plot_kinship import plot_link_json, specific_plot_link
+
+    link = None
+    if seed_plot and peer_plot:
+        link = specific_plot_link(
+            seed_text=seed_plot, peer_text=peer_plot, shelf_labels=set()
+        )
+    link_json = plot_link_json(link) if link else "{}"
+    explainable = 1 if link else 0
     with db.connect() as conn:
         conn.execute(
             """
-            INSERT OR REPLACE INTO item_neighbors (item_id, neighbor_id, score, surprise_score)
-            VALUES (?, ?, ?, ?)
+            INSERT OR REPLACE INTO item_neighbors
+                (item_id, neighbor_id, score, surprise_score, explainable, plot_link_json)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (int(seed_id), int(peer_id), 0.92, 0.8),
+            (int(seed_id), int(peer_id), 0.92, 0.8, explainable, link_json or "{}"),
         )
 
 
@@ -70,7 +80,7 @@ class InboxRecommendationReasonTests(unittest.TestCase):
                 "genres": ["Comedy", "Animation"],
             }
         )
-        _neighbor(self.db, seed_id, peer_id)
+        _neighbor(self.db, seed_id, peer_id, seed_plot=PANEL_PLOT, peer_plot=SPONGE_PLOT)
 
         nudge = pick_nudge_title(self.db)
         whisper = pick_whisper_title(self.db, user_id="member-1")
@@ -103,7 +113,7 @@ class InboxRecommendationReasonTests(unittest.TestCase):
                 "genres": ["Thriller"],
             }
         )
-        _neighbor(self.db, seed_id, peer_id)
+        _neighbor(self.db, seed_id, peer_id, seed_plot=BAKE_PLOT, peer_plot=SPY_PLOT)
 
         pick = pick_nudge_title(self.db)
         self.assertIsNotNone(pick)
@@ -113,6 +123,7 @@ class InboxRecommendationReasonTests(unittest.TestCase):
         self.assertIn("Heat", why)
         self.assertIn("Thief", why)
         self.assertTrue(why.endswith("."))
+        self.assertTrue(why.lower().startswith("you watched") or why.lower().startswith("you finished"))
         self.assertNotIn("recently watched", why.lower())
         self.assertNotIn("still belongs", why.lower())
 

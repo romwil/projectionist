@@ -88,14 +88,20 @@ def pick_nudge_title(
     db: Database,
     *,
     recent: Optional[List[Dict[str, Any]]] = None,
+    user_id: Optional[str] = None,
+    multi_user_enabled: bool = False,
 ) -> Optional[Dict[str, Any]]:
     """Pick one unwatched title that shares a named link with a real watch.
 
     Embedding neighbors and a random unwatched shelf title are not picks.
     ``recent`` is accepted for callers; the link itself is read from the graph.
+    When multi-user is on, prefer the acting member's watch evidence, then
+    fall back to the household.
     """
     del recent
-    return pick_linked_unwatched(db)
+    return pick_linked_unwatched(
+        db, user_id=user_id, multi_user_enabled=multi_user_enabled
+    )
 
 
 def build_nudge_copy(
@@ -134,15 +140,12 @@ def deliver_enthusiast_nudges(
     """Fan out opt-in enthusiast nudges (inbox + email prefs)."""
     ts = time.time() if now is None else float(now)
     week_bucket = int(ts // (7 * 86400))
+    multi_user = bool(getattr(getattr(settings, "features", None), "multi_user_enabled", False))
     recent = recently_watched_context(db, limit=3, now=ts)
-    pick = pick_nudge_title(db, recent=recent)
-    if pick is None:
-        return {"delivered": 0, "emailed": 0, "skipped": "no_title"}
-
-    content = build_nudge_copy(db, pick=pick, recent=recent)
     delivered = 0
     emailed = 0
     considered = 0
+    last_pick_title: Optional[str] = None
     for user in db.list_users(limit=500):
         if considered >= MAX_NUDGES_PER_RUN:
             break
@@ -157,6 +160,16 @@ def deliver_enthusiast_nudges(
         )
         if existing:
             continue
+        pick = pick_nudge_title(
+            db,
+            recent=recent,
+            user_id=str(user["id"]),
+            multi_user_enabled=multi_user,
+        )
+        if pick is None:
+            continue
+        last_pick_title = str(pick.get("title") or "") or last_pick_title
+        content = build_nudge_copy(db, pick=pick, recent=recent)
         result = deliver_notification(
             db,
             settings,
@@ -168,6 +181,8 @@ def deliver_enthusiast_nudges(
                 "enthusiast": True,
                 "recently_watched": recent,
                 "pick_why": pick.get("why"),
+                "explanation": pick.get("explanation"),
+                "seed_title": pick.get("seed_title"),
             },
             media_type=pick.get("media_type"),
             tmdb_id=pick.get("tmdb_id"),
@@ -182,10 +197,12 @@ def deliver_enthusiast_nudges(
             delivered += 1
         if result.get("emailed"):
             emailed += 1
+    if considered and delivered == 0 and last_pick_title is None:
+        return {"delivered": 0, "emailed": 0, "skipped": "no_title", "considered": considered}
     return {
         "delivered": delivered,
         "emailed": emailed,
         "considered": considered,
-        "pick": pick.get("title"),
+        "pick": last_pick_title,
         "recent_count": len(recent),
     }
