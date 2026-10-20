@@ -1,6 +1,32 @@
 {
-  "generated_at": "2026-10-20T03:55:39Z",
+  "generated_at": "2026-10-20T04:01:15Z",
   "releases": [
+    {
+      "version": "1.37.55",
+      "date": "2026-10-20",
+      "summary": "One patch on 1.37.54: inbox, whisper, and weekly picks recommend titles because of something this house finished or pinned, with a named link — not an embedding neighbor of the last play.",
+      "highlights": [
+        "**Recommendations cite a household seed.** Nudges, whispers, and weekly notes say you finished or pinned a title, then name the plot, crew, or collection link.",
+        "**Watch evidence over view counts.** Seeds prefer completions, sessions, and terminal watch events, plus watchlist pins; raw Plex view_count is only a fallback.",
+        "**Multi-user prefers the acting member.** When multi-user is on, member evidence comes first, then the household."
+      ],
+      "sections": [
+        {
+          "title": "Changed",
+          "bullets": [
+            "**`recommendation_reasons`** builds `watched_bridge` explanation objects; `pick_linked_unwatched` / `watched_library_rows` take optional `user_id` + `multi_user_enabled`.",
+            "**Nudges, whispers, and member newsletters** wire through the bridge path and carry `explanation` / `seed_title` in payloads.",
+            "**Docs:** [docs/MEDIA_INTELLIGENCE.md](docs/MEDIA_INTELLIGENCE.md) Release 2 done notes."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend `pytest` (`tests/test_household_bridges.py`, `tests/test_inbox_recommendation_reasons.py`, `tests/test_whisper_inbox.py`) — 18 passed with `--no-cov`."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.54",
       "date": "2026-10-20",

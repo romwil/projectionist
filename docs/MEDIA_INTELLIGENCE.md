@@ -40,7 +40,7 @@ flowchart LR
 | Similarity cache | `item_neighbors` (`score`, `surprise_score`, **`explainable`**, **`plot_link_json`**) | `plot_neighbors` |
 | Graph edges | `title_relations` (`collection`, `neighbor`, `shared_crew`) | `title_relations_refresh` |
 
-Watch ledger / sessions exist for personalization; household bridges that cite “you finished X” land in a later release.
+Watch ledger (`watch_completions` / `watch_sessions` / terminal `watch_events`) plus `watchlist_pins` seed inbox bridges (Release 2).
 
 ---
 
@@ -58,17 +58,24 @@ Watch ledger / sessions exist for personalization; household bridges that cite �
 
 | Release | Theme | Status |
 |---------|--------|--------|
-| **1** | Explainable kinship — materialize `explainable` + explanation objects; coverage split; `MEDIA_INTELLIGENCE.md` | This doc lands here |
-| **2** | Household bridges — inbox/whisper/weekly cite watch/watchlist seeds with named links | Planned |
+| **1** | Explainable kinship — materialize `explainable` + explanation objects; coverage split; `MEDIA_INTELLIGENCE.md` | Done (1.37.54) |
+| **2** | Household bridges — inbox/whisper/weekly cite watch/watchlist seeds with named links | Done (1.37.55) |
 | **3** | Catalog graph — genre facets, person-centric edges, keyword-first Related titles | Planned |
 | **4** | Owner demand catch-up — miss signals → idle priority; Admin promotes explainable % | Planned |
 
 ### Release 1 notes
 
-- Shared explanation shape: `{kind, sentence, seed_ids?, peer_id?, terms[], evidence}` for `plot_link` | `shared_crew` | `collection` (later `watched_bridge`). Built next to `specific_plot_link` / `_why_payload`.
+- Shared explanation shape: `{kind, sentence, seed_ids?, peer_id?, terms[], evidence}` for `plot_link` | `shared_crew` | `collection` | `watched_bridge`. Built next to `specific_plot_link` / `_why_payload`.
 - `item_neighbors.explainable` + `plot_link_json` filled on neighbor build (and a cheap annotate pass for legacy rows).
 - Relations mirror and More Like This read **explainable** rows only.
 - Admin / Explore coverage shows raw neighbor % and explainable %.
+
+### Release 2 notes
+
+- **Seeds** prefer `watch_completions`, then recent `watch_sessions`, then terminal `watch_events`, plus `watchlist_pins`. Library `view_count` / `last_viewed_at` is a last resort only when the ledger is empty.
+- **Bridge builder** (`recommendation_reasons.bridge_between`) finds peers via explainable neighbors, shared crew, or collection and emits `kind=watched_bridge` (“You finished *X*; *Y* — …”). No seed → no fake “because you watched.”
+- **Nudges, whispers, and weekly member newsletters** pick through the same path. When `multi_user_enabled`, prefer the acting member’s evidence, then fall back to the household.
+- Cosine-only neighbors stay excluded from candidate discovery (`explainable_only=True`).
 
 ---
 
