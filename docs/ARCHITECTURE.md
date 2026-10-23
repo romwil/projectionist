@@ -199,7 +199,7 @@ See [WEB_UI.md](WEB_UI.md) and [DESIGN.md](DESIGN.md).
 - **Lens API** — `/api/lenses`, `/api/lenses/active`.
 - **Persona API** — `/api/persona`, `/api/system-config`.
 - **Reviews API** — `/api/reviews` with optional Plex rating sync and conflict handling.
-- **Explore feeds** — `/api/library/feeds/*`, `/api/library/neighbors/{item_id}`, `/api/library/motifs`, `/api/library/knowledge-coverage`.
+- **Explore feeds** — `/api/library/feeds/*`, `/api/library/neighbors/{item_id}`, `/api/library/motifs`, `/api/library/knowledge-coverage`, owner `GET /api/library/kinship-miss`.
 - **Webhooks** — `POST /api/webhooks/plex` for near-completion rating prompts (optional shared secret).
 - **JobManager** — background library sync with progress polling.
 - **CuratorAgent** — accepts `lens_id`; builds persona-aware system prompt; tool list respects feature flags.
@@ -426,7 +426,8 @@ Empty neighbor/relation responses are **honest** — they mean the idle cache ha
 | `GET /api/library/feeds/on-this-day` | calendar month-day match, else milestone-year fallback | `mode` field discloses which path ran |
 | `GET /api/library/neighbors/{item_id}` | `item_neighbors` (explainable only) | Empty until named plot links exist |
 | `GET /api/library/motifs` | `library_facets` where `facet_type='motif'` | Empty until motif task ran |
-| `GET /api/library/knowledge-coverage` | facet/neighbor/plot column counts | Honest % coverage for Admin/Explore |
+| `GET /api/library/knowledge-coverage` | facet/neighbor/plot column counts plus `with_explainable_neighbors_opened_pct` from `kinship_miss` keys | Honest % coverage for Admin/Explore; opened % is the Monday number |
+| `GET /api/library/kinship-miss` | `telemetry_events` kinship_miss joined to `library_items` | Owner-only demand list; no auto-repair |
 | `GET /api/library/query?motifs=…` | hybrid by default (`plot_match_mode`) | Motif ∪ keyword ∪ theme ∪ plot-text AND; `motifs` mode = facet-only |
 
 ### Plot Lab multi-signal search

@@ -119,9 +119,8 @@ export default function KnowledgeCoverageCard({
         ) : null}
       </div>
       <p className="status status-secondary knowledge-coverage-blurb">
-        Named kinship is the health that matters for More Like This and inbox bridges.
-        Similar cache can look full while Named kinship stays low — empty shelves queue
-        catch-up on{" "}
+        Named kinship on opened titles is the Monday number. Similar cache % is not
+        useful relatedness — empty shelves queue catch-up on{" "}
         <Link to="/admin/scheduled-tasks" className="app-topbar-link">
           Scheduled Tasks
         </Link>

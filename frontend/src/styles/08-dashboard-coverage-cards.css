@@ -158,6 +158,77 @@
   margin-top: 0;
 }
 
+.kinship-miss-panel {
+  margin-bottom: var(--space-4);
+}
+
+.kinship-miss-blurb {
+  margin: 0 0 var(--space-3);
+}
+
+.kinship-miss-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.kinship-miss-item {
+  margin: 0;
+}
+
+.kinship-miss-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  color: var(--text);
+  text-decoration: none;
+}
+
+a.kinship-miss-link:hover {
+  border-color: var(--accent);
+}
+
+a.kinship-miss-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.kinship-miss-poster {
+  width: 40px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+  background: var(--surface-raised);
+}
+
+.kinship-miss-poster-empty {
+  display: block;
+  border: 1px solid var(--border-subtle);
+}
+
+.kinship-miss-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.kinship-miss-title {
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+
+.kinship-miss-meta {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
 .title-plot-knowledge {
   margin-top: var(--space-4);
 }

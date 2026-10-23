@@ -6,6 +6,25 @@ import { readAllStyles } from "./readStyles.mjs";
 const styles = readAllStyles();
 
 describe("buildHealthHeroTiles", () => {
+  it("quotes opened-title Named kinship, not Similar cache", () => {
+    const tiles = buildHealthHeroTiles({
+      health: { total: 10, watched_count: 4, unwatched_pct: 20 },
+      coverage: {
+        with_overview_pct: 91,
+        with_neighbors_pct: 88,
+        with_explainable_neighbors_pct: 72,
+        with_explainable_neighbors_opened_pct: 41,
+        opened_title_count: 12,
+      },
+      openIssues: 0,
+    });
+    const byId = Object.fromEntries(tiles.map((t) => [t.id, t]));
+    assert.equal(byId.coverage.label, "Named kinship");
+    assert.equal(byId.coverage.value, "41%");
+    assert.equal(byId.coverage.detail, "Opened titles with a named More Like This link");
+    assert.equal(byId.coverage.tone, "warn");
+  });
+
   it("derives tiles from aggregations including purge pressure", () => {
     const tiles = buildHealthHeroTiles({
       health: {
@@ -82,6 +101,20 @@ describe("buildHealthHeroTiles", () => {
 });
 
 describe("buildLibraryHealthStory", () => {
+  it("quotes opened-title kinship in the Monday narrative", () => {
+    const story = buildLibraryHealthStory({
+      coverage: {
+        with_explainable_neighbors_pct: 72,
+        with_explainable_neighbors_opened_pct: 41,
+        opened_title_count: 8,
+      },
+      openIssues: 0,
+      purgeCount: 0,
+    });
+    assert.match(story.body, /Named kinship on opened titles is at 41%/);
+    assert.equal(story.body.includes("72%"), false);
+  });
+
   it("ties kinship, issues, purge, and catch-up into one narrative", () => {
     const story = buildLibraryHealthStory({
       health: { stale_adds: 4 },
@@ -123,5 +156,7 @@ describe("owner health hero theme-safe styles", () => {
       styles,
       /\.owner-health-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s,
     );
+    assert.match(styles, /\.kinship-miss-panel\b/);
+    assert.match(styles, /\.kinship-miss-link:focus-visible\b/);
   });
 });
