@@ -34,10 +34,18 @@ class McpExpandTests(unittest.TestCase):
         from projectionist.library.db import Database
 
         Database(path).ensure_seed_data()
-        out = json.loads(mcp_server.what_to_watch_tonight(limit=5))
-        self.assertIn("items", out)
-        purge = json.loads(mcp_server.suggest_purge_candidates_tool(limit=3))
-        self.assertIn("items", purge)
+        from projectionist.mcp.mode import set_mcp_mode
+
+        set_mcp_mode("full")
+        try:
+            out = json.loads(mcp_server.what_to_watch_tonight(limit=5))
+            self.assertIn("items", out)
+            self.assertIn("continue", out)
+            self.assertEqual(out.get("mode"), "watched_bridge")
+            purge = json.loads(mcp_server.suggest_purge_candidates_tool(limit=3))
+            self.assertIn("items", purge)
+        finally:
+            set_mcp_mode("privacy")
 
 
 if __name__ == "__main__":

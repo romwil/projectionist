@@ -126,14 +126,13 @@ Without either key, `/mcp` returns **503**. Wrong key → **401**. Logs record `
 |------|---------|
 | `library_query` / `library_aggregate` / facets / TV helpers | Browse owned inventory |
 | `library_overview_tool` / `library_title_detail` | Compact stats + title detail |
-| `what_to_watch_tonight` | Owned watch suggestions |
 | `sample_owned_library` | Owned inventory sample (overview + owned titles). `find_collection_gaps` is a one-release alias of this — not TMDB missing-title discover |
 | `discover_missing_titles` | Real TMDB collection gaps (title, year, media_type, poster CDN, `in_library=false`); shares agent gap filters (`genres`, `without_genres`, `tv_type`, years, query) |
 | `recommend_hidden_gems` | Lower-view owned “hidden gem” browses (full mode) |
 | `suggest_purge_candidates_tool` | Purge candidates |
 | `analyze_watch_patterns` | Overview + in-progress TV |
 | `list_watchlist_pins` | Watchlist snapshot |
-| `upcoming_premieres` | Recently added titles |
+| `upcoming_premieres` | Recently added titles (last 30 days — not theatrical premieres) |
 | `search_tmdb_proxy` | TMDB search when key configured (CDN posters; trimmed fields) |
 
 The in-app agent’s `research_title` service combines configured TMDB details
@@ -155,15 +154,16 @@ Chat agent tools (same library index; available in the in-app curator and mirror
 
 Empty neighbor/relation results mean the idle scheduler has not materialized the cache yet — not that the library is empty. See [ARCHITECTURE.md](ARCHITECTURE.md#agent-tools-vs-background-scheduler).
 
-### Full mode only (*arr — propose → confirm)
+### Full mode only (tonight + *arr)
 
 | Tool | Purpose |
 |------|---------|
+| `what_to_watch_tonight` | Same For you path as Explore (`list_linked_unwatched`): `{mode, empty, note, items[].explanation, continue[]}`. Privacy callers get the existing full-mode error — never a TMDB tonight. |
 | `propose_add_radarr` / `propose_add_sonarr` | Queue add; returns `pending_token` |
 | `propose_remove_arr` | Queue remove; returns `pending_token` |
 | `confirm_pending_action` | Cancel a pending token, or confirm/execute it **when the key is scoped for active curation** |
 
-Privacy mode callers receive an error if they invoke propose/confirm tools. There is no silent `require_confirmation=false` path.
+Privacy mode callers receive an error if they invoke tonight or propose/confirm tools. There is no silent `require_confirmation=false` path.
 
 **Active-curation scope (H3).** A full key can always *propose* and *cancel*. Whether it may *confirm/execute* its own proposals is a scope bound to key issuance: set `mcp_full_confirm_enabled` (Admin → rotate the full key with the active-curation scope) or `PROJECTIONIST_MCP_FULL_CONFIRM=1` for stdio / Unraid CA. Without the scope, `confirm_pending_action` returns `requires_human_confirmation` and the pending token survives so a human can confirm it in the web UI status dock (or `POST /api/actions/confirm`). This lets you issue read+propose keys for untrusted models and reserve self-confirming keys for trusted in-stack automation.
 
