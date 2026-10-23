@@ -110,7 +110,8 @@ class NativeScheduleTests(unittest.TestCase):
             self.assertFalse(channel["now"]["is_flex"])
             programs = guide["channels"][0]["programs"]
             flex = next(row for row in programs if row.get("is_flex"))
-            self.assertTrue(str(flex["title"]).endswith("· Up next"))
+            self.assertEqual(flex["title"], "Between programs")
+            self.assertTrue(flex["is_flex"])
             self.assertEqual(int(flex["stop"] - flex["start"]), 15 * 60)
             rows = admin_channel_rows(settings, _lineup(now=now))
             self.assertEqual(rows[0]["id"], "ch-mystery")
@@ -153,6 +154,65 @@ class NativeScheduleTests(unittest.TestCase):
         self.assertNotIn("18765", source["stream_url"])
         self.assertNotIn("tunarr", source["stream_url"].lower())
         self.assertFalse(source["is_flex"])
+
+    def test_one_title_pool_notice_on_guide_and_watch(self) -> None:
+        now = 1_700_000_000.0
+        lineup = _lineup(now=now)
+        lineup["channels"]["ch-mystery"]["items"] = [
+            lineup["channels"]["ch-mystery"]["items"][0]
+        ]
+        lineup["channels"]["ch-mystery"]["library_repeat_note"] = (
+            "This station has one playable title in the library — it will repeat."
+        )
+        with self._dir() as data_dir:
+            save_schedule(lineup, data_dir=data_dir)
+            settings = _settings(data_dir)
+            snap = snapshot_if_scheduled(settings, now=now, include_programs=True)
+            source = play_source_for_channel(
+                None,
+                settings,
+                SimpleNamespace(id="owner"),
+                "ch-mystery",
+                now=now,
+                start_playback_fn=lambda *args, **kwargs: {
+                    "session_id": "sess",
+                    "stream_url": "/api/library/playback/sess/index.m3u8",
+                    "rating_key": kwargs.get("rating_key"),
+                },
+            )
+        notice = "This station has one playable title in the library — it will repeat."
+        self.assertEqual(snap["channels"][0]["pool_notice"], notice)
+        self.assertEqual(source["pool_notice"], notice)
+
+    def test_flex_without_filler_or_preroll_returns_named_slate(self) -> None:
+        now = 1_700_000_000.0
+        flex_now = now + 115 + 1
+
+        def fail_start(*args, **kwargs):
+            raise AssertionError("slate must not start library playback")
+
+        with self._dir() as data_dir:
+            save_schedule(_lineup(now=now), data_dir=data_dir)
+            with patch(
+                "projectionist.theater.preroll.list_preroll_videos",
+                return_value=[],
+            ):
+                source = play_source_for_channel(
+                    None,
+                    _settings(data_dir),
+                    SimpleNamespace(id="owner"),
+                    "ch-mystery",
+                    now=flex_now,
+                    start_playback_fn=fail_start,
+                )
+        self.assertTrue(source["is_flex"])
+        self.assertTrue(source["slate"])
+        self.assertEqual(source["title"], "Between programs")
+        self.assertEqual(source["stream_url"], "")
+        self.assertIn("Between programs", source["slate_copy"])
+        self.assertIn("up next:", source["slate_copy"].lower())
+        self.assertIn("Next Case", source["slate_copy"])
+        self.assertEqual(source["reason"], "no_filler")
 
     def test_flex_slot_starts_filler_then_next_title(self) -> None:
         now = 1_700_000_000.0
@@ -199,7 +259,7 @@ class NativeScheduleTests(unittest.TestCase):
                 start_playback_fn=fake_start,
             )
         self.assertTrue(during["is_flex"])
-        self.assertTrue(str(during["title"]).endswith("· Up next"))
+        self.assertEqual(during["title"], "Between programs")
         self.assertEqual(during["rating_key"], "filler-88")
         self.assertEqual(during["playback_kind"], "hls")
         self.assertIn("/api/library/playback/sess-filler-88/index.m3u8", during["stream_url"])
@@ -240,7 +300,8 @@ class NativeScheduleTests(unittest.TestCase):
         self.assertEqual(source["rating_key"], "abc123bumper")
         self.assertEqual(source["stream_url"], "/api/preroll/asset/abc123bumper")
         self.assertEqual(source["playback_kind"], "progressive")
-        self.assertTrue(str(source["title"]).endswith("· Up next"))
+        self.assertEqual(source["title"], "Between programs")
+        self.assertFalse(source.get("slate"))
 
     def test_sqlite_import_does_not_need_tunarr_process(self) -> None:
         with self._dir() as raw_dir:
@@ -427,7 +488,7 @@ class NativeScheduleTests(unittest.TestCase):
         self.assertGreater(accordion[1]["start"], accordion[0]["stop"])
         flex_rows = [row for row in programs if row.get("is_flex")]
         self.assertEqual(len(flex_rows), 2)
-        self.assertTrue(all(str(row["title"]).endswith("· Up next") for row in flex_rows))
+        self.assertTrue(all(row.get("title") == "Between programs" for row in flex_rows))
         self.assertEqual(int(flex_rows[0]["stop"] - flex_rows[0]["start"]), 15 * 60)
         self.assertEqual(
             [row.get("plex_rating_key") for row in programs if not row.get("is_flex")],

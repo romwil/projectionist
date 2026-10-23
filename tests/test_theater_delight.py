@@ -178,6 +178,7 @@ class WeatherTests(unittest.TestCase):
         self.assertEqual(data["latitude"], 41.88)
         self.assertIsNone(data["muzak"])
         self.assertIn("No music folder", data["muzak_note"])
+        self.assertIn("no soundtrack", data["muzak_note"])
         self.assertTrue(calls)
         self.assertTrue(all("geocoding-api" not in url for url in calls))
 

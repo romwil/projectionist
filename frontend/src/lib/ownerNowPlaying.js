@@ -14,7 +14,7 @@ export function isPlaceholderNowTitle(title) {
   const text = String(title || "").trim();
   if (!text) return false;
   if (text.includes("· Up next")) return true;
-  return /^(flex|filler|continuity)$/i.test(text);
+  return /^(flex|filler|continuity|between programs)$/i.test(text);
 }
 
 /**

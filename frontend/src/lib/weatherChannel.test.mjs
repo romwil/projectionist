@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   forecastDayColumns,
   skyFromWeatherCode,
@@ -79,5 +82,15 @@ describe("weatherChannel boards", () => {
     const aheadOnly = weatherBoardSequence({ current: {}, daily });
     assert.deepEqual(aheadOnly, ["ahead"]);
     assert.ok(WEATHER_BOARD_DWELL_MS >= 8000 && WEATHER_BOARD_DWELL_MS <= 12000);
+  });
+
+  it("unset music is forecast with no soundtrack, not a fake bed", () => {
+    const player = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "../components/live/WeatherChannelPlayer.jsx"),
+      "utf8",
+    );
+    assert.match(player, /no soundtrack|muzak_note/i);
+    assert.match(player, /payload\?\.muzak\?\.url/);
+    assert.doesNotMatch(player, /fake soundtrack/i);
   });
 });

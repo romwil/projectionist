@@ -10,6 +10,7 @@ import {
 /** Living-room empty copy for Live CC when neither stream nor Plex tracks exist. */
 export const LIVE_CC_EMPTY_STREAM = "No subtitles on this stream";
 export const LIVE_CC_EMPTY_AIRING = "No captions available for this airing";
+export const BETWEEN_PROGRAMS_TITLE = "Between programs";
 
 /**
  * Merge HLS/native stream tracks with Plex-attached tracks for the CC picker.
@@ -61,12 +62,32 @@ export function flexPlaybackPlan(tuned, nowMs = Date.now()) {
   const kind = String(tuned?.playback_kind || "").trim().toLowerCase();
   const progressive =
     kind === "progressive" || /\.(mp4|m4v|webm|mov)(\?|$)/i.test(url);
+  const play = Boolean(url);
+  const slate = Boolean(isFlex && !play);
   return {
     url,
     holdMs,
     progressive,
-    play: Boolean(url),
+    play,
+    slate,
+    slateCopy: slate
+      ? flexSlateCopy({
+          nextTitle: tuned?.next_title || tuned?.nextTitle || "",
+          slateCopy: tuned?.slate_copy,
+        })
+      : "",
   };
+}
+
+/**
+ * Named station card when a flex pad has neither filler nor preroll.
+ * @param {{ nextTitle?: string, slateCopy?: string }} [input]
+ */
+export function flexSlateCopy({ nextTitle = "", slateCopy = "" } = {}) {
+  const canned = String(slateCopy || "").trim();
+  if (canned) return canned;
+  const next = String(nextTitle || "").trim();
+  return next ? `${BETWEEN_PROGRAMS_TITLE} — up next: ${next}` : BETWEEN_PROGRAMS_TITLE;
 }
 
 export function liveWatchHref(channelId, { popout = false } = {}) {
@@ -638,13 +659,14 @@ export function buildOsdModel(channel, nowMs = Date.now(), { selectedProgram = n
   const nextDisplay = formatProgramDisplayTitle(next) || nextTitle;
   // During Continuity/flex, never show a stolen content episode on "now" — the
   // upcoming show belongs in Next (and optionally as an Up-next subtitle).
-  let title = String(now?.title || "").trim();
+  let title = isFlex ? BETWEEN_PROGRAMS_TITLE : String(now?.title || "").trim();
   let episode = isFlex ? "" : formatProgramEpisodeLabel(now) || String(now?.episode_title || "").trim();
   if (isFlex && nextDisplay) {
     episode = `Up next: ${nextDisplay}`;
-  } else if (isFlex && nextTitle && !title.toLowerCase().includes("up next")) {
+  } else if (isFlex && nextTitle) {
     episode = `Up next: ${nextTitle}`;
   }
+  const poolNotice = String(channel.pool_notice || channel.poolNotice || "").trim();
   return {
     id: String(channel.id || ""),
     number: channel.number == null ? null : Number(channel.number),
@@ -652,6 +674,7 @@ export function buildOsdModel(channel, nowMs = Date.now(), { selectedProgram = n
     iconUrl: String(channel.icon_url || channel.iconUrl || "").trim(),
     title,
     episode,
+    poolNotice,
     rating: isFlex ? "" : String(now?.content_rating || "").trim(),
     isFlex,
     nowProgram: isFlex ? null : now,
@@ -719,7 +742,8 @@ export function separateOverlappingGuidePrograms(programs) {
  * @param {object} program
  */
 function normalizeGuideProgram(program) {
-  const title = String(program.title || "").trim();
+  const isFlex = Boolean(program.is_flex || program.isFlex);
+  const title = isFlex ? BETWEEN_PROGRAMS_TITLE : String(program.title || "").trim();
   if (!title) return null;
   const episode =
     formatProgramEpisodeLabel(program) || String(program.episode_title || "").trim();
@@ -747,8 +771,8 @@ function normalizeGuideProgram(program) {
     stop,
     durationSeconds,
     duration_seconds: durationSeconds,
-    isFlex: Boolean(program.is_flex),
-    is_flex: Boolean(program.is_flex),
+    isFlex,
+    is_flex: isFlex,
     plex_rating_key: program.plex_rating_key || null,
     show_plex_rating_key: program.show_plex_rating_key || null,
   };
@@ -838,6 +862,7 @@ export function normalizeGuide(snapshot) {
         iconUrl: String(channel.icon_url || "").trim(),
         now: channel.now || null,
         next: channel.next || null,
+        poolNotice: String(channel.pool_notice || channel.poolNotice || "").trim(),
         programs,
       };
     })

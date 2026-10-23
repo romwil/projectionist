@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   isPauseBoundaryDismissed,
   pauseBoundaryForPlaybackStatus,
@@ -100,6 +103,22 @@ describe("livePauseBoundary", () => {
       }),
       true,
     );
+  });
+
+  it("names Rejoin live and Finish this, and says finishing stretches the clock", () => {
+    const live = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "../components/live/LivePlayer.jsx"),
+      "utf8",
+    );
+    assert.match(live, /Rejoin live/);
+    assert.match(live, /Finish this, then rejoin live/);
+    assert.match(live, /stretches the linear clock/);
+    assert.match(live, /other stations stay on the guide/);
+    assert.doesNotMatch(live, /holdToDoubleSpeed/);
+    assert.doesNotMatch(live, /playbackRate\s*=\s*2/);
+    const finishFn = live.slice(live.indexOf("function finishThenRejoinLive"));
+    const body = finishFn.slice(0, finishFn.indexOf("\n  function ") > 0 ? finishFn.indexOf("\n  function ") : 800);
+    assert.doesNotMatch(body, /refill|rebuild|save_schedule|live_lineup/);
   });
 
   it("reads program end from OSD ends_at or remaining", () => {
