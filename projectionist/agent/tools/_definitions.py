@@ -671,13 +671,25 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
         "type": "function",
         "function": {
             "name": "what_to_watch_tonight",
-            "description": "Suggest unwatched or under-watched library titles for tonight.",
+            "description": (
+                "Tonight's For you picks: named watched_bridge links to something "
+                "the house finished, plus a continue list of in-progress TV. "
+                "Empty means no named link — not a cosine guess. Optional "
+                "runtime_max / media_type filter that list; they do not invent substitutes."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "media_type": {"type": "string", "enum": ["movie", "show"]},
                     "limit": {"type": "integer"},
-                    "mood": {"type": "string", "description": "Optional mood or theme filter"},
+                    "runtime_max": {
+                        "type": "integer",
+                        "description": "Keep only bridge picks at or under this runtime (minutes).",
+                    },
+                    "mood": {
+                        "type": "string",
+                        "description": "Ignored — mood is not a parallel tonight ranker.",
+                    },
                 },
             },
         },

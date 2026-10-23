@@ -2463,37 +2463,36 @@ class ToolRegistry:
         )
 
     async def _tool_what_to_watch_tonight(self, args: Mapping[str, Any]) -> str:
-        media_type = args.get("media_type")
-        mood = str(args.get("mood") or "").lower()
-        limit = int(args.get("limit") or 8)
-        if mood:
-            cards = await search_library(self.db, self.settings, mood, media_type=media_type, limit=limit * 2)
-        else:
-            candidates: List[tuple[int, TitleCard]] = []
-            rows = enrich_rows_with_episode_play_sums(self.db, self.db.all_library_items())
-            for row in rows:
-                if media_type and row["media_type"] != media_type:
-                    continue
-                view_count = effective_view_count(row)
-                if view_count > 2:
-                    continue
-                score = (3 - view_count) * 10
-                if row.get("last_viewed_at"):
-                    score -= 2
-                candidates.append((score, row_to_title_card(row, reason="Good pick for tonight")))
-            candidates.sort(key=lambda item: item[0], reverse=True)
-            cards = [card for _, card in candidates[:limit]]
-        cards = self._allowed_cards(cards)
-        self._cards.extend(cards[:limit])
-        return json.dumps(
-            {
-                "total_matched": len(cards[:limit]),
-                "returned": len(cards[:limit]),
-                "offset": 0,
-                "has_more": False,
-                "items": [_card_to_tool_item(c) for c in cards[:limit]],
-            }
+        from projectionist.library.tonight import build_tonight_watch
+
+        youth_ceiling = None
+        if self.is_youth:
+            from projectionist.youth.rating_gate import resolve_youth_max_rating
+
+            youth_ceiling = resolve_youth_max_rating(self.settings)
+        payload = build_tonight_watch(
+            self.db,
+            media_type=args.get("media_type"),
+            runtime_max=args.get("runtime_max"),
+            limit=int(args.get("limit") or 8),
+            youth_max_rating=youth_ceiling,
+            user_id=self.user_id,
+            multi_user_enabled=bool(self.settings.features.multi_user_enabled),
         )
+        cards: List[TitleCard] = []
+        for item in list(payload.get("items") or []) + list(payload.get("continue") or []):
+            if not isinstance(item, dict):
+                continue
+            explanation = item.get("explanation") if isinstance(item.get("explanation"), dict) else {}
+            sentence = str(
+                (explanation or {}).get("sentence") or item.get("sentence") or item.get("why") or ""
+            ).strip()
+            cards.append(
+                _feed_item_to_title_card({**item, "why": sentence, "recommendation_reason": sentence})
+            )
+        allowed = self._allowed_cards(cards)
+        self._cards.extend(allowed)
+        return json.dumps(payload)
 
     async def _tool_analyze_watch_patterns(self, args: Mapping[str, Any]) -> str:
         filters = filters_from_mapping(args)
