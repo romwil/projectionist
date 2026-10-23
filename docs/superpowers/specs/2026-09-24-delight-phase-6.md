@@ -4,7 +4,7 @@
 **Status:** Program spec (Wave 0 docs sprint = **v1.36.3**)  
 **Audience:** Developers / Cursor agents shipping the 1.36 minor  
 **Locked plan:** Cursor plan `persona_delight_top_10_a8ebd6a0` (`~/.cursor/plans/persona_delight_top_10_a8ebd6a0.plan.md`)  
-**Wishlist pointer:** [DELIGHT-WISHLIST.md](../../DELIGHT-WISHLIST.md)
+**Wishlist pointer:** [DELIGHT-WISHLIST.md](../../DELIGHT-WISHLIST.md) (living persona roadmap; this spec is Archive)
 
 Prod today is **1.35.5**. This program is the **1.36** minor. Each sprint is a GitHub release (`v1.36.x` + feature title). **Automat prod waits until the full build is green on QA.** During the build we merge and tag GitHub (and Path-B Hub onto `:8792` if we need a live look). We do **not** `rollout.sh` prod per sprint.
 
@@ -216,7 +216,7 @@ Refresh only — do not rewrite [2026-07-architecture-code-review.md](../../revi
 
 ## 9. See also
 
-- [DELIGHT-WISHLIST.md](../../DELIGHT-WISHLIST.md) — historical Phases 1–5; Phase 6 points here
+- [DELIGHT-WISHLIST.md](../../DELIGHT-WISHLIST.md) — living delight roadmap; Phases 1–6 (including this program) live in its Archive
 - [RELEASE.md](../../RELEASE.md) — Hub-first ship path
 - [AUTOMAT.md](../../ops/AUTOMAT.md) — prod `:8788`, smartmap `:8790`, QA `:8792`
 - [2026-07-29-live-channels-deferred.md](../plans/2026-07-29-live-channels-deferred.md) — residual Live trust (hygiene-reconciled 2026-09-24)
