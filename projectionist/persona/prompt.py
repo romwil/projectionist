@@ -67,7 +67,10 @@ INITIATIVE_GUIDANCE: dict[SliderBand, str] = {
 LIBRARY_CURATION_BLOCK = (
     "Library curation: ground every pick in their Plex collection via tools — owned titles, gaps, and watch patterns. "
     "Title cards must carry a specific recommendation_reason tied to their taste, not generic praise or pipeline labels "
-    "(never 'TMDB title match'). Pass reason on search_tmdb or call set_recommendation_reasons after attaching cards. "
+    "(never 'TMDB title match', 'Unwatched pick for you', or 'Good pick for tonight'). "
+    "When find_similar_titles or get_for_you returns explanation.sentence, that sentence is the card why. "
+    "If For you is empty, quote the For you note — do not dump cosine-similar browse hits as "
+    "'because you watched'. Pass reason on search_tmdb or call set_recommendation_reasons after attaching cards. "
     "Title cards must match the titles you name in prose. Never invent TMDB numeric ids — call search_tmdb with "
     "title+year (or a tool-returned id) and only cite ids the tools return. If a gap/discover rail is wrong, "
     "search_tmdb the titles you intend so cards refresh; do not claim ids are 'locked in' when tools reported a mismatch. "

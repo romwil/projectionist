@@ -134,6 +134,10 @@ Without either key, `/mcp` returns **503**. Wrong key → **401**. Logs record `
 | `list_watchlist_pins` | Watchlist snapshot |
 | `upcoming_premieres` | Recently added titles (last 30 days — not theatrical premieres) |
 | `search_tmdb_proxy` | TMDB search when key configured (CDN posters; trimmed fields) |
+| `list_relations` | Named one-hop `title_relations` (collection / crew / plot_link). Empty = cache not ready |
+| `walk_relations` | Shallow BFS (depth ≤ 2) over the same graph |
+| `titles_by_person` | In-library filmography with a named credit explanation |
+| `find_similar_titles` | Explainable plot neighbors only (`explainable_only=True`) |
 
 The in-app agent’s `research_title` service combines configured TMDB details
 with the keyless Wikipedia MediaWiki API and optional OMDb/TVDB sources. It
@@ -142,17 +146,16 @@ read-only MCP `research_title` tool should wrap this same sanitized service;
 the in-process agent surface ships first so external-provider behavior and
 privacy boundaries remain centrally tested.
 
-Chat agent tools (same library index; available in the in-app curator and mirrored concepts for MCP library browses) also include graph/person helpers. Prefer these when the user asks “more like X”, “same director”, or “franchise siblings”:
+Chat agent tools share the same graph functions. Prefer them (or the MCP wraps above) when the user asks “more like X”, “same director”, or “franchise siblings”. Each peer carries an XC-01 `explanation` or is omitted. Empty `{items: [], note}` means the Named kinship cache is not ready — not that nothing is related. Cosine-only rows stay out. Privacy mode never emits `rating_key`. See [ARCHITECTURE.md](ARCHITECTURE.md#agent-tools-vs-background-scheduler).
 
-| Agent tool | Purpose | Cache / source |
-|------------|---------|----------------|
-| `find_similar_titles` | Similar or surprising neighbors for a seed | `item_neighbors` (`mode=similar\|surprising`) |
-| `list_relations` | One-hop `title_relations` edges | collection / neighbor / shared_crew / llm_theme |
+| Agent / MCP tool | Purpose | Cache / source |
+|------------------|---------|----------------|
+| `find_similar_titles` | Similar or surprising **explainable** neighbors | `item_neighbors` (`explainable_only=True`) |
+| `list_relations` | One-hop `title_relations` edges | collection / neighbor / shared_crew |
 | `walk_relations` | Shallow BFS (depth ≤ 2) over relations | same graph |
 | `titles_by_person` | In-library filmography for a person | `people` + `credits` |
-| `get_facet_catalog` | Top facet values including **`motif`** and **`theme`** | `library_facets` |
-
-Empty neighbor/relation results mean the idle scheduler has not materialized the cache yet — not that the library is empty. See [ARCHITECTURE.md](ARCHITECTURE.md#agent-tools-vs-background-scheduler).
+| `get_facet_catalog` | Top facet values including **`motif`** and **`theme`** | `library_facets` (in-app) |
+| `get_for_you` | Explore For you + honest empty note (in-app) | `list_linked_unwatched` |
 
 ### Full mode only (tonight + *arr)
 

@@ -182,7 +182,9 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
             "name": "find_similar_titles",
             "description": (
                 "Find titles similar or surprisingly adjacent to a seed library title using "
-                "cached plot-neighbor scores (embedding cosine + surprise). Prefer this over "
+                "cached named plot links (explainable neighbors only — never cosine-only peers). "
+                "Each item.explanation.sentence is the card why. Empty items mean the Named "
+                "kinship cache is not ready, not that nothing is related. Prefer this over "
                 "search_library when the user asks for 'more like X' or 'something similar but unexpected'."
             ),
             "parameters": {
@@ -210,6 +212,24 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
                         "enum": ["similar", "surprising"],
                         "description": "similar = high cosine; surprising = high cosine with low genre/keyword/credit overlap",
                     },
+                    "limit": {"type": "integer"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_for_you",
+            "description": (
+                "Return Explore For you: unwatched titles with a named watched_bridge explanation, "
+                "or an honest empty note. Use this when the user asks why For you is empty or "
+                "what For you is recommending — quote items[].explanation.sentence or the note. "
+                "Never fill with cosine-similar browse hits."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
                     "limit": {"type": "integer"},
                 },
             },
@@ -1510,8 +1530,9 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
         "function": {
             "name": "quick_pick_roulette",
             "description": (
-                "Pick ONE random unwatched title matching taste profile. "
-                "Optionally constrained by runtime and genre. Returns a single title with a 'Why this?' reason."
+                "Pick ONE unwatched title. Prefer a named watched_bridge explanation.sentence "
+                "when a youth-safe (or household) bridge exists; otherwise return the title with "
+                "an empty why — never 'Unwatched pick for you' or cosine labels."
             ),
             "parameters": {
                 "type": "object",

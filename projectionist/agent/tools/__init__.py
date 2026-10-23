@@ -69,6 +69,14 @@ from projectionist.library.double_feature import suggest_tonight_double_feature
 from projectionist.library.search import exact_title_cards, row_to_title_card, search_library
 from projectionist.library.titles import get_title_detail
 from projectionist.library.watch_progress import watch_progress_state
+from projectionist.library.plot_kinship import (
+    KINSHIP_CACHE_NOT_READY_NOTE,
+    build_explanation,
+    explanation_from_plot_link,
+    kinship_empty_payload,
+    parse_plot_link_json,
+    peers_with_named_explanation,
+)
 from projectionist.models.recommendation import sanitize_recommendation_reason
 from projectionist.models.schemas import TitleCard
 from projectionist.preferences.purge import suggest_purge_candidates
@@ -457,6 +465,48 @@ def _feed_item_to_title_card(item: Mapping[str, Any]) -> TitleCard:
     }
     reason = str(item.get("recommendation_reason") or item.get("why") or "").strip()
     return row_to_title_card(row, reason=reason)
+
+
+def _row_mapping(row: Any) -> Dict[str, Any]:
+    if row is None:
+        return {}
+    try:
+        return {str(key): row[key] for key in row.keys()}
+    except Exception:  # noqa: BLE001 — sqlite Row, Mapping, or dict
+        if isinstance(row, Mapping):
+            return dict(row)
+        return {}
+
+
+def _person_credit_explanation(
+    row: Mapping[str, Any],
+    *,
+    person_name: str,
+    peer_id: Optional[int],
+) -> Optional[Dict[str, Any]]:
+    job = str(row.get("job") or "").strip()
+    department = str(row.get("department") or "").strip()
+    name = str(person_name or "").strip()
+    job_l = job.lower()
+    dept_l = department.lower()
+    if job_l == "director" or dept_l == "directing":
+        kind = "directed_by"
+        sentence = f"Directed by {name}" if name else "Same director"
+    elif "writer" in job_l or "screenplay" in job_l or dept_l == "writing":
+        kind = "written_by"
+        sentence = f"Written by {name}" if name else "Same writer"
+    elif name:
+        kind = "shared_crew"
+        sentence = f"{name} — {job}" if job else name
+    else:
+        return None
+    return build_explanation(
+        kind=kind,
+        sentence=sentence,
+        terms=[name] if name else [],
+        peer_id=peer_id,
+        evidence={"job": job, "department": department},
+    )
 
 
 def _card_to_tool_item(card: TitleCard) -> Dict[str, Any]:
@@ -1244,6 +1294,11 @@ class ToolRegistry:
 
     async def _tool_find_similar_titles(self, args: Mapping[str, Any]) -> str:
         """Read cached plot neighbors (similar or surprising) for a seed title."""
+        from projectionist.notifications.recommendation_reasons import (
+            watched_bridge,
+            watched_library_rows,
+        )
+
         limit = min(max(1, int(args.get("limit") or 10)), 25)
         mode = str(args.get("mode") or "similar").strip().lower()
         if mode not in {"similar", "surprising"}:
@@ -1253,23 +1308,51 @@ class ToolRegistry:
         if seed_row is None:
             return json.dumps({"error": "Seed title not found in library", "items": []})
 
+        seed_id = int(seed_row["id"])
+        watched_seed = next(
+            (
+                row
+                for row in watched_library_rows(
+                    self.db,
+                    user_id=self.user_id,
+                    multi_user_enabled=bool(self.user_id),
+                )
+                if int(row.get("id") or 0) == seed_id
+            ),
+            None,
+        )
         neighbors = self.db.get_neighbors(
-            int(seed_row["id"]), mode=mode, limit=limit, explainable_only=True
+            seed_id, mode=mode, limit=limit, explainable_only=True
         )
         cards = []
         items = []
         for row in neighbors:
-            card = row_to_title_card(row)
+            peer_map = _row_mapping(row)
+            explanation = None
+            if watched_seed is not None:
+                explanation = watched_bridge(self.db, peer_map, watched_seed)
+            if not explanation or not str(explanation.get("sentence") or "").strip():
+                link = parse_plot_link_json(peer_map.get("plot_link_json"))
+                if link:
+                    explanation = explanation_from_plot_link(
+                        link,
+                        seed_ids=[seed_id],
+                        peer_id=int(peer_map.get("id") or 0) or None,
+                    )
+            sentence = str((explanation or {}).get("sentence") or "").strip()
+            if not sentence:
+                continue
+            card = row_to_title_card(row, reason=sanitize_recommendation_reason(sentence))
             if not self._card_allowed(card):
                 continue
             cards.append(card)
             payload = _card_to_tool_item(card)
             payload["score"] = float(row["score"] or 0)
             payload["surprise_score"] = float(row["surprise_score"] or 0)
+            payload["explanation"] = explanation
             items.append(payload)
         self._cards.extend(cards)
-
-        return json.dumps(
+        payload = kinship_empty_payload(
             {
                 "seed": {
                     "id": int(seed_row["id"]),
@@ -1279,17 +1362,41 @@ class ToolRegistry:
                 },
                 "mode": mode,
                 "items": items,
-                "returned": len(items),
                 "cache_status": "ready" if items else "seed_pending",
                 "note": (
-                    "Neighbors come from the plot_neighbors idle cache. "
-                    "This seed has no cached neighbors yet; let the plot_neighbors scheduled "
-                    "task catch up, then retry with the returned seed id."
+                    KINSHIP_CACHE_NOT_READY_NOTE
                     if not items
                     else "Neighbors come from the plot_neighbors idle cache."
                 ),
             }
         )
+        return json.dumps(payload)
+
+    async def _tool_get_for_you(self, args: Mapping[str, Any]) -> str:
+        """Return Explore For you (watched_bridge) including the honest empty note."""
+        from projectionist.library.feeds import feed_for_you
+        from projectionist.youth.rating_gate import resolve_youth_max_rating
+
+        limit = min(max(1, int(args.get("limit") or 8)), 12)
+        youth_max = resolve_youth_max_rating(self.settings) if self.is_youth else None
+        payload = feed_for_you(
+            self.db,
+            limit=limit,
+            user_id=self.user_id,
+            multi_user_enabled=bool(self.user_id),
+            youth_max_rating=youth_max,
+        )
+        for item in payload.get("items") or []:
+            if not isinstance(item, Mapping):
+                continue
+            self._offer_card(_feed_item_to_title_card(item))
+        if not payload.get("items"):
+            payload = dict(payload)
+            payload["empty"] = True
+            payload["note"] = str(payload.get("note") or "").strip() or (
+                "No named link to something you finished — not a cosine guess."
+            )
+        return json.dumps(payload)
 
     async def _tool_query_library(self, args: Mapping[str, Any]) -> str:
         filters = self._apply_youth_filters(filters_from_mapping(args))
@@ -1371,10 +1478,12 @@ class ToolRegistry:
             "year": seed_row["year"],
             "media_type": str(seed_row["media_type"]),
         }
-        payload["note"] = (
-            "Relations come from title_relations_refresh (collection/neighbor/shared_crew). "
-            "Empty means the graph has not been built yet."
-        )
+        payload["items"] = peers_with_named_explanation(payload.get("items") or [])
+        payload = kinship_empty_payload(payload)
+        if payload.get("items"):
+            payload["note"] = (
+                "Relations come from title_relations_refresh (collection/neighbor/shared_crew)."
+            )
         return json.dumps(payload)
 
     async def _tool_walk_relations(self, args: Mapping[str, Any]) -> str:
@@ -1398,6 +1507,8 @@ class ToolRegistry:
             "year": seed_row["year"],
             "media_type": str(seed_row["media_type"]),
         }
+        payload["items"] = peers_with_named_explanation(payload.get("items") or [])
+        payload = kinship_empty_payload(payload)
         return json.dumps(payload)
 
     async def _tool_titles_by_person(self, args: Mapping[str, Any]) -> str:
@@ -1450,7 +1561,18 @@ class ToolRegistry:
         cards = []
         items = []
         for row in rows[:limit]:
-            card = row_to_title_card(row)
+            peer_map = _row_mapping(row)
+            try:
+                peer_id = int(peer_map.get("id") or 0)
+            except (TypeError, ValueError):
+                peer_id = 0
+            explanation = _person_credit_explanation(
+                peer_map, person_name=person_name, peer_id=peer_id or None
+            )
+            sentence = str((explanation or {}).get("sentence") or "").strip()
+            if not sentence:
+                continue
+            card = row_to_title_card(row, reason=sanitize_recommendation_reason(sentence))
             if not self._card_allowed(card):
                 continue
             cards.append(card)
@@ -1458,9 +1580,10 @@ class ToolRegistry:
             payload["department"] = str(row["department"] or "") if "department" in row.keys() else ""
             payload["job"] = str(row["job"] or "") if "job" in row.keys() else ""
             payload["character"] = str(row["character"] or "") if "character" in row.keys() else ""
+            payload["explanation"] = explanation
             items.append(payload)
         self._cards.extend(cards)
-        return json.dumps(
+        payload = kinship_empty_payload(
             {
                 "person": {
                     "person_id": resolved_person_id,
@@ -1468,10 +1591,10 @@ class ToolRegistry:
                     "name": person_name or None,
                 },
                 "items": items,
-                "returned": len(items),
                 "total_matched": len(items) if self.is_youth else len(rows),
             }
         )
+        return json.dumps(payload)
 
     async def _tool_query_tv_episodes(self, args: Mapping[str, Any]) -> str:
         result = query_episodes(
@@ -3403,24 +3526,53 @@ class ToolRegistry:
                 genres_list = parsed if isinstance(parsed, list) else []
             except (TypeError, ValueError, json.JSONDecodeError):
                 genres_list = []
-        runtime = row["runtime_minutes"]
-        reason_parts = []
-        if genres_list:
-            reason_parts.append(f"Matches your {str(genres_list[0]).lower()} taste")
-        if runtime:
-            reason_parts.append(f"{runtime} min")
-        reason = " · ".join(reason_parts) if reason_parts else "Unwatched pick for you"
+        from projectionist.notifications.recommendation_reasons import named_unwatched_pick
+        from projectionist.youth.rating_gate import resolve_youth_max_rating
+
+        genre_needles = [g.strip() for g in genres_filter.split(",") if g.strip()] if genres_filter else []
+        youth_max = resolve_youth_max_rating(self.settings) if self.is_youth else None
+        named = named_unwatched_pick(
+            self.db,
+            user_id=self.user_id,
+            multi_user_enabled=bool(self.user_id),
+            youth_max_rating=youth_max,
+            genre_needles=genre_needles,
+            max_runtime=int(max_runtime) if max_runtime is not None else None,
+        )
+        if named:
+            explanation = named.get("explanation") if isinstance(named.get("explanation"), dict) else None
+            sentence = str((explanation or {}).get("sentence") or named.get("why") or "").strip()
+            card = _feed_item_to_title_card(
+                {
+                    **named,
+                    "overview": named.get("summary") or named.get("overview") or "",
+                    "why": sentence,
+                    "recommendation_reason": sentence,
+                }
+            )
+            self._offer_card(card)
+            tool_item = _card_to_tool_item(card)
+            if explanation:
+                tool_item["explanation"] = explanation
+            return json.dumps(
+                {
+                    "quick_pick": True,
+                    "item": tool_item,
+                    "why": sentence,
+                    "explanation": explanation,
+                }
+            )
 
         # row_to_title_card expects genres as a JSON string (sqlite shape).
         item = dict(row)
         item["genres"] = json.dumps(genres_list)
-        card = row_to_title_card(item, reason=reason)
+        card = row_to_title_card(item, reason="")
         self._offer_card(card)
 
         return json.dumps({
             "quick_pick": True,
             "item": _card_to_tool_item(card),
-            "why": reason,
+            "why": "",
         })
 
 
