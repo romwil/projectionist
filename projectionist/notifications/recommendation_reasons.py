@@ -2,11 +2,14 @@
 
 Seeds come from real household evidence (completions, sessions, terminal watch
 events, watchlist pins) — not raw view_count alone. TV episode watches overlay
-that episode's plot (or title) onto the show seed so Live / For you / inbox
-peers match what actually finished. Peers must share a named link (explainable
-neighbor, shared crew, collection, or episode-plot phrase). The resulting
-explanation kind is ``watched_bridge`` when a seed exists; cosine proximity
-alone is never a reason.
+that episode's plot onto the show seed so For you / inbox / newsletter peers
+match what actually finished. Empty episode plots stay off the search blob —
+the episode title is never plot text. Display sentences name the show (and
+year), not the episode as a watched work. Peers must share a named link
+(explainable neighbor, shared crew, collection, or episode-plot phrase). The
+resulting explanation kind is ``watched_bridge`` when a seed exists; cosine
+proximity alone is never a reason. ``watched_bridge`` is the one builder used
+by For you, inbox, and ``build_member_newsletter``.
 """
 
 from __future__ import annotations
@@ -28,7 +31,8 @@ _CREW_JOBS = ("director", "writer", "screenplay", "creator")
 _ITEM_COLUMNS = """
     id, title, year, media_type, tmdb_id, tvdb_id, rating_key, poster_url,
     summary, tmdb_overview, tagline, long_synopsis, llm_logline,
-    genres, keywords, tmdb_collection_id, collection_name, view_count
+    genres, keywords, tmdb_collection_id, collection_name, view_count,
+    content_rating
 """
 _SEED_SOURCES_WATCH = ("completion", "session", "watch_event", "library_view")
 _SEED_SOURCES_SAVED = ("watchlist",)
@@ -56,12 +60,21 @@ def _labels(value: Any) -> set[str]:
 
 
 def _title_label(row: Mapping[str, Any]) -> str:
+    """Show or movie name plus year. Never the episode title as a watched work."""
     title = str(row.get("title") or "Untitled").strip() or "Untitled"
     year = row.get("year")
-    label = f"{title} ({year})" if year else title
-    episode = str(row.get("episode_title") or "").strip()
-    if episode:
-        return f"{label} — {episode}"
+    return f"{title} ({year})" if year else title
+
+
+def _display_seed_label(row: Mapping[str, Any]) -> str:
+    """Watched-title clause for ``watched_bridge`` sentences.
+
+    Episode identity stays on ``evidence``. When the finished episode has a real
+    Plex plot, name it as an episode of the show rather than the episode title.
+    """
+    label = _title_label(row)
+    if row.get("episode_rating_key") and str(row.get("episode_summary") or "").strip():
+        return f"an episode of {label}"
     return label
 
 
@@ -194,10 +207,11 @@ def _overlay_episode(
     overlaid["episode_season"] = episode.get("season_number")
     overlaid["episode_number"] = episode.get("episode_number")
     overlaid["episode_summary"] = summary
-    extra = summary or (f"{title}." if title else "")
-    if extra:
+    # Matching overlay is plot only. An empty episode summary must not search
+    # the episode title string (e.g. "Not Cancer").
+    if summary:
         show_summary = str(overlaid.get("summary") or "").strip()
-        overlaid["summary"] = f"{extra}\n{show_summary}".strip() if show_summary else extra
+        overlaid["summary"] = f"{summary}\n{show_summary}".strip() if show_summary else summary
     return overlaid
 
 
@@ -719,12 +733,16 @@ def _inner_link(
     return None
 
 
-def bridge_between(
+def watched_bridge(
     db: Database,
     candidate: Mapping[str, Any],
     seed: Mapping[str, Any],
 ) -> Optional[Dict[str, Any]]:
-    """Explanation object ``kind=watched_bridge`` naming seed + peer link, or None."""
+    """One ``kind=watched_bridge`` explanation for For you / inbox / newsletter.
+
+    Display names the show or movie (and year). Episode titles stay on
+    ``evidence`` and never appear as the watched work.
+    """
     try:
         candidate_id = int(candidate.get("id") or 0)
         seed_id = int(seed.get("id") or 0)
@@ -737,7 +755,7 @@ def bridge_between(
     if not inner:
         return None
 
-    seed_label = _title_label(seed)
+    seed_label = _display_seed_label(seed)
     candidate_label = _title_label(candidate)
     verb = _seed_verb(seed)
     link_sentence = str(inner.get("sentence") or "").strip()
@@ -762,6 +780,9 @@ def bridge_between(
             "episode_title": str(seed.get("episode_title") or "") or None,
         },
     )
+
+
+bridge_between = watched_bridge
 
 
 def reason_between(db: Database, candidate: Mapping[str, Any], watched: Mapping[str, Any]) -> str:
@@ -791,7 +812,7 @@ def specific_bridge(
 ) -> Optional[Dict[str, Any]]:
     """First ``watched_bridge`` explanation from ``candidate`` back to a seed."""
     for seed in seed_rows:
-        explanation = bridge_between(db, candidate, seed)
+        explanation = watched_bridge(db, candidate, seed)
         if explanation and explanation.get("sentence"):
             return explanation
     return None
@@ -801,7 +822,10 @@ def _plot_phrase_candidate_ids(
     db: Database, seed: Mapping[str, Any], *, limit: int = 16
 ) -> List[int]:
     """Bounded unwatched ids whose plot text mentions episode story phrases."""
-    text = str(seed.get("episode_summary") or seed.get("summary") or "")
+    text = str(seed.get("episode_summary") or "").strip()
+    if not text:
+        # Empty episode plot: search the show plot, never the episode title.
+        text = str(seed.get("summary") or "")
     phrases = distinctive_plot_phrases(text, limit=3)
     if not phrases:
         return []
@@ -967,7 +991,16 @@ def _pick_from_row(
         "seed_title": seed_title,
         "cluster": None,
         "explanation": dict(explanation) if explanation else None,
+        "content_rating": str(row.get("content_rating") or "") or "",
     }
+
+
+def _youth_row_allowed(row: Mapping[str, Any], youth_max_rating: Optional[str]) -> bool:
+    if not youth_max_rating:
+        return True
+    from projectionist.youth.rating_gate import content_rating_allowed
+
+    return content_rating_allowed(row.get("content_rating"), max_rating=youth_max_rating)
 
 
 def list_linked_unwatched(
@@ -977,12 +1010,14 @@ def list_linked_unwatched(
     watched_rows: Optional[Sequence[Mapping[str, Any]]] = None,
     user_id: Optional[str] = None,
     multi_user_enabled: bool = False,
+    youth_max_rating: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Unwatched titles with named ``watched_bridge`` explanations (inbox refusal rules).
 
-    Same seed ledger, explainable-only candidates, and ``bridge_between`` gate as
+    Same seed ledger, explainable-only candidates, and ``watched_bridge`` gate as
     ``pick_linked_unwatched`` — returns up to ``limit`` distinct peers, or [] when
-    there is no honest why (never cosine-only filler).
+    there is no honest why (never cosine-only filler). Youth max skips adult
+    seeds and over-ceiling peers; empty is success.
     """
     capped = max(1, min(int(limit or 12), 50))
     watched = (
@@ -992,6 +1027,8 @@ def list_linked_unwatched(
             db, user_id=user_id, multi_user_enabled=multi_user_enabled
         )
     )
+    if youth_max_rating:
+        watched = [row for row in watched if _youth_row_allowed(row, youth_max_rating)]
     if not watched:
         return []
     seed_ids = []
@@ -1015,6 +1052,8 @@ def list_linked_unwatched(
             if int(row.get("view_count") or 0) > 0:
                 continue
         except (TypeError, ValueError):
+            continue
+        if not _youth_row_allowed(row, youth_max_rating):
             continue
         explanation = specific_bridge(db, row, watched)
         if not explanation:
@@ -1054,6 +1093,7 @@ def pick_linked_unwatched(
     watched_rows: Optional[Sequence[Mapping[str, Any]]] = None,
     user_id: Optional[str] = None,
     multi_user_enabled: bool = False,
+    youth_max_rating: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """First unwatched title with a named ``watched_bridge`` to household evidence."""
     picks = list_linked_unwatched(
@@ -1062,6 +1102,7 @@ def pick_linked_unwatched(
         watched_rows=watched_rows,
         user_id=user_id,
         multi_user_enabled=multi_user_enabled,
+        youth_max_rating=youth_max_rating,
     )
     return picks[0] if picks else None
 

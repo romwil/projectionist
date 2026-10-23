@@ -2235,11 +2235,14 @@ def feed_for_you(
     limit: int = DEFAULT_FEED_LIMIT,
     user_id: Optional[str] = None,
     multi_user_enabled: bool = False,
+    youth_max_rating: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Explore For you — unwatched titles with named household ``watched_bridge`` whys.
 
-    Reuses the Release 2 bridge builder (same refusal rules as inbox nudges /
-    whispers). Empty means no named link yet — never cosine-only filler.
+    Reuses the shared ``watched_bridge`` builder (same refusal rules as inbox
+    nudges / whispers / member newsletter). Empty means no named link yet —
+    never cosine-only filler. Youth max skips adult seeds and over-ceiling
+    peers; empty is success.
     """
     from projectionist.notifications.recommendation_reasons import list_linked_unwatched
 
@@ -2249,6 +2252,7 @@ def feed_for_you(
         limit=capped,
         user_id=user_id,
         multi_user_enabled=multi_user_enabled,
+        youth_max_rating=youth_max_rating,
     )
     items: List[Dict[str, Any]] = []
     for pick in raw:

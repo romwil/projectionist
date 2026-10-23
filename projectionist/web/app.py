@@ -2702,6 +2702,7 @@ def library_feed_for_you(
 ) -> Dict[str, Any]:
     """Explore For you — watched_bridge picks (same refusal rules as inbox)."""
     from projectionist.library.feeds import feed_for_you
+    from projectionist.youth.apply import youth_max_for_user
 
     settings = _settings()
     multi_user = bool(settings.features.multi_user_enabled)
@@ -2714,6 +2715,7 @@ def library_feed_for_you(
             limit=limit,
             user_id=user_id,
             multi_user_enabled=multi_user,
+            youth_max_rating=youth_max_for_user(user, settings),
         ),
         user,
     )
