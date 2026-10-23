@@ -931,6 +931,39 @@ def find_similar_titles(
     return _run_graph_tool("find_similar_titles", args)
 
 
+@mcp.tool()
+def knowledge_coverage_tool() -> str:
+    """Named kinship coverage, including opened-title % from kinship_miss keys.
+
+    Full MCP only. Quotes ``with_explainable_neighbors_opened_pct`` (demand
+    titles) and ``with_explainable_neighbors_pct`` (whole library). Similar
+    cache ``with_neighbors_pct`` is not useful relatedness. Hash-fallback is
+    labeled via ``embedding_is_hash_fallback``. Read-only.
+    """
+    denied = _require_full_mode()
+    if denied:
+        return denied
+    from projectionist.library.query import compute_knowledge_coverage
+
+    return _emit(compute_knowledge_coverage(_database()))
+
+
+@mcp.tool()
+def kinship_miss_list(limit: int = 50) -> str:
+    """Titles someone opened to an empty More Like This / Related / bridge shelf.
+
+    Full MCP only. Wraps owner GET /api/library/kinship-miss. Demand, not a
+    grade — nothing is auto-repaired. Purge stays a separate review list.
+    """
+    denied = _require_full_mode()
+    if denied:
+        return denied
+    from projectionist.telemetry.kinship_miss import list_kinship_miss
+
+    capped = max(1, min(int(limit or 50), 200))
+    return _emit(list_kinship_miss(_database(), limit=capped))
+
+
 def main() -> None:
     from projectionist.config_store import load_dotenv_file
     from projectionist.envcompat import skip_dotenv

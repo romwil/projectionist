@@ -7,6 +7,15 @@
  * Named kinship leads — that is the health that matters for More Like This. */
 export const KNOWLEDGE_COVERAGE_METRICS = [
   {
+    id: "openedExplainableNeighbors",
+    pctKey: "with_explainable_neighbors_opened_pct",
+    label: "Named kinship (opened)",
+    detailKey: "opened_title_count",
+    detailSuffix: " opened titles",
+    requireKey: "with_explainable_neighbors_opened_pct",
+    omitUnlessCount: "opened_title_count",
+  },
+  {
     id: "explainableNeighbors",
     pctKey: "with_explainable_neighbors_pct",
     label: "Named kinship",
@@ -95,6 +104,7 @@ export function buildKnowledgeCoverageRows(coverage) {
   const rows = [];
   for (const metric of KNOWLEDGE_COVERAGE_METRICS) {
     if (metric.requireKey && !(metric.requireKey in coverage)) continue;
+    if (metric.omitUnlessCount && !(Number(coverage[metric.omitUnlessCount]) > 0)) continue;
     const pct = Number(coverage[metric.pctKey]);
     if (!Number.isFinite(pct)) continue;
     if (metric.omitWhenEmpty) {

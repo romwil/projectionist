@@ -356,7 +356,7 @@ Identify is usually **show-level** (theme or score). It does **not** pick season
 
 Admin Dashboard leads with a **Monday pass** — about 20 minutes, in this order:
 
-1. **Named kinship %** (the number to watch — catch-up is the lever)
+1. **Named kinship on opened titles** (the number to watch — catch-up is the lever; Similar cache % is not useful relatedness)
 2. **Open issues**
 3. **Purge pressure**
 4. **Scheduled Tasks catch-up**
@@ -364,9 +364,10 @@ Admin Dashboard leads with a **Monday pass** — about 20 minutes, in this order
 Each tile links to that page. Similar-cache % can look full while Named kinship stays low; empty More Like This shelves queue idle catch-up. After overnight idle, re-read coverage:
 
 ```bash
-# Automat LAN (authoritative). Watch with_explainable_neighbors_pct.
-# 1.37.58 snapshot was ~72.9% — the target is higher on *opened* titles, not a fake 100%.
+# Automat LAN (authoritative). Quote with_explainable_neighbors_opened_pct.
+# Global Similar cache / Named kinship can look full while opened titles stay sparse.
 curl -s http://10.10.1.202:8788/api/library/knowledge-coverage | python3 -m json.tool
+curl -s http://10.10.1.202:8788/api/library/kinship-miss | python3 -m json.tool
 ```
 
 ### Library knowledge
@@ -531,7 +532,7 @@ The safety model is deliberately conservative: auto-repair is an owner policy ov
 
 ### Library-health hero & issue badge
 
-The **Admin → Dashboard** (**Library intelligence**) opens with a **Monday pass** hero: about 20 minutes, in order — **Named kinship** → **open issues** → **purge pressure** → **Scheduled Tasks catch-up**. Tiles also include title count, unwatched share, and **rating coverage** (watched titles you’ve rated — with an honest note when ratings aren’t linked to watched titles yet). Each tile links into the page that fixes it. Weekly digest stat cards are drillable the same way. The Admin rail carries the open-issue count as a badge next to **Issues**.
+The **Admin → Dashboard** (**Library intelligence**) opens with a **Monday pass** hero: about 20 minutes, in order — **Named kinship on opened titles** → **open issues** → **purge pressure** → **Scheduled Tasks catch-up**. Similar cache % is not useful relatedness. Below coverage, an empty-shelf list names titles someone opened to a blank More Like This. Tiles also include title count, unwatched share, and **rating coverage** (watched titles you’ve rated — with an honest note when ratings aren’t linked to watched titles yet). Each tile links into the page that fixes it. Weekly digest stat cards are drillable the same way. The Admin rail carries the open-issue count as a badge next to **Issues**.
 
 The hero reuses the same aggregations the rest of the Dashboard already loads — nothing new is fetched per tile. The open-issue count comes from the existing queue:
 
