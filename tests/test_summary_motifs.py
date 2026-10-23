@@ -43,6 +43,12 @@ class MotifNormalizationTests(unittest.TestCase):
         self.assertIn("wicked wonderland", tokens)
         self.assertIn("royal wedding", tokens)
 
+        wiki = tokenize_plot_text(
+            "A drama television series which premiered on a network about ordinary people."
+        )
+        self.assertNotIn("which premiered", wiki)
+        self.assertNotIn("which", wiki)
+
     def test_tokenize_uses_tagline_and_logline(self) -> None:
         tokens = tokenize_plot_text(
             "",

@@ -115,6 +115,8 @@ Watch ledger (`watch_completions` / `watch_sessions` / terminal `watch_events`) 
 
 Explore’s **For you** rail (`feed_for_you` / hub `for_you`) lists unwatched titles through the same `list_linked_unwatched` → `watched_bridge` path as inbox nudges. Weekly persona rails remain a separate taste feature; they are not a cosine fallback for this shelf.
 
+The named link is a plot subject a person would recognize (`museum exhibits`, `amateur bakers`), shared crew, or a collection. Wikipedia/TMDB glue (`ordinary people`, `drama television`, `which premiered`, `tropical climates`) is refused — empty is better than junk grammar.
+
 After a TV episode finish, that path uses the **episode plot** (when Plex stored one) so Live / next-like-this peers match the episode you actually watched, not a generic show blurb or a cosine movie neighbor.
 
 ## Next horizon (out of this series)

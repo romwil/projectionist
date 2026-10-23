@@ -467,6 +467,143 @@ class HouseholdBridgeTests(unittest.TestCase):
         self.assertEqual(feed["items"][0]["title"], "Covert Kitchen")
         self.assertFalse(any(item.get("title") == "Gravity" for item in feed["items"]))
 
+    def test_boilerplate_overlap_is_not_a_for_you_reason(self) -> None:
+        house_plot = (
+            "The team try to cure complex and rare diseases from very ill ordinary people "
+            "in the United States of America."
+        )
+        beauty_plot = (
+            "They uncover a sexually transmitted virus that transforms ordinary people "
+            "into visions of physical perfection, but with terrifying consequences."
+        )
+        seed = _title(
+            self.db,
+            rating_key="rk-house",
+            tmdb_id=1408,
+            title="House",
+            year=2004,
+            media_type="show",
+            summary=house_plot,
+        )
+        peer = _title(
+            self.db,
+            rating_key="rk-beauty",
+            tmdb_id=99,
+            title="The Beauty",
+            year=2026,
+            summary=beauty_plot,
+        )
+        with self.db.connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO item_neighbors
+                    (item_id, neighbor_id, score, surprise_score, explainable, plot_link_json)
+                VALUES (?, ?, ?, ?, 1, ?)
+                """,
+                (
+                    seed,
+                    peer,
+                    0.91,
+                    0.8,
+                    '{"sentence":"Both stories turn on an ordinary people.","terms":["ordinary people"]}',
+                ),
+            )
+        self.db.upsert_library_episode(
+            {
+                "show_item_id": seed,
+                "rating_key": "ep-not-cancer",
+                "season_number": 8,
+                "episode_number": 2,
+                "title": "Not Cancer",
+                "summary": "",
+            }
+        )
+        _insert_completion(
+            self.db,
+            user_id="will",
+            rating_key="ep-not-cancer",
+            parent_rating_key="rk-house",
+            media_type="episode",
+            completed_at_ms=1_700_000_000_000,
+        )
+
+        self.assertIsNone(specific_plot_link(seed_text=house_plot, peer_text=beauty_plot))
+        self.assertIsNone(pick_linked_unwatched(self.db))
+        feed = feed_for_you(self.db, limit=8)
+        self.assertEqual(feed["items"], [])
+        self.assertTrue(feed["empty"])
+        why_blob = " ".join(str(item.get("why") or "") for item in feed["items"]).lower()
+        self.assertNotIn("ordinary people", why_blob)
+        self.assertNotIn("an ordinary", why_blob)
+
+    def test_tv_wiki_glue_is_not_a_for_you_reason(self) -> None:
+        high_plot = (
+            "High Potential is an American crime comedy drama television series created "
+            "by Drew Goddard for ABC. A second season which premiered on September 16, 2025."
+        )
+        ted_plot = (
+            "Ted Lasso is an American sports comedy-drama television series developed "
+            "by Jason Sudeikis. A fourth season which premiered on August 5, 2026."
+        )
+        seed = _title(
+            self.db,
+            rating_key="rk-high",
+            tmdb_id=11,
+            title="High Potential",
+            year=2024,
+            media_type="show",
+            summary=high_plot,
+        )
+        peer = _title(
+            self.db,
+            rating_key="rk-ted",
+            tmdb_id=12,
+            title="Ted Lasso",
+            year=2020,
+            media_type="show",
+            summary=ted_plot,
+        )
+        with self.db.connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO item_neighbors
+                    (item_id, neighbor_id, score, surprise_score, explainable, plot_link_json)
+                VALUES (?, ?, ?, ?, 1, ?)
+                """,
+                (
+                    seed,
+                    peer,
+                    0.9,
+                    0.7,
+                    '{"sentence":"Both stories turn on a drama television and a which premiered.",'
+                    '"terms":["drama television","which premiered"]}',
+                ),
+            )
+        self.db.upsert_library_episode(
+            {
+                "show_item_id": seed,
+                "rating_key": "ep-ghosts",
+                "season_number": 1,
+                "episode_number": 4,
+                "title": "Chasing Ghosts",
+                "summary": "",
+            }
+        )
+        _insert_completion(
+            self.db,
+            user_id="will",
+            rating_key="ep-ghosts",
+            parent_rating_key="rk-high",
+            media_type="episode",
+            completed_at_ms=1_700_000_000_000,
+        )
+        self.assertIsNone(specific_plot_link(seed_text=high_plot, peer_text=ted_plot))
+        feed = feed_for_you(self.db, limit=8)
+        self.assertEqual(feed["items"], [])
+        why_blob = " ".join(str(item.get("why") or "") for item in feed["items"]).lower()
+        self.assertNotIn("drama television", why_blob)
+        self.assertNotIn("which premiered", why_blob)
+
     def test_for_you_empty_without_bridges_is_honest(self) -> None:
         empty = feed_for_you(self.db, limit=8)
         self.assertEqual(empty["feed"], "for-you")
