@@ -1,10 +1,10 @@
 # Delight wishlist — BA opportunity briefs
 
-This is a **pre-backlog brief**. It is what a BA would hand engineering *before* tickets. It is not shipping status, not a sprint plan, and not a backlog dump. Promotion into a delivery plan remains an owner decision.
+This is a **pre-backlog brief**. It is what a BA would hand engineering *before* tickets. It is not shipping status and not a sprint plan. Delivery sequencing (1.37.61–66) lives in [2026-10-23-delight-wishlist-delivery.md](superpowers/plans/2026-10-23-delight-wishlist-delivery.md); this file stays the brief.
 
 Shipping status lives in [CHANGELOG.md](../CHANGELOG.md) and [PRODUCT.md](PRODUCT.md). Knowledge mechanics live in [MEDIA_INTELLIGENCE.md](MEDIA_INTELLIGENCE.md). MCP contract lives in [MCP.md](MCP.md).
 
-**Baseline:** Automat prod was **1.37.59**. For you junk-copy refuse is **PR #149** (`fix/for-you-explanation-copy`; **1.37.60** in flight). Do not list those as future work. Do not reopen parked Phase 6 leftovers or Tunarr-era doors — they sit in the [Archive](#archive).
+**Baseline:** Automat prod is **1.37.60** shipped (For you junk-copy refuse + iPad 2× selection). Do not list those as future work. Do not reopen parked Phase 6 leftovers or Tunarr-era doors — they sit in the [Archive](#archive).
 
 SQLite WAL. Optional Plex / Radarr / Sonarr / TMDB / LLM. MCP: `python -m projectionist.mcp.server` (tools only; no resources). Dual keys: privacy = read-only public schema; full = internal fields + confirm-gated *arr. Private user memory never leaves either plane.
 
