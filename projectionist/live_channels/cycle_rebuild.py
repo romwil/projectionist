@@ -33,8 +33,8 @@ from projectionist.live_channels.recipes import (
     normalize_programming_mode,
 )
 
-_ONLY_ONE_NOTE = (
-    "This station has only one playable item in the library, so the guide repeats it."
+ONE_TITLE_POOL_NOTICE = (
+    "This station has one playable title in the library — it will repeat."
 )
 _FILL_CAP = 1000
 _MIN_DURATION_MS = 60_000
@@ -59,7 +59,7 @@ def rebuild_single_title_cycles(
     single_ids = [
         cid
         for cid, channel in channels.items()
-        if isinstance(channel, Mapping) and _is_single_title(channel)
+        if isinstance(channel, Mapping) and _should_rebuild_cycle(settings, cid, channel)
     ]
     if not single_ids:
         return report
@@ -89,7 +89,7 @@ def rebuild_single_title_cycles(
                         "id": cid,
                         "name": channel.get("name"),
                         "rating_key": outcome.get("rating_key") or "",
-                        "note": _ONLY_ONE_NOTE,
+                        "note": ONE_TITLE_POOL_NOTICE,
                     }
                 )
             else:
@@ -111,7 +111,7 @@ def _rebuild_channel(
     blocked_first: Set[str],
 ) -> Dict[str, Any]:
     before = list(_unique_content_keys(channel))
-    pool = _pool_for_channel(conn, settings, channel_id, channel)
+    pool = _dedupe_programs(_pool_for_channel(conn, settings, channel_id, channel))
     outcome: Dict[str, Any] = {
         "id": channel_id,
         "name": channel.get("name"),
@@ -134,9 +134,9 @@ def _rebuild_channel(
                 start_time_ms=start_ms,
                 max_flex_ms=pad_flex_max_ms(settings),
             )
-            if items != list(channel.get("items") or []) or channel.get("library_repeat_note") != _ONLY_ONE_NOTE:
+            if items != list(channel.get("items") or []) or channel.get("library_repeat_note") != ONE_TITLE_POOL_NOTICE:
                 channel["items"] = items
-                channel["library_repeat_note"] = _ONLY_ONE_NOTE
+                channel["library_repeat_note"] = ONE_TITLE_POOL_NOTICE
                 outcome["changed"] = True
         return outcome
 
@@ -605,8 +605,59 @@ def _duration_ms(duration_ms: Any, runtime_minutes: Any) -> int:
     return minutes * 60 * 1000
 
 
+def _should_rebuild_cycle(settings: Any, channel_id: str, channel: Mapping[str, Any]) -> bool:
+    """Expand a one-title loop, or a multi-title cycle that still repeats adjacent keys.
+
+    A single-show nonstop recipe may keep the same rating key in back-to-back
+    slots. Collection / theme stations may not.
+    """
+    if _is_single_title(channel):
+        return True
+    if _is_nonstop_show(settings, channel_id):
+        return False
+    return _has_adjacent_content_repeat(channel)
+
+
+def _is_nonstop_show(settings: Any, channel_id: str) -> bool:
+    row = station_meta_row(settings, channel_id)
+    return str(row.get("source") or "").strip().lower() == "show"
+
+
 def _is_single_title(channel: Mapping[str, Any]) -> bool:
     return len(_unique_content_keys(channel)) <= 1
+
+
+def _consecutive_content_keys(channel: Mapping[str, Any]) -> List[str]:
+    keys: List[str] = []
+    for item in _content_items(channel):
+        key = str(item.get("plex_rating_key") or item.get("program_id") or "").strip()
+        if key:
+            keys.append(key)
+    return keys
+
+
+def _has_adjacent_content_repeat(channel: Mapping[str, Any]) -> bool:
+    keys = _consecutive_content_keys(channel)
+    if len(keys) < 2:
+        return False
+    for left, right in zip(keys, keys[1:]):
+        if left == right:
+            return True
+    return keys[0] == keys[-1]
+
+
+def _dedupe_programs(programs: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
+    seen: Set[str] = set()
+    out: List[Dict[str, Any]] = []
+    for row in programs:
+        if not isinstance(row, Mapping):
+            continue
+        key = str(row.get("plex_rating_key") or "").strip()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(dict(row))
+    return out
 
 
 def _unique_content_keys(channel: Mapping[str, Any]) -> List[str]:

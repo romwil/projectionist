@@ -1109,6 +1109,20 @@ def weekly_newsletter_preview(user_id: str) -> str:
     )
 
 
+@mcp.tool()
+def live_guide(channel: Optional[str] = None, hours: float = 6.0) -> str:
+    """Read-only native Live guide (now/next, flex vs programme, pool notice).
+
+    Reads ``DATA_DIR/live_lineup.json``. If that file is gone the payload is
+    ``{"error": "lineup_missing"}`` — never a synthetic programme. Does not
+    publish, shuffle, or attach a tuner. Optional ``channel`` is a number, id,
+    or station name.
+    """
+    from projectionist.live_channels.native_schedule import live_guide_for_mcp
+
+    return _emit(live_guide_for_mcp(_settings(), channel=channel, hours=hours))
+
+
 def main() -> None:
     from projectionist.config_store import load_dotenv_file
     from projectionist.envcompat import skip_dotenv

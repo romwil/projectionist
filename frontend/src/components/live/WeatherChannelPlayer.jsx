@@ -295,7 +295,7 @@ export default function WeatherChannelPlayer({ className = "", onClose }) {
         Forecast via Open-Meteo (leaves LAN).{" "}
         {payload?.muzak
           ? `Music: ${payload.muzak.title}.`
-          : payload?.muzak_note || "No music folder is set."}
+          : payload?.muzak_note || "No soundtrack — the forecast plays without music."}
       </p>
       <audio ref={audioRef} data-testid="weather-channel-muzak" />
     </div>

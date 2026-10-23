@@ -179,7 +179,10 @@ def select_muzak(
     """Pick one audio file from the configured folder, or explain why there is none."""
     text = str(folder or "").strip()
     if not text:
-        return None, "No music folder is set. The owner can choose one under Admin → Live Channels → Setup."
+        return None, (
+            "No music folder is set — the forecast plays with no soundtrack. "
+            "The owner can choose one under Admin → Live Channels → Setup."
+        )
     if allowed_roots is not None:
         from projectionist.theater.media_browser import resolve_within_roots
 

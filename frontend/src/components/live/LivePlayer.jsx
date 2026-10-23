@@ -18,6 +18,7 @@ import {
   LIVE_STALL_ESCALATE_MS,
   LIVE_STALL_NOTICE_MS,
   flexPlaybackPlan,
+  flexSlateCopy,
   liveStreamUrl,
   mergeLiveCcTracks,
   OSD_IDLE_MS,
@@ -97,6 +98,7 @@ export default function LivePlayer({
   const [subDelay, setSubDelay] = useState(0);
   const [preroll, setPreroll] = useState(null); // null = none/ready; object = playing; undefined = resolving
   const [pauseBoundary, setPauseBoundary] = useState(null);
+  const [flexSlate, setFlexSlate] = useState("");
   const pauseProgramEndRef = useRef(null);
   const finishThenLiveRef = useRef(false);
   const remountLiveRef = useRef(null);
@@ -110,6 +112,7 @@ export default function LivePlayer({
     setPrerollEpoch(channelId);
     setPreroll(null);
     setPauseBoundary(null);
+    setFlexSlate("");
     prerollCueRef.current = "";
     finishThenLiveRef.current = false;
     pauseProgramEndRef.current = null;
@@ -576,6 +579,7 @@ export default function LivePlayer({
         const tuned = await tuneLiveChannel(channelId);
         if (destroyed) return;
         plan = flexPlaybackPlan(tuned);
+        setFlexSlate(plan.slate ? plan.slateCopy || flexSlateCopy({ nextTitle: osd?.nextDisplay || osd?.nextTitle || tuned?.next_title }) : "");
         if (plan.url) {
           url = plan.url;
           lastMediaUrlRef.current = url;
@@ -927,6 +931,13 @@ export default function LivePlayer({
         />
       ) : null}
 
+      {!preroll && flexSlate ? (
+        <div className="live-flex-slate" data-testid="live-flex-slate">
+          <p className="live-flex-slate-kicker">{osd?.name || "Station"}</p>
+          <h2 className="live-flex-slate-title">{flexSlate}</h2>
+        </div>
+      ) : null}
+
       <TuningInterstitial
         active={!preroll && status === "loading"}
         testId="live-player-tuning"
@@ -938,7 +949,8 @@ export default function LivePlayer({
             <p className="live-pause-boundary-kicker">Program ended while you were paused</p>
             <h2 className="live-pause-boundary-title">What now?</h2>
             <p className="live-pause-boundary-copy muted">
-              Projectionist can stretch the schedule: finish this piece, then catch wherever live is.
+              Finishing a paused file stretches the linear clock for this station —
+              other stations stay on the guide. Rejoin live jumps to what&apos;s on now.
             </p>
             <div className="live-pause-boundary-actions">
               <button type="button" className="primary" data-testid="live-rejoin-live" onClick={rejoinLiveNow}>
@@ -1030,6 +1042,11 @@ export default function LivePlayer({
               <h2 className="live-osd-title" data-testid="live-osd-title">
                 {osd?.title || (status === "loading" ? "Tuning…" : "Nothing scheduled")}
               </h2>
+              {osd?.poolNotice ? (
+                <p className="live-osd-pool-notice" data-testid="live-osd-pool-notice">
+                  {osd.poolNotice}
+                </p>
+              ) : null}
               {osd?.episode && !isCompact ? (
                 <p className="live-osd-episode" data-testid="live-osd-episode">
                   {osd.episode}

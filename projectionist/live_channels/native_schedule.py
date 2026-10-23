@@ -25,6 +25,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 logger = logging.getLogger(__name__)
 
 SCHEDULE_FILENAME = "live_lineup.json"
+BETWEEN_PROGRAMS_TITLE = "Between programs"
 _FLEX_TYPES = {"flex", "filler", "offline", "continuity", "commercial"}
 _PLEX_TUNER_NOTE = (
     "In-app Live plays through Projectionist's Play tool. "
@@ -346,9 +347,6 @@ def guide_programs(
     """Published slots overlapping ``[now, now + window)``, including the airing on now."""
     now_ms = int(float(now) * 1000)
     end_ms = now_ms + max(1, int(window_seconds)) * 1000
-    flex_title = str(channel.get("guide_flex_title") or "").strip()
-    if not flex_title:
-        flex_title = f"{channel.get('name') or 'Channel'} · Up next"
     programs: List[Dict[str, Any]] = []
     for item, start_ms, stop_ms in iter_slots(channel, start_ms=now_ms, end_ms=end_ms):
         start_s = start_ms / 1000.0
@@ -358,7 +356,7 @@ def guide_programs(
             programs.append(
                 {
                     "type": "flex",
-                    "title": flex_title,
+                    "title": BETWEEN_PROGRAMS_TITLE,
                     "start": start_s,
                     "stop": stop_s,
                     "duration": duration_ms,
@@ -444,16 +442,18 @@ def snapshot_if_scheduled(
             "icon_url": channel.get("icon_url") or "",
             "guideFlexTitle": channel.get("guide_flex_title") or "",
         }
-        rows.append(
-            _channel_row_from_guide(
-                cid,
-                meta=meta,
-                lineup={"name": channel.get("name"), "number": channel.get("number")},
-                programs=programs,
-                slots=slots,
-                include_programs=include_programs,
-            )
+        row = _channel_row_from_guide(
+            cid,
+            meta=meta,
+            lineup={"name": channel.get("name"), "number": channel.get("number")},
+            programs=programs,
+            slots=slots,
+            include_programs=include_programs,
         )
+        notice = str(channel.get("library_repeat_note") or "").strip()
+        if notice:
+            row["pool_notice"] = notice
+        rows.append(row)
     _sort_channels(rows)
     ceiling = str(youth_max_rating or "").strip()
     if ceiling:
@@ -701,16 +701,20 @@ def play_source_for_channel(
             "source": "projectionist",
         }
     ends_at = current.get("ends_at") or current.get("stop")
+    notice = str(channel.get("library_repeat_note") or "").strip()
+    next_title = _programme_display_title(nxt)
     base = {
         "ok": True,
         "channel_id": str(channel_id),
         "is_flex": bool(current.get("is_flex")),
         "title": current.get("title") or "",
         "ends_at": ends_at,
-        "next_title": (nxt or {}).get("title") if isinstance(nxt, Mapping) else "",
+        "next_title": next_title,
         "source": "projectionist",
         "plex_tuner_note": plex_tuner_note(),
     }
+    if notice:
+        base["pool_notice"] = notice
     if current.get("is_flex"):
         keys = filler_rating_keys(channel)
         for key in _filler_keys_from_tunarr(resolve_data_dir(settings), str(channel_id)):
@@ -760,6 +764,7 @@ def play_source_for_channel(
                 }
             )
             return base
+        slate_next = next_title
         base.update(
             {
                 "stream_url": "",
@@ -768,9 +773,15 @@ def play_source_for_channel(
                 "offset_ms": 0,
                 "playback_kind": "",
                 "filler": False,
+                "slate": True,
+                "slate_title": BETWEEN_PROGRAMS_TITLE,
                 "reason": "no_filler",
             }
         )
+        if slate_next:
+            base["slate_copy"] = f"{BETWEEN_PROGRAMS_TITLE} — up next: {slate_next}"
+        else:
+            base["slate_copy"] = BETWEEN_PROGRAMS_TITLE
         return base
     rating_key = str(current.get("plex_rating_key") or "").strip()
     if not rating_key:
@@ -809,3 +820,133 @@ def play_source_for_channel(
         }
     )
     return base
+
+
+def _programme_display_title(program: Optional[Mapping[str, Any]]) -> str:
+    """Watch 'up next' copy: show + episode, never a flex pad's name."""
+    if not isinstance(program, Mapping) or program.get("is_flex"):
+        return ""
+    title = str(program.get("title") or "").strip()
+    episode = str(program.get("episode_title") or "").strip()
+    if episode and episode.casefold() != title.casefold():
+        return f"{title} — {episode}" if title else episode
+    return title
+
+
+def _mcp_slot(program: Optional[Mapping[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Now/next for MCP: flex vs programme, no Plex keys or host paths."""
+    if not isinstance(program, Mapping):
+        return None
+    is_flex = bool(program.get("is_flex")) or str(program.get("type") or "").strip().lower() == "flex"
+    if is_flex:
+        title = BETWEEN_PROGRAMS_TITLE
+    else:
+        title = _programme_display_title(program) or str(program.get("title") or "").strip() or "Untitled"
+    return {
+        "title": title,
+        "kind": "flex" if is_flex else "programme",
+        "is_flex": is_flex,
+        "starts_at": program.get("start") or program.get("started_at"),
+        "ends_at": program.get("ends_at") or program.get("stop"),
+    }
+
+
+def _immediate_now_next(
+    programs: Sequence[Mapping[str, Any]],
+    *,
+    now: float,
+) -> tuple[Optional[Mapping[str, Any]], Optional[Mapping[str, Any]]]:
+    """Clock now/next including flex — do not skip pads to the next title."""
+    ts = float(now)
+    ordered = sorted(
+        (row for row in programs if isinstance(row, Mapping) and row.get("start") is not None),
+        key=lambda row: float(row.get("start") or 0),
+    )
+    for index, program in enumerate(ordered):
+        try:
+            start = float(program.get("start"))
+            stop = float(program.get("stop") or 0)
+        except (TypeError, ValueError):
+            continue
+        if start <= ts < stop:
+            nxt = ordered[index + 1] if index + 1 < len(ordered) else None
+            return program, nxt
+    return None, ordered[0] if ordered else None
+
+
+def _mcp_channel_matches(channel: Mapping[str, Any], needle: str) -> bool:
+    text = str(needle or "").strip()
+    if not text:
+        return True
+    if str(channel.get("id") or "") == text:
+        return True
+    if str(channel.get("number") or "") == text:
+        return True
+    return str(channel.get("name") or "").strip().casefold() == text.casefold()
+
+
+def _mcp_pool_size(channel: Mapping[str, Any]) -> int:
+    seen: List[str] = []
+    items = channel.get("items") if isinstance(channel.get("items"), list) else []
+    for item in items:
+        if not isinstance(item, Mapping):
+            continue
+        if str(item.get("type") or "content").lower() != "content":
+            continue
+        key = str(item.get("plex_rating_key") or item.get("program_id") or "").strip()
+        if key and key not in seen:
+            seen.append(key)
+    return len(seen)
+
+
+def live_guide_for_mcp(
+    settings: Any,
+    *,
+    channel: Optional[str] = None,
+    now: Optional[float] = None,
+    hours: float = 6.0,
+) -> Dict[str, Any]:
+    """Read-only native guide. Missing ``live_lineup.json`` is ``lineup_missing``.
+
+    Does not import Tunarr leftovers, publish, shuffle, or attach a tuner.
+    """
+    path = schedule_path(settings)
+    if not path.is_file():
+        return {"error": "lineup_missing"}
+    doc = load_schedule(settings)
+    channels_doc = doc.get("channels") if isinstance(doc.get("channels"), Mapping) else {}
+
+    ts = time.time() if now is None else float(now)
+    window = max(60, int(float(hours or 6.0) * 3600))
+    needle = str(channel or "").strip()
+    ordered = sorted(
+        (ch for ch in channels_doc.values() if isinstance(ch, Mapping)),
+        key=lambda ch: (
+            ch.get("number") is None,
+            int(ch.get("number") or 0) if str(ch.get("number") or "").lstrip("-").isdigit() else 0,
+            str(ch.get("name") or "").lower(),
+        ),
+    )
+    rows: List[Dict[str, Any]] = []
+    for stored in ordered:
+        if needle and not _mcp_channel_matches(stored, needle):
+            continue
+        programs = guide_programs(stored, now=ts, window_seconds=window)
+        now_row, next_row = _immediate_now_next(programs, now=ts)
+        notice = str(stored.get("library_repeat_note") or "").strip()
+        pool_size = _mcp_pool_size(stored)
+        row: Dict[str, Any] = {
+            "id": str(stored.get("id") or ""),
+            "name": str(stored.get("name") or "Channel").strip() or "Channel",
+            "number": stored.get("number"),
+            "now": _mcp_slot(now_row),
+            "next": _mcp_slot(next_row),
+            "pool_size": pool_size,
+            "pool_notice": notice or None,
+        }
+        rows.append(row)
+    return {
+        "source": "projectionist",
+        "channels": rows,
+        "count": len(rows),
+    }

@@ -138,6 +138,7 @@ Without either key, `/mcp` returns **503**. Wrong key → **401**. Logs record `
 | `walk_relations` | Shallow BFS (depth ≤ 2) over the same graph |
 | `titles_by_person` | In-library filmography with a named credit explanation |
 | `find_similar_titles` | Explainable plot neighbors only (`explainable_only=True`) |
+| `live_guide` | Read-only native Live lineup (`live_lineup.json`): now/next, flex vs programme, one-title pool notice. Missing file → `{error: "lineup_missing"}`. No publish, no tuner |
 
 The in-app agent’s `research_title` service combines configured TMDB details
 with the keyless Wikipedia MediaWiki API and optional OMDb/TVDB sources. It
