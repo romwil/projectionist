@@ -322,26 +322,24 @@ def library_title_detail(
 
 @mcp.tool()
 def what_to_watch_tonight(
-    media_type: Optional[str] = "movie",
-    query: Optional[str] = None,
-    limit: int = 12,
+    media_type: Optional[str] = None,
+    runtime_max: Optional[int] = None,
+    limit: int = 8,
 ) -> str:
-    """Suggest owned titles worth watching now (unwatched / in-progress bias). Full MCP only."""
+    """For you watched_bridge picks for tonight, plus in-progress continue. Full MCP only."""
     denied = _require_full_mode()
     if denied:
         return denied
-    filters = filters_from_mapping(
-        _filter_mapping(
+    from projectionist.library.tonight import build_tonight_watch
+
+    return _emit(
+        build_tonight_watch(
+            _database(),
             media_type=media_type,
-            query=query or "watch tonight",
-            unwatched_only=False,
-            in_progress_only=False,
-            sort="title",
+            runtime_max=runtime_max,
             limit=limit,
         )
     )
-    result = query_library(_database(), filters)
-    return _emit(result)
 
 
 def _sample_owned_library_payload(
@@ -547,11 +545,24 @@ def list_watchlist_pins(limit: int = 50) -> str:
 
 @mcp.tool()
 def upcoming_premieres(limit: int = 20) -> str:
-    """Best-effort recently added library titles (proxy for newly available / premiere-like)."""
+    """Recently added library titles (last 30 days). Not theatrical or episode premieres."""
     filters = filters_from_mapping(
         _filter_mapping(recently_added_days=30, sort="added_at", limit=limit)
     )
-    return _emit(query_library(_database(), filters))
+    result = query_library(_database(), filters)
+    items = []
+    for raw in result.get("items") or []:
+        if not isinstance(raw, dict):
+            continue
+        item = dict(raw)
+        key = str(item.get("rating_key") or "").strip()
+        item["in_library"] = bool(key)
+        item["playable"] = bool(key)
+        items.append(item)
+    payload = dict(result)
+    payload["items"] = items
+    payload["note"] = "Recently added to the library — not theatrical premieres."
+    return _emit(payload)
 
 
 @mcp.tool()

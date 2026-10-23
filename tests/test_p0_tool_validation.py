@@ -627,53 +627,44 @@ class TestSuggestPurgeCandidates(unittest.IsolatedAsyncioTestCase):
 
 
 # ===========================================================================
-# what_to_watch_tonight — preference weighting, unwatched filter, runtime caps
+# what_to_watch_tonight — For you watched_bridge, not a view_count scorer
 # ===========================================================================
 
 
 class TestWhatToWatchTonight(unittest.IsolatedAsyncioTestCase):
-    """Test what_to_watch_tonight: scoring logic without mood (direct DB path)."""
+    """Tonight is For you (watched_bridge), not a view_count scorer."""
 
-    async def test_excludes_view_count_above_2(self):
-        """Items with view_count > 2 are excluded."""
+    async def test_unwatched_without_named_link_is_empty(self):
+        """Browse hits are not narrated as tonight picks."""
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
             seed_library(db, [
                 {"rating_key": "v0", "media_type": "movie", "title": "Never Watched", "year": 2020, "genres": ["Drama"], "view_count": 0},
                 {"rating_key": "v1", "media_type": "movie", "title": "Once", "year": 2020, "genres": ["Action"], "view_count": 1},
-                {"rating_key": "v2", "media_type": "movie", "title": "Twice", "year": 2020, "genres": ["Thriller"], "view_count": 2},
-                {"rating_key": "v3", "media_type": "movie", "title": "Three Times", "year": 2020, "genres": ["Comedy"], "view_count": 3},
-                {"rating_key": "v5", "media_type": "movie", "title": "Five Times", "year": 2020, "genres": ["Horror"], "view_count": 5},
             ])
             registry = make_tool_registry(db)
             result = await execute_tool(registry, "what_to_watch_tonight", {"limit": 10})
 
-            titles = {item["title"] for item in result["items"]}
-            self.assertIn("Never Watched", titles)
-            self.assertIn("Once", titles)
-            self.assertIn("Twice", titles)
-            self.assertNotIn("Three Times", titles)
-            self.assertNotIn("Five Times", titles)
+            self.assertEqual(result["mode"], "watched_bridge")
+            self.assertTrue(result["empty"])
+            self.assertEqual(result["items"], [])
+            self.assertIn("not a cosine guess", (result.get("note") or "").lower())
 
-    async def test_unwatched_items_ranked_higher(self):
-        """Items with lower view_count score higher (unwatched > watched once > twice)."""
+    async def test_empty_library(self):
+        """Empty library returns the honest empty payload."""
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
-            seed_library(db, [
-                {"rating_key": "v0", "media_type": "movie", "title": "Unwatched", "year": 2020, "genres": ["Drama"], "view_count": 0},
-                {"rating_key": "v1", "media_type": "movie", "title": "Watched Once", "year": 2020, "genres": ["Action"], "view_count": 1},
-                {"rating_key": "v2", "media_type": "movie", "title": "Watched Twice", "year": 2020, "genres": ["Thriller"], "view_count": 2},
-            ])
             registry = make_tool_registry(db)
-            result = await execute_tool(registry, "what_to_watch_tonight", {"limit": 10})
+            result = await execute_tool(registry, "what_to_watch_tonight", {"limit": 5})
 
-            titles = [item["title"] for item in result["items"]]
-            self.assertEqual(titles[0], "Unwatched")
+            self.assertTrue(result["empty"])
+            self.assertEqual(result["items"], [])
+            self.assertEqual(result["continue"], [])
 
-    async def test_media_type_filter(self):
-        """media_type filter restricts to only that type."""
+    async def test_media_type_filter_does_not_invent(self):
+        """media_type filters the bridge list; empty stays empty."""
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
@@ -684,96 +675,21 @@ class TestWhatToWatchTonight(unittest.IsolatedAsyncioTestCase):
             registry = make_tool_registry(db)
             result = await execute_tool(registry, "what_to_watch_tonight", {"media_type": "movie", "limit": 10})
 
-            titles = {item["title"] for item in result["items"]}
-            self.assertIn("Movie A", titles)
-            self.assertNotIn("Show A", titles)
-
-    async def test_last_viewed_at_penalty(self):
-        """Items with last_viewed_at get a -2 penalty compared to those without."""
-        import tempfile
-        now = int(time.time())
-        with tempfile.TemporaryDirectory() as tmp:
-            db = Database(Path(tmp) / "test.db")
-            seed_library(db, [
-                {"rating_key": "no_lv", "media_type": "movie", "title": "No Last Viewed", "year": 2020, "genres": ["Drama"], "view_count": 1, "last_viewed_at": None},
-                {"rating_key": "has_lv", "media_type": "movie", "title": "Has Last Viewed", "year": 2020, "genres": ["Drama"], "view_count": 1, "last_viewed_at": now - 100},
-            ])
-            registry = make_tool_registry(db)
-            result = await execute_tool(registry, "what_to_watch_tonight", {"limit": 10})
-
-            titles = [item["title"] for item in result["items"]]
-            self.assertEqual(titles[0], "No Last Viewed")
-
-    async def test_limit_parameter(self):
-        """limit parameter caps results."""
-        import tempfile
-        with tempfile.TemporaryDirectory() as tmp:
-            db = Database(Path(tmp) / "test.db")
-            seed_library(db, [
-                {"rating_key": f"m{i}", "media_type": "movie", "title": f"Film {i}", "year": 2020, "genres": ["Drama"], "view_count": 0}
-                for i in range(20)
-            ])
-            registry = make_tool_registry(db)
-            result = await execute_tool(registry, "what_to_watch_tonight", {"limit": 5})
-
-            self.assertEqual(result["returned"], 5)
-
-    async def test_empty_library(self):
-        """Empty library returns zero items."""
-        import tempfile
-        with tempfile.TemporaryDirectory() as tmp:
-            db = Database(Path(tmp) / "test.db")
-            registry = make_tool_registry(db)
-            result = await execute_tool(registry, "what_to_watch_tonight", {"limit": 5})
-
-            self.assertEqual(result["total_matched"], 0)
             self.assertEqual(result["items"], [])
-
-    async def test_all_items_over_threshold(self):
-        """Library where all items have view_count > 2 returns empty."""
-        import tempfile
-        with tempfile.TemporaryDirectory() as tmp:
-            db = Database(Path(tmp) / "test.db")
-            seed_library(db, [
-                {"rating_key": "m1", "media_type": "movie", "title": "Watched A", "year": 2020, "genres": ["Drama"], "view_count": 5},
-                {"rating_key": "m2", "media_type": "movie", "title": "Watched B", "year": 2020, "genres": ["Action"], "view_count": 10},
-            ])
-            registry = make_tool_registry(db)
-            result = await execute_tool(registry, "what_to_watch_tonight", {"limit": 10})
-
-            self.assertEqual(result["total_matched"], 0)
-            self.assertEqual(result["items"], [])
+            self.assertTrue(result["empty"])
 
     @patch("projectionist.agent.tools.search_library")
-    async def test_mood_path_calls_search_library(self, mock_search):
-        """When mood is provided, search_library is used instead of direct DB query."""
-        from projectionist.models.schemas import TitleCard
-
-        mock_card = TitleCard(
-            media_type="movie",
-            title="Mood Match",
-            year=2020,
-            tmdb_id=123,
-            rating_key="mood1",
-            poster_url="",
-            backdrop_url="",
-            overview="",
-            genres=["Drama"],
-            in_library=True,
-        )
-        mock_search.return_value = [mock_card]
-
+    async def test_mood_does_not_call_search_library(self, mock_search):
+        """Mood is not a parallel tonight ranker."""
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
             registry = make_tool_registry(db)
             result = await execute_tool(registry, "what_to_watch_tonight", {"mood": "dark thriller", "limit": 5})
 
-            mock_search.assert_called_once()
-            call_args = mock_search.call_args
-            self.assertEqual(call_args[0][2], "dark thriller")
-            self.assertEqual(result["total_matched"], 1)
-            self.assertEqual(result["items"][0]["title"], "Mood Match")
+            mock_search.assert_not_called()
+            self.assertTrue(result["empty"])
+            self.assertEqual(result["items"], [])
 
 
 # ===========================================================================

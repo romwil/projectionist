@@ -177,9 +177,12 @@ class YouthAgentToolCardTests(unittest.IsolatedAsyncioTestCase):
     async def test_what_to_watch_tonight_hides_over_ceiling_for_youth(self) -> None:
         youth = self._registry(is_youth=True)
         payload = json.loads(await youth.execute("what_to_watch_tonight", {}))
-        titles = {item["title"] for item in payload["items"]}
-        self.assertEqual(titles, {"Robot Friends"})
-        self.assertEqual({card.title for card in youth.cards}, {"Robot Friends"})
+        titles = {item["title"] for item in payload.get("items") or []}
+        self.assertNotIn("Grim Harvest", titles)
+        self.assertNotIn("Unlabeled Reel", titles)
+        self.assertNotIn("Grim Harvest", {card.title for card in youth.cards})
+        self.assertTrue(payload.get("empty"))
+        self.assertIn("not a cosine guess", str(payload.get("note") or "").lower())
 
     async def test_tonight_picks_and_roulette_stay_under_ceiling(self) -> None:
         youth = self._registry(is_youth=True)
