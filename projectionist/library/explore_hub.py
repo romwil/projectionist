@@ -279,6 +279,7 @@ def _fast_rail_builders(
     capped: int,
     user_id: Optional[str],
     multi_user_enabled: bool = False,
+    youth_max_rating: Optional[str] = None,
 ) -> tuple[tuple[str, Callable[[], Any]], ...]:
     return (
         (
@@ -288,6 +289,7 @@ def _fast_rail_builders(
                 limit=capped,
                 user_id=user_id,
                 multi_user_enabled=multi_user_enabled,
+                youth_max_rating=youth_max_rating,
             ),
         ),
         ("unfinished", lambda: feed_unfinished(db, limit=capped, idle_days=60)),
@@ -306,11 +308,16 @@ def _fill_fast_rails(
     capped: int,
     user_id: Optional[str],
     multi_user_enabled: bool = False,
+    youth_max_rating: Optional[str] = None,
 ) -> None:
     """Local SQL shelves only. No Plex, no full-library scan, no overview rebuild."""
     rails = payload["rails"]
     for key, builder in _fast_rail_builders(
-        db, capped=capped, user_id=user_id, multi_user_enabled=multi_user_enabled
+        db,
+        capped=capped,
+        user_id=user_id,
+        multi_user_enabled=multi_user_enabled,
+        youth_max_rating=youth_max_rating,
     ):
         rails[key] = _coerce_rail(rails[key], builder, key=key)
     payload["overview"] = _read_cached_overview(db)
@@ -339,6 +346,7 @@ def _fast_partial(
     user_id: Optional[str],
     rail_limit: int,
     multi_user_enabled: bool = False,
+    youth_max_rating: Optional[str] = None,
 ) -> Dict[str, Any]:
     """First paint: local shelves, slow rails still pending."""
     capped = _cap_rail_limit(rail_limit)
@@ -349,6 +357,7 @@ def _fast_partial(
         capped=capped,
         user_id=user_id,
         multi_user_enabled=multi_user_enabled,
+        youth_max_rating=youth_max_rating,
     )
     payload["warming"] = True
     return payload
@@ -372,6 +381,11 @@ def build_explore_hub(
     capped = _cap_rail_limit(rail_limit)
     plex = _plex_client(settings)
     multi_user = bool(getattr(getattr(settings, "features", None), "multi_user_enabled", False))
+    youth_max_rating = None
+    if is_youth:
+        from projectionist.youth.rating_gate import resolve_youth_max_rating
+
+        youth_max_rating = resolve_youth_max_rating(settings)
     payload = _warming_payload(rail_limit=capped, is_youth=is_youth)
     rails = payload["rails"]
 
@@ -382,6 +396,7 @@ def build_explore_hub(
         capped=capped,
         user_id=user_id,
         multi_user_enabled=multi_user,
+        youth_max_rating=youth_max_rating,
     )
     _emit_partial(payload, on_partial)
 
@@ -588,6 +603,11 @@ def get_explore_hub(
 
     # Cold miss — local shelves go out on this response. Plex, spotlights, and
     # the seasonal scan fill the same cache entry in the background.
+    youth_max_rating = None
+    if is_youth:
+        from projectionist.youth.rating_gate import resolve_youth_max_rating
+
+        youth_max_rating = resolve_youth_max_rating(settings)
     partial = _fast_partial(
         db,
         is_youth=is_youth,
@@ -596,6 +616,7 @@ def get_explore_hub(
         multi_user_enabled=bool(
             getattr(getattr(settings, "features", None), "multi_user_enabled", False)
         ),
+        youth_max_rating=youth_max_rating,
     )
     _cache_set(cache_key, partial, soft_ttl=0.0)
     _schedule_refresh(
