@@ -167,6 +167,7 @@ class McpFullModeToolTests(unittest.TestCase):
         db = MagicMock()
         db.save_pending_action = MagicMock()
         db.is_acquisition_excluded.return_value = False
+        db.library_item_by_tmdb.return_value = None
 
         with (
             patch.object(mcp_server, "_database", return_value=db),
