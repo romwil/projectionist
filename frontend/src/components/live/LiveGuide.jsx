@@ -158,11 +158,17 @@ export default function LiveGuide({
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") event.stopPropagation();
               }}
-              aria-label={`Tune ${channel.number != null ? `${channel.number} ` : ""}${channel.name}`}
+              aria-label={`Tune ${channel.number != null ? `${channel.number} ` : ""}${channel.name}${channel.poolNotice ? `. ${channel.poolNotice}` : ""}`}
+              title={channel.poolNotice || undefined}
               data-testid="live-guide-station"
             >
               <span className="live-guide-station-num">{channel.number ?? "—"}</span>
               <span className="live-guide-station-name">{channel.name}</span>
+              {channel.poolNotice ? (
+                <span className="live-guide-station-notice" data-testid="live-guide-pool-notice">
+                  {channel.poolNotice}
+                </span>
+              ) : null}
             </button>
           ))}
         </div>

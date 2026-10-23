@@ -448,7 +448,8 @@ class ScheduleCycleTests(unittest.TestCase):
             ensure_schedule(settings, data_dir=data_dir)
             channel = load_schedule(data_dir=data_dir)["channels"]["solo"]
             self.assertEqual(_content_keys(channel), ["only-ep"])
-            self.assertIn("only one playable item", channel["library_repeat_note"])
+            self.assertIn("one playable title", channel["library_repeat_note"])
+            self.assertIn("will repeat", channel["library_repeat_note"])
             now = _START_MS / 1000.0
             programs = guide_programs(channel, now=now, window_seconds=4 * 3600)
             content_keys = [
@@ -461,6 +462,201 @@ class ScheduleCycleTests(unittest.TestCase):
             ensure_schedule(settings, data_dir=data_dir)
             again = load_schedule(data_dir=data_dir)["channels"]["solo"]
             self.assertEqual(again["items"], channel["items"])
+
+    def test_collection_of_twelve_does_not_air_heat_adjacent_after_rebuild(self) -> None:
+        with self._dir() as raw:
+            data_dir = Path(raw)
+            _init_db(data_dir / "projectionist.db")
+            conn = sqlite3.connect(data_dir / "projectionist.db")
+            titles = [
+                ("heat", "Heat"),
+                ("ronin", "Ronin"),
+                ("heat2", "Heat 2"),
+                ("thief", "Thief"),
+                ("drive", "Drive"),
+                ("le", "Le Samouraï"),
+                ("miami", "Miami Vice"),
+                ("collar", "The French Connection"),
+                ("bullitt", "Bullitt"),
+                ("getaway", "The Getaway"),
+                ("to_live", "To Live and Die in L.A."),
+                ("collateral", "Collateral"),
+            ]
+            for index, (key, title) in enumerate(titles, start=1):
+                conn.execute(
+                    """
+                    INSERT INTO library_items
+                        (id, rating_key, media_type, title, year, runtime_minutes, collection_name)
+                    VALUES (?, ?, 'movie', ?, 1995, 20, 'Night Crime')
+                    """,
+                    (index, key, title),
+                )
+            conn.commit()
+            conn.close()
+            save_schedule(
+                {
+                    "version": 1,
+                    "channels": {
+                        "crime": _channel("crime", "Night Crime", 101, "heat", media_type="movie")
+                    },
+                },
+                data_dir=data_dir,
+            )
+            ensure_schedule(
+                _settings(
+                    data_dir,
+                    {
+                        "crime": {
+                            "source": "collection",
+                            "programming_mode": "sequential",
+                            "media_scope": "movies",
+                            "collection_title": "Night Crime",
+                        }
+                    },
+                ),
+                data_dir=data_dir,
+            )
+            channel = load_schedule(data_dir=data_dir)["channels"]["crime"]
+            keys = _content_keys(channel)
+            self.assertEqual(len(keys), 12)
+            self.assertEqual(len(set(keys)), 12)
+            for left, right in zip(keys, keys[1:]):
+                self.assertNotEqual(left, right)
+            self.assertNotEqual(keys[0], keys[-1])
+            self.assertNotIn("library_repeat_note", channel)
+
+    def test_adjacent_same_key_rebuilds_unless_nonstop_show(self) -> None:
+        with self._dir() as raw:
+            data_dir = Path(raw)
+            _init_db(data_dir / "projectionist.db")
+            conn = sqlite3.connect(data_dir / "projectionist.db")
+            for index, (key, title) in enumerate(
+                [("heat", "Heat"), ("ronin", "Ronin"), ("thief", "Thief")],
+                start=1,
+            ):
+                conn.execute(
+                    """
+                    INSERT INTO library_items
+                        (id, rating_key, media_type, title, year, runtime_minutes, collection_name)
+                    VALUES (?, ?, 'movie', ?, 1995, 20, 'Night Crime')
+                    """,
+                    (index, key, title),
+                )
+            conn.commit()
+            conn.close()
+            stuck = _channel("crime", "Night Crime", 101, "heat", media_type="movie")
+            stuck["items"] = [
+                {
+                    "type": "content",
+                    "duration_ms": _TWENTY_MIN_MS,
+                    "program_id": "heat-1",
+                    "title": "Heat",
+                    "show_title": "",
+                    "media_type": "movie",
+                    "plex_rating_key": "heat",
+                },
+                {
+                    "type": "content",
+                    "duration_ms": _TWENTY_MIN_MS,
+                    "program_id": "heat-2",
+                    "title": "Heat",
+                    "show_title": "",
+                    "media_type": "movie",
+                    "plex_rating_key": "heat",
+                },
+                {
+                    "type": "content",
+                    "duration_ms": _TWENTY_MIN_MS,
+                    "program_id": "ronin",
+                    "title": "Ronin",
+                    "show_title": "",
+                    "media_type": "movie",
+                    "plex_rating_key": "ronin",
+                },
+            ]
+            save_schedule({"version": 1, "channels": {"crime": stuck}}, data_dir=data_dir)
+            ensure_schedule(
+                _settings(
+                    data_dir,
+                    {
+                        "crime": {
+                            "source": "collection",
+                            "programming_mode": "sequential",
+                            "media_scope": "movies",
+                            "collection_title": "Night Crime",
+                        }
+                    },
+                ),
+                data_dir=data_dir,
+            )
+            keys = _content_keys(load_schedule(data_dir=data_dir)["channels"]["crime"])
+            self.assertEqual(keys, ["heat", "ronin", "thief"])
+            for left, right in zip(keys, keys[1:]):
+                self.assertNotEqual(left, right)
+
+        with self._dir() as raw:
+            data_dir = Path(raw)
+            _init_db(data_dir / "projectionist.db")
+            self._show_with_episodes(
+                data_dir,
+                show_id=1,
+                show_key="show-g",
+                title="Gilligan's Island",
+                episodes=[
+                    ("g1", 1, 1, "One"),
+                    ("g2", 1, 2, "Two"),
+                ],
+            )
+            channel = _channel("g", "Gilligan's Island", 105, "g1", media_type="episode")
+            channel["items"] = [
+                {
+                    "type": "content",
+                    "duration_ms": _TWENTY_MIN_MS,
+                    "program_id": "g1-a",
+                    "title": "One",
+                    "show_title": "Gilligan's Island",
+                    "media_type": "episode",
+                    "plex_rating_key": "g1",
+                },
+                {
+                    "type": "content",
+                    "duration_ms": _TWENTY_MIN_MS,
+                    "program_id": "g1-b",
+                    "title": "One",
+                    "show_title": "Gilligan's Island",
+                    "media_type": "episode",
+                    "plex_rating_key": "g1",
+                },
+                {
+                    "type": "content",
+                    "duration_ms": _TWENTY_MIN_MS,
+                    "program_id": "g2",
+                    "title": "Two",
+                    "show_title": "Gilligan's Island",
+                    "media_type": "episode",
+                    "plex_rating_key": "g2",
+                },
+            ]
+            original = _content_keys(channel)
+            save_schedule({"version": 1, "channels": {"g": channel}}, data_dir=data_dir)
+            ensure_schedule(
+                _settings(
+                    data_dir,
+                    {
+                        "g": {
+                            "source": "show",
+                            "programming_mode": "sequential",
+                            "media_scope": "tv",
+                            "item_hints": ["Gilligan's Island"],
+                            "item_rating_keys": ["show-g"],
+                        }
+                    },
+                ),
+                data_dir=data_dir,
+            )
+            saved = _content_keys(load_schedule(data_dir=data_dir)["channels"]["g"])
+            self.assertEqual(saved, original)
+            self.assertEqual(saved[0], saved[1])
 
     def test_multi_title_cycle_is_left_alone(self) -> None:
         with self._dir() as raw:

@@ -20,6 +20,8 @@ import {
   liveGuideHref,
   liveProgramKey,
   flexPlaybackPlan,
+  flexSlateCopy,
+  BETWEEN_PROGRAMS_TITLE,
   liveStreamUrl,
   liveWatchHref,
   mergeLiveCcTracks,
@@ -333,7 +335,13 @@ describe("liveChannels helpers", () => {
 
     const black = flexPlaybackPlan({ is_flex: true, ends_at: nowMs / 1000 + 20, stream_url: "" }, nowMs);
     assert.equal(black.play, false);
+    assert.equal(black.slate, true);
+    assert.match(black.slateCopy, /Between programs/);
     assert.equal(black.holdMs, 20_000);
+    assert.equal(
+      flexSlateCopy({ nextTitle: "Heat" }),
+      "Between programs — up next: Heat",
+    );
   });
 
   it("OSD keeps flex honest and surfaces next episode as Up next", () => {
@@ -359,7 +367,7 @@ describe("liveChannels helpers", () => {
       2000 * 1000,
     );
     assert.equal(osd.isFlex, true);
-    assert.equal(osd.title, "Gilligan's Island · Up next");
+    assert.equal(osd.title, BETWEEN_PROGRAMS_TITLE);
     assert.equal(osd.episode, "Up next: Gilligan's Island — The Big Gold Strike");
     assert.equal(osd.rating, "");
     assert.equal(osd.nextTitle, "Gilligan's Island");
@@ -765,6 +773,44 @@ describe("liveChannels helpers", () => {
       assert.equal(parseFloat(style.left), 0);
       assert.ok(parseFloat(style.width) > 0);
       assert.ok(Math.abs(parseFloat(style.width) - scale.width) < 1e-6);
+    });
+
+    it("labels flex cells Between programs and keeps a one-title pool notice", () => {
+      const model = normalizeGuide({
+        enabled: true,
+        ready: true,
+        generated_at: 1_700_000_000,
+        window_seconds: 7200,
+        channels: [
+          {
+            id: "c1",
+            name: "Night Crime",
+            number: 101,
+            pool_notice: "This station has one playable title in the library — it will repeat.",
+            programs: [
+              {
+                title: "Night Crime · Up next",
+                is_flex: true,
+                start: 1_700_000_000,
+                stop: 1_700_000_720,
+              },
+              {
+                title: "Heat",
+                is_flex: false,
+                start: 1_700_000_720,
+                stop: 1_700_007_920,
+              },
+            ],
+          },
+        ],
+      });
+      assert.equal(model.channels[0].poolNotice, "This station has one playable title in the library — it will repeat.");
+      assert.equal(model.channels[0].programs[0].title, BETWEEN_PROGRAMS_TITLE);
+      assert.equal(model.channels[0].programs[0].isFlex, true);
+      assert.equal(model.channels[0].programs[1].title, "Heat");
+      const osd = buildOsdModel(model.channels[0], 1_700_000_100_000);
+      assert.equal(osd.title, BETWEEN_PROGRAMS_TITLE);
+      assert.equal(osd.poolNotice, model.channels[0].poolNotice);
     });
 
     it("rejects hostile input without NaN geometry", () => {

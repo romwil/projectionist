@@ -148,6 +148,7 @@ describe("normalizeOwnerNowPlaying", () => {
 describe("isPlaceholderNowTitle", () => {
   it("detects Tunarr Up next and flex labels", () => {
     assert.equal(isPlaceholderNowTitle("Mystery · Up next"), true);
+    assert.equal(isPlaceholderNowTitle("Between programs"), true);
     assert.equal(isPlaceholderNowTitle("flex"), true);
     assert.equal(isPlaceholderNowTitle("Heat"), false);
   });
