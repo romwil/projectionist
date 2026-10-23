@@ -72,7 +72,12 @@ def _is_guide_flex_placeholder(title: str) -> bool:
     text = str(title or "").strip()
     if not text:
         return False
-    return text.endswith(_GUIDE_FLEX_SUFFIX) or text.lower() in {"flex", "filler", "continuity"}
+    return text.endswith(_GUIDE_FLEX_SUFFIX) or text.lower() in {
+        "flex",
+        "filler",
+        "continuity",
+        "between programs",
+    }
 
 
 def _program_title(program: Mapping[str, Any]) -> str:
