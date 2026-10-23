@@ -177,7 +177,7 @@ Current extraction:
 
 **Themes (no LLM):** idle `keyword_theme_tagging` maps frequent TMDB keywords onto a small controlled vocabulary and writes `facet_type='theme'`.
 
-Knowledge coverage stats (`GET /api/library/stats` → `knowledge_coverage`, or `/api/library/knowledge-coverage`) expose % with overview / motifs / keywords / raw neighbors / **explainable neighbors** / loglines so sparsity stays visible to Admin/Explore.
+Knowledge coverage stats (`GET /api/library/stats` → `knowledge_coverage`, or `/api/library/knowledge-coverage`) expose % with overview / motifs / keywords / raw neighbors / **explainable neighbors** / **opened-title explainable neighbors** (`with_explainable_neighbors_opened_pct` over `kinship_miss` keys) / loglines so sparsity stays visible to Admin/Explore. Owner `GET /api/library/kinship-miss` lists those demand keys (title, why queued, hit_count, last miss) without auto-repair.
 
 Product explanation: [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) · [MEDIA_INTELLIGENCE.md](MEDIA_INTELLIGENCE.md). Durable `scheduled_task_runs` history + auto-tune: [ARCHITECTURE.md](ARCHITECTURE.md#why-last-run-only-failed-and-what-replaced-it).
 

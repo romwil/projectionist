@@ -48,6 +48,19 @@ test("formatCoverageDetail formats averages and counts", () => {
   assert.equal(formatCoverageDetail(null), null);
 });
 
+test("buildKnowledgeCoverageRows leads with opened Named kinship when miss keys exist", () => {
+  const rows = buildKnowledgeCoverageRows({
+    ...SAMPLE,
+    with_explainable_neighbors_opened_pct: 41.2,
+    opened_title_count: 8,
+    opened_with_explainable_count: 3,
+  });
+  assert.equal(rows[0].id, "openedExplainableNeighbors");
+  assert.equal(rows[0].label, "Named kinship (opened)");
+  assert.equal(rows[0].pctLabel, "41%");
+  assert.equal(rows[0].detail, "8 opened titles");
+});
+
 test("buildKnowledgeCoverageRows omits empty themes and missing synopsis", () => {
   const rows = buildKnowledgeCoverageRows(SAMPLE);
   const ids = rows.map((r) => r.id);

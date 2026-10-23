@@ -1525,6 +1525,26 @@ def library_knowledge_coverage(user=Depends(get_current_user_dep)) -> Dict[str, 
     return _sanitize_library_payload(get_cached_knowledge_coverage(_db()), user)
 
 
+@app.get("/api/library/kinship-miss")
+def library_kinship_miss(
+    limit: int = 50,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Titles someone opened to an empty More Like This / Related / bridge shelf.
+
+    Read-only demand list. Does not auto-repair or promote into staged
+    augmentations.
+    """
+    from projectionist.telemetry.kinship_miss import list_kinship_miss
+
+    capped = max(1, min(int(limit or 50), 200))
+    return _sanitize_library_payload(
+        list_kinship_miss(_db(), limit=capped),
+        user,
+        attach_watch=False,
+    )
+
+
 @app.get("/api/library/health")
 def library_health(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
     return _sanitize_library_payload(get_cached_library_health(_db()), user)

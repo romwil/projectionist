@@ -27,6 +27,8 @@ from projectionist.telemetry.explore import (
 from projectionist.telemetry.kinship_miss import (
     EVENT_KINSHIP_MISS,
     KINSHIP_MISS_QUEUE_CAP,
+    list_kinship_miss,
+    opened_explainable_coverage,
     preferred_item_ids as preferred_kinship_miss_item_ids,
     schedule_kinship_miss,
 )
@@ -66,6 +68,8 @@ __all__ = [
     "schedule_explore_miss",
     "schedule_bad_neighbor_match",
     "schedule_kinship_miss",
+    "list_kinship_miss",
+    "opened_explainable_coverage",
     "preferred_kinship_miss_item_ids",
     "scrub_closed_loop_payload",
     "upsert_closed_loop_event",

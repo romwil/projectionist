@@ -69,7 +69,7 @@ Runtime watch surfaces: **library Play** (`/watch`) and **native Live** (`/live`
 1. **Warm explainable kinship** — idle still annotates cosine-only neighbors; Named kinship % is the owner KPI (Automat 1.37.58 snapshot ~72.9% — higher on opened titles, not a fake 100%).
 2. **Couch-check Play + Live** — one caption layer + offset; Live flex filler shows a picture. Buffering OSD + hold-to-2x on library Play.
 3. **For you as Explore default** — first rail; empty means no named link to something you finished; never cosine filler; one For you, not a leftover weekly persona rail.
-4. **Owner Monday pass** — ~20 minutes: Named kinship → open issues → purge pressure → Scheduled Tasks catch-up.
+4. **Owner Monday pass** — ~20 minutes: Named kinship on opened titles → open issues → purge pressure → Scheduled Tasks catch-up.
 5. **Hash-embedding honesty** — `hash-fallback` labeled on Admin knowledge and the Explore coverage strip.
 6. **Continue Watching nightly path** — Explore/CW → Play → shrink/resume. Lobby `:8791` and MCP are optional owner tools.
 7. **Episode bridges** — finishing a TV episode seeds For you from **that episode’s plot**, not a random movie. No episode KG.
