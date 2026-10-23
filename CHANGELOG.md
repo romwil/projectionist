@@ -2,9 +2,22 @@
 
 ## [Unreleased]
 
+## [1.37.60] — 2026-10-23
+
+One patch on 1.37.59: For you names a real plot link or stays empty, and hold-to-2x no longer selects the page on iPad Safari.
+
+### Highlights
+- **For you names a real link, or stays quiet.** The reason cites a plot subject, crew, or collection you would recognize — not Wikipedia glue like “an ordinary people.” Empty is better than a broken sentence.
+- **Hold-to-2x no longer highlights the page on iPad.** Press-and-hold still doubles speed; the picture and 2x chip do not pick up the system text selection.
+
 ### Fixed
 - **Explore For you names a real link, or stays quiet.** Reasons cite a plot subject, crew, or collection someone would recognize — not Wikipedia glue like “an ordinary people,” “a drama television,” or “a which premiered.” Empty is better than junk grammar.
 - **Play hold-to-2x no longer selects the page on iPad Safari.** Press-and-hold still doubles speed; the 2x chip and theater stage do not pick up the system text highlight. Scrubber and inputs keep working.
+
+### Verification
+- Backend `pytest tests/test_surprising_plot_kinship.py tests/test_household_bridges.py tests/test_summary_motifs.py` — junk For you copy refused; named links such as amateur bakers still pass.
+- Frontend unit: theater hold-to-2x does not select the page on iPad Safari; scrubber and inputs keep working.
+- CI green on PR #149 (`7f0be73`) and PR #148 (`907fd2a`).
 
 ## [1.37.59] — 2026-10-20
 
