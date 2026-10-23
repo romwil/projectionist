@@ -12,6 +12,8 @@ Related: [HELP.md](HELP.md) · [MEDIA_INTELLIGENCE.md](MEDIA_INTELLIGENCE.md) ·
 
 Runtime watch surfaces: **library Play** (`/watch`) and **native Live** (`/live` + `DATA_DIR/live_lineup.json`). Tunarr is not the Live engine (removed from the running path in **1.37.51+**). Plex Live TV / OTA is the owner’s Plex setup — Projectionist does not manage that tuner stack.
 
+**Version truth:** Automat LAN `http://10.10.1.202:8788` is prod version / health / admin UI. `https://projectionist.automat.vip` is member-facing CDN/proxy — **not** version truth. Interactive UI QA is `:8792` only. Never stop smartmap `:8790` or prod `:8788` for QA. Do not resurrect Tunarr orchestration, HDHomeRun attach, or Phase 6 gift-queue tables. See [AUTOMAT.md](ops/AUTOMAT.md).
+
 ---
 
 ## Surface map
