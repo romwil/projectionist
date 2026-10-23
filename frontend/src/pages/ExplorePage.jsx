@@ -37,6 +37,7 @@ import {
   parseMediaBrowse,
   queryFiltersFromBrowse,
 } from "../lib/mediaBrowse.js";
+import { posterWhyLine } from "../lib/recommendationReason.js";
 
 function ExplorePosterCard({ item, meta, onSeed, seedLabel = "Surprise from this", onRecommend, showRecommend }) {
   return (
@@ -522,7 +523,7 @@ function ExploreHubPage() {
             testId="explore-for-you-rail"
             items={forYou.items}
             loading={forYou.loading}
-            cardMeta={(item) => item.why || item.recommendation_reason || null}
+            cardMeta={(item) => posterWhyLine(item) || null}
             chatHref={
               forYou.items.length
                 ? chatFromRailHref({
@@ -603,6 +604,7 @@ function ExploreHubPage() {
               testId="explore-pick-for-me-rail"
               items={pickForMe.items}
               loading={pickForMe.loading}
+              cardMeta={(item) => posterWhyLine(item) || null}
               chatHref={
                 pickForMe.items.length
                   ? chatFromRailHref({

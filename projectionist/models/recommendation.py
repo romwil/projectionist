@@ -13,6 +13,12 @@ PIPELINE_RECOMMENDATION_REASONS = frozenset(
         "double feature — second half",
         "double feature - first half",
         "double feature - second half",
+        # Pipeline / cosine labels that are not a named XC-01 link.
+        "unwatched pick for you",
+        "good pick for tonight",
+        "in your library",
+        "strong plot kinship",
+        "related title",
     }
 )
 

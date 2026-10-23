@@ -7,7 +7,12 @@ keyword, or credit overlap is not itself a reason to recommend a title.
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, Mapping, Optional, Sequence, Set
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Set
+
+# Honest empty for More Like This / relations / privacy MCP graph wraps.
+KINSHIP_CACHE_NOT_READY_NOTE = (
+    "Named kinship cache not ready — not that nothing is related."
+)
 
 # Cosine below "solid plot kinship" is too weak to explain as a story link.
 MIN_SURPRISE_COSINE = 0.55
@@ -360,6 +365,42 @@ def _sentence(terms: Sequence[str]) -> str:
     if len(rendered) == 1:
         return f"Both stories turn on {rendered[0]}."
     return f"Both stories turn on {rendered[0]} and {rendered[1]}."
+
+
+def peers_with_named_explanation(items: Sequence[Any]) -> List[Dict[str, Any]]:
+    """Keep peers that carry an XC-01 ``explanation.sentence``; drop cosine-only rows."""
+    kept: List[Dict[str, Any]] = []
+    for item in items or []:
+        if not isinstance(item, Mapping):
+            continue
+        explanation = item.get("explanation")
+        if not isinstance(explanation, dict):
+            why = item.get("why")
+            if isinstance(why, dict):
+                explanation = why.get("explanation")
+        if not isinstance(explanation, dict):
+            continue
+        sentence = str(explanation.get("sentence") or "").strip()
+        if not sentence:
+            continue
+        row = dict(item)
+        row["explanation"] = dict(explanation)
+        kept.append(row)
+    return kept
+
+
+def kinship_empty_payload(payload: Mapping[str, Any]) -> Dict[str, Any]:
+    """Stamp the cache-not-ready note when a graph tool has no named peers."""
+    items = list(payload.get("items") or [])
+    out = dict(payload)
+    out["items"] = items
+    out["returned"] = len(items)
+    if items:
+        out["empty"] = False
+        return out
+    out["empty"] = True
+    out["note"] = KINSHIP_CACHE_NOT_READY_NOTE
+    return out
 
 
 def build_explanation(
