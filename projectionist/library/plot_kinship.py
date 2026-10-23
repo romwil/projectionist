@@ -156,6 +156,92 @@ _GENERIC_UNIGRAMS = frozenset(
         "known",
     }
 )
+# Relative pronouns and wiki glue. "which premiered" is syntax, not a subject.
+_FUNCTION_UNIGRAMS = frozenset(
+    {
+        "which",
+        "whom",
+        "whose",
+        "how",
+        "why",
+        "whether",
+        "although",
+        "though",
+        "however",
+        "therefore",
+        "thus",
+        "hence",
+        "because",
+        "while",
+        "where",
+        "when",
+        "there",
+        "here",
+    }
+)
+# Format / credit boilerplate from TMDB and Wikipedia long synopses.
+_FORMAT_UNIGRAMS = frozenset(
+    {
+        "television",
+        "tv",
+        "cinema",
+        "premiere",
+        "premiered",
+        "premieres",
+        "broadcast",
+        "streaming",
+        "drama",
+        "comedy",
+        "thriller",
+        "horror",
+        "sitcom",
+        "miniseries",
+        "anthology",
+        "starring",
+        "created",
+        "developed",
+        "produced",
+        "aired",
+        "released",
+    }
+)
+# A shared phrase with one of these in either slot is too vague to name.
+_VAGUE_SUBJECTS = frozenset(
+    {
+        "people",
+        "person",
+        "persons",
+        "ordinary",
+        "various",
+        "certain",
+        "several",
+        "things",
+        "thing",
+        "someone",
+        "something",
+        "anyone",
+        "anything",
+        "everyone",
+        "everything",
+        "climate",
+        "climates",
+        "weather",
+    }
+)
+_IRREGULAR_PLURALS = frozenset(
+    {
+        "people",
+        "children",
+        "men",
+        "women",
+        "feet",
+        "teeth",
+        "mice",
+        "geese",
+        "police",
+        "series",
+    }
+)
 
 
 def plot_blob(row: Optional[Mapping[str, Any]]) -> str:
@@ -200,15 +286,30 @@ def _blocklist(shelf_labels: Set[str]) -> Set[str]:
     return blocked
 
 
+def _honest_subject(left: str, right: str) -> bool:
+    """True when the bigram can be named as a plot subject without junk grammar."""
+    if not left or not right or " " in right:
+        return False
+    if left in _NOISE_TOKENS or right in _NOISE_TOKENS:
+        return False
+    if left in _FUNCTION_UNIGRAMS or right in _FUNCTION_UNIGRAMS:
+        return False
+    if left in _FORMAT_UNIGRAMS or right in _FORMAT_UNIGRAMS:
+        return False
+    if left in _VAGUE_SUBJECTS or right in _VAGUE_SUBJECTS:
+        return False
+    if left in _GENERIC_UNIGRAMS and right in _GENERIC_UNIGRAMS:
+        return False
+    return True
+
+
 def _story_bigrams(tokens: Set[str], blocked: Set[str]) -> list[str]:
     found: list[str] = []
     for token in tokens:
         if " " not in token:
             continue
         left, right = token.split(" ", 1)
-        if left in _NOISE_TOKENS or right in _NOISE_TOKENS:
-            continue
-        if left in _GENERIC_UNIGRAMS and right in _GENERIC_UNIGRAMS:
+        if not _honest_subject(left, right):
             continue
         # A shelf word inside a longer phrase ("museum" in "museum exhibits")
         # does not erase the subject. Drop the phrase only when it is itself
@@ -226,12 +327,13 @@ def distinctive_plot_phrases(text: str, *, limit: int = 3) -> list[str]:
     return _story_bigrams(tokens, set())[: max(0, int(limit or 0))]
 
 
-def _phrase(term: str) -> str:
-    words = term.split()
-    if not words:
-        return term
+def _phrase(term: str) -> Optional[str]:
+    words = [part for part in term.split() if part]
+    if len(words) != 2 or not _honest_subject(words[0], words[1]):
+        return None
+    head = words[1]
     # Plurals already read as a noun phrase ("amateur bakers").
-    if words[-1].endswith("s") and not words[-1].endswith("ss"):
+    if head in _IRREGULAR_PLURALS or (head.endswith("s") and not head.endswith("ss")):
         return term
     article = "an" if words[0][:1] in "aeiou" else "a"
     return f"{article} {term}"
@@ -240,19 +342,24 @@ def _phrase(term: str) -> str:
 def _sentence(terms: Sequence[str]) -> str:
     chosen: list[str] = []
     used: Set[str] = set()
+    rendered: list[str] = []
     for term in terms:
         words = set(term.split())
         if words & used:
             continue
+        phrase = _phrase(term)
+        if not phrase:
+            continue
         chosen.append(term)
+        rendered.append(phrase)
         used |= words
         if len(chosen) == 2:
             break
-    if not chosen:
+    if not rendered:
         return ""
-    if len(chosen) == 1:
-        return f"Both stories turn on {_phrase(chosen[0])}."
-    return f"Both stories turn on {_phrase(chosen[0])} and {_phrase(chosen[1])}."
+    if len(rendered) == 1:
+        return f"Both stories turn on {rendered[0]}."
+    return f"Both stories turn on {rendered[0]} and {rendered[1]}."
 
 
 def build_explanation(
@@ -345,6 +452,33 @@ def parse_plot_link_json(raw: Any) -> Optional[Dict[str, Any]]:
     return parse_plot_link_json(parsed)
 
 
+def honest_plot_link(link: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
+    """Rebuild a stored plot-link from honest terms, or refuse junk grammar.
+
+    Empty is better than ``an ordinary people`` / ``a drama television`` /
+    ``a which premiered``. Crew and collection links are a different kind.
+    """
+    if not link:
+        return None
+    raw_terms = [str(term).strip().casefold() for term in (link.get("terms") or [])]
+    terms = []
+    used: Set[str] = set()
+    for term in raw_terms:
+        words = term.split()
+        if len(words) != 2 or not _honest_subject(words[0], words[1]):
+            continue
+        if set(words) & used:
+            continue
+        terms.append(term)
+        used |= set(words)
+        if len(terms) == 3:
+            break
+    sentence = _sentence(terms)
+    if not sentence:
+        return None
+    return {"sentence": sentence, "terms": terms[:3]}
+
+
 def specific_plot_link(
     *,
     seed_text: str,
@@ -355,7 +489,8 @@ def specific_plot_link(
 
     Cosine proximity is not an input. A neighbor is honest only when the plots
     share a concrete phrase (``museum exhibits``), not a vague one
-    (``creative arts``) and not embeddings alone.
+    (``ordinary people``, ``creative arts``, ``drama television``) and not
+    embeddings alone. Empty is better than junk grammar.
     """
     seed_tokens = _tokenize(seed_text)
     peer_tokens = _tokenize(peer_text)

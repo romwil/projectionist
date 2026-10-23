@@ -18,6 +18,7 @@ from projectionist.library.db import Database
 from projectionist.library.plot_kinship import (
     build_explanation,
     distinctive_plot_phrases,
+    honest_plot_link,
     parse_plot_link_json,
     plot_blob,
     specific_plot_link,
@@ -643,10 +644,12 @@ def _inner_link(
     shelf |= _labels(seed.get("genres")) | _labels(seed.get("keywords"))
 
     def _live_plot_link() -> Optional[Dict[str, Any]]:
-        link = specific_plot_link(
-            seed_text=plot_blob(seed),
-            peer_text=plot_blob(candidate),
-            shelf_labels=shelf,
+        link = honest_plot_link(
+            specific_plot_link(
+                seed_text=plot_blob(seed),
+                peer_text=plot_blob(candidate),
+                shelf_labels=shelf,
+            )
         )
         if link and link.get("sentence"):
             return {
@@ -674,11 +677,12 @@ def _inner_link(
         except (TypeError, ValueError, KeyError):
             continue
         stored = parse_plot_link_json(neighbor["plot_link_json"] if "plot_link_json" in neighbor.keys() else None)
-        if stored and stored.get("sentence"):
+        accepted = honest_plot_link(stored)
+        if accepted:
             return {
                 "link_kind": "plot_link",
-                "sentence": str(stored["sentence"]),
-                "terms": list(stored.get("terms") or []),
+                "sentence": str(accepted["sentence"]),
+                "terms": list(accepted.get("terms") or []),
             }
 
     live = _live_plot_link()

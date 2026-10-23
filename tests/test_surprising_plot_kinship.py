@@ -8,7 +8,11 @@ from pathlib import Path
 
 from projectionist.library.db import Database
 from projectionist.library.neighbors import compute_neighbors_for_seed
-from projectionist.library.plot_kinship import specific_plot_link, surprising_plot_link
+from projectionist.library.plot_kinship import (
+    honest_plot_link,
+    specific_plot_link,
+    surprising_plot_link,
+)
 from projectionist.library.relations import list_relations_for_item
 
 BAKE_PLOT = "Amateur bakers compete around a signature bake inside a failing colony."
@@ -265,6 +269,91 @@ class MuseumExhibitNeighborTests(unittest.TestCase):
             self.assertIn("museum exhibits", why["label"].lower())
             self.assertNotIn("Strong plot kinship", why["label"])
             self.assertNotIn("creative arts", why["label"].lower())
+
+
+class HonestPlotLinkCopyTests(unittest.TestCase):
+    """For you / More Like This copy names a subject, or stays empty."""
+
+    HOUSE_PLOT = (
+        "The team try to cure complex and rare diseases from very ill ordinary people "
+        "in the United States of America."
+    )
+    BEAUTY_PLOT = (
+        "They uncover a sexually transmitted virus that transforms ordinary people "
+        "into visions of physical perfection, but with terrifying consequences."
+    )
+    HIGH_POTENTIAL_PLOT = (
+        "High Potential is an American crime comedy drama television series created "
+        "by Drew Goddard for ABC. In January 2025, the series was renewed for a "
+        "second season which premiered on September 16, 2025."
+    )
+    TED_LASSO_PLOT = (
+        "Ted Lasso is an American sports comedy-drama television series developed "
+        "by Jason Sudeikis. It was renewed for a fourth season, which premiered "
+        "on August 5, 2026. The series has received critical acclaim."
+    )
+    TROPICAL_BAKE_PLOT = (
+        "The bakers dive into desserts from tropical climates featuring Latin "
+        "America's favorite, Flan; the Cuban puff pastry treat, Pastelitos; "
+        "and a tiered take on Pavlova."
+    )
+    FIREFLY_INSECT_PLOT = (
+        "Photinus beetles trap their males as prey. Fireflies are found in "
+        "temperate and tropical climates. Many live in marshes or in wet, "
+        "wooded areas where their larvae have abundant sources of food."
+    )
+
+    def test_ordinary_people_is_not_a_named_subject(self) -> None:
+        link = specific_plot_link(
+            seed_text=self.HOUSE_PLOT,
+            peer_text=self.BEAUTY_PLOT,
+            shelf_labels={"drama", "science fiction"},
+        )
+        self.assertIsNone(link)
+
+    def test_drama_television_and_which_premiered_are_refused(self) -> None:
+        link = specific_plot_link(
+            seed_text=self.HIGH_POTENTIAL_PLOT,
+            peer_text=self.TED_LASSO_PLOT,
+            shelf_labels={"comedy", "drama"},
+        )
+        self.assertIsNone(link)
+
+    def test_tropical_climates_is_not_a_named_subject(self) -> None:
+        link = specific_plot_link(
+            seed_text=self.TROPICAL_BAKE_PLOT,
+            peer_text=self.FIREFLY_INSECT_PLOT,
+            shelf_labels={"reality", "science fiction"},
+        )
+        self.assertIsNone(link)
+
+    def test_junk_sentence_never_gets_an_article_glued_on(self) -> None:
+        for terms in (
+            ["ordinary people"],
+            ["drama television"],
+            ["which premiered"],
+            ["drama television", "which premiered"],
+            ["tropical climates"],
+        ):
+            rebuilt = honest_plot_link(
+                {"sentence": "Both stories turn on an ordinary people.", "terms": terms}
+            )
+            self.assertIsNone(rebuilt, terms)
+
+    def test_honest_subject_still_names_amateur_bakers(self) -> None:
+        link = specific_plot_link(
+            seed_text=BAKE_PLOT,
+            peer_text=SPY_PLOT,
+            shelf_labels={"reality", "thriller"},
+        )
+        self.assertIsNotNone(link)
+        assert link is not None
+        sentence = str(link["sentence"]).lower()
+        self.assertIn("amateur bakers", sentence)
+        self.assertTrue(sentence.startswith("both stories turn on"))
+        self.assertNotIn("an ordinary people", sentence)
+        self.assertNotIn("a drama television", sentence)
+        self.assertNotIn("a which premiered", sentence)
 
 
 class MissingShelfSurpriseScoreTests(unittest.TestCase):
