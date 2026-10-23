@@ -11,15 +11,18 @@ from typing import Optional
 
 from projectionist.library.db import Database
 from projectionist.library.plot_kinship import plot_link_json, specific_plot_link
+from projectionist.notifications.newsletters import build_member_newsletter
 from projectionist.notifications.nudges import pick_nudge_title
 from projectionist.library.feeds import feed_for_you
 from projectionist.notifications.recommendation_reasons import (
     bridge_between,
     list_linked_unwatched,
     pick_linked_unwatched,
+    watched_bridge,
     watched_library_rows,
 )
 from projectionist.notifications.whisper import pick_whisper_title
+from projectionist.youth.rating_gate import filter_items_for_youth
 
 BAKE_PLOT = "Amateur bakers compete around a signature bake inside a failing colony."
 SPY_PLOT = "Rivals reunite after amateur bakers compete and ruin a signature bake tonight."
@@ -454,7 +457,8 @@ class HouseholdBridgeTests(unittest.TestCase):
         self.assertEqual(pick["title"], "Covert Kitchen")
         why = str(pick["why"]).lower()
         self.assertIn("colony bake-off", why)
-        self.assertIn("signature bake", why)
+        self.assertIn("an episode of colony bake-off", why)
+        self.assertNotIn("colony bake-off (2018) — signature bake", why)
         self.assertIn("amateur bakers", why)
         self.assertTrue(str(pick["why"]).lower().startswith("you finished"))
         evidence = (pick.get("explanation") or {}).get("evidence") or {}
@@ -535,6 +539,7 @@ class HouseholdBridgeTests(unittest.TestCase):
         why_blob = " ".join(str(item.get("why") or "") for item in feed["items"]).lower()
         self.assertNotIn("ordinary people", why_blob)
         self.assertNotIn("an ordinary", why_blob)
+        self.assertNotIn("not cancer", why_blob)
 
     def test_tv_wiki_glue_is_not_a_for_you_reason(self) -> None:
         high_plot = (
@@ -612,6 +617,238 @@ class HouseholdBridgeTests(unittest.TestCase):
         self.assertTrue(empty["empty"])
         self.assertIn("no named link to something you finished", empty["note"].lower())
         self.assertIn("not a cosine guess", empty["note"].lower())
+
+    def test_house_episode_title_is_not_the_watched_work(self) -> None:
+        """XC-02 / HV-01: House S8E2 *Not Cancer* never appears as the watched title."""
+        house = _title(
+            self.db,
+            rating_key="rk-house",
+            tmdb_id=1408,
+            title="House",
+            year=2004,
+            media_type="show",
+            summary="A diagnostician leads a team through rare medical mysteries.",
+            content_rating="TV-14",
+        )
+        contagion = _title(
+            self.db,
+            rating_key="rk-contagion",
+            tmdb_id=99,
+            title="Contagion",
+            year=2011,
+            summary=SPY_PLOT,
+            content_rating="PG-13",
+        )
+        _explainable_neighbor(
+            self.db, house, contagion, seed_text=BAKE_PLOT, peer_text=SPY_PLOT
+        )
+        self.db.upsert_library_episode(
+            {
+                "show_item_id": house,
+                "rating_key": "ep-not-cancer",
+                "season_number": 8,
+                "episode_number": 2,
+                "title": "Not Cancer",
+                "summary": BAKE_PLOT,
+            }
+        )
+        _insert_completion(
+            self.db,
+            user_id="will",
+            rating_key="ep-not-cancer",
+            parent_rating_key="rk-house",
+            media_type="episode",
+            completed_at_ms=1_700_000_000_000,
+        )
+
+        pick = pick_linked_unwatched(self.db)
+        self.assertIsNotNone(pick)
+        assert pick is not None
+        sentence = str((pick.get("explanation") or {}).get("sentence") or pick["why"])
+        self.assertEqual((pick.get("explanation") or {}).get("kind"), "watched_bridge")
+        self.assertIn("House (2004)", sentence)
+        self.assertIn("Contagion (2011)", sentence)
+        self.assertIn("an episode of House (2004)", sentence)
+        self.assertNotIn("Not Cancer", sentence)
+        self.assertNotIn("House (2004) — Not Cancer", sentence)
+        evidence = (pick.get("explanation") or {}).get("evidence") or {}
+        self.assertEqual(evidence.get("episode_title"), "Not Cancer")
+        self.assertEqual(evidence.get("episode_rating_key"), "ep-not-cancer")
+
+        feed = feed_for_you(self.db, limit=8)
+        self.assertEqual(feed["items"][0]["why"], sentence)
+        self.assertNotIn("Not Cancer", feed["items"][0]["why"])
+
+    def test_empty_episode_plot_does_not_search_episode_title(self) -> None:
+        """XC-02: empty *Not Cancer* plot must not search that title string."""
+        house = _title(
+            self.db,
+            rating_key="rk-house",
+            tmdb_id=1408,
+            title="House",
+            year=2004,
+            media_type="show",
+            summary=GRAVITY_PLOT,
+        )
+        leak = _title(
+            self.db,
+            rating_key="rk-leak",
+            tmdb_id=77,
+            title="Oncology Night",
+            year=2012,
+            summary=(
+                "A specialist proves the tumor is not cancer after all, then "
+                "walks the family through a long recovery on the ward."
+            ),
+        )
+        self.db.upsert_library_episode(
+            {
+                "show_item_id": house,
+                "rating_key": "ep-not-cancer",
+                "season_number": 8,
+                "episode_number": 2,
+                "title": "Not Cancer",
+                "summary": "",
+            }
+        )
+        _insert_completion(
+            self.db,
+            user_id="will",
+            rating_key="ep-not-cancer",
+            parent_rating_key="rk-house",
+            media_type="episode",
+            completed_at_ms=1_700_000_000_000,
+        )
+        self.assertIsNone(pick_linked_unwatched(self.db))
+        feed = feed_for_you(self.db, limit=8)
+        self.assertEqual(feed["items"], [])
+        self.assertTrue(feed["empty"])
+        why_blob = " ".join(str(item.get("why") or "") for item in feed["items"])
+        self.assertNotIn("Not Cancer", why_blob)
+
+    def test_for_you_inbox_and_newsletter_share_watched_bridge(self) -> None:
+        """XC-01 / CA-03: one builder, one sentence across For you / inbox / letter."""
+        now = time.time()
+        seed = _title(
+            self.db,
+            rating_key="rk-house",
+            tmdb_id=1408,
+            title="House",
+            year=2004,
+            media_type="show",
+            summary=BAKE_PLOT,
+            added_at=int(now - 30 * 86400),
+        )
+        peer = _title(
+            self.db,
+            rating_key="rk-contagion",
+            tmdb_id=99,
+            title="Contagion",
+            year=2011,
+            summary=SPY_PLOT,
+            added_at=int(now - 1800),
+        )
+        _explainable_neighbor(
+            self.db, seed, peer, seed_text=BAKE_PLOT, peer_text=SPY_PLOT
+        )
+        self.db.upsert_library_episode(
+            {
+                "show_item_id": seed,
+                "rating_key": "ep-not-cancer",
+                "season_number": 8,
+                "episode_number": 2,
+                "title": "Not Cancer",
+                "summary": BAKE_PLOT,
+            }
+        )
+        _insert_completion(
+            self.db,
+            user_id="will",
+            rating_key="ep-not-cancer",
+            parent_rating_key="rk-house",
+            media_type="episode",
+            completed_at_ms=1_700_000_000_000,
+        )
+
+        picks = list_linked_unwatched(self.db, limit=8)
+        self.assertEqual(len(picks), 1)
+        explanation = picks[0].get("explanation") or {}
+        self.assertEqual(explanation.get("kind"), "watched_bridge")
+        sentence = str(explanation.get("sentence") or "")
+        self.assertTrue(sentence)
+        self.assertIs(watched_bridge, bridge_between)
+        self.assertEqual(picks[0]["why"], sentence)
+        self.assertNotIn("Not Cancer", sentence)
+        self.assertNotIn("ordinary people", sentence.lower())
+        self.assertNotIn("good pick for tonight", sentence.lower())
+
+        nudge = pick_nudge_title(self.db)
+        self.assertIsNotNone(nudge)
+        assert nudge is not None
+        self.assertEqual(nudge["why"], sentence)
+        self.assertEqual((nudge.get("explanation") or {}).get("sentence"), sentence)
+
+        feed = feed_for_you(self.db, limit=8)
+        self.assertEqual(feed["items"][0]["why"], sentence)
+
+        letter = build_member_newsletter(
+            self.db,
+            user={"preferred_name": "Will", "display_name": "Will", "role": "owner"},
+            now=now,
+        )
+        self.assertIn(sentence, letter["body"])
+        self.assertNotIn("Not Cancer", letter["body"])
+        self.assertNotIn("an ordinary people", letter["body"].lower())
+        self.assertEqual(letter["picks"][0]["title"], "Contagion")
+        self.assertEqual(letter["picks"][0]["why"], sentence)
+        self.assertEqual(
+            (letter["picks"][0].get("explanation") or {}).get("kind"),
+            "watched_bridge",
+        )
+
+    def test_youth_skips_adult_house_to_r_peer(self) -> None:
+        """YT-01: PG-13 youth never sees an R For you card from an adult House finish."""
+        house = _title(
+            self.db,
+            rating_key="rk-house",
+            tmdb_id=1408,
+            title="House",
+            year=2004,
+            media_type="show",
+            summary=BAKE_PLOT,
+            content_rating="TV-14",
+        )
+        peer = _title(
+            self.db,
+            rating_key="rk-contagion",
+            tmdb_id=99,
+            title="Contagion",
+            year=2011,
+            summary=SPY_PLOT,
+            content_rating="R",
+        )
+        _explainable_neighbor(
+            self.db, house, peer, seed_text=BAKE_PLOT, peer_text=SPY_PLOT
+        )
+        _insert_completion(
+            self.db,
+            user_id="will",
+            rating_key="rk-house",
+            completed_at_ms=1_700_000_000_000,
+        )
+
+        adult = feed_for_you(self.db, limit=8)
+        self.assertEqual([item["title"] for item in adult["items"]], ["Contagion"])
+        self.assertEqual(adult["items"][0].get("content_rating"), "R")
+
+        youth = feed_for_you(self.db, limit=8, youth_max_rating="PG-13")
+        self.assertEqual(youth["items"], [])
+        self.assertTrue(youth["empty"])
+        self.assertIn("no named link to something you finished", youth["note"].lower())
+        self.assertIn("not a cosine guess", youth["note"].lower())
+
+        kept = filter_items_for_youth(adult["items"], max_rating="PG-13")
+        self.assertEqual(kept, [])
 
 
 if __name__ == "__main__":

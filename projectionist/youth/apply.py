@@ -81,6 +81,21 @@ def _filter_value(value: Any, *, max_rating: str) -> Any:
                     out["total"] = len(out[key])
             else:
                 out[key] = _filter_value(child, max_rating=max_rating)
+        items = out.get("items")
+        if (
+            isinstance(items, list)
+            and not items
+            and (
+                str(out.get("feed") or value.get("feed") or "") == "for-you"
+                or str(out.get("mode") or value.get("mode") or "") == "watched_bridge"
+            )
+        ):
+            out["empty"] = True
+            if not str(out.get("note") or "").strip():
+                out["note"] = (
+                    "No named link to something you finished — not a cosine guess. "
+                    "Finish a title, or let Scheduled Tasks catch up Named kinship."
+                )
         return out
     return value
 

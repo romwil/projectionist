@@ -128,6 +128,9 @@ def structured_digest_picks(
         why = str(item.get("why") or "").strip()
         if why:
             pick["why"] = why
+        explanation = item.get("explanation")
+        if isinstance(explanation, dict) and explanation.get("kind"):
+            pick["explanation"] = explanation
         picks.append(pick)
         if len(picks) >= cap:
             break
@@ -172,6 +175,7 @@ def build_member_newsletter(
         why = str(explanation.get("sentence") or "") if explanation else ""
         if not why:
             continue
+        # Body line is the shared watched_bridge sentence (same object as For you).
         linked.append({**item, "why": why, "explanation": explanation})
         if len(linked) >= DIGEST_PICK_CAP:
             break
