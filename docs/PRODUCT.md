@@ -2,7 +2,7 @@
 
 Living product truth for Projectionist — positioning, surface map, SWOT, sequenced top 10, and parked Tunarr-era non-goals. Baseline tip: Automat **1.37.58** substrate; this ship is **1.37.59**. Media intelligence R1–R4 (1.37.54–57) and the 1.37.58 platform tranche are **done**. Do not reopen those series.
 
-Related: [HELP.md](HELP.md) · [MEDIA_INTELLIGENCE.md](MEDIA_INTELLIGENCE.md) · [DELIGHT-WISHLIST.md](DELIGHT-WISHLIST.md) (persona delight roadmap) · [README](../README.md)
+Related: [HELP.md](HELP.md) · [MEDIA_INTELLIGENCE.md](MEDIA_INTELLIGENCE.md) · [DELIGHT-WISHLIST.md](DELIGHT-WISHLIST.md) (BA delight briefs) · [delight-wishlist-delivery](superpowers/plans/2026-10-23-delight-wishlist-delivery.md) · [README](../README.md)
 
 ---
 
@@ -92,4 +92,4 @@ From the Tunarr dual-watch era and [live-channels-deferred](superpowers/plans/20
 - External “on Netflix” where-to-watch
 - Lobby kiosk polish (unless the house relies on `:8791`)
 
-Delight Phase 6 / 1.36 is **historical substrate** ([DELIGHT-WISHLIST.md](DELIGHT-WISHLIST.md) Archive). Gift queue, trust diary, and Admin House seasonal preview/veto stay parked — they are not implied doors. Living platform sequencing lives here; living *delight* sequencing lives in the wishlist’s persona roadmap.
+Delight Phase 6 / 1.36 is **historical substrate** ([DELIGHT-WISHLIST.md](DELIGHT-WISHLIST.md) Archive). Gift queue, trust diary, and Admin House seasonal preview/veto stay parked — they are not implied doors. Living platform sequencing lives here; next delight work is the BA briefs in [DELIGHT-WISHLIST.md](DELIGHT-WISHLIST.md) sequenced by [delight-wishlist-delivery](superpowers/plans/2026-10-23-delight-wishlist-delivery.md).
