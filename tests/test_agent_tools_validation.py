@@ -523,8 +523,8 @@ class TestQuickPickRouletteValues(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(result["item"]["title"], "Fresh Film")
 
-    async def test_reason_includes_genre_and_runtime(self):
-        """The 'why' field should mention genre taste and runtime."""
+    async def test_reason_omits_pipeline_label_without_bridge(self):
+        """Without a named XC-01 bridge, why is empty — never Unwatched pick for you."""
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
             _seed_library(db, [
@@ -533,8 +533,8 @@ class TestQuickPickRouletteValues(unittest.IsolatedAsyncioTestCase):
             registry = ToolRegistry(db, Settings(), DEFAULT_LENS_ID)
             result = json.loads(await registry.execute("quick_pick_roulette", {}))
 
-            self.assertIn("thriller", result["why"].lower())
-            self.assertIn("110 min", result["why"])
+            self.assertEqual(result["why"], "")
+            self.assertNotIn("Unwatched pick for you", str(result.get("why") or ""))
 
 
 # ---------------------------------------------------------------------------

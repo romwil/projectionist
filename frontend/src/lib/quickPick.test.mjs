@@ -15,13 +15,13 @@ import {
 
 test("normalizeQuickPickResult keeps a successful pick", () => {
   const item = { title: "Arrival", media_type: "movie", rating_key: "1" };
-  const next = normalizeQuickPickResult({ item, why: "Unwatched pick for you" });
+  const next = normalizeQuickPickResult({ item, why: "" });
   assert.equal(next.status, "ready");
   assert.equal(next.item.title, "Arrival");
   assert.equal(next.item.rating_key, "1");
   assert.equal(next.item.in_library, true);
   assert.deepEqual(next.item.genres, []);
-  assert.equal(next.why, "Unwatched pick for you");
+  assert.equal(next.why, "");
   assert.equal(next.message, null);
 });
 
@@ -64,7 +64,7 @@ test("normalizeQuickPickError falls back when formatter returns blank", () => {
 test("normalizeQuickPickResult maps summary to overview and marks in_library", () => {
   const next = normalizeQuickPickResult({
     item: { title: "Arrival", media_type: "movie", summary: "Linguists meet aliens.", genres: ["Sci-Fi"] },
-    why: "Unwatched pick for you",
+    why: "",
   });
   assert.equal(next.status, "ready");
   assert.equal(next.item.overview, "Linguists meet aliens.");
@@ -96,6 +96,17 @@ test("quickPickToAssistantMessage renders a compact title-card block followed by
       { type: "title_cards", items: [pick.item] },
       { type: "text", content: "A thoughtful first-contact mystery for tonight." },
     ],
+  });
+});
+
+test("quickPickToAssistantMessage omits why when there is no named bridge", () => {
+  const pick = normalizeQuickPickResult({
+    item: { title: "Arrival", media_type: "movie", rating_key: "1" },
+    why: "",
+  });
+  assert.deepEqual(quickPickToAssistantMessage(pick), {
+    role: "assistant",
+    blocks: [{ type: "title_cards", items: [pick.item] }],
   });
 });
 

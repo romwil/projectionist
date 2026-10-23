@@ -155,6 +155,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             "get_library_overview",
             "get_facet_catalog",
             "find_similar_titles",
+            "get_for_you",
             "list_relations",
             "walk_relations",
             "titles_by_person",

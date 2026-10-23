@@ -8,6 +8,8 @@ export const RELATION_FILTERS = [
   { id: "surprising", label: "Surprisingly similar" },
 ];
 
+import { displayRecommendationReason } from "./recommendationReason.js";
+
 /** Absence of shelf labels is not a story connection. */
 const ABSENCE_REASON =
   /almost no shared|nothing in common|barely overlap|partial shelf|some shelf overlap|no shared genre|no shared keyword|credit labels|credit cards/i;
@@ -52,7 +54,11 @@ export function appendRelationBreadcrumb(breadcrumbs, item) {
 }
 
 export function relationWhyCopy(why = {}) {
-  const label = String(why.label || "Related title").trim();
+  const sentence = displayRecommendationReason(why?.explanation?.sentence);
+  if (sentence) {
+    return { label: sentence, detail: "" };
+  }
+  const label = displayRecommendationReason(why.label);
   const link = surprisingPlotLink(why);
   const sharedGenres = Array.isArray(why.shared_genres)
     ? why.shared_genres.map((genre) => String(genre).trim()).filter(Boolean)

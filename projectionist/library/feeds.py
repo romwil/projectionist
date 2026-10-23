@@ -2281,3 +2281,84 @@ def feed_for_you(
         "mode": "watched_bridge",
         "empty": not items,
     }
+
+
+def feed_pick_for_me(
+    db: Database,
+    *,
+    limit: int = 8,
+    user_id: Optional[str] = None,
+    multi_user_enabled: bool = False,
+    youth_max_rating: Optional[str] = None,
+    filler_items: Optional[Sequence[Mapping[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """Youth Pick for me — XC-01 sentence when a youth-safe bridge exists, else no why."""
+    from projectionist.notifications.recommendation_reasons import list_linked_unwatched
+
+    capped = _cap_limit(limit, default=8)
+    named = list_linked_unwatched(
+        db,
+        limit=capped,
+        user_id=user_id,
+        multi_user_enabled=multi_user_enabled,
+        youth_max_rating=youth_max_rating,
+    )
+    items: List[Dict[str, Any]] = []
+    seen: set[int] = set()
+    for pick in named:
+        if not isinstance(pick, dict):
+            continue
+        item = dict(pick)
+        explanation = item.get("explanation") if isinstance(item.get("explanation"), dict) else None
+        sentence = str((explanation or {}).get("sentence") or item.get("why") or "").strip()
+        if explanation and sentence:
+            item["why"] = sentence
+            item["recommendation_reason"] = sentence
+            item["explanation"] = explanation
+        else:
+            item["why"] = None
+            item.pop("recommendation_reason", None)
+            item["explanation"] = None
+        item["in_library"] = True
+        try:
+            seen.add(int(item["id"]))
+        except (TypeError, ValueError, KeyError):
+            pass
+        items.append(item)
+        if len(items) >= capped:
+            break
+    if len(items) < capped:
+        from projectionist.youth.rating_gate import content_rating_allowed
+
+        for raw in filler_items or []:
+            if not isinstance(raw, Mapping):
+                continue
+            if youth_max_rating and not content_rating_allowed(
+                raw.get("content_rating"), max_rating=youth_max_rating
+            ):
+                continue
+            try:
+                item_id = int(raw.get("id") or 0)
+            except (TypeError, ValueError):
+                item_id = 0
+            if item_id and item_id in seen:
+                continue
+            filler = dict(raw)
+            filler.pop("why", None)
+            filler.pop("recommendation_reason", None)
+            filler.pop("explanation", None)
+            filler["in_library"] = True
+            if item_id:
+                seen.add(item_id)
+            items.append(filler)
+            if len(items) >= capped:
+                break
+    return {
+        "feed": "pick-for-me",
+        "title": "Pick for me",
+        "items": items,
+        "total": len(items),
+        "limit": capped,
+        "total_matched": len(items),
+        "live_station": None,
+    }

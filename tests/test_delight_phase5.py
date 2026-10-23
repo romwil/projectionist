@@ -370,7 +370,7 @@ class MoodQuickPickApiTests(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload.get("mood"), "laugh")
         self.assertIsNotNone(payload.get("item"))
-        self.assertIn("mood", (payload.get("why") or "").lower())
+        self.assertNotIn("Unwatched pick for you", str(payload.get("why") or ""))
 
 
 class CallbackMemoryTests(unittest.TestCase):
