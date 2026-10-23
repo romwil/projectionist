@@ -216,6 +216,18 @@ class McpPrivacyToolTests(unittest.TestCase):
         self.assertIn("error", payload)
         self.assertIn("full MCP", payload["error"])
 
+    def test_privacy_library_title_detail_rejects_rating_key(self) -> None:
+        payload = json.loads(
+            mcp_server.library_title_detail(media_type="movie", rating_key="rk-1")
+        )
+        self.assertIn("error", payload)
+        self.assertIn("rating_key", payload["error"])
+
+    def test_privacy_cannot_preview_newsletter(self) -> None:
+        payload = json.loads(mcp_server.weekly_newsletter_preview(user_id="u1"))
+        self.assertIn("error", payload)
+        self.assertIn("full MCP", payload["error"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -79,6 +79,10 @@ class McpLibraryTests(unittest.TestCase):
                     sample = json.loads(mcp_server.sample_owned_library(genres="Horror", limit=5))
             self.assertIn("sample_owned", sample)
             self.assertEqual(sample["sample_owned"]["total_matched"], 1)
+            item = sample["sample_owned"]["items"][0]
+            self.assertEqual(item["title"], "Nosferatu")
+            self.assertTrue(item.get("in_library"))
+            self.assertNotEqual(item.get("in_library"), False)
 
     def test_discover_missing_titles_privacy_safe_gaps(self) -> None:
         from projectionist.config_store import Settings

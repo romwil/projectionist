@@ -41,9 +41,18 @@ mcp = FastMCP(
         "Use library_query for paginated owned-title browse with rich filters; "
         "library_aggregate for counts; library_facet_catalog for top directors/actors; "
         "library_tv_episodes and library_tv_progress for TV episode-level queries. "
-        "Full MCP mode can propose confirm-gated *arr changes; confirming them over "
-        "MCP requires a key scoped for active curation, otherwise a human confirms "
-        "on the authenticated Projectionist web plane."
+        "sample_owned_library is an owned inventory sample — not collection gaps; "
+        "use discover_missing_titles for TMDB titles missing from the library. "
+        "Live programme lists are owned library_query hits with playable keys; "
+        "never schedule discover_missing_titles gaps. There is no MCP Live publish "
+        "tool — the owner publishes in Admin. "
+        "weekly_newsletter_preview is a read-only draft of the Admin generate body "
+        "and does not send mail. "
+        "Full MCP propose_add_* only for discover_missing_titles gaps or an "
+        "owner-named TMDB/TVDB id (optional source on the pending token). "
+        "Confirming *arr changes over MCP requires a key scoped for active "
+        "curation, otherwise a human confirms on the authenticated Projectionist "
+        "web plane. LAN :8788 is version truth; projectionist.automat.vip is not."
     ),
 )
 
@@ -362,7 +371,16 @@ def _sample_owned_library_payload(
     )
     overview = library_overview(_database())
     sample = query_library(_database(), filters)
-    return _emit({"overview": overview, "sample_owned": sample})
+    items = []
+    for raw in sample.get("items") or []:
+        if not isinstance(raw, dict):
+            continue
+        item = dict(raw)
+        item["in_library"] = True
+        items.append(item)
+    owned = dict(sample)
+    owned["items"] = items
+    return _emit({"overview": overview, "sample_owned": owned})
 
 
 @mcp.tool()
@@ -375,7 +393,9 @@ def sample_owned_library(
 ) -> str:
     """Sample owned library inventory for a slice (overview + owned titles).
 
-    This is NOT TMDB missing-title discovery — use discover_missing_titles for gaps.
+    This is NOT TMDB missing-title discovery and is not a collection-gap tool.
+    Each sample_owned item is a library_items row (in_library true). Use
+    discover_missing_titles for titles the library does not have.
     """
     return _sample_owned_library_payload(
         media_type=media_type,
@@ -586,13 +606,67 @@ def search_tmdb_proxy(query: str, media_type: Optional[str] = "movie", limit: in
 
 # --- Full-mode confirm-gated *arr tools -------------------------------------------------
 
+_PROPOSE_ADD_SOURCES = frozenset({"discover_missing_titles", "owner_named"})
+_PROPOSE_ADD_SOURCE_ERROR = (
+    "Propose only titles from discover_missing_titles or an owner-named "
+    "TMDB/TVDB id — not cosine similar-to-owned or search_tmdb_proxy hits."
+)
+
+
+def _normalize_propose_add_source(source: Optional[str]) -> tuple[Optional[str], Optional[str]]:
+    raw = str(source or "owner_named").strip() or "owner_named"
+    if raw not in _PROPOSE_ADD_SOURCES:
+        return None, _PROPOSE_ADD_SOURCE_ERROR
+    return raw, None
+
+
+def _already_in_library_add(
+    db: Database,
+    *,
+    media_type: str,
+    tmdb_id: Optional[int] = None,
+    tvdb_id: Optional[int] = None,
+    title: str = "",
+) -> Optional[dict[str, Any]]:
+    """FL-02: pending *arr add is a gap — titles already in library_items are not."""
+    row = None
+    if media_type == "movie" and tmdb_id is not None:
+        row = db.library_item_by_tmdb(int(tmdb_id), "movie")
+    elif media_type == "show" and tvdb_id is not None:
+        row = db.library_item_by_tvdb(int(tvdb_id))
+    if row is None:
+        return None
+    label = str(title or "").strip()
+    try:
+        label = label or str(row["title"] or "")
+    except (KeyError, IndexError, TypeError):
+        pass
+    label = label or str(tmdb_id or tvdb_id)
+    return {
+        "already_in_library": True,
+        "in_library": True,
+        "message": f'"{label}" is already in the library — not a collection gap',
+    }
+
 
 @mcp.tool()
-def propose_add_radarr(tmdb_id: int, title: str = "") -> str:
-    """Full mode: queue a Radarr add for confirmation (returns pending_token)."""
+def propose_add_radarr(
+    tmdb_id: int,
+    title: str = "",
+    source: str = "owner_named",
+) -> str:
+    """Full mode: queue a Radarr add for confirmation (returns pending_token).
+
+    FL-02: propose only a real gap — ``source`` is ``discover_missing_titles``
+    or ``owner_named`` (an explicit TMDB id the owner named). Titles already in
+    ``library_items`` short-circuit with no new token. Confirm stays FL-01 gated.
+    """
     denied = _require_full_mode()
     if denied:
         return denied
+    normalized, source_error = _normalize_propose_add_source(source)
+    if source_error:
+        return _emit({"error": source_error})
     from projectionist.agent.tools import check_radarr_already_exists, mark_in_radarr
     from projectionist.config_store import (
         radarr_add_configuration_error,
@@ -605,6 +679,12 @@ def propose_add_radarr(tmdb_id: int, title: str = "") -> str:
     config_error = radarr_add_configuration_error(settings)
     if config_error:
         return _emit({"error": config_error})
+    db = _database()
+    owned = _already_in_library_add(
+        db, media_type="movie", tmdb_id=int(tmdb_id), title=title
+    )
+    if owned:
+        return _emit(owned)
     client = RadarrClient(settings.radarr_url, settings.radarr_api_key)
     root_error = validate_arr_root_folder(
         "Radarr",
@@ -613,7 +693,7 @@ def propose_add_radarr(tmdb_id: int, title: str = "") -> str:
     )
     if root_error:
         return _emit({"error": root_error})
-    if _database().is_acquisition_excluded(media_type="movie", tmdb_id=int(tmdb_id)):
+    if db.is_acquisition_excluded(media_type="movie", tmdb_id=int(tmdb_id)):
         return _emit(
             {
                 "error": (
@@ -624,15 +704,21 @@ def propose_add_radarr(tmdb_id: int, title: str = "") -> str:
         )
     existing = check_radarr_already_exists(client, int(tmdb_id), title=title)
     if existing:
-        mark_in_radarr(_database(), int(tmdb_id), title=title)
+        mark_in_radarr(db, int(tmdb_id), title=title)
         return _emit(existing)
     token = uuid.uuid4().hex
-    payload = {"action": "add_radarr", "tmdb_id": int(tmdb_id), "title": title}
-    _database().save_pending_action(token, "add_radarr", payload, user_id=None)
+    payload = {
+        "action": "add_radarr",
+        "tmdb_id": int(tmdb_id),
+        "title": title,
+        "source": normalized,
+    }
+    db.save_pending_action(token, "add_radarr", payload, user_id=None)
     return _emit(
         {
             "pending_token": token,
             "confirmation_token": token,
+            "source": normalized,
             "summary": f"Add to Radarr: {title or tmdb_id}",
             "message": (
                 "Confirm with confirm_pending_action if this key is scoped for "
@@ -644,11 +730,23 @@ def propose_add_radarr(tmdb_id: int, title: str = "") -> str:
 
 
 @mcp.tool()
-def propose_add_sonarr(tvdb_id: int, title: str = "") -> str:
-    """Full mode: queue a Sonarr add for confirmation (returns pending_token)."""
+def propose_add_sonarr(
+    tvdb_id: int,
+    title: str = "",
+    source: str = "owner_named",
+) -> str:
+    """Full mode: queue a Sonarr add for confirmation (returns pending_token).
+
+    FL-02: propose only a real gap — ``source`` is ``discover_missing_titles``
+    or ``owner_named``. Titles already in ``library_items`` short-circuit.
+    Confirm stays FL-01 gated.
+    """
     denied = _require_full_mode()
     if denied:
         return denied
+    normalized, source_error = _normalize_propose_add_source(source)
+    if source_error:
+        return _emit({"error": source_error})
     from projectionist.agent.tools import check_sonarr_already_exists, mark_in_sonarr
     from projectionist.config_store import (
         resolve_sonarr_root_folder,
@@ -661,6 +759,12 @@ def propose_add_sonarr(tvdb_id: int, title: str = "") -> str:
     config_error = sonarr_add_configuration_error(settings)
     if config_error:
         return _emit({"error": config_error})
+    db = _database()
+    owned = _already_in_library_add(
+        db, media_type="show", tvdb_id=int(tvdb_id), title=title
+    )
+    if owned:
+        return _emit(owned)
     client = SonarrClient(settings.sonarr_url, settings.sonarr_api_key)
     root_error = validate_arr_root_folder(
         "Sonarr",
@@ -669,7 +773,7 @@ def propose_add_sonarr(tvdb_id: int, title: str = "") -> str:
     )
     if root_error:
         return _emit({"error": root_error})
-    if _database().is_acquisition_excluded(media_type="show", tvdb_id=int(tvdb_id)):
+    if db.is_acquisition_excluded(media_type="show", tvdb_id=int(tvdb_id)):
         return _emit(
             {
                 "error": (
@@ -680,15 +784,21 @@ def propose_add_sonarr(tvdb_id: int, title: str = "") -> str:
         )
     existing = check_sonarr_already_exists(client, int(tvdb_id), title=title)
     if existing:
-        mark_in_sonarr(_database(), int(tvdb_id), title=title)
+        mark_in_sonarr(db, int(tvdb_id), title=title)
         return _emit(existing)
     token = uuid.uuid4().hex
-    payload = {"action": "add_sonarr", "tvdb_id": int(tvdb_id), "title": title}
-    _database().save_pending_action(token, "add_sonarr", payload, user_id=None)
+    payload = {
+        "action": "add_sonarr",
+        "tvdb_id": int(tvdb_id),
+        "title": title,
+        "source": normalized,
+    }
+    db.save_pending_action(token, "add_sonarr", payload, user_id=None)
     return _emit(
         {
             "pending_token": token,
             "confirmation_token": token,
+            "source": normalized,
             "summary": f"Add to Sonarr: {title or tvdb_id}",
             "message": (
                 "Confirm with confirm_pending_action if this key is scoped for "
@@ -962,6 +1072,41 @@ def kinship_miss_list(limit: int = 50) -> str:
 
     capped = max(1, min(int(limit or 50), 200))
     return _emit(list_kinship_miss(_database(), limit=capped))
+
+
+@mcp.tool()
+def weekly_newsletter_preview(user_id: str) -> str:
+    """Read-only draft of the weekly letter Admin generate would send (NW-01).
+
+    Wraps ``build_member_newsletter`` so the body cannot drift from Admin.
+    Does not send inbox, SMTP, Resend, or Apprise. Full MCP only.
+    """
+    denied = _require_full_mode()
+    if denied:
+        return denied
+    from projectionist.notifications.newsletters import build_member_newsletter
+
+    uid = str(user_id or "").strip()
+    if not uid:
+        return _emit({"error": "Provide user_id for the member whose letter to preview"})
+    db = _database()
+    row = db.get_user(uid)
+    if row is None:
+        return _emit({"error": f"User not found: {uid}"})
+    user = db._row_to_user(row)
+    content = build_member_newsletter(db, _settings(), user=user)
+    return _emit(
+        {
+            "preview": True,
+            "sent": False,
+            "user_id": uid,
+            "subject": content.get("subject"),
+            "body": content.get("body"),
+            "title": content.get("title"),
+            "blurb": content.get("blurb"),
+            "picks": content.get("picks") or [],
+        }
+    )
 
 
 def main() -> None:
