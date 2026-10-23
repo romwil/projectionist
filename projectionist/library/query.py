@@ -1612,7 +1612,8 @@ def compute_knowledge_coverage(db: Database) -> Dict[str, Any]:
     """Library knowledge-depth coverage for Admin / Explore (Phase D UI consumes this).
 
     Returns percentages and averages for overview text, motifs, keywords, neighbors,
-    and optional LLM loglines so sparsity is visible without LLM spend.
+    named kinship (global and opened ``kinship_miss`` keys), and optional LLM
+    loglines so sparsity is visible without LLM spend.
     """
     with db.connect() as conn:
         total = int(
@@ -1627,6 +1628,9 @@ def compute_knowledge_coverage(db: Database) -> Dict[str, Any]:
                 "with_themes_pct": 0.0,
                 "with_neighbors_pct": 0.0,
                 "with_explainable_neighbors_pct": 0.0,
+                "with_explainable_neighbors_opened_pct": 0.0,
+                "opened_title_count": 0,
+                "opened_with_explainable_count": 0,
                 "with_loglines_pct": 0.0,
                 "avg_motifs_per_title": 0.0,
                 "avg_keywords_per_title": 0.0,
@@ -1753,6 +1757,10 @@ def compute_knowledge_coverage(db: Database) -> Dict[str, Any]:
                 if model_row:
                     embedding_model = str(model_row["embedding_model"] or "").strip()
 
+        from projectionist.telemetry.kinship_miss import opened_explainable_coverage
+
+        opened_stats = opened_explainable_coverage(conn)
+
     def _pct(count: int) -> float:
         return round((count / total) * 100.0, 1)
 
@@ -1765,6 +1773,11 @@ def compute_knowledge_coverage(db: Database) -> Dict[str, Any]:
         "with_themes_pct": _pct(theme_titles),
         "with_neighbors_pct": _pct(neighbor_seeds),
         "with_explainable_neighbors_pct": _pct(explainable_seeds),
+        "with_explainable_neighbors_opened_pct": opened_stats[
+            "with_explainable_neighbors_opened_pct"
+        ],
+        "opened_title_count": opened_stats["opened_title_count"],
+        "opened_with_explainable_count": opened_stats["opened_with_explainable_count"],
         "with_loglines_pct": _pct(logline_count),
         "avg_motifs_per_title": round(motif_rows / total, 2),
         "avg_keywords_per_title": round(keyword_rows / total, 2),

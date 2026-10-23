@@ -157,6 +157,17 @@ Chat agent tools share the same graph functions. Prefer them (or the MCP wraps a
 | `get_facet_catalog` | Top facet values including **`motif`** and **`theme`** | `library_facets` (in-app) |
 | `get_for_you` | Explore For you + honest empty note (in-app) | `list_linked_unwatched` |
 
+Empty neighbor/relation results mean the idle scheduler has not materialized the cache yet — not that the library is empty. See [ARCHITECTURE.md](ARCHITECTURE.md#agent-tools-vs-background-scheduler).
+
+### Full mode only (library health — read)
+
+| Tool | Purpose |
+|------|---------|
+| `knowledge_coverage_tool` | Wraps `GET /api/library/knowledge-coverage` — Named kinship `%`, **opened-title** `%` (`with_explainable_neighbors_opened_pct` from `kinship_miss` keys), hash-fallback label. Similar cache `%` is not useful relatedness. |
+| `kinship_miss_list` | Wraps owner `GET /api/library/kinship-miss` — titles opened to an empty More Like This / Related / bridge shelf (`why_queued`, `hit_count`, last miss). Demand, not a grade; nothing is auto-repaired. |
+
+`suggest_purge_candidates_tool` stays a **review list**. These wraps do not delete, repair, or promote misses into staged augmentations.
+
 ### Full mode only (tonight + *arr)
 
 | Tool | Purpose |

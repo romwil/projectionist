@@ -35,12 +35,20 @@ function browseHref({ watch_state, sort, sort_dir } = {}) {
  * @param {number|null} [args.purgeCount]
  * @returns {{headline:string, body:string, tone:string}|null}
  */
-export function buildLibraryHealthStory({ health, coverage, openIssues, purgeCount } = {}) {
-  const h = health || {};
+function kinshipFromCoverage(coverage) {
   const c = coverage || {};
+  const openedCount = num(c.opened_title_count);
+  const opened = pct(c.with_explainable_neighbors_opened_pct);
   const explainable = pct(c.with_explainable_neighbors_pct);
   const overview = pct(c.with_overview_pct);
-  const kinshipPct = explainable != null ? explainable : overview;
+  const usesOpened = openedCount > 0 && opened != null;
+  const kinshipPct = usesOpened ? opened : explainable != null ? explainable : overview;
+  return { openedCount, opened, explainable, usesOpened, kinshipPct };
+}
+
+export function buildLibraryHealthStory({ health, coverage, openIssues, purgeCount } = {}) {
+  const h = health || {};
+  const { usesOpened, kinshipPct } = kinshipFromCoverage(coverage);
   const issues = typeof openIssues === "number" ? openIssues : null;
   const purge = typeof purgeCount === "number" ? purgeCount : null;
   const staleAdds = num(h.stale_adds);
@@ -48,10 +56,11 @@ export function buildLibraryHealthStory({ health, coverage, openIssues, purgeCou
 
   const bits = [];
   if (kinshipPct != null) {
+    const label = usesOpened ? "Named kinship on opened titles" : "Named kinship";
     bits.push(
       kinshipPct < 50
-        ? `Named kinship is at ${kinshipPct}% — empty More Like This shelves queue catch-up on Scheduled Tasks.`
-        : `Named kinship is at ${kinshipPct}% — titles can cite a plot, crew, or collection link.`,
+        ? `${label} is at ${kinshipPct}% — empty More Like This shelves queue catch-up on Scheduled Tasks.`
+        : `${label} is at ${kinshipPct}% — titles can cite a plot, crew, or collection link.`,
     );
   }
   if (issues != null) {
@@ -101,10 +110,8 @@ export function buildHealthHeroTiles({ health, coverage, openIssues, purgeCount 
   const total = num(h.total);
   const unwatched = pct(h.unwatched_pct);
   const rating = pct(h.rating_coverage_pct);
-  // Named kinship is the health that matters for More Like This / inbox bridges.
-  const explainable = pct(c.with_explainable_neighbors_pct);
-  const overview = pct(c.with_overview_pct);
-  const kinshipPct = explainable != null ? explainable : overview;
+  // Opened-title Named kinship is the Monday number; Similar cache is not useful relatedness.
+  const { usesOpened, kinshipPct, explainable } = kinshipFromCoverage(c);
   const issues = typeof openIssues === "number" ? openIssues : null;
   const purge = typeof purgeCount === "number" ? purgeCount : null;
   const ratingNote =
@@ -133,8 +140,9 @@ export function buildHealthHeroTiles({ health, coverage, openIssues, purgeCount 
       id: "coverage",
       label: "Named kinship",
       value: kinshipPct == null ? "—" : `${kinshipPct}%`,
-      detail:
-        explainable != null
+      detail: usesOpened
+        ? "Opened titles with a named More Like This link"
+        : explainable != null
           ? "Titles with a named More Like This link"
           : "Overview coverage",
       to: "/admin/scheduled-tasks",

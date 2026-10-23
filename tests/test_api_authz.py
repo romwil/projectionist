@@ -210,6 +210,21 @@ class ApiAuthzTests(unittest.TestCase):
         self.assertEqual(owner.status_code, 200)
         self.assertIn("onboarding_complete", owner.json())
 
+    def test_kinship_miss_list_is_owner_only(self) -> None:
+        self._enable_multi_user_via_api()
+        self._login_as(1, "Owner")
+        self.client.post("/api/auth/logout")
+        self._login_as(2, "Member")
+        self.assertEqual(self.client.get("/api/library/kinship-miss").status_code, 403)
+        self.client.post("/api/auth/logout")
+        self._login_as(1, "Owner")
+        resp = self.client.get("/api/library/kinship-miss?limit=50")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertIn("items", body)
+        self.assertIn("count", body)
+        self.assertIn("note", body)
+
     def test_library_csv_export_requires_auth_and_uses_requested_columns(self) -> None:
         self._enable_multi_user_via_api()
         from projectionist.web.jobs import get_job_manager
@@ -341,6 +356,7 @@ class ApiAuthzTests(unittest.TestCase):
             self.client.put("/api/admin/holidays/halloween/rail/order", json={"library_item_ids": [1]}).status_code,
             403,
         )
+        self.assertEqual(self.client.get("/api/library/kinship-miss").status_code, 403)
         # The old House admin surface is gone — no stub left behind.
         self.assertEqual(self.client.get("/api/admin/house/letter").status_code, 404)
 

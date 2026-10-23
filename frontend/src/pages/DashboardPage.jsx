@@ -19,6 +19,7 @@ import { useBulkActionProgress } from "../components/BulkActionProgress";
 import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog";
 import { useRemovalProgressSession } from "../hooks/useRemovalProgressSession.js";
 import KnowledgeCoverageCard from "../components/KnowledgeCoverageCard";
+import KinshipMissList from "../components/KinshipMissList";
 import OwnerHealthHero from "../components/OwnerHealthHero";
 import OwnerNowPlayingBreakdown from "../components/OwnerNowPlayingBreakdown";
 import RemovalSummaryDialog from "../components/RemovalSummaryDialog.jsx";
@@ -715,6 +716,7 @@ export default function DashboardPage({ embedded = false }) {
         </SectionHelp>
       </div>
       <KnowledgeCoverageCard variant="panel" />
+      <KinshipMissList />
 
       {/* ─── Panel 2: Health ─── */}
       <h2 className="dash-section-title">Library health</h2>

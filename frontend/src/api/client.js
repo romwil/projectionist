@@ -1420,6 +1420,12 @@ export async function getLibraryKnowledgeCoverage(options = {}) {
   return api("/library/knowledge-coverage", options);
 }
 
+/** Owner demand list: titles opened to an empty More Like This / Related / bridge shelf. */
+export async function getKinshipMissList({ limit = 50, signal } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return api(`/library/kinship-miss?${params}`, signal ? { signal } : {});
+}
+
 export async function getLibraryOverview() {
   return api("/library/overview");
 }
