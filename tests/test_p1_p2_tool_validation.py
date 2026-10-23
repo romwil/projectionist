@@ -1455,31 +1455,25 @@ class TestSuggestPurgeCandidatesValues(unittest.IsolatedAsyncioTestCase):
 
 
 class TestWhatToWatchTonightValues(unittest.IsolatedAsyncioTestCase):
-    """Verify tonight recommendations scoring."""
+    """Tonight without a named watched_bridge stays empty."""
 
-    async def test_unwatched_preferred_over_rewatched(self):
-        """Unwatched items should score higher than multi-watched items."""
+    async def test_unwatched_without_bridge_is_empty(self):
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
             _seed_library(db, [
                 {"rating_key": "fresh", "media_type": "movie", "title": "Fresh Film",
                  "year": 2020, "genres": ["Drama"], "view_count": 0, "runtime_minutes": 100},
-                {"rating_key": "once", "media_type": "movie", "title": "Seen Once",
-                 "year": 2019, "genres": ["Action"], "view_count": 1, "runtime_minutes": 110},
-                {"rating_key": "twice", "media_type": "movie", "title": "Seen Twice",
-                 "year": 2018, "genres": ["Comedy"], "view_count": 2, "runtime_minutes": 95},
                 {"rating_key": "many", "media_type": "movie", "title": "Seen Many",
                  "year": 2017, "genres": ["Thriller"], "view_count": 5, "runtime_minutes": 130},
             ])
             registry = _make_registry(db)
             result = json.loads(await registry.execute("what_to_watch_tonight", {"limit": 10}))
 
-            titles = [item["title"] for item in result["items"]]
-            self.assertIn("Fresh Film", titles)
-            self.assertNotIn("Seen Many", titles)
+            self.assertEqual(result["mode"], "watched_bridge")
+            self.assertTrue(result["empty"])
+            self.assertEqual(result["items"], [])
 
-    async def test_heavily_watched_excluded(self):
-        """Items with view_count > 2 should be excluded."""
+    async def test_heavily_watched_without_bridge_is_empty(self):
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
             _seed_library(db, [
@@ -1489,7 +1483,8 @@ class TestWhatToWatchTonightValues(unittest.IsolatedAsyncioTestCase):
             registry = _make_registry(db)
             result = json.loads(await registry.execute("what_to_watch_tonight", {}))
 
-            self.assertEqual(result["total_matched"], 0)
+            self.assertTrue(result["empty"])
+            self.assertEqual(result["items"], [])
 
     async def test_empty_library_returns_empty(self):
         """Empty library -> no picks."""
@@ -1498,7 +1493,8 @@ class TestWhatToWatchTonightValues(unittest.IsolatedAsyncioTestCase):
             registry = _make_registry(db)
             result = json.loads(await registry.execute("what_to_watch_tonight", {}))
 
-            self.assertEqual(result["total_matched"], 0)
+            self.assertTrue(result["empty"])
+            self.assertEqual(result["items"], [])
 
 
 if __name__ == "__main__":

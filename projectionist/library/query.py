@@ -1598,7 +1598,7 @@ def format_overview_for_prompt(overview: Mapping[str, Any]) -> str:
         "Query cookbook: owned inventory → query_library/summarize_library/search_library; "
         "exact external title lookup → search_tmdb; "
         "director/actor filmography → query_library(directors/cast) or get_facet_catalog; "
-        "mood/theme in owned library → query_library(keywords/semantic_query); tonight picks → what_to_watch_tonight or runtime_max + unwatched_only; "
+        "mood/theme in owned library → query_library(keywords/semantic_query); tonight picks → what_to_watch_tonight (watched_bridge, not FTS); "
         "recently added → sort=added_at desc or recently_added_days; never-watched new adds → unwatched_only + recently_added_days; "
         "purge candidates → sort=file_size desc + stale_days or unwatched_only; "
         "missing from Radarr/Sonarr → in_radarr=false (movies) or in_sonarr=false (shows); "
