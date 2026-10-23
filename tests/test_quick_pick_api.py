@@ -74,7 +74,7 @@ class QuickPickApiTests(unittest.TestCase):
         self.assertIn("overview", body["item"])
         self.assertEqual(body["item"]["genres"], ["Science Fiction"])
         self.assertIn("why", body)
-        self.assertTrue(body["why"])
+        self.assertNotEqual(body["why"], "Unwatched pick for you")
 
     def test_quick_pick_treats_null_view_count_as_unwatched(self) -> None:
         item_id = self.db.upsert_library_item(
@@ -121,7 +121,8 @@ class QuickPickApiTests(unittest.TestCase):
         self.assertIsNotNone(body["item"])
         self.assertEqual(body["item"]["title"], "Broken Genres")
         self.assertEqual(body["item"]["genres"], [])
-        self.assertEqual(body["why"], "Unwatched pick for you")
+        self.assertEqual(body["why"], "")
+        self.assertNotIn("Unwatched pick for you", str(body.get("why") or ""))
 
     def test_quick_pick_genre_filter_or_match(self) -> None:
         self.db.upsert_library_item(

@@ -32,6 +32,8 @@ class RecommendationReasonTests(unittest.TestCase):
         self.assertEqual(sanitize_recommendation_reason("Missing from your collection"), "")
         self.assertEqual(sanitize_recommendation_reason("Double feature — first half"), "")
         self.assertEqual(sanitize_recommendation_reason("Double feature — second half"), "")
+        self.assertEqual(sanitize_recommendation_reason("Unwatched pick for you"), "")
+        self.assertEqual(sanitize_recommendation_reason("Good pick for tonight"), "")
         self.assertEqual(sanitize_recommendation_reason(""), "")
 
 

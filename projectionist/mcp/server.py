@@ -804,6 +804,133 @@ def confirm_pending_action(token: str, confirmed: bool = True) -> str:
         return _emit({"error": str(error)})
 
 
+def _run_graph_tool(name: str, args: dict[str, Any]) -> str:
+    """Privacy-sanitized wrap of in-process graph tools (LIB-02). Never rewrite tonight."""
+    from projectionist.agent.tools import ToolRegistry
+    from projectionist.library.db import DEFAULT_LENS_ID
+    from projectionist.library.plot_kinship import (
+        KINSHIP_CACHE_NOT_READY_NOTE,
+        kinship_empty_payload,
+        peers_with_named_explanation,
+    )
+
+    registry = ToolRegistry(_database(), _settings(), DEFAULT_LENS_ID)
+    raw = asyncio.run(registry.execute(name, args))
+    try:
+        payload = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return _emit({"error": "Graph lookup failed", "items": [], "note": KINSHIP_CACHE_NOT_READY_NOTE})
+    if not isinstance(payload, dict):
+        return _emit({"error": "Graph lookup returned unexpected payload", "items": []})
+    if payload.get("error"):
+        return _emit(payload)
+    payload["items"] = peers_with_named_explanation(payload.get("items") or [])
+    payload = kinship_empty_payload(payload)
+    return _emit(payload)
+
+
+@mcp.tool()
+def list_relations(
+    title: Optional[str] = None,
+    item_id: Optional[int] = None,
+    year: Optional[int] = None,
+    media_type: Optional[str] = None,
+    relation: Optional[str] = None,
+    limit: int = 25,
+) -> str:
+    """Named one-hop title_relations (collection / crew / plot_link). Privacy-safe.
+
+    Empty items mean the Named kinship cache is not ready — not that nothing is related.
+    Cosine-only neighbors are omitted. No Plex rating_key in privacy mode.
+    """
+    args: dict[str, Any] = {"limit": max(1, min(int(limit or 25), 50))}
+    if item_id is not None:
+        args["item_id"] = int(item_id)
+    if title:
+        args["title"] = title
+    if year is not None:
+        args["year"] = int(year)
+    if media_type:
+        args["media_type"] = media_type
+    if relation:
+        args["relation"] = relation
+    return _run_graph_tool("list_relations", args)
+
+
+@mcp.tool()
+def walk_relations(
+    title: Optional[str] = None,
+    item_id: Optional[int] = None,
+    year: Optional[int] = None,
+    media_type: Optional[str] = None,
+    relation: Optional[str] = None,
+    depth: int = 1,
+    limit: int = 25,
+) -> str:
+    """Shallow BFS over title_relations (depth capped at 2). Privacy-safe named peers only."""
+    args: dict[str, Any] = {
+        "limit": max(1, min(int(limit or 25), 50)),
+        "depth": min(max(1, int(depth or 1)), 2),
+    }
+    if item_id is not None:
+        args["item_id"] = int(item_id)
+    if title:
+        args["title"] = title
+    if year is not None:
+        args["year"] = int(year)
+    if media_type:
+        args["media_type"] = media_type
+    if relation:
+        args["relation"] = relation
+    return _run_graph_tool("walk_relations", args)
+
+
+@mcp.tool()
+def titles_by_person(
+    name: Optional[str] = None,
+    person_id: Optional[int] = None,
+    tmdb_person_id: Optional[int] = None,
+    limit: int = 25,
+) -> str:
+    """In-library filmography for a person, each peer with a named credit explanation."""
+    args: dict[str, Any] = {"limit": max(1, min(int(limit or 25), 100))}
+    if name:
+        args["name"] = name
+    if person_id is not None:
+        args["person_id"] = int(person_id)
+    if tmdb_person_id is not None:
+        args["tmdb_person_id"] = int(tmdb_person_id)
+    return _run_graph_tool("titles_by_person", args)
+
+
+@mcp.tool()
+def find_similar_titles(
+    title: Optional[str] = None,
+    item_id: Optional[int] = None,
+    year: Optional[int] = None,
+    media_type: Optional[str] = None,
+    mode: Optional[str] = "similar",
+    limit: int = 10,
+) -> str:
+    """Explainable plot neighbors for a seed (explainable_only=True). Privacy-safe.
+
+    Peers without explanation.sentence are omitted. Empty = cache not ready.
+    """
+    args: dict[str, Any] = {
+        "limit": max(1, min(int(limit or 10), 25)),
+        "mode": str(mode or "similar"),
+    }
+    if item_id is not None:
+        args["item_id"] = int(item_id)
+    if title:
+        args["title"] = title
+    if year is not None:
+        args["year"] = int(year)
+    if media_type:
+        args["media_type"] = media_type
+    return _run_graph_tool("find_similar_titles", args)
+
+
 def main() -> None:
     from projectionist.config_store import load_dotenv_file
     from projectionist.envcompat import skip_dotenv

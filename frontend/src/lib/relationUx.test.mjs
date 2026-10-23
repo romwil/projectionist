@@ -19,6 +19,20 @@ test("appendRelationBreadcrumb keeps a two-hop trail without duplicate seeds", (
   assert.deepEqual(appendRelationBreadcrumb([seed], firstHop), [seed, firstHop]);
 });
 
+test("relationWhyCopy prefers explanation.sentence over cosine labels", () => {
+  assert.deepEqual(
+    relationWhyCopy({
+      label: "Strong plot kinship",
+      plot_link: "Both stories turn on amateur bakers.",
+      explanation: {
+        kind: "plot_link",
+        sentence: "Both stories turn on amateur bakers.",
+      },
+    }),
+    { label: "Both stories turn on amateur bakers.", detail: "" },
+  );
+});
+
 test("relationWhyCopy leads with a named story link and keeps shelf distance second", () => {
   assert.deepEqual(
     relationWhyCopy({
@@ -41,7 +55,7 @@ test("relationWhyCopy does not recommend a title for having no shared labels", (
       surprise_flavor: "Almost no shared genre, keyword, or credit labels",
     }),
     {
-      label: "Strong plot kinship",
+      label: "",
       detail: "",
     },
   );

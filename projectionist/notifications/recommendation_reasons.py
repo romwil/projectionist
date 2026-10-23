@@ -978,6 +978,22 @@ def _pick_from_row(
         tvdb_id = int(tvdb) if tvdb is not None else None
     except (TypeError, ValueError):
         tvdb_id = None
+    genres_raw = row.get("genres")
+    genres: List[str] = []
+    if isinstance(genres_raw, list):
+        genres = [str(g).strip() for g in genres_raw if str(g).strip()]
+    elif isinstance(genres_raw, str) and genres_raw.strip():
+        try:
+            parsed = json.loads(genres_raw)
+            if isinstance(parsed, list):
+                genres = [str(g).strip() for g in parsed if str(g).strip()]
+        except (TypeError, ValueError, json.JSONDecodeError):
+            genres = []
+    runtime = row.get("runtime_minutes")
+    try:
+        runtime_minutes = int(runtime) if runtime is not None else None
+    except (TypeError, ValueError):
+        runtime_minutes = None
     return {
         "id": int(row["id"]),
         "title": str(row.get("title") or "Untitled").strip() or "Untitled",
@@ -992,6 +1008,10 @@ def _pick_from_row(
         "cluster": None,
         "explanation": dict(explanation) if explanation else None,
         "content_rating": str(row.get("content_rating") or "") or "",
+        "genres": genres,
+        "runtime_minutes": runtime_minutes,
+        "summary": str(row.get("summary") or "") or "",
+        "in_library": True,
     }
 
 
@@ -1105,6 +1125,41 @@ def pick_linked_unwatched(
         youth_max_rating=youth_max_rating,
     )
     return picks[0] if picks else None
+
+
+def named_unwatched_pick(
+    db: Database,
+    *,
+    user_id: Optional[str] = None,
+    multi_user_enabled: bool = False,
+    youth_max_rating: Optional[str] = None,
+    genre_needles: Optional[Sequence[str]] = None,
+    max_runtime: Optional[int] = None,
+) -> Optional[Dict[str, Any]]:
+    """First XC-01 unwatched pick that also matches optional pool filters."""
+    picks = list_linked_unwatched(
+        db,
+        limit=12,
+        user_id=user_id,
+        multi_user_enabled=multi_user_enabled,
+        youth_max_rating=youth_max_rating,
+    )
+    needles = [str(g).strip().lower() for g in (genre_needles or []) if str(g).strip()]
+    for pick in picks:
+        if max_runtime is not None:
+            runtime = pick.get("runtime_minutes")
+            try:
+                if runtime is None or int(runtime) > int(max_runtime):
+                    continue
+            except (TypeError, ValueError):
+                continue
+        if needles:
+            genres = [str(g).lower() for g in (pick.get("genres") or [])]
+            blob = " ".join(genres)
+            if not any(needle in blob for needle in needles):
+                continue
+        return pick
+    return None
 
 
 def library_row_for_ref(db: Database, item: Mapping[str, Any]) -> Optional[Dict[str, Any]]:

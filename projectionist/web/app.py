@@ -2726,28 +2726,38 @@ def library_feed_pick_for_me(
     limit: int = 8,
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
-    """Youth-friendly pick-for-me spinner: random unwatched, age-gated titles."""
+    """Youth-friendly pick-for-me spinner: named bridge why, else no why."""
+    from projectionist.library.feeds import feed_pick_for_me
+    from projectionist.youth.apply import youth_max_for_user
+
+    settings = _settings()
+    multi_user = bool(settings.features.multi_user_enabled)
+    user_id = str(user.id) if multi_user and getattr(user, "id", None) else (
+        str(getattr(user, "id", None) or "bootstrap-owner")
+    )
+    capped = max(1, min(int(limit), 24))
     filters = filters_from_mapping(
         {
             "unwatched_only": True,
             "sort": "vote_average",
             "sort_dir": "desc",
-            "limit": max(1, min(int(limit), 24)),
+            "limit": capped,
         }
     )
     filters = _apply_youth_filters(filters, user)
     result = query_library(_db(), filters)
-    items = list(result.get("items") or [])
+    fillers = list(result.get("items") or [])
     import random
 
-    random.shuffle(items)
-    payload: Dict[str, Any] = {
-        "feed": "pick-for-me",
-        "title": "Pick for me",
-        "items": items[: max(1, min(int(limit), 24))],
-        "total_matched": result.get("total_matched", len(items)),
-        "live_station": None,
-    }
+    random.shuffle(fillers)
+    payload = feed_pick_for_me(
+        _db(),
+        limit=capped,
+        user_id=user_id,
+        multi_user_enabled=multi_user,
+        youth_max_rating=youth_max_for_user(user, settings),
+        filler_items=fillers,
+    )
     # Youth + Live on → soft-suggest a youth-safe station when one exists.
     if bool(getattr(user, "is_youth", False)):
         settings = _settings()
@@ -2929,6 +2939,35 @@ def library_quick_pick_endpoint(
             params,
         ).fetchone()
 
+    from projectionist.notifications.recommendation_reasons import named_unwatched_pick
+    from projectionist.youth.apply import youth_max_for_user
+
+    genre_needles = (
+        [g.strip() for g in str(effective_genre or "").split(",") if g.strip()]
+        if effective_genre
+        else []
+    )
+    multi_user = bool(settings.features.multi_user_enabled)
+    user_id = str(user.id) if multi_user and getattr(user, "id", None) else (
+        str(getattr(user, "id", None) or "bootstrap-owner")
+    )
+    named = named_unwatched_pick(
+        db,
+        user_id=user_id,
+        multi_user_enabled=multi_user,
+        youth_max_rating=youth_max_for_user(user, settings),
+        genre_needles=genre_needles,
+        max_runtime=max_runtime,
+    )
+    if named:
+        item = dict(named)
+        item["overview"] = str(item.get("summary") or item.get("overview") or "")
+        item["in_library"] = True
+        item["view_count"] = int(item.get("view_count") or 0)
+        explanation = item.get("explanation") if isinstance(item.get("explanation"), dict) else None
+        why = str((explanation or {}).get("sentence") or item.get("why") or "").strip()
+        return {"item": item, "why": why, "mood": mood_label, "explanation": explanation}
+
     if not row:
         return {"item": None, "why": "No unwatched titles match the criteria.", "mood": mood_label}
 
@@ -2943,16 +2982,6 @@ def library_quick_pick_endpoint(
         except (TypeError, ValueError, json.JSONDecodeError):
             genres_list = []
 
-    runtime = row["runtime_minutes"]
-    reason_parts = []
-    if mood_label:
-        reason_parts.append(f"Tuned for a {mood_label} mood (this pick only)")
-    if genres_list:
-        reason_parts.append(f"Matches your {str(genres_list[0]).lower()} taste")
-    if runtime:
-        reason_parts.append(f"{runtime} min")
-    reason = " · ".join(reason_parts) if reason_parts else "Unwatched pick for you"
-
     item = {key: row[key] for key in row.keys()}
     item["genres"] = genres_list
     item["view_count"] = int(item.get("view_count") or 0)
@@ -2961,7 +2990,7 @@ def library_quick_pick_endpoint(
     item["in_library"] = True
     item["content_rating"] = str(item.get("content_rating") or "")
 
-    return {"item": item, "why": reason, "mood": mood_label}
+    return {"item": item, "why": "", "mood": mood_label}
 
 
 @app.get("/api/library/query")

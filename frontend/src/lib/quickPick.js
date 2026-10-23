@@ -113,15 +113,14 @@ export function normalizeQuickPickError(error, formatError) {
  */
 export function quickPickToAssistantMessage(pick) {
   if (pick?.status === "ready" && pick.item) {
+    const why = String(pick.why || "").trim();
+    const blocks = [{ type: "title_cards", items: [pick.item] }];
+    if (why) {
+      blocks.push({ type: "text", content: why });
+    }
     return {
       role: "assistant",
-      blocks: [
-        { type: "title_cards", items: [pick.item] },
-        {
-          type: "text",
-          content: pick.why || "A random unwatched pick from your library for tonight.",
-        },
-      ],
+      blocks,
     };
   }
   return {
