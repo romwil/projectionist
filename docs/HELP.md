@@ -856,7 +856,7 @@ While a Live job is running, a sticky rail says what is working and other mutati
 
 ## Not in product (Phase 6 leftovers)
 
-Gift queue, trust diary, and Admin House seasonal veto/preview are **parked** — they are not household doors. See [DELIGHT-WISHLIST.md](DELIGHT-WISHLIST.md). Living sequencing lives in [PRODUCT.md](PRODUCT.md).
+Gift queue, trust diary, and Admin House seasonal veto/preview are **parked** — they are not household doors. See [DELIGHT-WISHLIST.md](DELIGHT-WISHLIST.md#parked-inventory-do-not-resurrect-as-the-plan). Living product sequencing lives in [PRODUCT.md](PRODUCT.md); living delight sequencing lives in the wishlist’s persona roadmap.
 
 ---
 

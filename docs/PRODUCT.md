@@ -2,7 +2,7 @@
 
 Living product truth for Projectionist — positioning, surface map, SWOT, sequenced top 10, and parked Tunarr-era non-goals. Baseline tip: Automat **1.37.58** substrate; this ship is **1.37.59**. Media intelligence R1–R4 (1.37.54–57) and the 1.37.58 platform tranche are **done**. Do not reopen those series.
 
-Related: [HELP.md](HELP.md) · [MEDIA_INTELLIGENCE.md](MEDIA_INTELLIGENCE.md) · [DELIGHT-WISHLIST.md](DELIGHT-WISHLIST.md) · [README](../README.md)
+Related: [HELP.md](HELP.md) · [MEDIA_INTELLIGENCE.md](MEDIA_INTELLIGENCE.md) · [DELIGHT-WISHLIST.md](DELIGHT-WISHLIST.md) (persona delight roadmap) · [README](../README.md)
 
 ---
 
@@ -74,7 +74,7 @@ Runtime watch surfaces: **library Play** (`/watch`) and **native Live** (`/live`
 6. **Continue Watching nightly path** — Explore/CW → Play → shrink/resume. Lobby `:8791` and MCP are optional owner tools.
 7. **Episode bridges** — finishing a TV episode seeds For you from **that episode’s plot**, not a random movie. No episode KG.
 8. **Ghost doors closed** — Tunarr not in README key capabilities or Live HELP lead; guest is not a household role; unmounted inbox is gone.
-9. **Phase 6 parked** — gift queue, trust diary, Admin House seasonal veto are not in product. See [DELIGHT-WISHLIST.md](DELIGHT-WISHLIST.md).
+9. **Phase 6 parked** — gift queue, trust diary, Admin House seasonal veto are not in product. See [DELIGHT-WISHLIST.md](DELIGHT-WISHLIST.md#parked-inventory-do-not-resurrect-as-the-plan).
 10. **Play buffering + press-and-hold 2x** — library Play only. Live TV stays 1x. iPad Safari may ignore `playbackRate`; the 2x chip shows only when the element reports rate 2.
 
 ---
@@ -92,4 +92,4 @@ From the Tunarr dual-watch era and [live-channels-deferred](superpowers/plans/20
 - External “on Netflix” where-to-watch
 - Lobby kiosk polish (unless the house relies on `:8791`)
 
-Delight Phase 6 / 1.36 is **historical substrate**. Gift queue, trust diary, and Admin House seasonal preview/veto stay parked — they are not implied doors. Living platform sequencing lives here.
+Delight Phase 6 / 1.36 is **historical substrate** ([DELIGHT-WISHLIST.md](DELIGHT-WISHLIST.md) Archive). Gift queue, trust diary, and Admin House seasonal preview/veto stay parked — they are not implied doors. Living platform sequencing lives here; living *delight* sequencing lives in the wishlist’s persona roadmap.
