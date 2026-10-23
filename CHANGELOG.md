@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Fixed
+- **Explore For you names a real link, or stays quiet.** Reasons cite a plot subject, crew, or collection someone would recognize — not Wikipedia glue like “an ordinary people,” “a drama television,” or “a which premiered.” Empty is better than junk grammar.
 - **Play hold-to-2x no longer selects the page on iPad Safari.** Press-and-hold still doubles speed; the 2x chip and theater stage do not pick up the system text highlight. Scrubber and inputs keep working.
 
 ## [1.37.59] — 2026-10-20
