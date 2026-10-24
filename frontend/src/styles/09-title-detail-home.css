@@ -951,6 +951,7 @@ a.title-credit-link:hover {
 .title-neighbor-card h3 {
   margin: 0;
   font-size: var(--text-sm);
+  overflow-wrap: break-word;
 }
 
 .title-neighbor-card h3 a {
@@ -958,10 +959,9 @@ a.title-credit-link:hover {
   text-decoration: none;
 }
 
-.title-neighbor-year {
-  margin: 0;
+.title-line-year {
   color: var(--muted);
-  font-size: var(--text-xs);
+  font-weight: 500;
 }
 
 .title-detail-loading {
@@ -1214,6 +1214,7 @@ a.title-credit-link:hover {
 .explore-cinema-card h3 {
   margin: 0;
   font-size: var(--text-sm);
+  overflow-wrap: break-word;
 }
 
 .explore-card-meta {

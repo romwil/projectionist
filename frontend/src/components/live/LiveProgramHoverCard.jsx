@@ -91,10 +91,7 @@ export default function LiveProgramHoverCard({
 
   if (!model || !open || typeof document === "undefined") return null;
 
-  const metaBits = [
-    model.rating,
-    model.year && model.subtitle !== model.year ? model.year : "",
-  ].filter(Boolean);
+  const metaBits = [model.rating].filter(Boolean);
 
   const copy = (
     <div
