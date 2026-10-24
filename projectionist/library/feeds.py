@@ -1352,8 +1352,10 @@ def neighbors_payload(
     seed_plot = ""
     from projectionist.library.plot_kinship import (
         explanation_from_plot_link,
+        honest_plot_link,
         parse_plot_link_json,
         plot_blob,
+        surprising_items_if_distinct,
     )
 
     if normalized == "surprising":
@@ -1384,27 +1386,30 @@ def neighbors_payload(
             item["metadata_overlap"] = None
         item["overview"] = str(neighbor["summary"] or "") if "summary" in neighbor.keys() else ""
         item["in_library"] = True
-        stored_link = None
-        if "plot_link_json" in neighbor.keys():
-            stored_link = parse_plot_link_json(neighbor["plot_link_json"])
+        stored_link = honest_plot_link(
+            parse_plot_link_json(neighbor["plot_link_json"])
+            if "plot_link_json" in neighbor.keys()
+            else None
+        )
         if normalized == "surprising" and surprise_link is not None:
             peer_labels = metadata_overlap_tokens(neighbor)
-            link = surprise_link(
+            live = surprise_link(
                 cosine=score,
                 overlap=measured_metadata_overlap(seed_labels, peer_labels),
                 seed_text=seed_plot,
                 peer_text=plot_blob(neighbor),
                 shelf_labels=seed_labels | peer_labels,
             )
+            link = honest_plot_link(live)
             if link is None:
                 continue
             item["plot_link"] = link["sentence"]
-            item["shelf_note"] = link["shelf_note"]
+            item["shelf_note"] = str((live or {}).get("shelf_note") or "") or None
             item["explanation"] = explanation_from_plot_link(
-                link,
+                {**link, "shelf_note": item["shelf_note"]},
                 seed_ids=[int(item_id)],
                 peer_id=nid,
-                evidence={"shelf_note": link["shelf_note"]},
+                evidence={"shelf_note": item["shelf_note"]},
             )
         elif stored_link:
             item["plot_link"] = stored_link["sentence"]
@@ -1413,7 +1418,22 @@ def neighbors_payload(
                 seed_ids=[int(item_id)],
                 peer_id=nid,
             )
+        else:
+            continue
         items.append(item)
+    if normalized == "surprising" and items:
+        similar_honest: List[Dict[str, Any]] = []
+        for neighbor in db.get_neighbors(
+            int(item_id), mode="similar", limit=capped, explainable_only=True
+        ):
+            accepted = honest_plot_link(
+                parse_plot_link_json(neighbor["plot_link_json"])
+                if "plot_link_json" in neighbor.keys()
+                else None
+            )
+            if accepted:
+                similar_honest.append(neighbor)
+        items = surprising_items_if_distinct(similar_honest, items)
     if items:
         note = None
     elif normalized == "surprising" and (neighbor_rows or raw_neighbor_count):
