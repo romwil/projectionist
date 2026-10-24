@@ -1,6 +1,33 @@
 {
-  "generated_at": "2026-10-24T01:10:13Z",
+  "generated_at": "2026-10-24T01:44:09Z",
   "releases": [
+    {
+      "version": "1.37.62",
+      "date": "2026-10-24",
+      "summary": "One patch on 1.37.61: year sits on the same line as the title, and Similar plot / For you / Surprising refuse Wikipedia leftover trivia as a plot link.",
+      "highlights": [
+        "**Year sits with the title.** Cards and rails show *The Last House on the Left (2009)* on one line, so the why is not pushed down by a lone year.",
+        "**Trivia is not a plot reason.** Similar plot, Surprising, and For you drop leftovers like “box office” or “united states.” Empty is better than a junk sentence.",
+        "**Surprising stays empty when it would copy Similar.** Two tabs that show the same titles in the same order is not a second list."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "**Title and year share one line.** Poster and list cards, Similar plot / Directed by rails, Related titles, chat cards, whisper chips, and Live hover put the year inline with the title (`titleWithYear`). A title that already ends in `(2009)` does not get a second year.",
+            "**Similar plot, Surprising, and For you omit Wikipedia/TMDB trivia** (box office, united states, principal photography, team investigates) instead of naming it as a plot link. Empty is better. Stored junk plot links are rebuilt or dropped. Surprising stays empty when it would copy Similar."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend focused `pytest` — 77 passed (`tests/test_surprising_plot_kinship.py`, `tests/test_household_bridges.py`, `tests/test_explore_wave3.py`, `tests/test_version.py`) with `--no-cov`. Trivia plot links refused; For you omits junk cards; Similar vs Surprising identities differ or Surprising is empty. PRs #159 (`10e8a69`) and #160 (`a05c2e2`) merged to `main` at `2842daa`.",
+            "Frontend unit 20/20 (`titleLine`, `liveProgramDetail`, `relationUx`).",
+            "`tests/test_version.py` after `./scripts/patch-release.sh 1.37.62`. Lockstep + Hub + Automat in this ship."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.61",
       "date": "2026-10-23",
