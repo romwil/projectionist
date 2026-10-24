@@ -1,6 +1,48 @@
 {
-  "generated_at": "2026-10-23T20:24:20Z",
+  "generated_at": "2026-10-24T01:09:15Z",
   "releases": [
+    {
+      "version": "1.37.61",
+      "date": "2026-10-23",
+      "summary": "One patch on 1.37.60: the delight series — tonight matches For you, chat and posters share that named-link sentence, Live names repeats and Between programs, Monday lists empty More Like This, and MCP proposes only real gaps.",
+      "highlights": [
+        "**Tonight matches For you.** Picks name a show or movie you finished, or stay empty. TV reasons say the show and year — never the episode title as the watched work.",
+        "**Chat, posters, and Pick for me use that same sentence.** If there is no named link, there is no why. Youth Pick for me stays quiet rather than invent a reason.",
+        "**Live names a repeat and Between programs.** A one-title station says it will repeat. Flex pads are a named slate, not a black frame.",
+        "**Monday pass lists empty More Like This.** Owners see which opened titles queued Named kinship. Nothing auto-repairs."
+      ],
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "Shared `watched_bridge` builder for For you, inbox, and the member newsletter. Display sentences name the show and year (`House (2004)`); episode titles stay in evidence only. Empty episode plots do not search the title string (House S8E2 *Not Cancer* is not a watched work).",
+            "In-app and MCP tonight (`what_to_watch_tonight`) call For you `list_linked_unwatched`. Sibling `continue[]` from paused episodes / in-progress TV. Items that claim playable have `in_library` plus a `rating_key`. MCP `upcoming_premieres` copy is recently added, not “premiered.”",
+            "Chat `find_similar_titles` / `get_for_you` reuse the named-bridge sentence (or the For you empty note). Privacy MCP wraps `list_relations`, `walk_relations` (depth ≤ 2), `titles_by_person`, and `find_similar_titles(explainable_only=True)`.",
+            "Owner `GET /api/library/kinship-miss` and Admin **Empty More Like This** list (title, why queued, hit count, last miss). Knowledge coverage quotes opened-title Named kinship % (`with_explainable_neighbors_opened_pct`). Full-MCP `knowledge_coverage_tool` and `kinship_miss_list`.",
+            "MCP `live_guide` reads `live_lineup.json` (now/next, flex vs programme, pool notice). Missing file returns `{error: \"lineup_missing\"}`. No publish, no tuner.",
+            "Full-mode `weekly_newsletter_preview` wraps `build_member_newsletter` and does not send inbox/SMTP/Resend/Apprise."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "Poster why line only when arrival `kind` is a named bridge. Browse Movies stays why-less. Cosine labels (`Strong plot kinship`, `Unwatched pick for you`) never show as why. Youth Pick for me / quick-pick: named youth-safe sentence, else no why. PG-13 youth skips adult House → R peers (empty rail is success).",
+            "Guide/Watch chrome says a one-title station will repeat. After a rebuild, collection/theme stations do not air the same `rating_key` in adjacent slots; a single-show nonstop recipe may.",
+            "Flex pads stay labeled **Between programs**. If neither filler nor preroll exists, Watch shows a named slate (`Between programs — up next: …`) instead of a black frame. Pause prompt still names Rejoin live and Finish this.",
+            "`propose_add_radarr` / `propose_add_sonarr` only mint a pending token for a real gap (`discover_missing_titles` or `owner_named`). Titles already in `library_items` or already in *arr short-circuit. Cosine / `search_tmdb_proxy` is refused. Confirm-gate is unchanged.",
+            "`owned_programme_candidates` keeps owned playable `library_query` hits and refuses `discover_missing_titles` gaps as programmes. `sample_owned_library` is an owned library row (`in_library=true`). No MCP Live publish."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend focused `pytest` — 73 passed (`tests/test_household_bridges.py`, `tests/test_tonight_watch.py`, `tests/test_delight_mouths.py`, `tests/test_kinship_opened.py`, `tests/test_live_schedule_cycles.py`, `tests/test_mcp_live_guide.py`, `tests/test_delight_fleet.py`, `tests/test_surprising_plot_kinship.py`) with `--no-cov`. House display, tonight = For you, chat/poster/youth sentences, Monday miss list, Live honesty + `live_guide`, gap-only *arr propose + newsletter preview.",
+            "Frontend unit 71/71 (`recommendationReason`, `relationUx`, `quickPick`, `liveChannels`, `livePauseBoundary`, `ownerNowPlaying`).",
+            "`tests/test_version.py` — 5 passed. PRs #152–#157 merged to `main` at `abf04ca`. Lockstep + Hub + Automat in this ship."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.60",
       "date": "2026-10-23",
