@@ -20,6 +20,7 @@ from projectionist.library.neighbors import measured_metadata_overlap
 from projectionist.library.plot_kinship import (
     build_explanation,
     explanation_from_plot_link,
+    honest_plot_link,
     plot_blob,
     specific_plot_link,
     surprising_plot_link,
@@ -317,10 +318,12 @@ def _why_payload(
         shelf = seed_shelf | peer_shelf
         seed_plot = plot_blob(seed)
         peer_plot = plot_blob(peer)
-        specific = specific_plot_link(
-            seed_text=seed_plot,
-            peer_text=peer_plot,
-            shelf_labels=shelf,
+        specific = honest_plot_link(
+            specific_plot_link(
+                seed_text=seed_plot,
+                peer_text=peer_plot,
+                shelf_labels=shelf,
+            )
         )
         # Cosine alone ("Strong plot kinship") is not a reason to show a neighbor.
         if not specific:

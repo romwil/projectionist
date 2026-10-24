@@ -1351,6 +1351,9 @@ class NeighborsFeedTests(unittest.TestCase):
                     "title": "Twin",
                     "year": 2001,
                     "genres": ["Sci-Fi"],
+                    "summary": (
+                        "Amateur bakers compete around a signature bake inside a failing colony."
+                    ),
                 }
             )
             odd = db.upsert_library_item(
@@ -1375,9 +1378,11 @@ class NeighborsFeedTests(unittest.TestCase):
             )
             similar = neighbors_payload(db, seed, mode="similar", limit=5)
             surprising = neighbors_payload(db, seed, mode="surprising", limit=5)
-            # Twin has no plot text → not explainable; Odd shares amateur bakers.
-            self.assertEqual([item["title"] for item in similar["items"]], ["Odd"])
-            self.assertEqual(surprising["items"][0]["title"], "Odd")
+            similar_keys = [item["rating_key"] for item in similar["items"]]
+            surprising_keys = [item["rating_key"] for item in surprising["items"]]
+            self.assertEqual(similar_keys, ["twin", "odd"])
+            self.assertEqual(surprising_keys, ["odd"])
+            self.assertNotEqual(similar_keys, surprising_keys)
             self.assertIn("amateur bakers", surprising["items"][0]["plot_link"].lower())
             self.assertNotIn("almost no shared", surprising["items"][0]["plot_link"].lower())
             self.assertIn("score", similar["items"][0])

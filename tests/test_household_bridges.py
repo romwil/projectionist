@@ -850,6 +850,163 @@ class HouseholdBridgeTests(unittest.TestCase):
         kept = filter_items_for_youth(adult["items"], max_rating="PG-13")
         self.assertEqual(kept, [])
 
+    def test_wikipedia_trivia_is_not_a_for_you_reason(self) -> None:
+        seed = _title(
+            self.db,
+            rating_key="rk-claw",
+            tmdb_id=26774,
+            title="The Blood on Satan's Claw",
+            year=1971,
+            summary=(
+                "A village is haunted. Mixed reviews in the United States followed "
+                "principal photography at Pinewood Studios."
+            ),
+        )
+        peer = _title(
+            self.db,
+            rating_key="rk-mufasa",
+            tmdb_id=762509,
+            title="Mufasa: The Lion King",
+            year=2024,
+            summary=(
+                "A young lion rises. Mixed reviews in the United States and a cult "
+                "following at the box office. The working title leaked."
+            ),
+        )
+        with self.db.connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO item_neighbors
+                    (item_id, neighbor_id, score, surprise_score, explainable, plot_link_json)
+                VALUES (?, ?, ?, ?, 1, ?)
+                """,
+                (
+                    seed,
+                    peer,
+                    0.9,
+                    0.8,
+                    '{"sentence":"Both stories turn on mixed reviews and united states.",'
+                    '"terms":["mixed reviews","united states"]}',
+                ),
+            )
+        _insert_completion(
+            self.db,
+            user_id="will",
+            rating_key="rk-claw",
+            completed_at_ms=1_700_000_000_000,
+        )
+        feed = feed_for_you(self.db, limit=8)
+        self.assertEqual(feed["items"], [])
+        why_blob = " ".join(str(item.get("why") or "") for item in feed["items"]).lower()
+        self.assertNotIn("united states", why_blob)
+        self.assertNotIn("mixed reviews", why_blob)
+        self.assertNotIn("cult following", why_blob)
+
+    def test_team_investigates_is_not_a_for_you_reason(self) -> None:
+        seed = _title(
+            self.db,
+            rating_key="rk-high",
+            tmdb_id=241757,
+            title="High Potential",
+            year=2024,
+            media_type="show",
+            summary="A consultant joins a detective squad in Los Angeles.",
+        )
+        peer = _title(
+            self.db,
+            rating_key="rk-hole",
+            tmdb_id=1781,
+            title="The Black Hole",
+            year=2006,
+            summary="A ship vanishes near a gravity well.",
+        )
+        with self.db.connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO item_neighbors
+                    (item_id, neighbor_id, score, surprise_score, explainable, plot_link_json)
+                VALUES (?, ?, ?, ?, 1, ?)
+                """,
+                (
+                    seed,
+                    peer,
+                    0.88,
+                    0.7,
+                    '{"sentence":"Both stories turn on team investigates.",'
+                    '"terms":["team investigates"]}',
+                ),
+            )
+        self.db.upsert_library_episode(
+            {
+                "show_item_id": seed,
+                "rating_key": "ep-high-1",
+                "season_number": 1,
+                "episode_number": 1,
+                "title": "Pilot",
+                "summary": "The team investigates a murder in a victorian mansion.",
+            }
+        )
+        _insert_completion(
+            self.db,
+            user_id="will",
+            rating_key="ep-high-1",
+            parent_rating_key="rk-high",
+            media_type="episode",
+            completed_at_ms=1_700_000_000_000,
+        )
+        feed = feed_for_you(self.db, limit=8)
+        self.assertEqual(feed["items"], [])
+        why_blob = " ".join(str(item.get("why") or "") for item in feed["items"]).lower()
+        self.assertNotIn("team investigates", why_blob)
+        self.assertNotIn("victorian mansion", why_blob)
+
+    def test_episode_prefix_survives_when_the_plot_link_is_honest(self) -> None:
+        seed = _title(
+            self.db,
+            rating_key="rk-high",
+            tmdb_id=241757,
+            title="High Potential",
+            year=2024,
+            media_type="show",
+            summary="A consultant joins a detective squad in Los Angeles.",
+        )
+        peer = _title(
+            self.db,
+            rating_key="rk-spy",
+            tmdb_id=2,
+            title="Covert Kitchen",
+            year=2019,
+            summary=SPY_PLOT,
+        )
+        _explainable_neighbor(
+            self.db, seed, peer, seed_text=BAKE_PLOT, peer_text=SPY_PLOT
+        )
+        self.db.upsert_library_episode(
+            {
+                "show_item_id": seed,
+                "rating_key": "ep-high-bake",
+                "season_number": 1,
+                "episode_number": 8,
+                "title": "Signature Bake",
+                "summary": BAKE_PLOT,
+            }
+        )
+        _insert_completion(
+            self.db,
+            user_id="will",
+            rating_key="ep-high-bake",
+            parent_rating_key="rk-high",
+            media_type="episode",
+            completed_at_ms=1_700_000_000_000,
+        )
+        feed = feed_for_you(self.db, limit=8)
+        self.assertEqual(len(feed["items"]), 1)
+        why = str(feed["items"][0].get("why") or "")
+        self.assertIn("an episode of High Potential (2024)", why)
+        self.assertIn("amateur bakers", why.lower())
+        self.assertNotIn("Signature Bake", why)
+        self.assertNotIn("team investigates", why.lower())
+
 
 if __name__ == "__main__":
     unittest.main()
