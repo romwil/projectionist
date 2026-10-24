@@ -4,6 +4,8 @@
  * Soft-fail: never invent episode titles — fall back to the show/movie name.
  */
 
+import { titleWithYear } from "./titleLine.js";
+
 /**
  * @param {unknown} value
  * @returns {string}
@@ -109,11 +111,7 @@ export function formatProgramDisplayTitle(program) {
   if (epLabel && mediaType !== "movie") {
     return `${title} — ${epLabel}`;
   }
-  const year = Number(program?.year);
-  if (Number.isFinite(year) && year > 1000) {
-    return `${title} (${year})`;
-  }
-  return title;
+  return titleWithYear({ title, year: program?.year }, { fallback: title });
 }
 
 /**
@@ -176,8 +174,8 @@ export function buildProgramHoverModel(program, { kind = "guide" } = {}) {
     kind === "next" ? "Up next" : kind === "now" ? "On now" : isMovie ? "Movie" : "Episode";
   return {
     eyebrow,
-    title,
-    subtitle: episodeLabel || (yearLabel && isMovie ? yearLabel : ""),
+    title: titleWithYear({ title, year: yearLabel }, { fallback: title }),
+    subtitle: episodeLabel,
     year: yearLabel,
     overview,
     rating,

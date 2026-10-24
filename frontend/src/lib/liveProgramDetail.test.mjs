@@ -43,8 +43,8 @@ describe("liveProgramDetail helpers", () => {
     };
     assert.equal(formatProgramDisplayTitle(movie), "Heat (1995)");
     const hover = buildProgramHoverModel(movie, { kind: "guide" });
-    assert.equal(hover.title, "Heat");
-    assert.equal(hover.subtitle, "1995");
+    assert.equal(hover.title, "Heat (1995)");
+    assert.equal(hover.subtitle, "");
     assert.equal(hover.overview, "A crew of professionals.");
     assert.equal(hover.digInItem.rating_key, "9001");
     assert.equal(hover.digInItem.media_type, "movie");
@@ -68,6 +68,7 @@ describe("liveProgramDetail helpers", () => {
     const hover = buildProgramHoverModel(
       {
         title: "Gilligan's Island",
+        year: 1964,
         episode_title: "The Big Gold Strike",
         season: 1,
         episode: 10,
@@ -78,6 +79,7 @@ describe("liveProgramDetail helpers", () => {
       { kind: "next" },
     );
     assert.equal(hover.eyebrow, "Up next");
+    assert.equal(hover.title, "Gilligan's Island (1964)");
     assert.equal(hover.subtitle, "S1E10 · The Big Gold Strike");
     assert.ok(hover.digInItem);
   });

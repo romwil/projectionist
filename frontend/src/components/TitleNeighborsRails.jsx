@@ -10,6 +10,7 @@ import {
 import { titleDetailPath } from "../lib/titleLinks.js";
 import PosterOverlayControls from "./PosterOverlayControls";
 import TitleDetailLink from "./TitleDetailLink";
+import TitleYearText from "./TitleYearText.jsx";
 
 function TitleNeighborCard({ item, testId, why = null }) {
   const libraryItem = { ...item, in_library: true };
@@ -33,9 +34,14 @@ function TitleNeighborCard({ item, testId, why = null }) {
         <PosterOverlayControls item={libraryItem} testPrefix="title-neighbor" />
       </div>
       <h3>
-        {path ? <TitleDetailLink item={libraryItem}>{libraryItem.title}</TitleDetailLink> : libraryItem.title}
+        {path ? (
+          <TitleDetailLink item={libraryItem}>
+            <TitleYearText item={libraryItem} />
+          </TitleDetailLink>
+        ) : (
+          <TitleYearText item={libraryItem} />
+        )}
       </h3>
-      {libraryItem.year ? <p className="title-neighbor-year">{libraryItem.year}</p> : null}
       {why?.label ? (
         <p className="title-neighbor-why" data-testid={`${testId}-why`}>
           {why.label}

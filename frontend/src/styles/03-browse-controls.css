@@ -869,6 +869,7 @@
   font-weight: 600;
   letter-spacing: 0;
   margin: 0;
+  overflow-wrap: break-word;
 }
 
 .year,
