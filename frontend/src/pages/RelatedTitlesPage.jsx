@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { queryLibrary, walkTitleRelations } from "../api/client";
 import BackLink from "../components/BackLink";
+import TitleYearText from "../components/TitleYearText.jsx";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/backNav.js";
 import {
@@ -14,6 +15,7 @@ import {
   relationWhyCopy,
   relatedTitlesPath,
 } from "../lib/relationUx.js";
+import { titleWithYear } from "../lib/titleLine.js";
 import { titleDetailPath } from "../lib/titleLinks.js";
 
 function RelationCard({ edge, onHop }) {
@@ -40,9 +42,14 @@ function RelationCard({ edge, onHop }) {
       </button>
       <div className="relation-card-copy">
         <h2>
-          {detailPath ? <Link to={detailPath}>{item.title}</Link> : item.title}
+          {detailPath ? (
+            <Link to={detailPath}>
+              <TitleYearText item={item} />
+            </Link>
+          ) : (
+            <TitleYearText item={item} />
+          )}
         </h2>
-        {item.year ? <p className="relation-card-year">{item.year}</p> : null}
         <p className="relation-card-why" data-testid="related-title-why">
           {why.label}
         </p>
@@ -53,8 +60,7 @@ function RelationCard({ edge, onHop }) {
 }
 
 function breadcrumbLabel(item) {
-  const title = String(item?.title || "Title");
-  return item?.year ? `${title} (${item.year})` : title;
+  return titleWithYear(item, { fallback: "Title" });
 }
 
 export default function RelatedTitlesPage() {
@@ -210,8 +216,7 @@ export default function RelatedTitlesPage() {
               {seedHits.map((item) => (
                 <li key={item.id || item.rating_key || `${item.media_type}:${item.tmdb_id}`}>
                   <button type="button" onClick={() => selectSeed(item, { addBreadcrumb: false })}>
-                    {item.title}
-                    {item.year ? ` (${item.year})` : ""}
+                    {titleWithYear(item)}
                   </button>
                 </li>
               ))}

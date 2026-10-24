@@ -942,6 +942,7 @@
   font-family: var(--font-display);
   font-size: 1.05rem;
   line-height: 1.2;
+  overflow-wrap: break-word;
 }
 
 .live-program-hover-body {
