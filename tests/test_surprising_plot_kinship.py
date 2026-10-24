@@ -7,10 +7,12 @@ import unittest
 from pathlib import Path
 
 from projectionist.library.db import Database
-from projectionist.library.neighbors import compute_neighbors_for_seed
+from projectionist.library.feeds import neighbors_payload
+from projectionist.library.neighbors import compute_neighbors_for_seed, enrich_neighbors_with_explanations
 from projectionist.library.plot_kinship import (
     honest_plot_link,
     specific_plot_link,
+    surprising_items_if_distinct,
     surprising_plot_link,
 )
 from projectionist.library.relations import list_relations_for_item
@@ -354,6 +356,163 @@ class HonestPlotLinkCopyTests(unittest.TestCase):
         self.assertNotIn("an ordinary people", sentence)
         self.assertNotIn("a drama television", sentence)
         self.assertNotIn("a which premiered", sentence)
+
+
+SCREENSHOT_TRIVIA_TERMS = (
+    ["cult following", "box office"],
+    ["mixed reviews", "united states"],
+    ["principal photography", "pinewood studios"],
+    ["united kingdom", "york city"],
+    ["working title"],
+    ["united states"],
+    ["team investigates"],
+    ["victorian mansion"],
+)
+
+SCREENSHOT_TRIVIA_SENTENCES = (
+    "Both stories turn on a cult following and a box office.",
+    "Both stories turn on mixed reviews and united states.",
+    "Both stories turn on a principal photography and pinewood studios.",
+    "Both stories turn on an united kingdom and a york city.",
+    "Both stories turn on a working title.",
+    "Both stories turn on united states.",
+    "Both stories turn on team investigates.",
+    "Both stories turn on a victorian mansion.",
+)
+
+
+class ProductionTriviaPlotLinkTests(unittest.TestCase):
+    """Infobox leftovers are not a named plot subject — omit the peer."""
+
+    LAST_JEDI_TRIVIA = (
+        "The Resistance faces the First Order after mixed reviews in the United States. "
+        "Principal photography took place at Pinewood Studios. The working title leaked."
+    )
+    RANDOM_TRIVIA = (
+        "A slasher opens to mixed reviews and a cult following at the box office. "
+        "Principal photography was at Pinewood Studios in the United Kingdom and New York City. "
+        "The working title changed after the United States release."
+    )
+    HIGH_POTENTIAL_GLUE = (
+        "The team investigates a murder in a victorian mansion after the consultant joins the squad."
+    )
+    BLACK_HOLE_GLUE = (
+        "Scientists watch a ship vanish. The team investigates wreckage near a victorian mansion."
+    )
+
+    def test_screenshot_terms_are_refused_by_honest_plot_link(self) -> None:
+        for terms, sentence in zip(SCREENSHOT_TRIVIA_TERMS, SCREENSHOT_TRIVIA_SENTENCES):
+            rebuilt = honest_plot_link({"sentence": sentence, "terms": terms})
+            self.assertIsNone(rebuilt, sentence)
+
+    def test_last_jedi_trivia_overlap_is_not_a_named_subject(self) -> None:
+        link = specific_plot_link(
+            seed_text=self.LAST_JEDI_TRIVIA,
+            peer_text=self.RANDOM_TRIVIA,
+            shelf_labels={"science fiction", "horror"},
+        )
+        self.assertIsNone(link)
+
+    def test_team_investigates_and_victorian_mansion_are_refused(self) -> None:
+        link = specific_plot_link(
+            seed_text=self.HIGH_POTENTIAL_GLUE,
+            peer_text=self.BLACK_HOLE_GLUE,
+            shelf_labels={"crime", "science fiction"},
+        )
+        self.assertIsNone(link)
+
+    def test_similar_and_surprising_omit_trivia_peers(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "trivia.db")
+            seed = _title(
+                db,
+                rating_key="claw",
+                tmdb_id=26774,
+                title="The Blood on Satan's Claw",
+                year=1971,
+                genres=["Horror"],
+                summary=self.LAST_JEDI_TRIVIA,
+            )
+            peer = _title(
+                db,
+                rating_key="mufasa",
+                tmdb_id=762509,
+                title="Mufasa: The Lion King",
+                year=2024,
+                genres=["Animation", "Family"],
+                summary=self.RANDOM_TRIVIA,
+            )
+            db.set_neighbors(
+                seed,
+                enrich_neighbors_with_explanations(db, seed, [(peer, 0.88, 0.8)]),
+            )
+            db.replace_relations_of_types(
+                {"neighbor": [(seed, peer, "neighbor", 0.88, "item_neighbors")]}
+            )
+            relations = list_relations_for_item(db, seed, limit=10)
+            self.assertEqual(relations["items"], [])
+            similar = neighbors_payload(db, seed, mode="similar", limit=8)
+            surprising = neighbors_payload(db, seed, mode="surprising", limit=8)
+            self.assertEqual(similar["items"], [])
+            self.assertEqual(surprising["items"], [])
+            blob = " ".join(
+                str(item.get("plot_link") or "")
+                for item in similar["items"] + surprising["items"]
+            ).lower()
+            self.assertNotIn("united states", blob)
+            self.assertNotIn("principal photography", blob)
+            self.assertNotIn("box office", blob)
+
+
+class SimilarSurprisingDistinctRailTests(unittest.TestCase):
+    def test_carbon_copy_surprising_rail_is_empty(self) -> None:
+        similar = [{"rating_key": "a"}, {"rating_key": "b"}]
+        self.assertEqual(surprising_items_if_distinct(similar, similar), [])
+
+    def test_honest_peers_on_both_tabs_differ_in_order(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "rails.db")
+            seed = _title(
+                db,
+                rating_key="seed",
+                tmdb_id=1,
+                title="Seed",
+                genres=["Sci-Fi"],
+                summary=BAKE_PLOT,
+            )
+            twin = _title(
+                db,
+                rating_key="twin",
+                tmdb_id=2,
+                title="Twin",
+                genres=["Sci-Fi"],
+                summary=SPY_PLOT,
+            )
+            odd = _title(
+                db,
+                rating_key="odd",
+                tmdb_id=3,
+                title="Odd",
+                genres=["Romance"],
+                summary=SPY_PLOT,
+            )
+            db.set_neighbors(
+                seed,
+                enrich_neighbors_with_explanations(
+                    db, seed, [(twin, 0.99, 0.1), (odd, 0.9, 0.85)]
+                ),
+            )
+            similar = neighbors_payload(db, seed, mode="similar", limit=5)
+            surprising = neighbors_payload(db, seed, mode="surprising", limit=5)
+            similar_keys = [item["rating_key"] for item in similar["items"]]
+            surprising_keys = [item["rating_key"] for item in surprising["items"]]
+            self.assertIn("twin", similar_keys)
+            self.assertTrue(similar["items"])
+            self.assertTrue(surprising["items"])
+            self.assertNotEqual(similar_keys, surprising_keys)
+            self.assertEqual(surprising_keys, ["odd"])
+            self.assertNotIn("cult following", str(similar).lower())
+            self.assertNotIn("united states", str(surprising).lower())
 
 
 class MissingShelfSurpriseScoreTests(unittest.TestCase):

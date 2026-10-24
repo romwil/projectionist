@@ -8,6 +8,7 @@ import {
   isSurprisingRelation,
   relationWhyCopy,
   relatedTitlesPath,
+  surprisingPlotNeighbors,
 } from "./relationUx.js";
 
 test("appendRelationBreadcrumb keeps a two-hop trail without duplicate seeds", () => {
@@ -142,6 +143,56 @@ test("filterRelationEdges supports relation types and surprising similarity", ()
   assert.equal(
     hasSpecificStoryLink({ plot_link: "Both stories turn on museum exhibits." }),
     true,
+  );
+});
+
+test("surprisingPlotNeighbors is empty when it would copy Similar's ordered peers", () => {
+  const plotEdges = [
+    {
+      relation: "neighbor",
+      peer: { rating_key: "rk-mufasa", title: "Mufasa: The Lion King" },
+      why: {
+        plot_link: "Both stories turn on amateur bakers.",
+        surprise_flavor: "Both stories turn on amateur bakers.",
+      },
+    },
+    {
+      relation: "neighbor",
+      peer: { rating_key: "rk-last-jedi", title: "The Last Jedi" },
+      why: {
+        plot_link: "Both stories turn on amateur bakers.",
+        surprise_flavor: "Both stories turn on amateur bakers.",
+      },
+    },
+  ];
+  assert.deepEqual(surprisingPlotNeighbors(plotEdges), []);
+});
+
+test("surprisingPlotNeighbors differs from Similar when only some peers are surprising", () => {
+  const plotEdges = [
+    {
+      relation: "neighbor",
+      peer: { rating_key: "rk-twin", title: "Twin" },
+      why: {
+        plot_link: "Both stories turn on amateur bakers.",
+        surprise_flavor: null,
+      },
+    },
+    {
+      relation: "neighbor",
+      peer: { rating_key: "rk-odd", title: "Odd" },
+      why: {
+        plot_link: "Both stories turn on amateur bakers.",
+        surprise_flavor: "Both stories turn on amateur bakers.",
+      },
+    },
+  ];
+  const surprising = surprisingPlotNeighbors(plotEdges);
+  assert.equal(surprising.length, 1);
+  assert.equal(surprising[0].peer.rating_key, "rk-odd");
+  assert.notDeepEqual(
+    plotEdges.map((edge) => edge.peer.rating_key),
+    surprising.map((edge) => edge.peer.rating_key),
   );
 });
 

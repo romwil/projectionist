@@ -33,6 +33,28 @@ export function isSurprisingRelation(edge) {
   return hasSpecificStoryLink(edge?.why);
 }
 
+export function neighborIdentity(item) {
+  const peer = item?.peer && typeof item.peer === "object" ? item.peer : item;
+  const ratingKey = String(peer?.rating_key || "").trim();
+  if (ratingKey) return `rk:${ratingKey}`;
+  if (peer?.tmdb_id) return `tmdb:${peer.tmdb_id}`;
+  if (peer?.tvdb_id) return `tvdb:${peer.tvdb_id}`;
+  const id = peer?.library_item_id || peer?.neighbor_id || peer?.to_id || peer?.id;
+  return id ? `id:${id}` : "";
+}
+
+/** Surprising must not serialize the same ordered peer set as Similar. */
+export function surprisingPlotNeighbors(plotEdges) {
+  const similar = Array.isArray(plotEdges) ? plotEdges : [];
+  const surprising = similar.filter((edge) => isSurprisingRelation(edge));
+  const similarIds = similar.map((edge) => neighborIdentity(edge)).filter(Boolean);
+  const surprisingIds = surprising.map((edge) => neighborIdentity(edge)).filter(Boolean);
+  if (similarIds.length && surprisingIds.join("\0") === similarIds.join("\0")) {
+    return [];
+  }
+  return surprising;
+}
+
 function relationItemKey(item) {
   if (!item) return "";
   return String(
