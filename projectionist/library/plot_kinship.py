@@ -159,6 +159,8 @@ _GENERIC_UNIGRAMS = frozenset(
         "journey",
         "famous",
         "known",
+        "mansion",
+        "manor",
     }
 )
 # Relative pronouns and wiki glue. "which premiered" is syntax, not a subject.
@@ -233,6 +235,57 @@ _VAGUE_SUBJECTS = frozenset(
         "weather",
     }
 )
+# Wikipedia/TMDB infobox leftovers — production, reception, geography, studio,
+# and procedural glue. Either slot is enough: "pinewood studios" is not a plot
+# subject, and "team investigates" is not a story engine.
+_NON_PLOT_UNIGRAMS = frozenset(
+    {
+        # Production process / commercial boilerplate
+        "photography",
+        "filming",
+        "filmed",
+        "shooting",
+        "budget",
+        "gross",
+        "grossing",
+        "title",
+        "box",
+        # Reception
+        "reviews",
+        "review",
+        "critic",
+        "critics",
+        "critical",
+        "acclaim",
+        "acclaimed",
+        "reception",
+        "following",
+        # Geography / infobox locations ("new" is a stopword → "york city")
+        "united",
+        "states",
+        "york",
+        "hollywood",
+        "britain",
+        "british",
+        "america",
+        "countries",
+        "country",
+        # Studio / company
+        "studios",
+        "studio",
+        "pictures",
+        # Procedural glue
+        "investigates",
+        "investigation",
+        "investigating",
+        "investigator",
+        # Period architecture that is not a shared story engine
+        "victorian",
+        "edwardian",
+        "georgian",
+        "elizabethan",
+    }
+)
 _IRREGULAR_PLURALS = frozenset(
     {
         "people",
@@ -302,6 +355,8 @@ def _honest_subject(left: str, right: str) -> bool:
     if left in _FORMAT_UNIGRAMS or right in _FORMAT_UNIGRAMS:
         return False
     if left in _VAGUE_SUBJECTS or right in _VAGUE_SUBJECTS:
+        return False
+    if left in _NON_PLOT_UNIGRAMS or right in _NON_PLOT_UNIGRAMS:
         return False
     if left in _GENERIC_UNIGRAMS and right in _GENERIC_UNIGRAMS:
         return False
@@ -493,11 +548,70 @@ def parse_plot_link_json(raw: Any) -> Optional[Dict[str, Any]]:
     return parse_plot_link_json(parsed)
 
 
+def neighbor_identity(item: Any) -> str:
+    """Stable peer key for Similar vs Surprising identity checks."""
+    if isinstance(item, Mapping):
+        nested = item.get("peer")
+        if isinstance(nested, Mapping):
+            nested_key = neighbor_identity(nested)
+            if nested_key:
+                return nested_key
+
+    def _get(key: str) -> Any:
+        if isinstance(item, Mapping):
+            return item.get(key)
+        try:
+            return item[key]
+        except (KeyError, IndexError, TypeError):
+            return None
+
+    rating = str(_get("rating_key") or "").strip()
+    if rating:
+        return f"rk:{rating}"
+    for prefix, key in (("tmdb", "tmdb_id"), ("tvdb", "tvdb_id")):
+        value = _get(key)
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            continue
+        if parsed > 0:
+            return f"{prefix}:{parsed}"
+    for key in ("neighbor_id", "to_id", "library_item_id", "id"):
+        value = _get(key)
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            continue
+        if parsed > 0:
+            return f"id:{parsed}"
+    return ""
+
+
+def surprising_items_if_distinct(
+    similar_items: Sequence[Any],
+    surprising_items: Sequence[Any],
+) -> List[Any]:
+    """Keep Surprising only when it is not a carbon copy of Similar.
+
+    Same ordered identities → honest empty. Those titles already sit on
+    Similar; duplicating the rail is not a story the shelf would not suggest.
+    """
+    surprising = [item for item in (surprising_items or []) if item is not None]
+    if not surprising:
+        return []
+    similar_ids = [key for key in (neighbor_identity(item) for item in (similar_items or [])) if key]
+    surprising_ids = [key for key in (neighbor_identity(item) for item in surprising) if key]
+    if similar_ids and surprising_ids == similar_ids:
+        return []
+    return surprising
+
+
 def honest_plot_link(link: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
     """Rebuild a stored plot-link from honest terms, or refuse junk grammar.
 
     Empty is better than ``an ordinary people`` / ``a drama television`` /
-    ``a which premiered``. Crew and collection links are a different kind.
+    ``united states`` / ``principal photography``. Crew and collection links
+    are a different kind.
     """
     if not link:
         return None

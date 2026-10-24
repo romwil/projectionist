@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- Similar plot, Surprising, and For you omit Wikipedia/TMDB trivia (box office, united states, principal photography, team investigates) instead of naming it as a plot link. Empty is better. Surprising stays empty when it would copy Similar.
+
 ## [1.37.61] — 2026-10-23
 
 One patch on 1.37.60: the delight series — tonight matches For you, chat and posters share that named-link sentence, Live names repeats and Between programs, Monday lists empty More Like This, and MCP proposes only real gaps.

@@ -3,9 +3,9 @@ import { Link } from "react-router-dom";
 import { getTitleRelations } from "../api/client";
 import {
   hasSpecificStoryLink,
-  isSurprisingRelation,
   relationWhyCopy,
   relatedTitlesPath,
+  surprisingPlotNeighbors,
 } from "../lib/relationUx.js";
 import { titleDetailPath } from "../lib/titleLinks.js";
 import PosterOverlayControls from "./PosterOverlayControls";
@@ -88,9 +88,7 @@ export default function TitleNeighborsRails({
     (edge) => edge.relation === "neighbor" && hasSpecificStoryLink(edge.why),
   );
   const neighbors =
-    neighborMode === "surprising"
-      ? plotEdges.filter((edge) => isSurprisingRelation(edge))
-      : plotEdges;
+    neighborMode === "surprising" ? surprisingPlotNeighbors(plotEdges) : plotEdges;
   const showNeighbors = plotEdges.length > 0;
   const relatedPath = relatedTitlesPath(detail);
 

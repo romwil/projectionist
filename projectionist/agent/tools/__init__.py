@@ -73,6 +73,7 @@ from projectionist.library.plot_kinship import (
     KINSHIP_CACHE_NOT_READY_NOTE,
     build_explanation,
     explanation_from_plot_link,
+    honest_plot_link,
     kinship_empty_payload,
     parse_plot_link_json,
     peers_with_named_explanation,
@@ -1332,7 +1333,7 @@ class ToolRegistry:
             if watched_seed is not None:
                 explanation = watched_bridge(self.db, peer_map, watched_seed)
             if not explanation or not str(explanation.get("sentence") or "").strip():
-                link = parse_plot_link_json(peer_map.get("plot_link_json"))
+                link = honest_plot_link(parse_plot_link_json(peer_map.get("plot_link_json")))
                 if link:
                     explanation = explanation_from_plot_link(
                         link,
