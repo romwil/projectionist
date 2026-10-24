@@ -16,6 +16,7 @@ import {
   titleAvailability,
   titleAvailabilityClassName,
 } from "../lib/titleAvailability.js";
+import { titleWithYear } from "../lib/titleLine.js";
 import {
   canWatchOnPlex,
   libraryWatchTo,
@@ -29,6 +30,7 @@ import { allowWatchlistPin } from "../lib/watchlistPin.js";
 import { normalizeWatchSummary, trackedCompletionCardLabel } from "../lib/watchTracker.js";
 import PosterActionMenu from "./PosterActionMenu";
 import TitleDetailLink from "./TitleDetailLink";
+import TitleYearText from "./TitleYearText.jsx";
 import WatchProgressBadge from "./WatchProgressBadge";
 
 let cachedPlexMachineId;
@@ -137,7 +139,7 @@ export default function TitleCard({
   const whyReason = displayRecommendationReason(item.recommendation_reason);
   const hasWhyDetail = Boolean(whyReason || facetMatches.length);
   const detailPath = titleDetailPath(item);
-  const titleLabel = `${item.title || "Unknown title"}${item.year ? ` (${item.year})` : ""}`;
+  const titleLabel = titleWithYear(item, { fallback: "Unknown title" });
   const trackedLabel =
     item.media_type === "movie"
       ? trackedCompletionCardLabel(normalizeWatchSummary(item))
@@ -407,14 +409,10 @@ export default function TitleCard({
               className="title-card-title-link"
               data-testid="title-card-title-link"
             >
-              {item.title || "Unknown title"}
-              {item.year ? <span className="year"> ({item.year})</span> : null}
+              <TitleYearText item={item} fallback="Unknown title" />
             </TitleDetailLink>
           ) : (
-            <>
-              {item.title || "Unknown title"}
-              {item.year ? <span className="year"> ({item.year})</span> : null}
-            </>
+            <TitleYearText item={item} fallback="Unknown title" />
           )}
         </h3>
         {item.rating ? <p className="rating">★ {item.rating.toFixed(1)}</p> : null}

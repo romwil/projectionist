@@ -4,6 +4,7 @@ import { shouldOpenTitleOverlayClick } from "../lib/titleDetailDrawer.js";
 import { titleDetailPath } from "../lib/titleLinks.js";
 import PosterOverlayControls from "./PosterOverlayControls";
 import TitleDetailLink from "./TitleDetailLink";
+import TitleYearText from "./TitleYearText.jsx";
 import { useTitleDetailOverlayOptional } from "./TitleDetailOverlayProvider.jsx";
 
 /**
@@ -46,8 +47,9 @@ export default function LibraryMediaCard({
 
   const titleBlock = (
     <>
-      <h3>{item.title || "Untitled"}</h3>
-      {item.year ? <p className="explore-card-meta">{item.year}</p> : null}
+      <h3>
+        <TitleYearText item={item} />
+      </h3>
       {meta ? <p className="explore-card-meta explore-card-context">{meta}</p> : null}
     </>
   );

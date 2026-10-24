@@ -5,6 +5,7 @@ import ChamberEmpty from "../components/ChamberEmpty";
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/backNav.js";
+import { titleWithYear } from "../lib/titleLine.js";
 import { titleDetailPath } from "../lib/titleLinks.js";
 import {
   isForbiddenWhisperCopy,
@@ -17,9 +18,8 @@ import {
 function WhisperCard({ item, memberName, onDismiss }) {
   const why = whisperWhy(item);
   const safeWhy = isForbiddenWhisperCopy(why) ? "" : why;
-  const yearBit = item?.year ? ` (${item.year})` : "";
   const href = titleDetailPath(item);
-  const title = String(item?.title || "A title").trim() || "A title";
+  const title = titleWithYear(item, { fallback: "A title" });
 
   return (
     <article className="whisper-card" data-testid="whisper-card">
@@ -28,12 +28,10 @@ function WhisperCard({ item, memberName, onDismiss }) {
         {href ? (
           <Link to={href} className="whisper-card-title-link" data-testid="whisper-card-title">
             {title}
-            {yearBit}
           </Link>
         ) : (
           <span data-testid="whisper-card-title">
             {title}
-            {yearBit}
           </span>
         )}
       </h2>

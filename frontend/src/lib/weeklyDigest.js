@@ -1,5 +1,7 @@
 /** Normalize the weekly in-app digest payload into a display model. Pure logic. */
 
+import { titleWithYear } from "./titleLine.js";
+
 function pct(value) {
   const num = Number(value);
   if (!Number.isFinite(num)) return null;
@@ -13,8 +15,7 @@ function num(value) {
 
 export function formatDigestTitle(item) {
   if (!item) return "";
-  const name = String(item.title || "Untitled");
-  return item.year ? `${name} (${item.year})` : name;
+  return titleWithYear(item);
 }
 
 /** Dedupe new-addition chips by tmdb identity, else title+year. */
