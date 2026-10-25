@@ -644,6 +644,13 @@
   border-top: 1px solid var(--live-line);
 }
 
+.live-cc-option {
+  min-height: var(--tap-min);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
 .live-cc-option.is-active {
   background: var(--accent-soft);
   color: var(--text);

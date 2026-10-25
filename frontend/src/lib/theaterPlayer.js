@@ -577,26 +577,76 @@ export function canResumeAttachedStream({ video, streamUrl } = {}) {
   return Boolean(video.currentSrc || video.src);
 }
 
+/** Library Play letterbox: default art (blurred poster), or a black frame. */
+export function playStageChrome(blackFrame = false) {
+  const black = Boolean(blackFrame);
+  return {
+    className: black ? "theater-player--black-frame" : "",
+    dataPlayFrame: black ? "black" : "art",
+    hidePoster: black,
+  };
+}
+
 /** True when the document (or webkit) reports an active fullscreen element. */
 export function isDocumentFullscreen() {
   if (typeof document === "undefined") return false;
   return Boolean(document.fullscreenElement || document.webkitFullscreenElement);
 }
 
+/** iPhone / iPad / iPod, including iPadOS desktop-class UA. */
+export function isIosSafariUserAgent(userAgent = "", { maxTouchPoints } = {}) {
+  const ua = String(userAgent || "");
+  if (/iPad|iPhone|iPod/i.test(ua)) return true;
+  const touches = Number(
+    maxTouchPoints ?? (typeof navigator !== "undefined" ? navigator.maxTouchPoints : 0),
+  );
+  return /Macintosh/i.test(ua) && Number.isFinite(touches) && touches > 1;
+}
+
 /**
- * Enter/exit theater fullscreen on the shell that owns video + OSD.
- * iOS Safari often rejects element Fullscreen API — fall back to a CSS
- * immersive class on the root. Prefer that over `video.webkitEnterFullscreen`,
- * which would hide custom OSD controls.
- * @returns {"exit"|"enter"|"immersive"|"noop"}
+ * iOS Safari does not fullscreen a div the way desktop does. Use the media
+ * element's webkitEnterFullscreen when the UA and the video both support it.
+ */
+export function shouldUseWebkitVideoFullscreen(video, { userAgent, maxTouchPoints } = {}) {
+  if (!video || typeof video.webkitEnterFullscreen !== "function") return false;
+  if (video.webkitSupportsFullscreen === false) return false;
+  const ua = userAgent ?? (typeof navigator !== "undefined" ? navigator.userAgent : "");
+  return isIosSafariUserAgent(ua, { maxTouchPoints });
+}
+
+function exitWebkitVideoFullscreen(video) {
+  const exit = video?.webkitExitFullscreen || video?.webkitEndFullscreen;
+  if (typeof exit !== "function") return false;
+  try {
+    exit.call(video);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Enter/exit theater fullscreen. On iPhone Safari, `requestFullscreen` on the
+ * shell is a no-op (watch is already a fixed viewport) — call
+ * `video.webkitEnterFullscreen` from the user gesture instead. Desktop still
+ * prefers element fullscreen so custom OSD stays. CSS immersive remains the
+ * last fallback when neither API exists.
+ * @returns {"exit"|"enter"|"webkit"|"immersive"|"noop"}
  */
 export function toggleTheaterFullscreen(
   root,
-  { immersiveClass = "theater-player--immersive" } = {},
+  { immersiveClass = "theater-player--immersive", video = null, userAgent, maxTouchPoints } = {},
 ) {
-  if (!root) return "noop";
+  if (!root && !video) return "noop";
   const hasDocument = typeof document !== "undefined";
-  const immersive = Boolean(immersiveClass && root.classList?.contains?.(immersiveClass));
+  const immersive = Boolean(immersiveClass && root?.classList?.contains?.(immersiveClass));
+  const webkitOpts = { userAgent, maxTouchPoints };
+
+  if (video?.webkitDisplayingFullscreen) {
+    exitWebkitVideoFullscreen(video);
+    if (immersiveClass) root?.classList?.remove?.(immersiveClass);
+    return "exit";
+  }
 
   if (hasDocument && isDocumentFullscreen()) {
     const exit = document.exitFullscreen || document.webkitExitFullscreen;
@@ -608,19 +658,33 @@ export function toggleTheaterFullscreen(
         // ignore
       }
     }
-    if (immersiveClass) root.classList?.remove?.(immersiveClass);
+    if (immersiveClass) root?.classList?.remove?.(immersiveClass);
     return "exit";
   }
 
-  if (immersive && immersiveClass) {
+  if (immersive && immersiveClass && root) {
     root.classList.remove(immersiveClass);
     return "exit";
   }
 
-  const request = root.requestFullscreen || root.webkitRequestFullscreen;
-  if (hasDocument && typeof request === "function") {
+  if (shouldUseWebkitVideoFullscreen(video, webkitOpts)) {
     try {
-      const result = request.call(root);
+      video.webkitEnterFullscreen();
+      return "webkit";
+    } catch {
+      // Fall through to element fullscreen / CSS immersive.
+    }
+  }
+
+  const request =
+    typeof root?.requestFullscreen === "function"
+      ? () => root.requestFullscreen()
+      : typeof root?.webkitRequestFullscreen === "function"
+        ? () => root.webkitRequestFullscreen()
+        : null;
+  if (request) {
+    try {
+      const result = request();
       if (result?.then) {
         result.catch(() => {
           if (immersiveClass) root.classList?.add?.(immersiveClass);
@@ -636,7 +700,7 @@ export function toggleTheaterFullscreen(
     }
   }
 
-  if (immersiveClass) {
+  if (immersiveClass && root) {
     root.classList?.add?.(immersiveClass);
     return "immersive";
   }

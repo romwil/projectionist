@@ -136,7 +136,9 @@ These surfaces share one bar: **picture first, one gold primary, quiet chrome, L
 | **Keyboard** | Space/`K`/`S` play-pause; `J`/`A`/← −15s; `L`/`D`/→ +15s; `F` fullscreen; `M` mute; `C` captions. |
 | **Mobile 390** | ≥44px primaries, safe-area insets, no Pop-out in the primary row, landscape immersive. |
 | **Phone landscape** | Detect phone by short/long edge (not width alone) so rotating to ~844×390 keeps `--phone` chrome. OSD uses `(orientation: landscape) and (max-height: 500px)` — compact title, hidden episode line, transport fully inside the shell with `env(safe-area-inset-*)`. |
-| **Fullscreen** | Prefer Fullscreen API on the theater root (video + OSD together). When the API is unavailable (common iOS Safari), CSS `theater-player--immersive` keeps custom controls; do not prefer `video.webkitEnterFullscreen` (it drops the OSD). |
+| **Fullscreen** | Desktop: Fullscreen API on the theater root (video + OSD together). iPhone Safari: `video.webkitEnterFullscreen()` — iOS does not fullscreen a div. CSS `theater-player--immersive` is the last fallback when neither API exists. |
+| **Play letterbox** | Default: blurred poster around the contain frame. More → **Black frame** (per-browser) swaps to a black letterbox; **Use poster border** restores art. Live TV does not take this pref unless it shares the same stage chrome. |
+| **CC** | Overlay text/VTT/SRT only. Bitmap PGS/VobSub are omitted (never “can’t draw” chips). If the preferred language has no drawable track, Play searches Plex for a text download. Offset uses the title clock (`playheadMsFromMedia`). |
 | **Honest empty / loading / error** | Tuning interstitial (CRT static + wry copy) while seeking/starting; Resume/Start over; Try again + Open in Plex — never a blank stall or dead Play. |
 | **Movie preroll** | Every movie play draws a random trailer from `/preroll`. Episodes skip it. The bumper plays through: no on-screen title, no skip control. Each browser picks independently (no shared preroll clock). |
 

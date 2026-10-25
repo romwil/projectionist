@@ -4,15 +4,19 @@ import {
   applyUiTheme,
   cycleUiTheme,
   loadPauseWhenBackgrounded,
+  loadPlayBlackFrame,
   loadStoredUiTheme,
   normalizeUiFontSize,
   normalizeUiTheme,
   persistPauseWhenBackgrounded,
+  persistPlayBlackFrame,
+  playFrameMenuLabel,
   resolveEffectiveTheme,
   themeControlIcon,
   themePreferenceLabel,
   themeToDataAttr,
   PAUSE_WHEN_BACKGROUNDED_KEY,
+  PLAY_BLACK_FRAME_KEY,
 } from "./uiPrefs.js";
 
 test("normalizeUiFontSize accepts small medium large", () => {
@@ -107,4 +111,20 @@ test("pauseWhenBackgrounded defaults false and persists true", () => {
   assert.equal(persistPauseWhenBackgrounded(false, storage), false);
   assert.equal(store.get(PAUSE_WHEN_BACKGROUNDED_KEY), "false");
   assert.equal(loadPauseWhenBackgrounded(storage), false);
+});
+
+test("play black frame defaults to art and persists per browser", () => {
+  const store = new Map();
+  const storage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, v),
+  };
+  assert.equal(loadPlayBlackFrame(storage), false);
+  assert.equal(playFrameMenuLabel(false), "Black frame");
+  assert.equal(persistPlayBlackFrame(true, storage), true);
+  assert.equal(store.get(PLAY_BLACK_FRAME_KEY), "true");
+  assert.equal(loadPlayBlackFrame(storage), true);
+  assert.equal(playFrameMenuLabel(true), "Use poster border");
+  assert.equal(persistPlayBlackFrame(false, storage), false);
+  assert.equal(loadPlayBlackFrame(storage), false);
 });

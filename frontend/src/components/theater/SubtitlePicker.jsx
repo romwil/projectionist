@@ -1,9 +1,8 @@
-import { formatSubtitleDelay, SUBTITLE_DELAY_STEP_SEC } from "../../lib/subtitleCues.js";
+import { formatSubtitleDelay, stepSubtitleDelay, SUBTITLE_DELAY_STEP_SEC } from "../../lib/subtitleCues.js";
 
 /**
- * One CC menu for every player. Off + real tracks; unreadable tracks stay
- * listed (disabled) with the honest reason. `extraOptions` lets Live add its
- * in-stream HLS tracks and the "Ask Plex" action.
+ * One CC menu for every player. Off + drawable text tracks only.
+ * `extraOptions` lets Live add its in-stream HLS tracks and the "Ask Plex" action.
  */
 export default function SubtitlePicker({
   tracks = [],
@@ -20,6 +19,7 @@ export default function SubtitlePicker({
   leading = null,
   trailing = null,
 }) {
+  const pickable = tracks.filter((track) => track.renderable !== false);
   const showSync = activeId !== -1 && typeof onDelayChange === "function";
   return (
     <div className={`live-cc-picker subtitle-picker ${className}`.trim()} data-testid={testId} data-theater-chrome="true">
@@ -32,27 +32,36 @@ export default function SubtitlePicker({
         Off
       </button>
       {leading}
-      {tracks.map((track) => (
+      {pickable.map((track) => (
         <button
           key={track.index}
           type="button"
           className={`ghost live-cc-option${activeId === track.index ? " is-active" : ""}`}
-          disabled={!track.renderable}
-          title={track.renderable ? undefined : track.unavailableReason}
           onClick={() => onSelect?.(track)}
           data-testid={`${testId}-track`}
         >
           {track.label}
-          {track.renderable ? "" : " · can’t draw"}
         </button>
       ))}
       {showSync ? (
         <span className="subtitle-sync" data-testid={`${testId}-sync`}>
-          <button type="button" className="ghost live-cc-option" onClick={() => onDelayChange(delaySec - SUBTITLE_DELAY_STEP_SEC)} aria-label="Show subtitles earlier">
+          <button
+            type="button"
+            className="ghost live-cc-option"
+            onClick={() => onDelayChange(stepSubtitleDelay(delaySec, -SUBTITLE_DELAY_STEP_SEC))}
+            aria-label="Show subtitles earlier"
+            data-testid={`${testId}-sync-earlier`}
+          >
             ◂
           </button>
           <span className="subtitle-sync-value">{formatSubtitleDelay(delaySec)}</span>
-          <button type="button" className="ghost live-cc-option" onClick={() => onDelayChange(delaySec + SUBTITLE_DELAY_STEP_SEC)} aria-label="Show subtitles later">
+          <button
+            type="button"
+            className="ghost live-cc-option"
+            onClick={() => onDelayChange(stepSubtitleDelay(delaySec, SUBTITLE_DELAY_STEP_SEC))}
+            aria-label="Show subtitles later"
+            data-testid={`${testId}-sync-later`}
+          >
             ▸
           </button>
         </span>
@@ -63,7 +72,7 @@ export default function SubtitlePicker({
       {state === "error" && error ? (
         <p className="live-cc-empty" role="alert" data-testid={`${testId}-error`}>{error}</p>
       ) : null}
-      {!tracks.length && emptyMessage ? (
+      {!pickable.length && emptyMessage ? (
         <p className="live-cc-empty" data-testid={`${testId}-empty`}>{emptyMessage}</p>
       ) : null}
       {note ? (

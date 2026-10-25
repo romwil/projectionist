@@ -67,6 +67,9 @@ import {
   theaterKeyAction,
   toggleTheaterFullscreen,
   isDocumentFullscreen,
+  isIosSafariUserAgent,
+  playStageChrome,
+  shouldUseWebkitVideoFullscreen,
 } from "./theaterPlayer.js";
 
 test("libraryWatchPath encodes the rating key", () => {
@@ -515,6 +518,133 @@ test("toggleTheaterFullscreen uses immersive CSS when requestFullscreen is missi
   assert.equal(toggleTheaterFullscreen(root), "exit");
   assert.equal(root.classList.contains("theater-player--immersive"), false);
   assert.equal(toggleTheaterFullscreen(null), "noop");
+});
+
+test("iPhone Safari Fullscreen tap calls video.webkitEnterFullscreen", () => {
+  const entered = [];
+  const video = {
+    webkitSupportsFullscreen: true,
+    webkitDisplayingFullscreen: false,
+    webkitEnterFullscreen() {
+      entered.push("enter");
+    },
+    webkitExitFullscreen() {
+      entered.push("exit");
+    },
+  };
+  const root = {
+    requestFullscreen() {
+      entered.push("div");
+      return Promise.resolve();
+    },
+    classList: {
+      _set: new Set(),
+      contains(name) {
+        return this._set.has(name);
+      },
+      add(name) {
+        this._set.add(name);
+      },
+      remove(name) {
+        this._set.delete(name);
+      },
+    },
+  };
+  const ua =
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+  assert.equal(isIosSafariUserAgent(ua), true);
+  assert.equal(shouldUseWebkitVideoFullscreen(video, { userAgent: ua }), true);
+  assert.equal(toggleTheaterFullscreen(root, { video, userAgent: ua }), "webkit");
+  assert.deepEqual(entered, ["enter"]);
+  assert.equal(root.classList.contains("theater-player--immersive"), false);
+  video.webkitDisplayingFullscreen = true;
+  assert.equal(toggleTheaterFullscreen(root, { video, userAgent: ua }), "exit");
+  assert.deepEqual(entered, ["enter", "exit"]);
+});
+
+test("desktop Fullscreen still uses the theater root, not webkit video", () => {
+  const entered = [];
+  const video = {
+    webkitSupportsFullscreen: true,
+    webkitEnterFullscreen() {
+      entered.push("webkit");
+    },
+  };
+  const root = {
+    requestFullscreen() {
+      entered.push("div");
+      return Promise.resolve();
+    },
+    classList: {
+      _set: new Set(),
+      contains(name) {
+        return this._set.has(name);
+      },
+      add(name) {
+        this._set.add(name);
+      },
+      remove(name) {
+        this._set.delete(name);
+      },
+    },
+  };
+  const ua =
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15";
+  assert.equal(isIosSafariUserAgent(ua, { maxTouchPoints: 0 }), false);
+  assert.equal(shouldUseWebkitVideoFullscreen(video, { userAgent: ua, maxTouchPoints: 0 }), false);
+  const previousDocument = globalThis.document;
+  globalThis.document = {
+    fullscreenElement: null,
+    webkitFullscreenElement: null,
+  };
+  try {
+    const mode = toggleTheaterFullscreen(root, { video, userAgent: ua, maxTouchPoints: 0 });
+    assert.notEqual(mode, "webkit");
+    assert.ok(!entered.includes("webkit"));
+    assert.equal(mode, "enter");
+    assert.deepEqual(entered, ["div"]);
+  } finally {
+    globalThis.document = previousDocument;
+  }
+});
+
+test("More black-frame toggle switches stage chrome class and background", () => {
+  const art = playStageChrome(false);
+  assert.equal(art.className, "");
+  assert.equal(art.dataPlayFrame, "art");
+  assert.equal(art.hidePoster, false);
+  const black = playStageChrome(true);
+  assert.equal(black.className, "theater-player--black-frame");
+  assert.equal(black.dataPlayFrame, "black");
+  assert.equal(black.hidePoster, true);
+  const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../styles/13-watch.css"), "utf8");
+  assert.match(css, /\.theater-player\.theater-player--black-frame\s*\{[^}]*background:\s*#000/s);
+  assert.match(css, /\.theater-player\.theater-player--black-frame \.theater-stage-poster\s*\{[^}]*display:\s*none/s);
+});
+
+test("Play wires iOS fullscreen, black frame, and title-clock captions", () => {
+  const root = dirname(fileURLToPath(import.meta.url));
+  const player = readFileSync(join(root, "../components/theater/LibraryPlayer.jsx"), "utf8");
+  const stage = readFileSync(join(root, "../components/theater/TheaterPlayer.jsx"), "utf8");
+  const picker = readFileSync(join(root, "../components/theater/SubtitlePicker.jsx"), "utf8");
+  const css = readFileSync(join(root, "../styles/13-watch.css"), "utf8");
+  const liveCss = readFileSync(join(root, "../styles/12-live.css"), "utf8");
+  assert.match(player, /toggleTheaterFullscreen\(root,\s*\{\s*video:/);
+  assert.match(player, /downloadLibraryItemSubtitles/);
+  assert.match(player, /resolvePlaySubtitleTracks/);
+  assert.match(player, /blackFrame=\{blackFrame\}/);
+  assert.match(player, /library-black-frame/);
+  assert.match(player, /playheadMsFromMedia/);
+  assert.match(stage, /toggleTheaterFullscreen\(rootRef\.current,\s*\{\s*video:/);
+  assert.match(stage, /playStageChrome\(blackFrame\)/);
+  assert.match(css, /\.theater-player\.theater-player--black-frame/);
+  assert.match(css, /background:\s*#000/);
+  assert.match(css, /\.theater-osd-skip,\s*\n\.theater-osd-secondary\s*\{[^}]*user-select:\s*none/s);
+  assert.doesNotMatch(picker, /can’t draw|can't draw/);
+  assert.match(picker, /stepSubtitleDelay/);
+  assert.match(picker, /sync-earlier/);
+  assert.match(liveCss, /\.live-cc-option\s*\{[^}]*min-height:\s*var\(--tap-min\)/s);
+  assert.match(liveCss, /\.live-cc-option\s*\{[^}]*user-select:\s*none/s);
 });
 
 test("Next Episode control opens the in-app watch route", () => {

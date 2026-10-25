@@ -29,7 +29,7 @@ import {
   toggleLiveVideoPlayback,
   tryPlayLiveVideo,
 } from "../../lib/liveChannels.js";
-import { theaterHlsConfig } from "../../lib/theaterPlayer.js";
+import { theaterHlsConfig, toggleTheaterFullscreen } from "../../lib/theaterPlayer.js";
 import {
   clampSubtitleDelay,
   liveProgramClockSec,
@@ -770,13 +770,7 @@ export default function LivePlayer({
   }
 
   function toggleFullscreen() {
-    const root = rootRef.current;
-    if (!root) return;
-    if (document.fullscreenElement) {
-      document.exitFullscreen?.().catch(() => {});
-    } else {
-      root.requestFullscreen?.().catch(() => {});
-    }
+    toggleTheaterFullscreen(rootRef.current, { video: videoRef.current });
     bumpOsd();
   }
 

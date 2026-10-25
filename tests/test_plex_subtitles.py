@@ -13,6 +13,7 @@ from projectionist.library.subtitles import (
     download_preferred_subtitles,
     has_preferred_subtitle,
     language_matches,
+    pick_search_candidate,
     list_item_subtitles,
     live_subtitles_payload,
     normalize_subtitle_language,
@@ -93,6 +94,53 @@ class SubtitleServiceTests(unittest.TestCase):
         stream = PlexSubtitleStream(id="1", language="English", language_code="eng")
         self.assertTrue(language_matches(stream, "en"))
         self.assertTrue(has_preferred_subtitle([stream], ["en"]))
+        pgs = PlexSubtitleStream(id="2", language="English", language_code="eng", format="pgs")
+        self.assertFalse(has_preferred_subtitle([pgs], ["en"]))
+        self.assertIsNone(pick_search_candidate([pgs]))
+        srt_hit = PlexSubtitleStream(
+            id="3", language="English", language_code="eng", format="srt", key="provider://sub/3"
+        )
+        self.assertEqual(pick_search_candidate([pgs, srt_hit]).id, "3")
+
+    def test_pgs_only_english_still_asks_plex_for_text(self) -> None:
+        class _Tunarr:
+            subtitle_language_primary = "en"
+            subtitle_language_fallback = ""
+
+        class _Settings:
+            plex_url = "http://plex.test:32400"
+            plex_token = "token"
+            tunarr = _Tunarr()
+
+        pgs = PlexSubtitleStream(id="9", language="English", language_code="eng", format="pgs")
+        srt = PlexSubtitleStream(
+            id="10",
+            language="English",
+            language_code="eng",
+            format="srt",
+            key="provider://sub/10",
+        )
+        attached = PlexSubtitleStream(
+            id="11",
+            language="English",
+            language_code="eng",
+            format="srt",
+            key="/library/streams/11",
+        )
+        client = PlexClient("http://plex.test:32400", "token")
+        lists = [[pgs], [pgs, attached]]
+        with patch(
+            "projectionist.library.subtitles.plex_client_from_settings",
+            return_value=client,
+        ), patch.object(client, "list_subtitle_streams", side_effect=lists), patch.object(
+            client, "search_subtitles", return_value=[srt]
+        ) as search, patch.object(client, "download_subtitle") as download:
+            result = download_preferred_subtitles(_Settings(), "42")
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["downloaded"])
+        search.assert_called()
+        download.assert_called()
+        self.assertTrue(any(row.get("renderable") for row in result["streams"]))
 
     def test_srt_to_vtt(self) -> None:
         srt = "1\n00:00:01,000 --> 00:00:02,000\nHello\n"

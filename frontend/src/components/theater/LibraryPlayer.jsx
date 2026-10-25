@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
+  downloadLibraryItemSubtitles,
   fetchNextPreroll,
   getLibraryItemSubtitles,
   progressLibraryPlayback,
@@ -56,11 +57,18 @@ import {
   theaterKeyAction,
   toggleTheaterFullscreen,
 } from "../../lib/theaterPlayer.js";
-import { UI_PREFS_CHANGED_EVENT, loadPauseWhenBackgrounded } from "../../lib/uiPrefs.js";
+import {
+  UI_PREFS_CHANGED_EVENT,
+  loadPauseWhenBackgrounded,
+  loadPlayBlackFrame,
+  persistPlayBlackFrame,
+  playFrameMenuLabel,
+} from "../../lib/uiPrefs.js";
 import {
   SUBTITLE_EMPTY_TRACKS,
+  SUBTITLE_NO_TEXT_TRACKS,
   clampSubtitleDelay,
-  normalizeSubtitleTracks,
+  resolvePlaySubtitleTracks,
   resolveSubtitlePresentation,
   silenceNativeTextTracks,
 } from "../../lib/subtitleCues.js";
@@ -176,6 +184,7 @@ export default function LibraryPlayer({
   const [skipChip, setSkipChip] = useState("");
   const [ccOpen, setCcOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [blackFrame, setBlackFrame] = useState(() => loadPlayBlackFrame());
   const [nowMs, setNowMs] = useState(0);
   const [durationMs, setDurationMs] = useState(0);
   /** Non-null while dragging/keyboard-scrubbing — drives the range value instead of playhead. */
@@ -264,17 +273,55 @@ export default function LibraryPlayer({
     setSubListNote("");
     if (!subtitleKey) return undefined;
     let cancelled = false;
-    getLibraryItemSubtitles(subtitleKey)
-      .then((payload) => {
+    (async () => {
+      try {
+        const listed = await getLibraryItemSubtitles(subtitleKey);
         if (cancelled) return;
-        const tracks = normalizeSubtitleTracks(payload?.streams);
-        setSubTracks(tracks);
-        if (!tracks.length)
-          setSubListNote(payload?.ok === false ? payload?.message || "" : SUBTITLE_EMPTY_TRACKS);
-      })
-      .catch(() => {
+        const preferred = listed?.preferred_languages || ["en"];
+        let downloaded = null;
+        let downloadMessage = "";
+        const first = resolvePlaySubtitleTracks({
+          listedStreams: listed?.streams,
+          preferredLanguages: preferred,
+        });
+        if (first.needsFetch) {
+          setSubListNote("Looking for text captions…");
+          try {
+            const result = await downloadLibraryItemSubtitles(subtitleKey);
+            if (cancelled) return;
+            downloadMessage = String(result?.message || "");
+            downloaded = Array.isArray(result?.streams) ? result.streams : [];
+            if (result?.ok && !downloaded.length) {
+              const refreshed = await getLibraryItemSubtitles(subtitleKey);
+              if (cancelled) return;
+              downloaded = refreshed?.streams ?? [];
+            }
+          } catch {
+            downloadMessage = "Plex couldn’t find text captions for this title.";
+          }
+        }
+        if (cancelled) return;
+        const resolved = resolvePlaySubtitleTracks({
+          listedStreams: listed?.streams,
+          downloadedStreams: downloaded,
+          preferredLanguages: preferred,
+        });
+        setSubTracks(resolved.tracks);
+        if (resolved.autoSelectIndex !== -1) setActiveSub(resolved.autoSelectIndex);
+        if (resolved.empty) {
+          setSubListNote(
+            downloadMessage ||
+              (listed?.ok === false ? listed?.message || "" : listed?.streams?.length
+                ? SUBTITLE_NO_TEXT_TRACKS
+                : SUBTITLE_EMPTY_TRACKS),
+          );
+        } else {
+          setSubListNote("");
+        }
+      } catch {
         if (!cancelled) setSubListNote("Couldn’t read subtitle tracks for this title.");
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -547,6 +594,7 @@ export default function LibraryPlayer({
   useEffect(() => {
     function refreshPref() {
       pauseWhenBackgroundedRef.current = loadPauseWhenBackgrounded();
+      setBlackFrame(loadPlayBlackFrame());
     }
     refreshPref();
     window.addEventListener("storage", refreshPref);
@@ -1035,7 +1083,7 @@ export default function LibraryPlayer({
 
   function toggleFullscreen() {
     const root = document.querySelector("[data-testid='library-player']");
-    toggleTheaterFullscreen(root);
+    toggleTheaterFullscreen(root, { video: videoRef.current });
   }
 
   function handleStageActivate(_event, _zone) {
@@ -1083,13 +1131,13 @@ export default function LibraryPlayer({
       }
       if (isDocumentFullscreen()) {
         const root = document.querySelector("[data-testid='library-player']");
-        toggleTheaterFullscreen(root);
+        toggleTheaterFullscreen(root, { video: videoRef.current });
         return;
       }
       {
         const root = document.querySelector("[data-testid='library-player']");
-        if (root?.classList.contains("theater-player--immersive")) {
-          toggleTheaterFullscreen(root);
+        if (root?.classList.contains("theater-player--immersive") || videoRef.current?.webkitDisplayingFullscreen) {
+          toggleTheaterFullscreen(root, { video: videoRef.current });
           return;
         }
       }
@@ -1306,6 +1354,14 @@ export default function LibraryPlayer({
                   {POP_OUT_OF_WINDOW_LABEL}
                 </button>
               ) : null}
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => setBlackFrame(persistPlayBlackFrame(!blackFrame))}
+                data-testid="library-black-frame"
+              >
+                {playFrameMenuLabel(blackFrame)}
+              </button>
               {plexHref ? (
                 <a
                   role="menuitem"
@@ -1343,6 +1399,7 @@ export default function LibraryPlayer({
       className={`library-watch ${phone ? "library-watch--phone" : ""} ${compact ? "library-watch--compact" : ""} ${className}`.trim()}
       data-play-phone={phone ? "true" : "false"}
       data-play-compact={compact ? "true" : "false"}
+      data-play-frame={blackFrame ? "black" : "art"}
       data-long-skip={longSkip ? "true" : "false"}
       data-center-play={showCenterPlay ? "visible" : "hidden"}
     >
@@ -1354,6 +1411,7 @@ export default function LibraryPlayer({
         }
         poster={session?.poster_url || ""}
         className="library-player"
+        blackFrame={blackFrame}
         testId="library-player"
         videoTestId="library-player-video"
         loading={status === "loading" && !resumeOpen && !preroll}
