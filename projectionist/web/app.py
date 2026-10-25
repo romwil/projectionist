@@ -71,6 +71,7 @@ from projectionist.library.db import DEFAULT_LENS_ID, InviteConflict
 from projectionist.library.external_search import (
     ERROR_NOT_CONFIGURED,
     external_tmdb_search,
+    normalize_external_media_type,
 )
 from projectionist.memory import MemoryAccessError, UserMemoryService
 from projectionist.library.derived_caches import (
@@ -3124,7 +3125,7 @@ def external_search_endpoint(
     query = (q or "").strip()
     if not query:
         raise HTTPException(status_code=400, detail="Enter something to search for.")
-    normalized_type = "show" if str(media_type or "").strip().lower() in {"show", "tv", "series"} else "movie"
+    normalized_type = normalize_external_media_type(media_type)
     capped_limit = max(1, min(int(limit or 20), 20))
     result = external_tmdb_search(
         _db(),

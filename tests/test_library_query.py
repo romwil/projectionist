@@ -22,9 +22,11 @@ from projectionist.library.query import (
     is_collection_audit_label,
     library_overview,
     maybe_set_audit_context_label,
+    normalize_library_media_type,
     query_library,
     refresh_library_overview_cache,
     resolve_thread_ambient_context_label,
+    title_query_rank,
     _parse_timestamp,
 )
 
@@ -854,6 +856,106 @@ class LibraryQueryTests(unittest.TestCase):
                 str(db.get_active_derived_context()["inferred_label"]),
                 "General Exploration",
             )
+
+    def test_normalize_library_media_type_treats_all_as_untyped(self) -> None:
+        self.assertIsNone(normalize_library_media_type(None))
+        self.assertIsNone(normalize_library_media_type(""))
+        self.assertIsNone(normalize_library_media_type("all"))
+        self.assertIsNone(normalize_library_media_type("All"))
+        self.assertEqual(normalize_library_media_type("movie"), "movie")
+        self.assertEqual(normalize_library_media_type("tv"), "show")
+        self.assertIsNone(filters_from_mapping({"media_type": "all"}).media_type)
+        self.assertEqual(filters_from_mapping({"media_type": "tv"}).media_type, "show")
+
+    def test_search_all_types_returns_owned_show_not_only_similar_movie_title(self) -> None:
+        """Type All must find owned Sliders (1995); a TMDB-gap movie is not a library hit."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_item(
+                {
+                    "rating_key": "sliders-1995",
+                    "media_type": "show",
+                    "title": "Sliders",
+                    "year": 1995,
+                    "tmdb_id": 1227,
+                    "summary": "A group travels between parallel Earths.",
+                }
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "unrelated-movie",
+                    "media_type": "movie",
+                    "title": "Arrival",
+                    "year": 2016,
+                    "tmdb_id": 329865,
+                    "summary": "Linguists make first contact.",
+                }
+            )
+            for media_type in (None, "all", "All"):
+                result = query_library(
+                    db,
+                    LibraryFilters(query="sliders", media_type=media_type, sort="title"),
+                )
+                titles = [(item["title"], item["media_type"], item["year"]) for item in result["items"]]
+                self.assertIn(
+                    ("Sliders", "show", 1995),
+                    titles,
+                    f"owned show missing for media_type={media_type!r}",
+                )
+                self.assertFalse(
+                    any("Ghost Town" in str(item["title"]) for item in result["items"])
+                )
+
+            show_only = query_library(
+                db, LibraryFilters(query="sliders", media_type="show", sort="title")
+            )
+            self.assertEqual(
+                [(item["title"], item["year"]) for item in show_only["items"]],
+                [("Sliders", 1995)],
+            )
+
+    def test_search_query_pins_exact_title_ahead_of_title_asc_and_plot_hits(self) -> None:
+        """Typed 'house' must pin House (2004) even when Sort is Title ASC."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            samples = [
+                ("a-house-time", "A House Through Time", 2018, "A documentary about a house."),
+                ("house-2004", "House", 2004, "A diagnostician leads a team of doctors."),
+                ("house-dragon", "House of the Dragon", 2022, "Targaryen civil war."),
+                ("bewitched", "Bewitched", 1964, "A witch keeps house in suburbia."),
+                ("dune-prophecy", "Dune: Prophecy", 2024, "A sisterhood in a great house."),
+                ("dr-terrible", "Dr. Terrible's House of Horrible", 2001, "Spoof horror anthology."),
+            ]
+            for rating_key, title, year, summary in samples:
+                db.upsert_library_item(
+                    {
+                        "rating_key": rating_key,
+                        "media_type": "show",
+                        "title": title,
+                        "year": year,
+                        "summary": summary,
+                    }
+                )
+            result = query_library(
+                db,
+                LibraryFilters(
+                    query="house",
+                    media_type="show",
+                    sort="title",
+                    sort_dir="asc",
+                    limit=25,
+                ),
+            )
+            titles = [item["title"] for item in result["items"]]
+            self.assertGreaterEqual(len(titles), 6)
+            self.assertEqual(titles[0], "House")
+            self.assertEqual(result["items"][0]["year"], 2004)
+            self.assertLess(titles.index("House"), titles.index("A House Through Time"))
+            self.assertLess(titles.index("House"), titles.index("House of the Dragon"))
+            self.assertLess(titles.index("House of the Dragon"), titles.index("Bewitched"))
+            self.assertEqual(title_query_rank("House", "house"), 0)
+            self.assertEqual(title_query_rank("House of the Dragon", "house"), 1)
+            self.assertEqual(title_query_rank("Bewitched", "house"), 3)
 
 
 if __name__ == "__main__":
