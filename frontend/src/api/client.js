@@ -1023,6 +1023,18 @@ export async function seekLibraryPlayback(sessionId, offsetMs) {
   });
 }
 
+/** Restart the Plex transcode with a burn-in stream, or Off (`subtitles=none`). */
+export async function setLibraryPlaybackSubtitles(sessionId, { subtitleStreamId = null, offsetMs = 0 } = {}) {
+  const raw = subtitleStreamId == null ? "" : String(subtitleStreamId).trim();
+  return api(`/library/playback/${encodeURIComponent(sessionId)}/subtitles`, {
+    method: "POST",
+    body: JSON.stringify({
+      subtitle_stream_id: raw || null,
+      offset_ms: Math.max(0, Math.floor(Number(offsetMs) || 0)),
+    }),
+  });
+}
+
 export async function progressLibraryPlayback(sessionId, payload) {
   return api(`/library/playback/${encodeURIComponent(sessionId)}/progress`, {
     method: "POST",

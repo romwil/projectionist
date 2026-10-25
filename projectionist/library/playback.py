@@ -74,6 +74,22 @@ class YouthBlockedError(PlaybackError):
 FetchFn = Callable[..., Tuple[bytes, str, int, str]]
 
 
+# Sentinel: regular seeks keep the current burn-in stream (or none).
+_KEEP_SUBTITLES = object()
+
+
+def normalize_burn_in_stream_id(raw: Any) -> Optional[str]:
+    """Plex stream id to burn into the transcode, or None for subtitles=none."""
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if not text or text.lower() in {"none", "off"}:
+        return None
+    if not text.isdigit():
+        raise PlaybackError("That subtitle track is not valid.")
+    return text
+
+
 @dataclass
 class PlaybackSession:
     session_id: str
@@ -96,6 +112,8 @@ class PlaybackSession:
     last_progress_at: float = 0.0
     created_at: float = field(default_factory=time.time)
     last_offset_s: float = 0.0
+    # Last-resort PGS/VobSub burn-in. Overlay text never shares this session.
+    subtitle_stream_id: Optional[str] = None
 
 
 _sessions: Dict[str, PlaybackSession] = {}
@@ -396,8 +414,10 @@ def universal_start_url(
     *,
     session_id: str,
     offset_seconds: float = 0,
+    subtitle_stream_id: Optional[str] = None,
 ) -> str:
     base = str(plex_base or "").strip().rstrip("/")
+    burn_id = normalize_burn_in_stream_id(subtitle_stream_id)
     params = {
         "path": f"/library/metadata/{rating_key}",
         "protocol": "hls",
@@ -405,9 +425,9 @@ def universal_start_url(
         "directPlay": "0",
         "directStream": "1",
         "directStreamAudio": "1",
-        # Soft tracks are drawn by Projectionist. Never ask PMS to burn or
-        # sidecar-mux captions into the HLS — that stacks with our overlay.
-        "subtitles": "none",
+        # Default: overlay draws text. Never burn or sidecar-mux unless the
+        # member picked a last-resort bitmap stream (PGS/VobSub).
+        "subtitles": "burn" if burn_id else "none",
         "subtitleSize": "100",
         "audioBoost": "100",
         "location": "lan",
@@ -422,6 +442,9 @@ def universal_start_url(
         "X-Plex-Device": "Web",
         "X-Plex-Device-Name": "Projectionist",
     }
+    if burn_id:
+        params["subtitleStreamID"] = burn_id
+        params["advancedSubtitles"] = "burn"
     return f"{base}/video/:/transcode/universal/start.m3u8?{urlencode(params)}"
 
 
@@ -758,6 +781,7 @@ def start_plex_hls(
         session.rating_key,
         session_id=session.session_id,
         offset_seconds=offset_seconds,
+        subtitle_stream_id=session.subtitle_stream_id,
     )
     fetch(url, headers=plex_identity_headers(session.token), timeout=30)
     session.last_offset_s = max(0.0, float(offset_seconds))
@@ -781,6 +805,7 @@ def session_public_payload(session: PlaybackSession, *, can_resume: Optional[boo
         "poster_url": session.poster_url,
         "rating_key": session.rating_key,
         "plex_watch_url": session.plex_watch_url,
+        "subtitle_stream_id": session.subtitle_stream_id or "",
     }
 
 
@@ -867,23 +892,32 @@ def seek_playback(
     *,
     fetch: Optional[FetchFn] = None,
     db: Any = None,
+    subtitle_stream_id: Any = _KEEP_SUBTITLES,
 ) -> Dict[str, Any]:
     """Stop the current transcode and open a new one at ``offset_ms``.
 
     The public playlist URL does not change (same session id). Callers must
-    reload that URL. If the new transcode fails, the previous offset is
-    started again so the session is still playable.
+    reload that URL. If the new transcode fails, the previous offset (and
+    burn-in stream) is started again so the session is still playable.
+
+    Pass ``subtitle_stream_id`` to burn that Plex stream into the new
+    transcode, or ``None`` to restore ``subtitles=none``. Omit it to keep
+    the current burn-in setting through a seek.
     """
     fetch = fetch or fetch_plex_bytes
     offset = max(0, int(offset_ms or 0))
     previous_ms = int(session.view_offset_ms or 0)
     previous_s = float(session.last_offset_s or 0.0)
+    previous_sub = session.subtitle_stream_id
+    if subtitle_stream_id is not _KEEP_SUBTITLES:
+        session.subtitle_stream_id = normalize_burn_in_stream_id(subtitle_stream_id)
     stop_plex_session(session, fetch=fetch)
     session.view_offset_ms = offset
     try:
         start_plex_hls(session, offset_seconds=offset / 1000.0, fetch=fetch)
     except Exception:
         session.view_offset_ms = previous_ms
+        session.subtitle_stream_id = previous_sub
         try:
             start_plex_hls(session, offset_seconds=previous_s, fetch=fetch)
         except Exception:

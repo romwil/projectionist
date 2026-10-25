@@ -19,6 +19,39 @@ DOWNLOAD_SOFT_FAIL = (
     "Agents may be off, or nothing matched your preferred language."
 )
 
+# Text-based formats Projectionist can overlay. Image formats (PGS/VobSub/…)
+# cannot be painted by SubtitleOverlay — never treat them as a preferred hit.
+IMAGE_SUBTITLE_FORMATS = frozenset(
+    {
+        "pgs",
+        "hdmv_pgs_subtitle",
+        "hdmv_text_subtitle",
+        "vobsub",
+        "dvd_subtitle",
+        "dvdsub",
+        "dvb_subtitle",
+        "dvbsub",
+        "xsub",
+    }
+)
+IMAGE_SUBTITLE_NOTE = (
+    "This track is picture-based, so Projectionist can’t draw it as text. "
+    "Pick another track or watch in Plex."
+)
+_NATIVE_TEXT_FORMATS = frozenset({"srt", "subrip", "vtt", "webvtt"})
+
+
+def _subtitle_row(stream: Mapping[str, Any] | PlexSubtitleStream) -> Mapping[str, Any]:
+    if isinstance(stream, PlexSubtitleStream):
+        return stream.to_dict()
+    return stream
+
+
+def subtitle_is_renderable(stream: Mapping[str, Any] | PlexSubtitleStream) -> bool:
+    """True when the track is text we can fetch and render (not PGS/VobSub bitmap)."""
+    fmt = str(_subtitle_row(stream).get("format") or "").strip().lower()
+    return fmt not in IMAGE_SUBTITLE_FORMATS
+
 
 def normalize_subtitle_language(value: Any, *, default: str = "en") -> str:
     """Normalize to a short ISO-ish language code (``en``, ``es``, ``eng`` → ``en``)."""
@@ -83,16 +116,19 @@ def has_preferred_subtitle(
     streams: Sequence[Mapping[str, Any] | PlexSubtitleStream],
     languages: Sequence[str],
 ) -> bool:
+    """True when a *drawable* (text) track matches the preferred language.
+
+    Bitmap/PGS/VobSub rows do not count — the player cannot overlay them.
+    """
+    usable = [stream for stream in streams if subtitle_is_renderable(stream)]
     for code in languages:
-        for stream in streams:
+        for stream in usable:
             if language_matches(stream, code) and not (
                 isinstance(stream, PlexSubtitleStream) and stream.forced
             ):
-                # Prefer non-forced; still count forced if it's the only match later.
                 return True
-    # Forced-only match still counts as "has preferred".
     for code in languages:
-        for stream in streams:
+        for stream in usable:
             if language_matches(stream, code):
                 return True
     return False
@@ -103,10 +139,10 @@ def pick_search_candidate(
     *,
     prefer_sdh: bool = False,
 ) -> Optional[PlexSubtitleStream]:
-    """Pick the best on-demand search hit (non-forced preferred; SDH optional)."""
-    if not candidates:
+    """Pick the best on-demand search hit (text only; non-forced preferred; SDH optional)."""
+    ranked = [item for item in candidates if subtitle_is_renderable(item)]
+    if not ranked:
         return None
-    ranked = list(candidates)
 
     def score(item: PlexSubtitleStream) -> tuple:
         return (
@@ -126,34 +162,6 @@ def plex_client_from_settings(settings: Any, *, timeout: int = 20) -> Optional[P
     if not url or not token:
         return None
     return PlexClient(url, token, timeout=timeout)
-
-
-# Text-based formats Projectionist can render as cues. Image formats (PGS/VobSub/…)
-# cannot be turned into text without OCR, so they are listed honestly but not selectable.
-IMAGE_SUBTITLE_FORMATS = frozenset(
-    {
-        "pgs",
-        "hdmv_pgs_subtitle",
-        "hdmv_text_subtitle",
-        "vobsub",
-        "dvd_subtitle",
-        "dvdsub",
-        "dvb_subtitle",
-        "dvbsub",
-        "xsub",
-    }
-)
-IMAGE_SUBTITLE_NOTE = (
-    "This track is picture-based, so Projectionist can’t draw it as text. "
-    "Pick another track or watch in Plex."
-)
-_NATIVE_TEXT_FORMATS = frozenset({"srt", "subrip", "vtt", "webvtt"})
-
-
-def subtitle_is_renderable(stream: Mapping[str, Any]) -> bool:
-    """True when the track is text we can fetch and render (not PGS/VobSub bitmap)."""
-    fmt = str(stream.get("format") or "").strip().lower()
-    return fmt not in IMAGE_SUBTITLE_FORMATS
 
 
 def subtitle_fetch_paths(stream: Mapping[str, Any]) -> List[str]:
@@ -189,6 +197,7 @@ def decorate_subtitle_row(rating_key: str, row: Dict[str, Any]) -> Dict[str, Any
     out = dict(row)
     renderable = subtitle_is_renderable(out)
     out["renderable"] = renderable
+    out["image"] = not renderable
     paths = subtitle_fetch_paths(out)
     stream_id = str(out.get("id") or "").strip()
     if renderable and paths and stream_id:

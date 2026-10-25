@@ -22,6 +22,7 @@ import {
   skipZoneFromClientX,
   stepLibraryBufferingUi,
   suppressHoldTextSelection,
+  playStageChrome,
   theaterHlsConfig,
   toggleTheaterFullscreen,
 } from "../../lib/theaterPlayer.js";
@@ -75,6 +76,8 @@ export default function TheaterPlayer({
   onAutoplayResult,
   /** Library Play only: press-and-hold 2x. Live TV must leave this false. */
   holdToDoubleSpeed = false,
+  /** Library Play: hide the blurred poster border and use a black letterbox. */
+  blackFrame = false,
   /** Library Play only: delayed buffering OSD. Live has its own chips. */
   bufferingEnabled = false,
   children,
@@ -324,7 +327,7 @@ export default function TheaterPlayer({
     }
 
     if (autoFullscreen && rootRef.current) {
-      toggleTheaterFullscreen(rootRef.current);
+      toggleTheaterFullscreen(rootRef.current, { video });
     }
 
     return () => {
@@ -341,7 +344,7 @@ export default function TheaterPlayer({
   }, [src, autoFullscreen]);
 
   function toggleFullscreen() {
-    toggleTheaterFullscreen(rootRef.current);
+    toggleTheaterFullscreen(rootRef.current, { video: videoRef.current });
     bumpOsd();
   }
 
@@ -461,13 +464,16 @@ export default function TheaterPlayer({
     onStatus?.("playing");
   }
 
+  const frame = playStageChrome(blackFrame);
+
   return (
     <div
       ref={rootRef}
-      className={`theater-player live-player ${className}`.trim()}
+      className={`theater-player live-player ${frame.className} ${className}`.trim()}
       data-testid={testId}
       data-osd={osdVisible ? "visible" : "hidden"}
       data-picture-hold={pictureHold ? "true" : "false"}
+      data-play-frame={frame.dataPlayFrame}
       tabIndex={0}
       onMouseMove={handlePointerMove}
       onFocus={bumpOsd}
@@ -600,6 +606,6 @@ export default function TheaterPlayer({
 }
 
 /** @deprecated Prefer {@link toggleTheaterFullscreen} from theaterPlayer.js */
-export function requestTheaterFullscreen(root) {
-  toggleTheaterFullscreen(root);
+export function requestTheaterFullscreen(root, video) {
+  toggleTheaterFullscreen(root, { video });
 }

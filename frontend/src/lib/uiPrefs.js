@@ -7,6 +7,8 @@ const FONT_SIZES = {
 export const UI_THEME_STORAGE_KEY = "projectionist.ui_theme";
 /** Opt-in: soft-pause /watch when the tab or Space is backgrounded. Default off = keep playing. */
 export const PAUSE_WHEN_BACKGROUNDED_KEY = "projectionist.pause_when_backgrounded";
+/** Opt-in: black letterbox instead of blurred poster art around the Play frame. Default art. */
+export const PLAY_BLACK_FRAME_KEY = "projectionist.play_black_frame";
 export const UI_PREFS_CHANGED_EVENT = "projectionist:ui-prefs";
 
 const THEME_PREFS = new Set(["lights_up", "lights_down", "system"]);
@@ -155,4 +157,28 @@ export function persistPauseWhenBackgrounded(enabled, storage = globalThis.local
   }
   notifyUiPrefsChanged({ pauseWhenBackgrounded: value });
   return value;
+}
+
+/** Device-local Play stage: false = blurred poster border (default), true = black frame. */
+export function loadPlayBlackFrame(storage = globalThis.localStorage) {
+  try {
+    return storage?.getItem?.(PLAY_BLACK_FRAME_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+export function persistPlayBlackFrame(enabled, storage = globalThis.localStorage) {
+  const value = Boolean(enabled);
+  try {
+    storage?.setItem?.(PLAY_BLACK_FRAME_KEY, value ? "true" : "false");
+  } catch {
+    // localStorage unavailable
+  }
+  notifyUiPrefsChanged({ playBlackFrame: value });
+  return value;
+}
+
+export function playFrameMenuLabel(blackFrame) {
+  return blackFrame ? "Use poster border" : "Black frame";
 }

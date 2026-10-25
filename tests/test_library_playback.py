@@ -269,6 +269,21 @@ class YouthAndProgressTests(unittest.TestCase):
         self.assertIn("subtitles=none", url)
         self.assertIn("offset=15", url)
         self.assertNotIn("subtitleStreamID=", url)
+        self.assertNotIn("advancedSubtitles=", url)
+
+    def test_universal_start_burns_selected_plex_stream(self) -> None:
+        url = universal_start_url(
+            "http://plex.test:32400",
+            "42",
+            session_id="sess-1",
+            offset_seconds=90,
+            subtitle_stream_id="9003",
+        )
+        self.assertIn("subtitles=burn", url)
+        self.assertIn("subtitleStreamID=9003", url)
+        self.assertIn("advancedSubtitles=burn", url)
+        self.assertNotIn("subtitles=none", url)
+        self.assertIn("offset=90", url)
 
 
 class PlaybackStartMockTests(unittest.TestCase):
@@ -297,6 +312,8 @@ class PlaybackStartMockTests(unittest.TestCase):
 
         def fake_fetch(url, **_kwargs):
             self.assertIn("start.m3u8", url)
+            self.assertIn("subtitles=none", url)
+            self.assertNotIn("subtitleStreamID=", url)
             self.assertNotIn("X-Plex-Token=server-token", url)
             return b"#EXTM3U\n", "application/vnd.apple.mpegurl", 200, url
 
@@ -311,6 +328,7 @@ class PlaybackStartMockTests(unittest.TestCase):
         self.assertNotIn("plex.test", json.dumps(payload))
         self.assertNotIn("server-token", json.dumps(payload))
         self.assertEqual(payload["title"], "Heat")
+        self.assertEqual(payload["subtitle_stream_id"], "")
 
     def test_progress_throttles_then_writes_offset(self) -> None:
         settings = Settings(plex_url="http://plex.test:32400", plex_token="server-token")
@@ -379,6 +397,8 @@ class PlaybackStartMockTests(unittest.TestCase):
         self.assertEqual(payload["view_offset_ms"], 15_000)
         self.assertTrue(any("/transcode/universal/stop" in url for url in calls))
         self.assertTrue(any("start.m3u8" in url and "offset=15&" in url for url in calls))
+        self.assertTrue(any("subtitles=none" in url for url in calls if "start.m3u8" in url))
+        self.assertFalse(any("subtitleStreamID=" in url for url in calls if "start.m3u8" in url))
 
     def test_failed_seek_restores_the_previous_playable_offset(self) -> None:
         settings = Settings(plex_url="http://plex.test:32400", plex_token="server-token")
@@ -411,6 +431,61 @@ class PlaybackStartMockTests(unittest.TestCase):
         self.assertTrue(any("start.m3u8" in url and "offset=0&" in url for url in calls))
         row = self.db.library_item_by_rating_key("movie-1")
         self.assertEqual(int(row["view_offset_ms"] or 0), 0)
+
+    def test_burn_in_restart_then_off_restores_subtitles_none(self) -> None:
+        settings = Settings(plex_url="http://plex.test:32400", plex_token="server-token")
+        user = type("U", (), {"id": "owner", "is_youth": False})()
+        calls: list[str] = []
+
+        def fake_fetch(url, **_kwargs):
+            calls.append(url)
+            return b"#EXTM3U\n", "application/vnd.apple.mpegurl", 200, url
+
+        started = start_playback(
+            self.db,
+            settings,
+            rating_key="movie-1",
+            user=user,
+            fetch=fake_fetch,
+        )
+        from projectionist.library.playback import get_session
+
+        session = get_session(started["session_id"], user_id="owner")
+        self.assertTrue(any("subtitles=none" in url for url in calls if "start.m3u8" in url))
+        calls.clear()
+        burned = seek_playback(
+            session,
+            12_000,
+            fetch=fake_fetch,
+            db=self.db,
+            subtitle_stream_id="9003",
+        )
+        self.assertEqual(burned["subtitle_stream_id"], "9003")
+        self.assertEqual(burned["view_offset_ms"], 12_000)
+        start_urls = [url for url in calls if "start.m3u8" in url]
+        self.assertTrue(start_urls)
+        self.assertIn("subtitles=burn", start_urls[-1])
+        self.assertIn("subtitleStreamID=9003", start_urls[-1])
+        self.assertIn("advancedSubtitles=burn", start_urls[-1])
+        self.assertIn("offset=12&", start_urls[-1])
+        calls.clear()
+        seek_playback(session, 20_000, fetch=fake_fetch, db=self.db)
+        kept = [url for url in calls if "start.m3u8" in url]
+        self.assertTrue(kept)
+        self.assertIn("subtitleStreamID=9003", kept[-1])
+        calls.clear()
+        off = seek_playback(
+            session,
+            20_000,
+            fetch=fake_fetch,
+            db=self.db,
+            subtitle_stream_id=None,
+        )
+        self.assertEqual(off["subtitle_stream_id"], "")
+        cleared = [url for url in calls if "start.m3u8" in url]
+        self.assertTrue(cleared)
+        self.assertIn("subtitles=none", cleared[-1])
+        self.assertNotIn("subtitleStreamID=", cleared[-1])
 
 
 class PlaybackApiTests(unittest.TestCase):
@@ -504,6 +579,43 @@ class PlaybackApiTests(unittest.TestCase):
         self.assertNotIn("server-token", text)
         self.assertNotIn("plex.test", text)
         self.assertIn("/api/library/playback/", text)
+
+    def test_subtitles_endpoint_burns_then_clears(self) -> None:
+        seen: list[str] = []
+
+        def fake_fetch(url, **_kwargs):
+            seen.append(url)
+            return b"#EXTM3U\n", "application/vnd.apple.mpegurl", 200, url
+
+        with patch(
+            "projectionist.connectors.plex.cached_machine_identifier",
+            return_value="machine-1",
+        ), patch("projectionist.library.playback.fetch_plex_bytes", side_effect=fake_fetch):
+            started = self.client.post("/api/library/playback/start", json={"rating_key": "rk-heat"})
+            self.assertEqual(started.status_code, 200, started.text)
+            session_id = started.json()["session_id"]
+            seen.clear()
+            burned = self.client.post(
+                f"/api/library/playback/{session_id}/subtitles",
+                json={"subtitle_stream_id": "9003", "offset_ms": 8000},
+            )
+            self.assertEqual(burned.status_code, 200, burned.text)
+            self.assertEqual(burned.json()["subtitle_stream_id"], "9003")
+            self.assertTrue(any("subtitles=burn" in url and "subtitleStreamID=9003" in url for url in seen))
+            seen.clear()
+            off = self.client.post(
+                f"/api/library/playback/{session_id}/subtitles",
+                json={"subtitle_stream_id": None, "offset_ms": 8000},
+            )
+            self.assertEqual(off.status_code, 200, off.text)
+            self.assertEqual(off.json()["subtitle_stream_id"], "")
+            self.assertTrue(any("subtitles=none" in url for url in seen if "start.m3u8" in url))
+            self.assertFalse(any("subtitleStreamID=" in url for url in seen if "start.m3u8" in url))
+            bad = self.client.post(
+                f"/api/library/playback/{session_id}/subtitles",
+                json={"subtitle_stream_id": "nope", "offset_ms": 0},
+            )
+            self.assertEqual(bad.status_code, 400)
 
     def test_watch_spa_shell(self) -> None:
         watch = self.client.get("/watch/plex-949")

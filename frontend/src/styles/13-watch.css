@@ -78,6 +78,15 @@ html:has([data-theater-mode="true"]) #root {
   z-index: 0;
 }
 
+/* More → Black frame: letterbox without the blurred poster border. */
+.theater-player.theater-player--black-frame {
+  background: #000;
+}
+
+.theater-player.theater-player--black-frame .theater-stage-poster {
+  display: none;
+}
+
 .theater-player-video.live-player-video,
 .watch-theater-shell .live-player-video,
 .library-watch .live-player-video {
@@ -275,6 +284,9 @@ html:has([data-theater-mode="true"]) #root {
   font: inherit;
   font-size: var(--text-sm);
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .theater-osd-skip {
