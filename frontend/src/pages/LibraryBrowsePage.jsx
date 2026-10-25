@@ -65,6 +65,7 @@ import {
   parseMediaBrowse,
   queryFiltersFromBrowse,
   resolvePageSizeLimit,
+  beyondSearchMediaType,
 } from "../lib/mediaBrowse.js";
 import {
   BROWSE_SEARCH_DEBOUNCE_MS,
@@ -460,7 +461,7 @@ export default function LibraryBrowsePage({ embedded = false }) {
     if (!q || beyond.status === BEYOND_STATUS.loading) return;
     setBeyond((prev) => ({ ...prev, status: BEYOND_STATUS.loading }));
     try {
-      const payload = await searchExternal({ q, mediaType: browse.media_type || "movie" });
+      const payload = await searchExternal({ q, mediaType: beyondSearchMediaType(browse.media_type) });
       const { items, total } = normalizeExternalResults(payload);
       setBeyond({ status: beyondStatusForResult(payload), items, total });
     } catch (err) {

@@ -3,11 +3,13 @@ import test from "node:test";
 import {
   MEDIA_BROWSE_ALL_CAP,
   MEDIA_BROWSE_PAGE_SIZES,
+  beyondSearchMediaType,
   buildMediaBrowseParams,
   isAllPageSize,
   libraryExportHref,
   matchesMediaBrowseWatchState,
   mediaBrowseRowsToCsv,
+  normalizeBrowseMediaType,
   parseMediaBrowse,
   queryFiltersFromBrowse,
   resolvePageSizeLimit,
@@ -68,6 +70,23 @@ test("browse query and export preserve current filters", () => {
   });
   assert.equal(buildMediaBrowseParams(state).get("year"), "1999");
   assert.match(libraryExportHref(state, ["title", "year"]), /columns=title%2Cyear/);
+});
+
+test("Type All is untyped and does not send media_type=all to the reader", () => {
+  assert.equal(normalizeBrowseMediaType(""), "");
+  assert.equal(normalizeBrowseMediaType("all"), "");
+  assert.equal(normalizeBrowseMediaType("All"), "");
+  assert.equal(normalizeBrowseMediaType("movie"), "movie");
+  assert.equal(normalizeBrowseMediaType("tv"), "show");
+  assert.equal(beyondSearchMediaType(""), "all");
+  assert.equal(beyondSearchMediaType("show"), "show");
+  assert.equal(beyondSearchMediaType("movie"), "movie");
+
+  const fromUrl = parseMediaBrowse(new URLSearchParams("media_type=all&q=sliders"));
+  assert.equal(fromUrl.media_type, "");
+  const filters = queryFiltersFromBrowse(fromUrl);
+  assert.equal(filters.media_type, undefined);
+  assert.equal(buildMediaBrowseParams({ ...fromUrl, media_type: "all" }).get("media_type"), null);
 });
 
 test("TV browse defaults to recently added episodes", () => {

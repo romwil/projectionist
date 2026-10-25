@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -132,6 +133,20 @@ def _parse_csv_list(value: Any) -> List[str]:
     return []
 
 
+def normalize_library_media_type(value: Any) -> Optional[str]:
+    """Map a browse/API media_type to ``movie``, ``show``, or untyped.
+
+    Type **All** (empty, ``all``, ``any``, ``*``) must not become a SQL equality
+    like ``media_type = 'all'``, which matches nothing in the library.
+    """
+    raw = str(value or "").strip().lower()
+    if raw in {"movie", "movies"}:
+        return "movie"
+    if raw in {"show", "shows", "tv", "series"}:
+        return "show"
+    return None
+
+
 def filters_from_mapping(data: Mapping[str, Any]) -> LibraryFilters:
     sort = str(data.get("sort") or "title").strip().lower()
     allowed_sort = {
@@ -174,7 +189,7 @@ def filters_from_mapping(data: Mapping[str, Any]) -> LibraryFilters:
         plot_match_mode = "hybrid"
 
     return LibraryFilters(
-        media_type=str(data["media_type"]).strip() if data.get("media_type") else None,
+        media_type=normalize_library_media_type(data.get("media_type")),
         year_from=_optional_int(data.get("year_from")),
         year_to=_optional_int(data.get("year_to")),
         genres=_parse_csv_list(data.get("genres")),
@@ -451,6 +466,66 @@ def _plot_signal_subquery(token: str) -> Tuple[str, List[Any]]:
     return sql, [needle, needle, needle, needle, needle, needle, needle]
 
 
+_YEAR_SUFFIX_RE = re.compile(r"\s*\((\d{4})\)\s*$")
+
+
+def _glob_literal(value: str) -> str:
+    """Escape GLOB metacharacters so a member query is matched literally."""
+    return str(value).replace("[", "[[]").replace("*", "[*]").replace("?", "[?]")
+
+
+def title_query_rank(title: str, query: str) -> int:
+    """Relevance tier for a typed library search: 0 exact … 3 plot/other."""
+    needle = " ".join(str(query or "").strip().split()).casefold()
+    raw = " ".join(str(title or "").strip().split()).casefold()
+    if not needle:
+        return 3
+    stripped = _YEAR_SUFFIX_RE.sub("", raw).strip()
+    if raw == needle or stripped == needle:
+        return 0
+    if raw.startswith(needle) or f" {needle}" in raw:
+        return 1
+    if needle in raw:
+        return 2
+    return 3
+
+
+def _query_match_rank_sort(query: str) -> Tuple[str, List[Any]]:
+    """ORDER BY exact title, then prefix/word-start, then title contains, then other."""
+    q = " ".join(str(query or "").strip().split()).casefold()
+    if not q:
+        return "title ASC", []
+    glob_q = _glob_literal(q)
+    sql = (
+        "CASE "
+        "WHEN lower(title) = ? THEN 0 "
+        "WHEN lower(title) GLOB ? THEN 0 "
+        "WHEN lower(title) GLOB ? THEN 1 "
+        "WHEN lower(title) GLOB ? THEN 1 "
+        "WHEN lower(title) GLOB ? THEN 2 "
+        "ELSE 3 END ASC"
+    )
+    params: List[Any] = [
+        q,
+        f"{glob_q} ([0-9][0-9][0-9][0-9])",
+        f"{glob_q}*",
+        f"* {glob_q}*",
+        f"*{glob_q}*",
+    ]
+    return sql, params
+
+
+def _order_for_filters(filters: LibraryFilters) -> Tuple[str, List[Any]]:
+    """Requested sort, with title-match relevance first when ``query`` is set."""
+    sort_sql = _sort_clause(filters.sort, filters.sort_dir)
+    if filters.query:
+        rank_sql, rank_params = _query_match_rank_sort(filters.query)
+        return f"{rank_sql}, {sort_sql}", rank_params
+    if filters.plot_match_mode == "any" and filters.motifs:
+        return _plot_signal_match_rank_sort(filters.motifs)
+    return sort_sql, []
+
+
 def _plot_signal_match_rank_sort(tokens: Sequence[str]) -> Tuple[str, List[Any]]:
     """ORDER BY how many Plot Lab tokens match (desc), then title."""
     cleaned = [str(token).strip() for token in tokens if str(token).strip()]
@@ -477,9 +552,10 @@ def _build_where(filters: LibraryFilters) -> Tuple[str, List[Any]]:
     clauses: List[str] = ["1=1"]
     params: List[Any] = []
 
-    if filters.media_type:
+    media_type = normalize_library_media_type(filters.media_type)
+    if media_type:
         clauses.append("media_type = ?")
-        params.append(filters.media_type)
+        params.append(media_type)
     if filters.year_from is not None:
         clauses.append("year >= ?")
         params.append(filters.year_from)
@@ -740,10 +816,7 @@ async def query_library_async(
     where_sql, params = _build_where(filters)
     limit = filters.normalized_limit()
     offset = filters.normalized_offset()
-    sort_sql = _sort_clause(filters.sort, filters.sort_dir)
-    sort_params: List[Any] = []
-    if filters.plot_match_mode == "any" and filters.motifs:
-        sort_sql, sort_params = _plot_signal_match_rank_sort(filters.motifs)
+    sort_sql, sort_params = _order_for_filters(filters)
 
     semantic_ids: Optional[List[int]] = None
     if filters.semantic_query and settings is not None:
@@ -1013,10 +1086,7 @@ def query_library(db: Database, filters: LibraryFilters) -> Dict[str, Any]:
     where_sql, params = _build_where(filters)
     limit = filters.normalized_limit()
     offset = filters.normalized_offset()
-    sort_sql = _sort_clause(filters.sort, filters.sort_dir)
-    sort_params: List[Any] = []
-    if filters.plot_match_mode == "any" and filters.motifs:
-        sort_sql, sort_params = _plot_signal_match_rank_sort(filters.motifs)
+    sort_sql, sort_params = _order_for_filters(filters)
     total_matched, rows = _fetch_rows(
         db,
         where_sql,

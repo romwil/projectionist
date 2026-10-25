@@ -4,6 +4,7 @@ import {
   MEDIA_BROWSE_SORTS,
   browseTypeChoices,
   libraryExportHref,
+  normalizeBrowseMediaType,
   loadMediaBrowseColumns,
   saveMediaBrowseColumns,
 } from "../lib/mediaBrowse.js";
@@ -75,8 +76,9 @@ export default function MediaBrowseControls({
   }
 
   const typeChoices = browseTypeChoices(mediaTypeScope);
-  const typeValue = typeChoices.some((choice) => choice.value === (state.media_type || ""))
-    ? state.media_type || ""
+  const normalizedType = normalizeBrowseMediaType(state.media_type) || "";
+  const typeValue = typeChoices.some((choice) => choice.value === normalizedType)
+    ? normalizedType
     : typeChoices[0].value;
   const languageChoices = browseLanguageChoices(filterOptions.languages, state.language);
 
@@ -92,7 +94,7 @@ export default function MediaBrowseControls({
               data-testid="media-browse-type"
               onChange={(event) => {
                 if (mediaTypeScope) return;
-                update({ media_type: event.target.value });
+                update({ media_type: normalizeBrowseMediaType(event.target.value) });
               }}
             >
               {typeChoices.map((choice) => (

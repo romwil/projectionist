@@ -5,6 +5,8 @@
 ### Fixed
 - **Live bumper tap starts the picture.** iPad Safari can pause unmuted preroll autoplay; the overlay now uses muted-first then unmute (same as Watch) and the tap calls `video.play()`. A missing preroll (HTTP 204) does not show the overlay.
 - **Live flex pad no longer loops preroll bumpers.** Between programs prefers commercials-bin filler rating keys; movie-start preroll is only when a movie is starting now. A 2-minute hole with no playable filler shows the named Between programs slate.
+- **Search Type All finds owned TV.** Typing *Sliders* with Type **All** returns owned *Sliders (1995)*. A similar TMDB movie such as *Sliders of Ghost Town* stays a Beyond-your-collection gap (`in_library: false`) and does not replace the library hit.
+- **Typed names pin the exact title.** Searching *House* puts *House (2004)* first even when Sort is Title ASC. Longer titles (*A House Through Time*, *House of the Dragon*) and plot-only hits stay below.
 
 ## [1.37.62] — 2026-10-24
 

@@ -27,6 +27,23 @@ def _normalize_title_key(value: Any) -> str:
     return " ".join(str(value or "").strip().casefold().split())
 
 
+def normalize_external_media_type(media_type: Any) -> str:
+    """Canonical Beyond-search type: ``movie``, ``show``, or ``all``."""
+    raw = str(media_type or "").strip().lower()
+    if raw in {"show", "shows", "tv", "series"}:
+        return "show"
+    if raw in {"all", "any", "*", "both"}:
+        return "all"
+    return "movie"
+
+
+def external_search_media_types(media_type: Any) -> List[str]:
+    canonical = normalize_external_media_type(media_type)
+    if canonical == "all":
+        return ["movie", "show"]
+    return [canonical]
+
+
 def _titles_roughly_match(expected: str, actual: str) -> bool:
     """True when expected title aligns with actual (exact or containment)."""
     left = _normalize_title_key(expected)
@@ -357,11 +374,14 @@ def external_tmdb_search(
     reason = sanitize_recommendation_reason(reason)
 
     tmdb = TMDBClient(settings.tmdb_api_key)
-    results: List[Mapping[str, Any]] = []
+    search_types = external_search_media_types(media_type)
+    typed_results: List[tuple[str, Mapping[str, Any]]] = []
     total_matched = 0
 
-    def _search_by_title() -> ExternalSearchResult | tuple[List[Mapping[str, Any]], int]:
-        if media_type == "movie":
+    def _search_by_title(
+        search_type: str,
+    ) -> ExternalSearchResult | tuple[List[Mapping[str, Any]], int]:
+        if search_type == "movie":
             page = tmdb.search_movie_page(title, year=year_int)
         else:
             page = tmdb.search_tv_page(title)
@@ -396,21 +416,18 @@ def external_tmdb_search(
                 )
         return ranked, matched
 
-    need_title_search = pinned_tmdb_id is None
-    if pinned_tmdb_id is not None:
+    def _pin_details(search_type: str) -> tuple[Mapping[str, Any], str] | ExternalSearchResult | None:
+        assert pinned_tmdb_id is not None
         try:
             details = (
                 tmdb.movie_details(pinned_tmdb_id)
-                if media_type == "movie"
+                if search_type == "movie"
                 else tmdb.tv_details(pinned_tmdb_id)
             )
         except RuntimeError as error:
             return ExternalSearchResult(error=str(error), error_kind=ERROR_TMDB)
         if not isinstance(details, Mapping) or not int(details.get("id") or 0):
-            return ExternalSearchResult(
-                error=f"TMDB {media_type} {pinned_tmdb_id} not found",
-                error_kind=ERROR_NOT_FOUND,
-            )
+            return None
         actual_title = str(details.get("title") or details.get("name") or "")
         actual_year = _tmdb_result_year(details)
         title_ok = (not title) or _titles_roughly_match(title, actual_title)
@@ -420,48 +437,94 @@ def external_tmdb_search(
             or abs(int(actual_year) - int(year_int)) <= 1
         )
         if title_ok and year_ok:
-            results = [details]
+            return details, search_type
+        return None
+
+    need_title_search = pinned_tmdb_id is None
+    pin_errors: List[ExternalSearchResult] = []
+    if pinned_tmdb_id is not None:
+        pinned = False
+        for search_type in search_types:
+            pinned_hit = _pin_details(search_type)
+            if isinstance(pinned_hit, ExternalSearchResult):
+                pin_errors.append(pinned_hit)
+                continue
+            if pinned_hit is None:
+                continue
+            details, resolved_type = pinned_hit
+            typed_results = [(resolved_type, details)]
             total_matched = 1
-        elif title:
-            # Stale/wrong numeric ids are common in agent turns — re-search by
-            # title+year instead of attaching an unrelated poster.
-            need_title_search = True
-        else:
-            return ExternalSearchResult(
-                error=(
-                    f"tmdb_id {pinned_tmdb_id} resolves to '{actual_title}'"
-                    + (f" ({actual_year})" if actual_year is not None else "")
-                    + ", which does not match the requested pin. "
-                    "Re-search by title+year instead of inventing ids."
-                ),
-                error_kind=ERROR_MISMATCH,
-            )
+            pinned = True
+            break
+        if not pinned:
+            if title:
+                # Stale/wrong numeric ids are common in agent turns — re-search by
+                # title+year instead of attaching an unrelated poster.
+                need_title_search = True
+            elif pin_errors and len(search_types) == 1:
+                return pin_errors[0]
+            else:
+                return ExternalSearchResult(
+                    error=f"TMDB {search_types[0]} {pinned_tmdb_id} not found",
+                    error_kind=ERROR_NOT_FOUND,
+                )
 
     if need_title_search:
-        searched = _search_by_title()
-        if isinstance(searched, ExternalSearchResult):
-            return searched
-        results, total_matched = searched
+        type_errors: List[ExternalSearchResult] = []
+        typed_results = []
+        total_matched = 0
+        for search_type in search_types:
+            searched = _search_by_title(search_type)
+            if isinstance(searched, ExternalSearchResult):
+                type_errors.append(searched)
+                continue
+            ranked, matched = searched
+            total_matched += matched
+            typed_results.extend((search_type, item) for item in ranked)
+        if not typed_results:
+            return type_errors[0] if type_errors else ExternalSearchResult(
+                error=(
+                    f"No confident TMDB match for '{title}'"
+                    + (f" ({year_int})" if year_int is not None else "")
+                    + ". Do not invent ids; try another title+year."
+                ),
+                error_kind=ERROR_NOT_FOUND,
+            )
 
-    owned = db.owned_tmdb_ids(media_type)
-    queued = db.queued_tmdb_ids(media_type)
-    excluded = db.excluded_tmdb_ids(media_type)
+    needle = title.casefold()
+    typed_results.sort(
+        key=lambda pair: 0
+        if str(pair[1].get("title") or pair[1].get("name") or "").strip().casefold() == needle
+        else 1
+    )
+
+    owned_by_type = {search_type: db.owned_tmdb_ids(search_type) for search_type in search_types}
+    queued_by_type = {search_type: db.queued_tmdb_ids(search_type) for search_type in search_types}
+    excluded_by_type = {search_type: db.excluded_tmdb_ids(search_type) for search_type in search_types}
     cards: List[TitleCard] = []
     items: List[Dict[str, Any]] = []
-    for item in results:
+    seen: set[tuple[str, int]] = set()
+    for search_type, item in typed_results:
         if not isinstance(item, Mapping):
             continue
         result_tmdb_id = int(item.get("id") or 0)
         if result_tmdb_id <= 0:
             continue
-        if media_type == "show":
+        key = (search_type, result_tmdb_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        if search_type == "show":
             item = _enrich_show_external_ids(item, tmdb, settings=settings)
-        card = _apply_queue_flags(db, _tmdb_card(item, media_type, tmdb, reason=reason))
+        card = _apply_queue_flags(db, _tmdb_card(item, search_type, tmdb, reason=reason))
+        owned = owned_by_type.get(search_type) or set()
+        queued = queued_by_type.get(search_type) or set()
+        excluded = excluded_by_type.get(search_type) or set()
         card.in_library = result_tmdb_id in owned
-        if result_tmdb_id in queued and media_type == "movie":
+        if result_tmdb_id in queued and search_type == "movie":
             card.in_radarr = True
         cards.append(card)
-        tool_item = _tmdb_search_item_to_tool_item(item, media_type)
+        tool_item = _tmdb_search_item_to_tool_item(item, search_type)
         tool_item["in_library"] = card.in_library
         tool_item["in_radarr"] = bool(card.in_radarr)
         tool_item["in_sonarr"] = bool(card.in_sonarr)

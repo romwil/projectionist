@@ -183,18 +183,16 @@ def _title_match_queries(cleaned: str) -> List[str]:
     )
 
 
+def _strip_year_suffix(value: str) -> str:
+    return re.sub(r"\s*\((\d{4})\)\s*$", "", value).strip()
+
+
 def _is_exact_title_match(title: str, query: str) -> bool:
-    left = _normalize_search_query(title).casefold()
-    right = _normalize_search_query(query).casefold()
+    left = _strip_year_suffix(_normalize_search_query(title)).casefold()
+    right = _strip_year_suffix(_normalize_search_query(query)).casefold()
     if not left or not right:
         return False
-    if left == right:
-        return True
-    # Allow "Industry (2020)" style probes against title "Industry".
-    year_suffix = re.fullmatch(r"(.+?)\s*\((\d{4})\)\s*", right)
-    if year_suffix and left == year_suffix.group(1).strip():
-        return True
-    return False
+    return left == right
 
 
 def exact_title_cards(cards: Sequence[TitleCard], query: str) -> List[TitleCard]:
