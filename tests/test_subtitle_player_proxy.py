@@ -62,6 +62,7 @@ class DecorateTests(unittest.TestCase):
     def test_embedded_text_track_is_renderable_with_proxy_url_and_no_token(self) -> None:
         row = decorate_subtitle_row("123", EMBEDDED.to_dict())
         self.assertTrue(row["renderable"])
+        self.assertFalse(row["image"])
         self.assertEqual(row["proxy_url"], "/api/library/items/123/subtitles/9001/file")
         self.assertNotIn("SECRET", str(row))
         self.assertNotIn("X-Plex-Token", str(row))
@@ -70,6 +71,7 @@ class DecorateTests(unittest.TestCase):
         self.assertFalse(subtitle_is_renderable(PGS.to_dict()))
         row = decorate_subtitle_row("123", PGS.to_dict())
         self.assertFalse(row["renderable"])
+        self.assertTrue(row["image"])
         self.assertEqual(row["proxy_url"], "")
         self.assertEqual(row["unavailable_reason"], IMAGE_SUBTITLE_NOTE)
 

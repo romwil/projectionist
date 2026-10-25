@@ -1,11 +1,17 @@
-import { formatSubtitleDelay, stepSubtitleDelay, SUBTITLE_DELAY_STEP_SEC } from "../../lib/subtitleCues.js";
+import {
+  formatSubtitleDelay,
+  stepSubtitleDelay,
+  SUBTITLE_BURN_IN_NOTE,
+  SUBTITLE_DELAY_STEP_SEC,
+} from "../../lib/subtitleCues.js";
 
 /**
- * One CC menu for every player. Off + drawable text tracks only.
- * `extraOptions` lets Live add its in-stream HLS tracks and the "Ask Plex" action.
+ * One CC menu for every player. Off + drawable text tracks, then last-resort
+ * Plex burn-in chips. Bitmap streams are never overlay options.
  */
 export default function SubtitlePicker({
   tracks = [],
+  burnInTracks = [],
   activeId = -1,
   onSelect,
   state = "idle",
@@ -19,8 +25,12 @@ export default function SubtitlePicker({
   leading = null,
   trailing = null,
 }) {
-  const pickable = tracks.filter((track) => track.renderable !== false);
-  const showSync = activeId !== -1 && typeof onDelayChange === "function";
+  const pickable = tracks.filter((track) => track.renderable !== false && !track.burnIn);
+  const burnIn = Array.isArray(burnInTracks) ? burnInTracks : [];
+  const burnInActive = Boolean(burnIn.find((track) => track.index === activeId));
+  const showSync = activeId !== -1 && !burnInActive && typeof onDelayChange === "function";
+  const hasChoices = pickable.length + burnIn.length > 0;
+  const burnInNote = burnIn.length ? SUBTITLE_BURN_IN_NOTE : "";
   return (
     <div className={`live-cc-picker subtitle-picker ${className}`.trim()} data-testid={testId} data-theater-chrome="true">
       <button
@@ -39,6 +49,17 @@ export default function SubtitlePicker({
           className={`ghost live-cc-option${activeId === track.index ? " is-active" : ""}`}
           onClick={() => onSelect?.(track)}
           data-testid={`${testId}-track`}
+        >
+          {track.label}
+        </button>
+      ))}
+      {burnIn.map((track) => (
+        <button
+          key={track.index}
+          type="button"
+          className={`ghost live-cc-option${activeId === track.index ? " is-active" : ""}`}
+          onClick={() => onSelect?.(track)}
+          data-testid={`${testId}-burn-in`}
         >
           {track.label}
         </button>
@@ -72,11 +93,16 @@ export default function SubtitlePicker({
       {state === "error" && error ? (
         <p className="live-cc-empty" role="alert" data-testid={`${testId}-error`}>{error}</p>
       ) : null}
-      {!pickable.length && emptyMessage ? (
+      {!hasChoices && emptyMessage ? (
         <p className="live-cc-empty" data-testid={`${testId}-empty`}>{emptyMessage}</p>
       ) : null}
       {note ? (
         <p className="live-cc-empty" data-testid={`${testId}-note`}>{note}</p>
+      ) : null}
+      {burnInNote && note !== burnInNote ? (
+        <p className="live-cc-empty" data-testid={`${testId}-burn-in-note`}>
+          {burnInNote}
+        </p>
       ) : null}
       {trailing}
     </div>

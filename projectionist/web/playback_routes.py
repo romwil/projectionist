@@ -68,6 +68,11 @@ class PlaybackSeekPayload(BaseModel):
     offset_ms: int = Field(default=0, ge=0)
 
 
+class PlaybackSubtitlesPayload(BaseModel):
+    subtitle_stream_id: Optional[str] = None
+    offset_ms: int = Field(default=0, ge=0)
+
+
 class PlaybackProgressPayload(BaseModel):
     state: str = "playing"
     time_ms: int = Field(default=0, ge=0)
@@ -117,6 +122,29 @@ def library_playback_seek(
         raise
     except Exception as error:  # noqa: BLE001
         _raise_playback(error, "Could not seek")
+        raise
+
+
+@router.post("/api/library/playback/{session_id}/subtitles")
+def library_playback_subtitles(
+    session_id: str,
+    payload: PlaybackSubtitlesPayload,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Restart the transcode with a last-resort Plex burn-in stream, or Off."""
+    try:
+        session = get_session(validate_session_id(session_id), user_id=_user_id(user))
+        return seek_playback(
+            session,
+            int(payload.offset_ms or 0),
+            db=_db(),
+            subtitle_stream_id=payload.subtitle_stream_id,
+        )
+    except PlaybackError as error:
+        _raise_playback(error, "Could not change captions")
+        raise
+    except Exception as error:  # noqa: BLE001
+        _raise_playback(error, "Could not change captions")
         raise
 
 

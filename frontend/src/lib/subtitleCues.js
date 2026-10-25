@@ -6,6 +6,45 @@ export const SUBTITLE_EMPTY_TRACKS = "No subtitle tracks are attached to this ti
 export const SUBTITLE_NO_TEXT_TRACKS = "No text captions we can draw. Off stays Off.";
 export const SUBTITLE_DELAY_STEP_SEC = 0.5;
 export const SUBTITLE_DELAY_MAX_SEC = 30;
+export const SUBTITLE_BURN_IN_NOTE = "Plex captions restart playback. Timing is overlay-only.";
+export const IMAGE_SUBTITLE_FORMATS = new Set([
+  "pgs",
+  "hdmv_pgs_subtitle",
+  "hdmv_text_subtitle",
+  "vobsub",
+  "dvd_subtitle",
+  "dvdsub",
+  "dvb_subtitle",
+  "dvbsub",
+  "xsub",
+]);
+const BURN_IN_LANGUAGE_NAMES = {
+  en: "English",
+  eng: "English",
+  es: "Spanish",
+  spa: "Spanish",
+  fr: "French",
+  fra: "French",
+  fre: "French",
+  de: "German",
+  ger: "German",
+  deu: "German",
+  ja: "Japanese",
+  jpn: "Japanese",
+  ko: "Korean",
+  kor: "Korean",
+  zh: "Chinese",
+  chi: "Chinese",
+  zho: "Chinese",
+  pt: "Portuguese",
+  por: "Portuguese",
+  it: "Italian",
+  ita: "Italian",
+  ru: "Russian",
+  rus: "Russian",
+  ar: "Arabic",
+  ara: "Arabic",
+};
 
 /** "00:01:02.500" | "01:02.500" | "1:02,5" → seconds (NaN when unparseable). */
 export function parseCueTimestamp(raw) {
@@ -81,14 +120,24 @@ export function subtitleLookupTimeSec({ currentTimeSec, originMs = 0, delaySec =
 }
 
 /**
- * One presentation path only: soft DOM overlay, native TextTrack, or none.
- * Soft selectable tracks win when the user turns CC on — never stack systems.
+ * One presentation path only: Plex burn-in, soft DOM overlay, native TextTrack, or none.
+ * Never overlay + burn-in. Soft tracks win over native — never stack systems.
  */
 export function resolveSubtitlePresentation({
   softTrackSelected = false,
   softTrackReady = false,
   nativeTrackIndex = -1,
+  burnInSelected = false,
 } = {}) {
+  // Burn-in is in the picture. Never overlay on top of it.
+  if (burnInSelected) {
+    return {
+      mode: "burn",
+      showOverlay: false,
+      enableNativeTrack: false,
+      disableAllNative: true,
+    };
+  }
   if (softTrackSelected) {
     return {
       mode: softTrackReady ? "soft" : "soft-loading",
@@ -205,6 +254,64 @@ export function normalizeSubtitleTracks(rows) {
     .filter((track) => track.renderable);
 }
 
+export function isImageSubtitleStream(row) {
+  if (!row || typeof row !== "object") return false;
+  if (row.image === true) return true;
+  const fmt = String(row.format || "").trim().toLowerCase();
+  return IMAGE_SUBTITLE_FORMATS.has(fmt);
+}
+
+export function plexBurnInLanguageLabel(row) {
+  const language = String(row?.language || "").trim();
+  if (language && !/^[a-z]{2,3}$/i.test(language)) return language;
+  const code = String(row?.language_code || language || "")
+    .trim()
+    .toLowerCase()
+    .split("-")[0];
+  return BURN_IN_LANGUAGE_NAMES[code] || language || (code ? code.toUpperCase() : "Captions");
+}
+
+/** Last-resort chip: language name plus “from Plex”. Never “can’t draw”. */
+export function plexBurnInChipLabel(row) {
+  return `${plexBurnInLanguageLabel(row)} (from Plex)`;
+}
+
+/**
+ * Bitmap streams for languages that still have no drawable overlay text.
+ * One chip per language; never auto-selected. Member must pick burn-in.
+ */
+export function plexBurnInFallbackTracks(streams, overlayTracks = []) {
+  const overlayLangs = (overlayTracks || []).filter((track) => track?.renderable !== false);
+  const byLang = new Map();
+  const list = Array.isArray(streams) ? streams : [];
+  for (const row of list) {
+    if (!isImageSubtitleStream(row)) continue;
+    const language = String(row.language_code || row.language || "");
+    if (language && preferredPickableSubtitle(overlayLangs, [language])) continue;
+    const id = String(row.id ?? "");
+    if (!id) continue;
+    const langKey = String(language || id)
+      .trim()
+      .toLowerCase()
+      .split("-")[0] || id;
+    const next = {
+      index: `plex-burn-${id}`,
+      id,
+      label: plexBurnInChipLabel(row),
+      language,
+      proxyUrl: "",
+      renderable: false,
+      burnIn: true,
+      forced: Boolean(row.forced),
+    };
+    const existing = byLang.get(langKey);
+    if (!existing || (existing.forced && !next.forced)) {
+      byLang.set(langKey, next);
+    }
+  }
+  return [...byLang.values()];
+}
+
 export function preferredPickableSubtitle(tracks, preferredLanguages = ["en"]) {
   const pickable = (tracks || []).filter((track) => track.renderable);
   const langs = (preferredLanguages || []).map((code) => String(code || "").trim()).filter(Boolean);
@@ -242,8 +349,13 @@ export function resolvePlaySubtitleTracks({
       : listed;
   const tracks = source.filter((track) => track.renderable);
   const auto = needsFetch ? preferredPickableSubtitle(tracks, preferredLanguages) : null;
+  const burnInTracks = plexBurnInFallbackTracks(
+    [...(Array.isArray(listedStreams) ? listedStreams : []), ...(Array.isArray(downloadedStreams) ? downloadedStreams : [])],
+    tracks,
+  );
   return {
     tracks,
+    burnInTracks,
     needsFetch,
     autoSelectIndex: auto?.index ?? -1,
     empty: tracks.length === 0,
