@@ -1,6 +1,40 @@
 {
-  "generated_at": "2026-10-24T01:44:09Z",
+  "generated_at": "2026-10-25T15:47:55Z",
   "releases": [
+    {
+      "version": "1.37.63",
+      "date": "2026-10-25",
+      "summary": "One patch on 1.37.62: iPhone Play fullscreen and honest captions, a Live bumper tap plus flex that prefers commercials, and Search Type All that keeps owned TV and pins the exact title.",
+      "highlights": [
+        "**iPhone Fullscreen fills the phone.** Play uses Safari’s native video fullscreen. More can switch the letterbox to a black frame instead of poster art.",
+        "**Captions you can actually read.** Picture-only subtitles are no longer listed as dead chips. Play fetches a text track, or you can pick **English (from Plex)** as a last resort.",
+        "**A tap starts the Live bumper.** iPad Safari no longer leaves a white preroll. Between programs uses commercials, not a looping scenic bumper.",
+        "**Search All finds the show you own.** Type All includes TV. Typing *House* puts *House (2004)* first."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "**iPhone Fullscreen uses native video fullscreen.** `toggleTheaterFullscreen` calls `video.webkitEnterFullscreen()` from the user gesture on iOS Safari; desktop still fullscreens the theater root. OSD chips are `user-select: none` so the tap fires. Escape/back treats `webkitDisplayingFullscreen`.",
+            "**CC lists drawable text only.** Bitmap PGS/VobSub overlay chips are omitted. When the preferred language has no drawable track, Play fetches VTT/SRT via the existing Plex search/download. A fetched English track lists as **English** and auto-selects; otherwise CC stays Off with honest empty copy.",
+            "**Last-resort Plex burn-in.** If that language still has no drawable text and Plex has a bitmap stream, Play offers **English (from Plex)** (member pick only — never auto-selected). Choosing it restarts the session at the playhead with `subtitles=burn` and `subtitleStreamID`. Overlay is empty while burning. Off restores `subtitles=none`. Offset steppers stay overlay-only.",
+            "**More → Black frame / Use poster border** switches the letterbox from the default blurred-poster border to a black frame. Persists per browser (`projectionist.play_black_frame`, default art). Library Play only.",
+            "**Live bumper tap starts the picture.** iPad Safari can pause unmuted preroll autoplay; the overlay now uses muted-first then unmute (same as Watch) and the tap calls `video.play()`. A missing preroll (HTTP 204) does not show the overlay.",
+            "**Live flex pad no longer loops preroll bumpers.** Between programs prefers commercials-bin filler rating keys; movie-start preroll is only when a movie is starting now. A 2-minute hole with no playable filler shows the named Between programs slate.",
+            "**Search Type All finds owned TV.** Typing *Sliders* with Type **All** returns owned *Sliders (1995)*. A similar TMDB movie such as *Sliders of Ghost Town* stays a Beyond-your-collection gap (`in_library: false`) and does not replace the library hit.",
+            "**Typed names pin the exact title.** Searching *House* puts *House (2004)* first even when Sort is Title ASC. Longer titles (*A House Through Time*, *House of the Dragon*) and plot-only hits stay below."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend focused `pytest` — 82 passed (`tests/test_library_playback.py`, `tests/test_live_native_schedule.py`, `tests/test_library_query.py`, `tests/test_external_search_api.py`, `tests/test_version.py`) with `--no-cov`. Burn-in `subtitles=burn` + `subtitleStreamID`; flex prefers filler over preroll; Type All is untyped; exact-title pin. PRs #162 (`e32d0ab`), #163 (`23e9c3a`), and #164 (`c43bae4`) merged to `main` at `5a51b9b`.",
+            "Frontend unit 1074/1074 (`subtitleCues`, `theaterPlayer`, `prerollClient`, `mediaBrowse` among the suite).",
+            "`tests/test_version.py` after `./scripts/patch-release.sh 1.37.63`. Lockstep + Hub + Automat in this ship."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.62",
       "date": "2026-10-24",
