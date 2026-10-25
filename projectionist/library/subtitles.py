@@ -197,6 +197,7 @@ def decorate_subtitle_row(rating_key: str, row: Dict[str, Any]) -> Dict[str, Any
     out = dict(row)
     renderable = subtitle_is_renderable(out)
     out["renderable"] = renderable
+    out["image"] = not renderable
     paths = subtitle_fetch_paths(out)
     stream_id = str(out.get("id") or "").strip()
     if renderable and paths and stream_id:

@@ -11,6 +11,8 @@ import {
   normalizeSubtitleTracks,
   parseCueTimestamp,
   parseVtt,
+  plexBurnInChipLabel,
+  plexBurnInFallbackTracks,
   preferredPickableSubtitle,
   resolvePlaySubtitleTracks,
   resolveSubtitlePresentation,
@@ -110,6 +112,16 @@ test("resolveSubtitlePresentation never stacks soft overlay with native tracks",
   assert.equal(stacked.mode, "soft");
   assert.equal(stacked.enableNativeTrack, false);
   assert.equal(stacked.disableAllNative, true);
+  // Burn-in never keeps an overlay, even if a text track is also selected.
+  const burned = resolveSubtitlePresentation({
+    burnInSelected: true,
+    softTrackSelected: true,
+    softTrackReady: true,
+  });
+  assert.equal(burned.mode, "burn");
+  assert.equal(burned.showOverlay, false);
+  assert.equal(burned.enableNativeTrack, false);
+  assert.equal(burned.disableAllNative, true);
 });
 
 test("silenceNativeTextTracks disables every TextTrack mode", () => {
@@ -187,13 +199,19 @@ test("normalizeSubtitleTracks omits undrawable image tracks and keeps English te
 
 test("undrawable-only title fetches a text track or stays honest Off", () => {
   const pgsOnly = [
-    { id: "1", label: "English", language_code: "eng", proxy_url: "", renderable: false },
-    { id: "2", label: "English", language_code: "eng", proxy_url: "", renderable: false },
+    { id: "1", label: "English", language: "English", language_code: "eng", format: "pgs", proxy_url: "", renderable: false, image: true },
+    { id: "2", label: "English", language: "English", language_code: "eng", format: "pgs", proxy_url: "", renderable: false, image: true },
   ];
   const listed = resolvePlaySubtitleTracks({ listedStreams: pgsOnly, preferredLanguages: ["en"] });
   assert.equal(listed.needsFetch, true);
   assert.equal(listed.empty, true);
   assert.equal(listed.autoSelectIndex, -1);
+  assert.equal(listed.tracks.length, 0);
+  assert.equal(listed.burnInTracks.length, 1);
+  assert.equal(listed.burnInTracks[0].label, "English (from Plex)");
+  assert.equal(listed.burnInTracks[0].burnIn, true);
+  assert.ok(!JSON.stringify(listed.burnInTracks).toLowerCase().includes("can't draw"));
+  assert.ok(!JSON.stringify(listed.burnInTracks).toLowerCase().includes("pgs"));
 
   const afterFail = resolvePlaySubtitleTracks({
     listedStreams: pgsOnly,
@@ -202,6 +220,9 @@ test("undrawable-only title fetches a text track or stays honest Off", () => {
   });
   assert.equal(afterFail.empty, true);
   assert.equal(afterFail.autoSelectIndex, -1);
+  assert.equal(afterFail.tracks.length, 0);
+  assert.equal(afterFail.burnInTracks.length, 1);
+  assert.equal(afterFail.burnInTracks[0].label, "English (from Plex)");
 
   const afterFetch = resolvePlaySubtitleTracks({
     listedStreams: pgsOnly,
@@ -221,8 +242,39 @@ test("undrawable-only title fetches a text track or stays honest Off", () => {
   assert.equal(afterFetch.tracks.length, 1);
   assert.equal(afterFetch.tracks[0].label, "English");
   assert.equal(afterFetch.autoSelectIndex, "plex-99");
+  assert.equal(afterFetch.burnInTracks.length, 0);
   assert.equal(needsTextSubtitleFetch(afterFetch.tracks, ["en"]), false);
   assert.equal(preferredPickableSubtitle(afterFetch.tracks, ["en"]).index, "plex-99");
+});
+
+test("text VTT present does not require a burn-in chip and never auto-picks burn-in", () => {
+  const mixed = resolvePlaySubtitleTracks({
+    listedStreams: [
+      { id: "10", label: "English", language: "English", language_code: "eng", format: "srt", proxy_url: "/api/library/items/1/subtitles/10/file", renderable: true },
+      { id: "11", label: "English", language: "English", language_code: "eng", format: "pgs", proxy_url: "", renderable: false, image: true },
+    ],
+    preferredLanguages: ["en"],
+  });
+  assert.equal(mixed.tracks.length, 1);
+  assert.equal(mixed.burnInTracks.length, 0);
+  assert.equal(mixed.autoSelectIndex, -1);
+  assert.equal(mixed.needsFetch, false);
+});
+
+test("plex burn-in fallback is one chip per language without overlay text", () => {
+  const chips = plexBurnInFallbackTracks(
+    [
+      { id: "1", language: "English", language_code: "eng", format: "pgs", forced: true, image: true },
+      { id: "2", language: "English", language_code: "eng", format: "pgs", image: true },
+      { id: "3", language: "Français", language_code: "fra", format: "vobsub", image: true },
+    ],
+    [{ index: "plex-99", language: "eng", renderable: true }],
+  );
+  assert.equal(chips.length, 1);
+  assert.equal(chips[0].id, "3");
+  assert.equal(chips[0].label, "Français (from Plex)");
+  assert.equal(plexBurnInChipLabel({ language: "English" }), "English (from Plex)");
+  assert.ok(!plexBurnInChipLabel({ language: "English", format: "pgs" }).toLowerCase().includes("can't draw"));
 });
 
 test("liveProgramClockSec is wall clock minus program start", () => {
