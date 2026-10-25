@@ -80,7 +80,7 @@ export function flexPlaybackPlan(tuned, nowMs = Date.now()) {
 }
 
 /**
- * Named station card when a flex pad has neither filler nor preroll.
+ * Named station card when a flex pad has no playable filler.
  * @param {{ nextTitle?: string, slateCopy?: string }} [input]
  */
 export function flexSlateCopy({ nextTitle = "", slateCopy = "" } = {}) {
@@ -126,7 +126,7 @@ export function isLivePlayerChromeTarget(target) {
   if (!target || typeof target.closest !== "function") return false;
   return Boolean(
     target.closest(
-      "button, a, input, select, textarea, [role='button'], .live-osd-actions, .live-cc-picker, .live-program-hover, .live-chrome",
+      "button, a, input, select, textarea, [role='button'], .live-osd-actions, .live-cc-picker, .live-program-hover, .live-chrome, .preroll-stage",
     ),
   );
 }
