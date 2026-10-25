@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
+  downloadLibraryItemSubtitles,
   fetchNextPreroll,
   getLibraryItemSubtitles,
   progressLibraryPlayback,
   seekLibraryPlayback,
+  setLibraryPlaybackSubtitles,
   startLibraryPlayback,
   stopLibraryPlayback,
 } from "../../api/client";
@@ -56,11 +58,18 @@ import {
   theaterKeyAction,
   toggleTheaterFullscreen,
 } from "../../lib/theaterPlayer.js";
-import { UI_PREFS_CHANGED_EVENT, loadPauseWhenBackgrounded } from "../../lib/uiPrefs.js";
+import {
+  UI_PREFS_CHANGED_EVENT,
+  loadPauseWhenBackgrounded,
+  loadPlayBlackFrame,
+  persistPlayBlackFrame,
+  playFrameMenuLabel,
+} from "../../lib/uiPrefs.js";
 import {
   SUBTITLE_EMPTY_TRACKS,
+  SUBTITLE_NO_TEXT_TRACKS,
   clampSubtitleDelay,
-  normalizeSubtitleTracks,
+  resolvePlaySubtitleTracks,
   resolveSubtitlePresentation,
   silenceNativeTextTracks,
 } from "../../lib/subtitleCues.js";
@@ -176,6 +185,7 @@ export default function LibraryPlayer({
   const [skipChip, setSkipChip] = useState("");
   const [ccOpen, setCcOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [blackFrame, setBlackFrame] = useState(() => loadPlayBlackFrame());
   const [nowMs, setNowMs] = useState(0);
   const [durationMs, setDurationMs] = useState(0);
   /** Non-null while dragging/keyboard-scrubbing — drives the range value instead of playhead. */
@@ -230,11 +240,14 @@ export default function LibraryPlayer({
   const [subListNote, setSubListNote] = useState("");
   const [activeSub, setActiveSub] = useState(-1);
   const [subDelay, setSubDelay] = useState(0);
+  const [burnInTracks, setBurnInTracks] = useState([]);
   const activeSubTrack = subTracks.find((track) => track.index === activeSub) || null;
-  const subs = useSubtitleCues(activeSubTrack?.proxyUrl || "");
+  const activeBurnIn = burnInTracks.find((track) => track.index === activeSub) || null;
+  const subs = useSubtitleCues(activeBurnIn ? "" : activeSubTrack?.proxyUrl || "");
   const subPresentation = resolveSubtitlePresentation({
-    softTrackSelected: Boolean(activeSubTrack),
+    softTrackSelected: Boolean(activeSubTrack?.proxyUrl) && !activeBurnIn,
     softTrackReady: subs.state === "ready",
+    burnInSelected: Boolean(activeBurnIn),
   });
   /** Absolute title seconds (includes 0-based seek origin) so delay/sync match the picture. */
   const getSubtitleTimeSec = useCallback(() => {
@@ -261,32 +274,90 @@ export default function LibraryPlayer({
     setActiveSub(-1);
     setSubDelay(0);
     setSubTracks([]);
+    setBurnInTracks([]);
     setSubListNote("");
     if (!subtitleKey) return undefined;
     let cancelled = false;
-    getLibraryItemSubtitles(subtitleKey)
-      .then((payload) => {
+    (async () => {
+      try {
+        const listed = await getLibraryItemSubtitles(subtitleKey);
         if (cancelled) return;
-        const tracks = normalizeSubtitleTracks(payload?.streams);
-        setSubTracks(tracks);
-        if (!tracks.length)
-          setSubListNote(payload?.ok === false ? payload?.message || "" : SUBTITLE_EMPTY_TRACKS);
-      })
-      .catch(() => {
+        const preferred = listed?.preferred_languages || ["en"];
+        let downloaded = null;
+        let downloadMessage = "";
+        const first = resolvePlaySubtitleTracks({
+          listedStreams: listed?.streams,
+          preferredLanguages: preferred,
+        });
+        if (first.needsFetch) {
+          setSubListNote("Looking for text captions…");
+          try {
+            const result = await downloadLibraryItemSubtitles(subtitleKey);
+            if (cancelled) return;
+            downloadMessage = String(result?.message || "");
+            downloaded = Array.isArray(result?.streams) ? result.streams : [];
+            if (result?.ok && !downloaded.length) {
+              const refreshed = await getLibraryItemSubtitles(subtitleKey);
+              if (cancelled) return;
+              downloaded = refreshed?.streams ?? [];
+            }
+          } catch {
+            downloadMessage = "Plex couldn’t find text captions for this title.";
+          }
+        }
+        if (cancelled) return;
+        const resolved = resolvePlaySubtitleTracks({
+          listedStreams: listed?.streams,
+          downloadedStreams: downloaded,
+          preferredLanguages: preferred,
+        });
+        setSubTracks(resolved.tracks);
+        setBurnInTracks(resolved.burnInTracks);
+        if (resolved.autoSelectIndex !== -1) setActiveSub(resolved.autoSelectIndex);
+        if (resolved.empty && !resolved.burnInTracks.length) {
+          setSubListNote(
+            downloadMessage ||
+              (listed?.ok === false ? listed?.message || "" : listed?.streams?.length
+                ? SUBTITLE_NO_TEXT_TRACKS
+                : SUBTITLE_EMPTY_TRACKS),
+          );
+        } else {
+          setSubListNote("");
+        }
+      } catch {
         if (!cancelled) setSubListNote("Couldn’t read subtitle tracks for this title.");
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };
   }, [subtitleKey]);
 
   function selectSubtitle(track) {
+    const current = sessionRef.current;
+    const offsetMs = displayedPlayheadMs();
+    const wasBurnIn = Boolean(activeBurnIn);
     if (!track || track.index === -1) {
       setActiveSub(-1);
+      if (wasBurnIn && current?.session_id) {
+        void restartPlaybackCaptions(null, offsetMs);
+      }
+      return;
+    }
+    if (track.burnIn) {
+      if (activeBurnIn?.id === track.id) return;
+      setActiveSub(track.index);
+      setSubDelay(0);
+      if (current?.session_id) {
+        void restartPlaybackCaptions(track.id, offsetMs);
+      }
       return;
     }
     if (!track.renderable) return;
     setActiveSub(track.index);
+    if (wasBurnIn && current?.session_id) {
+      void restartPlaybackCaptions(null, offsetMs);
+    }
   }
 
   useEffect(() => {
@@ -547,6 +618,7 @@ export default function LibraryPlayer({
   useEffect(() => {
     function refreshPref() {
       pauseWhenBackgroundedRef.current = loadPauseWhenBackgrounded();
+      setBlackFrame(loadPlayBlackFrame());
     }
     refreshPref();
     window.addEventListener("storage", refreshPref);
@@ -866,6 +938,36 @@ export default function LibraryPlayer({
     }, SEEK_RESTART_DEBOUNCE_MS);
   }
 
+  /** Switching to/from Plex burn-in restarts the transcode at the playhead. */
+  async function restartPlaybackCaptions(subtitleStreamId, offsetMs) {
+    const current = sessionRef.current;
+    if (!current?.session_id) return;
+    const target = Math.max(0, Math.floor(Number(offsetMs) || 0));
+    if (!pictureHoldRef.current) {
+      seekRestoreMsRef.current = target;
+      seekRestoreAttemptedRef.current = false;
+      seekFailedRef.current = false;
+      seekReloadArmedRef.current = false;
+      holdSeekPicture();
+    }
+    seekCommittedMsRef.current = target;
+    setSeeking(true);
+    try {
+      const next = await setLibraryPlaybackSubtitles(current.session_id, {
+        subtitleStreamId,
+        offsetMs: target,
+      });
+      sessionRef.current = next;
+      setSession(next);
+      setNowMs(target);
+      seekReloadArmedRef.current = true;
+      setSeekEpoch((epoch) => epoch + 1);
+      armSeekPaintTimer();
+    } catch (err) {
+      await failSeek(err?.message || SEEK_FAILED_MESSAGE);
+    }
+  }
+
   /** Local currentTime when buffered; otherwise Plex session restart at offset. */
   function seekToOffsetMs(offsetMs) {
     const video = videoRef.current;
@@ -1035,7 +1137,7 @@ export default function LibraryPlayer({
 
   function toggleFullscreen() {
     const root = document.querySelector("[data-testid='library-player']");
-    toggleTheaterFullscreen(root);
+    toggleTheaterFullscreen(root, { video: videoRef.current });
   }
 
   function handleStageActivate(_event, _zone) {
@@ -1083,13 +1185,13 @@ export default function LibraryPlayer({
       }
       if (isDocumentFullscreen()) {
         const root = document.querySelector("[data-testid='library-player']");
-        toggleTheaterFullscreen(root);
+        toggleTheaterFullscreen(root, { video: videoRef.current });
         return;
       }
       {
         const root = document.querySelector("[data-testid='library-player']");
-        if (root?.classList.contains("theater-player--immersive")) {
-          toggleTheaterFullscreen(root);
+        if (root?.classList.contains("theater-player--immersive") || videoRef.current?.webkitDisplayingFullscreen) {
+          toggleTheaterFullscreen(root, { video: videoRef.current });
           return;
         }
       }
@@ -1306,6 +1408,14 @@ export default function LibraryPlayer({
                   {POP_OUT_OF_WINDOW_LABEL}
                 </button>
               ) : null}
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => setBlackFrame(persistPlayBlackFrame(!blackFrame))}
+                data-testid="library-black-frame"
+              >
+                {playFrameMenuLabel(blackFrame)}
+              </button>
               {plexHref ? (
                 <a
                   role="menuitem"
@@ -1326,13 +1436,14 @@ export default function LibraryPlayer({
         <SubtitlePicker
           testId="library-cc-picker"
           tracks={subTracks}
+          burnInTracks={burnInTracks}
           activeId={activeSub}
           onSelect={selectSubtitle}
           state={activeSubTrack ? subs.state : "idle"}
           error={subs.error}
           emptyMessage={subListNote}
           delaySec={subDelay}
-          onDelayChange={(value) => setSubDelay(clampSubtitleDelay(value))}
+          onDelayChange={activeBurnIn ? undefined : (value) => setSubDelay(clampSubtitleDelay(value))}
         />
       ) : null}
     </div>
@@ -1343,6 +1454,7 @@ export default function LibraryPlayer({
       className={`library-watch ${phone ? "library-watch--phone" : ""} ${compact ? "library-watch--compact" : ""} ${className}`.trim()}
       data-play-phone={phone ? "true" : "false"}
       data-play-compact={compact ? "true" : "false"}
+      data-play-frame={blackFrame ? "black" : "art"}
       data-long-skip={longSkip ? "true" : "false"}
       data-center-play={showCenterPlay ? "visible" : "hidden"}
     >
@@ -1354,6 +1466,7 @@ export default function LibraryPlayer({
         }
         poster={session?.poster_url || ""}
         className="library-player"
+        blackFrame={blackFrame}
         testId="library-player"
         videoTestId="library-player-video"
         loading={status === "loading" && !resumeOpen && !preroll}
