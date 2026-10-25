@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 import {
   livePrerollCueId,
   normalizePrerollPayload,
+  playBumperVideo,
+  PREROLL_TAP_COPY,
   shouldPlayLivePreroll,
   shouldPlayMoviePreroll,
 } from "./prerollClient.js";
@@ -10,6 +12,8 @@ import {
 describe("prerollClient", () => {
   it("normalizes next-preroll payloads and rejects empties", () => {
     assert.equal(normalizePrerollPayload(null), null);
+    assert.equal(normalizePrerollPayload(undefined), null);
+    assert.equal(normalizePrerollPayload({}), null);
     assert.equal(normalizePrerollPayload({ id: "a" }), null);
     const ok = normalizePrerollPayload({
       id: "clip-1",
@@ -21,13 +25,38 @@ describe("prerollClient", () => {
     assert.equal(ok.title, "Bumper");
   });
 
+  it("bumper overlay tap calls video.play(); autoplay-blocked path is not a no-op", async () => {
+    assert.match(PREROLL_TAP_COPY, /Tap the picture/);
+    const video = {
+      muted: false,
+      paused: true,
+      plays: 0,
+      async play() {
+        this.plays += 1;
+        if (!this.muted) throw new Error("NotAllowedError");
+        this.paused = false;
+      },
+    };
+    assert.equal(await playBumperVideo(video), "playing");
+    assert.ok(video.plays >= 2, "muted-first recovery must call play() after the block");
+    assert.equal(video.muted, false);
+    assert.equal(video.paused, false);
+
+    video.paused = true;
+    video.muted = false;
+    const beforeTap = video.plays;
+    assert.equal(await playBumperVideo(video), "playing");
+    assert.ok(video.plays > beforeTap, "gesture retry must call video.play()");
+    assert.equal(video.paused, false);
+  });
+
   it("gates movie preroll vs episode", () => {
     assert.equal(shouldPlayMoviePreroll({ media_type: "movie" }), true);
     assert.equal(shouldPlayMoviePreroll({ media_type: "episode" }), false);
     assert.equal(shouldPlayMoviePreroll({ media_type: "episode" }, { force: true }), true);
   });
 
-  it("plays a live bumper only when a movie is starting or about to air", () => {
+  it("plays a live bumper only when a movie is starting now", () => {
     const start = 1_700_000_000;
     const movie = { title: "Heat", media_type: "movie", start, started_at: start };
     const show = {
@@ -66,6 +95,20 @@ describe("prerollClient", () => {
       shouldPlayLivePreroll(
         { isFlex: true, nowProgram: null, nextProgram: nextMovie, nextStart },
         at(nextStart - 60),
+      ),
+      false,
+    );
+    assert.equal(
+      shouldPlayLivePreroll(
+        { isFlex: true, nowProgram: null, nextProgram: nextMovie, nextStart },
+        at(nextStart - 120),
+      ),
+      false,
+    );
+    assert.equal(
+      shouldPlayLivePreroll(
+        { isFlex: false, nowProgram: nextMovie, nextProgram: null },
+        at(nextStart + 20),
       ),
       true,
     );

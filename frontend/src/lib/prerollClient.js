@@ -2,6 +2,10 @@
  * Client helpers for Projectionist preroll bumpers (independent per browser).
  */
 
+import { tryPlayLiveVideo } from "./liveChannels.js";
+
+export const PREROLL_TAP_COPY = "Tap the picture to start the bumper.";
+
 /**
  * @param {unknown} payload
  * @returns {{ id: string, url: string, title: string, media_type: string } | null}
@@ -64,33 +68,35 @@ export function isLiveMovieProgram(program) {
 }
 
 /**
- * The movie that is starting now or about to air, or null.
- * Mid-feature tunes and non-movies do not qualify.
+ * The movie that is starting now, or null.
+ * Flex pads and mid-feature tunes do not qualify — preroll is not the flex
+ * gap source, and “up next in a few minutes” is still the pad.
  * @param {object | null | undefined} osd
  * @param {number} [nowMs]
  */
 export function liveMovieComingOn(osd, nowMs = Date.now()) {
   if (!osd || typeof osd !== "object") return null;
+  if (osd.isFlex) return null;
   const nowSec = asEpochSeconds(nowMs);
-  const nowProg = osd.isFlex ? null : osd.nowProgram;
-  if (isLiveMovieProgram(nowProg)) {
-    const start = programStartSec(nowProg);
-    if (start != null) {
-      const elapsed = nowSec - start;
-      if (elapsed >= 0 && elapsed <= LIVE_MOVIE_START_GRACE_SEC) return nowProg;
-      if (elapsed < 0 && -elapsed <= LIVE_MOVIE_IMMINENT_SEC) return nowProg;
-    }
-  }
-  const nextProg = osd.nextProgram;
-  if (!isLiveMovieProgram(nextProg)) return null;
-  const nextStart = programStartSec({
-    start: osd.nextStart ?? nextProg.start,
-    started_at: nextProg.started_at,
-  });
-  if (nextStart == null) return null;
-  const until = nextStart - nowSec;
-  if (until >= 0 && until <= LIVE_MOVIE_IMMINENT_SEC) return nextProg;
+  const nowProg = osd.nowProgram;
+  if (!isLiveMovieProgram(nowProg)) return null;
+  const start = programStartSec(nowProg);
+  if (start == null) return null;
+  const elapsed = nowSec - start;
+  if (elapsed >= 0 && elapsed <= LIVE_MOVIE_START_GRACE_SEC) return nowProg;
+  if (elapsed < 0 && -elapsed <= LIVE_MOVIE_IMMINENT_SEC) return nowProg;
   return null;
+}
+
+/**
+ * Start (or gesture-retry) a preroll bumper. Muted-first, then unmute — the
+ * same Live program audio contract as Watch. A blocked unmuted play is not a
+ * no-op: the overlay tap calls this again so `video.play()` actually runs.
+ * @param {HTMLMediaElement|null|undefined} video
+ * @returns {Promise<"playing"|"ready"|"idle">}
+ */
+export async function playBumperVideo(video) {
+  return tryPlayLiveVideo(video);
 }
 
 /**
