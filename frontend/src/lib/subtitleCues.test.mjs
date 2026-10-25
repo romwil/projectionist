@@ -7,11 +7,15 @@ import {
   cleanCueText,
   formatSubtitleDelay,
   liveProgramClockSec,
+  needsTextSubtitleFetch,
   normalizeSubtitleTracks,
   parseCueTimestamp,
   parseVtt,
+  preferredPickableSubtitle,
+  resolvePlaySubtitleTracks,
   resolveSubtitlePresentation,
   silenceNativeTextTracks,
+  stepSubtitleDelay,
   subtitleLookupTimeSec,
 } from "./subtitleCues.js";
 
@@ -130,19 +134,95 @@ test("subtitle delay clamps and formats", () => {
   assert.equal(formatSubtitleDelay(0), "In sync");
   assert.equal(formatSubtitleDelay(1.5), "+1.5s");
   assert.equal(formatSubtitleDelay(-0.5), "−0.5s");
+  assert.equal(stepSubtitleDelay(0, 0.5), 0.5);
+  assert.equal(stepSubtitleDelay(0.5, 0.5), 1);
+  assert.equal(stepSubtitleDelay(0, -0.5), -0.5);
+  assert.equal(stepSubtitleDelay(0, -1), -1);
 });
 
-test("normalizeSubtitleTracks keeps image tracks listed but unavailable, no token fields", () => {
+test("iPhone stepper taps change overlay cue offset", () => {
+  let delay = 0;
+  delay = stepSubtitleDelay(delay, 0.5);
+  delay = stepSubtitleDelay(delay, 0.5);
+  assert.equal(delay, 1);
+  const cues = [{ start: 10, end: 12, text: "English line" }];
+  assert.equal(activeCueText(cues, subtitleLookupTimeSec({ currentTimeSec: 10.2, delaySec: 0 })), "English line");
+  assert.equal(activeCueText(cues, subtitleLookupTimeSec({ currentTimeSec: 10.2, delaySec: delay })), "");
+});
+
+test("overlay cue lookup shifts ±0.5s and ±1s including fetched title time", () => {
+  const cues = parseVtt(`WEBVTT
+
+00:00:10.000 --> 00:00:12.000
+English line
+`);
+  const at = (delay) =>
+    activeCueText(cues, subtitleLookupTimeSec({ currentTimeSec: 10.2, originMs: 0, delaySec: delay }));
+  assert.equal(at(0), "English line");
+  assert.equal(at(0.5), "");
+  assert.equal(at(-0.5), "English line");
+  assert.equal(
+    activeCueText(cues, subtitleLookupTimeSec({ currentTimeSec: 0.4, originMs: 10_000, delaySec: 0 })),
+    "English line",
+  );
+  assert.equal(
+    activeCueText(cues, subtitleLookupTimeSec({ currentTimeSec: 0.4, originMs: 10_000, delaySec: 1 })),
+    "",
+  );
+});
+
+test("normalizeSubtitleTracks omits undrawable image tracks and keeps English text", () => {
   const tracks = normalizeSubtitleTracks([
     { id: "9001", label: "English (SRT)", language_code: "eng", proxy_url: "/api/library/items/1/subtitles/9001/file", renderable: true },
-    { id: "9003", label: "Japanese", language_code: "jpn", proxy_url: "", renderable: false, unavailable_reason: "picture-based" },
+    { id: "9003", label: "Français", language_code: "fra", proxy_url: "", renderable: false, unavailable_reason: "picture-based" },
+    { id: "9004", label: "English", language_code: "eng", proxy_url: "", renderable: false, unavailable_reason: "picture-based" },
   ]);
+  assert.equal(tracks.length, 1);
   assert.equal(tracks[0].index, "plex-9001");
   assert.equal(tracks[0].renderable, true);
-  assert.equal(tracks[1].renderable, false);
-  assert.equal(tracks[1].unavailableReason, "picture-based");
   assert.ok(!JSON.stringify(tracks).includes("X-Plex-Token"));
+  assert.ok(!JSON.stringify(tracks).toLowerCase().includes("can't draw"));
   assert.deepEqual(normalizeSubtitleTracks(null), []);
+});
+
+test("undrawable-only title fetches a text track or stays honest Off", () => {
+  const pgsOnly = [
+    { id: "1", label: "English", language_code: "eng", proxy_url: "", renderable: false },
+    { id: "2", label: "English", language_code: "eng", proxy_url: "", renderable: false },
+  ];
+  const listed = resolvePlaySubtitleTracks({ listedStreams: pgsOnly, preferredLanguages: ["en"] });
+  assert.equal(listed.needsFetch, true);
+  assert.equal(listed.empty, true);
+  assert.equal(listed.autoSelectIndex, -1);
+
+  const afterFail = resolvePlaySubtitleTracks({
+    listedStreams: pgsOnly,
+    downloadedStreams: pgsOnly,
+    preferredLanguages: ["en"],
+  });
+  assert.equal(afterFail.empty, true);
+  assert.equal(afterFail.autoSelectIndex, -1);
+
+  const afterFetch = resolvePlaySubtitleTracks({
+    listedStreams: pgsOnly,
+    downloadedStreams: [
+      ...pgsOnly,
+      {
+        id: "99",
+        label: "English",
+        language_code: "eng",
+        proxy_url: "/api/library/items/1/subtitles/99/file",
+        renderable: true,
+      },
+    ],
+    preferredLanguages: ["en"],
+  });
+  assert.equal(afterFetch.empty, false);
+  assert.equal(afterFetch.tracks.length, 1);
+  assert.equal(afterFetch.tracks[0].label, "English");
+  assert.equal(afterFetch.autoSelectIndex, "plex-99");
+  assert.equal(needsTextSubtitleFetch(afterFetch.tracks, ["en"]), false);
+  assert.equal(preferredPickableSubtitle(afterFetch.tracks, ["en"]).index, "plex-99");
 });
 
 test("liveProgramClockSec is wall clock minus program start", () => {

@@ -3,6 +3,7 @@
 export const SUBTITLE_FETCH_FAILED =
   "Couldn’t load this subtitle track from Plex. Try another track, or watch in Plex.";
 export const SUBTITLE_EMPTY_TRACKS = "No subtitle tracks are attached to this title in Plex.";
+export const SUBTITLE_NO_TEXT_TRACKS = "No text captions we can draw. Off stays Off.";
 export const SUBTITLE_DELAY_STEP_SEC = 0.5;
 export const SUBTITLE_DELAY_MAX_SEC = 30;
 
@@ -156,9 +157,30 @@ export function formatSubtitleDelay(value) {
   return `${n > 0 ? "+" : "−"}${Math.abs(n).toFixed(1)}s`;
 }
 
+export function stepSubtitleDelay(current, delta = SUBTITLE_DELAY_STEP_SEC) {
+  return clampSubtitleDelay((Number(current) || 0) + (Number(delta) || 0));
+}
+
+/** en ↔ eng, en-US → en. Empty values never match. */
+export function subtitleLanguageMatches(language, code) {
+  const wanted = String(code || "")
+    .trim()
+    .toLowerCase()
+    .split("-")[0];
+  const have = String(language || "")
+    .trim()
+    .toLowerCase()
+    .split("-")[0];
+  if (!wanted || !have) return false;
+  if (have === wanted) return true;
+  if (have.length === 3 && wanted.length === 2 && have.startsWith(wanted)) return true;
+  if (wanted.length === 3 && have.length === 2 && wanted.startsWith(have)) return true;
+  return false;
+}
+
 /**
  * Normalize server rows (`plex_streams` on Live, `streams` on library items) into picker tracks.
- * Image-based tracks stay listed but flagged unavailable so we never pretend they render.
+ * Image-based / unreadable tracks are omitted — dead “can’t draw” chips are not a choice.
  */
 export function normalizeSubtitleTracks(rows) {
   const list = Array.isArray(rows) ? rows : [];
@@ -179,7 +201,53 @@ export function normalizeSubtitleTracks(rows) {
         selected: Boolean(row.selected),
         forced: Boolean(row.forced),
       };
-    });
+    })
+    .filter((track) => track.renderable);
+}
+
+export function preferredPickableSubtitle(tracks, preferredLanguages = ["en"]) {
+  const pickable = (tracks || []).filter((track) => track.renderable);
+  const langs = (preferredLanguages || []).map((code) => String(code || "").trim()).filter(Boolean);
+  const wanted = langs.length ? langs : ["en"];
+  for (const code of wanted) {
+    const hit = pickable.find((track) => subtitleLanguageMatches(track.language, code) && !track.forced);
+    if (hit) return hit;
+  }
+  for (const code of wanted) {
+    const hit = pickable.find((track) => subtitleLanguageMatches(track.language, code));
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/** True when the preferred language has no text track we can overlay. */
+export function needsTextSubtitleFetch(tracks, preferredLanguages = ["en"]) {
+  return !preferredPickableSubtitle(tracks, preferredLanguages);
+}
+
+/**
+ * Play CC list: hide undrawable rows; after a Plex text-track download, auto-select
+ * the preferred language when that fetch was required.
+ */
+export function resolvePlaySubtitleTracks({
+  listedStreams = [],
+  downloadedStreams = null,
+  preferredLanguages = ["en"],
+} = {}) {
+  const listed = normalizeSubtitleTracks(listedStreams);
+  const needsFetch = needsTextSubtitleFetch(listed, preferredLanguages);
+  const source =
+    needsFetch && Array.isArray(downloadedStreams)
+      ? normalizeSubtitleTracks(downloadedStreams)
+      : listed;
+  const tracks = source.filter((track) => track.renderable);
+  const auto = needsFetch ? preferredPickableSubtitle(tracks, preferredLanguages) : null;
+  return {
+    tracks,
+    needsFetch,
+    autoSelectIndex: auto?.index ?? -1,
+    empty: tracks.length === 0,
+  };
 }
 
 /**
