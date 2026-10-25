@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Live bumper tap starts the picture.** iPad Safari can pause unmuted preroll autoplay; the overlay now uses muted-first then unmute (same as Watch) and the tap calls `video.play()`. A missing preroll (HTTP 204) does not show the overlay.
+- **Live flex pad no longer loops preroll bumpers.** Between programs prefers commercials-bin filler rating keys; movie-start preroll is only when a movie is starting now. A 2-minute hole with no playable filler shows the named Between programs slate.
+
 ## [1.37.62] — 2026-10-24
 
 One patch on 1.37.61: year sits on the same line as the title, and Similar plot / For you / Surprising refuse Wikipedia leftover trivia as a plot link.

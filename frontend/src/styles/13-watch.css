@@ -812,6 +812,18 @@ html:has([data-theater-mode="true"]) #root {
   object-fit: contain;
   background: #000;
 }
+.preroll-stage-tap {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
 .preroll-stage-error {
   position: absolute;
   left: 50%;
@@ -826,6 +838,7 @@ html:has([data-theater-mode="true"]) #root {
   color: var(--ink-on-media);
   font-size: 0.85rem;
   text-align: center;
+  pointer-events: none;
 }
 
 /*
