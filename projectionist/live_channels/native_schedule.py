@@ -8,8 +8,10 @@ guide and playback do not call Tunarr.
 
 Playback of the programme on now goes through library Play (Plex HLS session
 for that rating key, joined at the elapsed offset). A flex pad stays labeled
-flex — including the "Up next" lower-third — and plays a filler clip in that
-same video element instead of leaving it black.
+flex — including the "Up next" lower-third — and plays commercials-bin filler
+when the station has a playable filler rating key. Preroll bumpers are a
+movie-start overlay, not the pad source. With no playable filler, Watch shows
+the named Between programs slate.
 """
 
 from __future__ import annotations
@@ -193,7 +195,7 @@ def import_tunarr_lineup(data_dir: Path) -> Optional[Dict[str, Any]]:
             )
         if not stored_items:
             continue
-        stored[cid] = {
+        row = {
             "id": cid,
             "name": name,
             "number": meta.get("number"),
@@ -202,6 +204,10 @@ def import_tunarr_lineup(data_dir: Path) -> Optional[Dict[str, Any]]:
             "start_time_ms": start_ms,
             "items": stored_items,
         }
+        filler_keys = _filler_keys_from_tunarr(data_dir, cid)
+        if filler_keys:
+            row["filler_rating_keys"] = filler_keys
+        stored[cid] = row
     if not stored:
         return None
     return {"version": 1, "imported_from": "tunarr_sqlite", "channels": stored}
@@ -548,9 +554,6 @@ def _channel(doc: Mapping[str, Any], channel_id: str) -> Optional[Mapping[str, A
     return row if isinstance(row, Mapping) else None
 
 
-_PROGRESSIVE_EXTS = {".mp4", ".m4v", ".webm", ".mov"}
-
-
 def _stable_pick(items: Sequence[Any], seed: float) -> Any:
     count = len(items)
     if count <= 0:
@@ -560,6 +563,15 @@ def _stable_pick(items: Sequence[Any], seed: float) -> Any:
     except (TypeError, ValueError):
         base = 0
     return items[base % count]
+
+
+def _keys_in_play_order(keys: Sequence[str], seed: float) -> List[str]:
+    """Stable first pick, then the rest, so a dead key is not the only try."""
+    items = [str(key).strip() for key in keys if str(key).strip()]
+    if not items:
+        return []
+    start = items.index(str(_stable_pick(items, seed)))
+    return items[start:] + items[:start]
 
 
 def filler_rating_keys(channel: Mapping[str, Any]) -> List[str]:
@@ -632,34 +644,6 @@ def _filler_keys_from_tunarr(data_dir: Path, channel_id: str) -> List[str]:
     return keys
 
 
-def _progressive_bumper(seed: float) -> Optional[Dict[str, Any]]:
-    """A short browser-playable bumper when the filler show has no Plex key.
-
-    Station commercials on Automat are local mkv files and are not in the
-    library. Preroll mp4s are mounted in the app and paint in the video element.
-    """
-    from projectionist.theater.preroll import list_preroll_videos
-
-    videos = []
-    for row in list_preroll_videos():
-        if not isinstance(row, Mapping) or not row.get("id"):
-            continue
-        suffix = Path(str(row.get("path") or "")).suffix.lower()
-        if suffix not in _PROGRESSIVE_EXTS:
-            continue
-        videos.append(row)
-    if not videos:
-        return None
-    chosen = _stable_pick(videos, seed)
-    asset_id = str(chosen["id"])
-    return {
-        "rating_key": asset_id,
-        "stream_url": f"/api/preroll/asset/{asset_id}",
-        "playback_kind": "progressive",
-        "filler_title": str(chosen.get("title") or ""),
-    }
-
-
 def play_source_for_channel(
     db: Any,
     settings: Any,
@@ -671,10 +655,10 @@ def play_source_for_channel(
 ) -> Optional[Dict[str, Any]]:
     """Library Play session for the file on now.
 
-    A flex pad still reports ``is_flex`` (Up next lower-third) and also starts
-    a filler session when the station has a playable filler rating key. With
-    no library filler, a progressive preroll bumper is used so the video
-    element is not an empty black frame.
+    A flex pad still reports ``is_flex`` (Up next lower-third) and starts a
+    commercials-bin filler session when the station has a playable filler
+    rating key. Movie-start preroll is a client overlay, not this pad source.
+    With no playable filler, Watch gets the named Between programs slate.
 
     Returns None when this channel is not in our lineup (caller may still use
     the legacy Tunarr tune path).
@@ -722,48 +706,34 @@ def play_source_for_channel(
                 keys.append(key)
         seed = float(current.get("start") or current.get("started_at") or ts)
         if keys:
-            filler_key = str(_stable_pick(keys, seed))
             if start_playback_fn is None:
                 from projectionist.library.playback import start_playback as start_playback_fn
-            try:
-                payload = start_playback_fn(
-                    db,
-                    settings,
-                    rating_key=filler_key,
-                    user=user,
-                    start_over=True,
-                    offset_ms=0,
-                )
-            except Exception as error:  # noqa: BLE001
-                logger.warning("flex filler playback failed for %s: %s", filler_key, error)
-                payload = None
-            if isinstance(payload, Mapping) and str(payload.get("stream_url") or "").strip():
-                base.update(
-                    {
-                        "stream_url": str(payload.get("stream_url") or ""),
-                        "rating_key": filler_key,
-                        "session_id": str(payload.get("session_id") or ""),
-                        "offset_ms": 0,
-                        "duration_ms": payload.get("duration_ms"),
-                        "playback_kind": "hls",
-                        "filler": True,
-                    }
-                )
-                return base
-        bumper = _progressive_bumper(seed)
-        if bumper:
-            base.update(
-                {
-                    "stream_url": bumper["stream_url"],
-                    "rating_key": bumper["rating_key"],
-                    "session_id": "",
-                    "offset_ms": 0,
-                    "playback_kind": "progressive",
-                    "filler": True,
-                    "filler_title": bumper.get("filler_title") or "",
-                }
-            )
-            return base
+            for filler_key in _keys_in_play_order(keys, seed):
+                try:
+                    payload = start_playback_fn(
+                        db,
+                        settings,
+                        rating_key=filler_key,
+                        user=user,
+                        start_over=True,
+                        offset_ms=0,
+                    )
+                except Exception as error:  # noqa: BLE001
+                    logger.warning("flex filler playback failed for %s: %s", filler_key, error)
+                    payload = None
+                if isinstance(payload, Mapping) and str(payload.get("stream_url") or "").strip():
+                    base.update(
+                        {
+                            "stream_url": str(payload.get("stream_url") or ""),
+                            "rating_key": filler_key,
+                            "session_id": str(payload.get("session_id") or ""),
+                            "offset_ms": 0,
+                            "duration_ms": payload.get("duration_ms"),
+                            "playback_kind": "hls",
+                            "filler": True,
+                        }
+                    )
+                    return base
         slate_next = next_title
         base.update(
             {
