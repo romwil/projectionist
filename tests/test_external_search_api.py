@@ -196,6 +196,61 @@ class ExternalSearchApiTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200, resp.text)
         self.assertEqual(resp.json()["returned"], 2)
 
+    @patch("projectionist.library.external_search.TMDBClient")
+    def test_type_all_searches_movies_and_shows_gap_stays_out_of_library(self, mock_cls) -> None:
+        """Type All looks beyond as movies+TV. A similar-title gap movie stays in_library false."""
+        db = self._jobs.get_job_manager().db
+        db.upsert_library_item(
+            {
+                "rating_key": "sliders-1995",
+                "media_type": "show",
+                "title": "Sliders",
+                "year": 1995,
+                "tmdb_id": 1227,
+            }
+        )
+        mock_tmdb = self._mock_tmdb(mock_cls)
+        mock_tmdb.search_movie_page.return_value = {
+            "total_results": 1,
+            "results": [
+                {
+                    "id": 90001,
+                    "title": "Sliders of Ghost Town",
+                    "release_date": "2024-06-01",
+                    "overview": "A western.",
+                    "vote_average": 5.1,
+                }
+            ],
+        }
+        mock_tmdb.search_tv_page.return_value = {
+            "total_results": 1,
+            "results": [
+                {
+                    "id": 1227,
+                    "name": "Sliders",
+                    "first_air_date": "1995-03-22",
+                    "overview": "Parallel Earths.",
+                    "vote_average": 7.4,
+                }
+            ],
+        }
+        mock_tmdb.tv_details.return_value = {"id": 1227, "external_ids": {"tvdb_id": 4085}}
+
+        resp = self.client.get("/api/search/external", params={"q": "sliders", "media_type": "all"})
+        self.assertEqual(resp.status_code, 200, resp.text)
+        body = resp.json()
+        self.assertEqual(body["media_type"], "all")
+        by_id = {item["tmdb_id"]: item for item in body["items"]}
+        self.assertIn(1227, by_id)
+        self.assertIn(90001, by_id)
+        self.assertTrue(by_id[1227]["in_library"])
+        self.assertEqual(by_id[1227]["media_type"], "show")
+        self.assertFalse(by_id[90001]["in_library"])
+        self.assertEqual(by_id[90001]["media_type"], "movie")
+        self.assertEqual(by_id[90001]["title"], "Sliders of Ghost Town")
+        mock_tmdb.search_movie_page.assert_called()
+        mock_tmdb.search_tv_page.assert_called()
+
 
 if __name__ == "__main__":
     unittest.main()
