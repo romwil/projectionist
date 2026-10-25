@@ -45,6 +45,19 @@ export const DEFAULT_MEDIA_BROWSE = {
   keywords: [],
 };
 
+/** Type All (empty / all / any) is untyped. Only movie and show filter the reader. */
+export function normalizeBrowseMediaType(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "movie" || raw === "movies") return "movie";
+  if (raw === "show" || raw === "shows" || raw === "tv" || raw === "series") return "show";
+  return "";
+}
+
+/** Beyond-search type: movies, TV, or both when the wall is Type All. */
+export function beyondSearchMediaType(value) {
+  return normalizeBrowseMediaType(value) || "all";
+}
+
 /** Default browse state when opening the TV library (fresh-episode browsing). */
 export const DEFAULT_TV_MEDIA_BROWSE = {
   ...DEFAULT_MEDIA_BROWSE,
@@ -139,16 +152,16 @@ function parsePageSizeParam(value, fallback) {
 
 export function parseMediaBrowse(searchParams, defaults = {}) {
   const get = (key) => searchParams?.get?.(key);
-  const mediaHint = String(get("media_type") || defaults.media_type || "").trim().toLowerCase();
+  const mediaHint = normalizeBrowseMediaType(get("media_type") || defaults.media_type || "");
   const baseDefaults =
-    mediaHint === "show" || mediaHint === "tv"
+    mediaHint === "show"
       ? { ...DEFAULT_TV_MEDIA_BROWSE, ...defaults }
       : { ...DEFAULT_MEDIA_BROWSE, ...defaults };
   const merged = baseDefaults;
   const view = get("view");
   const sort = get("sort");
   const sortDir = get("sort_dir");
-  const allowedSorts = mediaHint === "show" || mediaHint === "tv" ? MEDIA_BROWSE_TV_SORTS : MEDIA_BROWSE_SORTS;
+  const allowedSorts = mediaHint === "show" ? MEDIA_BROWSE_TV_SORTS : MEDIA_BROWSE_SORTS;
   const defaultSortDir = merged.sort_dir === "desc" ? "desc" : "asc";
   return {
     ...merged,
@@ -161,7 +174,7 @@ export function parseMediaBrowse(searchParams, defaults = {}) {
     sort_dir: sortDir === "desc" || sortDir === "asc" ? sortDir : defaultSortDir,
     limit: parsePageSizeParam(get("limit") || merged.limit, merged.limit),
     offset: numberInRange(get("offset"), 0, 0, Number.MAX_SAFE_INTEGER),
-    media_type: get("media_type") || merged.media_type || "",
+    media_type: mediaHint,
     watch_state: get("watch_state") || merged.watch_state || "",
     year: get("year") || merged.year || "",
     language: normalizeLanguageCode(get("language") || merged.language || ""),
@@ -171,10 +184,10 @@ export function parseMediaBrowse(searchParams, defaults = {}) {
 }
 
 export function buildMediaBrowseParams(state, updates = {}) {
-  const mediaHint = String(updates.media_type ?? state?.media_type ?? "").trim().toLowerCase();
+  const mediaHint = normalizeBrowseMediaType(updates.media_type ?? state?.media_type ?? "");
   const defaults =
-    mediaHint === "show" || mediaHint === "tv" ? DEFAULT_TV_MEDIA_BROWSE : DEFAULT_MEDIA_BROWSE;
-  const next = { ...defaults, ...state, ...updates };
+    mediaHint === "show" ? DEFAULT_TV_MEDIA_BROWSE : DEFAULT_MEDIA_BROWSE;
+  const next = { ...defaults, ...state, ...updates, media_type: mediaHint };
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(next)) {
     if (key === "offset" && !value) continue;
@@ -195,10 +208,12 @@ export function buildMediaBrowseParams(state, updates = {}) {
 
 export function queryFiltersFromBrowse(state, extra = {}) {
   const filters = { ...extra };
-  for (const key of ["sort", "sort_dir", "limit", "offset", "media_type", "year", "genres", "keywords"]) {
+  for (const key of ["sort", "sort_dir", "limit", "offset", "year", "genres", "keywords"]) {
     const value = state?.[key];
     if (Array.isArray(value) ? value.length : value !== "" && value != null) filters[key] = value;
   }
+  const mediaType = normalizeBrowseMediaType(state?.media_type);
+  if (mediaType) filters.media_type = mediaType;
   // Never forward the "all" sentinel to the reader — resolve it to the cap.
   if (isAllPageSize(filters.limit)) filters.limit = MEDIA_BROWSE_ALL_CAP;
   if (state?.watch_state === "unwatched") filters.unwatched_only = true;
