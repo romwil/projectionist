@@ -57,7 +57,7 @@ def register(scheduler: IdleScheduler) -> None:
             run_fn=run_tease,
             description=(
                 "Late December soft tease for opted-in members with enough "
-                "watch-tracker signal for the ending year."
+                "Plex plays this year (this account) for the ending year."
             ),
         )
     )

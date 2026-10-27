@@ -55,7 +55,9 @@ def personality_line(*, movie_genre: str, tv_genre: str, year: int) -> str:
 
 
 def honesty_footnote(rollup: YearRollup) -> str:
-    body = "Finishes attributed to you — not the whole household."
+    from projectionist.year_in_review import HONESTY_FOOTNOTE
+
+    body = HONESTY_FOOTNOTE
     c = rollup.confidence or {}
     certain = int(c.get("certain") or 0)
     likely = int(c.get("likely") or 0)

@@ -39,8 +39,8 @@ export default function YearInReviewAdminPanel({
             setYirStatus({
               type: "error",
               message: year
-                ? `Not enough tracked finishes for ${year} yet (year to date). Keep watching, then try again.`
-                : "Not enough tracked finishes for this year yet.",
+                ? `Not enough Plex plays for ${year} yet (year to date). Keep watching on this Plex account, then try again.`
+                : "Not enough Plex plays for this year yet.",
             });
           } else if (path) {
             setYirStatus({
@@ -93,8 +93,9 @@ export default function YearInReviewAdminPanel({
       testId={`${testIdPrefix}-yir-panel`}
     >
       <p className="settings-field-hint" data-testid={`${testIdPrefix}-yir-prereqs`}>
-        Test generate uses the current calendar year (year to date). Requires a mapped Plex
-        identity and enough tracked finishes for this year
+        Your Plex plays this year (this account), not the household and not only titles played
+        inside Projectionist. Test generate uses the current calendar year (year to date). Requires
+        a mapped Plex identity and enough plays for this year
         {mailConfigured === false ? (
           <>
             {" "}

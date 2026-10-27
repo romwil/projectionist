@@ -449,6 +449,8 @@ class PlexClient:
         start: int = 0,
         size: int = 250,
         since_ms: Optional[int] = None,
+        until_ms: Optional[int] = None,
+        account_id: Optional[str] = None,
     ) -> "PlexHistoryPage":
         """Return one bounded page from Plex's played-history endpoint.
 
@@ -462,6 +464,8 @@ class PlexClient:
             start=start,
             size=size,
             since_ms=since_ms,
+            until_ms=until_ms,
+            account_id=account_id,
         )
         return page
 
