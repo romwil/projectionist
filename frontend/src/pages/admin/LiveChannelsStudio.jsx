@@ -32,6 +32,7 @@ import {
   publishSucceeded,
 } from "../../lib/liveChannelsOwnerCopy.js";
 import { isLiveMutatingDisabled, plexRebuildConfirmMessage } from "../../lib/liveChannelsJob.js";
+import { useConfirmModal } from "../../hooks/useConfirmModal.js";
 import { DEFAULT_QUEUE_PAD_DRAFT, queuePadPayload } from "../../lib/liveQueuePad.js";
 import { LiveJobRail, LiveStatusCheck } from "./LiveChannelsParts.jsx";
 
@@ -143,6 +144,7 @@ export default function LiveChannelsStudio({
   const [launch, setLaunch] = useState(null); // { phase, error }
   const [setupOpen, setSetupOpen] = useState(false);
   const [lastLaunched, setLastLaunched] = useState("");
+  const { confirm, modal } = useConfirmModal();
 
   const state = liveStationState({
     enabled,
@@ -400,7 +402,16 @@ export default function LiveChannelsStudio({
   }
 
   async function resyncPlex(rebuild) {
-    if (rebuild && !window.confirm(plexRebuildConfirmMessage())) return;
+    if (
+      rebuild &&
+      !(await confirm({
+        title: "Rebuild Plex tuner",
+        body: plexRebuildConfirmMessage(),
+        confirmLabel: "Rebuild",
+      }))
+    ) {
+      return;
+    }
     setLiveBusy(rebuild ? "plex-repair" : "attach-guide");
     try {
       const result = rebuild ? await postLiveChannelsPlexRepair() : await postLiveChannelsPlexAttachGuide();
@@ -454,6 +465,7 @@ export default function LiveChannelsStudio({
           </div>
           {renderLiveBlockAlert("hero")}
         </div>
+        {modal}
       </section>
     );
   }
@@ -1132,6 +1144,7 @@ export default function LiveChannelsStudio({
           </details>
         </div>
       ) : null}
+      {modal}
     </section>
   );
 }

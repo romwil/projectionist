@@ -21,6 +21,7 @@ import {
   personShelfLabel,
 } from "../lib/journeyExploration.js";
 import { guestDeepLinkBlocked } from "../lib/memberShell.js";
+import { useConfirmModal } from "../hooks/useConfirmModal.js";
 
 const PEOPLE_RAILS = [
   { id: "directors", title: "Directors in your shelf", subtitle: "Voices behind the films you keep returning to." },
@@ -118,6 +119,7 @@ function JourneyInsightCard({ insight }) {
 
 export default function MyJourneyPage() {
   const { authReady, isYouth, role, multiUserEnabled, isOwner } = useAuthGate();
+  const { confirm, modal } = useConfirmModal();
   const [publishBusy, setPublishBusy] = useState("");
   const [state, setState] = useState({ loading: true, data: null, error: "" });
   const [syllabusBusy, setSyllabusBusy] = useState("");
@@ -194,7 +196,11 @@ export default function MyJourneyPage() {
     try {
       const preview = await syllabusPublishHandoff(course.id, { confirm: false, target: "plex" });
       if (preview?.needs_confirm) {
-        const ok = window.confirm(preview.message || `Publish “${course.name}” to Plex?`);
+        const ok = await confirm({
+          title: "Publish to Plex",
+          body: preview.message || `Publish “${course.name}” to Plex?`,
+          confirmLabel: "Publish",
+        });
         if (!ok) return;
       }
       const result = await syllabusPublishHandoff(course.id, { confirm: true, target: "plex" });
@@ -365,6 +371,7 @@ export default function MyJourneyPage() {
           </>
         ) : null}
       </main>
+      {modal}
     </AppShell>
   );
 }

@@ -10,8 +10,10 @@ import {
   listWatchlist,
   updateCuratedList,
 } from "../../api/client";
+import { useConfirmModal } from "../../hooks/useConfirmModal.js";
 
 export default function ListsSettingsPage() {
+  const { confirm, modal } = useConfirmModal();
   const [lists, setLists] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -110,7 +112,16 @@ export default function ListsSettingsPage() {
 
   async function handleDeleteList() {
     if (!selectedId || !detail) return;
-    if (!window.confirm(`Delete list “${detail.name}”?`)) return;
+    if (
+      !(await confirm({
+        title: "Delete list",
+        body: `Delete list “${detail.name}”?`,
+        confirmLabel: "Delete list",
+        danger: true,
+      }))
+    ) {
+      return;
+    }
     setSaving(true);
     setMessage(null);
     try {
@@ -212,6 +223,7 @@ export default function ListsSettingsPage() {
       <section className="settings-section" data-testid="settings-lists">
         <h2>Lists</h2>
         <p className="status status-secondary">Loading lists…</p>
+        {modal}
       </section>
     );
   }
@@ -413,6 +425,7 @@ export default function ListsSettingsPage() {
           {message.text}
         </p>
       ) : null}
+      {modal}
     </section>
   );
 }

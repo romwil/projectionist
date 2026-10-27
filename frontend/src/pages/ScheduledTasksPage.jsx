@@ -38,6 +38,7 @@ import {
   taskDisplayName,
   taskRowTone,
 } from "../lib/scheduledTasks.js";
+import { useConfirmModal } from "../hooks/useConfirmModal.js";
 
 const POLL_IDLE_MS = 5000;
 const POLL_ACTIVE_MS = 1200;
@@ -58,6 +59,7 @@ function readStoredSortMode() {
 
 export default function ScheduledTasksPage() {
   const { start, update, finish } = useBulkActionProgress();
+  const { confirm, modal } = useConfirmModal();
   const [items, setItems] = useState([]);
   const [idle, setIdle] = useState(false);
   const [running, setRunning] = useState(null);
@@ -491,13 +493,16 @@ export default function ScheduledTasksPage() {
 
   async function handleOptimizeRates() {
     if (optimizingRates) return;
-    const confirmed = window.confirm(
-      "Optimize rates for autotune-eligible enrichment tasks?\n\n"
+    const confirmed = await confirm({
+      title: "Optimize task rates",
+      body:
+        "Optimize rates for autotune-eligible enrichment tasks?\n\n"
         + "Uses the same safe auto-tune rules as after a successful run: "
         + "nudges batch size and cadence within per-task min/max bounds, "
         + "never disables tasks, and does not start any job. "
         + "Tasks without a recent successful run are skipped.",
-    );
+      confirmLabel: "Optimize rates",
+    });
     if (!confirmed) return;
     setOptimizingRates(true);
     setActionError("");
@@ -1150,6 +1155,7 @@ export default function ScheduledTasksPage() {
           ) : null}
         </section>
       ) : null}
+      {modal}
     </div>
   );
 }
