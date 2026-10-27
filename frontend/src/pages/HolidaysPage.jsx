@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useConfirmModal } from "../hooks/useConfirmModal.js";
+import { useConfirmModal } from "../hooks/useConfirmModal.jsx";
 import {
   clearHolidayRailTitle,
   createHoliday,

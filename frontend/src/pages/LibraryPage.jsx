@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useConfirmModal } from "../hooks/useConfirmModal.js";
+import { useConfirmModal } from "../hooks/useConfirmModal.jsx";
 import { deleteLibraryPage, getLibraryPage, listLibraryPages } from "../api/client";
 import AppShell from "../layouts/AppShell";
 import BackLink from "../components/BackLink";

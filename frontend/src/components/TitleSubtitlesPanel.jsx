@@ -3,7 +3,7 @@ import {
   downloadLibraryItemSubtitles,
   getLibraryItemSubtitles,
 } from "../api/client";
-import { useConfirmModal } from "../hooks/useConfirmModal.js";
+import { useConfirmModal } from "../hooks/useConfirmModal.jsx";
 
 /**
  * Dig-in / dual-watch subtitle surface — prefer Plex-attached tracks; soft-fail download.

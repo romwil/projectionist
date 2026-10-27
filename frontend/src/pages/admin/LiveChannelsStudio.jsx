@@ -32,7 +32,7 @@ import {
   publishSucceeded,
 } from "../../lib/liveChannelsOwnerCopy.js";
 import { isLiveMutatingDisabled, plexRebuildConfirmMessage } from "../../lib/liveChannelsJob.js";
-import { useConfirmModal } from "../../hooks/useConfirmModal.js";
+import { useConfirmModal } from "../../hooks/useConfirmModal.jsx";
 import { DEFAULT_QUEUE_PAD_DRAFT, queuePadPayload } from "../../lib/liveQueuePad.js";
 import { LiveJobRail, LiveStatusCheck } from "./LiveChannelsParts.jsx";
 

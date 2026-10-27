@@ -28,7 +28,7 @@ function walkJsx(dir, acc = []) {
 
 describe("ConfirmModal chrome", () => {
   const modal = readFileSync(join(srcRoot, "components", "ConfirmModal.jsx"), "utf8");
-  const hook = readFileSync(join(srcRoot, "hooks", "useConfirmModal.js"), "utf8");
+  const hook = readFileSync(join(srcRoot, "hooks", "useConfirmModal.jsx"), "utf8");
   const styles = readAllStyles();
 
   it("reuses RecommendModal overlay chrome, not a native dialog", () => {
