@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useConfirmModal } from "../../hooks/useConfirmModal.js";
+import { useConfirmModal } from "../../hooks/useConfirmModal.jsx";
 import InlineAlert from "../../components/InlineAlert";
 import SettingsToggle from "../../components/settings/SettingsToggle";
 import AdminExecutionCard from "../../components/AdminExecutionCard";

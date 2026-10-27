@@ -22,6 +22,7 @@ One patch on 1.37.63: For you names a plot subject you can say, Taste lock stays
 
 ### Fixed
 - **A warming Continue Watching rail stays pending.** Merging in-app progress notes no longer clears `pending` on an empty first hub paint, so Explore does not flash “Nothing in progress” while Plex on-deck is still loading.
+- **ConfirmModal hook is JSX.** `useConfirmModal` lives in a `.jsx` file so the production Vite build can compile the overlay.
 
 ### Verification
 - Backend focused pytest — 162 passed (`tests/test_household_bridges.py`, `tests/test_surprising_plot_kinship.py`, `tests/test_taste_clusters.py`, `tests/test_taste_engagement.py`, `tests/test_library_db.py`, `tests/test_year_in_review_history.py`, `tests/test_tautulli_watch_history.py`, `tests/test_watch_history.py`, `tests/test_year_in_review.py`, `tests/test_continue_watching_after_play.py`, `tests/test_library_playback.py`, `tests/test_version.py`) with `--no-cov`.

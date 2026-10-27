@@ -13,7 +13,7 @@ import QueuePadControl from "../../components/live/QueuePadControl";
 import { queuePadPayload } from "../../lib/liveQueuePad.js";
 import { liveSetupStepNumbers } from "../../lib/liveChannelsCopy.js";
 import { isLiveMutatingDisabled } from "../../lib/liveChannelsJob.js";
-import { useConfirmModal } from "../../hooks/useConfirmModal.js";
+import { useConfirmModal } from "../../hooks/useConfirmModal.jsx";
 import { LiveReadyBadge, LiveStatusCheck } from "./LiveChannelsParts.jsx";
 
 /**
