@@ -2,7 +2,8 @@
 
 ``taste_refresh`` used to whitespace-split preference / feedback prose into
 cluster tags, which produced junk like ``you've``, ``of``, ``in.``, and ``-``.
-These helpers keep only contentful tags suitable for Settings → Taste.
+Clusters are TMDB genres plus quiz moods (``noir``, ``comedy``, ``sci-fi``, …),
+not abstract TMDB-keyword unigrams (``plot``, ``rabbit``, ``rated``).
 """
 
 from __future__ import annotations
@@ -306,10 +307,68 @@ _MIN_LETTER_COUNT = 3
 _MAX_TAG_LEN = 80
 _MAX_WORDS = 4
 
+# Official TMDB movie + TV genre names. Ampersands become spaces via
+# ``_canon_label`` so "Sci-Fi & Fantasy" → "sci-fi fantasy".
+_TMDB_GENRE_NAMES = (
+    "Action",
+    "Adventure",
+    "Animation",
+    "Comedy",
+    "Crime",
+    "Documentary",
+    "Drama",
+    "Family",
+    "Fantasy",
+    "History",
+    "Horror",
+    "Music",
+    "Mystery",
+    "Romance",
+    "Science Fiction",
+    "TV Movie",
+    "Thriller",
+    "War",
+    "Western",
+    "Action & Adventure",
+    "Sci-Fi & Fantasy",
+    "War & Politics",
+    "Kids",
+    "News",
+    "Reality",
+    "Soap",
+    "Talk",
+)
+# Quiz chips plus common aliases that members actually type.
+_QUIZ_AND_MOOD_LABELS = (
+    "sci-fi",
+    "scifi",
+    "musical",
+    "noir",
+    "neo-noir",
+)
+# Abstract unigrams that passed the old stopword-only gate. Overlaps
+# plot-kinship generics (story/stories/plot) plus the Taste screenshot junk.
+_ABSTRACT_CLUSTER_UNIGRAMS = frozenset(
+    {
+        "plot",
+        "story",
+        "stories",
+        "rated",
+        "paying",
+        "protagonist",
+        "strong",
+        "pulls",
+        "rabbit",
+        "spectacle",
+        "royale",
+        "rites",
+    }
+)
+
 
 def normalize_cluster_tag(raw: str) -> str:
     """Lowercase, strip edge punctuation, collapse whitespace."""
-    text = str(raw or "").strip().lower()
+    text = str(raw or "").strip().lower().replace("&", " ")
     if not text:
         return ""
     # Drop surrounding junk (``in.`` → ``in``, ``-`` → ````).
@@ -318,12 +377,34 @@ def normalize_cluster_tag(raw: str) -> str:
     return text[:_MAX_TAG_LEN]
 
 
+def _canon_label(raw: str) -> str:
+    return normalize_cluster_tag(raw)
+
+
+_TASTE_LABELS = frozenset(
+    _canon_label(raw) for raw in (*_TMDB_GENRE_NAMES, *_QUIZ_AND_MOOD_LABELS)
+) - {""}
+
+
+def clamp_cluster_weight(weight: float) -> float:
+    """Store profile weights on the 0–1 slider range."""
+    try:
+        value = float(weight)
+    except (TypeError, ValueError):
+        return 0.0
+    if value != value:  # NaN
+        return 0.0
+    return max(0.0, min(1.0, value))
+
+
 def is_valid_cluster_tag(raw: str) -> bool:
-    """Return True when ``raw`` is a contentful taste cluster label."""
+    """Return True when ``raw`` is a real taste label (genre or quiz mood)."""
     tag = normalize_cluster_tag(raw)
     if not tag:
         return False
     if len(tag) > _MAX_TAG_LEN:
+        return False
+    if tag in _ABSTRACT_CLUSTER_UNIGRAMS:
         return False
     if tag in STOPWORDS or tag in _CONTRACTION_FORMS:
         return False
@@ -340,14 +421,8 @@ def is_valid_cluster_tag(raw: str) -> bool:
     parts = [p for p in re.split(r"[\s\-]+", tag) if p]
     if len(parts) > _MAX_WORDS:
         return False
-    content = [
-        p
-        for p in parts
-        if p not in STOPWORDS
-        and p not in _CONTRACTION_FORMS
-        and len(re.sub(r"[^a-z]", "", p)) >= _MIN_LETTER_COUNT
-    ]
-    return bool(content)
+    # Known TMDB / quiz labels win even when a part is a stopword ("tv movie").
+    return tag in _TASTE_LABELS
 
 
 def cluster_tokens_from_text(text: str) -> List[str]:
