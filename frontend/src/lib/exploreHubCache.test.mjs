@@ -1,14 +1,22 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
+  CONTINUE_WATCHING_PROGRESS_KEY,
   clearExploreHubCache,
+  dropReflectedContinueWatchingNotes,
   exploreHubStillWarming,
   hubRailState,
   mergeContinueWatchingNotes,
   readExploreHubCache,
   rememberContinueWatchingProgress,
+  spliceContinueWatchingRail,
   writeExploreHubCache,
 } from "./exploreHubCache.js";
+
+const here = dirname(fileURLToPath(import.meta.url));
 
 function memoryStorage() {
   const map = new Map();
@@ -114,5 +122,190 @@ describe("exploreHubCache", () => {
       merged.rails.continue_watching.items[0].view_offset_ms,
       staleServer.rails.continue_watching.items[0].view_offset_ms,
     );
+  });
+
+  const armstrongShow = {
+    title: "The Armstrong & Miller Show",
+    rating_key: "show-am",
+    play_rating_key: "am-s1e1",
+    media_type: "show",
+    year: 2007,
+    view_offset_ms: 18_000,
+    duration_ms: 1_800_000,
+    continue_season: 1,
+    continue_episode: 1,
+    resume_label: "S1E1 · 1% watched",
+  };
+
+  it("keeps one Armstrong & Miller card when E1 finishes and E2 starts", () => {
+    const storage = memoryStorage();
+    writeExploreHubCache(
+      { rails: { continue_watching: { items: [{ ...armstrongShow }], note: null } } },
+      storage,
+    );
+    rememberContinueWatchingProgress(
+      {
+        ratingKey: "am-s1e1",
+        showRatingKey: "show-am",
+        viewOffsetMs: 0,
+        durationMs: 1_800_000,
+        finished: true,
+        title: "The Armstrong & Miller Show",
+        mediaType: "episode",
+        season: 1,
+        episode: 1,
+      },
+      storage,
+    );
+    rememberContinueWatchingProgress(
+      {
+        ratingKey: "am-s1e2",
+        showRatingKey: "show-am",
+        viewOffsetMs: 36_000,
+        durationMs: 1_800_000,
+        title: "The Armstrong & Miller Show",
+        mediaType: "episode",
+        season: 1,
+        episode: 2,
+        episodeTitle: "Episode 2",
+      },
+      storage,
+    );
+    const row = readExploreHubCache(storage).payload.rails.continue_watching;
+    assert.equal(row.items.length, 1);
+    assert.equal(row.items[0].title, "The Armstrong & Miller Show");
+    assert.equal(row.items[0].rating_key, "show-am");
+    assert.equal(row.items[0].play_rating_key, "am-s1e2");
+    assert.equal(row.items[0].continue_episode, 2);
+    assert.match(row.items[0].resume_label, /S1E2/);
+
+    const staleHub = {
+      rails: {
+        continue_watching: {
+          items: [
+            { ...armstrongShow },
+            {
+              ...armstrongShow,
+              play_rating_key: "am-s1e2",
+              continue_episode: 2,
+              view_offset_ms: 36_000,
+              resume_label: "S1E2 · 2% watched",
+            },
+          ],
+        },
+      },
+    };
+    const merged = mergeContinueWatchingNotes(staleHub, storage);
+    assert.equal(merged.rails.continue_watching.items.length, 1);
+    assert.equal(merged.rails.continue_watching.items[0].play_rating_key, "am-s1e2");
+  });
+
+  it("splices live Continue Watching percent without clearing the rail", () => {
+    const payload = {
+      rails: {
+        continue_watching: { items: [{ ...armstrongShow }], note: null, pending: false },
+        recently_added: { items: [{ title: "Heat" }], note: null },
+      },
+    };
+    const live = {
+      feed: "continue-watching",
+      source: "plex_on_deck",
+      items: [
+        {
+          ...armstrongShow,
+          play_rating_key: "am-s1e2",
+          continue_episode: 2,
+          view_offset_ms: 558_000,
+          resume_label: "S1E2 · 31% watched",
+        },
+      ],
+      total: 1,
+      note: null,
+    };
+    const next = spliceContinueWatchingRail(payload, live);
+    assert.equal(next.rails.continue_watching.items.length, 1);
+    assert.equal(next.rails.continue_watching.items[0].view_offset_ms, 558_000);
+    assert.match(next.rails.continue_watching.items[0].resume_label, /31%/);
+    assert.equal(next.rails.continue_watching.pending, false);
+    assert.equal(next.rails.recently_added.items[0].title, "Heat");
+    assert.equal(payload.rails.continue_watching.items[0].view_offset_ms, 18_000);
+  });
+
+  it("shows Plex-only progress on load with no Play notes in this tab", () => {
+    const storage = memoryStorage();
+    const live = {
+      feed: "continue-watching",
+      source: "plex_on_deck",
+      items: [
+        {
+          title: "House",
+          rating_key: "show-house",
+          play_rating_key: "house-s5e2",
+          media_type: "show",
+          continue_season: 5,
+          continue_episode: 2,
+          view_offset_ms: 216_000,
+          duration_ms: 2_640_000,
+          resume_label: "S5E2 · 6% watched",
+        },
+      ],
+      total: 1,
+      note: null,
+    };
+    const next = spliceContinueWatchingRail({ rails: {} }, live);
+    const merged = mergeContinueWatchingNotes(next, storage);
+    assert.equal(merged.rails.continue_watching.items.length, 1);
+    assert.equal(merged.rails.continue_watching.items[0].title, "House");
+    assert.match(merged.rails.continue_watching.items[0].resume_label, /6%/);
+    assert.equal(storage.getItem(CONTINUE_WATCHING_PROGRESS_KEY), null);
+  });
+
+  it("drops session notes a live rail already reflects", () => {
+    const storage = memoryStorage();
+    rememberContinueWatchingProgress(
+      {
+        ratingKey: "am-s1e2",
+        showRatingKey: "show-am",
+        viewOffsetMs: 36_000,
+        durationMs: 1_800_000,
+        title: "The Armstrong & Miller Show",
+        mediaType: "episode",
+        season: 1,
+        episode: 2,
+      },
+      storage,
+    );
+    const livePayload = {
+      rails: {
+        continue_watching: {
+          items: [
+            {
+              ...armstrongShow,
+              play_rating_key: "am-s1e2",
+              continue_episode: 2,
+              view_offset_ms: 36_000,
+            },
+          ],
+        },
+      },
+    };
+    dropReflectedContinueWatchingNotes(livePayload, storage);
+    assert.equal(JSON.parse(storage.getItem(CONTINUE_WATCHING_PROGRESS_KEY) || "[]").length, 0);
+    const stale = {
+      rails: {
+        continue_watching: { items: [{ ...armstrongShow }] },
+      },
+    };
+    const merged = mergeContinueWatchingNotes(stale, storage);
+    assert.equal(merged.rails.continue_watching.items[0].play_rating_key, "am-s1e1");
+  });
+
+  it("ExplorePage live-refreshes Continue Watching on mount and visibility", () => {
+    const src = readFileSync(join(here, "../pages/ExplorePage.jsx"), "utf8");
+    assert.match(src, /getExploreFeedContinueWatching/);
+    assert.match(src, /visibilitychange/);
+    assert.match(src, /pageshow/);
+    assert.match(src, /spliceContinueWatchingRail/);
+    assert.doesNotMatch(src, /setHub\(\{ loading: true/);
   });
 });

@@ -66,6 +66,7 @@ export function continueWatchingProgressForWatched(item, ratingKey, watched) {
   );
   return {
     ratingKey: String(ratingKey),
+    showRatingKey: isEpisode ? parentKey : "",
     viewOffsetMs: 0,
     durationMs: Number(item?.duration_ms) || 0,
     finished: Boolean(watched),
