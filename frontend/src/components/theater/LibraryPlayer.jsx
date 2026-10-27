@@ -109,6 +109,7 @@ function rememberPlayedProgress(session, timeMs, durationMs) {
   const finished = duration >= 30_000 && offset >= duration * 0.9;
   rememberContinueWatchingProgress({
     ratingKey,
+    showRatingKey: session.show_rating_key || "",
     viewOffsetMs: finished ? 0 : offset,
     durationMs: duration,
     finished: finished || offset <= 0,

@@ -123,6 +123,7 @@ class PlaybackResolveTests(unittest.TestCase):
         item = resolve_playable_item(self.db, "ep-2")
         self.assertEqual(item["rating_key"], "ep-2")
         self.assertEqual(item["show_title"], "The Wire")
+        self.assertEqual(item["show_rating_key"], "show-1")
 
     def test_missing_key_404(self) -> None:
         with self.assertRaises(PlaybackError) as ctx:
