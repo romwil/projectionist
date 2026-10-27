@@ -5106,7 +5106,7 @@ def patch_member_taste(
                     user_id,
                     cluster.cluster_tag,
                     cluster.weight,
-                    explicit_lock=cluster.explicit_lock if cluster.explicit_lock is not None else True,
+                    explicit_lock=cluster.explicit_lock if cluster.explicit_lock is not None else False,
                 )
             )
         except ValueError as error:
@@ -5152,12 +5152,20 @@ def submit_taste_quiz(
         cleaned = str(tag or "").strip().lower()
         if not cleaned:
             continue
-        updated.append(db.set_user_taste_weight(user_id, cleaned, 0.85, explicit_lock=True))
+        try:
+            # Quiz seeds are member overrides. Lock stays off unless they
+            # check it on Taste settings — never a silent lens lock.
+            updated.append(db.set_user_taste_weight(user_id, cleaned, 0.85, explicit_lock=False))
+        except ValueError:
+            continue
     for tag in payload.dislikes:
         cleaned = str(tag or "").strip().lower()
         if not cleaned:
             continue
-        updated.append(db.set_user_taste_weight(user_id, cleaned, 0.15, explicit_lock=True))
+        try:
+            updated.append(db.set_user_taste_weight(user_id, cleaned, 0.15, explicit_lock=False))
+        except ValueError:
+            continue
     result = build_member_taste_payload(db, user_id=user_id)
     result["updated"] = updated
     return result
