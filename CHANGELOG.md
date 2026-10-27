@@ -2,9 +2,20 @@
 
 ## [Unreleased]
 
+## [1.37.65] — 2026-10-27
+
+One patch on 1.37.64: the Dependabot-equivalent security floors that missed the 1.37.64 tag. No product change. Vite 5 and React Router 6 stay.
+
+### Highlights
+- **The 1.37.64 floors ship now.** Patched frontend libraries and Python floors that were ready after the tag land as 1.37.65. 1.37.64 is unchanged.
+- **Vite 5 and React Router 6 stay.** Those majors are still skipped.
+
 ### Security
-- Frontend lockfile picks up patched `postcss`, `nanoid`, `js-yaml`, `brace-expansion`, `browserslist`, `source-map-js`, `zod`, and `baseline-browser-mapping` from `npm audit fix`. Vite stays on 5.x and React Router on 6.x (7/8 are major jumps).
+- Frontend lockfile picks up patched `postcss`, `nanoid`, `js-yaml`, `brace-expansion`, `browserslist`, `source-map-js`, `zod`, and `baseline-browser-mapping` from `npm audit fix`.
 - Python floors: `python-multipart>=0.0.32`, `mcp>=1.30.0,<2`, `anyio>=4.14.2`, `urllib3>=2.8.0`.
+
+### Verification
+- `tests/test_version.py` after `./scripts/patch-release.sh 1.37.65`. Cherry-pick of `8549737` onto `origin/main` (post-#166 / #167). Hub `:1.37.64` was never published; this image is the first Hub ship after honesty-chrome.
 
 ## [1.37.64] — 2026-10-27
 
