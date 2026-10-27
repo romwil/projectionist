@@ -1007,6 +1007,309 @@ class HouseholdBridgeTests(unittest.TestCase):
         self.assertNotIn("Signature Bake", why)
         self.assertNotIn("team investigates", why.lower())
 
+    def test_previously_used_is_not_a_for_you_reason(self) -> None:
+        seed = _title(
+            self.db,
+            rating_key="rk-blood-beast",
+            tmdb_id=26774,
+            title="Night of the Blood Beast",
+            year=1958,
+            summary=(
+                "An astronaut crash lands and a previously used alien organism "
+                "infects the crew in the woods."
+            ),
+        )
+        peer = _title(
+            self.db,
+            rating_key="rk-cars-3",
+            tmdb_id=260513,
+            title="Cars 3",
+            year=2017,
+            summary=(
+                "Lightning McQueen trains at a previously used racing facility "
+                "before one last season around the oval."
+            ),
+        )
+        with self.db.connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO item_neighbors
+                    (item_id, neighbor_id, score, surprise_score, explainable, plot_link_json)
+                VALUES (?, ?, ?, ?, 1, ?)
+                """,
+                (
+                    seed,
+                    peer,
+                    0.9,
+                    0.8,
+                    '{"sentence":"Both stories turn on a previously used.",'
+                    '"terms":["previously used"]}',
+                ),
+            )
+        _insert_completion(
+            self.db,
+            user_id="will",
+            rating_key="rk-blood-beast",
+            completed_at_ms=1_700_000_000_000,
+        )
+        feed = feed_for_you(self.db, limit=8)
+        self.assertEqual(feed["items"], [])
+        why_blob = " ".join(str(item.get("why") or "") for item in feed["items"]).lower()
+        self.assertNotIn("previously used", why_blob)
+
+    def test_american_international_is_not_a_for_you_plot_subject(self) -> None:
+        seed = _title(
+            self.db,
+            rating_key="rk-blood-beast",
+            tmdb_id=10,
+            title="Night of the Blood Beast",
+            year=1958,
+            summary=(
+                "Distributed by American International Pictures and directed by "
+                "Bernard Kowalski, an astronaut faces an alien in the woods."
+            ),
+        )
+        peer = _title(
+            self.db,
+            rating_key="rk-leeches",
+            tmdb_id=11,
+            title="Attack of the Giant Leeches",
+            year=1959,
+            summary=(
+                "An American International Pictures swamp horror directed by "
+                "Bernard Kowalski, where leeches drag swimmers under."
+            ),
+        )
+        credit = [
+            {
+                "tmdb_person_id": 1001,
+                "name": "Bernard Kowalski",
+                "department": "Directing",
+                "job": "Director",
+                "billing_order": 0,
+            }
+        ]
+        self.db.upsert_credits_for_item(seed, credit)
+        self.db.upsert_credits_for_item(peer, credit)
+        with self.db.connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO item_neighbors
+                    (item_id, neighbor_id, score, surprise_score, explainable, plot_link_json)
+                VALUES (?, ?, ?, ?, 1, ?)
+                """,
+                (
+                    seed,
+                    peer,
+                    0.88,
+                    0.7,
+                    '{"sentence":"Both stories turn on an american international '
+                    'and a bernard kowalski.",'
+                    '"terms":["american international","bernard kowalski"]}',
+                ),
+            )
+        _insert_completion(
+            self.db,
+            user_id="will",
+            rating_key="rk-blood-beast",
+            completed_at_ms=1_700_000_000_000,
+        )
+        feed = feed_for_you(self.db, limit=8)
+        why_blob = " ".join(str(item.get("why") or "") for item in feed["items"]).lower()
+        self.assertNotIn("american international", why_blob)
+        self.assertNotIn("turn on a bernard", why_blob)
+        self.assertNotIn("both stories turn on", why_blob)
+        if feed["items"]:
+            self.assertIn("bernard kowalski worked on both", why_blob)
+
+    def test_roger_corman_crew_sentence_is_allowed_not_plot_subject(self) -> None:
+        seed = _title(
+            self.db,
+            rating_key="rk-blood-beast",
+            tmdb_id=12,
+            title="Night of the Blood Beast",
+            year=1958,
+            summary="Produced by Roger Corman. An astronaut faces an alien in the woods.",
+        )
+        peer = _title(
+            self.db,
+            rating_key="rk-cave",
+            tmdb_id=13,
+            title="Beast from Haunted Cave",
+            year=1959,
+            summary="Produced by Roger Corman. A gang hides in a cavern after a robbery.",
+        )
+        credit = [
+            {
+                "tmdb_person_id": 2710,
+                "name": "Roger Corman",
+                "department": "Directing",
+                "job": "Director",
+                "billing_order": 0,
+            }
+        ]
+        self.db.upsert_credits_for_item(seed, credit)
+        self.db.upsert_credits_for_item(peer, credit)
+        with self.db.connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO item_neighbors
+                    (item_id, neighbor_id, score, surprise_score, explainable, plot_link_json)
+                VALUES (?, ?, ?, ?, 1, ?)
+                """,
+                (
+                    seed,
+                    peer,
+                    0.9,
+                    0.75,
+                    '{"sentence":"Both stories turn on a roger corman.",'
+                    '"terms":["roger corman"]}',
+                ),
+            )
+        _insert_completion(
+            self.db,
+            user_id="will",
+            rating_key="rk-blood-beast",
+            completed_at_ms=1_700_000_000_000,
+        )
+        feed = feed_for_you(self.db, limit=8)
+        self.assertEqual(len(feed["items"]), 1)
+        why = str(feed["items"][0].get("why") or "").lower()
+        self.assertNotIn("turn on a roger", why)
+        self.assertNotIn("both stories turn on", why)
+        self.assertIn("roger corman worked on both", why)
+
+    def test_kill_again_is_not_a_for_you_reason(self) -> None:
+        seed = _title(
+            self.db,
+            rating_key="rk-magician",
+            tmdb_id=20,
+            title="The Mad Magician",
+            year=1954,
+            summary=(
+                "A Victorian magician uses a crematorium to hide bodies and vows "
+                "to kill again after his wife betrays him."
+            ),
+        )
+        peer = _title(
+            self.db,
+            rating_key="rk-comeback",
+            tmdb_id=21,
+            title="The Comeback",
+            year=1978,
+            summary=(
+                "A faded singer returns to a seaside hotel; the killer will kill "
+                "again before the comeback concert."
+            ),
+        )
+        with self.db.connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO item_neighbors
+                    (item_id, neighbor_id, score, surprise_score, explainable, plot_link_json)
+                VALUES (?, ?, ?, ?, 1, ?)
+                """,
+                (
+                    seed,
+                    peer,
+                    0.87,
+                    0.7,
+                    '{"sentence":"Both stories turn on a kill again.",'
+                    '"terms":["kill again"]}',
+                ),
+            )
+        _insert_completion(
+            self.db,
+            user_id="will",
+            rating_key="rk-magician",
+            completed_at_ms=1_700_000_000_000,
+        )
+        feed = feed_for_you(self.db, limit=8)
+        self.assertEqual(feed["items"], [])
+        why_blob = " ".join(str(item.get("why") or "") for item in feed["items"]).lower()
+        self.assertNotIn("kill again", why_blob)
+
+    def test_crash_lands_is_not_a_for_you_reason(self) -> None:
+        seed = _title(
+            self.db,
+            rating_key="rk-blood-beast",
+            tmdb_id=30,
+            title="Night of the Blood Beast",
+            year=1958,
+            summary="An astronaut crash lands in the woods and an alien infects the crew.",
+        )
+        peer = _title(
+            self.db,
+            rating_key="rk-apes",
+            tmdb_id=31,
+            title="Beneath the Planet of the Apes",
+            year=1970,
+            summary=(
+                "An astronaut crash lands on a planet ruled by apes and finds an "
+                "underground city of mutants."
+            ),
+        )
+        with self.db.connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO item_neighbors
+                    (item_id, neighbor_id, score, surprise_score, explainable, plot_link_json)
+                VALUES (?, ?, ?, ?, 1, ?)
+                """,
+                (
+                    seed,
+                    peer,
+                    0.91,
+                    0.8,
+                    '{"sentence":"Both stories turn on crash lands.",'
+                    '"terms":["crash lands"]}',
+                ),
+            )
+        _insert_completion(
+            self.db,
+            user_id="will",
+            rating_key="rk-blood-beast",
+            completed_at_ms=1_700_000_000_000,
+        )
+        feed = feed_for_you(self.db, limit=8)
+        self.assertEqual(feed["items"], [])
+        why_blob = " ".join(str(item.get("why") or "") for item in feed["items"]).lower()
+        self.assertNotIn("crash lands", why_blob)
+
+    def test_collection_still_renders_when_plot_is_junk(self) -> None:
+        seed = _title(
+            self.db,
+            rating_key="rk-blood-beast",
+            tmdb_id=40,
+            title="Night of the Blood Beast",
+            year=1958,
+            tmdb_collection_id=9001,
+            collection_name="AIP Horror",
+            summary="An astronaut crash lands. A previously used capsule sits in the woods.",
+        )
+        peer = _title(
+            self.db,
+            rating_key="rk-leeches",
+            tmdb_id=41,
+            title="Attack of the Giant Leeches",
+            year=1959,
+            tmdb_collection_id=9001,
+            collection_name="AIP Horror",
+            summary="Swamp creatures drag swimmers under after a previously used dock collapses.",
+        )
+        _insert_completion(
+            self.db,
+            user_id="will",
+            rating_key="rk-blood-beast",
+            completed_at_ms=1_700_000_000_000,
+        )
+        feed = feed_for_you(self.db, limit=8)
+        self.assertEqual(len(feed["items"]), 1)
+        why = str(feed["items"][0].get("why") or "").lower()
+        self.assertIn("both are part of aip horror", why)
+        self.assertNotIn("previously used", why)
+        self.assertNotIn("crash lands", why)
+
 
 if __name__ == "__main__":
     unittest.main()

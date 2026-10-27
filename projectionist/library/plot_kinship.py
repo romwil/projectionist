@@ -7,6 +7,7 @@ keyword, or credit overlap is not itself a reason to recommend a title.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set
 
 # Honest empty for More Like This / relations / privacy MCP graph wraps.
@@ -286,6 +287,153 @@ _NON_PLOT_UNIGRAMS = frozenset(
         "elizabethan",
     }
 )
+# Shape gate: a named subject is adj+noun or noun+noun. These classes are
+# positional — dumping them into ``_NON_PLOT_UNIGRAMS`` would also erase
+# real NPs ("international spies", "used cars", "car crash").
+_ADVERBS = frozenset(
+    {
+        "again",
+        "already",
+        "always",
+        "never",
+        "still",
+        "once",
+        "twice",
+        "soon",
+        "later",
+        "often",
+        "ever",
+        "almost",
+        "nearly",
+        "previously",
+        "actually",
+        "recently",
+        "suddenly",
+        "finally",
+        "eventually",
+        "immediately",
+        "originally",
+        "currently",
+    }
+)
+_LEFT_VERBS = frozenset(
+    {
+        "kill",
+        "kills",
+        "killed",
+        "killing",
+        "crash",
+        "crashes",
+        "crashed",
+        "crashing",
+        "die",
+        "dies",
+        "died",
+        "dying",
+        "return",
+        "returns",
+        "returned",
+        "returning",
+        "arrive",
+        "arrives",
+        "arrived",
+        "arriving",
+        "escape",
+        "escapes",
+        "escaped",
+        "escaping",
+        "destroy",
+        "destroys",
+        "destroyed",
+        "destroying",
+        "land",
+        "landing",
+        "landed",
+    }
+)
+_PARTICIPLE_HEADS = frozenset(
+    {
+        "used",
+        "lands",
+        "directed",
+        "produced",
+        "written",
+        "created",
+        "developed",
+        "filmed",
+        "released",
+        "made",
+        "based",
+        "starring",
+        "killed",
+        "crashed",
+        "destroyed",
+        "returned",
+        "escaped",
+        "arrived",
+        "kills",
+        "crashes",
+        "dies",
+        "returns",
+        "arrives",
+        "escapes",
+        "destroys",
+        "kill",
+        "crash",
+        "die",
+        "return",
+        "arrive",
+        "escape",
+        "destroy",
+        "land",
+    }
+)
+_STUDIO_TAILS = frozenset(
+    {
+        "international",
+        "productions",
+        "associates",
+        "entertainment",
+    }
+)
+# Short nouns that happen to end in -ed; the head-participle heuristic
+# would otherwise refuse "top speed" / "mustard seed".
+_ED_NOUN_HEADS = frozenset(
+    {
+        "speed",
+        "seed",
+        "breed",
+        "need",
+        "deed",
+        "feed",
+        "steed",
+        "tweed",
+        "weed",
+        "bed",
+    }
+)
+_CREDIT_CLAUSE_RE = re.compile(
+    r"(?:,\s*|\s+)?(?:and\s+)?"
+    r"(?:co-)?(?:executive\s+)?"
+    r"(?:"
+    r"produced(?:\s+and\s+directed)?|"
+    r"directed|"
+    r"written|"
+    r"distributed|"
+    r"released"
+    r")\s+by\b[^.,;]*",
+    re.IGNORECASE,
+)
+_STARRING_CLAUSE_RE = re.compile(
+    r"(?:,\s*|\s+)?(?:and\s+)?starring\b[^.,;]*",
+    re.IGNORECASE,
+)
+_STUDIO_TRAILER_RE = re.compile(
+    r"\bamerican\s+international(?:\s+pictures)?\b"
+    r"|\b[\w.&'-]+(?:\s+[\w.&'-]+){0,2}\s+"
+    r"(?:productions|associates|entertainment)\b",
+    re.IGNORECASE,
+)
 _IRREGULAR_PLURALS = frozenset(
     {
         "people",
@@ -302,6 +450,17 @@ _IRREGULAR_PLURALS = frozenset(
 )
 
 
+def _strip_infobox(text: str) -> str:
+    """Drop directed-by / produced-by / starring / studio trailers before tokenizing."""
+    cleaned = str(text or "")
+    if not cleaned:
+        return ""
+    cleaned = _CREDIT_CLAUSE_RE.sub(" ", cleaned)
+    cleaned = _STARRING_CLAUSE_RE.sub(" ", cleaned)
+    cleaned = _STUDIO_TRAILER_RE.sub(" ", cleaned)
+    return " ".join(cleaned.split())
+
+
 def plot_blob(row: Optional[Mapping[str, Any]]) -> str:
     """Layered plot text, skipping empty and placeholder fields."""
     if row is None:
@@ -312,7 +471,7 @@ def plot_blob(row: Optional[Mapping[str, Any]]) -> str:
             value = row[field]
         except (KeyError, IndexError, TypeError):
             value = ""
-        text = " ".join(str(value or "").split())
+        text = _strip_infobox(" ".join(str(value or "").split()))
         if not text or text.casefold() in _PLACEHOLDER_BLOBS:
             continue
         parts.append(text)
@@ -322,7 +481,7 @@ def plot_blob(row: Optional[Mapping[str, Any]]) -> str:
 def _tokenize(text: str) -> Set[str]:
     from projectionist.scheduler.tasks.summary_motifs import tokenize_plot_text
 
-    return tokenize_plot_text(text)
+    return tokenize_plot_text(_strip_infobox(text))
 
 
 def _content_unigrams(tokens: Set[str]) -> Set[str]:
@@ -344,6 +503,32 @@ def _blocklist(shelf_labels: Set[str]) -> Set[str]:
     return blocked
 
 
+def _looks_like_adverb(word: str) -> bool:
+    if word in _ADVERBS:
+        return True
+    # ``previously used`` — not ``deadly virus`` / ``lonely hearts``.
+    return False
+
+
+def _participle_head(word: str) -> bool:
+    if word in _PARTICIPLE_HEADS:
+        return True
+    if word in _ED_NOUN_HEADS:
+        return False
+    return len(word) > 3 and word.endswith("ed")
+
+
+def _np_shape_ok(left: str, right: str) -> bool:
+    """Adj+noun or noun+noun. Refuse verb/adverb glue and studio tails."""
+    if left in _LEFT_VERBS or _looks_like_adverb(left):
+        return False
+    if _looks_like_adverb(right) or right in _STUDIO_TAILS or _participle_head(right):
+        return False
+    if left.endswith("ly") and _participle_head(right):
+        return False
+    return True
+
+
 def _honest_subject(left: str, right: str) -> bool:
     """True when the bigram can be named as a plot subject without junk grammar."""
     if not left or not right or " " in right:
@@ -359,6 +544,8 @@ def _honest_subject(left: str, right: str) -> bool:
     if left in _NON_PLOT_UNIGRAMS or right in _NON_PLOT_UNIGRAMS:
         return False
     if left in _GENERIC_UNIGRAMS and right in _GENERIC_UNIGRAMS:
+        return False
+    if not _np_shape_ok(left, right):
         return False
     return True
 
@@ -389,7 +576,10 @@ def distinctive_plot_phrases(text: str, *, limit: int = 3) -> list[str]:
 
 def _phrase(term: str) -> Optional[str]:
     words = [part for part in term.split() if part]
+    # Two-word NP only (adj+noun / noun+noun). Refuse verb-adverb glue.
     if len(words) != 2 or not _honest_subject(words[0], words[1]):
+        return None
+    if not _np_shape_ok(words[0], words[1]):
         return None
     head = words[1]
     # Plurals already read as a noun phrase ("amateur bakers").
@@ -606,21 +796,28 @@ def surprising_items_if_distinct(
     return surprising
 
 
-def honest_plot_link(link: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
+def honest_plot_link(
+    link: Optional[Mapping[str, Any]],
+    *,
+    shelf_labels: Optional[Set[str]] = None,
+) -> Optional[dict[str, Any]]:
     """Rebuild a stored plot-link from honest terms, or refuse junk grammar.
 
     Empty is better than ``an ordinary people`` / ``a drama television`` /
-    ``united states`` / ``principal photography``. Crew and collection links
-    are a different kind.
+    ``united states`` / ``principal photography`` / ``a roger corman``.
+    Crew and collection links are a different kind.
     """
     if not link:
         return None
+    blocked = _blocklist(shelf_labels or set())
     raw_terms = [str(term).strip().casefold() for term in (link.get("terms") or [])]
     terms = []
     used: Set[str] = set()
     for term in raw_terms:
         words = term.split()
         if len(words) != 2 or not _honest_subject(words[0], words[1]):
+            continue
+        if term in blocked or (words[0] in blocked and words[1] in blocked):
             continue
         if set(words) & used:
             continue

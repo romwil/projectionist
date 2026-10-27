@@ -530,3 +530,194 @@ class MissingShelfSurpriseScoreTests(unittest.TestCase):
         self.assertEqual(by_id[2], 0.0)
         self.assertEqual(by_id[3], 0.0)
         self.assertGreater(neighbors[0][1], 0.0)
+
+
+BLOOD_BEAST_PLOT = (
+    "Night of the Blood Beast is a 1958 independently made American science-fiction "
+    "horror film, produced and directed by Bernard L. Kowalski, co-produced by Gene "
+    "Corman, and starring Michael Emmet, Ed Nelson, and Angela Greene. Distributed by "
+    "American International Pictures. An astronaut crash lands and a previously used "
+    "alien organism infects the crew."
+)
+CARS_3_PLOT = (
+    "Lightning McQueen trains at a previously used racing facility before one last "
+    "season around the oval with a new crew of trainers and a young prodigy."
+)
+GIANT_LEECHES_PLOT = (
+    "Attack of the Giant Leeches is an American International Pictures horror film "
+    "directed by Bernard Kowalski. Swamp creatures drag swimmers into underwater caves "
+    "near a lonely marina."
+)
+HAUNTED_CAVE_PLOT = (
+    "Beast from Haunted Cave was produced by Roger Corman. A gang hides in a cavern "
+    "where a spider-like creature hunts them one by one after a robbery."
+)
+MAD_MAGICIAN_PLOT = (
+    "A Victorian magician uses a crematorium to hide bodies and vows to kill again "
+    "after his wife betrays him during a packed stage show."
+)
+COMEBACK_PLOT = (
+    "A faded singer returns to a seaside hotel and the murders begin; the killer "
+    "will kill again before the comeback concert in the ballroom."
+)
+APES_PLOT = (
+    "An astronaut crash lands on a planet ruled by apes and discovers an underground "
+    "city of mutated humans living beneath the ruins."
+)
+
+
+class ScreenshotPlotSubjectTests(unittest.TestCase):
+    """iPhone For you screenshots — named NP, crew, or empty. Never junk grammar."""
+
+    def test_previously_used_is_not_a_named_subject(self) -> None:
+        link = specific_plot_link(
+            seed_text=BLOOD_BEAST_PLOT,
+            peer_text=CARS_3_PLOT,
+            shelf_labels={"science fiction", "animation"},
+        )
+        self.assertIsNone(link)
+        rebuilt = honest_plot_link(
+            {
+                "sentence": "Both stories turn on a previously used.",
+                "terms": ["previously used"],
+            }
+        )
+        self.assertIsNone(rebuilt)
+
+    def test_american_international_and_kowalski_are_not_plot_subjects(self) -> None:
+        link = specific_plot_link(
+            seed_text=BLOOD_BEAST_PLOT,
+            peer_text=GIANT_LEECHES_PLOT,
+            shelf_labels={"horror", "science fiction", "bernard kowalski"},
+        )
+        self.assertIsNone(link)
+        for terms, sentence in (
+            (["american international"], "Both stories turn on an american international."),
+            (["bernard kowalski"], "Both stories turn on a bernard kowalski."),
+        ):
+            rebuilt = honest_plot_link(
+                {"sentence": sentence, "terms": terms},
+                shelf_labels={"bernard kowalski"},
+            )
+            self.assertIsNone(rebuilt, sentence)
+
+    def test_roger_corman_is_not_a_turn_on_subject(self) -> None:
+        link = specific_plot_link(
+            seed_text=BLOOD_BEAST_PLOT,
+            peer_text=HAUNTED_CAVE_PLOT,
+            shelf_labels={"horror", "roger corman"},
+        )
+        blob = str((link or {}).get("sentence") or "").lower()
+        self.assertNotIn("roger corman", blob)
+        self.assertNotIn("turn on a roger", blob)
+        rebuilt = honest_plot_link(
+            {
+                "sentence": "Both stories turn on a roger corman.",
+                "terms": ["roger corman"],
+            },
+            shelf_labels={"roger corman"},
+        )
+        self.assertIsNone(rebuilt)
+
+    def test_kill_again_is_not_a_named_subject(self) -> None:
+        link = specific_plot_link(
+            seed_text=MAD_MAGICIAN_PLOT,
+            peer_text=COMEBACK_PLOT,
+            shelf_labels={"horror", "thriller"},
+        )
+        self.assertIsNone(link)
+        rebuilt = honest_plot_link(
+            {"sentence": "Both stories turn on a kill again.", "terms": ["kill again"]}
+        )
+        self.assertIsNone(rebuilt)
+
+    def test_crash_lands_is_not_a_named_subject(self) -> None:
+        link = specific_plot_link(
+            seed_text=BLOOD_BEAST_PLOT,
+            peer_text=APES_PLOT,
+            shelf_labels={"science fiction"},
+        )
+        blob = str((link or {}).get("sentence") or "").lower()
+        self.assertNotIn("crash lands", blob)
+        rebuilt = honest_plot_link(
+            {"sentence": "Both stories turn on crash lands.", "terms": ["crash lands"]}
+        )
+        self.assertIsNone(rebuilt)
+
+    def test_real_noun_phrases_still_render(self) -> None:
+        bakers = specific_plot_link(
+            seed_text=BAKE_PLOT,
+            peer_text=SPY_PLOT,
+            shelf_labels={"reality", "thriller"},
+        )
+        self.assertIsNotNone(bakers)
+        assert bakers is not None
+        self.assertIn("amateur bakers", bakers["sentence"].lower())
+        museum = specific_plot_link(
+            seed_text=MUSEUM_PLOT,
+            peer_text=MUSEUM_PEER_PLOT,
+            shelf_labels={"reality", "documentary"},
+        )
+        self.assertIsNotNone(museum)
+        assert museum is not None
+        self.assertIn("museum exhibits", museum["sentence"].lower())
+
+    def test_credit_names_do_not_mark_neighbors_explainable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "credits.db")
+            seed = _title(
+                db,
+                rating_key="blood-beast",
+                tmdb_id=10,
+                title="Night of the Blood Beast",
+                year=1958,
+                genres=["Horror"],
+                summary=BLOOD_BEAST_PLOT,
+            )
+            peer = _title(
+                db,
+                rating_key="haunted-cave",
+                tmdb_id=11,
+                title="Beast from Haunted Cave",
+                year=1959,
+                genres=["Horror"],
+                summary=HAUNTED_CAVE_PLOT,
+            )
+            credit = [
+                {
+                    "tmdb_person_id": 2710,
+                    "name": "Roger Corman",
+                    "department": "Directing",
+                    "job": "Director",
+                    "billing_order": 0,
+                }
+            ]
+            db.upsert_credits_for_item(seed, credit)
+            db.upsert_credits_for_item(peer, credit)
+            enriched = enrich_neighbors_with_explanations(db, seed, [(peer, 0.9, 0.8)])
+            self.assertEqual(enriched[0][3], 0)
+            blob = (enriched[0][4] or "").lower()
+            self.assertNotIn("roger corman", blob)
+            self.assertNotIn("previously used", blob)
+
+
+class InfoboxStripTests(unittest.TestCase):
+    def test_directed_by_and_studio_trailers_are_not_tokenized_as_subjects(self) -> None:
+        seed = (
+            "A swamp siege. Directed by Bernard Kowalski. Starring Michael Emmet. "
+            "Distributed by American International Pictures. Produced by Roger Corman."
+        )
+        peer = (
+            "A cavern siege. Directed by Bernard Kowalski. Starring Ed Nelson. "
+            "American International Pictures released it. Produced by Roger Corman."
+        )
+        link = specific_plot_link(
+            seed_text=seed,
+            peer_text=peer,
+            shelf_labels=set(),
+        )
+        blob = str((link or {}).get("sentence") or "").lower()
+        self.assertNotIn("bernard kowalski", blob)
+        self.assertNotIn("roger corman", blob)
+        self.assertNotIn("american international", blob)
+        self.assertNotIn("michael emmet", blob)
