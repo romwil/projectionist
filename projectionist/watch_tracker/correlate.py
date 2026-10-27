@@ -19,6 +19,10 @@ from projectionist.watch_tracker import (
 
 logger = logging.getLogger(__name__)
 
+# Plex history, scrobble, and optional Tautulli history are played events
+# (viewedAt / Tautulli date), not credits-roll proof.
+PLAYED_EVENT_KINDS = frozenset({"history_played", "plex_scrobble", "tautulli_history"})
+
 
 def _progress_pct(progress_ms: Optional[int], duration_ms: Optional[int]) -> Optional[float]:
     if progress_ms is None or duration_ms is None or int(duration_ms) <= 0:
@@ -326,7 +330,7 @@ def _can_merge(
         tol = _rewind_tolerance_ms(row["duration_ms"] or current.get("duration_ms"))
         if int(row["progress_ms"]) + tol < int(current["max_progress_ms"]):
             kind = str(row["source_event_kind"])
-            if kind not in {"history_played", "plex_scrobble", "manual_scrobble"}:
+            if kind not in {*PLAYED_EVENT_KINDS, "manual_scrobble"}:
                 return False
     # Client handoff
     if (
@@ -336,8 +340,8 @@ def _can_merge(
         and gap > CLIENT_HANDOFF_GAP_MS
     ):
         return False
-    # Near-duplicate scrobbles
-    if str(row["source_event_kind"]) in {"plex_scrobble", "history_played"}:
+    # Near-duplicate scrobbles / played events
+    if str(row["source_event_kind"]) in PLAYED_EVENT_KINDS:
         if gap <= SCROBBLE_DEDUPE_WINDOW_MS:
             return True
     return True
@@ -354,7 +358,7 @@ def _derive_completion(
     if (
         "manual_unscrobble" in kinds
         and "manual_scrobble" in kinds
-        and not (kinds & {"history_played", "plex_scrobble"})
+        and not (kinds & PLAYED_EVENT_KINDS)
         and not current.get("saw_at_or_above_threshold")
     ):
         return None
@@ -380,7 +384,7 @@ def _derive_completion(
         }
 
     max_pct = _progress_pct(current.get("max_progress_ms"), current.get("duration_ms"))
-    terminal_kinds = kinds & {"session_stop", "plex_scrobble", "history_played"}
+    terminal_kinds = kinds & ({"session_stop"} | PLAYED_EVENT_KINDS)
     if max_pct is not None and max_pct >= COMPLETION_THRESHOLD_PCT and terminal_kinds:
         return {
             "completed_at_ms": completed_at,
@@ -389,7 +393,7 @@ def _derive_completion(
             "evidence_event_id": evidence_id,
         }
 
-    if "history_played" in kinds and current.get("has_progress"):
+    if (kinds & PLAYED_EVENT_KINDS) and current.get("has_progress"):
         return {
             "completed_at_ms": completed_at,
             "confidence": "likely",
@@ -397,7 +401,7 @@ def _derive_completion(
             "evidence_event_id": evidence_id,
         }
 
-    if kinds & {"history_played", "plex_scrobble"}:
+    if kinds & PLAYED_EVENT_KINDS:
         return {
             "completed_at_ms": completed_at,
             "confidence": "plex_event_only",

@@ -103,6 +103,9 @@ def deliver_year_in_review(
             continue
         uid = str(user["id"])
         try:
+            from projectionist.watch_tracker.year_backfill import backfill_member_year_history
+
+            backfill_member_year_history(db, settings, user_id=uid, year=year)
             snap = build_reel_for_user(db, user_id=uid, year=year, status_hint=status_hint)
         except Exception:  # noqa: BLE001
             logger.exception("YIR generate failed for %s", uid)
@@ -128,7 +131,8 @@ def deliver_year_in_review(
                 f"Hi {preferred},\n\n"
                 f"Your private {year} cinema reel is ready. "
                 f"Open {path} inside Projectionist to watch it.\n\n"
-                "These chapters use your tracked completions — not household Plex totals.\n"
+                "Your Plex plays this year (this account), not the household "
+                "and not only titles played inside Projectionist.\n"
             )
         result = deliver_notification(
             db,

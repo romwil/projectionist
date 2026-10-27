@@ -248,6 +248,33 @@ def refresh_plex_server_account_aliases(
     }
 
 
+def source_user_keys_for_user(db: Database, user_id: str) -> List[str]:
+    """Plex account keys that resolve to this member (plex.tv id plus aliases)."""
+    uid = str(user_id or "").strip()
+    if not uid:
+        return []
+    keys: set[str] = set()
+    row = db.get_user(uid)
+    if row is not None:
+        plex_id = str(row["plex_user_id"] or "").strip()
+        if plex_id:
+            keys.add(plex_id)
+    with db.connect() as conn:
+        mapped = conn.execute(
+            """
+            SELECT DISTINCT source_user_key
+            FROM watch_source_identities
+            WHERE user_id = ?
+            """,
+            (uid,),
+        ).fetchall()
+    for item in mapped:
+        key = str(item["source_user_key"] or "").strip()
+        if key:
+            keys.add(key)
+    return sorted(keys)
+
+
 def list_mapped_source_keys(db: Database) -> List[Dict[str, str]]:
     """Distinct resolvable ``source_user_key`` → ``user_id`` pairs."""
     with db.connect() as conn:
