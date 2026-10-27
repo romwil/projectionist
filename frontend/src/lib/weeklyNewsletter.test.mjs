@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   newsletterConfirmMessage,
+  newsletterConfirmOptions,
   newsletterResultMessage,
   NEWSLETTER_SCOPES,
 } from "./weeklyNewsletter.js";
@@ -20,6 +21,9 @@ describe("weeklyNewsletter helpers", () => {
     assert.match(newsletterConfirmMessage("users", 1), /1 selected member/);
     assert.match(newsletterConfirmMessage("users", 3), /3 selected members/);
     assert.match(newsletterConfirmMessage("all"), /everyone who opted in/i);
+    const self = newsletterConfirmOptions("self");
+    assert.equal(self.confirmLabel, "Send");
+    assert.equal(self.body, newsletterConfirmMessage("self"));
   });
 
   it("summarizes delivery results", () => {

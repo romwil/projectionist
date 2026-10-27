@@ -9,9 +9,10 @@ import {
 import AdminExecutionCard from "../AdminExecutionCard";
 import InlineAlert from "../InlineAlert";
 import SettingsPanel from "../settings/SettingsPanel";
+import { useConfirmModal } from "../../hooks/useConfirmModal.js";
 import {
   NEWSLETTER_SCOPES,
-  newsletterConfirmMessage,
+  newsletterConfirmOptions,
   newsletterResultMessage,
 } from "../../lib/weeklyNewsletter.js";
 
@@ -23,6 +24,7 @@ export default function WeeklyNewsletterPanel({
   testIdPrefix = "newsletters",
   mailConfigured = null,
 }) {
+  const { confirm, modal } = useConfirmModal();
   const [newsletterScope, setNewsletterScope] = useState("self");
   const [members, setMembers] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -80,8 +82,8 @@ export default function WeeklyNewsletterPanel({
       setNewsletterStatus({ type: "error", message: "Select at least one member." });
       return;
     }
-    const confirmed = window.confirm(
-      newsletterConfirmMessage(newsletterScope, selectedIds.length),
+    const confirmed = await confirm(
+      newsletterConfirmOptions(newsletterScope, selectedIds.length),
     );
     if (!confirmed) return;
     setSendingNewsletter(true);
@@ -216,6 +218,7 @@ export default function WeeklyNewsletterPanel({
         testId={`${testIdPrefix}-newsletter-status`}
         onDismiss={() => setNewsletterStatus(null)}
       />
+      {modal}
     </SettingsPanel>
   );
 }

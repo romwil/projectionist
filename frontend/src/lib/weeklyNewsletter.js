@@ -24,6 +24,19 @@ export function newsletterConfirmMessage(scope, selectedCount = 0) {
 }
 
 /**
+ * In-app ConfirmModal options for a newsletter send (replaces window.confirm).
+ * @param {"self"|"users"|"all"} scope
+ * @param {number} selectedCount
+ */
+export function newsletterConfirmOptions(scope, selectedCount = 0) {
+  return {
+    title: scope === "self" ? "Send this week’s newsletter" : "Send weekly newsletter",
+    body: newsletterConfirmMessage(scope, selectedCount),
+    confirmLabel: "Send",
+  };
+}
+
+/**
  * @param {{ delivered?: number, emailed?: number, skipped_opt_out?: number, targeted?: number }} result
  * @returns {string}
  */
