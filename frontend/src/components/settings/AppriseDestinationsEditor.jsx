@@ -1,6 +1,6 @@
 import { useId, useState } from "react";
 import { testMyAppriseSend } from "../../api/client";
-import { useConfirmModal } from "../../hooks/useConfirmModal.js";
+import { useConfirmModal } from "../../hooks/useConfirmModal.jsx";
 import {
   APPRISE_SCHEME_OPTIONS,
   appriseTypeLabel,

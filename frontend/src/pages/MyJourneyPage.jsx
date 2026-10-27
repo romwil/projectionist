@@ -21,7 +21,7 @@ import {
   personShelfLabel,
 } from "../lib/journeyExploration.js";
 import { guestDeepLinkBlocked } from "../lib/memberShell.js";
-import { useConfirmModal } from "../hooks/useConfirmModal.js";
+import { useConfirmModal } from "../hooks/useConfirmModal.jsx";
 
 const PEOPLE_RAILS = [
   { id: "directors", title: "Directors in your shelf", subtitle: "Voices behind the films you keep returning to." },

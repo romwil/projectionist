@@ -11,7 +11,7 @@ import {
   setLibraryItemWatched,
 } from "../api/client";
 import MarkBadMediaDialog from "./MarkBadMediaDialog.jsx";
-import { useConfirmModal } from "../hooks/useConfirmModal.js";
+import { useConfirmModal } from "../hooks/useConfirmModal.jsx";
 import { useAuthGate } from "./UserMenu";
 import ReportMediaIssueModal from "./ReportMediaIssueModal";
 import TitleDetailLink from "./TitleDetailLink";

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { cancelYearInReview, generateYearInReview, getYearInReviewStatus } from "../../api/client";
-import { useConfirmModal } from "../../hooks/useConfirmModal.js";
+import { useConfirmModal } from "../../hooks/useConfirmModal.jsx";
 import { yirAdminGenerateConfirmOptions, yirPathFromGenerateResult } from "../../lib/yearInReview";
 import AdminExecutionCard from "../AdminExecutionCard";
 import InlineAlert from "../InlineAlert";

@@ -38,7 +38,7 @@ import {
   taskDisplayName,
   taskRowTone,
 } from "../lib/scheduledTasks.js";
-import { useConfirmModal } from "../hooks/useConfirmModal.js";
+import { useConfirmModal } from "../hooks/useConfirmModal.jsx";
 
 const POLL_IDLE_MS = 5000;
 const POLL_ACTIVE_MS = 1200;

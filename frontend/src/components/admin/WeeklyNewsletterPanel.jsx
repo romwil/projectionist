@@ -9,7 +9,7 @@ import {
 import AdminExecutionCard from "../AdminExecutionCard";
 import InlineAlert from "../InlineAlert";
 import SettingsPanel from "../settings/SettingsPanel";
-import { useConfirmModal } from "../../hooks/useConfirmModal.js";
+import { useConfirmModal } from "../../hooks/useConfirmModal.jsx";
 import {
   NEWSLETTER_SCOPES,
   newsletterConfirmOptions,
