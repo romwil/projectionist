@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { deleteTasteCluster, getTasteProfile, patchTasteProfile, submitTasteQuiz } from "../../api/client";
 import SettingsPageHeader from "../../components/settings/SettingsPageHeader";
 import SettingsPanel from "../../components/settings/SettingsPanel";
+import { clampTasteWeight, formatTasteWeight } from "../../lib/tasteWeight.js";
 
 const QUIZ_OPTIONS = [
   "animation",
@@ -13,12 +14,6 @@ const QUIZ_OPTIONS = [
   "mystery",
   "musical",
 ];
-
-function formatWeight(weight) {
-  const n = Number(weight);
-  if (!Number.isFinite(n)) return "—";
-  return `${Math.round(n * 100)}%`;
-}
 
 export default function TasteSettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -39,7 +34,7 @@ export default function TasteSettingsPage() {
         const next = {};
         for (const cluster of list) {
           next[cluster.cluster_tag] = {
-            weight: Number(cluster.weight),
+            weight: clampTasteWeight(cluster.weight),
             explicit_lock: Boolean(cluster.explicit_lock),
           };
         }
@@ -81,7 +76,7 @@ export default function TasteSettingsPage() {
         }
         return {
           cluster_tag: cluster.cluster_tag,
-          weight: Number(draft.weight),
+          weight: clampTasteWeight(draft.weight),
           explicit_lock: Boolean(draft.explicit_lock),
         };
       })
@@ -130,7 +125,8 @@ export default function TasteSettingsPage() {
   return (
     <div className="settings-stack" data-testid="settings-taste">
       <SettingsPageHeader title="Taste">
-        Tune what Projectionist leans toward. Lock a weight so the weekly refresh cannot drift it.
+        Tune what Projectionist leans toward. Lock is opt-in — weekly refresh
+        will drift unlocked clusters.
       </SettingsPageHeader>
 
       {error ? <p className="status status-error">{error}</p> : null}
@@ -194,8 +190,8 @@ export default function TasteSettingsPage() {
             <ul className="taste-cluster-list" data-testid="taste-cluster-list">
               {clusters.map((cluster) => {
                 const draft = drafts[cluster.cluster_tag] || {
-                  weight: cluster.weight,
-                  explicit_lock: cluster.explicit_lock,
+                  weight: clampTasteWeight(cluster.weight),
+                  explicit_lock: Boolean(cluster.explicit_lock),
                 };
                 return (
                   <li
@@ -206,7 +202,7 @@ export default function TasteSettingsPage() {
                     <div className="taste-cluster-meta">
                       <strong>{cluster.cluster_tag}</strong>
                       <span className="status status-secondary">
-                        {formatWeight(draft.weight)}
+                        {formatTasteWeight(draft.weight)}
                         {cluster.source === "user" ? " · your override" : " · from library taste"}
                       </span>
                     </div>
@@ -217,13 +213,13 @@ export default function TasteSettingsPage() {
                         min="0"
                         max="1"
                         step="0.05"
-                        value={draft.weight}
+                        value={clampTasteWeight(draft.weight)}
                         onChange={(event) =>
                           setDrafts((prev) => ({
                             ...prev,
                             [cluster.cluster_tag]: {
                               ...draft,
-                              weight: Number(event.target.value),
+                              weight: clampTasteWeight(event.target.value),
                             },
                           }))
                         }
@@ -245,7 +241,7 @@ export default function TasteSettingsPage() {
                         }
                         data-testid={`taste-lock-${cluster.cluster_tag}`}
                       />
-                      Lock
+                      Lock so the weekly refresh leaves this one alone
                     </label>
                     {cluster.source === "user" ? (
                       <button

@@ -5,9 +5,10 @@ Reads ``preference_facts``, ``message_feedback``, ``user_title_reviews``, and
 cluster weights, then upserts them into ``lens_taste_profile``.
 
 Free-text preference / feedback prose is tokenized with
-``projectionist.taste.clusters`` so stop-words, contractions, and punctuation
-never become Taste settings clusters. Each run also purges unlocked junk rows
-left by older naive splits.
+``projectionist.taste.clusters`` so stop-words, contractions, punctuation,
+and abstract unigrams never become Taste settings clusters. Each run also
+purges junk rows (including previously auto-locked ones) left by older
+naive splits.
 
 Lightweight — should complete in under a second for typical libraries.
 Default interval: 6 hours.
@@ -81,21 +82,22 @@ def _apply_tags(cluster_weights: Counter[str], tags: List[str], weight: float) -
 
 
 def _purge_junk_clusters(conn: Any) -> int:
-    """Delete unlocked junk tags left over from older naive tokenization."""
+    """Delete junk tags left over from older naive tokenization, including locked rows.
+
+    Auto-lock used to pin TMDB-keyword unigrams forever; the validator is the
+    source of truth now, so locked junk goes too. Real genre/mood locks stay.
+    """
     deleted = 0
     for table, key_col in (
         ("lens_taste_profile", "lens_id"),
         ("user_taste_profile", "user_id"),
     ):
         rows = conn.execute(
-            f"SELECT {key_col} AS scope_key, cluster_tag, explicit_lock FROM {table}"
+            f"SELECT {key_col} AS scope_key, cluster_tag FROM {table}"
         ).fetchall()
         for row in rows:
             tag = str(row["cluster_tag"] or "")
             if is_valid_cluster_tag(tag):
-                continue
-            # Leave locked overrides alone; owners can Reset them in Taste settings.
-            if int(row["explicit_lock"] or 0):
                 continue
             conn.execute(
                 f"DELETE FROM {table} WHERE {key_col} = ? AND cluster_tag = ?",
@@ -103,6 +105,7 @@ def _purge_junk_clusters(conn: Any) -> int:
             )
             deleted += 1
     return deleted
+
 
 async def run(
     db: Database, settings: Settings, should_stop: Callable[[], bool]
