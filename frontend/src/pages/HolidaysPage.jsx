@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useConfirmModal } from "../hooks/useConfirmModal.js";
 import {
   clearHolidayRailTitle,
   createHoliday,
@@ -70,6 +71,7 @@ export default function HolidaysPage() {
     () => items.find((item) => item.id === selectedId) || null,
     [items, selectedId],
   );
+  const { confirm, modal } = useConfirmModal();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -161,7 +163,16 @@ export default function HolidaysPage() {
 
   async function handleDelete() {
     if (!selectedId || creating) return;
-    if (!window.confirm(`Remove “${selected?.name || "this holiday"}” from the calendar?`)) return;
+    if (
+      !(await confirm({
+        title: "Remove holiday",
+        body: `Remove “${selected?.name || "this holiday"}” from the calendar?`,
+        confirmLabel: "Remove",
+        danger: true,
+      }))
+    ) {
+      return;
+    }
     try {
       await deleteHoliday(selectedId);
       setSelectedId(null);
@@ -174,7 +185,13 @@ export default function HolidaysPage() {
   }
 
   async function handleRestore() {
-    if (!window.confirm("Restore built-in holidays to their default shoulders and filter terms? Family customs stay.")) {
+    if (
+      !(await confirm({
+        title: "Restore built-in holidays",
+        body: "Restore built-in holidays to their default shoulders and filter terms? Family customs stay.",
+        confirmLabel: "Restore defaults",
+      }))
+    ) {
       return;
     }
     try {
@@ -234,6 +251,7 @@ export default function HolidaysPage() {
     return (
       <div className="settings-stack" data-testid="admin-holidays">
         <SettingsPageHeader title="Holidays">Loading the household calendar…</SettingsPageHeader>
+        {modal}
       </div>
     );
   }
@@ -594,6 +612,7 @@ export default function HolidaysPage() {
           <p className="muted">No upcoming windows in the next couple of months.</p>
         )}
       </SettingsPanel>
+      {modal}
     </div>
   );
 }

@@ -55,6 +55,32 @@ class PlexHistoryParserTests(unittest.TestCase):
         self.assertEqual(query["viewedAt>"], ["1704000000"])
         self.assertNotIn("secret", requested[0])
 
+    def test_history_page_filters_account_and_until(self) -> None:
+        root = ElementTree.fromstring(
+            (FIXTURES / "history_page_1.xml").read_text(encoding="utf-8")
+        )
+        requested: list[str] = []
+        client = PlexClient("http://plex.test:32400", "secret")
+        client._machine_identifier = "server-1"
+
+        def request(path: str):
+            requested.append(path)
+            return root
+
+        with patch.object(client, "_request_xml", side_effect=request):
+            client.history_page(
+                start=0,
+                size=250,
+                since_ms=1_704_000_000_000,
+                until_ms=1_735_689_600_000,
+                account_id="111",
+            )
+
+        query = parse_qs(urlsplit(requested[0]).query)
+        self.assertEqual(query["accountID"], ["111"])
+        self.assertEqual(query["viewedAt>"], ["1704000000"])
+        self.assertEqual(query["viewedAt<"], ["1735689600"])
+
     def test_parser_skips_malformed_rows_without_breaking_page_offset(self) -> None:
         root = ElementTree.fromstring(
             (FIXTURES / "history_page_2.xml").read_text(encoding="utf-8")

@@ -188,6 +188,15 @@ def start_year_in_review_job(
                 )
                 payload = {"scope": "self", **result}
             else:
+                from projectionist.watch_tracker.year_backfill import backfill_member_year_history
+
+                backfill_member_year_history(
+                    db,
+                    settings,
+                    user_id=str(user_id),
+                    year=year,
+                    should_stop=cancel.is_set,
+                )
                 snap = build_reel_for_user(db, user_id=str(user_id), year=year, status_hint=status_hint)
                 status = snap.get("status")
                 path = f"/year-in-review/{year}" if status in ("ready", "tease") else None

@@ -10,7 +10,9 @@ from projectionist.config_store import Settings
 from projectionist.connectors.plex import PlexOnDeckItem
 from projectionist.library import explore_hub
 from projectionist.library.continue_watching_progress import (
+    apply_known_continue_watching,
     clear_continue_watching_progress_notes,
+    note_playback_progress,
     notes_for_db,
 )
 from projectionist.library.db import Database
@@ -133,6 +135,167 @@ class ContinueWatchingAfterPlayTests(unittest.TestCase):
             self.assertEqual(stored["rails"]["continue_watching"]["items"][0]["view_offset_ms"], 1_800_000)
             self.assertNotEqual(stored["rails"]["continue_watching"], previous["rails"]["continue_watching"])
             self.assertFalse(stored["warming"])
+
+    def test_e1_then_e2_keeps_one_armstrong_and_miller_card(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            show_id = db.upsert_library_item(
+                {
+                    "rating_key": "show-am",
+                    "media_type": "show",
+                    "title": "The Armstrong & Miller Show",
+                    "year": 2007,
+                    "total_episode_count": 2,
+                    "unwatched_episode_count": 1,
+                }
+            )
+            db.upsert_library_episode(
+                {
+                    "show_item_id": show_id,
+                    "rating_key": "am-s1e1",
+                    "season_number": 1,
+                    "episode_number": 1,
+                    "title": "Episode 1",
+                    "duration_ms": 1_800_000,
+                    "view_offset_ms": 18_000,
+                    "view_count": 0,
+                }
+            )
+            db.upsert_library_episode(
+                {
+                    "show_item_id": show_id,
+                    "rating_key": "am-s1e2",
+                    "season_number": 1,
+                    "episode_number": 2,
+                    "title": "Episode 2",
+                    "duration_ms": 1_800_000,
+                    "view_offset_ms": 36_000,
+                    "view_count": 0,
+                }
+            )
+            on_deck = {
+                "feed": "continue-watching",
+                "source": "plex_on_deck",
+                "items": [
+                    {
+                        "title": "The Armstrong & Miller Show",
+                        "rating_key": "show-am",
+                        "play_rating_key": "am-s1e1",
+                        "media_type": "show",
+                        "view_offset_ms": 18_000,
+                        "duration_ms": 1_800_000,
+                        "continue_season": 1,
+                        "continue_episode": 1,
+                        "resume_label": "S1E1 · 1% watched",
+                    }
+                ],
+                "total": 1,
+            }
+            note_playback_progress(db, "am-s1e1", 0, 1_800_000, finished=True)
+            note_playback_progress(db, "am-s1e2", 36_000, 1_800_000, finished=False)
+            rail = apply_known_continue_watching(db, on_deck)
+            self.assertEqual(len(rail["items"]), 1)
+            self.assertEqual(rail["items"][0]["title"], "The Armstrong & Miller Show")
+            self.assertEqual(rail["items"][0]["rating_key"], "show-am")
+            self.assertEqual(rail["items"][0]["play_rating_key"], "am-s1e2")
+            self.assertEqual(rail["items"][0]["continue_episode"], 2)
+            self.assertIn("S1E2", rail["items"][0]["resume_label"])
+
+    def test_finished_episode_keeps_later_on_deck_episode(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            show_id = db.upsert_library_item(
+                {
+                    "rating_key": "show-am",
+                    "media_type": "show",
+                    "title": "The Armstrong & Miller Show",
+                    "year": 2007,
+                }
+            )
+            db.upsert_library_episode(
+                {
+                    "show_item_id": show_id,
+                    "rating_key": "am-s1e1",
+                    "season_number": 1,
+                    "episode_number": 1,
+                    "title": "Episode 1",
+                    "duration_ms": 1_800_000,
+                }
+            )
+            db.upsert_library_episode(
+                {
+                    "show_item_id": show_id,
+                    "rating_key": "am-s1e2",
+                    "season_number": 1,
+                    "episode_number": 2,
+                    "title": "Episode 2",
+                    "duration_ms": 1_800_000,
+                    "view_offset_ms": 36_000,
+                }
+            )
+            on_deck = {
+                "items": [
+                    {
+                        "title": "The Armstrong & Miller Show",
+                        "rating_key": "show-am",
+                        "play_rating_key": "am-s1e2",
+                        "media_type": "show",
+                        "view_offset_ms": 36_000,
+                        "continue_season": 1,
+                        "continue_episode": 2,
+                    }
+                ],
+                "total": 1,
+            }
+            note_playback_progress(db, "am-s1e1", 0, 1_800_000, finished=True)
+            rail = apply_known_continue_watching(db, on_deck)
+            self.assertEqual(len(rail["items"]), 1)
+            self.assertEqual(rail["items"][0]["play_rating_key"], "am-s1e2")
+
+    def test_warming_rail_stays_pending_without_notes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            rail = apply_known_continue_watching(
+                db,
+                {
+                    "feed": "continue-watching",
+                    "items": [],
+                    "total": 0,
+                    "note": None,
+                    "pending": True,
+                },
+            )
+            self.assertTrue(rail.get("pending"))
+            self.assertEqual(rail["items"], [])
+            self.assertFalse(rail.get("note"))
+
+    def test_duplicate_show_cards_collapse_without_notes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            rail = apply_known_continue_watching(
+                db,
+                {
+                    "items": [
+                        {
+                            "title": "The Armstrong & Miller Show",
+                            "rating_key": "show-am",
+                            "play_rating_key": "am-s1e2",
+                            "media_type": "show",
+                            "continue_episode": 2,
+                        },
+                        {
+                            "title": "The Armstrong & Miller Show",
+                            "rating_key": "show-am",
+                            "play_rating_key": "am-s1e1",
+                            "media_type": "show",
+                            "continue_episode": 1,
+                        },
+                    ],
+                    "total": 2,
+                },
+            )
+            self.assertEqual(len(rail["items"]), 1)
+            self.assertEqual(rail["items"][0]["play_rating_key"], "am-s1e2")
 
 
 if __name__ == "__main__":

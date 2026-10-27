@@ -323,7 +323,8 @@ def _why_payload(
                 seed_text=seed_plot,
                 peer_text=peer_plot,
                 shelf_labels=shelf,
-            )
+            ),
+            shelf_labels=shelf,
         )
         # Cosine alone ("Strong plot kinship") is not a reason to show a neighbor.
         if not specific:

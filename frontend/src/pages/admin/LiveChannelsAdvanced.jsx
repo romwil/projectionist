@@ -13,6 +13,7 @@ import QueuePadControl from "../../components/live/QueuePadControl";
 import { queuePadPayload } from "../../lib/liveQueuePad.js";
 import { liveSetupStepNumbers } from "../../lib/liveChannelsCopy.js";
 import { isLiveMutatingDisabled } from "../../lib/liveChannelsJob.js";
+import { useConfirmModal } from "../../hooks/useConfirmModal.js";
 import { LiveReadyBadge, LiveStatusCheck } from "./LiveChannelsParts.jsx";
 
 /**
@@ -66,6 +67,7 @@ export default function LiveChannelsAdvanced({
   tunarrLogsBusy,
   refreshTunarrLogs,
 }) {
+  const { confirm, modal } = useConfirmModal();
   const liveLaunched = true;
   const effectiveLiveTab = "setup";
   const setupSteps = liveSetupStepNumbers({
@@ -196,9 +198,12 @@ export default function LiveChannelsAdvanced({
                           disabled={liveLocked || liveBusy === "continuity-repair"}
                           onClick={async () => {
                           if (
-                            !window.confirm(
-                              "Rescan filler and repair continuity? This remounts filler paths if needed, force-scans the local filler library, attaches the shared list, and warms streams. Active Live TV sessions may briefly drop while the broadcast restarts.",
-                            )
+                            !(await confirm({
+                              title: "Rescan filler",
+                              body:
+                                "Rescan filler and repair continuity? This remounts filler paths if needed, force-scans the local filler library, attaches the shared list, and warms streams. Active Live TV sessions may briefly drop while the broadcast restarts.",
+                              confirmLabel: "Rescan",
+                            }))
                           ) {
                             return;
                           }
@@ -495,7 +500,14 @@ export default function LiveChannelsAdvanced({
                           onClick={async () => {
                             if (!settingsStationId) return;
                             const label = `${settingsStation?.number != null ? `${settingsStation.number} · ` : ""}${settingsStation?.name || "station"}`;
-                            if (!window.confirm(`Delete channel ${label}? This cannot be undone.`)) {
+                            if (
+                              !(await confirm({
+                                title: "Delete channel",
+                                body: `Delete channel ${label}? This cannot be undone.`,
+                                confirmLabel: "Delete",
+                                danger: true,
+                              }))
+                            ) {
                               return;
                             }
                             setLiveBusy(`delete-${settingsStationId}`);
@@ -810,6 +822,7 @@ export default function LiveChannelsAdvanced({
                   ) : null}
         </>
       ) : null}
+      {modal}
     </div>
   );
 }

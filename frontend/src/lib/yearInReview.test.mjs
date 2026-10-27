@@ -7,11 +7,13 @@ import {
   prevChapterIndex,
   recapIsReady,
   recapShareText,
+  runConfirmedYirGenerate,
   shareCardText,
   shouldAutoAdvance,
   yirPath,
   yirPathFromGenerateResult,
   YIR_DEFAULT_DURATION_MS,
+  YIR_SELF_GENERATE_PAYLOAD,
 } from "./yearInReview.js";
 
 describe("yearInReview helpers", () => {
@@ -64,5 +66,18 @@ describe("yearInReview helpers", () => {
       "/year-in-review/2026",
     );
     assert.equal(yirPathFromGenerateResult({ year: 2026 }), null);
+  });
+
+  it("runs generateYearInReview only after confirm", async () => {
+    const calls = [];
+    const generate = async (payload) => {
+      calls.push(payload);
+      return { ok: true };
+    };
+    assert.equal(await runConfirmedYirGenerate({ confirmed: false, generate }), null);
+    assert.deepEqual(calls, []);
+    const snap = await runConfirmedYirGenerate({ confirmed: true, generate });
+    assert.deepEqual(calls, [YIR_SELF_GENERATE_PAYLOAD]);
+    assert.deepEqual(snap, { ok: true });
   });
 });

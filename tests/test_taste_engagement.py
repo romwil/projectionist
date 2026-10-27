@@ -139,6 +139,44 @@ class TasteEngagementApiTests(unittest.TestCase):
         self.assertAlmostEqual(comedy["weight"], 0.85)
         self.assertTrue(comedy["explicit_lock"])
 
+    def test_taste_patch_defaults_unlocked_and_hides_rabbit_plot(self) -> None:
+        self.db.set_lens_taste_weight(DEFAULT_LENS_ID, "comedy", 0.6)
+        with self.db.connect() as conn:
+            for junk in ("rabbit", "plot"):
+                conn.execute(
+                    """
+                    INSERT INTO lens_taste_profile (lens_id, cluster_tag, weight, explicit_lock)
+                    VALUES ('general', ?, 2.0, 1)
+                    """,
+                    (junk,),
+                )
+        hidden = self.client.get("/api/taste")
+        self.assertEqual(hidden.status_code, 200)
+        tags = {c["cluster_tag"] for c in hidden.json()["clusters"]}
+        self.assertIn("comedy", tags)
+        self.assertNotIn("rabbit", tags)
+        self.assertNotIn("plot", tags)
+        for cluster in hidden.json()["clusters"]:
+            self.assertLessEqual(float(cluster["weight"]), 1.0)
+
+        unlocked = self.client.patch(
+            "/api/taste",
+            json={"clusters": [{"cluster_tag": "comedy", "weight": 0.4}]},
+        )
+        self.assertEqual(unlocked.status_code, 200)
+        comedy = next(c for c in unlocked.json()["clusters"] if c["cluster_tag"] == "comedy")
+        self.assertFalse(comedy["explicit_lock"])
+        self.assertEqual(comedy["source"], "user")
+
+    def test_taste_quiz_writes_unlocked_user_override(self) -> None:
+        resp = self.client.post("/api/taste/quiz", json={"likes": ["comedy", "rabbit"]})
+        self.assertEqual(resp.status_code, 200)
+        tags = {c["cluster_tag"]: c for c in resp.json()["clusters"]}
+        self.assertIn("comedy", tags)
+        self.assertNotIn("rabbit", tags)
+        self.assertEqual(tags["comedy"]["source"], "user")
+        self.assertFalse(tags["comedy"]["explicit_lock"])
+
     def test_engagement_summary_endpoint(self) -> None:
         resp = self.client.get("/api/engagement/summary")
         self.assertEqual(resp.status_code, 200)

@@ -1287,6 +1287,25 @@ a.on-this-day-item:focus-visible {
   gap: var(--space-2);
 }
 
+.recommend-modal.confirm-modal {
+  width: min(420px, 100%);
+  max-height: min(80vh, 480px);
+}
+
+.confirm-modal-copy {
+  margin: 0 0 var(--space-4);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.recommend-modal-actions .primary.danger {
+  background: var(--danger, #c45c4a);
+  color: #fff;
+  border: 1px solid var(--danger, #c45c4a);
+}
+
 .recommend-intent-toggle {
   display: flex;
   flex-wrap: wrap;

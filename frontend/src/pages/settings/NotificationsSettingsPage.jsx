@@ -15,12 +15,17 @@ import AppriseDestinationsEditor from "../../components/settings/AppriseDestinat
 import SettingsPageHeader from "../../components/settings/SettingsPageHeader";
 import SettingsPanel from "../../components/settings/SettingsPanel";
 import SettingsToggle from "../../components/settings/SettingsToggle";
+import { useConfirmModal } from "../../hooks/useConfirmModal.js";
 import {
   parseAppriseDestinationRows,
   serializeAppriseDestinationRows,
 } from "../../lib/appriseDestinations.js";
 import {
-  newsletterConfirmMessage,
+  YIR_SELF_GENERATE_CONFIRM,
+  runConfirmedYirGenerate,
+} from "../../lib/yearInReview.js";
+import {
+  newsletterConfirmOptions,
   newsletterResultMessage,
 } from "../../lib/weeklyNewsletter.js";
 
@@ -50,6 +55,7 @@ function ChannelRequirementBadge({ requiresOwner, available, ownerConfigured }) 
 }
 
 export default function NotificationsSettingsPage() {
+  const { confirm, modal } = useConfirmModal();
   const [notificationEmail, setNotificationEmail] = useState("");
   const [inboxOn, setInboxOn] = useState(true);
   const [emailOn, setEmailOn] = useState(false);
@@ -162,7 +168,7 @@ export default function NotificationsSettingsPage() {
       });
       return;
     }
-    if (!window.confirm(newsletterConfirmMessage("self"))) return;
+    if (!(await confirm(newsletterConfirmOptions("self")))) return;
     setSendingSelf(true);
     setSelfStatus(null);
     try {
@@ -185,17 +191,14 @@ export default function NotificationsSettingsPage() {
       });
       return;
     }
-    if (
-      !window.confirm(
-        "Generate your Year in Review reel now and send it to your inbox (and email if enabled)?"
-      )
-    ) {
-      return;
-    }
+    if (!(await confirm(YIR_SELF_GENERATE_CONFIRM))) return;
     setSendingYir(true);
     setYirStatus(null);
     try {
-      const snap = await generateYearInReview({ scope: "self", notify: true });
+      const snap = await runConfirmedYirGenerate({
+        confirmed: true,
+        generate: generateYearInReview,
+      });
       setYirJob(snap);
     } catch (error) {
       setYirStatus({
@@ -210,6 +213,7 @@ export default function NotificationsSettingsPage() {
     return (
       <div className="settings-stack" data-testid="settings-notifications">
         <SettingsPageHeader title="Notifications">Loading…</SettingsPageHeader>
+        {modal}
       </div>
     );
   }
@@ -320,7 +324,7 @@ export default function NotificationsSettingsPage() {
             checked={yirOn}
             onChange={setYirOn}
             label="Year in Review"
-            help="Opt in to a private year-end cinema reel built from your tracked watch history (not household Plex totals)."
+            help="Opt in to a private year-end cinema reel of your Plex plays this year (this account), not the household and not only titles played inside Projectionist."
             testId="notifications-yir-toggle"
           />
         </SettingsPanel>
@@ -379,10 +383,11 @@ export default function NotificationsSettingsPage() {
       {isOwner ? (
         <SettingsPanel title="Generate my Year in Review">
           <p className="settings-field-hint">
-            Builds a private reel from your watch-tracker completions for the current calendar year
-            (year to date) and notifies your inbox with a durable link — same shape as scheduled
-            delivery. Requires Year in Review opt-in and a mapped Plex identity with enough tracked
-            finishes. Owners can also generate from Admin → Newsletters.
+            Your Plex plays this year (this account), not the household and not only titles played
+            inside Projectionist. Generate builds the current calendar year (year to date) and
+            notifies your inbox with a durable link — same shape as scheduled delivery. Requires
+            Year in Review opt-in and a mapped Plex identity. Owners can also generate from Admin
+            → Newsletters.
           </p>
           <button
             type="button"
@@ -408,6 +413,7 @@ export default function NotificationsSettingsPage() {
           ) : null}
         </SettingsPanel>
       ) : null}
+      {modal}
     </div>
   );
 }

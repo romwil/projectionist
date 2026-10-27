@@ -58,14 +58,25 @@ def note_playback_progress(
     key = str(rating_key or "").strip()
     if not key or db is None:
         return
+    show_key = _show_rating_key_for(db, key)
     note = {
         "rating_key": key,
+        "show_rating_key": show_key,
         "view_offset_ms": max(0, int(view_offset_ms or 0)),
         "duration_ms": max(0, int(duration_ms or 0)),
         "finished": bool(finished) or max(0, int(view_offset_ms or 0)) <= 0,
         "noted_at": time.time(),
     }
     with _LOCK:
+        path = _db_path(db)
+        if show_key:
+            stale = [
+                stored
+                for stored, existing in _NOTES.items()
+                if stored[0] == path and str(existing.get("show_rating_key") or "") == show_key
+            ]
+            for stored in stale:
+                _NOTES.pop(stored, None)
         _NOTES[_note_key(db, key)] = note
         _drop_expired_locked()
     for callback in list(_REFRESHERS):
@@ -94,10 +105,52 @@ def notes_for_db(db: Any) -> list[Dict[str, Any]]:
         return [dict(note) for (note_path, _key), note in _NOTES.items() if note_path == path]
 
 
-def _item_matches(item: Dict[str, Any], rating_key: str) -> bool:
-    if str(item.get("play_rating_key") or "") == rating_key:
+def _item_matches(item: Dict[str, Any], rating_key: str, *, show_rating_key: str = "") -> bool:
+    play = str(item.get("play_rating_key") or "")
+    key = str(item.get("rating_key") or "")
+    if play == rating_key or key == rating_key:
         return True
-    return str(item.get("rating_key") or "") == rating_key
+    show_key = str(show_rating_key or "").strip()
+    if show_key and (key == show_key or play == show_key):
+        return True
+    return False
+
+
+def _continue_watching_identity(item: Dict[str, Any]) -> str:
+    rating_key = str(item.get("rating_key") or "")
+    play_key = str(item.get("play_rating_key") or "")
+    media_type = str(item.get("media_type") or "")
+    episode_like = (
+        media_type in {"show", "episode"}
+        or item.get("continue_season") is not None
+        or item.get("continue_episode") is not None
+        or (bool(play_key) and bool(rating_key) and play_key != rating_key)
+    )
+    if episode_like and rating_key:
+        return f"show:{rating_key}"
+    return f"play:{play_key or rating_key}"
+
+
+def _dedupe_continue_watching(items: list[Dict[str, Any]]) -> list[Dict[str, Any]]:
+    seen: set[str] = set()
+    out: list[Dict[str, Any]] = []
+    for item in items:
+        ident = _continue_watching_identity(item)
+        if not ident or ident in seen:
+            continue
+        seen.add(ident)
+        out.append(item)
+    return out
+
+
+def _show_rating_key_for(db: Any, rating_key: str) -> str:
+    try:
+        episode = _episode_context(db, rating_key)
+    except Exception:  # noqa: BLE001 — notes must not break playback
+        return ""
+    if episode is None:
+        return ""
+    return str(episode["show_rating_key"] or "").strip()
 
 
 def _episode_context(db: Any, rating_key: str):
@@ -166,35 +219,45 @@ def _card_for_note(db: Any, note: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 def apply_known_continue_watching(db: Any, rail: Dict[str, Any]) -> Dict[str, Any]:
     """Return ``rail`` with in-app progress merged over a Plex or local snapshot."""
-    notes = notes_for_db(db)
-    if not notes or not isinstance(rail, dict):
+    if not isinstance(rail, dict):
         return rail
+    notes = sorted(notes_for_db(db), key=lambda note: float(note.get("noted_at") or 0))
+    had_notes = bool(notes)
     items = [dict(item) for item in (rail.get("items") or []) if isinstance(item, dict)]
     for note in notes:
         rating_key = str(note.get("rating_key") or "")
         if not rating_key:
             continue
         if note.get("finished") or int(note.get("view_offset_ms") or 0) <= 0:
+            # Drop this episode only. A later on-deck episode of the same show stays.
             items = [item for item in items if not _item_matches(item, rating_key)]
             continue
+        show_key = str(note.get("show_rating_key") or "").strip()
         card = _card_for_note(db, note)
         if card is None:
             for item in items:
-                if not _item_matches(item, rating_key):
+                if not _item_matches(item, rating_key, show_rating_key=show_key):
                     continue
                 item["view_offset_ms"] = int(note.get("view_offset_ms") or 0)
                 if note.get("duration_ms"):
                     item["duration_ms"] = int(note["duration_ms"])
             continue
-        items = [item for item in items if not _item_matches(item, rating_key)]
+        if not show_key:
+            card_play = str(card.get("play_rating_key") or "")
+            card_key = str(card.get("rating_key") or "")
+            if card_play and card_key and card_play != card_key:
+                show_key = card_key
+        items = [item for item in items if not _item_matches(item, rating_key, show_rating_key=show_key)]
         items.insert(0, card)
+    items = _dedupe_continue_watching(items)
     updated = dict(rail)
     updated["items"] = items
     updated["total"] = len(items)
-    updated.pop("pending", None)
+    if had_notes or items:
+        updated.pop("pending", None)
     if items:
         updated["note"] = None
-    elif not updated.get("note"):
+    elif not updated.get("pending") and not updated.get("note"):
         updated["note"] = (
             "Nothing in progress — start something in Plex, or wait for watch "
             "progress to sync."
