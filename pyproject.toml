@@ -29,15 +29,18 @@ web = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
     "pydantic>=2.0.0",
-    "python-multipart>=0.0.9",
+    "python-multipart>=0.0.32",
     "sse-starlette>=2.0.0",
     "apprise>=1.7.0",
+    # Transitive security floors (httpx/starlette/requests).
+    "anyio>=4.14.2",
+    "urllib3>=2.8.0",
 ]
 
 mcp = [
     # Stay on the v1 SDK until Projectionist migrates off mcp.server.fastmcp.
     # pip install mcp now resolves to 2.x, which relocated FastMCP.
-    "mcp>=1.28.0,<2",
+    "mcp>=1.30.0,<2",
 ]
 
 # Optional ANN prefilter for neighbor rebuild / semantic search. Not required
