@@ -162,6 +162,8 @@ def history_page(
     start: int = 0,
     size: int = 250,
     since_ms: Optional[int] = None,
+    until_ms: Optional[int] = None,
+    account_id: Optional[str] = None,
 ) -> tuple[PlexHistoryPage, List[WatchEventInput]]:
     """Fetch one page of Plex `/status/sessions/history/all`."""
     params: dict[str, str] = {
@@ -170,6 +172,11 @@ def history_page(
     }
     if since_ms is not None:
         params["viewedAt>"] = str(max(0, int(since_ms) // 1000))
+    if until_ms is not None:
+        params["viewedAt<"] = str(max(0, int(until_ms) // 1000))
+    account = str(account_id or "").strip()
+    if account:
+        params["accountID"] = account
     query = urllib.parse.urlencode(params)
     path = f"/status/sessions/history/all?{query}"
     machine_id = client.machine_identifier()

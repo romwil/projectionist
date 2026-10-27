@@ -44,6 +44,43 @@ class TautulliClient:
         data = self._call("get_metadata", rating_key=rating_key)
         return data if isinstance(data, dict) else {}
 
+    def get_history(
+        self,
+        *,
+        start: int = 0,
+        length: int = 100,
+        user_id: Optional[str] = None,
+        after: Optional[str] = None,
+        before: Optional[str] = None,
+        grouping: int = 0,
+        include_activity: int = 0,
+    ) -> Mapping[str, Any]:
+        """Paged Tautulli history. ``user_id`` is the Plex account id when present."""
+        data = self._call(
+            "get_history",
+            start=max(0, int(start)),
+            length=max(1, min(int(length), 500)),
+            user_id=str(user_id).strip() if user_id is not None and str(user_id).strip() else None,
+            after=str(after).strip() if after else None,
+            before=str(before).strip() if before else None,
+            grouping=int(grouping),
+            include_activity=int(include_activity),
+        )
+        if isinstance(data, dict):
+            rows = data.get("data")
+            return {
+                "data": rows if isinstance(rows, list) else [],
+                "recordsFiltered": data.get("recordsFiltered"),
+                "recordsTotal": data.get("recordsTotal"),
+            }
+        if isinstance(data, list):
+            return {
+                "data": data,
+                "recordsFiltered": len(data),
+                "recordsTotal": len(data),
+            }
+        return {"data": [], "recordsFiltered": 0, "recordsTotal": 0}
+
     def never_watched(self, section_id: int) -> List[Mapping[str, Any]]:
         items = self.get_library_media_info(section_id, length=5000)
         return [item for item in items if int(item.get("play_count") or 0) == 0]

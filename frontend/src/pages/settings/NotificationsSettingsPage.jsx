@@ -324,7 +324,7 @@ export default function NotificationsSettingsPage() {
             checked={yirOn}
             onChange={setYirOn}
             label="Year in Review"
-            help="Opt in to a private year-end cinema reel built from your tracked watch history (not household Plex totals)."
+            help="Opt in to a private year-end cinema reel of your Plex plays this year (this account), not the household and not only titles played inside Projectionist."
             testId="notifications-yir-toggle"
           />
         </SettingsPanel>
@@ -383,10 +383,11 @@ export default function NotificationsSettingsPage() {
       {isOwner ? (
         <SettingsPanel title="Generate my Year in Review">
           <p className="settings-field-hint">
-            Builds a private reel from your watch-tracker completions for the current calendar year
-            (year to date) and notifies your inbox with a durable link — same shape as scheduled
-            delivery. Requires Year in Review opt-in and a mapped Plex identity with enough tracked
-            finishes. Owners can also generate from Admin → Newsletters.
+            Your Plex plays this year (this account), not the household and not only titles played
+            inside Projectionist. Generate builds the current calendar year (year to date) and
+            notifies your inbox with a durable link — same shape as scheduled delivery. Requires
+            Year in Review opt-in and a mapped Plex identity. Owners can also generate from Admin
+            → Newsletters.
           </p>
           <button
             type="button"
