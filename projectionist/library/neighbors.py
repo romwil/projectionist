@@ -146,6 +146,49 @@ def _shelf_label_set(tokens: Set[str]) -> Set[str]:
     }
 
 
+_CREW_JOBS = ("director", "writer", "screenplay", "creator")
+
+
+def _director_writer_names(db: Database, item_ids: Sequence[int]) -> Set[str]:
+    """Director/writer names for plot-link shelf blocking — not ``person:`` ids."""
+    ids = sorted({int(item_id) for item_id in item_ids if int(item_id) > 0})
+    if not ids:
+        return set()
+    placeholders = ",".join("?" for _ in ids)
+    jobs = ",".join("?" for _ in _CREW_JOBS)
+    names: Set[str] = set()
+    try:
+        with db.connect() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT p.name AS name
+                FROM credits c
+                JOIN people p ON p.id = c.person_id
+                WHERE c.item_id IN ({placeholders})
+                  AND (
+                    c.department IN ('Directing', 'Writing', 'Directors', 'Creator')
+                    OR lower(COALESCE(c.job, '')) IN ({jobs})
+                  )
+                """,
+                (*ids, *_CREW_JOBS),
+            ).fetchall()
+    except Exception:  # noqa: BLE001 — partial fixtures / missing credits table
+        rows = []
+    for row in rows:
+        text = str(row["name"] or "").strip().casefold()
+        if text:
+            names.add(text)
+    return names
+
+
+def _directors_field_names(row: Any) -> Set[str]:
+    try:
+        raw = row["directors"]
+    except (KeyError, IndexError, TypeError):
+        return set()
+    return _parse_tag_set(raw)
+
+
 def enrich_neighbors_with_explanations(
     db: Database,
     seed_id: int,
@@ -166,6 +209,10 @@ def enrich_neighbors_with_explanations(
         for row in (db.library_item_by_id(pid) for pid in peer_ids)
         if row is not None
     }
+    crew_names = _director_writer_names(db, [int(seed_id), *peer_ids])
+    crew_names |= _directors_field_names(seed)
+    for peer in peer_rows.values():
+        crew_names |= _directors_field_names(peer)
     enriched: List[Tuple[int, float, float, int, Optional[str]]] = []
     for neighbor_id, score, surprise in neighbors:
         peer = peer_rows.get(int(neighbor_id))
@@ -176,7 +223,7 @@ def enrich_neighbors_with_explanations(
         link = specific_plot_link(
             seed_text=seed_plot,
             peer_text=plot_blob(peer),
-            shelf_labels=_shelf_label_set(seed_tokens | peer_tokens),
+            shelf_labels=_shelf_label_set(seed_tokens | peer_tokens) | crew_names,
         )
         # Non-null JSON (including "{}") marks the row as evaluated so idle
         # annotate does not revisit cosine-only peers forever.

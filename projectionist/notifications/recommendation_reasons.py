@@ -598,6 +598,38 @@ def _load_items(db: Database, item_ids: Sequence[int]) -> Dict[int, Dict[str, An
     return {int(row["id"]): _as_dict(row) for row in rows}
 
 
+def _credit_names(db: Database, *item_ids: int) -> set[str]:
+    """Director/writer names for plot-link shelf blocking (same jobs as ``_why_payload``)."""
+    ids = sorted({int(item_id) for item_id in item_ids if int(item_id) > 0})
+    if not ids:
+        return set()
+    placeholders = ",".join("?" for _ in ids)
+    jobs = ",".join("?" for _ in _CREW_JOBS)
+    try:
+        with db.connect() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT p.name AS name
+                FROM credits c
+                JOIN people p ON p.id = c.person_id
+                WHERE c.item_id IN ({placeholders})
+                  AND (
+                    c.department IN ('Directing', 'Writing', 'Directors', 'Creator')
+                    OR lower(COALESCE(c.job, '')) IN ({jobs})
+                  )
+                """,
+                (*ids, *_CREW_JOBS),
+            ).fetchall()
+    except Exception:  # noqa: BLE001
+        return set()
+    names: set[str] = set()
+    for row in rows:
+        text = str(row["name"] or "").strip().casefold()
+        if text:
+            names.add(text)
+    return names
+
+
 def _shared_creator(db: Database, left_id: int, right_id: int) -> Optional[str]:
     jobs = ",".join("?" for _ in _CREW_JOBS)
     try:
@@ -656,6 +688,7 @@ def _inner_link(
 
     shelf = _labels(candidate.get("genres")) | _labels(candidate.get("keywords"))
     shelf |= _labels(seed.get("genres")) | _labels(seed.get("keywords"))
+    shelf |= _credit_names(db, candidate_id, seed_id)
 
     def _live_plot_link() -> Optional[Dict[str, Any]]:
         link = honest_plot_link(
@@ -663,7 +696,8 @@ def _inner_link(
                 seed_text=plot_blob(seed),
                 peer_text=plot_blob(candidate),
                 shelf_labels=shelf,
-            )
+            ),
+            shelf_labels=shelf,
         )
         if link and link.get("sentence"):
             return {
@@ -691,7 +725,7 @@ def _inner_link(
         except (TypeError, ValueError, KeyError):
             continue
         stored = parse_plot_link_json(neighbor["plot_link_json"] if "plot_link_json" in neighbor.keys() else None)
-        accepted = honest_plot_link(stored)
+        accepted = honest_plot_link(stored, shelf_labels=shelf)
         if accepted:
             return {
                 "link_kind": "plot_link",

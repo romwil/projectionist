@@ -1350,6 +1350,10 @@ def neighbors_payload(
     surprise_link = None
     seed_labels: set[str] = set()
     seed_plot = ""
+    from projectionist.library.neighbors import (
+        _director_writer_names,
+        _directors_field_names,
+    )
     from projectionist.library.plot_kinship import (
         explanation_from_plot_link,
         honest_plot_link,
@@ -1357,6 +1361,16 @@ def neighbors_payload(
         plot_blob,
         surprising_items_if_distinct,
     )
+
+    credit_shelf = _director_writer_names(
+        db,
+        [int(item_id)]
+        + [
+            int(row["neighbor_id"]) if "neighbor_id" in row.keys() else int(row["id"])
+            for row in neighbor_rows
+        ],
+    )
+    credit_shelf |= _directors_field_names(seed)
 
     if normalized == "surprising":
         from projectionist.library.neighbors import (
@@ -1389,18 +1403,25 @@ def neighbors_payload(
         stored_link = honest_plot_link(
             parse_plot_link_json(neighbor["plot_link_json"])
             if "plot_link_json" in neighbor.keys()
-            else None
+            else None,
+            shelf_labels=credit_shelf | _directors_field_names(neighbor),
         )
         if normalized == "surprising" and surprise_link is not None:
             peer_labels = metadata_overlap_tokens(neighbor)
+            plot_shelf = (
+                seed_labels
+                | peer_labels
+                | credit_shelf
+                | _directors_field_names(neighbor)
+            )
             live = surprise_link(
                 cosine=score,
                 overlap=measured_metadata_overlap(seed_labels, peer_labels),
                 seed_text=seed_plot,
                 peer_text=plot_blob(neighbor),
-                shelf_labels=seed_labels | peer_labels,
+                shelf_labels=plot_shelf,
             )
-            link = honest_plot_link(live)
+            link = honest_plot_link(live, shelf_labels=plot_shelf)
             if link is None:
                 continue
             item["plot_link"] = link["sentence"]
@@ -1429,7 +1450,8 @@ def neighbors_payload(
             accepted = honest_plot_link(
                 parse_plot_link_json(neighbor["plot_link_json"])
                 if "plot_link_json" in neighbor.keys()
-                else None
+                else None,
+                shelf_labels=credit_shelf,
             )
             if accepted:
                 similar_honest.append(neighbor)
