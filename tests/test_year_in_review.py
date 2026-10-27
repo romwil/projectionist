@@ -512,7 +512,9 @@ class YearInReviewChapterPolishTests(unittest.TestCase):
         chapter = build_honesty(rollup, {})
         assert chapter is not None
         body = chapter["body"]
-        self.assertIn("finishes attributed to you", body.lower())
+        self.assertIn("your plex plays this year", body.lower())
+        self.assertIn("not the household", body.lower())
+        self.assertIn("not only titles played inside projectionist", body.lower())
         self.assertIn("3 reconstructed from progress", body)
         self.assertIn("97 marked played in Plex without progress data", body)
         for jargon in (
