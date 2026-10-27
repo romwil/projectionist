@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useConfirmModal } from "../hooks/useConfirmModal.js";
 import { deleteLibraryPage, getLibraryPage, listLibraryPages } from "../api/client";
 import AppShell from "../layouts/AppShell";
 import BackLink from "../components/BackLink";
@@ -23,6 +24,7 @@ function groupedByDate(pages) {
 export default function LibraryPage() {
   const { pageId } = useParams();
   const navigate = useNavigate();
+  const { confirm, modal } = useConfirmModal();
   const [pages, setPages] = useState([]);
   const [page, setPage] = useState(null);
   const [query, setQuery] = useState("");
@@ -36,7 +38,16 @@ export default function LibraryPage() {
   }, [pageId, page]);
 
   async function archive(entry) {
-    if (!window.confirm(`Archive "${entry.name}"?`)) return;
+    if (
+      !(await confirm({
+        title: "Archive saved response",
+        body: `Archive "${entry.name}"?`,
+        confirmLabel: "Archive",
+        danger: true,
+      }))
+    ) {
+      return;
+    }
     await deleteLibraryPage(entry.id);
     setPages((current) => current.filter((item) => item.id !== entry.id));
   }
@@ -116,6 +127,7 @@ export default function LibraryPage() {
             </div> : null}
           </section>
         </main>
+        {modal}
       </AppShell>
     );
   }
@@ -148,6 +160,7 @@ export default function LibraryPage() {
           </article>
         ))}</div>)}
       </section></main>
+      {modal}
     </AppShell>
   );
 }

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useConfirmModal } from "../../hooks/useConfirmModal.js";
 import { getLiveChannelsStatus, refillLiveChannelsChannel } from "../../api/client";
 import { buildCraftFiltersPayload, craftDraftFromStation } from "../../lib/liveChannelsCraft.js";
 import { ownerLiveText } from "../../lib/liveChannelsOwnerCopy.js";
@@ -25,6 +26,7 @@ export default function LiveChannelsSection(props) {
     setActionFeedback,
   } = props;
   const [stationCraftDraft, setStationCraftDraft] = useState(null);
+  const { confirm, modal } = useConfirmModal();
 
   function openStationSettings(channelId) {
     if (stationSettingsOpen === channelId) {
@@ -43,7 +45,15 @@ export default function LiveChannelsSection(props) {
 
   async function refillStation(channelId, name) {
     if (!channelId) return;
-    if (!window.confirm(`Rebuild the lineup for ${name || "this channel"}?`)) return;
+    if (
+      !(await confirm({
+        title: "Rebuild lineup",
+        body: `Rebuild the lineup for ${name || "this channel"}?`,
+        confirmLabel: "Rebuild",
+      }))
+    ) {
+      return;
+    }
     setLiveBusy(`refill-${channelId}`);
     try {
       const result = await refillLiveChannelsChannel(channelId);
@@ -64,12 +74,15 @@ export default function LiveChannelsSection(props) {
   const advancedProps = { ...props, stationCraftDraft, setStationCraftDraft, refillStation };
 
   return (
-    <LiveChannelsStudio
-      {...props}
-      openStationSettings={openStationSettings}
-      refillStation={refillStation}
-      stationSettings={<LiveChannelsAdvanced {...advancedProps} panel="station" />}
-      advancedSetup={<LiveChannelsAdvanced {...advancedProps} panel="setup" />}
-    />
+    <>
+      <LiveChannelsStudio
+        {...props}
+        openStationSettings={openStationSettings}
+        refillStation={refillStation}
+        stationSettings={<LiveChannelsAdvanced {...advancedProps} panel="station" />}
+        advancedSetup={<LiveChannelsAdvanced {...advancedProps} panel="setup" />}
+      />
+      {modal}
+    </>
   );
 }
