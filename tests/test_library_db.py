@@ -229,11 +229,11 @@ class DatabaseTests(unittest.TestCase):
     def test_lens_taste_explicit_lock(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
-            db.set_lens_taste_weight(DEFAULT_LENS_ID, "70s-sci-fi", 2.0, explicit_lock=True)
-            db.set_lens_taste_weight(DEFAULT_LENS_ID, "70s-sci-fi", 0.1, respect_lock=True)
+            db.set_lens_taste_weight(DEFAULT_LENS_ID, "sci-fi", 2.0, explicit_lock=True)
+            db.set_lens_taste_weight(DEFAULT_LENS_ID, "sci-fi", 0.1, respect_lock=True)
             rows = db.get_lens_taste_profile(DEFAULT_LENS_ID)
             self.assertEqual(len(rows), 1)
-            self.assertEqual(float(rows[0]["weight"]), 2.0)
+            self.assertEqual(float(rows[0]["weight"]), 1.0)
             self.assertEqual(int(rows[0]["explicit_lock"]), 1)
 
     def test_curator_name_config_seeded(self) -> None:

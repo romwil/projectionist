@@ -226,7 +226,8 @@ describe("sonarr per-show selection", () => {
     assert.match(libraries, /data-testid=\{`sonarr-select-\$\{group\.seriesId\}`\}/);
     assert.match(libraries, /sonarr-missing-search-footer/);
     assert.match(libraries, /setSonarrPicked\(new Set\(\)\);\s*handleSonarrMissingScan/);
-    assert.match(libraries, /window\.confirm\(/);
+    assert.match(libraries, /useConfirmModal/);
+    assert.match(libraries, /Search all missing episodes/);
   });
 });
 

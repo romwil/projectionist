@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   EXPLORE_RAIL_LIMIT,
+  getExploreFeedContinueWatching,
   getExploreHub,
   getPickForMeFeed,
   queryLibrary,
@@ -24,10 +25,12 @@ import LanguageLandingPage from "./LanguageLandingPage.jsx";
 import { buildPulseStats, normalizeFeed } from "../lib/exploreFeeds.js";
 import {
   CONTINUE_WATCHING_PROGRESS_EVENT,
+  dropReflectedContinueWatchingNotes,
   exploreHubStillWarming,
   hubRailState,
   mergeContinueWatchingNotes,
   readExploreHubCache,
+  spliceContinueWatchingRail,
   writeExploreHubCache,
 } from "../lib/exploreHubCache.js";
 import {
@@ -219,12 +222,46 @@ function useExploreHub() {
     const WARMING_POLL_MS = 1200;
     const WARMING_MAX_ATTEMPTS = 30;
     const sessionPayload = withPlayedProgress(cached?.payload) || null;
+    let liveContinueWatching = null;
+
+    const withLiveRail = (payload) => {
+      const base = payload || { rails: {} };
+      const spliced = liveContinueWatching ? spliceContinueWatchingRail(base, liveContinueWatching) : base;
+      return withPlayedProgress(spliced);
+    };
+
+    const applyLiveFeed = (live) => {
+      if (!live || typeof live !== "object") return;
+      liveContinueWatching = live;
+      setHub((prev) => {
+        const base = prev.payload || sessionPayload || { rails: {} };
+        const spliced = spliceContinueWatchingRail(base, live);
+        dropReflectedContinueWatchingNotes(spliced);
+        const next = withPlayedProgress(spliced);
+        writeExploreHubCache(next);
+        return {
+          ...prev,
+          payload: next,
+        };
+      });
+    };
+
+    const refreshContinueWatching = () => {
+      getExploreFeedContinueWatching({ limit: EXPLORE_RAIL_LIMIT })
+        .then((live) => {
+          if (cancelled) return;
+          applyLiveFeed(live);
+        })
+        .catch(() => {
+          // Keep posters already on screen.
+        });
+    };
 
     const fetchHub = (attempt = 0) => {
       getExploreHub({ limit: EXPLORE_RAIL_LIMIT })
         .then((payload) => {
           if (cancelled) return;
-          const played = withPlayedProgress(payload);
+          const played = withLiveRail(payload);
           const warming = exploreHubStillWarming(played);
           if (warming) {
             // Paint rails that have already landed. Keep a prior full payload
@@ -239,7 +276,7 @@ function useExploreHub() {
                 null;
               return {
                 loading: false,
-                payload: withPlayedProgress(keep || played),
+                payload: withLiveRail(keep || played),
                 error: "",
                 fromCache: Boolean(keep),
               };
@@ -270,9 +307,21 @@ function useExploreHub() {
     };
 
     fetchHub(0);
+    refreshContinueWatching();
+
+    function onVisibility() {
+      if (document.visibilityState === "visible") refreshContinueWatching();
+    }
+    function onPageShow() {
+      refreshContinueWatching();
+    }
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pageshow", onPageShow);
     return () => {
       cancelled = true;
       if (pollTimer) window.clearTimeout(pollTimer);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pageshow", onPageShow);
     };
   }, []);
 

@@ -11,6 +11,7 @@ import {
   setLibraryItemWatched,
 } from "../api/client";
 import MarkBadMediaDialog from "./MarkBadMediaDialog.jsx";
+import { useConfirmModal } from "../hooks/useConfirmModal.js";
 import { useAuthGate } from "./UserMenu";
 import ReportMediaIssueModal from "./ReportMediaIssueModal";
 import TitleDetailLink from "./TitleDetailLink";
@@ -50,6 +51,7 @@ export default function PosterActionMenu({
   motifWhy,
 }) {
   const { isOwner, multiUserEnabled, role } = useAuthGate();
+  const { confirm, modal } = useConfirmModal();
   const [lists, setLists] = useState([]);
   const [listOpen, setListOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
@@ -147,7 +149,17 @@ export default function PosterActionMenu({
   }
 
   async function deleteIndex() {
-    if (!window.confirm(`Remove "${item.title || "this title"}" from the Projectionist index? Plex files are not deleted.`)) return;
+    setOpen(false);
+    if (
+      !(await confirm({
+        title: "Remove from index",
+        body: `Remove "${item.title || "this title"}" from the Projectionist index? Plex files are not deleted.`,
+        confirmLabel: "Remove",
+        danger: true,
+      }))
+    ) {
+      return;
+    }
     try {
       await deleteLibraryItems([item.rating_key || item.plex_rating_key]);
       flashStatus("Removed from the Projectionist index.");
@@ -233,5 +245,6 @@ export default function PosterActionMenu({
       onCancel={() => setBadMediaOpen(false)}
       onConfirm={handleMarkBadMedia}
     />
+    {modal}
   </div>;
 }

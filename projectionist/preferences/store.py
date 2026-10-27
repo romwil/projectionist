@@ -7,6 +7,7 @@ from typing import List, Optional
 from projectionist.library.db import DEFAULT_LENS_ID, Database
 from projectionist.models.schemas import PreferenceSignal
 from projectionist.taste.clusters import (
+    clamp_cluster_weight,
     cluster_tokens_from_text,
     is_valid_cluster_tag,
     normalize_cluster_tag,
@@ -43,11 +44,14 @@ def remember_preference(
         elif candidate:
             tags = cluster_tokens_from_text(candidate)[:8]
     for tag in tags:
+        # Keep raw ``weight`` on the preference fact (signal strength). The
+        # taste profile slider is 0–1, and lock is opt-in only — library/lens
+        # ingest never silently locks a cluster.
         db.set_lens_taste_weight(
             lens_id,
             tag[:120],
-            float(weight),
-            explicit_lock=signal.explicit_lock if signal.explicit_lock is not None else (signal.signal_type == "explicit"),
+            clamp_cluster_weight(weight),
+            explicit_lock=bool(signal.explicit_lock) if signal.explicit_lock is not None else False,
             respect_lock=signal.explicit_lock is None,
         )
 

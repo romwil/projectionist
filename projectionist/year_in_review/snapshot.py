@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 
 from projectionist.library.db import Database
 from projectionist.watch_tracker.rollups import build_year_rollup
-from projectionist.year_in_review import REEL_SCHEMA_VERSION
+from projectionist.year_in_review import CONFIDENCE_NOTE, HONESTY_FOOTNOTE, REEL_SCHEMA_VERSION
 from projectionist.year_in_review.chapters import assemble_chapters
 from projectionist.year_in_review.recap import build_recap
 from projectionist.year_in_review.signals import collect_social_signals
@@ -154,10 +154,8 @@ def build_reel_for_user(
         "display_name": display_name,
         "status": status,
         "honesty": {
-            "footnote": "Finishes attributed to you — not the whole household.",
-            "confidence_note": (
-                "Some finishes come from Plex ‘played’ marks when we didn’t see progress."
-            ),
+            "footnote": HONESTY_FOOTNOTE,
+            "confidence_note": CONFIDENCE_NOTE,
         },
         "rollup": rollup.as_dict(),
         "recap": build_recap(rollup, ctx) if status == "ready" else None,

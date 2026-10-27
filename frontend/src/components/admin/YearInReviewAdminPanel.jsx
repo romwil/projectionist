@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { cancelYearInReview, generateYearInReview, getYearInReviewStatus } from "../../api/client";
-import { yirPathFromGenerateResult } from "../../lib/yearInReview";
+import { useConfirmModal } from "../../hooks/useConfirmModal.js";
+import { yirAdminGenerateConfirmOptions, yirPathFromGenerateResult } from "../../lib/yearInReview";
 import AdminExecutionCard from "../AdminExecutionCard";
 import InlineAlert from "../InlineAlert";
 import SettingsPanel from "../settings/SettingsPanel";
@@ -15,6 +16,7 @@ export default function YearInReviewAdminPanel({
   testIdPrefix = "newsletters",
   mailConfigured = null,
 }) {
+  const { confirm, modal } = useConfirmModal();
   const [sendingYir, setSendingYir] = useState(false);
   const [yirNotify, setYirNotify] = useState(true);
   const [yirStatus, setYirStatus] = useState(null);
@@ -39,8 +41,8 @@ export default function YearInReviewAdminPanel({
             setYirStatus({
               type: "error",
               message: year
-                ? `Not enough tracked finishes for ${year} yet (year to date). Keep watching, then try again.`
-                : "Not enough tracked finishes for this year yet.",
+                ? `Not enough Plex plays for ${year} yet (year to date). Keep watching on this Plex account, then try again.`
+                : "Not enough Plex plays for this year yet.",
             });
           } else if (path) {
             setYirStatus({
@@ -62,15 +64,7 @@ export default function YearInReviewAdminPanel({
   }, []);
 
   async function handleGenerateYir() {
-    if (
-      !window.confirm(
-        yirNotify
-          ? "Generate your Year in Review reel now and notify your inbox (and email if enabled)?"
-          : "Generate your Year in Review reel now without sending a notification?",
-      )
-    ) {
-      return;
-    }
+    if (!(await confirm(yirAdminGenerateConfirmOptions(yirNotify)))) return;
     setSendingYir(true);
     setYirStatus(null);
     setYirPath(null);
@@ -93,8 +87,9 @@ export default function YearInReviewAdminPanel({
       testId={`${testIdPrefix}-yir-panel`}
     >
       <p className="settings-field-hint" data-testid={`${testIdPrefix}-yir-prereqs`}>
-        Test generate uses the current calendar year (year to date). Requires a mapped Plex
-        identity and enough tracked finishes for this year
+        Your Plex plays this year (this account), not the household and not only titles played
+        inside Projectionist. Test generate uses the current calendar year (year to date). Requires
+        a mapped Plex identity and enough plays for this year
         {mailConfigured === false ? (
           <>
             {" "}
@@ -154,6 +149,7 @@ export default function YearInReviewAdminPanel({
           ) : null}
         </p>
       ) : null}
+      {modal}
     </SettingsPanel>
   );
 }

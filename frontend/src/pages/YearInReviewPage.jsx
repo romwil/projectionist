@@ -288,6 +288,9 @@ export default function YearInReviewPage() {
       {!showRecap && reel.honesty?.footnote && (
         <p className="yir-footnote muted">{reel.honesty.footnote}</p>
       )}
+      {!showRecap && reel.honesty?.confidence_note && (
+        <p className="yir-footnote muted">{reel.honesty.confidence_note}</p>
+      )}
     </main>
   );
 }

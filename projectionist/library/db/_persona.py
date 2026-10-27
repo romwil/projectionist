@@ -448,13 +448,18 @@ class PersonaLensesMixin:
         explicit_lock: Optional[bool] = None,
         respect_lock: bool = True,
     ) -> None:
-        from projectionist.taste.clusters import is_valid_cluster_tag, normalize_cluster_tag
+        from projectionist.taste.clusters import (
+            clamp_cluster_weight,
+            is_valid_cluster_tag,
+            normalize_cluster_tag,
+        )
 
         tag = normalize_cluster_tag(cluster_tag)
         if not tag or not is_valid_cluster_tag(tag):
             raise ValueError("cluster_tag is required")
         if not self.get_lens(lens_id):
             raise ValueError(f"Unknown lens_id: {lens_id}")
+        clamped = round(clamp_cluster_weight(weight), 4)
         with self.connect() as conn:
             existing = conn.execute(
                 "SELECT * FROM lens_taste_profile WHERE lens_id = ? AND cluster_tag = ?",
@@ -476,7 +481,7 @@ class PersonaLensesMixin:
                     explicit_lock=excluded.explicit_lock,
                     last_updated=CURRENT_TIMESTAMP
                 """,
-                (lens_id, tag, weight, lock_value),
+                (lens_id, tag, clamped, lock_value),
             )
 
     # --- Chat (lens-scoped) ---

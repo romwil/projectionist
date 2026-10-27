@@ -3,11 +3,13 @@ import {
   downloadLibraryItemSubtitles,
   getLibraryItemSubtitles,
 } from "../api/client";
+import { useConfirmModal } from "../hooks/useConfirmModal.js";
 
 /**
  * Dig-in / dual-watch subtitle surface — prefer Plex-attached tracks; soft-fail download.
  */
 export default function TitleSubtitlesPanel({ ratingKey, canDownload = true }) {
+  const { confirm, modal } = useConfirmModal();
   const key = String(ratingKey || "").trim();
   const [state, setState] = useState({ status: "idle", payload: null, note: "" });
 
@@ -44,7 +46,13 @@ export default function TitleSubtitlesPanel({ ratingKey, canDownload = true }) {
     canDownload && state.status === "ready" && state.payload?.ok !== false && !hasPreferred;
 
   async function onAskPlex() {
-    if (!window.confirm("Ask Plex to search and download subtitles for this title?")) {
+    if (
+      !(await confirm({
+        title: "Download subtitles",
+        body: "Ask Plex to search and download subtitles for this title?",
+        confirmLabel: "Ask Plex",
+      }))
+    ) {
       return;
     }
     setState((prev) => ({ ...prev, status: "downloading", note: "" }));
@@ -100,6 +108,7 @@ export default function TitleSubtitlesPanel({ ratingKey, canDownload = true }) {
           {state.note}
         </p>
       ) : null}
+      {modal}
     </section>
   );
 }

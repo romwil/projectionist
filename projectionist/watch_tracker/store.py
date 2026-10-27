@@ -18,7 +18,7 @@ from projectionist.watch_tracker.identity import (
 from projectionist.watch_tracker.models import IngestResult, SOURCE_EVENT_KINDS, WatchEventInput
 
 logger = logging.getLogger(__name__)
-_RECONNECT_KINDS = {"history_played", "plex_scrobble"}
+_RECONNECT_KINDS = {"history_played", "plex_scrobble", "tautulli_history"}
 _RECONNECT_WINDOW_MS = 120_000
 _CROSS_SOURCE_WINDOW_MS = 5 * 60 * 1000
 
@@ -243,7 +243,7 @@ def _find_duplicate_event_id(
               AND server_machine_id = ?
               AND source_user_key = ?
               AND rating_key = ?
-              AND source_event_kind IN ('history_played', 'plex_scrobble')
+              AND source_event_kind IN ('history_played', 'plex_scrobble', 'tautulli_history')
               AND occurred_at_ms BETWEEN ? AND ?
               AND COALESCE(client_key, '') = COALESCE(?, '')
             ORDER BY occurred_at_ms ASC, id ASC

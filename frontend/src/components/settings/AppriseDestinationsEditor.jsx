@@ -1,5 +1,6 @@
 import { useId, useState } from "react";
 import { testMyAppriseSend } from "../../api/client";
+import { useConfirmModal } from "../../hooks/useConfirmModal.js";
 import {
   APPRISE_SCHEME_OPTIONS,
   appriseTypeLabel,
@@ -20,6 +21,7 @@ export default function AppriseDestinationsEditor({
   disabled = false,
   ownerConfigured = false,
 }) {
+  const { confirm, modal } = useConfirmModal();
   const baseId = useId();
   const [mode, setMode] = useState(null); // null | 'pick' | 'form'
   const [editingId, setEditingId] = useState(null);
@@ -100,9 +102,18 @@ export default function AppriseDestinationsEditor({
     resetBuilder();
   }
 
-  function handleDelete(row) {
+  async function handleDelete(row) {
     const label = appriseTypeLabel(row.url);
-    if (!window.confirm(`Remove this ${label} destination?`)) return;
+    if (
+      !(await confirm({
+        title: "Remove destination",
+        body: `Remove this ${label} destination?`,
+        confirmLabel: "Remove",
+        danger: true,
+      }))
+    ) {
+      return;
+    }
     onChange(rows.filter((entry) => entry.id !== row.id));
     setRowStatus((prev) => {
       const next = { ...prev };
@@ -403,6 +414,7 @@ export default function AppriseDestinationsEditor({
           for every supported scheme.
         </p>
       ) : null}
+      {modal}
     </div>
   );
 }

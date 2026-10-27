@@ -115,3 +115,42 @@ export function yirPathFromGenerateResult(result) {
   if (!status && !(Number(result.delivered) > 0)) return null;
   return yirPath(year);
 }
+
+/** Member Settings → Generate Year in Review confirm copy (replaces window.confirm). */
+export const YIR_SELF_GENERATE_CONFIRM = {
+  title: "Generate Year in Review",
+  body: "Generate your Year in Review reel now and send it to your inbox (and email if enabled)?",
+  confirmLabel: "Generate & send",
+};
+
+/** Same payload NotificationsSettingsPage passed after the native confirm. */
+export const YIR_SELF_GENERATE_PAYLOAD = { scope: "self", notify: true };
+
+/**
+ * Admin Newsletters generate confirm — notify toggle changes the body, not the API shape.
+ * @param {boolean} notify
+ */
+export function yirAdminGenerateConfirmOptions(notify = true) {
+  return {
+    title: "Generate Year in Review",
+    body: notify
+      ? "Generate your Year in Review reel now and notify your inbox (and email if enabled)?"
+      : "Generate your Year in Review reel now without sending a notification?",
+    confirmLabel: "Generate",
+  };
+}
+
+/**
+ * Fire generateYearInReview only after the in-app modal confirms.
+ * Cancel returns null and never calls `generate`.
+ *
+ * @param {{ confirmed: boolean, generate: Function, payload?: { scope?: string, notify?: boolean } }} args
+ */
+export async function runConfirmedYirGenerate({
+  confirmed,
+  generate,
+  payload = YIR_SELF_GENERATE_PAYLOAD,
+}) {
+  if (!confirmed) return null;
+  return generate(payload);
+}
