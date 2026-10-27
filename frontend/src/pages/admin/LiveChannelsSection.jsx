@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useConfirmModal } from "../../hooks/useConfirmModal.js";
+import { useConfirmModal } from "../../hooks/useConfirmModal.jsx";
 import { getLiveChannelsStatus, refillLiveChannelsChannel } from "../../api/client";
 import { buildCraftFiltersPayload, craftDraftFromStation } from "../../lib/liveChannelsCraft.js";
 import { ownerLiveText } from "../../lib/liveChannelsOwnerCopy.js";

@@ -10,7 +10,7 @@ import {
   listWatchlist,
   updateCuratedList,
 } from "../../api/client";
-import { useConfirmModal } from "../../hooks/useConfirmModal.js";
+import { useConfirmModal } from "../../hooks/useConfirmModal.jsx";
 
 export default function ListsSettingsPage() {
   const { confirm, modal } = useConfirmModal();

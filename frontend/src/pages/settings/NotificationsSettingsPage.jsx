@@ -15,7 +15,7 @@ import AppriseDestinationsEditor from "../../components/settings/AppriseDestinat
 import SettingsPageHeader from "../../components/settings/SettingsPageHeader";
 import SettingsPanel from "../../components/settings/SettingsPanel";
 import SettingsToggle from "../../components/settings/SettingsToggle";
-import { useConfirmModal } from "../../hooks/useConfirmModal.js";
+import { useConfirmModal } from "../../hooks/useConfirmModal.jsx";
 import {
   parseAppriseDestinationRows,
   serializeAppriseDestinationRows,

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-27T21:59:50Z",
+  "generated_at": "2026-10-27T22:01:39Z",
   "releases": [
     {
       "version": "1.37.64",
@@ -26,7 +26,8 @@
         {
           "title": "Fixed",
           "bullets": [
-            "**A warming Continue Watching rail stays pending.** Merging in-app progress notes no longer clears `pending` on an empty first hub paint, so Explore does not flash “Nothing in progress” while Plex on-deck is still loading."
+            "**A warming Continue Watching rail stays pending.** Merging in-app progress notes no longer clears `pending` on an empty first hub paint, so Explore does not flash “Nothing in progress” while Plex on-deck is still loading.",
+            "**ConfirmModal hook is JSX.** `useConfirmModal` lives in a `.jsx` file so the production Vite build can compile the overlay."
           ]
         },
         {
