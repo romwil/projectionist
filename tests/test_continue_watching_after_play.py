@@ -252,6 +252,23 @@ class ContinueWatchingAfterPlayTests(unittest.TestCase):
             self.assertEqual(len(rail["items"]), 1)
             self.assertEqual(rail["items"][0]["play_rating_key"], "am-s1e2")
 
+    def test_warming_rail_stays_pending_without_notes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            rail = apply_known_continue_watching(
+                db,
+                {
+                    "feed": "continue-watching",
+                    "items": [],
+                    "total": 0,
+                    "note": None,
+                    "pending": True,
+                },
+            )
+            self.assertTrue(rail.get("pending"))
+            self.assertEqual(rail["items"], [])
+            self.assertFalse(rail.get("note"))
+
     def test_duplicate_show_cards_collapse_without_notes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")

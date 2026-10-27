@@ -222,6 +222,7 @@ def apply_known_continue_watching(db: Any, rail: Dict[str, Any]) -> Dict[str, An
     if not isinstance(rail, dict):
         return rail
     notes = sorted(notes_for_db(db), key=lambda note: float(note.get("noted_at") or 0))
+    had_notes = bool(notes)
     items = [dict(item) for item in (rail.get("items") or []) if isinstance(item, dict)]
     for note in notes:
         rating_key = str(note.get("rating_key") or "")
@@ -252,10 +253,11 @@ def apply_known_continue_watching(db: Any, rail: Dict[str, Any]) -> Dict[str, An
     updated = dict(rail)
     updated["items"] = items
     updated["total"] = len(items)
-    updated.pop("pending", None)
+    if had_notes or items:
+        updated.pop("pending", None)
     if items:
         updated["note"] = None
-    elif not updated.get("note"):
+    elif not updated.get("pending") and not updated.get("note"):
         updated["note"] = (
             "Nothing in progress — start something in Plex, or wait for watch "
             "progress to sync."
