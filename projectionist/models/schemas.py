@@ -448,7 +448,7 @@ class EngagementStreakResponse(BaseModel):
 class TasteClusterUpdate(BaseModel):
     cluster_tag: str = Field(min_length=1, max_length=80)
     weight: float = Field(ge=0.0, le=1.0)
-    explicit_lock: Optional[bool] = True
+    explicit_lock: Optional[bool] = False
 
 
 class TasteClusterPatch(BaseModel):
