@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Security
+- Frontend lockfile picks up patched `postcss`, `nanoid`, `js-yaml`, `brace-expansion`, `browserslist`, `source-map-js`, `zod`, and `baseline-browser-mapping` from `npm audit fix`. Vite stays on 5.x and React Router on 6.x (7/8 are major jumps).
+- Python floors: `python-multipart>=0.0.32`, `mcp>=1.30.0,<2`, `anyio>=4.14.2`, `urllib3>=2.8.0`.
+
 ## [1.37.64] — 2026-10-27
 
 One patch on 1.37.63: For you names a plot subject you can say, Taste lock stays off until you choose it, confirms stay in the app, Year in Review is this account’s Plex year, and Continue Watching is one live card per show.
