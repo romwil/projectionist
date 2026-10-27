@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useConfirmModal } from "../../hooks/useConfirmModal.js";
 import InlineAlert from "../../components/InlineAlert";
 import SettingsToggle from "../../components/settings/SettingsToggle";
 import AdminExecutionCard from "../../components/AdminExecutionCard";
@@ -102,6 +103,7 @@ export default function LibrariesSection({
   const [repairSkippingId, setRepairSkippingId] = useState("");
   const [hiddenRepairs, setHiddenRepairs] = useState(() => new Set());
   const [sonarrPicked, setSonarrPicked] = useState(() => new Set());
+  const { confirm, modal } = useConfirmModal();
 
   function formatLastSync(lastSync) {
     return formatLastSyncRelative(lastSync);
@@ -193,13 +195,16 @@ export default function LibrariesSection({
     handleSonarrMissingSearch?.(payload);
   }
 
-  function handleSonarrSearchAll() {
+  async function handleSonarrSearchAll() {
     const total = Number(sonarrMissing?.result?.scan_count) || sonarrGroups.reduce((n, g) => n + g.count, 0);
     if (
-      !window.confirm(
-        `Queue EpisodeSearch for all ${total} missing episodes across ${sonarrGroups.length} shows? ` +
+      !(await confirm({
+        title: "Search all missing episodes",
+        body:
+          `Queue EpisodeSearch for all ${total} missing episodes across ${sonarrGroups.length} shows? ` +
           "Sonarr will work through them for a long time. To search only some shows, cancel and check them instead.",
-      )
+        confirmLabel: "Search all",
+      }))
     ) {
       return;
     }
@@ -683,6 +688,7 @@ export default function LibrariesSection({
             message={actionAlert?.area === "plex-sections" ? actionAlert.message : null}
           />
         </section>
+        {modal}
         </>
   );
 }

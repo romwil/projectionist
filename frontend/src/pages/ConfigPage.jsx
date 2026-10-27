@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useConfirmModal } from "../hooks/useConfirmModal.js";
 import { Link, Navigate, useNavigate, useOutletContext, useParams } from "react-router-dom";
 import {
   AUTO_CERTIFY_SERVICES,
@@ -545,6 +546,7 @@ export default function ConfigPage() {
   const enginePollRef = useRef(null);
   const continuityPollRef = useRef(null);
   const publishPollRef = useRef(null);
+  const { confirm, modal } = useConfirmModal();
 
   useEffect(() => {
     if (typeof setWizardMode === "function") {
@@ -1028,7 +1030,12 @@ export default function ConfigPage() {
     const label = entry.display_name || entry.email || entry.id;
     if (
       nextDisabled &&
-      !window.confirm(`Disable ${label}? They will not be able to sign in until re-enabled.`)
+      !(await confirm({
+        title: "Disable member",
+        body: `Disable ${label}? They will not be able to sign in until re-enabled.`,
+        confirmLabel: "Disable",
+        danger: true,
+      }))
     ) {
       return;
     }
@@ -1057,7 +1064,14 @@ export default function ConfigPage() {
 
   async function handleUserRemove(entry) {
     const label = entry.display_name || entry.email || entry.id;
-    if (!window.confirm(`Remove ${label} from this household? This cannot be undone.`)) {
+    if (
+      !(await confirm({
+        title: "Remove from household",
+        body: `Remove ${label} from this household? This cannot be undone.`,
+        confirmLabel: "Remove",
+        danger: true,
+      }))
+    ) {
       return;
     }
     try {
@@ -1459,9 +1473,12 @@ export default function ConfigPage() {
   async function handleLiveChannelsEnabled(enabled) {
     if (
       !enabled &&
-      !window.confirm(
-        "Turn off Live Channels? On now hides for the household. Saved channels stay on disk.",
-      )
+      !(await confirm({
+        title: "Turn off Live Channels",
+        body: "Turn off Live Channels? On now hides for the household. Saved channels stay on disk.",
+        confirmLabel: "Turn off",
+        danger: true,
+      }))
     ) {
       return;
     }
@@ -2244,9 +2261,12 @@ export default function ConfigPage() {
   async function handleRotateMcpKey(which) {
     const label = which === "privacy" ? "privacy" : "full";
     if (
-      !window.confirm(
-        `Regenerate the ${label} MCP API key? Clients using the old key will stop working until you update them.`,
-      )
+      !(await confirm({
+        title: "Regenerate MCP key",
+        body: `Regenerate the ${label} MCP API key? Clients using the old key will stop working until you update them.`,
+        confirmLabel: "Regenerate",
+        danger: true,
+      }))
     ) {
       return;
     }
@@ -2272,7 +2292,14 @@ export default function ConfigPage() {
 
   async function handleClearMcpKey(which) {
     const label = which === "privacy" ? "privacy" : "full";
-    if (!window.confirm(`Clear the ${label} MCP API key from settings?`)) {
+    if (
+      !(await confirm({
+        title: "Clear MCP key",
+        body: `Clear the ${label} MCP API key from settings?`,
+        confirmLabel: "Clear key",
+        danger: true,
+      }))
+    ) {
       return;
     }
     clearActionFeedback("mcp");
@@ -3081,6 +3108,7 @@ export default function ConfigPage() {
       ) : null}
 
       {status ? <p className="status status-secondary">{status}</p> : null}
+      {modal}
     </div>
   );
 }
