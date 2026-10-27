@@ -1,6 +1,45 @@
 {
-  "generated_at": "2026-10-25T15:47:55Z",
+  "generated_at": "2026-10-27T21:59:50Z",
   "releases": [
+    {
+      "version": "1.37.64",
+      "date": "2026-10-27",
+      "summary": "One patch on 1.37.63: For you names a plot subject you can say, Taste lock stays off until you choose it, confirms stay in the app, Year in Review is this account’s Plex year, and Continue Watching is one live card per show.",
+      "highlights": [
+        "**For you names a plot you can say.** A For you card no longer leads with crew, studio, or a noun-phrase leftover. When the plot link is junk, you get a crew or collection sentence instead.",
+        "**Taste lock is something you turn on.** Checkboxes stay off until you save a lock. Locked junk one-word clusters are gone; weights stay in a 0–1 range.",
+        "**Confirms stay in the app.** Delete, send, and generate dialogs use the house overlay instead of the browser’s system box — including on iPad.",
+        "**Year in Review is your Plex year.** The reel is this account’s plays for that calendar year, not the household and not only titles played inside Projectionist. Tautulli is optional extra history.",
+        "**Continue Watching is one live card per show.** Explore refreshes On Deck when you land and when you come back. A new episode replaces the previous row instead of stacking a second card."
+      ],
+      "sections": [
+        {
+          "title": "Changed",
+          "bullets": [
+            "**For you plot subjects are adj+noun or noun+noun only.** Crew/studio leftovers are refused. When the plot link is junk, recommendation copy prefers a crew or collection sentence.",
+            "**Taste lock is opt-in.** Library/lens ingest and quiz defaults no longer auto-lock. Profile weights cap at 0–1. Clusters stay TMDB genres and quiz moods; locked junk unigrams are purged.",
+            "**Native `window.confirm` is replaced with ConfirmModal.** Settings Year in Review / newsletter and the other confirm sites use RecommendModal chrome with a danger variant, focus trap, and Esc/overlay cancel.",
+            "**Year in Review generate and scheduled tease/drop backfill year-scoped Plex history** for the mapped account (including `plex_event_only` plays) instead of the 90-day ingest window. Tautulli is an optional merge only. Copy says the reel is this account’s Plex plays.",
+            "**Continue Watching matches progress by show.** Hub cache plus episode-keyed overlay no longer paints the same show twice after Play. Explore fetches Plex on-deck in place on load and visibility so a new episode replaces the previous row."
+          ]
+        },
+        {
+          "title": "Fixed",
+          "bullets": [
+            "**A warming Continue Watching rail stays pending.** Merging in-app progress notes no longer clears `pending` on an empty first hub paint, so Explore does not flash “Nothing in progress” while Plex on-deck is still loading."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend focused pytest — 162 passed (`tests/test_household_bridges.py`, `tests/test_surprising_plot_kinship.py`, `tests/test_taste_clusters.py`, `tests/test_taste_engagement.py`, `tests/test_library_db.py`, `tests/test_year_in_review_history.py`, `tests/test_tautulli_watch_history.py`, `tests/test_watch_history.py`, `tests/test_year_in_review.py`, `tests/test_continue_watching_after_play.py`, `tests/test_library_playback.py`, `tests/test_version.py`) with `--no-cov`.",
+            "Broader `pytest tests/` — 2671 passed, 43 skipped, coverage 76.52% (floor 74%) on `feat/honesty-chrome-1.37.64` before the pending-preservation fix; the one failure (`test_first_hub_response_paints_local_rails_while_slow_rails_hang`) plus Continue Watching cases re-ran green after that fix (7 passed).",
+            "Frontend unit 42/42 on ConfirmModal, taste weights, explore hub cache, Year in Review, weekly newsletter, and sonarr missing. Full `src/lib/*.test.mjs` 1089 passed; 2 failures are pre-existing esbuild imports in a sparse worktree (`browseGridPending`, `removalProgress`) and exist on origin/main without `node_modules`.",
+            "`tests/test_version.py` after `./scripts/patch-release.sh 1.37.64`. Lockstep + Hub + Automat in this ship."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.63",
       "date": "2026-10-25",
