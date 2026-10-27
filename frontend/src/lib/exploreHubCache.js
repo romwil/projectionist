@@ -98,13 +98,101 @@ export function continueWatchingResumeLabel({
   return parts.join(" · ");
 }
 
-function progressMatchesItem(item, ratingKey) {
-  return item?.play_rating_key === ratingKey || item?.rating_key === ratingKey;
+function continueWatchingIdentity(item) {
+  const ratingKey = String(item?.rating_key || "");
+  const playKey = String(item?.play_rating_key || "");
+  const mediaType = String(item?.media_type || "");
+  const episodeLike = Boolean(
+    mediaType === "show" ||
+      mediaType === "episode" ||
+      item?.continue_season != null ||
+      item?.continue_episode != null ||
+      (playKey && ratingKey && playKey !== ratingKey),
+  );
+  if (episodeLike && ratingKey) return `show:${ratingKey}`;
+  return `play:${playKey || ratingKey}`;
+}
+
+export function dedupeContinueWatchingItems(items) {
+  const list = Array.isArray(items) ? items : [];
+  const seen = new Set();
+  const out = [];
+  for (const item of list) {
+    if (!item || typeof item !== "object") continue;
+    const ident = continueWatchingIdentity(item);
+    if (!ident || seen.has(ident)) continue;
+    seen.add(ident);
+    out.push(item);
+  }
+  return out;
+}
+
+function progressShowKey(progress) {
+  return String(progress?.showRatingKey || "").trim();
+}
+
+function titlesMatchShow(item, progress) {
+  const wanted = String(progress?.title || "").trim().toLowerCase();
+  const have = String(item?.title || "").trim().toLowerCase();
+  if (!wanted || wanted !== have) return false;
+  return (
+    item?.media_type === "show" ||
+    item?.media_type === "episode" ||
+    item?.continue_season != null ||
+    item?.continue_episode != null
+  );
+}
+
+function progressMatchesItem(item, progress) {
+  const ratingKey = typeof progress === "string" ? progress : String(progress?.ratingKey || "");
+  const showKey = typeof progress === "string" ? "" : progressShowKey(progress);
+  const play = String(item?.play_rating_key || "");
+  const key = String(item?.rating_key || "");
+  if (play === ratingKey || key === ratingKey) return true;
+  if (showKey && (key === showKey || play === showKey)) return true;
+  return false;
+}
+
+function sameShowRow(item, progress, cardRatingKey = "") {
+  if (progressMatchesItem(item, progress)) return true;
+  if (cardRatingKey && String(item?.rating_key || "") === cardRatingKey) return true;
+  if (cardRatingKey && continueWatchingIdentity(item) === `show:${cardRatingKey}`) return true;
+  return titlesMatchShow(item, progress);
+}
+
+function isEpisodeProgress(progress) {
+  return (
+    progress?.mediaType === "episode" ||
+    progress?.season != null ||
+    progress?.episode != null
+  );
+}
+
+function resolveShowRatingKey(items, progress) {
+  const fromNote = progressShowKey(progress);
+  if (fromNote) return fromNote;
+  if (!isEpisodeProgress(progress)) return "";
+  const ratingKey = String(progress.ratingKey || "");
+  const existing = items.find(
+    (item) =>
+      item?.play_rating_key === ratingKey ||
+      item?.rating_key === ratingKey ||
+      titlesMatchShow(item, progress),
+  );
+  return existing ? String(existing.rating_key || "") : "";
+}
+
+function sameProgressShow(row, note) {
+  if (row?.ratingKey === note.ratingKey) return true;
+  if (note.showRatingKey && row?.showRatingKey && row.showRatingKey === note.showRatingKey) return true;
+  if (note.showRatingKey && row?.ratingKey === note.showRatingKey) return true;
+  if (isEpisodeProgress(row) && isEpisodeProgress(note) && row?.title && row.title === note.title) return true;
+  return false;
 }
 
 /**
  * Splice one in-app play into a hub payload's Continue Watching rail.
- * A finished play drops the title. A new offset replaces the previous row.
+ * A finished play drops that episode. A new episode replaces the show's row.
  */
 export function applyContinueWatchingProgress(payload, progress) {
   if (!payload || typeof payload !== "object" || !progress?.ratingKey) return payload;
@@ -117,12 +205,16 @@ export function applyContinueWatchingProgress(payload, progress) {
     ? rails.continue_watching
     : { feed: "continue-watching", items: [], total: 0, note: null };
   let items = Array.isArray(rail.items) ? rail.items.filter((item) => item && typeof item === "object") : [];
-  items = items.filter((item) => !progressMatchesItem(item, ratingKey));
-  if (!finished) {
+  if (finished) {
+    items = items.filter((item) => !progressMatchesItem(item, ratingKey));
+  } else {
     const mediaType = progress.mediaType === "episode" ? "episode" : progress.mediaType || "movie";
+    const parentKey = mediaType === "episode" ? resolveShowRatingKey(items, progress) : "";
+    const cardRatingKey = parentKey || ratingKey;
+    items = items.filter((item) => !sameShowRow(item, progress, parentKey));
     items = [
       {
-        rating_key: ratingKey,
+        rating_key: cardRatingKey,
         play_rating_key: ratingKey,
         title: progress.title || "Untitled",
         year: progress.year || null,
@@ -152,6 +244,7 @@ export function applyContinueWatchingProgress(payload, progress) {
       ...items,
     ];
   }
+  items = dedupeContinueWatchingItems(items);
   const note = items.length
     ? null
     : typeof rail.note === "string" && rail.note.trim()
@@ -175,9 +268,59 @@ export function applyContinueWatchingProgress(payload, progress) {
 function railMatchesProgress(payload, progress) {
   const items = payload?.rails?.continue_watching?.items;
   const list = Array.isArray(items) ? items : [];
-  const found = list.find((item) => progressMatchesItem(item, String(progress.ratingKey)));
-  if (progress.finished || Number(progress.viewOffsetMs) <= 0) return !found;
+  const ratingKey = String(progress.ratingKey || "");
+  const foundEpisode = list.find(
+    (item) => String(item?.play_rating_key || "") === ratingKey || String(item?.rating_key || "") === ratingKey,
+  );
+  if (progress.finished || Number(progress.viewOffsetMs) <= 0) return !foundEpisode;
+  const found = list.find((item) => progressMatchesItem(item, progress));
+  if (!found) return false;
+  const sameEpisode = String(found.play_rating_key || found.rating_key || "") === ratingKey;
+  if (!sameEpisode) return false;
   return Number(found?.view_offset_ms) === Math.floor(Number(progress.viewOffsetMs) || 0);
+}
+
+/**
+ * Replace Continue Watching from a live on-deck feed without clearing other rails.
+ */
+export function spliceContinueWatchingRail(payload, liveFeed) {
+  if (!liveFeed || typeof liveFeed !== "object") return payload;
+  const base = payload && typeof payload === "object" ? payload : {};
+  const rails = base.rails && typeof base.rails === "object" ? base.rails : {};
+  const previous =
+    rails.continue_watching && typeof rails.continue_watching === "object" ? rails.continue_watching : {};
+  const items = dedupeContinueWatchingItems(
+    Array.isArray(liveFeed.items) ? liveFeed.items.filter((item) => item && typeof item === "object") : [],
+  );
+  const note = items.length
+    ? null
+    : typeof liveFeed.note === "string" && liveFeed.note.trim()
+      ? liveFeed.note.trim()
+      : typeof previous.note === "string" && previous.note.trim()
+        ? previous.note
+        : "Nothing in progress — start something in Plex, or wait for watch progress to sync.";
+  return {
+    ...base,
+    rails: {
+      ...rails,
+      continue_watching: {
+        ...previous,
+        ...liveFeed,
+        feed: liveFeed.feed || "continue-watching",
+        items,
+        total: items.length,
+        note,
+        pending: false,
+      },
+    },
+  };
+}
+
+export function dropReflectedContinueWatchingNotes(payload, storage = globalThis.sessionStorage) {
+  const notes = readProgressNotes(storage);
+  if (!notes.length) return;
+  const remaining = notes.filter((note) => !railMatchesProgress(payload, note));
+  writeProgressNotes(remaining, storage);
 }
 
 /**
@@ -198,8 +341,13 @@ export function mergeContinueWatchingNotes(payload, storage = globalThis.session
 
 export function rememberContinueWatchingProgress(progress, storage = globalThis.sessionStorage) {
   if (!progress?.ratingKey) return;
-  const note = { ...progress, ratingKey: String(progress.ratingKey), at: Date.now() };
-  const notes = readProgressNotes(storage).filter((row) => row.ratingKey !== note.ratingKey);
+  const note = {
+    ...progress,
+    ratingKey: String(progress.ratingKey),
+    showRatingKey: String(progress.showRatingKey || "").trim(),
+    at: Date.now(),
+  };
+  const notes = readProgressNotes(storage).filter((row) => !sameProgressShow(row, note));
   notes.push(note);
   writeProgressNotes(notes, storage);
   const cached = readExploreHubCache(storage);

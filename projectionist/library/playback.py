@@ -107,6 +107,7 @@ class PlaybackSession:
     media_type: str = ""
     poster_url: str = ""
     content_rating: str = ""
+    show_rating_key: str = ""
     next_episode: Optional[Dict[str, Any]] = None
     plex_watch_url: str = ""
     last_progress_at: float = 0.0
@@ -322,7 +323,14 @@ def _next_episode(db: Any, show_item_id: int, season: Optional[int], episode: Op
     }
 
 
-def _playable_from_episode(row: Any, *, show_title: str = "", show_rating: str = "", poster_url: str = "") -> Dict[str, Any]:
+def _playable_from_episode(
+    row: Any,
+    *,
+    show_title: str = "",
+    show_rating: str = "",
+    poster_url: str = "",
+    show_rating_key: str = "",
+) -> Dict[str, Any]:
     duration = _row_int(row, "duration_ms") or 0
     if duration <= 0:
         runtime = _row_int(row, "runtime_minutes") or 0
@@ -339,6 +347,7 @@ def _playable_from_episode(row: Any, *, show_title: str = "", show_rating: str =
         "content_rating": _row_str(row, "content_rating") or show_rating or _row_str(row, "show_content_rating"),
         "poster_url": poster_url or _row_str(row, "show_poster_url"),
         "show_item_id": _row_int(row, "show_item_id") or 0,
+        "show_rating_key": show_rating_key or _row_str(row, "show_rating_key"),
     }
 
 
@@ -377,6 +386,7 @@ def resolve_playable_item(db: Any, rating_key: str) -> Dict[str, Any]:
                 show_title=_row_str(item, "title"),
                 show_rating=_row_str(item, "content_rating"),
                 poster_url=_row_str(item, "poster_url"),
+                show_rating_key=key,
             )
             playable["show_item_id"] = int(item["id"])
             return playable
@@ -804,6 +814,7 @@ def session_public_payload(session: PlaybackSession, *, can_resume: Optional[boo
         "next_episode": session.next_episode,
         "poster_url": session.poster_url,
         "rating_key": session.rating_key,
+        "show_rating_key": session.show_rating_key,
         "plex_watch_url": session.plex_watch_url,
         "subtitle_stream_id": session.subtitle_stream_id or "",
     }
@@ -874,6 +885,7 @@ def start_playback(
         media_type=str(playable.get("media_type") or ""),
         poster_url=str(playable.get("poster_url") or ""),
         content_rating=str(playable.get("content_rating") or ""),
+        show_rating_key=str(playable.get("show_rating_key") or ""),
         next_episode=next_ep,
         plex_watch_url=plex_web_watch_url(machine_id, str(playable["rating_key"])),
         last_offset_s=offset_ms / 1000.0,
