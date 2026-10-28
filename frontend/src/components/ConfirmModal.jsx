@@ -40,11 +40,14 @@ export default function ConfirmModal({
   const promptId = useId();
   const dialogRef = useRef(null);
   const onCancelRef = useRef(onCancel);
-  onCancelRef.current = onCancel;
   const promptSpec = normalizePrompt(prompt);
   const hasPrompt = Boolean(promptSpec);
   const [promptValue, setPromptValue] = useState("");
   const promptReady = !hasPrompt || Boolean(promptValue.trim());
+
+  useEffect(() => {
+    onCancelRef.current = onCancel;
+  }, [onCancel]);
 
   useEffect(() => {
     if (!open) {
