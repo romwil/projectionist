@@ -396,6 +396,32 @@ test("library buffering chip waits for holdMs then hides when playing with a fra
   assert.equal(shown.displayed, "buffering");
 });
 
+test("Live and Weather mount TheaterPlayer; LibraryPlayer keeps session overlays", () => {
+  const root = dirname(fileURLToPath(import.meta.url));
+  const live = readFileSync(join(root, "../components/live/LivePlayer.jsx"), "utf8");
+  const weather = readFileSync(join(root, "../components/live/WeatherChannelPlayer.jsx"), "utf8");
+  const library = readFileSync(join(root, "../components/theater/LibraryPlayer.jsx"), "utf8");
+  const theater = readFileSync(join(root, "../components/theater/TheaterPlayer.jsx"), "utf8");
+  assert.match(live, /import TheaterPlayer from "\.\.\/theater\/TheaterPlayer\.jsx"/);
+  assert.match(live, /<TheaterPlayer/);
+  assert.match(live, /tuneLiveChannel/);
+  assert.match(live, /flexPlaybackPlan/);
+  assert.match(live, /tryPlayLiveVideo/);
+  assert.match(live, /liveHlsErrorPolicy/);
+  assert.doesNotMatch(live, /new Hls\(/);
+  assert.doesNotMatch(live, /holdToDoubleSpeed/);
+  assert.match(weather, /import TheaterPlayer from "\.\.\/theater\/TheaterPlayer\.jsx"/);
+  assert.match(weather, /<TheaterPlayer/);
+  assert.match(library, /<TheaterPlayer/);
+  assert.match(library, /library-resume-gate/);
+  assert.match(library, /rememberPlayedProgress/);
+  assert.match(library, /LibraryPlayerOsd/);
+  assert.match(theater, /onHlsError/);
+  assert.match(theater, /playMedia/);
+  assert.match(theater, /mediaMode = "hls"/);
+  assert.match(theater, /attachKey = 0/);
+});
+
 test("library Play wires hold-to-2x and buffering; Live TV does not", () => {
   const root = dirname(fileURLToPath(import.meta.url));
   const library = readFileSync(join(root, "../components/theater/LibraryPlayer.jsx"), "utf8");
@@ -624,7 +650,10 @@ test("More black-frame toggle switches stage chrome class and background", () =>
 
 test("Play wires iOS fullscreen, black frame, and title-clock captions", () => {
   const root = dirname(fileURLToPath(import.meta.url));
-  const player = readFileSync(join(root, "../components/theater/LibraryPlayer.jsx"), "utf8");
+  const player = [
+    readFileSync(join(root, "../components/theater/LibraryPlayer.jsx"), "utf8"),
+    readFileSync(join(root, "../components/theater/LibraryPlayerOsd.jsx"), "utf8"),
+  ].join("\n");
   const stage = readFileSync(join(root, "../components/theater/TheaterPlayer.jsx"), "utf8");
   const picker = readFileSync(join(root, "../components/theater/SubtitlePicker.jsx"), "utf8");
   const cues = readFileSync(join(root, "./subtitleCues.js"), "utf8");
