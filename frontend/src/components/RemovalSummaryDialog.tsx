@@ -5,6 +5,7 @@ import {
   hasRemovalSummary,
   normalizeRemovalSummary,
   removalPathsNote,
+  removalViaLabel,
 } from "../lib/bulkLibraryDelete.js";
 import {
   REMOVAL_STOP_REMAINING_NOTE,
@@ -39,10 +40,19 @@ function RemovalItem({ entry, showStatus }: RemovalItemProps) {
         <span className="removal-summary-item-bytes">
           {showStatus ? (
             <span className="removal-summary-status" data-testid="removal-item-status">
-              {removalStatusLabel(status)}
+              {removalStatusLabel(status, entry.removed_via)}
             </span>
           ) : (
-            formatRemovalFreedLabel(entry)
+            <>
+              {removalViaLabel(entry) ? (
+                <span className="removal-summary-status" data-testid="removal-item-via">
+                  {removalViaLabel(entry)}
+                </span>
+              ) : null}
+              <span className={removalViaLabel(entry) ? "removal-summary-item-freed" : undefined}>
+                {formatRemovalFreedLabel(entry)}
+              </span>
+            </>
           )}
           {showStatus && status === "removed" ? (
             <span className="removal-summary-item-freed">{formatRemovalFreedLabel(entry)}</span>
@@ -165,14 +175,14 @@ function RemovalSummaryPanel({
               <p>
                 Projectionist asked Radarr/Sonarr what files and folders belonged to
                 each title before deleting them, then reports those paths and the
-                storage freed. A title that is not in either app still deletes files
-                whose path is already on the library row or reported by Plex, and
-                those bytes stay in the totals. The “not in Sonarr” or “not in Radarr”
-                line is only a note on that title. When no file path can be found,
-                the note says so and the freed total stays 0 B. When *arr has a folder
-                but no episode file list, the summary says the size is unknown instead
-                of pretending 0 B was measured. Empty folders listed here are inferred
-                from known paths — not from a full disk scan.
+                storage freed. A title that is not in either app is deleted from disk
+                via Plex when Plex has it, or via a file path this app can already
+                see. “Removed via Plex” means Plex deleted the on-disk media. A title
+                that is not in *arr and could not be deleted via Plex is listed under
+                Could not fully remove — it is not marked Removed with 0 B. When *arr
+                has a folder but no episode file list, the summary says the size is
+                unknown instead of pretending 0 B was measured. Empty folders listed
+                here are inferred from known paths — not from a full disk scan.
               </p>
             </SectionHelp>
           </div>

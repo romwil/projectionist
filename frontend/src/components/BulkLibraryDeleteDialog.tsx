@@ -168,8 +168,8 @@ export default function BulkLibraryDeleteDialog({
               <strong>Full remove</strong>
               <span className="bulk-delete-modal-mode-hint">
                 Delete media files via Radarr/Sonarr, add an import exclusion so lists cannot
-                re-add the title, remove it from Plex when configured, then drop the Projectionist
-                index row.
+                re-add the title, or delete from disk via Plex when the title is not in *arr.
+                Then drop the Projectionist index row.
               </span>
             </span>
           </label>
@@ -183,17 +183,18 @@ export default function BulkLibraryDeleteDialog({
             isPurgeSurface ? (
               <>
                 This permanently deletes disk files for {preview.total} {countLabel} via
-                Radarr/Sonarr (<code>deleteFiles</code> + import exclusion), removes the Plex
-                library entry when configured, and drops the Projectionist index.{" "}
+                Radarr/Sonarr (<code>deleteFiles</code> + import exclusion), or via Plex when
+                the title is not in *arr, and drops the Projectionist index.{" "}
                 <strong>Full purge is not undoable</strong> — index undo cannot restore files
-                or index rows from a full remove. Titles not managed by *arr stay in the index with
-                a clear error.
+                or index rows from a full remove. Titles not in *arr and not deletable via Plex
+                stay in the index with a clear error.
               </>
             ) : (
               <>
                 This permanently removes {preview.total} {countLabel} from your stack: disk files
-                (through Radarr/Sonarr), Plex library entry, and the Projectionist index. Titles not
-                managed by *arr cannot be fully removed — those stay in the index with a clear error.
+                (through Radarr/Sonarr, or Plex when the title is not in *arr) and the Projectionist
+                index. Titles not in *arr and not deletable via Plex stay in the index with a
+                clear error.
               </>
             )
           ) : isPurgeSurface ? (

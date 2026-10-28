@@ -134,10 +134,18 @@ export function formatRemovalFreedLabel(entryOrTotals: JsParam) {
     return `~${formatRemovalBytes(bytes)} (est.)`;
   }
   if (bytes > 0) return formatRemovalBytes(bytes);
-  // A folder with no file list is an unmeasured *arr delete. Zero files and
-  // zero folders is an honest 0 B — including when the title was not in *arr.
-  if (files === 0 && folders > 0) return "Size unknown";
+  // A folder with no file list is an unmeasured *arr/Plex delete. Zero files
+  // and zero folders with a Plex path still means size was not reported.
+  if ((files === 0 && folders > 0) || source === "plex") return "Size unknown";
   return "0 B";
+}
+
+export function removalViaLabel(entry: JsParam) {
+  const via = String(entry?.removed_via || "").trim().toLowerCase();
+  if (via === "plex") return "Removed via Plex";
+  if (via === "disk") return "Removed from disk";
+  if (via === "radarr" || via === "sonarr" || via === "arr") return "Removed";
+  return "";
 }
 
 export function removalPathsNote(entry: JsParam) {
@@ -145,6 +153,9 @@ export function removalPathsNote(entry: JsParam) {
   if (note) return note;
   const files = Array.isArray(entry?.files) ? entry.files : [];
   const folders = Array.isArray(entry?.folders) ? entry.folders : [];
+  if (String(entry?.removed_via || "").trim().toLowerCase() === "plex") {
+    return "Removed from disk via Plex.";
+  }
   if (!files.length && folders.length) {
     return (
       "*arr reported the title folder but no episode file list. " +
@@ -174,6 +185,7 @@ export function normalizeRemovalSummary(result: JsParam) {
         bytes_freed: Number(entry?.bytes_freed) || 0,
         bytes_source: String(entry?.bytes_source || "").trim() || "unknown",
         note: String(entry?.note || "").trim(),
+        removed_via: String(entry?.removed_via || "").trim().toLowerCase(),
         ok: Boolean(entry?.ok),
       }))
     : [];
@@ -196,6 +208,7 @@ export function normalizeRemovalSummary(result: JsParam) {
   let bytes_source = "unknown";
   if (sources.size === 1) bytes_source = String([...sources][0]);
   else if (sources.has("arr") && totals.bytes_freed > 0) bytes_source = "arr";
+  else if (sources.has("plex") && totals.bytes_freed > 0) bytes_source = "plex";
   else if (sources.has("library_estimate")) bytes_source = "library_estimate";
   return {
     deleted: Number(result?.deleted) || 0,

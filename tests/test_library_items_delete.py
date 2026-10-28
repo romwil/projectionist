@@ -261,7 +261,7 @@ class LibraryItemsDeleteApiTests(unittest.TestCase):
         remaining = jobs.get_job_manager().db.search_keyword("Full Remove Me")
         self.assertEqual(len(remaining), 0)
 
-    def test_full_remove_drops_index_when_arr_missing(self) -> None:
+    def test_full_remove_fails_when_arr_and_plex_missing(self) -> None:
         self._seed_item("rk-full-miss", title="Not In Arr", tmdb_id=202)
         path = Path(self._tmpdir.name) / "settings.json"
         path.write_text(
@@ -286,15 +286,66 @@ class LibraryItemsDeleteApiTests(unittest.TestCase):
             )
         self.assertEqual(resp.status_code, 200)
         body = resp.json()
-        self.assertEqual(body["deleted"], 1)
-        self.assertEqual(body["errors"], [])
-        self.assertIn("not in Radarr", body["results"][0]["note"])
-        self.assertTrue(body["results"][0]["index_deleted"])
-        self.assertFalse(body["results"][0]["arr"]["add_exclusion"])
+        self.assertEqual(body["deleted"], 0)
+        self.assertEqual(len(body["errors"]), 1)
+        self.assertIn("not in Radarr", body["errors"][0]["error"])
+        self.assertIn("Plex is not configured", body["errors"][0]["error"])
+        self.assertFalse(body["errors"][0]["index_deleted"])
 
         import projectionist.web.jobs as jobs
 
         remaining = jobs.get_job_manager().db.search_keyword("Not In Arr")
+        self.assertEqual(len(remaining), 1)
+
+    def test_full_remove_uses_plex_when_arr_missing(self) -> None:
+        self._seed_item("rk-full-plex", title="The Furious", tmdb_id=303)
+        path = Path(self._tmpdir.name) / "settings.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "llm_provider": "ollama",
+                    "radarr_url": "http://radarr.test",
+                    "radarr_api_key": "radarr-key",
+                    "plex_url": "http://plex.test",
+                    "plex_token": "plex-token",
+                }
+            ),
+            encoding="utf-8",
+        )
+        from projectionist.connectors.arr_errors import ArrTitleNotFoundError
+
+        with (
+            patch(
+                "projectionist.library.full_remove.resolve_arr_removal_target",
+                side_effect=ArrTitleNotFoundError("Radarr", title="The Furious", external_id=303),
+            ),
+            patch("projectionist.library.full_remove.PlexClient") as plex_cls,
+        ):
+            plex = MagicMock()
+            plex.media_file_parts.return_value = [
+                {
+                    "file": "/movies/The Furious (2025)/The Furious.mkv",
+                    "size": 5000,
+                    "media_id": "12",
+                }
+            ]
+            plex_cls.return_value = plex
+            resp = self.client.post(
+                "/api/library/items/delete",
+                json={"rating_keys": ["rk-full-plex"], "mode": "full"},
+            )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(body["deleted"], 1)
+        self.assertEqual(body["errors"], [])
+        self.assertEqual(body["results"][0]["removed_via"], "plex")
+        self.assertIn("Removed from disk via Plex", body["results"][0]["note"])
+        self.assertEqual(body["totals"]["bytes_freed"], 5000)
+        plex.delete_media.assert_called_once_with("rk-full-plex", delete_files=True)
+
+        import projectionist.web.jobs as jobs
+
+        remaining = jobs.get_job_manager().db.search_keyword("The Furious")
         self.assertEqual(len(remaining), 0)
 
     def test_full_remove_errors_when_radarr_not_configured(self) -> None:

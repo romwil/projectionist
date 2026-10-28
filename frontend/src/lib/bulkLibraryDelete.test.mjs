@@ -18,6 +18,7 @@ import {
   hasRemovalSummary,
   normalizeRemovalSummary,
   removalPathsNote,
+  removalViaLabel,
   formatLibraryDeleteSuccessMessage,
   canConfirmLibraryRemoval,
   isBulkDeleteConfirmPhrase,
@@ -320,6 +321,56 @@ describe("owner title-detail delete gating", () => {
       }),
       "0 B",
     );
+    assert.equal(removalViaLabel({ removed_via: "plex" }), "Removed via Plex");
+    assert.equal(removalViaLabel({ removed_via: "disk" }), "Removed from disk");
+    assert.equal(removalViaLabel({ removed_via: "radarr" }), "Removed");
+    assert.equal(
+      formatRemovalFreedLabel({
+        bytes_freed: 6400000000,
+        bytes_source: "plex",
+        files: ["/movies/The Furious.mkv"],
+        folders: ["/movies/The Furious (2025)"],
+      }),
+      "5.96 GB",
+    );
+    assert.equal(
+      formatRemovalFreedLabel({
+        bytes_freed: 0,
+        bytes_source: "plex",
+        files: ["/movies/The Furious.mkv"],
+        folders: [],
+      }),
+      "Size unknown",
+    );
+    const plexFallback = normalizeRemovalSummary({
+      mode: LIBRARY_DELETE_MODE_FULL,
+      deleted: 1,
+      results: [
+        {
+          title: "The Furious",
+          ok: true,
+          files: ["/movies/The Furious.mkv"],
+          folders: ["/movies/The Furious (2025)"],
+          bytes_freed: 6400000000,
+          bytes_source: "plex",
+          removed_via: "plex",
+          note: '"The Furious" is not in Radarr. Removed from disk via Plex.',
+        },
+      ],
+      totals: { files: 1, folders: 1, bytes_freed: 6400000000 },
+      errors: [],
+    });
+    assert.equal(plexFallback.results[0].removed_via, "plex");
+    assert.match(plexFallback.results[0].note, /Removed from disk via Plex/);
+    assert.equal(
+      removalPathsNote({
+        removed_via: "plex",
+        files: [],
+        folders: [],
+        note: "",
+      }),
+      "Removed from disk via Plex.",
+    );
     const absent = normalizeRemovalSummary({
       mode: LIBRARY_DELETE_MODE_FULL,
       deleted: 1,
@@ -450,6 +501,9 @@ describe("owner title-detail delete gating", () => {
       removalSummary,
       /titleCount = Number\.isFinite\(deleted\) \? deleted : results\.length/,
     );
+    assert.match(removalSummary, /removalViaLabel/);
+    assert.match(removalSummary, /Could not fully remove/);
+    assert.match(dialog, /delete from disk via Plex/);
     assert.doesNotMatch(removalSummary, /titleCount = deleted \|\| results\.length/);
   });
 

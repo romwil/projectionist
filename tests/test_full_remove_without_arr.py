@@ -70,6 +70,7 @@ class FullRemoveWithoutArrTests(unittest.TestCase):
         removed = next(event for event in events if event.get("status") == "removed")
         entry = removed["entry"]
         self.assertIn("not in Radarr", entry["note"])
+        self.assertEqual(entry["removed_via"], "disk")
         self.assertEqual(entry["files"], [str(media)])
         self.assertEqual(entry["bytes_freed"], 120)
         self.assertTrue(entry["index_deleted"])
@@ -132,7 +133,8 @@ class FullRemoveWithoutArrTests(unittest.TestCase):
             lookup_cls.return_value = lookup
             plex = MagicMock()
             plex.media_file_paths.return_value = []
-            plex.delete_metadata.side_effect = RuntimeError("Plex rejected the delete")
+            plex.media_file_parts.return_value = []
+            plex.delete_media.side_effect = RuntimeError("Plex rejected the delete")
             plex_cls.return_value = plex
             run = RemovalProgress(
                 db,
@@ -148,7 +150,7 @@ class FullRemoveWithoutArrTests(unittest.TestCase):
         self.assertIn("Plex rejected", failed["error"])
         self.assertEqual(run.result["deleted"], 0)
 
-    def test_absent_sonarr_drops_index_without_exclusion(self) -> None:
+    def test_absent_sonarr_without_plex_or_files_fails(self) -> None:
         from projectionist.library.full_remove import full_remove_library_items
 
         db = MagicMock()
@@ -170,14 +172,13 @@ class FullRemoveWithoutArrTests(unittest.TestCase):
 
         delete_cls.return_value.delete_series.assert_not_called()
         db.record_acquisition_exclusion.assert_not_called()
-        self.assertEqual(result["deleted"], 1)
-        self.assertEqual(result["errors"], [])
-        self.assertIn("not in Sonarr", result["results"][0]["note"])
-        self.assertIn("File path was unknown", result["results"][0]["note"])
-        self.assertEqual(result["results"][0]["bytes_freed"], 0)
-        self.assertEqual(result["totals"]["bytes_freed"], 0)
-        self.assertTrue(result["results"][0]["ok"])
-        self.assertFalse(result["results"][0]["arr"]["add_exclusion"])
+        db.delete_library_items_by_rating_keys.assert_not_called()
+        self.assertEqual(result["deleted"], 0)
+        self.assertEqual(len(result["errors"]), 1)
+        self.assertIn("not in Sonarr", result["errors"][0]["error"])
+        self.assertIn("Plex is not configured", result["errors"][0]["error"])
+        self.assertIn("Files were not removed", result["errors"][0]["error"])
+        self.assertFalse(result["errors"][0]["index_deleted"])
 
     def test_absent_sonarr_deletes_library_row_file_and_counts_bytes(self) -> None:
         from projectionist.library.full_remove import full_remove_library_items
@@ -218,6 +219,7 @@ class FullRemoveWithoutArrTests(unittest.TestCase):
         self.assertTrue(entry["ok"])
         self.assertTrue(entry["index_deleted"])
         self.assertIn("not in Sonarr", entry["note"])
+        self.assertEqual(entry["removed_via"], "disk")
         self.assertNotIn("File path was unknown", entry["note"])
         self.assertEqual(entry["files"], [str(media)])
         self.assertEqual(entry["bytes_freed"], 4096)
@@ -258,23 +260,105 @@ class FullRemoveWithoutArrTests(unittest.TestCase):
                 lookup.series_by_tvdb_id.return_value = None
                 lookup_cls.return_value = lookup
                 plex = MagicMock()
+                plex.media_file_parts.return_value = [
+                    {"file": plex_path, "size": 2048, "media_id": "9"}
+                ]
                 plex.media_file_paths.return_value = [plex_path]
                 plex_cls.return_value = plex
                 result = full_remove_library_items(db, settings, ["rk-sacrifice"])
 
             self.assertFalse(media.exists())
-            plex.media_file_paths.assert_called_once()
-            self.assertTrue(plex.media_file_paths.call_args.kwargs.get("include_leaves"))
+            plex.media_file_parts.assert_called()
+            self.assertTrue(plex.media_file_parts.call_args.kwargs.get("include_leaves"))
+            plex.delete_metadata.assert_called_once_with("rk-sacrifice")
+            plex.delete_media.assert_not_called()
 
         self.assertEqual(result["errors"], [])
         entry = result["results"][0]
         self.assertTrue(entry["index_deleted"])
+        self.assertEqual(entry["removed_via"], "disk")
         self.assertIn("not in Sonarr", entry["note"])
         self.assertNotIn("Failed", entry["note"])
         self.assertEqual(entry["bytes_freed"], 2048)
         self.assertEqual(result["totals"]["bytes_freed"], 2048)
         self.assertEqual(result["totals"]["files"], 1)
         self.assertIn(str(media), entry["files"])
+
+    def test_absent_radarr_deletes_via_plex_when_no_local_file(self) -> None:
+        from projectionist.library.full_remove import full_remove_library_items
+
+        db = MagicMock()
+        db.library_item_by_rating_key.return_value = _row(title="The Furious")
+        db.delete_library_items_by_rating_keys.return_value = 1
+        with (
+            patch("projectionist.agent.tools.RadarrClient") as lookup_cls,
+            patch("projectionist.library.full_remove.RadarrClient"),
+            patch("projectionist.library.full_remove.PlexClient") as plex_cls,
+            patch("projectionist.library.full_remove.drop_cached_purge_keys"),
+        ):
+            lookup = MagicMock()
+            lookup.movie_by_tmdb_id.return_value = None
+            lookup_cls.return_value = lookup
+            plex = MagicMock()
+            plex.media_file_parts.return_value = [
+                {"file": "/movies/The Furious (2025)/The Furious.mkv", "size": 6400000000, "media_id": "77"}
+            ]
+            plex_cls.return_value = plex
+            result = full_remove_library_items(
+                db,
+                _settings(plex_url="http://plex.test", plex_token="token"),
+                ["rk-sacrifice"],
+            )
+
+        plex.delete_media.assert_called_once_with("rk-sacrifice", delete_files=True)
+        plex.delete_metadata.assert_not_called()
+        db.delete_library_items_by_rating_keys.assert_called_once_with(["rk-sacrifice"])
+        db.record_acquisition_exclusion.assert_not_called()
+        self.assertEqual(result["errors"], [])
+        self.assertEqual(result["deleted"], 1)
+        entry = result["results"][0]
+        self.assertEqual(entry["removed_via"], "plex")
+        self.assertIn("not in Radarr", entry["note"])
+        self.assertIn("Removed from disk via Plex", entry["note"])
+        self.assertEqual(entry["files"], ["/movies/The Furious (2025)/The Furious.mkv"])
+        self.assertEqual(entry["bytes_freed"], 6400000000)
+        self.assertEqual(entry["bytes_source"], "plex")
+        self.assertTrue(entry["ok"])
+
+    def test_absent_radarr_and_plex_not_found_fails(self) -> None:
+        from projectionist.library.full_remove import full_remove_library_items
+
+        db = MagicMock()
+        db.library_item_by_rating_key.return_value = _row(title="The Furious")
+        db.delete_library_items_by_rating_keys.return_value = 1
+        with (
+            patch("projectionist.agent.tools.RadarrClient") as lookup_cls,
+            patch("projectionist.library.full_remove.RadarrClient"),
+            patch("projectionist.library.full_remove.PlexClient") as plex_cls,
+            patch("projectionist.library.full_remove.drop_cached_purge_keys"),
+        ):
+            lookup = MagicMock()
+            lookup.movie_by_tmdb_id.return_value = None
+            lookup_cls.return_value = lookup
+            plex = MagicMock()
+            plex.media_file_parts.return_value = []
+            plex.delete_media.side_effect = RuntimeError(
+                "HTTP 404 from http://plex.test/library/metadata/rk-sacrifice: not found"
+            )
+            plex_cls.return_value = plex
+            result = full_remove_library_items(
+                db,
+                _settings(plex_url="http://plex.test", plex_token="token"),
+                ["rk-sacrifice"],
+            )
+
+        db.delete_library_items_by_rating_keys.assert_not_called()
+        self.assertEqual(result["deleted"], 0)
+        self.assertEqual(len(result["errors"]), 1)
+        self.assertIn("not in Radarr", result["errors"][0]["error"])
+        self.assertIn("not in Plex", result["errors"][0]["error"])
+        self.assertIn("Files were not removed", result["errors"][0]["error"])
+        self.assertFalse(result["errors"][0]["index_deleted"])
 
 
 if __name__ == "__main__":
