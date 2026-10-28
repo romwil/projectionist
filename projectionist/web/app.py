@@ -2947,7 +2947,7 @@ def library_quick_pick_endpoint(
 
     where_sql = " AND ".join(where_clauses)
     with db.connect() as conn:
-        row = conn.execute(
+        rows = conn.execute(
             f"""
             SELECT id, rating_key, media_type, title, year, genres, poster_url,
                    backdrop_url, view_count, last_viewed_at, tmdb_id, tvdb_id,
@@ -2955,39 +2955,31 @@ def library_quick_pick_endpoint(
             FROM library_items
             WHERE {where_sql}
             ORDER BY RANDOM()
-            LIMIT 1
+            LIMIT 25
             """,
             params,
-        ).fetchone()
+        ).fetchall()
 
-    from projectionist.notifications.recommendation_reasons import named_unwatched_pick
+    from projectionist.notifications.recommendation_reasons import (
+        named_bridge_for_item,
+        tracker_watched_item_ids,
+    )
     from projectionist.youth.apply import youth_max_for_user
 
-    genre_needles = (
-        [g.strip() for g in str(effective_genre or "").split(",") if g.strip()]
-        if effective_genre
-        else []
-    )
     multi_user = bool(settings.features.multi_user_enabled)
     user_id = str(user.id) if multi_user and getattr(user, "id", None) else (
         str(getattr(user, "id", None) or "bootstrap-owner")
     )
-    named = named_unwatched_pick(
-        db,
-        user_id=user_id,
-        multi_user_enabled=multi_user,
-        youth_max_rating=youth_max_for_user(user, settings),
-        genre_needles=genre_needles,
-        max_runtime=max_runtime,
-    )
-    if named:
-        item = dict(named)
-        item["overview"] = str(item.get("summary") or item.get("overview") or "")
-        item["in_library"] = True
-        item["view_count"] = int(item.get("view_count") or 0)
-        explanation = item.get("explanation") if isinstance(item.get("explanation"), dict) else None
-        why = str((explanation or {}).get("sentence") or item.get("why") or "").strip()
-        return {"item": item, "why": why, "mood": mood_label, "explanation": explanation}
+    watched_ids = tracker_watched_item_ids(db)
+    row = None
+    for candidate in rows:
+        try:
+            if int(candidate["id"]) in watched_ids:
+                continue
+        except (TypeError, ValueError, KeyError):
+            pass
+        row = candidate
+        break
 
     if not row:
         return {"item": None, "why": "No unwatched titles match the criteria.", "mood": mood_label}
@@ -3011,7 +3003,20 @@ def library_quick_pick_endpoint(
     item["in_library"] = True
     item["content_rating"] = str(item.get("content_rating") or "")
 
-    return {"item": item, "why": "", "mood": mood_label}
+    explanation = named_bridge_for_item(
+        db,
+        item,
+        user_id=user_id,
+        multi_user_enabled=multi_user,
+        youth_max_rating=youth_max_for_user(user, settings),
+    )
+    why = ""
+    if explanation:
+        item["explanation"] = explanation
+        why = str(explanation.get("sentence") or "").strip()
+        if why:
+            item["why"] = why
+    return {"item": item, "why": why, "mood": mood_label, "explanation": explanation}
 
 
 @app.get("/api/library/query")

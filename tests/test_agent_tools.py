@@ -605,6 +605,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             assert row is not None
             tool_item = _card_to_tool_item(row_to_title_card(row))
             self.assertEqual(tool_item["view_count"], 7)
+            self.assertEqual(tool_item["plex_played_event_count"], 7)
             self.assertEqual(tool_item["completed_watches"], 7)
             self.assertEqual(tool_item["rewatch_count"], 6)
             self.assertIsNone(tool_item["play_sessions"])
@@ -627,6 +628,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             }
         )
         self.assertEqual(tool_item["completed_watches"], 0)
+        self.assertEqual(tool_item["plex_played_event_count"], 0)
         self.assertEqual(tool_item["rewatch_count"], 0)
         self.assertIsNone(tool_item["play_sessions"])
         self.assertEqual(tool_item["watch_state"], "partial")
@@ -687,6 +689,11 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("tracked completion", prompt)
             self.assertIn("plex_event_only", prompt)
             self.assertIn("uninterrupted", prompt)
+            self.assertIn("sittings_observed", prompt)
+            self.assertIn("ingests Plex history", prompt)
+            self.assertIn("watched twice", prompt)
+            self.assertNotIn("play_sessions=null means Projectionist has no per-session history evidence", prompt)
+            self.assertNotIn("does not currently ingest", prompt)
 
     async def test_query_library_prefers_user_scoped_tracker_fields_without_relabeling_plex_count(
         self,
@@ -756,6 +763,8 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(item["tracked_completions"], 1)
             self.assertEqual(item["completion_confidence"]["certain"], 1)
             self.assertEqual(item["tracker_coverage"], "partial")
+            self.assertGreaterEqual(item["sittings_observed"], 1)
+            self.assertEqual(item["play_sessions"], item["sittings_observed"])
 
     @patch("projectionist.agent.tools.TMDBClient")
     async def test_find_collection_gaps_items_include_tmdb_id(self, mock_tmdb_cls) -> None:
