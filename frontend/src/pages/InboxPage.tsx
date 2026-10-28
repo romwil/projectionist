@@ -25,7 +25,9 @@ import {
   inboxListParams,
   inboxPageSelection,
   inboxReplyText,
+  inboxRowWhen,
   inboxScanPreview,
+  inboxShowsListFilters,
   isAgentInboxNote,
 } from "../lib/inboxMailbox.js";
 import { guestDeepLinkBlocked } from "../lib/memberShell.js";
@@ -233,6 +235,7 @@ export default function InboxPage() {
   const selection = inboxPageSelection(state.items, selected);
   const pageCount = Math.max(1, Math.ceil((state.total || 0) / inboxListParams().limit));
   const showKindFilter = state.kinds.length > 1;
+  const showListFilters = inboxShowsListFilters(openItem);
 
   return (
     <AppShell
@@ -243,51 +246,53 @@ export default function InboxPage() {
       blockUntilAuth={false}
     >
       <main className="explore-main inbox-main">
-        <header className="inbox-toolbar">
-          <h2>Inbox</h2>
-          <div className="inbox-toolbar-controls">
-            <label className="inbox-field">
-              <span>Show</span>
-              <select
-                data-testid="inbox-status"
-                value={query.status}
-                onChange={(event) => updateQuery({ status: event.target.value })}
-              >
-                <option value="all">All</option>
-                <option value="unread">Unread</option>
-                <option value="read">Read</option>
-              </select>
-            </label>
-            <label className="inbox-field">
-              <span>Sort</span>
-              <select
-                data-testid="inbox-sort"
-                value={query.sort}
-                onChange={(event) => updateQuery({ sort: event.target.value })}
-              >
-                <option value="newest">Newest</option>
-                <option value="oldest">Oldest</option>
-              </select>
-            </label>
-            {showKindFilter ? (
+        {showListFilters ? (
+          <header className="inbox-toolbar">
+            <h2>Inbox</h2>
+            <div className="inbox-toolbar-controls">
               <label className="inbox-field">
-                <span>Type</span>
+                <span>Show</span>
                 <select
-                  data-testid="inbox-kind"
-                  value={query.kind}
-                  onChange={(event) => updateQuery({ kind: event.target.value })}
+                  data-testid="inbox-status"
+                  value={query.status}
+                  onChange={(event) => updateQuery({ status: event.target.value })}
                 >
-                  <option value="">All types</option>
-                  {state.kinds.map((kind: any) => (
-                    <option key={kind} value={kind}>
-                      {inboxKindLabel(kind)}
-                    </option>
-                  ))}
+                  <option value="all">All</option>
+                  <option value="unread">Unread</option>
+                  <option value="read">Read</option>
                 </select>
               </label>
-            ) : null}
-          </div>
-        </header>
+              <label className="inbox-field">
+                <span>Sort</span>
+                <select
+                  data-testid="inbox-sort"
+                  value={query.sort}
+                  onChange={(event) => updateQuery({ sort: event.target.value })}
+                >
+                  <option value="newest">Newest</option>
+                  <option value="oldest">Oldest</option>
+                </select>
+              </label>
+              {showKindFilter ? (
+                <label className="inbox-field">
+                  <span>Type</span>
+                  <select
+                    data-testid="inbox-kind"
+                    value={query.kind}
+                    onChange={(event) => updateQuery({ kind: event.target.value })}
+                  >
+                    <option value="">All types</option>
+                    {state.kinds.map((kind: any) => (
+                      <option key={kind} value={kind}>
+                        {inboxKindLabel(kind)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+            </div>
+          </header>
+        ) : null}
 
         {state.loading && !state.items.length ? (
           <p className="status status-secondary">Loading inbox…</p>
@@ -352,6 +357,7 @@ export default function InboxPage() {
             <ul className="inbox-rows">
               {state.items.map((item: any) => {
                 const preview = inboxScanPreview(inboxFullMessage(item).body);
+                const when = inboxRowWhen(item);
                 return (
                   <li key={item.id} className={item.read_at ? "inbox-row is-read" : "inbox-row"} data-testid={`inbox-row-${item.id}`}>
                     <label className="inbox-hit inbox-row-check">
@@ -371,6 +377,7 @@ export default function InboxPage() {
                     </label>
                     <button type="button" className="inbox-row-open" onClick={() => openNote(item)}>
                       <span className="inbox-row-title">{item.title || "Note"}</span>
+                      {when ? <span className="inbox-row-when">{when}</span> : null}
                       {preview.text ? (
                         <span className="inbox-row-preview">
                           {preview.text}

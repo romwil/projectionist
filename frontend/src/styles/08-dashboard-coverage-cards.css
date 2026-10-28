@@ -1787,6 +1787,12 @@ a.on-this-day-item:focus-visible {
 .inbox-toolbar {
   justify-content: space-between;
   margin-bottom: var(--space-4);
+  position: static;
+}
+
+.inbox-toolbar-controls {
+  position: static;
+  flex: 0 1 auto;
 }
 
 .inbox-toolbar h2 {
@@ -1868,8 +1874,13 @@ a.on-this-day-item:focus-visible {
 }
 
 .inbox-note-when,
-.inbox-note-titles {
+.inbox-note-titles,
+.inbox-row-when {
   color: var(--muted);
+}
+
+.inbox-row-when {
+  font-size: var(--text-sm);
 }
 
 .inbox-note-thread {

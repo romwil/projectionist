@@ -95,6 +95,16 @@ export function formatInboxWhen(createdAt: JsParam) {
   return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
+/** Show/Sort/Type belong on the list, not the open letter. */
+export function inboxShowsListFilters(openItem: LibraryItem | null | undefined) {
+  return !openItem;
+}
+
+/** Same sent datetime as the open-letter header. Empty when missing. */
+export function inboxRowWhen(item: LibraryItem | null | undefined) {
+  return formatInboxWhen(inboxFullMessage(item).when);
+}
+
 export function applyInboxRead(items: LibraryItem[] | null | undefined, id: string, readAt: JsParam) {
   return (items || []).map((item) => (item.id === id ? { ...item, read_at: readAt } : item));
 }
