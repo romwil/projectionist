@@ -7,11 +7,13 @@ transport as the newsletters when the owner opts in.
 
 from __future__ import annotations
 
+import shutil
 import time
 import uuid
 import json
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from projectionist.config_store import Settings
@@ -54,10 +56,69 @@ def format_bytes(size: int) -> str:
     for label, step in units:
         if value >= step:
             amount = value / step
-            if amount >= 10:
-                return f"{int(round(amount))} {label}"
+            rounded = round(amount)
+            # Whole numbers stay "2 TB" / "38 TB". A tenth stays a tenth so
+            # 37.6 TB of movies cannot collapse into a 38 TB volume label.
+            if abs(amount - rounded) < 0.05:
+                return f"{int(rounded)} {label}"
             return f"{amount:.1f} {label}"
     return f"{value} bytes"
+
+
+def volume_capacity_bytes(settings: Optional[Settings] = None) -> int:
+    """Filesystem capacity of configured media roots, de-duplicated by device.
+
+    Returns 0 when we cannot see a real volume — omit "the disks hold" rather
+    than pretending library-used is how much the disks hold.
+    """
+    if settings is None:
+        return 0
+    paths: List[str] = []
+    for attr in ("movies_root", "tv_root", "radarr_root_folder", "sonarr_root_folder"):
+        raw = str(getattr(settings, attr, "") or "").strip()
+        if raw:
+            paths.append(raw)
+    totals: Dict[int, int] = {}
+    for raw in paths:
+        path = Path(raw)
+        try:
+            if not path.exists():
+                continue
+            st = path.stat()
+            usage = shutil.disk_usage(path)
+        except OSError:
+            continue
+        prev = totals.get(st.st_dev, 0)
+        if int(usage.total) > prev:
+            totals[st.st_dev] = int(usage.total)
+    return int(sum(totals.values()))
+
+
+def disk_sentence(stats: Dict[str, Any]) -> str:
+    """Capacity vs library used — never reuse one number as the other."""
+    capacity = int(stats.get("capacity_bytes") or 0)
+    movie_bytes = int(stats.get("movie_bytes") or 0)
+    show_bytes = int(stats.get("show_bytes") or 0)
+
+    used_parts: List[str] = []
+    if movie_bytes > 0:
+        used_parts.append(f"movies take {format_bytes(movie_bytes)}")
+    if show_bytes > 0:
+        used_parts.append(f"shows take {format_bytes(show_bytes)}")
+
+    if not used_parts and capacity <= 0:
+        return (
+            "I cannot see file sizes yet, so I will not guess at disk. After the next sync "
+            "I can tell you what the movies and shows actually weigh."
+        )
+
+    sentences: List[str] = []
+    if capacity > 0:
+        sentences.append(f"The disks hold {format_bytes(capacity)}.")
+    if used_parts:
+        used = "; ".join(used_parts)
+        sentences.append(used[:1].upper() + used[1:] + ".")
+    return " ".join(sentences)
 
 
 def _title_label(row: Dict[str, Any]) -> str:
@@ -66,7 +127,13 @@ def _title_label(row: Dict[str, Any]) -> str:
     return f"{title} ({year})" if year else title
 
 
-def gather_house_stats(db: Database, *, now: Optional[float] = None) -> Dict[str, Any]:
+def gather_house_stats(
+    db: Database,
+    *,
+    now: Optional[float] = None,
+    settings: Optional[Settings] = None,
+    capacity_bytes: Optional[int] = None,
+) -> Dict[str, Any]:
     """Unwatched hours, dead weight, and disk — the letter's facts."""
     ts = time.time() if now is None else float(now)
     stale_cutoff = ts - STALE_ADD_DAYS * 86400
@@ -76,9 +143,8 @@ def gather_house_stats(db: Database, *, now: Optional[float] = None) -> Dict[str
             SELECT
               COUNT(*) AS total,
               SUM(CASE WHEN view_count IS NULL OR view_count = 0 THEN 1 ELSE 0 END) AS unwatched,
-              COALESCE(SUM(COALESCE(file_size, 0)), 0) AS bytes_on_disk,
               COALESCE(SUM(CASE WHEN media_type = 'movie' THEN COALESCE(file_size, 0) ELSE 0 END), 0) AS movie_bytes,
-              COALESCE(SUM(CASE WHEN media_type = 'show' THEN COALESCE(file_size, 0) ELSE 0 END), 0) AS show_bytes
+              COALESCE(SUM(CASE WHEN media_type = 'show' THEN COALESCE(file_size, 0) ELSE 0 END), 0) AS show_item_bytes
             FROM library_items
             """
         ).fetchone()
@@ -104,6 +170,19 @@ def gather_house_stats(db: Database, *, now: Optional[float] = None) -> Dict[str
             ).fetchone()
         except Exception:  # noqa: BLE001 — older fixtures may lack the table
             episode_ms = None
+        episode_file_bytes = 0
+        try:
+            episode_file_row = conn.execute(
+                """
+                SELECT COALESCE(SUM(COALESCE(file_size, 0)), 0) AS bytes_on_disk
+                FROM library_episodes
+                """
+            ).fetchone()
+            episode_file_bytes = _as_int(
+                episode_file_row["bytes_on_disk"] if episode_file_row else 0
+            )
+        except Exception:  # noqa: BLE001 — older fixtures may lack the table
+            episode_file_bytes = 0
         dead_rows = conn.execute(
             """
             SELECT id, title, year, media_type, file_size, added_at, rating_key, tmdb_id
@@ -131,9 +210,16 @@ def gather_house_stats(db: Database, *, now: Optional[float] = None) -> Dict[str
 
     total = _as_int(totals["total"] if totals else 0)
     unwatched = _as_int(totals["unwatched"] if totals else 0)
-    disk_bytes = _as_int(totals["bytes_on_disk"] if totals else 0)
     movie_bytes = _as_int(totals["movie_bytes"] if totals else 0)
-    show_bytes = _as_int(totals["show_bytes"] if totals else 0)
+    show_item_bytes = _as_int(totals["show_item_bytes"] if totals else 0)
+    # Show rows often hold a Plex metadata slice (or 0 after a show-level sync
+    # overwrites the episode rollup). Prefer actual episode file bytes.
+    show_bytes = max(episode_file_bytes, show_item_bytes)
+    library_used_bytes = movie_bytes + show_bytes
+    if capacity_bytes is not None:
+        resolved_capacity = max(0, int(capacity_bytes))
+    else:
+        resolved_capacity = volume_capacity_bytes(settings)
     movie_ms = _as_int(unwatched_ms["ms"] if unwatched_ms else 0)
     show_episode_ms = _as_int(episode_ms["ms"] if episode_ms else 0)
     unwatched_ms_total = movie_ms + show_episode_ms
@@ -168,12 +254,15 @@ def gather_house_stats(db: Database, *, now: Optional[float] = None) -> Dict[str
         "unwatched_pct": unwatched_pct,
         "unwatched_ms": unwatched_ms_total,
         "unwatched_hours_label": format_hours(unwatched_ms_total),
-        "disk_bytes": disk_bytes,
-        "disk_label": format_bytes(disk_bytes),
+        "disk_bytes": library_used_bytes,
+        "disk_label": format_bytes(library_used_bytes) if library_used_bytes else "",
+        "library_used_bytes": library_used_bytes,
+        "capacity_bytes": resolved_capacity,
+        "capacity_label": format_bytes(resolved_capacity) if resolved_capacity else "",
         "movie_bytes": movie_bytes,
         "show_bytes": show_bytes,
-        "movie_disk_label": format_bytes(movie_bytes),
-        "show_disk_label": format_bytes(show_bytes),
+        "movie_disk_label": format_bytes(movie_bytes) if movie_bytes else "",
+        "show_disk_label": format_bytes(show_bytes) if show_bytes else "",
         "stale_add_days": STALE_ADD_DAYS,
         "dead_weight_count": dead_count,
         "dead_weight_bytes": dead_bytes,
@@ -242,17 +331,7 @@ def _paragraphs_for(stats: Dict[str, Any]) -> List[Dict[str, str]]:
             "and confirm each one."
         )
 
-    disk_bytes = int(stats.get("disk_bytes") or 0)
-    if disk_bytes <= 0:
-        disk_text = (
-            "I cannot see file sizes yet, so I will not guess at disk. After the next sync "
-            "I can tell you what the movies and shows actually weigh."
-        )
-    else:
-        disk_text = (
-            f"The disks hold {stats.get('disk_label')}. Movies take "
-            f"{stats.get('movie_disk_label')}; shows take {stats.get('show_disk_label')}."
-        )
+    disk_text = disk_sentence(stats)
 
     close = (
         "Nothing here changes on its own. Open Health when you want the house lighter, "
@@ -266,9 +345,15 @@ def _paragraphs_for(stats: Dict[str, Any]) -> List[Dict[str, str]]:
     ]
 
 
-def compose_weekly_letter(db: Database, *, now: Optional[float] = None) -> Dict[str, Any]:
+def compose_weekly_letter(
+    db: Database,
+    *,
+    now: Optional[float] = None,
+    settings: Optional[Settings] = None,
+    capacity_bytes: Optional[int] = None,
+) -> Dict[str, Any]:
     """Owner letter: unwatched hours, dead weight, disk — story, not tiles."""
-    stats = gather_house_stats(db, now=now)
+    stats = gather_house_stats(db, now=now, settings=settings, capacity_bytes=capacity_bytes)
     paragraphs = _paragraphs_for(stats)
     body = "\n\n".join(item["text"] for item in paragraphs)
     return {
@@ -375,7 +460,7 @@ def deliver_weekly_letter(
         if state["last_week"] == bucket:
             result["skipped"] = "already_sent"
             return result
-    letter = compose_weekly_letter(db, now=now)
+    letter = compose_weekly_letter(db, now=now, settings=settings)
     if not force and int(letter["stats"].get("total") or 0) <= 0:
         result["skipped"] = "empty_library"
         return result
