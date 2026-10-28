@@ -626,14 +626,14 @@ class MailSettings:
     # off | smtp | resend
     provider: str = "off"
     from_email: str = ""
-    from_name: str = "CuratorX"
+    from_name: str = "Projectionist"
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_username: str = ""
     smtp_password: str = ""
     smtp_use_tls: bool = True
     resend_api_key: str = ""
-    subject_prefix: str = "[CuratorX]"
+    subject_prefix: str = "[Projectionist]"
     footer_text: str = ""
     logo_url: str = ""
 
