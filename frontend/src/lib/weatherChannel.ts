@@ -114,7 +114,7 @@ export function forecastDayColumns(daily: JsParam) {
 export function weatherTickerLines(payload: JsParam) {
   const current = payload?.current && typeof payload.current === "object" ? payload.current : {};
   const daily = payload?.daily && typeof payload.daily === "object" ? payload.daily : {};
-  const lines: unknown[] = [];
+  const lines: JsParam[] = [];
   const humidity = Number(current.relative_humidity_2m);
   if (Number.isFinite(humidity)) lines.push(`Humidity ${Math.round(humidity)}%`);
   const times = Array.isArray(daily.time) ? daily.time : [];
@@ -137,7 +137,7 @@ export function weatherTickerLines(payload: JsParam) {
  * @returns {Array<"now"|"ahead">}
  */
 export function weatherBoardSequence(payload: JsParam) {
-  const boards: unknown[] = [];
+  const boards: JsParam[] = [];
   if (hasCurrentConditions(payload?.current)) boards.push("now");
   if (forecastDayColumns(payload?.daily).length) boards.push("ahead");
   return boards;

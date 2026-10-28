@@ -145,10 +145,10 @@ export default function CourseAuthoringPanel({ list, onRefresh }: CourseAuthorin
                 className="collection-step-note-input"
                 data-testid={`course-step-note-${item.id}`}
                 placeholder="Why this step, what to notice…"
-                value={drafts[item.id] ?? ""}
+                value={drafts[String(item.id ?? "")] ?? ""}
                 disabled={busy}
                 onChange={(event) =>
-                  setDrafts((prev: any) => ({ ...prev, [item.id]: event.target.value }))
+                  setDrafts((prev: any) => ({ ...prev, [String(item.id ?? "")]: event.target.value }))
                 }
               />
               <div className="user-management-actions">
@@ -159,7 +159,7 @@ export default function CourseAuthoringPanel({ list, onRefresh }: CourseAuthorin
                   disabled={busy}
                   onClick={() =>
                     run(() =>
-                      updateCuratedListItem(list.id, item.id, { note: drafts[item.id] ?? "" }),
+                      updateCuratedListItem(list.id, item.id, { note: drafts[String(item.id ?? "")] ?? "" }),
                     )
                   }
                 >

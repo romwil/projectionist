@@ -45,7 +45,7 @@ export function titleAlreadyHasYear(title: string, year: number | null = null) {
  * @param {{ fallback?: string }} [options]
  * @returns {{ title: string, year: number | null, label: string }}
  */
-export function titleLineParts(item: LibraryItem | null | undefined, { fallback = "Untitled" }: JsParam = {}) {
+export function titleLineParts(item: JsParam = null, { fallback = "Untitled" }: JsParam = {}) {
   const raw = String(item?.title ?? "").trim();
   const title = raw || fallback;
   const year = mediaYear(item?.year);
@@ -61,6 +61,6 @@ export function titleLineParts(item: LibraryItem | null | undefined, { fallback 
  * @param {{ title?: unknown, year?: unknown } | null | undefined} item
  * @param {{ fallback?: string }} [options]
  */
-export function titleWithYear(item: LibraryItem | null | undefined, { fallback = "Untitled" }: JsParam = {}) {
+export function titleWithYear(item: LibraryItem | JsParam | null | undefined, { fallback = "Untitled" }: JsParam = {}) {
   return titleLineParts(item, { fallback }).label;
 }

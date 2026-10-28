@@ -50,7 +50,7 @@ export default function CollectionsPage({ embedded = false }: CollectionsPagePro
         setState({
           loading: false,
           items: listId ? [] : data?.items || [],
-          detail: listId ? data : null,
+          detail: listId ? (data as CollectionList) : null,
           error: "",
         });
       })

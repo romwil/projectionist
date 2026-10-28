@@ -55,7 +55,7 @@ export function buildLibraryHealthStory({ health, coverage, openIssues, purgeCou
   const staleAdds = num(h.stale_adds);
   if (kinshipPct == null && issues == null && purge == null) return null;
 
-  const bits: unknown[] = [];
+  const bits: JsParam[] = [];
   if (kinshipPct != null) {
     const label = usesOpened ? "Named kinship on opened titles" : "Named kinship";
     bits.push(

@@ -139,8 +139,8 @@ describe("1.36.5 whisper/tonight chat home", () => {
   });
 
   it("saves to the holdable shelf without a prompt H1 and shows resume + shelf on chat home", () => {
-    const appJsx = readFileSync(new URL("../App.jsx", import.meta.url), "utf8");
-    const chatSessionJs = readFileSync(new URL("../hooks/useChatSession.js", import.meta.url), "utf8");
+    const appJsx = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
+    const chatSessionJs = readFileSync(new URL("../hooks/useChatSession.ts", import.meta.url), "utf8");
     const workspaceJsx = readFileSync(new URL("../components/ChatWorkspace.tsx", import.meta.url), "utf8");
     const libraryJsx = readFileSync(new URL("../pages/LibraryPage.tsx", import.meta.url), "utf8");
     assert.doesNotMatch(appJsx, /window\.prompt\(/);

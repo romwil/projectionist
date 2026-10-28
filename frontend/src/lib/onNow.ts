@@ -23,7 +23,7 @@ export function formatRemaining(seconds: unknown) {
 export function formatProgressHint(channel: JsParam) {
   if (!channel) return "";
   if (channel.isPaused) return "Paused";
-  const parts: unknown[] = [];
+  const parts: JsParam[] = [];
   if (channel.percent != null && Number.isFinite(Number(channel.percent))) {
     parts.push(`${Math.round(Number(channel.percent))}%`);
   }

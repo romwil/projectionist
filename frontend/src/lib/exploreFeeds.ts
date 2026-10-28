@@ -298,7 +298,7 @@ export function buildMotifQueryParams(motifs: JsParam,
  * Normalize Plot Lab “Why?” payload from a library query item.
  * Prefers server-attached motif_why / excerpts / match_layers when present.
  */
-export function resolveMotifWhy(item: LibraryItem | null | undefined, selectedMotifs = []) {
+export function resolveMotifWhy(item: LibraryItem | null | undefined, selectedMotifs: JsParam[] = []) {
   if (!item || typeof item !== "object") return null;
   const matched = Array.isArray(item.matched_motifs)
     ? item.matched_motifs.map((m) => String(m || "").trim()).filter(Boolean)
@@ -365,7 +365,7 @@ function mediaTypeSlice(payload: JsParam, mediaType: string) {
 
 function buildMediaPulseCard(id: string, label: string, count: unknown, overviewSlice: JsParam, healthSlice: JsParam) {
   if (count == null) return null;
-  const metrics: unknown[] = [];
+  const metrics: JsParam[] = [];
 
   const unwatchedPct = healthSlice?.unwatched_pct;
   if (unwatchedPct != null) {
@@ -420,7 +420,7 @@ function buildMediaPulseCard(id: string, label: string, count: unknown, overview
 export function buildPulseStats(overview: JsParam, health: JsParam) {
   const ov = overview && typeof overview === "object" ? overview : {};
   const hl = health && typeof health === "object" ? health : {};
-  const stats: unknown[] = [];
+  const stats: JsParam[] = [];
 
   const total = ov.total ?? hl.total;
   if (total != null) {

@@ -1,4 +1,4 @@
-import type { LibraryItem } from "../api/types";
+import type { JsParam, LibraryItem } from "../api/types";
 /** Ephemeral “tonight’s queue” shelf — session-scoped, not persisted to the server. */
 
 const STORAGE_KEY = "projectionist_tonight_queue_v1";
@@ -42,7 +42,7 @@ export function saveTonightQueue(items: LibraryItem[] | null | undefined) {
  * @param {{ title: string, channelId?: string, id?: string }} item
  * @param {Array} [current]
  */
-export function addToTonightQueue(item: LibraryItem | null | undefined, current: number) {
+export function addToTonightQueue(item: JsParam, current: JsParam) {
   const list = Array.isArray(current) ? [...current] : loadTonightQueue();
   const title = String(item?.title || "").trim();
   if (!title) return list;
@@ -64,7 +64,7 @@ export function addToTonightQueue(item: LibraryItem | null | undefined, current:
  * @param {string} id
  * @param {Array} [current]
  */
-export function removeFromTonightQueue(id: string, current: number) {
+export function removeFromTonightQueue(id: string | number, current: JsParam) {
   const list = Array.isArray(current) ? current : loadTonightQueue();
   const next = list.filter((row) => row.id !== String(id));
   saveTonightQueue(next);

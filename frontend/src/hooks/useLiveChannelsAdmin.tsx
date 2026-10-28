@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { Dispatch, SetStateAction } from "react";
+import type { ApiError, JsParam } from "../api/types";
 import {
   getLiveChannelsCraftOptions,
   getLiveChannelsContinuityStatus,
@@ -21,6 +23,15 @@ import { startVisibleBusyPoll } from "../lib/visibleBusyPoll.js";
 
 export { formatPublishFeedback };
 
+export type LiveChannelsAdminArgs = {
+  settings?: JsParam;
+  persistSettings?: (patch: JsParam) => Promise<unknown> | unknown;
+  updateTunarrSettings?: (patch: JsParam) => void;
+  updateFeatureFlags?: (patch: JsParam) => void;
+  setSettings?: Dispatch<SetStateAction<JsParam>>;
+  confirm: (options: JsParam) => Promise<boolean | string>;
+};
+
 export default function useLiveChannelsAdmin({
   settings,
   persistSettings,
@@ -28,11 +39,11 @@ export default function useLiveChannelsAdmin({
   updateFeatureFlags,
   setSettings,
   confirm,
-}) {
-  const [liveChannelsStatus, setLiveChannelsStatus] = useState(null);
-  const [livePreflight, setLivePreflight] = useState(null);
-  const [liveStarters, setLiveStarters] = useState(null);
-  const [liveCraftOptions, setLiveCraftOptions] = useState(null);
+}: LiveChannelsAdminArgs) {
+  const [liveChannelsStatus, setLiveChannelsStatus] = useState<JsParam>(null);
+  const [livePreflight, setLivePreflight] = useState<JsParam>(null);
+  const [liveStarters, setLiveStarters] = useState<JsParam>(null);
+  const [liveCraftOptions, setLiveCraftOptions] = useState<JsParam>(null);
   const [liveCraft, setLiveCraft] = useState({
     name: "",
     number: "",
@@ -49,29 +60,29 @@ export default function useLiveChannelsAdmin({
     theme: "",
     content_rating: "",
   });
-  const [liveCraftPreview, setLiveCraftPreview] = useState(null);
+  const [liveCraftPreview, setLiveCraftPreview] = useState<JsParam>(null);
   const [liveCraftPreviewBusy, setLiveCraftPreviewBusy] = useState(false);
   const [fillerPathDraft, setFillerPathDraft] = useState("");
   const [padFlexDraft, setPadFlexDraft] = useState("");
   const [exclusionNameDraft, setExclusionNameDraft] = useState("");
-  const [stationSettingsOpen, setStationSettingsOpen] = useState(null);
-  const [liveAttach, setLiveAttach] = useState(null);
-  const [liveBusy, setLiveBusy] = useState(null);
-  const [liveEngineProgress, setLiveEngineProgress] = useState(null);
+  const [stationSettingsOpen, setStationSettingsOpen] = useState<JsParam>(null);
+  const [liveAttach, setLiveAttach] = useState<JsParam>(null);
+  const [liveBusy, setLiveBusy] = useState<JsParam>(null);
+  const [liveEngineProgress, setLiveEngineProgress] = useState<JsParam>(null);
   const [liveEngineError, setLiveEngineError] = useState("");
-  const [liveContinuityProgress, setLiveContinuityProgress] = useState(null);
-  const [livePublishProgress, setLivePublishProgress] = useState(null);
+  const [liveContinuityProgress, setLiveContinuityProgress] = useState<JsParam>(null);
+  const [livePublishProgress, setLivePublishProgress] = useState<JsParam>(null);
   /** Per-card success/error for Live Channels (not the page-bottom banner). */
-  const [liveBlockFeedback, setLiveBlockFeedback] = useState({});
-  const [selectedStarters, setSelectedStarters] = useState({});
+  const [liveBlockFeedback, setLiveBlockFeedback] = useState<Record<string, JsParam>>({});
+  const [selectedStarters, setSelectedStarters] = useState<Record<string, JsParam>>({});
   const [tunarrLogsOpen, setTunarrLogsOpen] = useState(false);
-  const [tunarrLogs, setTunarrLogs] = useState(null);
+  const [tunarrLogs, setTunarrLogs] = useState<JsParam>(null);
   const [tunarrLogsBusy, setTunarrLogsBusy] = useState(false);
-  const [liveChannelsTab, setLiveChannelsTab] = useState(null); // null = auto by launch state
+  const [liveChannelsTab, setLiveChannelsTab] = useState<string | null>(null); // null = auto by launch state
   const [collectionFilter, setCollectionFilter] = useState("");
-  const enginePollRef = useRef(null);
-  const continuityPollRef = useRef(null);
-  const publishPollRef = useRef(null);
+  const enginePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const continuityPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const publishPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const liveLaunched = useMemo(
     () => isLiveChannelsLaunched(liveChannelsStatus, liveEngineProgress),
@@ -106,17 +117,17 @@ export default function useLiveChannelsAdmin({
         setLiveCraftOptions(opts);
         // Provisional (warming) numbers must not seed the form — wait for the real ones.
         if (opts?.warming) return;
-        setLiveCraft((prev) => ({
+        setLiveCraft((prev: JsParam) => ({
           ...prev,
           number: prev.number || String(opts.next_channel_number || 100),
           motif: prev.motif || opts.motifs?.[0]?.value || "",
           cluster_tag: prev.cluster_tag || opts.taste_clusters?.[0]?.cluster_tag || "",
         }));
         if (opts?.pad_flex_max_minutes != null) {
-          setPadFlexDraft((prev) => (prev === "" ? String(opts.pad_flex_max_minutes) : prev));
+          setPadFlexDraft((prev: JsParam) => (prev === "" ? String(opts.pad_flex_max_minutes) : prev));
         }
         if (opts?.exclusion_collection_name) {
-          setExclusionNameDraft((prev) => (prev === "" ? opts.exclusion_collection_name : prev));
+          setExclusionNameDraft((prev: JsParam) => (prev === "" ? opts.exclusion_collection_name : prev));
         }
       })
       .catch(() => setLiveCraftOptions(null));
@@ -155,7 +166,7 @@ export default function useLiveChannelsAdmin({
           .then((opts) => {
             setLiveCraftOptions(opts);
             if (opts?.warming) return;
-            setLiveCraft((prev) => ({
+            setLiveCraft((prev: JsParam) => ({
               ...prev,
               number: prev.number || String(opts.next_channel_number || 100),
               motif: prev.motif || opts.motifs?.[0]?.value || "",
@@ -203,21 +214,21 @@ export default function useLiveChannelsAdmin({
     };
   }, []);
 
-  function setLiveFeedback(block, type, message, options = {}) {
+  function setLiveFeedback(block: JsParam, type: JsParam, message: JsParam, options: JsParam = {}) {
     const key = String(block || "general").trim() || "general";
     const details = Array.isArray(options.details) ? options.details : null;
-    setLiveBlockFeedback((prev) => ({
+    setLiveBlockFeedback((prev: JsParam) => ({
       ...prev,
       [key]: { type, message, details },
     }));
   }
 
-  function clearLiveFeedback(block) {
+  function clearLiveFeedback(block?: JsParam) {
     if (!block) {
       setLiveBlockFeedback({});
       return;
     }
-    setLiveBlockFeedback((prev) => {
+    setLiveBlockFeedback((prev: JsParam) => {
       if (!prev[block]) return prev;
       const next = { ...prev };
       delete next[block];
@@ -225,20 +236,19 @@ export default function useLiveChannelsAdmin({
     });
   }
 
-  function renderLiveBlockAlert(block) {
+  function renderLiveBlockAlert(block: JsParam) {
     const fb = liveBlockFeedback[block];
     if (!fb?.message) return null;
     return (
       <InlineAlert
         type={fb.type}
         message={ownerLiveText(fb.message)}
-        details={Array.isArray(fb.details) ? fb.details.map(ownerLiveText) : fb.details}
         testId={`live-channels-${block}-alert`}
       />
     );
   }
 
-  function setActionFeedback(area, type, message, options = {}) {
+  function setActionFeedback(area: JsParam, type: JsParam, message: JsParam, options: JsParam = {}) {
     const details = Array.isArray(options.details) ? options.details : null;
     // Live Channels: route to the card block (options.block). Do not park at page bottom.
     if (area === "live-channels") {
@@ -246,7 +256,7 @@ export default function useLiveChannelsAdmin({
     }
   }
 
-  function clearActionFeedback(area) {
+  function clearActionFeedback(area?: JsParam) {
     if (area === "live-channels") {
       clearLiveFeedback();
     }
@@ -262,13 +272,13 @@ export default function useLiveChannelsAdmin({
         ok: false,
         text: "",
         source: "",
-        message: error.message || "Could not load broadcast engine logs.",
+        message: (error as ApiError).message || "Could not load broadcast engine logs.",
       });
     } finally {
       setTunarrLogsBusy(false);
     }
   }
-  async function handleLiveChannelsEnabled(enabled) {
+  async function handleLiveChannelsEnabled(enabled: boolean) {
     if (
       !enabled &&
       !(await confirm({
@@ -281,10 +291,10 @@ export default function useLiveChannelsAdmin({
       return;
     }
     clearActionFeedback("live-channels");
-    updateFeatureFlags({ live_channels_enabled: enabled });
+    updateFeatureFlags?.({ live_channels_enabled: enabled });
     setLiveBusy(enabled ? "enable" : "disable");
     try {
-      await persistSettings({
+      await persistSettings?.({
         features: { ...(settings.features || {}), live_channels_enabled: enabled },
       });
       if (enabled) {
@@ -301,8 +311,8 @@ export default function useLiveChannelsAdmin({
         stopEngineProgressPoll();
       }
     } catch (error) {
-      updateFeatureFlags({ live_channels_enabled: !enabled });
-      setActionFeedback("live-channels", "error", error.message, { block: "hero" });
+      updateFeatureFlags?.({ live_channels_enabled: !enabled });
+      setActionFeedback("live-channels", "error", (error as ApiError).message, { block: "hero" });
     } finally {
       setLiveBusy(null);
     }
@@ -347,7 +357,7 @@ export default function useLiveChannelsAdmin({
     }
   }
 
-  function continuityPhaseLabel(phase) {
+  function continuityPhaseLabel(phase: JsParam) {
     switch (phase) {
       case "queued":
         return "Queued";
@@ -374,7 +384,7 @@ export default function useLiveChannelsAdmin({
     }
   }
 
-  async function runContinuityJob(body = {}, { successFallback = "Continuity update finished.", block = "stations" } = {}) {
+  async function runContinuityJob(body: JsParam = {}, { successFallback = "Continuity update finished.", block = "stations" }: JsParam = {}) {
     clearLiveFeedback(block);
     clearActionFeedback("live-channels");
     setLiveBusy("continuity-repair");
@@ -458,16 +468,16 @@ export default function useLiveChannelsAdmin({
       return progress;
     } catch (error) {
       stopContinuityProgressPoll();
-      setLiveContinuityProgress((prev) => ({
+      setLiveContinuityProgress((prev: JsParam) => ({
         ...(prev || {}),
         phase: "error",
         percent: 0,
         busy: false,
         ok: false,
-        error: error.message,
-        message: error.message,
+        error: (error as ApiError).message,
+        message: (error as ApiError).message,
       }));
-      setActionFeedback("live-channels", "error", error.message, { block });
+      setActionFeedback("live-channels", "error", (error as ApiError).message, { block });
       throw error;
     } finally {
       stopContinuityProgressPoll();
@@ -492,7 +502,7 @@ export default function useLiveChannelsAdmin({
     }
   }
 
-  function publishPhaseLabel(phase) {
+  function publishPhaseLabel(phase: JsParam) {
     switch (phase) {
       case "queued":
         return "Queued";
@@ -515,7 +525,7 @@ export default function useLiveChannelsAdmin({
     }
   }
 
-  async function runPublishJob(startFn, { busyKey = "publish", block = "collection", successFallback = "Publish finished." } = {}) {
+  async function runPublishJob(startFn: JsParam, { busyKey = "publish", block = "collection", successFallback = "Publish finished." }: JsParam = {}) {
     clearLiveFeedback(block);
     clearActionFeedback("live-channels");
     setLiveBusy(busyKey);
@@ -601,16 +611,16 @@ export default function useLiveChannelsAdmin({
       return progress;
     } catch (error) {
       stopPublishProgressPoll();
-      setLivePublishProgress((prev) => ({
+      setLivePublishProgress((prev: JsParam) => ({
         ...(prev || {}),
         phase: "error",
         percent: 0,
         busy: false,
         ok: false,
-        error: error.message,
-        message: error.message,
+        error: (error as ApiError).message,
+        message: (error as ApiError).message,
       }));
-      setActionFeedback("live-channels", "error", error.message, { block });
+      setActionFeedback("live-channels", "error", (error as ApiError).message, { block });
       throw error;
     } finally {
       stopPublishProgressPoll();
@@ -618,7 +628,7 @@ export default function useLiveChannelsAdmin({
     }
   }
 
-  function renderPublishProgress(block) {
+  function renderPublishProgress(block: JsParam) {
     const publishBusy =
       liveBusy === "collection" || liveBusy === "craft" || liveBusy === "show";
     const busyMatch =
@@ -807,12 +817,12 @@ export default function useLiveChannelsAdmin({
     try {
       const result = await postLiveChannelsLifecycle("ensure_running");
       if (result.tunarr_url) {
-        updateTunarrSettings({ url: result.tunarr_url });
+        updateTunarrSettings?.({ url: result.tunarr_url });
       }
       if (!result.ok) {
         const message = result.message || "TV engine failed to start.";
         setLiveEngineError(message);
-        setLiveEngineProgress((prev) => ({
+        setLiveEngineProgress((prev: JsParam) => ({
           ...(prev || {}),
           phase: "error",
           percent: 0,
@@ -854,7 +864,7 @@ export default function useLiveChannelsAdmin({
           : "Timed out waiting for the TV engine to become ready. Check TV engine logs below.";
         // stillStarting: container up, HTTP not ready — soft notice (ok:true), not a failure.
         setLiveEngineError(stillStarting ? "" : timeoutMsg);
-        setLiveEngineProgress((prev) => ({
+        setLiveEngineProgress((prev: JsParam) => ({
           ...(prev || {}),
           phase: stillStarting ? "waiting_ready" : "error",
           percent: prev?.percent || 80,
@@ -879,9 +889,9 @@ export default function useLiveChannelsAdmin({
       }
     } catch (error) {
       stopEngineProgressPoll();
-      const message = error.message || "TV engine failed to start.";
+      const message = (error as ApiError).message || "TV engine failed to start.";
       setLiveEngineError(message);
-      setLiveEngineProgress((prev) => ({
+      setLiveEngineProgress((prev: JsParam) => ({
         ...(prev || {}),
         phase: "error",
         percent: 0,

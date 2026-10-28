@@ -37,7 +37,7 @@ export const SAVED_LIBRARY_RAIL_LIMIT = 12;
 export function sanitizeSavedRailItems(items: LibraryItem[] | null | undefined = [], opts: JsParam = {}) {
   const limit = Math.max(1, Number(opts.limit) || SAVED_LIBRARY_RAIL_LIMIT);
   const list = Array.isArray(items) ? items : [];
-  const kept: unknown[] = [];
+  const kept: JsParam[] = [];
   const seen = new Set();
 
   for (const raw of list) {
@@ -62,7 +62,7 @@ export function sanitizeSavedRailItems(items: LibraryItem[] | null | undefined =
   return kept;
 }
 
-export function savedLibraryBlocks(blocks: unknown[] = []) {
+export function savedLibraryBlocks(blocks: JsParam[] = []) {
   const list = Array.isArray(blocks) ? blocks : [];
   const hasTitleCards = list.some(
     (block) =>
@@ -72,7 +72,7 @@ export function savedLibraryBlocks(blocks: unknown[] = []) {
       sanitizeSavedRailItems((block as JsParam).items).length > 0,
   );
 
-  const result: unknown[] = [];
+  const result: JsParam[] = [];
   for (const block of list) {
     if (!block || typeof block !== "object") continue;
 

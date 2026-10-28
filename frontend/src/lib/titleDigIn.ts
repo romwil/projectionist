@@ -89,8 +89,8 @@ export function linkifyKnownTitles(content: unknown, titleRefs: JsParam[] = []) 
 }
 
 /** Collect linkable title refs from chat message blocks (title_cards, etc.). */
-export function titleRefsFromBlocks(blocks: unknown[] = []) {
-  const refs: unknown[] = [];
+export function titleRefsFromBlocks(blocks: JsParam[] = []) {
+  const refs: JsParam[] = [];
   for (const block of blocks as JsParam[]) {
     if (block?.type === "title_cards" && Array.isArray(block.items)) {
       for (const item of block.items) {

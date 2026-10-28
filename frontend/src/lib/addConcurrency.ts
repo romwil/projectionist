@@ -18,14 +18,14 @@ export function isAddBlockedForKey(inFlightKeys: JsParam, key: string) {
   return false;
 }
 
-export function withAddInFlight(inFlightKeys: JsParam, key: string) {
-  const next = new Set(inFlightKeys instanceof Set ? inFlightKeys : inFlightKeys || []);
+export function withAddInFlight(inFlightKeys: JsParam, key: string): Set<string> {
+  const next = new Set<string>(inFlightKeys instanceof Set ? inFlightKeys : inFlightKeys || []);
   if (key) next.add(key);
   return next;
 }
 
-export function withoutAddInFlight(inFlightKeys: JsParam, key: string) {
-  const next = new Set(inFlightKeys instanceof Set ? inFlightKeys : inFlightKeys || []);
+export function withoutAddInFlight(inFlightKeys: JsParam, key: string): Set<string> {
+  const next = new Set<string>(inFlightKeys instanceof Set ? inFlightKeys : inFlightKeys || []);
   if (key) next.delete(key);
   return next;
 }

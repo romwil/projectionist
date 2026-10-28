@@ -25,14 +25,14 @@ export function idleLiveJob() {
   };
 }
 
-export function isLiveJobBusy(job: Job | null | undefined) {
+export function isLiveJobBusy(job?: Job | JsParam | null) {
   if (!job) return false;
   if (job.busy) return true;
   const phase = String(job.phase || "idle");
   return phase !== "idle" && phase !== "done" && phase !== "error" && phase !== "ready";
 }
 
-export function liveJobKindLabel(kind: string) {
+export function liveJobKindLabel(kind?: string | null) {
   const key = String(kind || "").trim();
   return LIVE_JOB_KIND_LABELS[key] || "";
 }
@@ -40,7 +40,7 @@ export function liveJobKindLabel(kind: string) {
 /**
  * Sticky rail copy: “Working: Refreshing Plex map · … · Don’t start another Live job.”
  */
-export function liveJobRailCopy(job: Job | null | undefined) {
+export function liveJobRailCopy(job?: Job | JsParam | null) {
   if (!isLiveJobBusy(job)) return "";
   const label = liveJobKindLabel(job!.kind) || "Working";
   const bits = [`Working: ${label}`];

@@ -2,7 +2,7 @@ import { titleDetailPath } from "./titleLinks.js";
 import type {JsonObject, LibraryItem, JsParam} from "../api/types";
 
 /** Resolve drawer/API target from a library card or purge-candidate row. */
-export function titleDetailTargetFromItem(item: LibraryItem | null | undefined) {
+export function titleDetailTargetFromItem(item?: LibraryItem | JsParam | null) {
   if (!item) return null;
   const mediaType = item.media_type === "show" ? "show" : "movie";
   if (item.tmdb_id) {

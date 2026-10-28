@@ -55,8 +55,8 @@ export function useAnchoredPopover({
   const [internalOpen, setInternalOpen] = useState(initialOpen);
   const open = controlled ? Boolean(controlledOpen) : internalOpen;
 
-  const rootRef = useRef<HTMLElement | null>(null);
-  const popoverRef = useRef<HTMLElement | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
   const [popoverStyle, setPopoverStyle] = useState<CSSProperties | null>(null);
 
   const setOpen = useCallback(

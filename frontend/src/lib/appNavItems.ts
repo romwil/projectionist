@@ -84,7 +84,7 @@ export function buildAppNavItems(
   });
   const secondary = secondaryNavItems({ isYouth, role });
 
-  const items: unknown[] = [];
+  const items: JsParam[] = [];
   if (primary.length > 0) {
     items.push({ kind: "heading", id: "heading-navigate", label: "Navigate" });
     items.push(...primary);

@@ -8,7 +8,7 @@ import { readAllStyles } from "./readStyles.mjs";
 const here = dirname(fileURLToPath(import.meta.url));
 const styles = readAllStyles();
 const configPage = [
-  readFileSync(join(here, "../pages/ConfigPage.jsx"), "utf8"),
+  readFileSync(join(here, "../pages/ConfigPage.tsx"), "utf8"),
   readFileSync(join(here, "../pages/admin/OverviewSection.tsx"), "utf8"),
   readFileSync(join(here, "../pages/admin/ConnectionsSection.tsx"), "utf8"),
   readFileSync(join(here, "../pages/admin/LibrariesSection.tsx"), "utf8"),

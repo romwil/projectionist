@@ -47,7 +47,7 @@ function messageTextFingerprint(message: JsParam) {
  * and append only messages the client has not already rendered — typically the
  * delayed consult addendum.
  */
-export function mergeThreadMessagesById(current: number, fetched: JsParam) {
+export function mergeThreadMessagesById(current: JsParam, fetched: JsParam) {
   const currentList = (Array.isArray(current) ? current : []).filter((message) => message?.id);
   const fetchedList = (Array.isArray(fetched) ? fetched : []).filter((message) => message?.id);
   const fetchedById = new Map(fetchedList.map((message) => [message.id, message]));
@@ -72,7 +72,7 @@ export function mergeThreadMessagesById(current: number, fetched: JsParam) {
     fetchedIdForCurrentId.set(matchId, message.id);
   }
 
-  const merged: unknown[] = [];
+  const merged: JsParam[] = [];
   const emittedFetchedIds = new Set();
   for (const message of currentList) {
     const snapshot = fetchedById.get(fetchedIdForCurrentId.get(message.id) || message.id);

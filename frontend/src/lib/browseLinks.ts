@@ -6,7 +6,7 @@ import type {JsonObject, JsParam} from "../api/types";
 
 export { ROUTES, withReturnTo };
 
-export function personPath(tmdbPersonId: string) {
+export function personPath(tmdbPersonId?: string | number | null) {
   if (tmdbPersonId == null || tmdbPersonId === "") return null;
   const id = String(tmdbPersonId).trim();
   if (!id || Number.isNaN(Number(id))) return null;

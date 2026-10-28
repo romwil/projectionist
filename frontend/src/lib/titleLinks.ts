@@ -77,7 +77,7 @@ export function plexClientPlayUrl(ratingKey: string, machineId = "") {
  * On a 390-wide phone, overflow still prefers the Plex client scheme unless
  * `toClient` is false.
  */
-export function plexWatchUrl(ratingKey: string, machineId = "", options: JsParam = {}) {
+export function plexWatchUrl(ratingKey?: string | number | null, machineId = "", options: JsParam = {}) {
   const key = String(ratingKey || "").trim();
   if (!key) return "";
   const server = String(machineId || "").trim();

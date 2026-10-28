@@ -9,7 +9,7 @@ import {
 
 type SurpriseItem = {
   id?: string | number;
-  rating_key?: string | number;
+  rating_key?: string | number | null;
   title?: string;
 };
 

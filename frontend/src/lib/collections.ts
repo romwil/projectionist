@@ -29,7 +29,7 @@ export function isPublished(list: JsParam) {
  *
  * @returns {Array<{id:string, position:number}>}
  */
-export function computeReorder(items: LibraryItem[] | null | undefined, itemId: string | number, direction: JsParam) {
+export function computeReorder(items: LibraryItem[] | null | undefined, itemId?: string | number | null, direction: JsParam = "up") {
   const ordered = orderCollectionSteps(items).map((item, index) => ({
     ...item,
     position: index,

@@ -80,7 +80,7 @@ export default function AppriseDestinationsEditor({
   }
 
   function patchField(name: any, value: any) {
-    setFields((prev) => ({ ...prev, [name]: value }));
+    setFields((prev: Record<string, string>) => ({ ...prev, [name]: value }));
   }
 
   function handleSubmit(event: any) {

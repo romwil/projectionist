@@ -140,8 +140,8 @@ export function groupAddableItems(
   };
 }
 
-export function collectTitleCardItems(blocks: unknown[] = []) {
-  const items: unknown[] = [];
+export function collectTitleCardItems(blocks: JsParam[] = []) {
+  const items: JsParam[] = [];
   for (const block of blocks) {
     if ((block as JsParam)?.type === "title_cards") {
       items.push(...((block as JsParam).items || []));
@@ -188,7 +188,7 @@ const TOKEN_ACTION_GROUPS = {
   plex: new Set(["create_plex_collection", "add_to_plex_collection"]),
 };
 
-export function summarizePendingTokenActions(entries: unknown[] = []) {
+export function summarizePendingTokenActions(entries: JsParam[] = []) {
   const counts = { add: 0, remove: 0, plex: 0, other: 0 };
   for (const entry of entries) {
     const action = (entry as JsParam).action || "add_radarr";
@@ -200,7 +200,7 @@ export function summarizePendingTokenActions(entries: unknown[] = []) {
   return counts;
 }
 
-export function tokenConfirmPrompt(count: unknown, entries = []) {
+export function tokenConfirmPrompt(count: unknown, entries: JsParam[] = []) {
   const summary = summarizePendingTokenActions(entries);
   if (count === 1) {
     if (summary.remove === 1 && summary.add === 0 && summary.plex === 0) {
@@ -229,7 +229,7 @@ export function tokenConfirmPrompt(count: unknown, entries = []) {
   return `Confirm all ${count} proposed actions?`;
 }
 
-export function tokenConfirmButtonLabel(count: unknown, entries = []) {
+export function tokenConfirmButtonLabel(count: unknown, entries: JsParam[] = []) {
   const summary = summarizePendingTokenActions(entries);
   if (count === 1) {
     if (summary.remove === 1 && summary.add === 0 && summary.plex === 0) {
@@ -255,7 +255,7 @@ export function tokenConfirmButtonLabel(count: unknown, entries = []) {
   return `Confirm all ${count}`;
 }
 
-export function tokenConfirmSuccessMessage(count: unknown, entries = []) {
+export function tokenConfirmSuccessMessage(count: unknown, entries: JsParam[] = []) {
   const summary = summarizePendingTokenActions(entries);
   if (summary.remove > 0 && summary.add === 0 && summary.plex === 0) {
     return `Confirmed ${count} removal${count === 1 ? "" : "s"}.`;
@@ -266,7 +266,7 @@ export function tokenConfirmSuccessMessage(count: unknown, entries = []) {
   return `Confirmed ${count} action${count === 1 ? "" : "s"}.`;
 }
 
-export function tokenConfirmFailureMessage(entries: unknown[] = []) {
+export function tokenConfirmFailureMessage(entries: JsParam[] = []) {
   const summary = summarizePendingTokenActions(entries);
   if (summary.remove > 0 && summary.add === 0) {
     return "Could not confirm proposed removals.";

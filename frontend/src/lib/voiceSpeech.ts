@@ -17,7 +17,7 @@ export function stripMarkdownForSpeech(text: string) {
 
 export function extractSpeakableText(message: JsParam) {
   if (!message?.blocks?.length) return "";
-  const parts: unknown[] = [];
+  const parts: JsParam[] = [];
   for (const block of message.blocks) {
     if (block?.type === "text" && block.content) {
       const cleaned = stripMarkdownForSpeech(block.content);

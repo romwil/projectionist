@@ -1,14 +1,34 @@
 import { useEffect, useState } from "react";
 import { parseVtt, SUBTITLE_FETCH_FAILED } from "../../lib/subtitleCues.js";
+import type { JsParam } from "../../api/types";
+
+type SubtitleCueState = "idle" | "loading" | "ready" | "error";
+
+type SubtitleCueResult = {
+  url: string;
+  cues: JsParam[];
+  state: SubtitleCueState;
+  error: string;
+};
+
+export type SubtitleCues = {
+  cues: JsParam[];
+  state: SubtitleCueState;
+  error: string;
+};
 
 /**
  * Fetch + parse one proxied subtitle track. Same-origin, cookie-authed — the
  * browser never sees a Plex URL or token.
- * @param {string} url `/api/library/items/:key/subtitles/:id/file` or ""
- * @returns {{ cues: object[], state: "idle"|"loading"|"ready"|"error", error: string }}
+ * @param url `/api/library/items/:key/subtitles/:id/file` or ""
  */
-export default function useSubtitleCues(url) {
-  const [result, setResult] = useState({ url: "", cues: [], state: "idle", error: "" });
+export default function useSubtitleCues(url: string): SubtitleCues {
+  const [result, setResult] = useState<SubtitleCueResult>({
+    url: "",
+    cues: [],
+    state: "idle",
+    error: "",
+  });
 
   useEffect(() => {
     if (!url) return undefined;
@@ -33,9 +53,14 @@ export default function useSubtitleCues(url) {
           return;
         }
         setResult({ url, cues, state: "ready", error: "" });
-      } catch (error) {
-        if (cancelled || error?.name === "AbortError") return;
-        setResult({ url, cues: [], state: "error", error: error?.message || SUBTITLE_FETCH_FAILED });
+      } catch (error: unknown) {
+        if (cancelled || (error as { name?: string })?.name === "AbortError") return;
+        setResult({
+          url,
+          cues: [],
+          state: "error",
+          error: (error as { message?: string })?.message || SUBTITLE_FETCH_FAILED,
+        });
       }
     })();
     return () => {

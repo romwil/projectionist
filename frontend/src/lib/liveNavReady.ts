@@ -57,7 +57,7 @@ export function liveChannelsReadyFromFeatures(features: Features | null | undefi
   return Boolean(flags.live_channels_ready);
 }
 
-export function applyLiveChannelsFeature(features: Features | null | undefined, setReady: (ready: boolean) => void, storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null | undefined = globalThis.localStorage) {
+export function applyLiveChannelsFeature(features: Features | null | undefined, setReady?: (ready: boolean) => void, storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null | undefined = globalThis.localStorage) {
   const ready = liveChannelsReadyFromFeatures(features);
   if (ready === null) return null;
   writeCachedLiveChannelsReady(ready, storage);

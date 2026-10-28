@@ -78,7 +78,7 @@ export function splitAppriseUrls(raw: unknown) {
   const text = String(raw || "").trim();
   if (!text) return [];
   const seen = new Set();
-  const out: unknown[] = [];
+  const out: JsParam[] = [];
   for (const line of text.replace(/[,;]/g, "\n").split("\n")) {
     const stripped = line.trim();
     if (!stripped || stripped.startsWith("#")) continue;
@@ -279,7 +279,7 @@ export function buildAppriseUrl(schemeId: JsParam, fields: JsParam = {}) {
  * @param {string} url
  * @returns {{ schemeId: string, fields: Record<string, string> }}
  */
-export function parseAppriseUrlFields(url: string) {
+export function parseAppriseUrlFields(url: string): { schemeId: string; fields: Record<string, string> } {
   const raw = String(url || "").trim();
   const schemeId = detectBuilderScheme(raw);
   if (schemeId === "custom" || !raw) {
@@ -390,7 +390,16 @@ export function parseAppriseUrlFields(url: string) {
  * @param {string} schemeId
  * @returns {{ name: string, label: string, type?: string, placeholder?: string, required?: boolean, hint?: string }[]}
  */
-export function builderFieldsFor(schemeId: JsParam) {
+export type AppriseBuilderField = {
+  name: string;
+  label: string;
+  required?: boolean;
+  type?: string;
+  placeholder?: string;
+  hint?: string;
+};
+
+export function builderFieldsFor(schemeId: JsParam): AppriseBuilderField[] {
   switch (schemeId) {
     case "discord":
       return [
@@ -484,8 +493,8 @@ export function builderFieldsFor(schemeId: JsParam) {
 }
 
 /** @param {string} schemeId */
-export function defaultBuilderFields(schemeId: JsParam) {
-  const fields: JsParam = {};
+export function defaultBuilderFields(schemeId: JsParam): Record<string, string> {
+  const fields: Record<string, string> = {};
   for (const field of builderFieldsFor(schemeId)) {
     if (field.type === "checkbox") {
       fields[field.name] = "1";

@@ -139,7 +139,7 @@ describe("no mixed native confirms", () => {
   });
 
   it("puts Config Seerr token paste on ConfirmModal", () => {
-    const config = readFileSync(join(srcRoot, "pages", "ConfigPage.jsx"), "utf8");
+    const config = readFileSync(join(srcRoot, "pages", "ConfigPage.tsx"), "utf8");
     const household = readFileSync(join(srcRoot, "pages", "admin", "HouseholdSection.tsx"), "utf8");
     assert.match(config, /seerrSyncConfirmOptions/);
     assert.match(config, /handleRotateMcpKey/);

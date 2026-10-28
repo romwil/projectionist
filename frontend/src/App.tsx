@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { AuthUser, ChatMessage, Features, Job, JsParam, LibraryItem, Persona } from "./api/types";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   api,
@@ -65,28 +66,28 @@ export default function App() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [uiTheme, setUiTheme] = useState(() => loadStoredUiTheme());
   const [appNavOpen, setAppNavOpen] = useState(false);
-  const [stats, setStats] = useState(null);
-  const [setup, setSetup] = useState(null);
-  const [jobs, setJobs] = useState([]);
-  const [persona, setPersona] = useState(null);
-  const [features, setFeatures] = useState(null);
+  const [stats, setStats] = useState<JsParam>(null);
+  const [setup, setSetup] = useState<JsParam>(null);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [persona, setPersona] = useState<Persona | null>(null);
+  const [features, setFeatures] = useState<Features | null>(null);
   const [keyboardHelpOpen, setKeyboardHelpOpen] = useState(false);
-  const [watchlistPins, setWatchlistPins] = useState([]);
-  const [recommendItem, setRecommendItem] = useState(null);
+  const [watchlistPins, setWatchlistPins] = useState<JsParam[]>([]);
+  const [recommendItem, setRecommendItem] = useState<JsParam>(null);
   const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
-  const [reviewPrompts, setReviewPrompts] = useState([]);
-  const [reviewLookup, setReviewLookup] = useState({});
+  const [reviewPrompts, setReviewPrompts] = useState<JsParam[]>([]);
+  const [reviewLookup, setReviewLookup] = useState<Record<string, JsParam>>({});
   const [nightOwl, setNightOwl] = useState(isNightOwlHour);
-  const [anniversaries, setAnniversaries] = useState([]);
-  const [libraryGlance, setLibraryGlance] = useState(null);
+  const [anniversaries, setAnniversaries] = useState<JsParam[]>([]);
+  const [libraryGlance, setLibraryGlance] = useState<JsParam>(null);
   const [glanceShown, setGlanceShown] = useState(false);
-  const [authUser, setAuthUser] = useState(null);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const jobsRunningRef = useRef(false);
-  const composerRef = useRef(null);
-  const konamiTrackerRef = useRef(null);
-  const speakAssistantMessageRef = useRef(() => {});
-  const stopVoiceListeningRef = useRef(() => {});
-  const stopTtsRef = useRef(() => {});
+  const composerRef = useRef<HTMLElement | null>(null);
+  const konamiTrackerRef = useRef<JsParam>(null);
+  const speakAssistantMessageRef = useRef<(message: ChatMessage) => void>(() => {});
+  const stopVoiceListeningRef = useRef<() => void>(() => {});
+  const stopTtsRef = useRef<() => void>(() => {});
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
       return sessionStorage.getItem(SIDEBAR_RAIL_KEY) === "true";
@@ -211,7 +212,7 @@ export default function App() {
   });
 
   const speakAssistantMessage = useCallback(
-    (message) => {
+    (message: ChatMessage) => {
       speakReply(extractSpeakableText(message));
     },
     [speakReply]
@@ -231,7 +232,7 @@ export default function App() {
   const refreshReviewData = useCallback(async () => {
     try {
       const [reviewsData, promptsData] = await Promise.all([listReviews({ limit: 200 }), listReviewPrompts(5)]);
-      const lookup = {};
+      const lookup: Record<string, JsParam> = {};
       for (const review of reviewsData.items || []) {
         if (review.rating_key) {
           lookup[review.rating_key] = review.stars;
@@ -373,7 +374,7 @@ export default function App() {
     }).catch(() => {});
   }
 
-  async function handleDismiss(item) {
+  async function handleDismiss(item: LibraryItem) {
     await api("/preferences", {
       method: "POST",
       body: JSON.stringify({
@@ -386,7 +387,7 @@ export default function App() {
     });
   }
 
-  async function handleToggleWatchlistPin(item, pinRecord) {
+  async function handleToggleWatchlistPin(item: LibraryItem, pinRecord: JsParam) {
     const adding = !pinRecord?.id;
     const { next, rollback } = applyOptimisticPinToggle(watchlistPins, {
       item,
@@ -414,11 +415,11 @@ export default function App() {
     }
   }
 
-  function handleRecommendTitle(item) {
+  function handleRecommendTitle(item: LibraryItem) {
     setRecommendItem(item);
   }
 
-  async function handleReviewSave({ prompt, stars, review_text: reviewText, session_id: reviewSessionId, replace_plex_rating: replacePlexRating }) {
+  async function handleReviewSave({ prompt, stars, review_text: reviewText, session_id: reviewSessionId, replace_plex_rating: replacePlexRating }: JsParam) {
     const slashRate = String(prompt.id || "").startsWith("slash-rate-");
     const viewedUnrated = String(prompt.id || "").startsWith("viewed-unrated-");
     await saveReview({
@@ -438,7 +439,7 @@ export default function App() {
     refreshReviewData();
   }
 
-  async function handleReviewDismiss(prompt) {
+  async function handleReviewDismiss(prompt: JsParam) {
     if (!String(prompt.id || "").startsWith("slash-rate-") && !String(prompt.id || "").startsWith("viewed-unrated-")) {
       await dismissReviewPrompt(prompt.id);
       setReviewPrompts((current) => current.filter((entry) => entry.id !== prompt.id));
@@ -449,7 +450,7 @@ export default function App() {
     refreshReviewData();
   }
 
-  function handleDockDrop(item) {
+  function handleDockDrop(item: LibraryItem) {
     const target = resolveDockDropTarget(item, {
       radarrConnected: arrServiceConnected(setup, features, "radarr"),
       sonarrConnected: arrServiceConnected(setup, features, "sonarr"),

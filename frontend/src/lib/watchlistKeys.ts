@@ -6,7 +6,7 @@ export function watchlistItemKey(item: LibraryItem | null | undefined) {
   return `${mediaType}:${tmdb}:${tvdb}`;
 }
 
-export function buildWatchlistLookup(pins: unknown[] = []) {
+export function buildWatchlistLookup(pins: JsParam[] = []) {
   const byItemKey = new Map();
   const byId = new Map();
   for (const pin of pins) {

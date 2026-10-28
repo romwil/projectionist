@@ -170,7 +170,7 @@ export function firstSentence(text: string, { maxLen = 160 }: JsParam = {}) {
 export function digestPicks(item: LibraryItem | null | undefined, { limit = 8 }: JsParam = {}) {
   const raw = item?.payload?.picks;
   if (!Array.isArray(raw)) return [];
-  const picks: unknown[] = [];
+  const picks: JsParam[] = [];
   for (const entry of raw) {
     if (!entry || typeof entry !== "object") continue;
     const title = String(entry.title || "").trim();

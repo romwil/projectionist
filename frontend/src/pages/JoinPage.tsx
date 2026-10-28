@@ -25,7 +25,7 @@ export default function JoinPage() {
   const token = (searchParams.get("token") || "").trim();
   const pollRef = useRef<(() => void) | null>(null);
 
-  type JoinFeatures = { auth_methods?: string[] };
+  type JoinFeatures = { auth_methods?: string[] | Record<string, unknown> };
   type JoinInvite = { allowed_methods?: string[]; is_youth?: boolean };
 
   const [features, setFeatures] = useState<JoinFeatures | null>(null);

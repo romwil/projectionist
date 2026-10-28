@@ -80,7 +80,7 @@ export function cleanCueText(raw: unknown) {
  */
 export function parseVtt(source: JsParam) {
   const lines = String(source || "").replace(/\r\n?/g, "\n").replace(/^\ufeff/, "").split("\n");
-  const cues: unknown[] = [];
+  const cues: JsParam[] = [];
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
@@ -92,7 +92,7 @@ export function parseVtt(source: JsParam) {
     const start = parseCueTimestamp(startRaw);
     const end = parseCueTimestamp(String(endRaw || "").trim().split(/\s+/)[0]);
     i += 1;
-    const body: unknown[] = [];
+    const body: JsParam[] = [];
     while (i < lines.length && lines[i].trim() !== "") {
       body.push(lines[i]);
       i += 1;

@@ -55,7 +55,7 @@ export default function ListsPage({ embedded = false }: ListsPageProps) {
       .map((entry: any) => ({ ...(entry.media || entry), _listItemId: entry.id }))
       .filter((item: any) => !browse.media_type || item?.media_type === browse.media_type)
       .filter((item: any) => !browse.year || String(item?.year || "") === String(browse.year))
-      .filter((item: any) => !browse.genres.length || browse.genres.every((genre) => (item?.genres || []).includes(genre)))
+      .filter((item: any) => !browse.genres.length || browse.genres.every((genre: string) => (item?.genres || []).includes(genre)))
       .filter((item: any) => matchesMediaBrowseWatchState(item, browse.watch_state));
     const direction = browse.sort_dir === "desc" ? -1 : 1;
     return [...source].sort((left, right) => {

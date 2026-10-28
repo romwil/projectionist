@@ -30,7 +30,7 @@ export function footnoteSheetLabel(note: JsParam) {
 }
 
 export function parseMarkdownFootnotes(markdown: JsParam) {
-  const notes: unknown[] = [];
+  const notes: JsParam[] = [];
   const seen = new Set();
   const text = String(markdown || "");
   DEFINITION_RE.lastIndex = 0;

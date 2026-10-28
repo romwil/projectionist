@@ -1,4 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react";
+import type { NavigateFunction } from "react-router-dom";
+import type {
+  ApiError,
+  ChatContext,
+  ChatMessage,
+  ChatThread,
+  Features,
+  JsonObject,
+  JsParam,
+  LibraryItem,
+  Persona,
+} from "../api/types";
 import {
   api,
   addCuratedListItem,
@@ -98,6 +111,96 @@ import {
   chatErrorMessage,
 } from "../lib/chatSession.js";
 
+export type ChatSessionArgs = {
+  persona?: Persona | null;
+  features?: Features | null;
+  isYouth?: boolean;
+  authReady?: boolean;
+  refreshJobs: () => void;
+  setStats: Dispatch<SetStateAction<JsParam>>;
+  speakAssistantMessageRef: MutableRefObject<(message: ChatMessage) => void>;
+  stopVoiceListeningRef: MutableRefObject<() => void>;
+  stopTtsRef: MutableRefObject<() => void>;
+  composerRef: RefObject<HTMLElement | null>;
+  searchParams: URLSearchParams;
+  setSearchParams: (next: URLSearchParams, opts?: { replace?: boolean }) => void;
+  navigate: NavigateFunction;
+  startBulkProgress: (opts: JsParam) => string | null;
+  updateBulkProgress: (id: string | null | undefined, current: number) => void;
+  finishBulkProgress: (id: string | null | undefined, opts?: JsParam) => void;
+  reviewUserContext?: JsParam;
+  setMobileNavOpen?: (open: boolean) => void;
+};
+
+/** Explicit return bag App / ChatWorkspace consume. JSON bags use Wave 4 types. */
+export type ChatSession = {
+  messages: ChatMessage[];
+  setMessages: Dispatch<SetStateAction<ChatMessage[]>>;
+  messageFeedback: Record<string, string>;
+  threads: ChatThread[];
+  activeSessionId: string;
+  threadsReady: boolean;
+  turnstyleResults: JsParam;
+  setTurnstyleResults: Dispatch<SetStateAction<JsParam>>;
+  pendingAdd: JsParam;
+  pendingBulk: JsParam;
+  pendingTokens: JsParam[];
+  addInProgress: boolean;
+  addProgress: JsParam;
+  addFeedback: JsParam;
+  input: string;
+  setInput: Dispatch<SetStateAction<string>>;
+  loading: boolean;
+  chatError: string;
+  activeContext: ChatContext | null;
+  typingLabel: string;
+  agentActivityLog: JsParam[];
+  activityPanelOpen: boolean;
+  setActivityPanelOpen: Dispatch<SetStateAction<boolean>>;
+  composerPlaceholder: string;
+  quickPickLoading: boolean;
+  surpriseMood: string;
+  undoToast: JsParam;
+  personas: Persona[];
+  activePersonaId: string | null;
+  setActivePersonaId: Dispatch<SetStateAction<string | null>>;
+  defaultPersonaId: string | null;
+  slashPaletteIndex: number;
+  setSlashPaletteIndex: Dispatch<SetStateAction<number>>;
+  slashPaletteItems: JsParam[];
+  showSlashPalette: boolean;
+  savedShelf: JsParam[];
+  refreshSavedShelf: () => void;
+  refreshThreads: () => Promise<ChatThread[]>;
+  switchThread: (session: string) => Promise<void>;
+  handleCreateThread: () => Promise<void>;
+  handleDeleteThread: (session: string) => Promise<void>;
+  handleUndoDeleteThread: () => void;
+  commitPendingDelete: () => Promise<void>;
+  handleMessageFeedbackChange: (messageId: string, feedback: string | null) => Promise<void>;
+  handleSaveToLibrary: (message: ChatMessage) => Promise<void>;
+  handleCreatePersona: (data: JsonObject) => Promise<void>;
+  handleUpdatePersona: (id: string, data: JsonObject) => Promise<void>;
+  handleDeletePersona: (id: string) => Promise<void>;
+  handleSetDefaultPersona: (id: string) => Promise<void>;
+  handleQuickPick: (moodOverride?: string) => Promise<void>;
+  handleOpenAgentResultsGrid: (opts: { heading?: string; items?: LibraryItem[] }) => Promise<JsParam>;
+  handleContextChip: (chip: JsParam) => void;
+  handleSlashPaletteSelect: (entry: JsParam) => void;
+  sendMessage: (text: string) => Promise<void>;
+  executeSingleAdd: (item: LibraryItem, target: string, opts?: JsParam) => Promise<JsParam>;
+  handleAdd: (item: LibraryItem, target: string) => Promise<void>;
+  handleConfirmAllItems: (items: LibraryItem[], target: string) => void;
+  handleConfirmAllTokens: () => void;
+  cancelPendingBulk: () => void;
+  cancelPendingTokens: () => void;
+  cancelPendingAdd: () => void;
+  confirmActiveAction: () => Promise<void>;
+  cancelActiveAction: () => void;
+  confirmPendingAdd: () => Promise<void>;
+  dismissAddFeedback: () => void;
+};
+
 export default function useChatSession({
   persona,
   features,
@@ -117,46 +220,46 @@ export default function useChatSession({
   finishBulkProgress,
   reviewUserContext,
   setMobileNavOpen = () => {},
-}) {
-  const [messages, setMessages] = useState([]);
-  const [messageFeedback, setMessageFeedback] = useState({});
-  const [threads, setThreads] = useState([]);
+}: ChatSessionArgs): ChatSession {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messageFeedback, setMessageFeedback] = useState<Record<string, string>>({});
+  const [threads, setThreads] = useState<ChatThread[]>([]);
   const [activeSessionId, setActiveSessionId] = useState(() => sessionId());
   const [threadsReady, setThreadsReady] = useState(false);
-  const [turnstyleResults, setTurnstyleResults] = useState(null);
-  const [pendingAdd, setPendingAdd] = useState(null);
-  const [pendingBulk, setPendingBulk] = useState(null);
-  const [pendingTokens, setPendingTokens] = useState([]);
+  const [turnstyleResults, setTurnstyleResults] = useState<JsParam>(null);
+  const [pendingAdd, setPendingAdd] = useState<JsParam>(null);
+  const [pendingBulk, setPendingBulk] = useState<JsParam>(null);
+  const [pendingTokens, setPendingTokens] = useState<JsParam[]>([]);
   const [addInProgress, setAddInProgress] = useState(false);
-  const addInFlightKeysRef = useRef(new Set());
-  const [addProgress, setAddProgress] = useState(null);
-  const [addFeedback, setAddFeedback] = useState(null);
+  const addInFlightKeysRef = useRef<Set<string>>(new Set());
+  const [addProgress, setAddProgress] = useState<JsParam>(null);
+  const [addFeedback, setAddFeedback] = useState<JsParam>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [chatError, setChatError] = useState("");
-  const [activeContext, setActiveContext] = useState(null);
+  const [activeContext, setActiveContext] = useState<ChatContext | null>(null);
   const [typingLabel, setTypingLabel] = useState("");
-  const [agentActivityLog, setAgentActivityLog] = useState([]);
+  const [agentActivityLog, setAgentActivityLog] = useState<JsParam[]>([]);
   const [activityPanelOpen, setActivityPanelOpen] = useState(false);
   const [composerPlaceholder, setComposerPlaceholder] = useState("");
   const [quickPickLoading, setQuickPickLoading] = useState(false);
   const [surpriseMood, setSurpriseMood] = useState("");
-  const [undoToast, setUndoToast] = useState(null);
-  const [personas, setPersonas] = useState([]);
-  const [activePersonaId, setActivePersonaId] = useState(null);
-  const [defaultPersonaId, setDefaultPersonaId] = useState(null);
+  const [undoToast, setUndoToast] = useState<JsParam>(null);
+  const [personas, setPersonas] = useState<Persona[]>([]);
+  const [activePersonaId, setActivePersonaId] = useState<string | null>(null);
+  const [defaultPersonaId, setDefaultPersonaId] = useState<string | null>(null);
   const helpfulCountRef = useRef(0);
   const perfectPickPendingRef = useRef(false);
   const tokenNoteLoggedRef = useRef(false);
   const inputRef = useRef("");
-  const pendingDeleteRef = useRef(null);
+  const pendingDeleteRef = useRef<JsParam>(null);
   const rateFlowStartedRef = useRef(false);
   const recommendLikeStartedRef = useRef(false);
   const chatFromRailStartedRef = useRef(false);
-  const chatFromRailSeedRef = useRef(null);
+  const chatFromRailSeedRef = useRef<JsParam>(null);
   const savedLibraryStartedRef = useRef(false);
   const [slashPaletteIndex, setSlashPaletteIndex] = useState(0);
-  const [savedShelf, setSavedShelf] = useState([]);
+  const [savedShelf, setSavedShelf] = useState<JsParam[]>([]);
 
   inputRef.current = input;
 
@@ -173,8 +276,8 @@ export default function useChatSession({
     shouldShowSlashCommandPalette(input) && slashPaletteItems.length > 0 && !loading && threadsReady;
   const refreshPersonas = useCallback(async () => {
     try {
-      const data = await getPersonas();
-      const list = data.items || data || [];
+      const data = await getPersonas() as { items?: Persona[] } | Persona[];
+      const list: Persona[] = Array.isArray(data) ? data : (data.items || []);
       setPersonas(list);
       const def = list.find((p) => p.is_default);
       let nextDefaultId = def?.id ?? null;
@@ -200,25 +303,25 @@ export default function useChatSession({
     }
   }, []);
 
-  const loadThreadFeedback = useCallback(async (session) => {
+  const loadThreadFeedback = useCallback(async (session: string) => {
     try {
       const data = await getThreadFeedback(session);
-      const next = {};
+      const next: Record<string, string> = {};
       for (const item of data.items || []) {
         if (item.message_id && item.feedback) {
-          next[item.message_id] = item.feedback;
+          next[String(item.message_id)] = String(item.feedback);
         }
       }
       setMessageFeedback(next);
     } catch (error) {
-      if (!error.message?.includes("Thread not found")) {
+      if (!(error as ApiError).message?.includes("Thread not found")) {
         console.error(error);
       }
       setMessageFeedback({});
     }
   }, []);
 
-  const loadThreadMessages = useCallback(async (session) => {
+  const loadThreadMessages = useCallback(async (session: string) => {
     try {
       const data = await getThreadMessages(session);
       setMessages(data.messages || []);
@@ -226,7 +329,7 @@ export default function useChatSession({
       await loadThreadFeedback(session);
       return true;
     } catch (error) {
-      if (error.message?.includes("Thread not found")) {
+      if ((error as ApiError).message?.includes("Thread not found")) {
         setMessages([]);
         setMessageFeedback({});
         return false;
@@ -244,7 +347,7 @@ export default function useChatSession({
   useEffect(() => {
     if (!personaConsultPending || loading || !activeSessionId) return undefined;
     let stopped = false;
-    let timer;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const deadline = Date.now() + PERSONA_CONSULT_POLL_WINDOW_MS;
 
     const poll = async () => {
@@ -253,11 +356,11 @@ export default function useChatSession({
         const data = await getThreadMessages(activeSessionId);
         if (!stopped) {
           setMessages((current) =>
-            mergeThreadMessagesById(current, data.messages || []),
+            mergeThreadMessagesById(current, data.messages || []) as ChatMessage[],
           );
         }
       } catch (error) {
-        if (!error.message?.includes("Thread not found")) {
+        if (!(error as ApiError).message?.includes("Thread not found")) {
           console.error(error);
         }
       } finally {
@@ -278,7 +381,7 @@ export default function useChatSession({
   }, [activeSessionId, loading, personaConsultPending]);
 
   const switchThread = useCallback(
-    async (session) => {
+    async (session: string) => {
       setMobileNavOpen(false);
       if (!session || session === activeSessionId) return;
       helpfulCountRef.current = 0;
@@ -355,7 +458,7 @@ export default function useChatSession({
   }, []);
 
   const handleDeleteThread = useCallback(
-    async (session) => {
+    async (session: string) => {
       if (!session) return;
       // Flush any prior pending delete first.
       if (pendingDeleteRef.current) {
@@ -370,14 +473,14 @@ export default function useChatSession({
 
       if (session === activeSessionId) {
         if (remaining.length) {
-          const nextId = remaining[0].id;
+          const nextId = remaining[0].id || "";
           setActiveSession(nextId);
           setActiveSessionId(nextId);
           await loadThreadMessages(nextId);
         } else {
           try {
             const created = await createThread();
-            const nextId = created.session_id;
+            const nextId = created.session_id || "";
             setActiveSession(nextId);
             setActiveSessionId(nextId);
             setMessages([]);
@@ -405,7 +508,7 @@ export default function useChatSession({
   );
 
   const handleMessageFeedbackChange = useCallback(
-    async (messageId, feedback) => {
+    async (messageId: string, feedback: string | null) => {
       const previous = messageFeedback[messageId] ?? null;
       if (feedback === previous) return;
 
@@ -458,7 +561,7 @@ export default function useChatSession({
   }, []);
 
   const handleSaveToLibrary = useCallback(
-    async (message) => {
+    async (message: ChatMessage) => {
       const name =
         threads.find((thread) => thread.id === activeSessionId)?.thread_title || "Curator response";
       try {
@@ -484,13 +587,13 @@ export default function useChatSession({
 
       if (!storedExists && !loaded) {
         if (threadList.length > 0) {
-          storedId = threadList[0].id;
+          storedId = threadList[0].id || storedId;
           setActiveSession(storedId);
           setActiveSessionId(storedId);
           await loadThreadMessages(storedId);
         } else {
           const created = await createThread();
-          storedId = created.session_id;
+          storedId = created.session_id || storedId;
           setActiveSession(storedId);
           setActiveSessionId(storedId);
           threadList = await refreshThreads();
@@ -574,7 +677,7 @@ export default function useChatSession({
     setAddFeedback(null);
   }
 
-  function appendChatError(reason) {
+  function appendChatError(reason: unknown) {
     const snark = persona?.val_dipl_snark ?? 0.5;
     const message = chatErrorMessage(reason, snark);
     setChatError(message);
@@ -588,29 +691,29 @@ export default function useChatSession({
     ]);
   }
 
-  async function handleCreatePersona(data) {
+  async function handleCreatePersona(data: JsonObject) {
     await createPersona(data);
     const { list } = await refreshPersonas();
-    if (list.length === 1) setActivePersonaId(list[0].id);
+    if (list.length === 1) setActivePersonaId(list[0].id ?? null);
   }
 
-  async function handleUpdatePersona(id, data) {
+  async function handleUpdatePersona(id: string, data: JsonObject) {
     await updatePersona(id, data);
     await refreshPersonas();
   }
 
-  async function handleDeletePersona(id) {
+  async function handleDeletePersona(id: string) {
     await deletePersona(id);
     await refreshPersonas();
     if (activePersonaId === id) setActivePersonaId(defaultPersonaId);
   }
 
-  async function handleSetDefaultPersona(id) {
+  async function handleSetDefaultPersona(id: string) {
     await setDefaultPersona(id);
     setDefaultPersonaId(id);
   }
 
-  async function handleQuickPick(moodOverride) {
+  async function handleQuickPick(moodOverride?: string) {
     if (quickPickLoading) return;
     setQuickPickLoading(true);
     const mood = resolveQuickPickMood(moodOverride, surpriseMood);
@@ -635,7 +738,7 @@ export default function useChatSession({
       setQuickPickLoading(false);
     }
   }
-  async function handleOpenAgentResultsGrid({ heading, items }) {
+  async function handleOpenAgentResultsGrid({ heading, items }: { heading?: string; items?: LibraryItem[] }) {
     const result = await materializeAgentResultList({
       heading,
       items,
@@ -646,7 +749,7 @@ export default function useChatSession({
     return result;
   }
 
-  function handleContextChip(chip) {
+  function handleContextChip(chip: JsParam) {
     const action = resolveChatLauncherChipAction(chip);
     if (!action) return;
     if (action.type === "resume" && action.threadId) {
@@ -654,22 +757,22 @@ export default function useChatSession({
       return;
     }
     if (action.type === "send") {
-      sendMessage(action.prompt);
+      if (action.prompt) sendMessage(action.prompt);
       return;
     }
     if (action.type === "prefill") {
-      setInput(action.text);
+      setInput(action.text || "");
       composerRef.current?.focus();
     }
   }
 
-  function handleSlashPaletteSelect(entry) {
+  function handleSlashPaletteSelect(entry: JsParam) {
     setInput(formatSlashCommandInsert(entry.command));
     setSlashPaletteIndex(0);
     composerRef.current?.focus();
   }
 
-  async function sendMessage(text) {
+  async function sendMessage(text: string) {
     if (!text.trim() || loading) return;
     stopVoiceListeningRef.current?.();
     stopTtsRef.current?.();
@@ -898,7 +1001,7 @@ export default function useChatSession({
       }
     };
   }, []);
-  async function executeSingleAdd(item, target, { trackGlobal = false } = {}) {
+  async function executeSingleAdd(item: LibraryItem, target: string, { trackGlobal = false }: JsParam = {}) {
     const label = item.title || "this title";
     const service = serviceLabelForTarget(target);
     const body = buildProposeActionBody(item, target);
@@ -940,7 +1043,7 @@ export default function useChatSession({
     }
   }
 
-  async function handleAdd(item, target) {
+  async function handleAdd(item: LibraryItem, target: string) {
     // Per-card concurrent adds — do not globally block other cards.
     setAddFeedback(null);
     setPendingBulk(null);
@@ -949,7 +1052,7 @@ export default function useChatSession({
     await executeSingleAdd(item, target, { trackGlobal: false });
   }
 
-  function handleConfirmAllItems(items, target) {
+  function handleConfirmAllItems(items: LibraryItem[], target: string) {
     if (!items?.length || addInProgress) return;
     setAddFeedback(null);
     setPendingAdd(null);
@@ -985,7 +1088,7 @@ export default function useChatSession({
 
   const requestPath = requestPathFromFeatures(features);
 
-  async function executeBulkAdd(items, target) {
+  async function executeBulkAdd(items: LibraryItem[], target: string) {
     const service = serviceLabelForTarget(target);
     const action = target === "sonarr" ? "add_sonarr" : target === "seerr" ? "request_seerr" : "add_radarr";
     let successCount = 0;

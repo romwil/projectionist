@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useConfirmModal } from "../../hooks/useConfirmModal";
-import useLiveChannelsAdmin from "../../hooks/useLiveChannelsAdmin.jsx";
+import useLiveChannelsAdmin, { type LiveChannelsAdminArgs } from "../../hooks/useLiveChannelsAdmin";
 import { getLiveChannelsStatus, refillLiveChannelsChannel } from "../../api/client";
 import { buildCraftFiltersPayload, craftDraftFromStation } from "../../lib/liveChannelsCraft.js";
 import { ownerLiveText } from "../../lib/liveChannelsOwnerCopy.js";
@@ -32,15 +32,14 @@ type LiveAdminShared = {
  */
 export default function LiveChannelsSection(shared: LiveAdminShared) {
   const { confirm, modal } = useConfirmModal();
-  // Wave 5 god hook stays JS; return bag is untyped until that conversion.
   const live = useLiveChannelsAdmin({
     settings: shared.settings,
     persistSettings: shared.persistSettings,
     updateTunarrSettings: shared.updateTunarrSettings,
     updateFeatureFlags: shared.updateFeatureFlags,
-    setSettings: shared.setSettings,
+    setSettings: shared.setSettings as LiveChannelsAdminArgs["setSettings"],
     confirm,
-  }) as any;
+  });
   const props = {
     ...shared,
     ...live,

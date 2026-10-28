@@ -1,14 +1,16 @@
 import { createId } from "../lib/id.js";
 import { formatApiError, parseApiErrorBody } from "../lib/apiError.js";
-import type {ApiError, AuthMe, ChatMessage, ExploreHubPayload, Features, Job, JsonObject, JsParam, QueryParams} from "./types";
+import type {ApiError, AuthMe, ChatMessage, ChatThread, ExploreHubPayload, Features, Job, JsonObject, JsParam, QueryParams} from "./types";
 
 export type {
   ApiError,
   AuthMe,
   AuthUser,
   ChatBlock,
+  ChatContext,
   ChatMessage,
   ChatThread,
+  Persona,
   ExploreHubPayload,
   FeatureFlags,
   Features,
@@ -71,7 +73,7 @@ export function setActiveSession(nextSessionId: string | null | undefined) {
 }
 
 export async function listThreads() {
-  return api("/chat/threads");
+  return api<ChatThread[]>("/chat/threads");
 }
 
 export async function createThread(payload: JsonObject = {}) {
@@ -82,7 +84,7 @@ export async function createThread(payload: JsonObject = {}) {
 }
 
 export async function getThreadMessages(sessionId: string) {
-  return api<ChatMessage[]>(`/chat/threads/${encodeURIComponent(sessionId)}/messages`);
+  return api<{ messages?: ChatMessage[] }>(`/chat/threads/${encodeURIComponent(sessionId)}/messages`);
 }
 
 export async function saveLibraryPage(payload: JsonObject) {
@@ -90,7 +92,7 @@ export async function saveLibraryPage(payload: JsonObject) {
 }
 
 export async function listLibraryPages(query: string = "") {
-  return api(`/saved-library?q=${encodeURIComponent(query)}`);
+  return api<JsParam>(`/saved-library?q=${encodeURIComponent(query)}`);
 }
 
 export async function getLibraryPage(pageId: string) {
@@ -467,10 +469,10 @@ export async function listSeerrRequests(params: QueryParams = {}) {
 }
 
 export async function getThreadFeedback(sessionId: string) {
-  return api(`/chat/threads/${encodeURIComponent(sessionId)}/feedback`);
+  return api<{ items?: JsonObject[] }>(`/chat/threads/${encodeURIComponent(sessionId)}/feedback`);
 }
 
-export async function submitMessageFeedback(messageId: string, sessionId: string, feedback: string) {
+export async function submitMessageFeedback(messageId: string, sessionId: string, feedback: string | null) {
   if (!feedback) {
     const query = new URLSearchParams({ session_id: sessionId });
     return api(`/chat/messages/${encodeURIComponent(messageId)}/feedback?${query.toString()}`, {
@@ -593,7 +595,7 @@ export async function getPersona() {
 }
 
 export async function getPersonaPresets() {
-  return api("/persona/presets");
+  return api<JsParam>("/persona/presets");
 }
 
 export async function getPersonaPreview(params: QueryParams = {}) {
@@ -646,8 +648,8 @@ export async function addWatchlistPin(payload: JsonObject) {
   });
 }
 
-export async function removeWatchlistPin(pinId: string) {
-  return api(`/watchlist/${encodeURIComponent(pinId)}`, {
+export async function removeWatchlistPin(pinId?: string | number | null) {
+  return api(`/watchlist/${encodeURIComponent(String(pinId ?? ""))}`, {
     method: "DELETE",
   });
 }
@@ -712,8 +714,8 @@ export async function deleteCuratedListItem(listId: string, itemId: string | num
 }
 
 /** Owner authoring: set a course step's note and/or ordering position. */
-export async function updateCuratedListItem(listId: string, itemId: string | number, payload: JsonObject) {
-  return api(`/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(itemId)}`, {
+export async function updateCuratedListItem(listId?: string | number | null, itemId?: string | number | null, payload: JsonObject = {}) {
+  return api(`/lists/${encodeURIComponent(String(listId ?? ""))}/items/${encodeURIComponent(String(itemId ?? ""))}`, {
     method: "PATCH",
     body: JSON.stringify(payload),
   });
@@ -729,11 +731,11 @@ export async function setCuratedListVisibility(listId: string, visibility: strin
 
 /** Household-visible published collections/courses (any signed-in member). */
 export async function listPublishedCollections() {
-  return api("/collections");
+  return api<JsParam>("/collections");
 }
 
 export async function getPublishedCollection(listId: string) {
-  return api(`/collections/${encodeURIComponent(listId)}`);
+  return api<JsParam>(`/collections/${encodeURIComponent(listId)}`);
 }
 
 export async function createAccessRequest(payload: JsonObject) {
@@ -917,7 +919,7 @@ export async function getTasteProfile() {
   return api("/taste");
 }
 
-export async function patchTasteProfile(clusters: JsonObject[]) {
+export async function patchTasteProfile(clusters: JsParam[]) {
   return api("/taste", {
     method: "PATCH",
     body: JSON.stringify({ clusters }),
@@ -1212,7 +1214,7 @@ export async function sendChat(message: JsonObject,
  * @param {function} [options.onError]    - ({error}) on stream error
  * @param {AbortSignal} [options.signal]  - abort controller signal
  */
-export async function sendChatStream(message: JsonObject,
+export async function sendChatStream(message: string | JsonObject,
   {
     sessionId: sid,
     personaId,
@@ -1697,8 +1699,8 @@ export async function getLibraryFacets(facetType: string, limit: number = 50, q:
   return api(`/library/facets?${params}`);
 }
 
-export async function getPerson(tmdbPersonId: string) {
-  return api(`/person/${encodeURIComponent(tmdbPersonId)}`);
+export async function getPerson(tmdbPersonId?: string | number | null) {
+  return api(`/person/${encodeURIComponent(String(tmdbPersonId ?? ""))}`);
 }
 
 export async function resolvePerson(name: string) {
@@ -1915,7 +1917,7 @@ export async function getAskDeleteConfirmation() {
   return api("/settings/ask-delete-confirmation");
 }
 
-export async function saveAskDeleteConfirmation(askDeleteConfirmation: JsonObject) {
+export async function saveAskDeleteConfirmation(askDeleteConfirmation: boolean | JsonObject) {
   return api("/settings/ask-delete-confirmation", {
     method: "PUT",
     body: JSON.stringify({ ask_delete_confirmation: Boolean(askDeleteConfirmation) }),
@@ -2253,7 +2255,7 @@ export async function createHoliday(payload: JsonObject) {
   });
 }
 
-export async function updateHoliday(observanceId: string, payload: JsonObject) {
+export async function updateHoliday(observanceId: string | number, payload: JsonObject) {
   return api(`/admin/holidays/${encodeURIComponent(observanceId)}`, {
     method: "PATCH",
     body: JSON.stringify(payload),
@@ -2270,11 +2272,11 @@ export async function restoreHolidayDefaults() {
   return api("/admin/holidays/restore-defaults", { method: "POST" });
 }
 
-export async function getHolidayRail(observanceId: string) {
+export async function getHolidayRail(observanceId: string | number) {
   return api(`/admin/holidays/${encodeURIComponent(observanceId)}/rail`);
 }
 
-export async function setHolidayRailTitle(observanceId: string, payload: JsonObject) {
+export async function setHolidayRailTitle(observanceId: string | number, payload: JsonObject) {
   return api(`/admin/holidays/${encodeURIComponent(observanceId)}/rail/titles`, {
     method: "PUT",
     body: JSON.stringify(payload),
@@ -2298,7 +2300,7 @@ export async function refreshHolidaySchedule() {
 }
 
 /** Owner: order a seasonal shelf — pins these titles to the front, in this order. */
-export async function setHolidayRailOrder(observanceId: string, libraryItemIds: string[]) {
+export async function setHolidayRailOrder(observanceId: string | number, libraryItemIds: (string | number)[]) {
   return api(`/admin/holidays/${encodeURIComponent(observanceId)}/rail/order`, {
     method: "PUT",
     body: JSON.stringify({ library_item_ids: libraryItemIds }),
@@ -2306,7 +2308,7 @@ export async function setHolidayRailOrder(observanceId: string, libraryItemIds: 
 }
 
 /** Owner: ask the professor to propose seasonal shelf picks + staff-pick notes. */
-export async function proposeHolidayRailCuration(observanceId: string, { limit = 10 }: JsonObject = {}) {
+export async function proposeHolidayRailCuration(observanceId: string | number, { limit = 10 }: JsonObject = {}) {
   return api(`/admin/holidays/${encodeURIComponent(observanceId)}/rail/curate`, {
     method: "POST",
     body: JSON.stringify({ limit }),
@@ -2314,7 +2316,7 @@ export async function proposeHolidayRailCuration(observanceId: string, { limit =
 }
 
 /** Owner: confirm a professor proposal (replaces shelf order + notes). */
-export async function applyHolidayRailCuration(observanceId: string, picks: JsonObject[]) {
+export async function applyHolidayRailCuration(observanceId: string | number, picks: JsonObject[]) {
   return api(`/admin/holidays/${encodeURIComponent(observanceId)}/rail/curate/apply`, {
     method: "POST",
     body: JSON.stringify({ picks }),
@@ -2322,7 +2324,7 @@ export async function applyHolidayRailCuration(observanceId: string, picks: Json
 }
 
 /** Owner: save a staff-pick curator note for one shelf title. */
-export async function setHolidayRailCuratorNote(observanceId: string, libraryItemId: string, curatorNote: string) {
+export async function setHolidayRailCuratorNote(observanceId: string | number, libraryItemId: string | number, curatorNote: string) {
   return api(
     `/admin/holidays/${encodeURIComponent(observanceId)}/rail/titles/${encodeURIComponent(libraryItemId)}/note`,
     {

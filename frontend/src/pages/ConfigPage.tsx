@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import type { ChangeEvent } from "react";
+import type { ApiError, JsonObject, JsParam } from "../api/types";
 import { useConfirmModal } from "../hooks/useConfirmModal";
 import { Link, Navigate, useNavigate, useOutletContext, useParams } from "react-router-dom";
 import {
@@ -69,7 +71,7 @@ const ADMIN_SECTIONS = new Set([
   "advanced",
 ]);
 
-const SECTION_TITLES = {
+const SECTION_TITLES: Record<string, string> = {
   overview: "Overview",
   connections: "Connections",
   libraries: "Libraries",
@@ -80,7 +82,7 @@ const SECTION_TITLES = {
   advanced: "Advanced",
 };
 
-const SECTION_LEADS = {
+const SECTION_LEADS: Record<string, string> = {
   advanced: "Integrations & keys",
 };
 
@@ -98,7 +100,7 @@ const SECRET_FIELDS = [
 ];
 
 /** User-facing labels for settings keys (never show raw snake_case in the UI). */
-const FIELD_LABELS = {
+const FIELD_LABELS: Record<string, string> = {
   plex_url: "Plex server URL",
   plex_token: "Plex server token",
   radarr_url: "Radarr URL",
@@ -122,7 +124,7 @@ const FIELD_LABELS = {
   library_sync_hour: "Preferred sync hour",
 };
 
-const FIELD_PLACEHOLDERS = {
+const FIELD_PLACEHOLDERS: Record<string, string> = {
   plex_url: "http://192.168.1.50:32400",
   plex_token: "Server token for library access",
   radarr_url: "http://192.168.1.50:7878",
@@ -130,7 +132,7 @@ const FIELD_PLACEHOLDERS = {
   tautulli_url: "http://192.168.1.50:8181",
 };
 
-const FIELD_HELP = {
+const FIELD_HELP: Record<string, string> = {
   plex_token:
     "Lets Projectionist read your Plex libraries (sync, collections, ratings). This is a server token for the Media Server — not the same as household Sign in with Plex on the login page.",
   tmdb_api_key: "Powers posters, details, and discovery for titles not yet in your library.",
@@ -148,11 +150,11 @@ const FIELD_HELP = {
   library_enrich_workers: "How many titles to enrich at once during sync. Lower if Unraid feels busy.",
 };
 
-function fieldLabel(field) {
+function fieldLabel(field: string) {
   return FIELD_LABELS[field] || field.replace(/_/g, " ");
 }
 
-function settingsPayloadForTest(service, settings) {
+function settingsPayloadForTest(service: string, settings: JsParam) {
   if (service === "seerr") {
     return {
       ...settings,
@@ -179,6 +181,16 @@ function SecretInput({
   visible = false,
   revealing = false,
   onToggleVisible,
+}: {
+  field: string;
+  settings: JsParam;
+  value: JsParam;
+  onChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  disabled?: boolean;
+  placeholder?: string;
+  visible?: boolean;
+  revealing?: boolean;
+  onToggleVisible: () => void;
 }) {
   // Drafts reveal client-side; stored secrets load via owner-only reveal endpoint.
   const configured = isSecretConfigured(settings, field);
@@ -212,7 +224,7 @@ function SecretInput({
   );
 }
 
-function InlineAlert({ type, message, details, testId }) {
+function InlineAlert({ type, message, details, testId }: { type?: string; message?: string; details?: JsParam; testId?: string }) {
   if (!message || (type !== "success" && type !== "error")) return null;
   const detailList = Array.isArray(details)
     ? details.map((item) => String(item || "").trim()).filter(Boolean)
@@ -235,7 +247,7 @@ function InlineAlert({ type, message, details, testId }) {
   );
 }
 
-function CertifiedBadge({ certified, testing, serviceId }) {
+function CertifiedBadge({ certified, testing, serviceId }: { certified?: boolean; testing?: boolean; serviceId: string }) {
   if (testing) {
     return (
       <span className="certified-badge certified-badge-testing" data-testid={`certified-badge-${serviceId}`}>
@@ -258,7 +270,7 @@ function CertifiedBadge({ certified, testing, serviceId }) {
 }
 
 /** Prefer the Connected pill; only surface InlineAlert for errors or non-Connected feedback. */
-function connectionStatusAlert(actionAlert, area, result, certified) {
+function connectionStatusAlert(actionAlert: JsParam, area: string, result: JsParam, certified: boolean) {
   if (actionAlert?.area === area) {
     return { type: actionAlert.type, message: actionAlert.message };
   }
@@ -267,7 +279,7 @@ function connectionStatusAlert(actionAlert, area, result, certified) {
   return { type: result.state, message: result.message };
 }
 
-function serviceCredentialsPresent(service, settings) {
+function serviceCredentialsPresent(service: string, settings: JsParam) {
   if (!settings) return false;
   switch (service) {
     case "llm":
@@ -296,7 +308,7 @@ function serviceCredentialsPresent(service, settings) {
   }
 }
 
-function ProviderSelect({ value, onChange }) {
+function ProviderSelect({ value, onChange }: { value?: string; onChange: (event: ChangeEvent<HTMLSelectElement>) => void }) {
   return (
     <select value={value || "openai"} onChange={onChange}>
       {LLM_PROVIDER_OPTIONS.map(({ value: providerValue, label }) => (
@@ -308,7 +320,7 @@ function ProviderSelect({ value, onChange }) {
   );
 }
 
-const STEP_LABELS = {
+const STEP_LABELS: Record<string, string> = {
   identity_seed: "Name",
   infrastructure: "Connections",
   dropdown_mapping: "Libraries",
@@ -327,20 +339,20 @@ const OPTIONAL_SERVICES = [
   { id: "tautulli", label: "Tautulli", fields: ["tautulli_url", "tautulli_api_key"] },
 ];
 
-function wizardPersonaPreview(persona) {
+function wizardPersonaPreview(persona: JsParam) {
   if (!persona) return "";
   const name = String(persona.curator_name || "Curator").trim() || "Curator";
   return `Hello, I'm ${name}. I'll curate your library with a balanced voice.`;
 }
 
-function stepUnlocked(stepIndex, verification) {
+function stepUnlocked(stepIndex: number, verification: JsParam) {
   if (stepIndex === 0) return true;
   if (stepIndex === 1) return verification.identity;
   if (stepIndex === 2) return verification.identity && verification.plex;
   return false;
 }
 
-function canAdvance(stepIndex, verification) {
+function canAdvance(stepIndex: number, verification: JsParam) {
   if (stepIndex === 0) return verification.identity;
   if (stepIndex === 1) {
     return verification.llm && verification.plex && verification.radarr && verification.sonarr;
@@ -349,7 +361,7 @@ function canAdvance(stepIndex, verification) {
   return false;
 }
 
-function onboardingReady(verification) {
+function onboardingReady(verification: JsParam) {
   return (
     verification.identity &&
     verification.llm &&
@@ -360,7 +372,7 @@ function onboardingReady(verification) {
   );
 }
 
-function firstIncompleteWizardStep(wizardData) {
+function firstIncompleteWizardStep(wizardData: JsParam) {
   const steps = wizardData?.steps;
   if (!steps) return 0;
   if (!steps.identity_seed?.complete) return 0;
@@ -371,20 +383,20 @@ function firstIncompleteWizardStep(wizardData) {
 export default function ConfigPage() {
   const navigate = useNavigate();
   const { section: sectionParam } = useParams();
-  const outletContext = useOutletContext() || {};
+  const outletContext = useOutletContext<{ setWizardMode?: (value: boolean) => void }>() || {};
   const setWizardMode = outletContext.setWizardMode;
-  const section = ADMIN_SECTIONS.has(sectionParam) ? sectionParam : "overview";
-  const showSection = (id) => section === id;
-  const [settings, setSettings] = useState(null);
-  const [persona, setPersona] = useState(null);
-  const [wizard, setWizard] = useState(null);
+  const section = ADMIN_SECTIONS.has(sectionParam || "") ? sectionParam : "overview";
+  const showSection = (id: string) => section === id;
+  const [settings, setSettings] = useState<JsParam>(null);
+  const [persona, setPersona] = useState<JsParam>(null);
+  const [wizard, setWizard] = useState<JsParam>(null);
   const [status, setStatus] = useState("");
-  const [actionAlert, setActionAlert] = useState(null);
-  const [footerAlert, setFooterAlert] = useState(null);
-  const [sections, setSections] = useState([]);
-  const [testing, setTesting] = useState(null);
-  const [testResults, setTestResults] = useState({});
-  const [certifications, setCertifications] = useState({});
+  const [actionAlert, setActionAlert] = useState<JsParam>(null);
+  const [footerAlert, setFooterAlert] = useState<JsParam>(null);
+  const [sections, setSections] = useState<JsParam[]>([]);
+  const [testing, setTesting] = useState<JsParam>(null);
+  const [testResults, setTestResults] = useState<Record<string, JsParam>>({});
+  const [certifications, setCertifications] = useState<Record<string, JsParam>>({});
   const [autoCertifying, setAutoCertifying] = useState(false);
   const [autoCertifyDone, setAutoCertifyDone] = useState(false);
   const [verification, setVerification] = useState({
@@ -397,27 +409,27 @@ export default function ConfigPage() {
   });
   const [stepIndex, setStepIndex] = useState(0);
   const [showWizard, setShowWizard] = useState(true);
-  const [onboardingHints, setOnboardingHints] = useState([]);
+  const [onboardingHints, setOnboardingHints] = useState<JsParam[]>([]);
   const [savingPersona, setSavingPersona] = useState(false);
   const [plexCollapsed, setPlexCollapsed] = useState(false);
-  const [visibleSecrets, setVisibleSecrets] = useState({});
-  const [revealingSecret, setRevealingSecret] = useState(null);
-  const [libraryStats, setLibraryStats] = useState(null);
-  const [libraryHealth, setLibraryHealth] = useState(null);
+  const [visibleSecrets, setVisibleSecrets] = useState<Record<string, boolean>>({});
+  const [revealingSecret, setRevealingSecret] = useState<string | null>(null);
+  const [libraryStats, setLibraryStats] = useState<JsParam>(null);
+  const [libraryHealth, setLibraryHealth] = useState<JsParam>(null);
   const [exportingCorpus, setExportingCorpus] = useState(false);
   const [exportingSnapshot, setExportingSnapshot] = useState(false);
   const [registeringRadarr, setRegisteringRadarr] = useState(false);
-  const [radarrGapStats, setRadarrGapStats] = useState(null);
-  const [radarrRegister, setRadarrRegister] = useState(null);
-  const [sonarrMissing, setSonarrMissing] = useState(null);
+  const [radarrGapStats, setRadarrGapStats] = useState<JsParam>(null);
+  const [radarrRegister, setRadarrRegister] = useState<JsParam>(null);
+  const [sonarrMissing, setSonarrMissing] = useState<JsParam>(null);
   const [sonarrIncludeSpecials, setSonarrIncludeSpecials] = useState(false);
-  const [featureFlags, setFeatureFlags] = useState(null);
+  const [featureFlags, setFeatureFlags] = useState<JsParam>(null);
   const [appVersion, setAppVersion] = useState("");
-  const [managedUsers, setManagedUsers] = useState([]);
+  const [managedUsers, setManagedUsers] = useState<JsParam[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
-  const [mcpRevealedKeys, setMcpRevealedKeys] = useState({});
-  const [mcpKeyBusy, setMcpKeyBusy] = useState(null);
-  const [modelCatalog, setModelCatalog] = useState(null);
+  const [mcpRevealedKeys, setMcpRevealedKeys] = useState<Record<string, string>>({});
+  const [mcpKeyBusy, setMcpKeyBusy] = useState<JsParam>(null);
+  const [modelCatalog, setModelCatalog] = useState<JsParam>(null);
   const [modelCatalogLoading, setModelCatalogLoading] = useState(false);
   const { confirm, modal } = useConfirmModal();
 
@@ -435,18 +447,18 @@ export default function ConfigPage() {
   const preview = useMemo(() => wizardPersonaPreview(persona), [persona]);
   const movieSections = useMemo(() => sections.filter((s) => s.type === "movie"), [sections]);
   const tvSections = useMemo(() => sections.filter((s) => s.type === "show"), [sections]);
-  function applyCertifications(certMap) {
+  function applyCertifications(certMap: JsParam) {
     setCertifications(certMap || {});
-    const initialResults = {};
+    const initialResults: Record<string, JsParam> = {};
     for (const [service, cert] of Object.entries(certMap || {})) {
-      if (cert?.certified) {
+      if ((cert as JsParam)?.certified) {
         initialResults[service] = { state: "success", message: "Connected" };
       }
     }
     if (Object.keys(initialResults).length) {
-      setTestResults((prev) => ({ ...initialResults, ...prev }));
+      setTestResults((prev: JsParam) => ({ ...initialResults, ...prev }));
     }
-    setVerification((prev) => ({
+    setVerification((prev: JsParam) => ({
       ...prev,
       llm: certMap?.llm?.certified || prev.llm,
       plex: certMap?.plex?.certified || prev.plex,
@@ -464,7 +476,7 @@ export default function ConfigPage() {
     if (wizardData.onboarding_complete) {
       setShowWizard(false);
     }
-    setVerification((prev) => ({
+    setVerification((prev: JsParam) => ({
       ...prev,
       identity: wizardData.steps.identity_seed.curator_name_set || prev.identity,
       llm: wizardData.steps.infrastructure.llm_verified || prev.llm,
@@ -561,12 +573,12 @@ export default function ConfigPage() {
   useEffect(() => {
     if (!settings) return;
     const sectionsSet = Boolean(settings.plex_movie_section && settings.plex_tv_section);
-    setVerification((prev) => ({ ...prev, sections: sectionsSet || prev.sections }));
+    setVerification((prev: JsParam) => ({ ...prev, sections: sectionsSet || prev.sections }));
   }, [settings?.plex_movie_section, settings?.plex_tv_section]);
 
   useEffect(() => {
     if (!persona) return;
-    setVerification((prev) => ({
+    setVerification((prev: JsParam) => ({
       ...prev,
       identity: Boolean(String(persona.curator_name || "").trim()) || prev.identity,
     }));
@@ -576,7 +588,7 @@ export default function ConfigPage() {
     if (!settings || sections.length) return;
     if (!serviceCredentialsPresent("plex", settings) && !verification.plex) return;
     getPlexSections()
-      .then((loaded) => setSections(loaded))
+      .then((loaded) => setSections(Array.isArray(loaded) ? loaded : []))
       .catch(() => {});
   }, [settings, verification.plex, sections.length]);
 
@@ -652,40 +664,40 @@ export default function ConfigPage() {
     };
   }, [showWizard, section, registeringRadarr, radarrRegister?.busy]);
 
-  function updateSettings(patch) {
-    setSettings((prev) => ({ ...prev, ...patch }));
+  function updateSettings(patch: JsParam) {
+    setSettings((prev: JsParam) => ({ ...prev, ...patch }));
   }
 
-  function updateFeatureFlags(patch) {
-    setSettings((prev) => ({
+  function updateFeatureFlags(patch: JsParam) {
+    setSettings((prev: JsParam) => ({
       ...prev,
       features: { ...(prev?.features || {}), ...patch },
     }));
   }
 
-  function updateAuthSettings(patch) {
-    setSettings((prev) => ({
+  function updateAuthSettings(patch: JsParam) {
+    setSettings((prev: JsParam) => ({
       ...prev,
       auth: { ...(prev?.auth || {}), ...patch },
     }));
   }
 
-  function updateSeerrSettings(patch) {
-    setSettings((prev) => ({
+  function updateSeerrSettings(patch: JsParam) {
+    setSettings((prev: JsParam) => ({
       ...prev,
       seerr: { ...(prev?.seerr || {}), ...patch },
     }));
   }
 
-  function updateTunarrSettings(patch) {
-    setSettings((prev) => ({
+  function updateTunarrSettings(patch: JsParam) {
+    setSettings((prev: JsParam) => ({
       ...prev,
       tunarr: { ...(prev?.tunarr || {}), ...patch },
     }));
   }
 
-  function updateYouthSettings(patch) {
-    setSettings((prev) => ({
+  function updateYouthSettings(patch: JsParam) {
+    setSettings((prev: JsParam) => ({
       ...prev,
       youth: { ...(prev?.youth || {}), ...patch },
     }));
@@ -712,17 +724,17 @@ export default function ConfigPage() {
     }
   }
 
-  async function handleUserRoleChange(userId, role) {
+  async function handleUserRoleChange(userId: string, role: string) {
     try {
       await updateUserRole(userId, role);
       await refreshManagedUsers();
       setActionFeedback("users", "success", "User role updated.");
     } catch (error) {
-      setActionFeedback("users", "error", error.message);
+      setActionFeedback("users", "error", (error as ApiError).message);
     }
   }
 
-  async function handleUserDisableToggle(entry) {
+  async function handleUserDisableToggle(entry: JsParam) {
     const nextDisabled = !entry.disabled;
     const label = entry.display_name || entry.email || entry.id;
     if (
@@ -745,21 +757,21 @@ export default function ConfigPage() {
         nextDisabled ? "User disabled." : "User re-enabled.",
       );
     } catch (error) {
-      setActionFeedback("users", "error", error.message);
+      setActionFeedback("users", "error", (error as ApiError).message);
     }
   }
 
-  async function handleYouthModeToggle(entry) {
+  async function handleYouthModeToggle(entry: JsParam) {
     try {
       await patchUserYouthMode(entry.id, !entry.is_youth);
       await refreshManagedUsers();
       setActionFeedback("users", "success", entry.is_youth ? "Youth mode removed." : "Youth mode enabled.");
     } catch (error) {
-      setActionFeedback("users", "error", error.message);
+      setActionFeedback("users", "error", (error as ApiError).message);
     }
   }
 
-  async function handleUserRemove(entry) {
+  async function handleUserRemove(entry: JsParam) {
     const label = entry.display_name || entry.email || entry.id;
     if (
       !(await confirm({
@@ -776,11 +788,11 @@ export default function ConfigPage() {
       await refreshManagedUsers();
       setActionFeedback("users", "success", "User removed.");
     } catch (error) {
-      setActionFeedback("users", "error", error.message);
+      setActionFeedback("users", "error", (error as ApiError).message);
     }
   }
 
-  async function handleUserSyncSeerr(entry) {
+  async function handleUserSyncSeerr(entry: JsParam) {
     const authToken = await confirm(
       seerrSyncConfirmOptions(entry.display_name || entry.email || entry.id),
     );
@@ -790,11 +802,11 @@ export default function ConfigPage() {
       await refreshManagedUsers();
       setActionFeedback("users", "success", "Seerr account linked.");
     } catch (error) {
-      setActionFeedback("users", "error", error.message);
+      setActionFeedback("users", "error", (error as ApiError).message);
     }
   }
 
-  function renderSeerrSecretInput(options = {}) {
+  function renderSeerrSecretInput(options: JsParam = {}) {
     const field = "seerr.api_key";
     const value = settings?.seerr?.api_key ?? "";
     return (
@@ -812,17 +824,17 @@ export default function ConfigPage() {
     );
   }
 
-  async function toggleSecretVisibility(field) {
+  async function toggleSecretVisibility(field: string) {
     const currentlyVisible = Boolean(visibleSecrets[field]);
     if (currentlyVisible) {
-      setVisibleSecrets((prev) => ({ ...prev, [field]: false }));
+      setVisibleSecrets((prev: JsParam) => ({ ...prev, [field]: false }));
       return;
     }
 
     const currentValue =
       field === "seerr.api_key" ? settings?.seerr?.api_key ?? "" : settings?.[field] ?? "";
     if (String(currentValue).length > 0) {
-      setVisibleSecrets((prev) => ({ ...prev, [field]: true }));
+      setVisibleSecrets((prev: JsParam) => ({ ...prev, [field]: true }));
       return;
     }
 
@@ -842,7 +854,7 @@ export default function ConfigPage() {
       } else {
         updateSettings({ [field]: secret });
       }
-      setVisibleSecrets((prev) => ({ ...prev, [field]: true }));
+      setVisibleSecrets((prev: JsParam) => ({ ...prev, [field]: true }));
     } catch (error) {
       const alertArea =
         field === "seerr.api_key"
@@ -852,13 +864,13 @@ export default function ConfigPage() {
             : field.endsWith("_api_key")
               ? field.replace(/_api_key$/, "")
               : "llm";
-      setActionFeedback(alertArea, "error", error.message || "Could not reveal secret");
+      setActionFeedback(alertArea, "error", (error as ApiError).message || "Could not reveal secret");
     } finally {
       setRevealingSecret(null);
     }
   }
 
-  function renderSecretInput(field, options = {}) {
+  function renderSecretInput(field: string, options: JsParam = {}) {
     return (
       <SecretInput
         field={field}
@@ -874,7 +886,7 @@ export default function ConfigPage() {
     );
   }
 
-  function setActionFeedback(area, type, message, options = {}) {
+  function setActionFeedback(area: string, type: JsParam = null, message: JsParam = null, options: JsParam = {}) {
     const details = Array.isArray(options.details) ? options.details : null;
     setActionAlert({ area, type, message, details });
     // Areas that render their own InlineAlert should not also fill the page footer
@@ -886,12 +898,12 @@ export default function ConfigPage() {
     }
   }
 
-  function clearActionFeedback(area) {
-    setActionAlert((prev) => (prev?.area === area ? null : prev));
+  function clearActionFeedback(area?: string) {
+    setActionAlert((prev: JsParam) => (prev?.area === area ? null : prev));
   }
 
-  function llmSettingsPatch(overrides = {}) {
-    const patch = {
+  function llmSettingsPatch(overrides: JsParam = {}) {
+    const patch: JsParam = {
       llm_provider: overrides.llm_provider ?? settings.llm_provider,
       llm_base_url: overrides.llm_base_url ?? settings.llm_base_url,
       llm_model: overrides.llm_model ?? settings.llm_model,
@@ -903,7 +915,7 @@ export default function ConfigPage() {
     return patch;
   }
 
-  async function persistLlmSettings(overrides = {}, options = {}) {
+  async function persistLlmSettings(overrides: JsParam = {}, options: JsParam = {}) {
     return persistSettings(llmSettingsPatch(overrides), options);
   }
 
@@ -937,9 +949,9 @@ export default function ConfigPage() {
     return fallback ? [{ id: fallback, hint: null }] : [];
   }
 
-  function renderModelPicker({ listId }) {
+  function renderModelPicker({ listId }: { listId: string }) {
     const options = modelPickerOptions();
-    const cheaper = options.filter((row) => row.hint === "cheaper-tier").slice(0, 4);
+    const cheaper = options.filter((row: JsParam) => row.hint === "cheaper-tier").slice(0, 4);
     return (
       <>
         <input
@@ -951,7 +963,7 @@ export default function ConfigPage() {
           data-testid={`llm-model-input-${listId}`}
         />
         <datalist id={listId}>
-          {options.map((row) => (
+          {options.map((row: JsParam) => (
             <option key={row.id} value={row.id}>
               {row.hint === "cheaper-tier" ? "cheaper tier" : row.hint === "standard-tier" ? "standard" : ""}
             </option>
@@ -959,7 +971,7 @@ export default function ConfigPage() {
         </datalist>
         {cheaper.length ? (
           <div className="llm-cheaper-picks" data-testid={`llm-cheaper-picks-${listId}`}>
-            {cheaper.map((row) => (
+            {cheaper.map((row: JsParam) => (
               <button
                 key={row.id}
                 type="button"
@@ -987,8 +999,8 @@ export default function ConfigPage() {
     );
   }
 
-  function handleProviderChange(provider) {
-    const defaultUrl = LLM_PROVIDER_DEFAULTS[provider] ?? "";
+  function handleProviderChange(provider: string) {
+    const defaultUrl = (LLM_PROVIDER_DEFAULTS as Record<string, string>)[provider] ?? "";
     const nextModel = resolveModelForProvider(provider, settings.llm_model);
     updateSettings({
       llm_provider: provider,
@@ -996,7 +1008,7 @@ export default function ConfigPage() {
       llm_model: nextModel,
     });
     clearActionFeedback("llm");
-    setCertifications((prev) => ({
+    setCertifications((prev: JsParam) => ({
       ...prev,
       llm: { ...(prev.llm || {}), certified: false, connection_status: "unverified" },
     }));
@@ -1005,11 +1017,11 @@ export default function ConfigPage() {
       llm_base_url: defaultUrl,
       llm_model: nextModel,
     }).catch((error) => {
-      setActionFeedback("llm", "error", error.message);
+      setActionFeedback("llm", "error", (error as ApiError).message);
     });
   }
 
-  async function persistSettings(patch = {}, options = {}) {
+  async function persistSettings(patch: JsParam = {}, options: JsParam = {}) {
     const payload = { ...settings, ...patch };
     const saved = await saveSettings(payload);
     setSettings({ ...payload, ...saved });
@@ -1017,27 +1029,27 @@ export default function ConfigPage() {
     return saved;
   }
 
-  async function savePersonaField(field, value) {
+  async function savePersonaField(field: string, value: JsParam) {
     setSavingPersona(true);
     try {
       const updated = await putPersona({ [field]: value });
       setPersona(updated);
       if (field === "curator_name") {
         await putSystemConfig({ curator_name: String(value) });
-        setVerification((prev) => ({
+        setVerification((prev: JsParam) => ({
           ...prev,
           identity: Boolean(String(value || "").trim()),
         }));
       }
       setActionFeedback("persona", "success", "Persona updated.");
     } catch (error) {
-      setActionFeedback("persona", "error", error.message);
+      setActionFeedback("persona", "error", (error as ApiError).message);
     } finally {
       setSavingPersona(false);
     }
   }
 
-  async function handleAskDeleteConfirmationToggle(enabled) {
+  async function handleAskDeleteConfirmationToggle(enabled: boolean) {
     const previous = settings?.ask_delete_confirmation !== false;
     updateSettings({ ask_delete_confirmation: enabled });
     try {
@@ -1052,11 +1064,11 @@ export default function ConfigPage() {
       );
     } catch (error) {
       updateSettings({ ask_delete_confirmation: previous });
-      setActionFeedback("plex-sections", "error", error.message);
+      setActionFeedback("plex-sections", "error", (error as ApiError).message);
     }
   }
 
-  async function handleSyncReviewsToggle(enabled) {
+  async function handleSyncReviewsToggle(enabled: boolean) {
     updateSettings({ sync_reviews_to_plex: enabled });
     try {
       await persistSettings({ sync_reviews_to_plex: enabled });
@@ -1066,11 +1078,11 @@ export default function ConfigPage() {
         enabled ? "Plex rating sync enabled." : "Plex rating sync disabled.",
       );
     } catch (error) {
-      setActionFeedback("plex-sections", "error", error.message);
+      setActionFeedback("plex-sections", "error", (error as ApiError).message);
     }
   }
 
-  async function handlePlexCollectionsToggle(enabled) {
+  async function handlePlexCollectionsToggle(enabled: boolean) {
     updateFeatureFlags({ plex_collections_enabled: enabled });
     try {
       await persistSettings({
@@ -1082,11 +1094,11 @@ export default function ConfigPage() {
         enabled ? "Plex collection management enabled." : "Plex collection management disabled.",
       );
     } catch (error) {
-      setActionFeedback("plex-sections", "error", error.message);
+      setActionFeedback("plex-sections", "error", (error as ApiError).message);
     }
   }
 
-  async function handleEphemeralCollectionGcToggle(enabled) {
+  async function handleEphemeralCollectionGcToggle(enabled: boolean) {
     updateFeatureFlags({ ephemeral_collection_gc_enabled: enabled });
     try {
       await persistSettings({
@@ -1100,11 +1112,11 @@ export default function ConfigPage() {
           : "Ephemeral collection cleanup is off — expired agent shelves stay on Plex until you delete them.",
       );
     } catch (error) {
-      setActionFeedback("plex-sections", "error", error.message);
+      setActionFeedback("plex-sections", "error", (error as ApiError).message);
     }
   }
 
-  async function handleEphemeralCollectionGcDryRunToggle(enabled) {
+  async function handleEphemeralCollectionGcDryRunToggle(enabled: boolean) {
     updateFeatureFlags({ ephemeral_collection_gc_dry_run: enabled });
     try {
       await persistSettings({
@@ -1118,33 +1130,33 @@ export default function ConfigPage() {
           : "Collection GC dry-run is off — expired ephemeral collections will be deleted from Plex.",
       );
     } catch (error) {
-      setActionFeedback("plex-sections", "error", error.message);
+      setActionFeedback("plex-sections", "error", (error as ApiError).message);
     }
   }
 
-  async function handleSectionChange(field, value) {
+  async function handleSectionChange(field: string, value: JsParam) {
     const nextMovie = field === "plex_movie_section" ? value : settings.plex_movie_section;
     const nextTv = field === "plex_tv_section" ? value : settings.plex_tv_section;
     updateSettings({ [field]: value });
     try {
       await persistSettings({ [field]: value });
-      setVerification((prev) => ({
+      setVerification((prev: JsParam) => ({
         ...prev,
         sections: Boolean(nextMovie && nextTv),
       }));
     } catch (error) {
-      setActionFeedback("plex-sections", "error", error.message);
+      setActionFeedback("plex-sections", "error", (error as ApiError).message);
     }
   }
 
-  async function runTest(service, options = {}) {
+  async function runTest(service: string, options: JsParam = {}) {
     const { silent = false } = options;
     setTesting(service);
-    setTestResults((prev) => ({ ...prev, [service]: { state: "loading" } }));
+    setTestResults((prev: JsParam) => ({ ...prev, [service]: { state: "loading" } }));
     if (!silent) clearActionFeedback(service);
     try {
       const result = await testService(service, settingsPayloadForTest(service, settings));
-      setTestResults((prev) => ({
+      setTestResults((prev: JsParam) => ({
         ...prev,
         [service]: {
           state: result.ok ? "success" : "error",
@@ -1164,7 +1176,7 @@ export default function ConfigPage() {
       if (result.hints) setOnboardingHints(result.hints);
       else if (result.hint) setOnboardingHints([result.hint]);
 
-      setCertifications((prev) => ({
+      setCertifications((prev: JsParam) => ({
         ...prev,
         [service]: {
           ...(prev[service] || {}),
@@ -1174,36 +1186,36 @@ export default function ConfigPage() {
       }));
 
       if (result.ok) {
-        const keyMap = {
+        const keyMap: Record<string, string> = {
           llm: "llm",
           plex: "plex",
           radarr: "radarr",
           sonarr: "sonarr",
         };
         if (keyMap[service]) {
-          setVerification((prev) => ({ ...prev, [keyMap[service]]: true }));
+          setVerification((prev: JsParam) => ({ ...prev, [keyMap[service]]: true }));
         }
         if (service === "llm") {
           try {
             const saved = await persistLlmSettings({}, { refreshWizard: false });
-            setSettings((prev) => ({ ...prev, ...saved }));
+            setSettings((prev: JsParam) => ({ ...prev, ...saved }));
           } catch (error) {
             if (!silent) {
-              setActionFeedback("llm", "error", `Verified, but failed to save settings: ${error.message}`);
+              setActionFeedback("llm", "error", `Verified, but failed to save settings: ${(error as ApiError).message}`);
             }
           }
         }
         await refreshWizard();
       }
     } catch (error) {
-      setTestResults((prev) => ({
+      setTestResults((prev: JsParam) => ({
         ...prev,
-        [service]: { state: "error", message: error.message },
+        [service]: { state: "error", message: (error as ApiError).message },
       }));
       if (!silent) {
-        setActionFeedback(service, "error", error.message);
+        setActionFeedback(service, "error", (error as ApiError).message);
       }
-      setCertifications((prev) => ({
+      setCertifications((prev: JsParam) => ({
         ...prev,
         [service]: {
           ...(prev[service] || {}),
@@ -1221,13 +1233,13 @@ export default function ConfigPage() {
     try {
       await persistSettings({}, { refreshWizard: true });
       if (stepIndex < WIZARD_STEPS.length - 1) {
-        setStepIndex((prev) => prev + 1);
+        setStepIndex((prev: JsParam) => prev + 1);
       }
       setFooterAlert({ type: "success", message: "Step saved." });
       setStatus("Step saved.");
     } catch (error) {
-      setFooterAlert({ type: "error", message: error.message });
-      setStatus(error.message);
+      setFooterAlert({ type: "error", message: (error as ApiError).message });
+      setStatus((error as ApiError).message);
     }
   }
 
@@ -1248,8 +1260,8 @@ export default function ConfigPage() {
       setStatus(message);
       navigate("/");
     } catch (error) {
-      setFooterAlert({ type: "error", message: error.message });
-      setStatus(error.message);
+      setFooterAlert({ type: "error", message: (error as ApiError).message });
+      setStatus((error as ApiError).message);
     }
   }
 
@@ -1259,11 +1271,11 @@ export default function ConfigPage() {
       await persistSettings();
       setActionFeedback("save", "success", "Settings saved.");
     } catch (error) {
-      setActionFeedback("save", "error", error.message);
+      setActionFeedback("save", "error", (error as ApiError).message);
     }
   }
 
-  async function handleRotateMcpKey(which) {
+  async function handleRotateMcpKey(which: string) {
     const label = which === "privacy" ? "privacy" : "full";
     if (
       !(await confirm({
@@ -1280,22 +1292,22 @@ export default function ConfigPage() {
     try {
       const result = await rotateMcpKey(which);
       if (result.settings) {
-        setSettings((prev) => ({ ...prev, ...result.settings }));
+        setSettings((prev: JsParam) => ({ ...prev, ...result.settings }));
       }
-      setMcpRevealedKeys((prev) => ({ ...prev, [which]: result.key }));
+      setMcpRevealedKeys((prev: JsParam) => ({ ...prev, [which]: result.key }));
       setActionFeedback(
         "mcp",
         "success",
         `${label.charAt(0).toUpperCase() + label.slice(1)} MCP key regenerated. Copy it now — it won’t be shown again.`,
       );
     } catch (error) {
-      setActionFeedback("mcp", "error", error.message);
+      setActionFeedback("mcp", "error", (error as ApiError).message);
     } finally {
       setMcpKeyBusy(null);
     }
   }
 
-  async function handleClearMcpKey(which) {
+  async function handleClearMcpKey(which: string) {
     const label = which === "privacy" ? "privacy" : "full";
     if (
       !(await confirm({
@@ -1312,22 +1324,22 @@ export default function ConfigPage() {
     try {
       const result = await clearMcpKey(which);
       if (result.settings) {
-        setSettings((prev) => ({ ...prev, ...result.settings }));
+        setSettings((prev: JsParam) => ({ ...prev, ...result.settings }));
       }
-      setMcpRevealedKeys((prev) => {
+      setMcpRevealedKeys((prev: JsParam) => {
         const next = { ...prev };
         delete next[which];
         return next;
       });
       setActionFeedback("mcp", "success", `${label.charAt(0).toUpperCase() + label.slice(1)} MCP key cleared.`);
     } catch (error) {
-      setActionFeedback("mcp", "error", error.message);
+      setActionFeedback("mcp", "error", (error as ApiError).message);
     } finally {
       setMcpKeyBusy(null);
     }
   }
 
-  async function copyMcpKey(which) {
+  async function copyMcpKey(which: string) {
     const value = mcpRevealedKeys[which];
     if (!value) return;
     try {
@@ -1440,7 +1452,7 @@ export default function ConfigPage() {
                           type="text"
                           value={settings.llm_base_url ?? ""}
                           onChange={(event) => updateSettings({ llm_base_url: event.target.value })}
-                          placeholder={LLM_PROVIDER_DEFAULTS[settings.llm_provider] || "https://api.openai.com/v1"}
+                          placeholder={(LLM_PROVIDER_DEFAULTS as Record<string, string>)[settings.llm_provider] || "https://api.openai.com/v1"}
                         />
                         <span className="wizard-note field-help">
                           Where your model lives (OpenAI, Anthropic, Ollama, or another OpenAI-compatible endpoint).
@@ -1632,7 +1644,7 @@ export default function ConfigPage() {
     } catch (error) {
       setActionFeedback("radarr-register", {
         type: "error",
-        message: error.message || "Could not register titles in Radarr.",
+        message: (error as ApiError).message || "Could not register titles in Radarr.",
       });
     }
   }
@@ -1645,7 +1657,7 @@ export default function ConfigPage() {
     } catch (error) {
       setActionFeedback("radarr-register", {
         type: "error",
-        message: error.message || "Could not cancel remaining Radarr registrations.",
+        message: (error as ApiError).message || "Could not cancel remaining Radarr registrations.",
       });
     }
   }
@@ -1658,7 +1670,7 @@ export default function ConfigPage() {
     } catch (error) {
       setActionFeedback("sonarr-missing", {
         type: "error",
-        message: error.message || "Could not start the Sonarr missing scan.",
+        message: (error as ApiError).message || "Could not start the Sonarr missing scan.",
       });
     }
   }
@@ -1667,7 +1679,7 @@ export default function ConfigPage() {
    * Queue EpisodeSearch. Pass `{ episode_ids }` for a checked subset; `{ search_all: true }`
    * only from an explicit "Search all" confirm (or the Repair retry). No payload sends nothing.
    */
-  async function handleSonarrMissingSearch(payload) {
+  async function handleSonarrMissingSearch(payload: JsParam) {
     if (!payload || (!payload.search_all && !(payload.episode_ids || []).length)) {
       setActionFeedback("sonarr-missing", {
         type: "error",
@@ -1682,7 +1694,7 @@ export default function ConfigPage() {
     } catch (error) {
       setActionFeedback("sonarr-missing", {
         type: "error",
-        message: error.message || "Could not queue EpisodeSearch.",
+        message: (error as ApiError).message || "Could not queue EpisodeSearch.",
       });
     }
   }
@@ -1695,7 +1707,7 @@ export default function ConfigPage() {
     } catch (error) {
       setActionFeedback("sonarr-missing", {
         type: "error",
-        message: error.message || "Could not cancel remaining EpisodeSearch commands.",
+        message: (error as ApiError).message || "Could not cancel remaining EpisodeSearch commands.",
       });
     }
   }
@@ -1724,7 +1736,7 @@ export default function ConfigPage() {
     } catch (error) {
       setActionFeedback("training-export", {
         type: "error",
-        message: error.message || "Taste data export failed.",
+        message: (error as ApiError).message || "Taste data export failed.",
       });
     } finally {
       setExportingCorpus(false);
@@ -1749,7 +1761,7 @@ export default function ConfigPage() {
     } catch (error) {
       setActionFeedback("admin-snapshot", {
         type: "error",
-        message: error.message || "Snapshot download failed.",
+        message: (error as ApiError).message || "Snapshot download failed.",
       });
     } finally {
       setExportingSnapshot(false);
@@ -1787,7 +1799,7 @@ export default function ConfigPage() {
           showCuratorName
           onCuratorNameBlur={async (name) => {
             await putSystemConfig({ curator_name: String(name) });
-            setVerification((prev) => ({
+            setVerification((prev: JsParam) => ({
               ...prev,
               identity: Boolean(String(name || "").trim()),
             }));
@@ -1950,9 +1962,9 @@ export default function ConfigPage() {
       <header className="topbar admin-section-topbar">
         <div>
           {showWizard ? <p className="eyebrow">Configuration</p> : null}
-          <h1>{showWizard ? "First-run setup" : SECTION_TITLES[section] || "Admin"}</h1>
-          {!showWizard && SECTION_LEADS[section] ? (
-            <p className="muted admin-section-lead">{SECTION_LEADS[section]}</p>
+          <h1>{showWizard ? "First-run setup" : SECTION_TITLES[section || "overview"] || "Admin"}</h1>
+          {!showWizard && SECTION_LEADS[section || ""] ? (
+            <p className="muted admin-section-lead">{SECTION_LEADS[section || ""]}</p>
           ) : null}
         </div>
         {showWizard ? (
@@ -2004,7 +2016,7 @@ export default function ConfigPage() {
 
           <div className="wizard-footer">
             {stepIndex > 0 ? (
-              <button type="button" className="ghost" data-testid="wizard-back" onClick={() => setStepIndex((prev) => prev - 1)}>
+              <button type="button" className="ghost" data-testid="wizard-back" onClick={() => setStepIndex((prev: JsParam) => prev - 1)}>
                 Back
               </button>
             ) : (

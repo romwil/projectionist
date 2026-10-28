@@ -59,7 +59,7 @@ export function personTitleKey(item: LibraryItem | null | undefined) {
 export function groupPersonTitles(titles: JsParam) {
   const list = Array.isArray(titles) ? titles : [];
   const groups = new Map();
-  const order: unknown[] = [];
+  const order: JsParam[] = [];
   for (const item of list) {
     if (!item) continue;
     const key = personTitleKey(item);
