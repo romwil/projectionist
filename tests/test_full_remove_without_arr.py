@@ -325,6 +325,52 @@ class FullRemoveWithoutArrTests(unittest.TestCase):
         self.assertEqual(entry["bytes_source"], "plex")
         self.assertTrue(entry["ok"])
 
+    def test_absent_radarr_drops_index_when_plex_404s_after_disk_delete(self) -> None:
+        from projectionist.library.full_remove import full_remove_library_items
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp) / "The Sacrifice (2026)"
+            folder.mkdir()
+            media = folder / "The Sacrifice.mkv"
+            media.write_bytes(b"x" * 120)
+            db = MagicMock()
+            db.library_item_by_rating_key.return_value = _row(str(media))
+            db.delete_library_items_by_rating_keys.return_value = 1
+            with (
+                patch("projectionist.agent.tools.RadarrClient") as lookup_cls,
+                patch("projectionist.library.full_remove.RadarrClient"),
+                patch("projectionist.library.full_remove.PlexClient") as plex_cls,
+                patch("projectionist.library.full_remove.drop_cached_purge_keys"),
+            ):
+                lookup = MagicMock()
+                lookup.movie_by_tmdb_id.return_value = None
+                lookup_cls.return_value = lookup
+                plex = MagicMock()
+                plex.media_file_parts.return_value = []
+                plex.delete_metadata.side_effect = RuntimeError(
+                    "HTTP 404 from http://plex.test/library/metadata/rk-sacrifice: not found"
+                )
+                plex_cls.return_value = plex
+                result = full_remove_library_items(
+                    db,
+                    _settings(plex_url="http://plex.test", plex_token="token"),
+                    ["rk-sacrifice"],
+                )
+
+            self.assertFalse(media.exists())
+            plex.delete_metadata.assert_called_once_with("rk-sacrifice")
+            plex.delete_media.assert_not_called()
+
+        db.delete_library_items_by_rating_keys.assert_called_once_with(["rk-sacrifice"])
+        self.assertEqual(result["errors"], [])
+        self.assertEqual(result["deleted"], 1)
+        entry = result["results"][0]
+        self.assertTrue(entry["ok"])
+        self.assertTrue(entry["index_deleted"])
+        self.assertEqual(entry["removed_via"], "disk")
+        self.assertEqual(entry["plex"]["reason"], "plex_not_found")
+        self.assertEqual(entry["bytes_freed"], 120)
+
     def test_absent_radarr_and_plex_not_found_fails(self) -> None:
         from projectionist.library.full_remove import full_remove_library_items
 

@@ -608,7 +608,7 @@ def _remove_from_plex(
             client.delete_metadata(rating_key)
     except Exception as error:  # noqa: BLE001 — surface to owner as plex step result
         logger.warning("Plex delete failed for %s delete_files=%s: %s", rating_key, delete_files, error)
-        if delete_files and is_plex_not_found_error(error):
+        if is_plex_not_found_error(error):
             return {
                 "removed": False,
                 "skipped": False,
@@ -704,8 +704,10 @@ def _finish_absent_arr_remove(
     Prefer files this container can already see. When those are missing, ask
     Plex to delete the item from disk and the library — Plex can see host
     paths this container often cannot. Does not add an import exclusion.
-    Permission errors, a Plex reject, and a true no-op (not in *arr and not
-    deleted via Plex) fail the title and leave the index row.
+    Permission errors and a true no-op (not in *arr and not deleted via Plex)
+    fail the title and leave the index row. After local files were unlinked, a
+    Plex 404 or leftover library-delete miss still drops the index — the media
+    is gone, so the row must not stay as a zombie.
     """
     plex_snapshot = _plex_media_snapshot(settings, key, media_type)
     known = _dedupe_paths(
@@ -746,12 +748,7 @@ def _finish_absent_arr_remove(
         entry["removed_via"] = "disk"
         plex = _remove_from_plex(settings, key, delete_files=False)
         entry["plex"] = plex
-        if plex.get("reason") == "plex_error":
-            return _failed_step(
-                key,
-                title,
-                str(plex.get("error") or "Plex rejected the library delete"),
-            )
+        # Files are already gone. Fail only when media may still exist.
         return _commit_removed_entry(
             db,
             entry,
