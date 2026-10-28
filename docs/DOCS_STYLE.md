@@ -38,11 +38,11 @@ Projectionist documentation serves three audiences. Pick the audience per docume
 | **Owner** (server operator) | In-app `/help` (`## For owners`), `docs/ONBOARDING.md`, `docs/FAQ.md`, `docs/CONFIGURATION.md` | Warm but precise; assumes comfort with Docker and a terminal. | **Runnable snippets** — `curl`, Compose YAML, `settings.json`/env excerpts — plus "how it works / why it matters" and honest limits. | Marketing fluff; hand-waving about what a command does. |
 | **Developer / contributor** | GitHub-only: `README.md`, `docs/WEB_UI.md`, `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md` | Direct, technical, terse. | Accurate routes, schemas, quickstart commands that actually run. | Warmth for its own sake; member-style repetition. |
 
-**The render split is real and load-bearing.** `frontend/src/pages/HelpPage.jsx` (`markdownForRole`, ~127–140) drops everything from the first `## For owners` heading down to `## Related documentation` for members and guests. So:
+**The render split is real and load-bearing.** `frontend/src/pages/HelpPage.tsx` (`markdownForRole`, ~127–140) drops everything from the first `## For owners` heading down to `## Related documentation` for members and guests. So:
 
 - Owner-only depth (API endpoints, `curl`, config keys) belongs **below** `## For owners` in `docs/HELP.md`, where members never see it.
 - A member-facing endpoint reference (e.g. "export your memory") must be **restated as a guided UI action** in the member half — "Export or delete your private memory from **Settings → Privacy**" — not a `GET /api/me/memory` line.
-- Do not rename the `## For owners` heading or the anchor headings the app links to (`#start-here`, `#chat`, `#plot-lab`, `#coverage-over-time`, etc.) without updating `HelpPage.jsx` and `PrivacyPage.jsx`.
+- Do not rename the `## For owners` heading or the anchor headings the app links to (`#start-here`, `#chat`, `#plot-lab`, `#coverage-over-time`, etc.) without updating `HelpPage.tsx` and `PrivacyPage.tsx`.
 
 ---
 
