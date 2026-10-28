@@ -64,7 +64,7 @@ export function expandRailItem(compact: JsParam) {
   };
 }
 
-/** @param {unknown[]} items */
+/** @param {JsParam[]} items */
 export function compactRailItems(items: LibraryItem[] | null | undefined) {
   return (Array.isArray(items) ? items : [])
     .map((item) => compactRailItem(item))
@@ -113,7 +113,7 @@ export function decodeRailPack(raw: unknown) {
 
 /**
  * Stash full rail items (including posters) for the next chat-from-rail turn.
- * @param {{ railTitle?: string, railId?: string, items?: unknown[] }} rail
+ * @param {{ railTitle?: string, railId?: string, items?: JsParam[] }} rail
  */
 export function stashRailSeed(rail: JsParam) {
   if (typeof sessionStorage === "undefined") return;
@@ -198,7 +198,7 @@ export function railItemsToTitleCards(items: LibraryItem[] | null | undefined) {
 /**
  * Prefer curated in-library rail posters over agent TMDB / Add cards.
  * @param {Record<string, unknown> | null | undefined} message
- * @param {unknown[]} seedItems
+ * @param {JsParam[]} seedItems
  */
 export function mergeRailSeedCards(message: JsParam, seedItems: JsParam) {
   const cards = railItemsToTitleCards(seedItems);
@@ -263,7 +263,7 @@ export function buildRailChatPrompt({ railTitle, items, focusTitle = "", focusWh
       list.find((item) => String(item.title).toLowerCase() === focus.toLowerCase()) || null;
     const why = trimStr(focusWhy || match?.why || match?.recommendation_reason, 280);
     const discussOnly = /^let'?s discuss(\s+this)?\.?$/i.test(why);
-    const idBits: unknown[] = [];
+    const idBits: JsParam[] = [];
     if (match?.id != null) idBits.push(`library_id=${match.id}`);
     if (match?.rating_key) idBits.push(`rating_key=${match.rating_key}`);
     if (match?.tmdb_id != null) idBits.push(`tmdb_id=${match.tmdb_id}`);
@@ -288,7 +288,7 @@ export function buildRailChatPrompt({ railTitle, items, focusTitle = "", focusWh
   }
 
   const lines = list.map((item, index) => {
-    const bits: unknown[] = [];
+    const bits: JsParam[] = [];
     if (item.id != null) bits.push(`library_id=${item.id}`);
     if (item.rating_key) bits.push(`rating_key=${item.rating_key}`);
     if (item.year) bits.push(String(item.year));

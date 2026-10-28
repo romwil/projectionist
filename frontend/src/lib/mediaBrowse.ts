@@ -262,7 +262,7 @@ export function saveMediaBrowseColumns(scope: JsParam, columns: JsParam) {
   }
 }
 
-export function libraryExportHref(state: JsParam, columns = []) {
+export function libraryExportHref(state: JsParam, columns: JsParam[] = []) {
   const params = buildMediaBrowseParams(state);
   const language = normalizeLanguageCode(state?.language);
   if (language) {

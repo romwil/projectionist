@@ -56,13 +56,13 @@ export function moveShelfId(ids: JsParam, index: unknown, delta: unknown) {
 }
 
 /** Ids to save when adding a title at the front of the shelf (no duplicates). */
-export function addShelfIdFirst(ids: JsParam, id: string) {
+export function addShelfIdFirst(ids: JsParam, id: string | number) {
   const next = (Array.isArray(ids) ? ids : []).filter((value) => Number(value) !== Number(id));
   return [Number(id), ...next.map(Number)];
 }
 
 /** Why a title sits where it does, in plain words. */
-export function shelfRoleLabel(role: string, { hasNote = false }: JsParam = {}) {
+export function shelfRoleLabel(role?: string | number | null, { hasNote = false }: JsParam = {}) {
   if (hasNote) return "Staff pick";
   if (role === "pin") return "Picked by you";
   if (role === "include") return "Added by you";
@@ -127,7 +127,7 @@ export function curateClickPlan({ error = null, proposal = null }: JsParam = {})
     return { ok: false, message, applyPicks: [] };
   }
   const picks = Array.isArray(proposal?.picks) ? proposal.picks : [];
-  const applyPicks: unknown[] = [];
+  const applyPicks: JsParam[] = [];
   for (const pick of picks) {
     const libraryItemId = Number(pick?.library_item_id || pick?.id);
     if (!Number.isFinite(libraryItemId) || libraryItemId < 1) continue;

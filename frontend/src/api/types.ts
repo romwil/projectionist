@@ -30,9 +30,9 @@ export type RecommendationReason = string | RecommendationWhy | RecommendationEx
 
 export type LibraryItem = JsonObject & {
   id?: string | number;
-  rating_key?: string;
-  play_rating_key?: string;
-  plex_rating_key?: string;
+  rating_key?: string | number | null;
+  play_rating_key?: string | number | null;
+  plex_rating_key?: string | number | null;
   tmdb_id?: number | string | null;
   tvdb_id?: number | string | null;
   title?: string;
@@ -52,7 +52,7 @@ export type LibraryItem = JsonObject & {
   unwatched_episode_count?: number | null;
   resume_label?: string;
   explanation?: RecommendationExplanation;
-  why?: RecommendationWhy;
+  why?: RecommendationReason;
   card_kind?: string;
   continue_season?: number | null;
   continue_episode?: number | null;
@@ -78,7 +78,24 @@ export type ChatMessage = JsonObject & {
 export type ChatThread = JsonObject & {
   id?: string;
   title?: string;
+  thread_title?: string;
   updated_at?: string | number;
+  persona_id?: string;
+  context_label?: string;
+  context_hash?: string;
+  session_id?: string;
+};
+
+export type Persona = JsonObject & {
+  id?: string;
+  is_default?: boolean;
+  curator_name?: string;
+  persona_ui?: JsonObject;
+};
+
+export type ChatContext = JsonObject & {
+  context_hash?: string;
+  inferred_label?: string;
 };
 
 export type AuthUser = JsonObject & {

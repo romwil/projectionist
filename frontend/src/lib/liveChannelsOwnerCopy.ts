@@ -107,7 +107,7 @@ export function createStepsFor(kind: string) {
 
 /** Owner-facing summary line for the review step. */
 export function channelSummaryLine({ kind, name, number, programmingMode, mediaScope, pickTitle }: JsParam) {
-  const bits: unknown[] = [];
+  const bits: JsParam[] = [];
   if (number) bits.push(`Channel ${number}`);
   bits.push(name || pickTitle || "New channel");
   if (kind !== "suggest") {

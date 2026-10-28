@@ -52,7 +52,7 @@ export function watchedTimesLabel(count: unknown) {
 export function episodeHistorySummary(summary: JsParam = {}) {
   const unique = Number(summary.unique_episodes_completed || 0);
   const repeats = Number(summary.repeat_episode_completions || 0);
-  const parts: unknown[] = [];
+  const parts: JsParam[] = [];
   if (unique > 0) {
     parts.push(`${unique} ${unique === 1 ? "episode" : "episodes"} watched`);
   } else {

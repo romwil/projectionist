@@ -133,7 +133,7 @@ export function formatClockMs(ms: JsParam) {
 
 export function bufferedRanges(video: JsParam) {
   if (!video?.buffered) return [];
-  const out: unknown[] = [];
+  const out: JsParam[] = [];
   for (let i = 0; i < video.buffered.length; i += 1) {
     try {
       out.push({ start: video.buffered.start(i), end: video.buffered.end(i) });
@@ -158,7 +158,7 @@ function theaterSelectionGetter(getSelection: JsParam) {
 }
 
 /** Drop a Safari / iOS selection so the 2x chip and stage do not stay highlighted. */
-export function clearTheaterTextSelection(getSelection: JsParam) {
+export function clearTheaterTextSelection(getSelection?: JsParam) {
   const getter = theaterSelectionGetter(getSelection);
   if (!getter) return false;
   try {

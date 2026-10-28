@@ -30,7 +30,7 @@ export function metadataOverlapFromScores(score: JsParam, surpriseScore: JsParam
 function normalizeGenreList(genres: JsParam) {
   if (!Array.isArray(genres)) return [];
   const seen = new Set();
-  const out: unknown[] = [];
+  const out: JsParam[] = [];
   for (const raw of genres) {
     const label = String(raw || "").trim();
     if (!label) continue;

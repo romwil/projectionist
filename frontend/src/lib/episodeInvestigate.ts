@@ -194,7 +194,7 @@ export function investigateSeasonOptions(seasonsWithFiles: JsParam, plexSeasonCo
   if (seasonsWithFiles == null) {
     const count = Number(plexSeasonCount) || 0;
     if (count <= 0) return [];
-    const out: unknown[] = [];
+    const out: JsParam[] = [];
     for (let n = 1; n <= count; n += 1) out.push(n);
     return out;
   }
@@ -214,7 +214,7 @@ export function filterInvestigateShows(shows: JsParam, query: string, { limit = 
   const q = String(query || "").trim().toLowerCase();
   if (!q) return list.slice(0, cap);
 
-  const scored: unknown[] = [];
+  const scored: JsParam[] = [];
   for (const item of list) {
     const title = String(item?.title || "").toLowerCase();
     const label = formatInvestigateShowLabel(item).toLowerCase();
@@ -250,7 +250,7 @@ export function reviewEvidenceSummary(rows: JsParam, options: JsParam = {}) {
   const systematic = uncertain === list.length || noStills === list.length;
   if (!systematic) return "";
 
-  const bits: unknown[] = [];
+  const bits: JsParam[] = [];
   if (uncertain === list.length) {
     bits.push(`All ${list.length} rows are Uncertain.`);
   }

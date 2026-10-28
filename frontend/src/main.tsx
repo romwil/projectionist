@@ -9,7 +9,9 @@ import LiveStickyOsd from "./components/LiveStickyOsd";
 import InAppPlaybackHost from "./components/theater/InAppPlaybackHost";
 import "./styles.css";
 
-createRoot(document.getElementById("root")).render(
+const rootEl = document.getElementById("root");
+if (!rootEl) throw new Error("Missing #root");
+createRoot(rootEl).render(
   <React.StrictMode>
     <BrowserRouter>
       <BulkActionProgressProvider>

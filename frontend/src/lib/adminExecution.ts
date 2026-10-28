@@ -19,7 +19,7 @@ export const ADMIN_PHASE_LABELS: Record<string, any> = {
   error: "Failed",
 };
 
-export function adminPhaseLabel(phase: string, extraLabels: JsParam = {}) {
+export function adminPhaseLabel(phase?: string | null, extraLabels: JsParam = {}) {
   const key = String(phase || "").trim().toLowerCase();
   return extraLabels[key] || ADMIN_PHASE_LABELS[key] || "Working";
 }
@@ -51,7 +51,7 @@ export function adminDisplayPercent(job: Job | null | undefined) {
 
 export function adminExecutionCountLine(execution: JsParam) {
   if (!execution) return "";
-  const bits: unknown[] = [];
+  const bits: JsParam[] = [];
   const pending = Number(execution.pending_submit) || 0;
   if (pending && pending !== (Number(execution.queued) || 0)) {
     bits.push(`${pending} submitting`);
@@ -80,7 +80,7 @@ export function adminProgressLine(job: Job | null | undefined) {
       Number(execution.completed) > 0 ||
       Number(execution.failed) > 0 ||
       Number(execution.skipped) > 0);
-  const bits: unknown[] = [];
+  const bits: JsParam[] = [];
   const message = String(job.message || "").trim();
   if (message && !/\d+ queued/.test(message)) bits.push(message);
   if (hasWork) bits.push(adminExecutionCountLine(execution));

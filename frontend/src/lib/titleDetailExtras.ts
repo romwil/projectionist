@@ -78,7 +78,7 @@ export function filterCollectionPeers(items: LibraryItem[] | null | undefined, d
   const selfKey = [detail?.tmdb_id, detail?.rating_key, detail?.title, detail?.year]
     .map((v) => String(v ?? ""))
     .join("|");
-  const out: unknown[] = [];
+  const out: JsParam[] = [];
   for (const item of Array.isArray(items) ? items : []) {
     const itemCollection = String(item?.collection_name || "").trim().toLowerCase();
     if (itemCollection !== name) continue;

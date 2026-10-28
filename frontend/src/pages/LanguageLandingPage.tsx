@@ -42,10 +42,11 @@ import {
   parseMediaBrowse,
 } from "../lib/mediaBrowse.js";
 import { allowWatchlistPin } from "../lib/watchlistPin.js";
+import type { JsParam } from "../api/types";
 
 const EMPTY_STATE = {
   loading: false,
-  items: [],
+  items: [] as JsParam[],
   total: 0,
   returned: 0,
   hasMore: false,

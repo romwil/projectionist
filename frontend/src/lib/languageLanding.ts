@@ -33,7 +33,7 @@ function normalizeLandingMediaType(raw: unknown) {
  * `original_language`). Empty and unknown sentinels are omitted. Codes that
  * are not in the buckets are not offered.
  */
-export function languageOptionsFromBuckets(buckets: unknown[] = []) {
+export function languageOptionsFromBuckets(buckets: JsParam[] = []) {
   const counts = new Map();
   for (const bucket of buckets || []) {
     const code = normalizeLanguageCode((bucket as JsParam)?.value ?? (bucket as JsParam)?.language ?? "");

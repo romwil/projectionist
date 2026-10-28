@@ -74,7 +74,7 @@ export function sonarrMissingDisplayPercent(status: JsParam) {
 
 function executionCountLine(execution: JsParam) {
   if (!execution) return "";
-  const bits: unknown[] = [];
+  const bits: JsParam[] = [];
   const pending = Number(execution.pending_submit) || 0;
   if (pending) bits.push(`${pending} submitting`);
   bits.push(`${Number(execution.queued) || 0} queued`);
@@ -99,13 +99,13 @@ export function sonarrMissingProgressLine(status: JsParam) {
       Number(execution.completed) > 0 ||
       Number(execution.failed) > 0);
   if (hasCommands && (phase === "searching" || phase === "executing" || phase === "searched" || phase === "cancelled")) {
-    const bits: unknown[] = [];
+    const bits: JsParam[] = [];
     const message = String(status.message || "").trim();
     if (message && !/\d+ queued/.test(message)) bits.push(message);
     bits.push(executionCountLine(execution));
     return bits.filter(Boolean).join(" · ");
   }
-  const bits: unknown[] = [];
+  const bits: JsParam[] = [];
   const message = String(status.message || "").trim();
   if (message) bits.push(message);
   const seriesTotal = Number(status.series_total) || 0;
@@ -143,30 +143,30 @@ export function sonarrMissingSecondsAgo(seconds: unknown) {
 }
 
 /** Series ids from the current scan that are still selectable (drops stale picks after a rescan). */
-export function sonarrPruneSelection(groups: JsParam, selected: JsParam) {
+export function sonarrPruneSelection(groups: JsParam, selected: JsParam): Set<string> {
   const valid = new Set((groups || []).map((group: JsParam) => group.seriesId));
-  const next = new Set();
+  const next = new Set<string>();
   for (const id of selected || []) {
-    if (valid.has(id)) next.add(id);
+    if (valid.has(id)) next.add(id as string);
   }
   return next;
 }
 
-export function sonarrToggleSeries(selected: JsParam, seriesId: JsParam) {
-  const next = new Set(selected || []);
+export function sonarrToggleSeries(selected: JsParam, seriesId: JsParam): Set<string> {
+  const next = new Set(selected || []) as Set<string>;
   if (next.has(seriesId)) next.delete(seriesId);
-  else next.add(seriesId);
+  else next.add(seriesId as string);
   return next;
 }
 
-export function sonarrSelectAllSeries(groups: JsParam) {
-  return new Set((groups || []).map((group: JsParam) => group.seriesId));
+export function sonarrSelectAllSeries(groups: JsParam): Set<string> {
+  return new Set((groups || []).map((group: JsParam) => group.seriesId)) as Set<string>;
 }
 
 /** Episode ids (deduped, scan order) for the checked shows only. */
 export function sonarrSelectedEpisodeIds(groups: JsParam, selected: JsParam) {
   const picked = selected instanceof Set ? selected : new Set(selected || []);
-  const ids: unknown[] = [];
+  const ids: JsParam[] = [];
   const seen = new Set();
   for (const group of groups || []) {
     if (!picked.has(group.seriesId)) continue;

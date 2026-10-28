@@ -114,13 +114,13 @@ function PersonaModal({ persona, onSave, onDelete, onCancel }: PersonaModalProps
 /** Props for PersonaSelector. `any` = API/handler bags until Wave 4 client generics. */
 type PersonaSelectorProps = {
   personas?: any;
-  activePersonaId?: string;
+  activePersonaId?: string | null;
   onSelect?: (...args: any[]) => void;
   onCreate?: (...args: any[]) => void;
   onUpdate?: (...args: any[]) => void;
   onDelete?: (...args: any[]) => void;
   onSetDefault?: (...args: any[]) => void;
-  defaultPersonaId?: string;
+  defaultPersonaId?: string | null;
 };
 
 export default function PersonaSelector({

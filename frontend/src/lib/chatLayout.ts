@@ -58,7 +58,7 @@ export function messageTextContainmentStyle() {
  * phone does not drop `--phone` styles (width alone becomes ~844).
  * One-arg width-only calls keep the legacy ≤390 check when height is unknown.
  */
-export function isPhonePlayViewport(width: unknown, height?: unknown) {
+export function isPhonePlayViewport(width?: unknown, height?: unknown) {
   let w = Number(width);
   let h = Number(height);
   if ((!Number.isFinite(w) || w <= 0) && typeof window !== "undefined") {
@@ -77,7 +77,7 @@ export function isPhonePlayViewport(width: unknown, height?: unknown) {
 }
 
 /** Compact theater (phone + iPad-class) — safe-area OSD in either orientation. */
-export function isCompactPlayViewport(width: unknown, height: unknown) {
+export function isCompactPlayViewport(width?: unknown, height?: unknown) {
   if (isPhonePlayViewport(width, height)) return true;
   let w = Number(width);
   let h = Number(height);

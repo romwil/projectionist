@@ -83,7 +83,7 @@ export function continueWatchingResumeLabel(
   episodeTitle = "",
 }: JsParam = {},
 ) {
-  const parts: unknown[] = [];
+  const parts: JsParam[] = [];
   if (mediaType === "episode" || season != null || episode != null) {
     if (season != null && episode != null) parts.push(`S${Number(season)}E${Number(episode)}`);
     else if (episodeTitle) parts.push(episodeTitle);
@@ -119,7 +119,7 @@ function continueWatchingIdentity(item: LibraryItem | null | undefined) {
 export function dedupeContinueWatchingItems(items: LibraryItem[] | null | undefined) {
   const list = Array.isArray(items) ? items : [];
   const seen = new Set();
-  const out: unknown[] = [];
+  const out: JsParam[] = [];
   for (const item of list) {
     if (!item || typeof item !== "object") continue;
     const ident = continueWatchingIdentity(item);

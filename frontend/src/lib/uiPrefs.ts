@@ -104,7 +104,7 @@ export function applyUiTheme(theme: JsParam, { persist = true, media, storage }:
 }
 
 /** Cycle Lights Up → Lights Down → Match system. */
-export function cycleUiTheme(current: number) {
+export function cycleUiTheme(current: JsParam) {
   const order = ["lights_up", "lights_down", "system"];
   const idx = order.indexOf(normalizeUiTheme(current));
   return order[(idx + 1) % order.length];
@@ -121,7 +121,7 @@ export function themePreferenceLabel(pref: JsParam) {
   }
 }
 
-export function themeControlIcon(pref: JsParam, media: JsParam) {
+export function themeControlIcon(pref: JsParam, media?: JsParam) {
   const preference = normalizeUiTheme(pref);
   if (preference === "system") return "brightness_auto";
   return resolveEffectiveTheme(preference, media) === "lights_up" ? "light_mode" : "dark_mode";

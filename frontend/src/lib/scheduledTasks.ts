@@ -173,7 +173,7 @@ export function formatMeasuredRate(rate: unknown) {
   const iph = Number((rate as JsParam).items_per_hour);
   const success = Number((rate as JsParam).success_rate);
   const runs = Number((rate as JsParam).run_count);
-  const parts: unknown[] = [];
+  const parts: JsParam[] = [];
   if (Number.isFinite(iph) && iph > 0) {
     const rounded = iph >= 10 ? Math.round(iph) : Math.round(iph * 10) / 10;
     parts.push(`${rounded.toLocaleString()}/hr measured`);

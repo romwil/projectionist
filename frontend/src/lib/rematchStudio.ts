@@ -67,7 +67,7 @@ export function repairActionsFor(kind: string, mediaType: string = "movie") {
 }
 
 export function collectRepairItems(radarrRegister: JsParam, sonarrMissing: JsParam) {
-  const items: unknown[] = [];
+  const items: JsParam[] = [];
   for (const raw of Array.isArray(radarrRegister?.items) ? radarrRegister.items : []) {
     const status = String(raw.status || "").toLowerCase();
     const outcome = String(raw.outcome || "").toLowerCase();

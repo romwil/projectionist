@@ -102,7 +102,7 @@ export function formatCoverageDetail(value: unknown, { suffix = "", decimals = 1
  */
 export function buildKnowledgeCoverageRows(coverage: JsParam) {
   if (!coverage || typeof coverage !== "object") return [];
-  const rows: unknown[] = [];
+  const rows: JsParam[] = [];
   for (const metric of KNOWLEDGE_COVERAGE_METRICS) {
     if (metric.requireKey && !(metric.requireKey in coverage)) continue;
     if (metric.omitUnlessCount && !(Number(coverage[metric.omitUnlessCount]) > 0)) continue;

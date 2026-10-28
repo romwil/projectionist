@@ -17,7 +17,7 @@ export const BETWEEN_PROGRAMS_TITLE = "Between programs";
  * Merge HLS/native stream tracks with Plex-attached tracks for the CC picker.
  * Stream tracks win for in-player display; Plex rows fill when the encode is bare.
  */
-export function mergeLiveCcTracks(streamTracks: unknown[] = [], plexPayload: JsParam = null) {
+export function mergeLiveCcTracks(streamTracks: JsParam[] = [], plexPayload: JsParam = null) {
   const stream = Array.isArray(streamTracks) ? streamTracks : [];
   const plexRows = Array.isArray(plexPayload?.plex_streams) ? plexPayload.plex_streams : [];
   const plex = normalizeSubtitleTracks(plexRows).map((track) => ({ ...track, viaPlex: true, streamId: track.id }));
@@ -91,7 +91,7 @@ export function flexSlateCopy({ nextTitle = "", slateCopy = "" }: JsParam = {}) 
   return next ? `${BETWEEN_PROGRAMS_TITLE} — up next: ${next}` : BETWEEN_PROGRAMS_TITLE;
 }
 
-export function liveWatchHref(channelId: string, { popout = false }: JsParam = {}) {
+export function liveWatchHref(channelId: string | number | null | undefined, { popout = false }: JsParam = {}) {
   const params = new URLSearchParams();
   const id = String(channelId || "").trim();
   if (id) params.set("channel", id);
@@ -101,7 +101,7 @@ export function liveWatchHref(channelId: string, { popout = false }: JsParam = {
 }
 
 /** Opener guide URL after pop-out — keeps channel selected without starting HLS. */
-export function liveGuideHref(channelId: string) {
+export function liveGuideHref(channelId: string | number | null | undefined) {
   const params = new URLSearchParams();
   const id = String(channelId || "").trim();
   if (id) params.set("channel", id);
@@ -232,7 +232,7 @@ export const LIVE_DIAG_RING_MAX = 40;
  */
 export function summarizeLiveVideoBuffer(video: JsParam) {
   if (!video) return null;
-  const ranges: unknown[] = [];
+  const ranges: JsParam[] = [];
   try {
     const buffered = video.buffered;
     for (let i = 0; i < buffered.length; i += 1) {
@@ -282,7 +282,7 @@ export function isHlsBufferStallDetail(detail: LibraryItem | null | undefined) {
  *   remountDelayMs?: number,
  * }}
  */
-export function liveHlsErrorPolicy(data: JsParam, { networkRetries = 0 }: JsParam = {}) {
+export function liveHlsErrorPolicy(data: JsParam, { networkRetries = 0 }: JsParam = {}): JsParam {
   const retries = Math.max(0, Math.floor(Number(networkRetries) || 0));
   if (!data) return { action: "ignore", handled: true, networkRetries: retries };
   const fatal = Boolean(data.fatal);
@@ -422,7 +422,7 @@ export function recordLivePlaybackDiag(event: JsParam, payload: JsParam = {}, op
     // ignore logging failures
   }
   if (typeof globalThis !== "undefined") {
-    const root = globalThis as typeof globalThis & { __projectionistLiveDiag?: unknown[] };
+    const root = globalThis as typeof globalThis & { __projectionistLiveDiag?: JsParam[] };
     if (!Array.isArray(root.__projectionistLiveDiag)) {
       root.__projectionistLiveDiag = [];
     }
@@ -541,7 +541,7 @@ export function pickNowAndNext(programs: JsParam, nowSec: unknown, { selectedPro
       return (Number.isFinite(as) ? as : 0) - (Number.isFinite(bs) ? bs : 0);
     });
 
-  const airing: unknown[] = [];
+  const airing: JsParam[] = [];
   let firstFuture = null;
   for (let index = 0; index < ordered.length; index += 1) {
     const program = ordered[index];
@@ -966,7 +966,7 @@ export function guideGridBounds(windowStart: unknown, windowEnd: unknown) {
 export function guideTimeScale(windowStart: unknown, windowEnd: unknown, pxPerHour: unknown) {
   const { gridStart, gridEnd, slotCount } = guideGridBounds(windowStart, windowEnd);
   const pxPerSlot = ((pxPerHour as JsParam) * GUIDE_SLOT_SECONDS) / 3600;
-  const marks: unknown[] = [];
+  const marks: JsParam[] = [];
   for (let i = 0; i < slotCount; i += 1) marks.push(gridStart + i * GUIDE_SLOT_SECONDS);
   return {
     gridStart,

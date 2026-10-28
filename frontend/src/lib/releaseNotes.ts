@@ -95,7 +95,7 @@ export const RELEASE_JUMP_RECENT_LIMIT = 10;
  * @param {{ recentLimit?: number }} [options]
  * @returns {{ mode: "chips" | "picker", recent: string[], all: string[] }}
  */
-export function allocateReleaseVersionJumps(releases: JsParam, { recentLimit = RELEASE_JUMP_RECENT_LIMIT }: JsParam = {}) {
+export function allocateReleaseVersionJumps(releases: JsParam, { recentLimit = RELEASE_JUMP_RECENT_LIMIT }: JsParam = {}): { mode: "chips" | "picker"; recent: string[]; all: string[] } {
   const versions = normalizeReleaseNotes(releases)
     .map((item: JsParam) => String(item.version || "").trim())
     .filter(Boolean);

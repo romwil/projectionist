@@ -163,7 +163,7 @@ export function normalizeOwnerNowPlaying(status: number) {
       } else {
         nowTitle = rawNowTitle;
         nextTitle = honestNext;
-        const progressParts: unknown[] = [];
+        const progressParts: JsParam[] = [];
         if (percent != null) progressParts.push(`${Math.round(percent)}%`);
         const remaining = formatRemaining(secondsRemaining);
         if (remaining) progressParts.push(remaining);

@@ -104,8 +104,8 @@ export function applyInboxDismiss(items: LibraryItem[] | null | undefined, ids: 
   return (items || []).filter((item) => !drop.has(item.id));
 }
 
-export function inboxPageSelection(items: LibraryItem[] | null | undefined, selected: JsParam) {
-  const ids = (items || []).map((item) => item.id).filter(Boolean);
+export function inboxPageSelection(items: LibraryItem[] | JsParam[] | null | undefined, selected: JsParam) {
+  const ids = (items || []).map((item: JsParam) => String(item?.id ?? "")).filter(Boolean);
   const chosen = selected instanceof Set ? selected : new Set(selected || []);
   return {
     ids,

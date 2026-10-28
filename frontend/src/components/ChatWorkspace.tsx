@@ -73,7 +73,7 @@ type ChatWorkspaceProps = {
   addProgress?: any;
   addFeedback?: any;
   confirmActiveAction?: any;
-  cancelActiveAction?: boolean;
+  cancelActiveAction?: (...args: any[]) => void;
   dismissAddFeedback?: any;
   dockDropEnabled?: any;
   handleDockDrop?: (...args: any[]) => void;
@@ -132,13 +132,13 @@ type ChatWorkspaceProps = {
   voiceListening?: any;
   composerPlaceholder?: any;
   personas?: any;
-  activePersonaId?: string;
-  setActivePersonaId?: string;
+  activePersonaId?: string | null;
+  setActivePersonaId?: (...args: any[]) => void;
   handleCreatePersona?: (...args: any[]) => void;
   handleUpdatePersona?: (...args: any[]) => void;
   handleDeletePersona?: (...args: any[]) => void;
   handleSetDefaultPersona?: (...args: any[]) => void;
-  defaultPersonaId?: string;
+  defaultPersonaId?: string | null;
   showMic?: boolean;
   toggleListening?: any;
   voiceSpeaking?: any;

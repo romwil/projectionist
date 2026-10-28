@@ -53,23 +53,23 @@ import { libraryHubPath } from "./lib/libraryTabs.js";
  */
 function RedirectLegacyLibraryPage() {
   const { pageId } = useParams();
-  return <Navigate to={`/library/saved/${encodeURIComponent(pageId)}`} replace />;
+  return <Navigate to={`/library/saved/${encodeURIComponent(pageId || "")}`} replace />;
 }
 
 function RedirectLegacyListDetail() {
   const { listId } = useParams();
-  return <Navigate to={`/library/shelves/${encodeURIComponent(listId)}`} replace />;
+  return <Navigate to={`/library/shelves/${encodeURIComponent(listId || "")}`} replace />;
 }
 
 function RedirectLegacyCollectionDetail() {
   const { listId } = useParams();
-  return <Navigate to={`/library/collections/${encodeURIComponent(listId)}`} replace />;
+  return <Navigate to={`/library/collections/${encodeURIComponent(listId || "")}`} replace />;
 }
 
 function RedirectExploreBrowse() {
   const { search } = useLocation();
   const incoming = new URLSearchParams(search);
-  const extra = {};
+  const extra: Record<string, string> = {};
   const mediaType = incoming.get("media_type");
   const q = incoming.get("q");
   if (mediaType) extra.media_type = mediaType;

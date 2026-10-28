@@ -23,7 +23,7 @@ export function formatDigestTitle(item: LibraryItem | null | undefined) {
 export function dedupeDigestTitles(titles: JsParam) {
   if (!Array.isArray(titles)) return [];
   const seen = new Set();
-  const out: unknown[] = [];
+  const out: JsParam[] = [];
   for (const item of titles) {
     if (!item || typeof item !== "object") continue;
     let key;

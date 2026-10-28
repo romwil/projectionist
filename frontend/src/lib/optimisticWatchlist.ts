@@ -21,7 +21,7 @@ export function optimisticPinFromItem(item: LibraryItem | null | undefined, { id
 }
 
 /** Remove a pin from a list by id (immutable). */
-export function removePinById(pins: JsParam, pinId: string) {
+export function removePinById(pins: JsParam, pinId?: string | number | null) {
   const id = String(pinId || "");
   if (!id) return Array.isArray(pins) ? pins.slice() : [];
   return (Array.isArray(pins) ? pins : []).filter((pin) => String(pin?.id) !== id);
