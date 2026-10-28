@@ -1129,7 +1129,7 @@
   display: block;
   align-items: stretch;
   justify-content: flex-start;
-  background: #100e0c;
+  background: var(--bg);
 }
 .theater-player.weather-channel .theater-player-video,
 .theater-player.weather-channel .live-osd.theater-osd {
