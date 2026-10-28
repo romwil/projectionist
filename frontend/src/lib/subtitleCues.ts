@@ -424,3 +424,18 @@ export function liveSubtitleLookupSec({ currentTimeSec, programElapsedSec, delay
     delaySec,
   });
 }
+
+/**
+ * HLS recover/Rejoin remount resets `video.currentTime` to 0 without a new tune.
+ * Caption lookup is join-offset + currentTime; leaving the join offset in place
+ * jumps cues back to tune-in while the picture is at live edge.
+ *
+ * Re-base to the last known file position (not wall-clock). No snapshot → NaN
+ * so the overlay omits rather than showing opening-title cues on a 0-based timeline.
+ */
+export function liveCaptionElapsedSecAfterRemount(lastFilePositionSec: unknown) {
+  if (lastFilePositionSec == null || lastFilePositionSec === "") return Number.NaN;
+  const last = Number(lastFilePositionSec);
+  if (Number.isFinite(last) && last >= 0) return last;
+  return Number.NaN;
+}

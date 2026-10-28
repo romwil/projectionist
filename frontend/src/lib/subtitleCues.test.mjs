@@ -7,6 +7,7 @@ import {
   cleanCueText,
   formatSubtitleDelay,
   isOurSubtitleProxyUrl,
+  liveCaptionElapsedSecAfterRemount,
   liveProgramClockSec,
   liveSubtitleLookupSec,
   liveSubtitleOriginMs,
@@ -357,4 +358,36 @@ test("missing Live timing does not invent a huge caption offset", () => {
   assert.equal(liveSubtitleLookupSec({ currentTimeSec: 5, programElapsedSec: 99_999 }), 5);
   assert.equal(liveSubtitleLookupSec({ currentTimeSec: 2700, programElapsedSec: 2700 }), 2700);
   assert.ok(Number.isNaN(liveSubtitleLookupSec({ currentTimeSec: Number.NaN, programElapsedSec: 1800 })));
+});
+
+test("HLS remount rebases caption origin to last file position, not join offset", () => {
+  const joinElapsed = 2700;
+  const lastFile = liveSubtitleLookupSec({
+    currentTimeSec: 120,
+    programElapsedSec: joinElapsed,
+  });
+  assert.equal(lastFile, 2820);
+
+  // attachKey copied lastFilePosition; remountLiveRef recover/Rejoin did not.
+  const rebased = liveCaptionElapsedSecAfterRemount(lastFile);
+  assert.equal(rebased, 2820);
+  assert.equal(
+    liveSubtitleLookupSec({ currentTimeSec: 0, programElapsedSec: rebased }),
+    2820,
+  );
+  assert.equal(
+    liveSubtitleLookupSec({ currentTimeSec: 10, programElapsedSec: rebased }),
+    2830,
+  );
+
+  // Stale join offset on a 0-based remount timeline jumps cues back to tune-in.
+  assert.equal(
+    liveSubtitleLookupSec({ currentTimeSec: 0, programElapsedSec: joinElapsed }),
+    2700,
+  );
+
+  assert.equal(Number.isNaN(liveCaptionElapsedSecAfterRemount(null)), true);
+  assert.equal(Number.isNaN(liveCaptionElapsedSecAfterRemount(undefined)), true);
+  assert.equal(Number.isNaN(liveCaptionElapsedSecAfterRemount(Number.NaN)), true);
+  assert.equal(liveCaptionElapsedSecAfterRemount(0), 0);
 });

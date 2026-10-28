@@ -25,12 +25,14 @@ import {
   summarizeLiveVideoBuffer,
   liveShowsTapHint,
   liveUiStatusFromTheater,
+  commitLiveUserPlaybackStatus,
   toggleLiveVideoPlayback,
   tryPlayLiveVideo,
 } from "../../lib/liveChannels.js";
 import { toggleTheaterFullscreen } from "../../lib/theaterPlayer.js";
 import {
   clampSubtitleDelay,
+  liveCaptionElapsedSecAfterRemount,
   liveSubtitleLookupSec,
   resolveSubtitlePresentation,
   silenceNativeTextTracks,
@@ -153,13 +155,31 @@ export default function LivePlayer({
   const getSubtitleTimeSec = useCallback(() => {
     const video = videoRef.current;
     if (!video) return Number.NaN;
+    const elapsed = tuneOffsetSecRef.current;
+    // NaN elapsed = remount without a snapshot; omit rather than replay join-offset cues.
+    if (elapsed != null && !Number.isFinite(elapsed)) return Number.NaN;
     const lookup = liveSubtitleLookupSec({
       currentTimeSec: video.currentTime,
-      programElapsedSec: tuneOffsetSecRef.current,
+      programElapsedSec: elapsed,
     });
     if (Number.isFinite(lookup)) lastFilePositionRef.current = lookup;
     return lookup;
   }, []);
+
+  function rememberLiveCaptionFilePosition(video = videoRef.current) {
+    const elapsed = tuneOffsetSecRef.current;
+    if (elapsed != null && !Number.isFinite(elapsed)) return;
+    const lookup = liveSubtitleLookupSec({
+      currentTimeSec: video?.currentTime,
+      programElapsedSec: elapsed,
+    });
+    if (Number.isFinite(lookup)) lastFilePositionRef.current = lookup;
+  }
+
+  function rebaseLiveCaptionsForRemount({ snapshot = false } = {}) {
+    if (snapshot) rememberLiveCaptionFilePosition();
+    tuneOffsetSecRef.current = liveCaptionElapsedSecAfterRemount(lastFilePositionRef.current);
+  }
 
   useEffect(() => {
     statusRef.current = status;
@@ -500,11 +520,13 @@ export default function LivePlayer({
       if (recoverTimerRef.current) clearTimeout(recoverTimerRef.current);
       recoverTimerRef.current = setTimeout(() => {
         recoverTimerRef.current = null;
+        rebaseLiveCaptionsForRemount({ snapshot: true });
         remount?.();
       }, policy.remountDelayMs);
       return true;
     }
     if (policy.action === "recoverMedia") {
+      rebaseLiveCaptionsForRemount({ snapshot: true });
       hls?.recoverMediaError?.();
       return true;
     }
@@ -567,6 +589,7 @@ export default function LivePlayer({
         clearStallSignals({ logEvent: "playhead-advanced" });
       }
     }
+    rememberLiveCaptionFilePosition(video);
   }
 
   function handleEnded() {
@@ -593,6 +616,7 @@ export default function LivePlayer({
     remountLiveRef.current = api?.remount
       ? () => {
           finishThenLiveRef.current = false;
+          rebaseLiveCaptionsForRemount({ snapshot: true });
           api.remount();
         }
       : null;
@@ -695,10 +719,9 @@ export default function LivePlayer({
 
   useEffect(() => {
     if (!attachKey) return;
-    const last = lastFilePositionRef.current;
-    if (Number.isFinite(last) && (last as number) >= 0) {
-      tuneOffsetSecRef.current = last as number;
-    }
+    // After remount currentTime is already 0 — rebase from the pre-reset snapshot,
+    // do not look up against the new timeline (that would replay the join offset).
+    rebaseLiveCaptionsForRemount({ snapshot: false });
   }, [attachKey]);
 
   useEffect(() => {
@@ -799,6 +822,7 @@ export default function LivePlayer({
         return nextBoundary === prev ? prev : nextBoundary;
       });
     }
+    commitLiveUserPlaybackStatus(statusRef, next);
     setStatus(next);
   }
 
@@ -809,11 +833,17 @@ export default function LivePlayer({
     pauseProgramEndRef.current = null;
     finishThenLiveRef.current = false;
     if (remountLiveRef.current) remountLiveRef.current();
-    else setAttachKey((key) => key + 1);
+    else {
+      rebaseLiveCaptionsForRemount({ snapshot: true });
+      setAttachKey((key) => key + 1);
+    }
     const video = videoRef.current;
     if (video) {
       hlsRef.current?.startLoad?.();
-      tryPlayLiveVideo(video).then((next) => setStatus(next));
+      tryPlayLiveVideo(video).then((next) => {
+        commitLiveUserPlaybackStatus(statusRef, next);
+        setStatus(next);
+      });
     }
   }
 
@@ -825,7 +855,10 @@ export default function LivePlayer({
     const video = videoRef.current;
     if (video) {
       hlsRef.current?.startLoad?.();
-      tryPlayLiveVideo(video).then((next) => setStatus(next));
+      tryPlayLiveVideo(video).then((next) => {
+        commitLiveUserPlaybackStatus(statusRef, next);
+        setStatus(next);
+      });
     }
   }
 
