@@ -8,7 +8,7 @@ import {
   applyRemovalProgressEvent,
   createRemovalSession,
   removalProgressView,
-} from "./removalProgress.js";
+} from "./removalProgress.ts";
 
 const GB = 1024 ** 3;
 const FIRST_BYTES = Math.round(11.99 * GB);

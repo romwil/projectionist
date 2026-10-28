@@ -17,8 +17,8 @@ import {
   normalizeRecommendation,
   nudgeCardNote,
   recommendationMediaTitle,
-} from "./recommendationInbox.js";
-import { canWatchOnPlex } from "./titleLinks.js";
+} from "./recommendationInbox.ts";
+import { canWatchOnPlex } from "./titleLinks.ts";
 
 test("inbox list params request unread-only so dismiss/clear-all persists on reopen", () => {
   assert.equal(INBOX_LIST_PARAMS.unread_only, true);

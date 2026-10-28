@@ -8,7 +8,7 @@ import {
   TRAILER_REQUEST_FAILED_TOAST,
   posterTrailerRequestPath,
   trailerLookupOutcome,
-} from "./posterTrailer.js";
+} from "./posterTrailer.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 

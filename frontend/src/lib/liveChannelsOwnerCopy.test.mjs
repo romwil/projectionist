@@ -10,7 +10,7 @@ import {
   liveStationState,
   ownerLiveText,
   publishSucceeded,
-} from "./liveChannelsOwnerCopy.js";
+} from "./liveChannelsOwnerCopy.ts";
 
 describe("ownerLiveText", () => {
   it("rewrites operator vocabulary into Projectionist words", () => {

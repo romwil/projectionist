@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { languageBrowseMeta } from "./titleDetailMeta.js";
+import { languageBrowseMeta } from "./titleDetailMeta.ts";
 import {
   ALL_LANGUAGES_HEADING,
   ALL_LANGUAGES_LEDE,
@@ -12,7 +12,7 @@ import {
   languageLandingPath,
   languageLandingRequest,
   languageOptionsFromBuckets,
-} from "./languageLanding.js";
+} from "./languageLanding.ts";
 
 const srcDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 

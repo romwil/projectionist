@@ -5,7 +5,7 @@ import {
   appriseUrlsLabel,
   mailTestResultMessage,
   savedSecretLabel,
-} from "./mailSettingsUi.js";
+} from "./mailSettingsUi.ts";
 
 describe("mailSettingsUi helpers", () => {
   it("labels saved secrets", () => {

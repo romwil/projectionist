@@ -17,5 +17,6 @@
     "resolveJsonModule": true,
     "moduleDetection": "force"
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/**/*.test.mjs"]
 }

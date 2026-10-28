@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createId } from "./id.js";
+import { createId } from "./id.ts";
 
 describe("createId", () => {
   it("returns a hyphenated UUID-shaped string by default", () => {

@@ -5,7 +5,7 @@ import {
   craftDraftFromStation,
   filterLiveCollections,
   findLiveCollection,
-} from "./liveChannelsCraft.js";
+} from "./liveChannelsCraft.ts";
 
 describe("liveChannelsCraft", () => {
   const collections = [

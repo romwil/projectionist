@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildHealthHeroTiles, buildLibraryHealthStory } from "./ownerHealth.js";
+import { buildHealthHeroTiles, buildLibraryHealthStory } from "./ownerHealth.ts";
 import { readAllStyles } from "./readStyles.mjs";
 
 const styles = readAllStyles();

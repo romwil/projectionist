@@ -7,7 +7,7 @@ import {
   lastMarkdownHeading,
   materializeAgentResultList,
   pageAgentListItems,
-} from "./agentResultLists.js";
+} from "./agentResultLists.ts";
 
 const RESULTS = [
   { title: "Heat", year: 1995, media_type: "movie", tmdb_id: 949, library_item_id: 7 },

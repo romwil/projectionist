@@ -29,7 +29,7 @@ import {
   LIBRARY_DELETE_NOTICE_KEY,
   normalizeLibraryDeleteMode,
   partitionBulkDeleteSelection,
-} from "./bulkLibraryDelete.js";
+} from "./bulkLibraryDelete.ts";
 import { readAllStyles } from "./readStyles.mjs";
 
 const styles = readAllStyles();
@@ -424,7 +424,7 @@ describe("owner title-detail delete gating", () => {
     const libDir = join(dirname(fileURLToPath(import.meta.url)), "..");
     const page = readFileSync(join(libDir, "pages", "TitleDetailPage.jsx"), "utf8");
     const interactions = readFileSync(
-      join(libDir, "hooks", "useTitleDetailInteractions.js"),
+      join(libDir, "hooks", "useTitleDetailInteractions.ts"),
       "utf8",
     );
     const content = readFileSync(join(libDir, "components", "TitleDetailContent.jsx"), "utf8");
@@ -461,7 +461,7 @@ describe("owner title-detail delete gating", () => {
     );
     const drawer = readFileSync(join(libDir, "components", "TitleDetailDrawer.jsx"), "utf8");
     const interactions = readFileSync(
-      join(libDir, "hooks", "useTitleDetailInteractions.js"),
+      join(libDir, "hooks", "useTitleDetailInteractions.ts"),
       "utf8",
     );
     const css = readFileSync(join(libDir, "styles", "10-explore-delight.css"), "utf8");

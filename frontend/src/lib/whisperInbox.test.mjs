@@ -11,7 +11,7 @@ import {
   whisperMemberName,
   whisperWhy,
   whyWordCount,
-} from "./whisperInbox.js";
+} from "./whisperInbox.ts";
 
 test("clipWhy hard-caps at twelve words", () => {
   const clipped = clipWhy("one two three four five six seven eight nine ten eleven twelve thirteen");

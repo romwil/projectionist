@@ -11,7 +11,7 @@ import {
   preferPhonePlexPlayHref,
   titleDetailPath,
   titleDetailTo,
-} from "./titleLinks.js";
+} from "./titleLinks.ts";
 
 test("libraryEpisodePath encodes the rating key", () => {
   assert.equal(libraryEpisodePath("ep-1"), "/title/episode/ep-1");

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { displayRecommendationReason, posterWhyLine } from "./recommendationReason.js";
+import { displayRecommendationReason, posterWhyLine } from "./recommendationReason.ts";
 
 describe("displayRecommendationReason", () => {
   it("keeps human curator rationale", () => {

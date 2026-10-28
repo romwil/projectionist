@@ -5,7 +5,7 @@ import {
   formatCollectionStepTitle,
   isPublished,
   orderCollectionSteps,
-} from "./collections.js";
+} from "./collections.ts";
 import { readAllStyles } from "./readStyles.mjs";
 
 const styles = readAllStyles();

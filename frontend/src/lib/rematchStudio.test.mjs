@@ -14,7 +14,7 @@ import {
   plexColumnCopy,
   radarrColumnCopy,
   repairActionsFor,
-} from "./rematchStudio.js";
+} from "./rematchStudio.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const libraries = readFileSync(join(here, "../pages/admin/LibrariesSection.jsx"), "utf8");

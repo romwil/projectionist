@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { libraryBrowsePath } from "./browseLinks.js";
+import { libraryBrowsePath } from "./browseLinks.ts";
 import {
   MEDIA_BROWSE_SORTS,
   MEDIA_BROWSE_TV_SORTS,
@@ -11,8 +11,8 @@ import {
   movieLandingBrowseDefaults,
   parseMediaBrowse,
   queryFiltersFromBrowse,
-} from "./mediaBrowse.js";
-import { browseLanguageOptions } from "./languageNames.js";
+} from "./mediaBrowse.ts";
+import { browseLanguageOptions } from "./languageNames.ts";
 
 const page = readFileSync(new URL("../pages/LibraryBrowsePage.jsx", import.meta.url), "utf8");
 const controls = readFileSync(

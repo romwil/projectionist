@@ -6,7 +6,7 @@ import {
   groupPersonTitles,
   libraryOwnedPercent,
   personTitleKey,
-} from "./personBrowse.js";
+} from "./personBrowse.ts";
 
 describe("personBrowse", () => {
   it("buckets director vs cast credits", () => {

@@ -10,7 +10,7 @@ import {
   knowledgeCoverageFailureCopy,
   knowledgeStripContent,
   summarizeKnowledgeCoverage,
-} from "./knowledgeCoverage.js";
+} from "./knowledgeCoverage.ts";
 
 const SAMPLE = {
   total_titles: 5355,

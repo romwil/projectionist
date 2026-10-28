@@ -4,14 +4,14 @@ import {
   tonightHabitChrome,
   tonightOneLiner,
   tonightReadySpotlight,
-} from "./whatsOnTonight.js";
+} from "./whatsOnTonight.ts";
 import {
   addToTonightQueue,
   clearTonightQueue,
   loadTonightQueue,
   removeFromTonightQueue,
   saveTonightQueue,
-} from "./tonightQueue.js";
+} from "./tonightQueue.ts";
 import { readAllStyles } from "./readStyles.mjs";
 
 const styles = readAllStyles();

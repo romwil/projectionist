@@ -1,0 +1,294 @@
+import { normalizeLanguageCode } from "./languageNames.js";
+import type {JsonObject, LibraryItem, JsParam} from "../api/types";
+
+export const MEDIA_BROWSE_COLUMNS = [
+  { id: "title", label: "Title" },
+  { id: "year", label: "Year" },
+  { id: "media_type", label: "Type" },
+  { id: "vote_average", label: "Rating" },
+  { id: "genres", label: "Genres" },
+  { id: "runtime_minutes", label: "Runtime" },
+  { id: "watch_state", label: "Watch state" },
+];
+
+export const MEDIA_BROWSE_SORTS = [
+  { id: "title", label: "Title" },
+  { id: "year", label: "Year" },
+  { id: "vote_average", label: "Rating" },
+  { id: "added_at", label: "Date added" },
+  { id: "episode_added_at", label: "Recently added episodes" },
+  { id: "last_viewed_at", label: "Last watched" },
+  { id: "runtime_minutes", label: "Runtime" },
+];
+
+/** Sort options for TV browse — episode arrivals first in the list. */
+export const MEDIA_BROWSE_TV_SORTS = [
+  { id: "episode_added_at", label: "Recently added episodes" },
+  { id: "added_at", label: "Recently added shows" },
+  { id: "title", label: "Title" },
+  { id: "year", label: "Year" },
+  { id: "vote_average", label: "Rating" },
+  { id: "last_viewed_at", label: "Last watched" },
+  { id: "runtime_minutes", label: "Runtime" },
+];
+
+export const DEFAULT_MEDIA_BROWSE = {
+  view: "poster",
+  sort: "title",
+  sort_dir: "asc",
+  limit: 48,
+  offset: 0,
+  media_type: "",
+  watch_state: "",
+  year: "",
+  language: "",
+  genres: [],
+  keywords: [],
+};
+
+/** Type All (empty / all / any) is untyped. Only movie and show filter the reader. */
+export function normalizeBrowseMediaType(value: unknown) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "movie" || raw === "movies") return "movie";
+  if (raw === "show" || raw === "shows" || raw === "tv" || raw === "series") return "show";
+  return "";
+}
+
+/** Beyond-search type: movies, TV, or both when the wall is Type All. */
+export function beyondSearchMediaType(value: unknown) {
+  return normalizeBrowseMediaType(value) || "all";
+}
+
+/** Default browse state when opening the TV library (fresh-episode browsing). */
+export const DEFAULT_TV_MEDIA_BROWSE = {
+  ...DEFAULT_MEDIA_BROWSE,
+  media_type: "show",
+  sort: "episode_added_at",
+  sort_dir: "desc",
+};
+
+/** Movies landing only (`/search?media_type=movie`): newest additions first. */
+export function movieLandingBrowseDefaults() {
+  return { sort: "added_at", sort_dir: "desc" };
+}
+
+/** True for Explore → Movies, not for other grids that happen to filter movies. */
+export function isMovieBrowseLanding(pathname: JsParam, searchParams: JsParam) {
+  const path = String(pathname || "");
+  const onSearch = path === "/search" || path.startsWith("/search/");
+  const media = String(searchParams?.get?.("media_type") || "")
+    .trim()
+    .toLowerCase();
+  return onSearch && media === "movie";
+}
+
+/**
+ * Year/genre/language catalogs scan the library. The poster page must not wait
+ * on that work — call this with the grid's settled flag before fetching them.
+ */
+export function browseFacetsFollowGrid(gridSettled: JsParam) {
+  return gridSettled === true;
+}
+
+/** Page sizes surfaced in the shared "Show" selector. "all" is a capped fetch. */
+export const MEDIA_BROWSE_PAGE_SIZES = [48, 100, 500, "all"];
+
+/** Type menu for a results grid. Landings stay on their own shelf. */
+export function browseTypeChoices(scope: JsParam) {
+  if (scope === "movie") return [{ value: "movie", label: "Movies" }];
+  if (scope === "show") return [{ value: "show", label: "TV shows" }];
+  return [
+    { value: "", label: "All" },
+    { value: "movie", label: "Movies" },
+    { value: "show", label: "TV shows" },
+  ];
+}
+
+/**
+ * Ceiling for an "All" request. Mirrors the CSV export cap in
+ * projectionist/web/app.py so "All" never asks the reader for an unbounded payload.
+ */
+export const MEDIA_BROWSE_ALL_CAP = 5000;
+
+const STORAGE_PREFIX = "projectionist.media-browse.columns.";
+
+/** True when a page-size value represents the capped "All" selection. */
+export function isAllPageSize(value: unknown) {
+  return String(value ?? "").trim().toLowerCase() === "all";
+}
+
+/**
+ * Resolve a page-size selection to the concrete request limit.
+ * "All" becomes min(total_matched, MEDIA_BROWSE_ALL_CAP) — or the cap when the
+ * total is unknown — so a single request returns every visible row up to the
+ * ceiling. Fixed sizes are clamped to the same ceiling.
+ */
+export function resolvePageSizeLimit(pageSize: JsParam, totalMatched: JsParam = undefined) {
+  if (isAllPageSize(pageSize)) {
+    const total = Number(totalMatched);
+    if (Number.isFinite(total) && total > 0) return Math.min(total, MEDIA_BROWSE_ALL_CAP);
+    return MEDIA_BROWSE_ALL_CAP;
+  }
+  const parsed = Number(pageSize);
+  if (Number.isFinite(parsed) && parsed > 0) return Math.min(parsed, MEDIA_BROWSE_ALL_CAP);
+  return DEFAULT_MEDIA_BROWSE.limit;
+}
+
+function stringList(value: unknown) {
+  if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
+  return String(value || "").split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function numberInRange(value: unknown, fallback: JsParam, min: number, max: number) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(min, Math.min(max, parsed)) : fallback;
+}
+
+/** Parse a page-size URL value into "all" or a bounded number. */
+function parsePageSizeParam(value: unknown, fallback: string) {
+  if (value == null || value === "") return fallback;
+  if (isAllPageSize(value)) return "all";
+  return numberInRange(value, fallback, 1, MEDIA_BROWSE_ALL_CAP);
+}
+
+export function parseMediaBrowse(searchParams: JsParam, defaults: JsParam = {}) {
+  const get = (key: JsParam) => searchParams?.get?.(key);
+  const mediaHint = normalizeBrowseMediaType(get("media_type") || defaults.media_type || "");
+  const baseDefaults =
+    mediaHint === "show"
+      ? { ...DEFAULT_TV_MEDIA_BROWSE, ...defaults }
+      : { ...DEFAULT_MEDIA_BROWSE, ...defaults };
+  const merged = baseDefaults;
+  const view = get("view");
+  const sort = get("sort");
+  const sortDir = get("sort_dir");
+  const allowedSorts = mediaHint === "show" ? MEDIA_BROWSE_TV_SORTS : MEDIA_BROWSE_SORTS;
+  const defaultSortDir = merged.sort_dir === "desc" ? "desc" : "asc";
+  return {
+    ...merged,
+    view: view === "list" ? "list" : "poster",
+    sort: allowedSorts.some((option) => option.id === sort)
+      ? sort
+      : MEDIA_BROWSE_SORTS.some((option) => option.id === sort)
+        ? sort
+        : merged.sort,
+    sort_dir: sortDir === "desc" || sortDir === "asc" ? sortDir : defaultSortDir,
+    limit: parsePageSizeParam(get("limit") || merged.limit, merged.limit),
+    offset: numberInRange(get("offset"), 0, 0, Number.MAX_SAFE_INTEGER),
+    media_type: mediaHint,
+    watch_state: get("watch_state") || merged.watch_state || "",
+    year: get("year") || merged.year || "",
+    language: normalizeLanguageCode(get("language") || merged.language || ""),
+    genres: stringList(get("genres") || merged.genres),
+    keywords: stringList(get("keywords") || merged.keywords),
+  };
+}
+
+export function buildMediaBrowseParams(state: JsParam, updates: JsParam = {}) {
+  const mediaHint = normalizeBrowseMediaType(updates.media_type ?? state?.media_type ?? "");
+  const defaults =
+    mediaHint === "show" ? DEFAULT_TV_MEDIA_BROWSE : DEFAULT_MEDIA_BROWSE;
+  const next = { ...defaults, ...state, ...updates, media_type: mediaHint };
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(next)) {
+    if (key === "offset" && !value) continue;
+    if (key === "view" && value === "poster") continue;
+    if (key === "sort" && value === defaults.sort) continue;
+    if (key === "sort_dir" && value === defaults.sort_dir) continue;
+    if (key === "limit" && value === DEFAULT_MEDIA_BROWSE.limit) continue;
+    if (key === "language") {
+      const code = normalizeLanguageCode(value);
+      if (code) params.set(key, code);
+      continue;
+    }
+    const normalized = Array.isArray(value) ? stringList(value).join(",") : String(value || "").trim();
+    if (normalized) params.set(key, normalized);
+  }
+  return params;
+}
+
+export function queryFiltersFromBrowse(state: JsParam, extra: JsParam = {}) {
+  const filters = { ...extra };
+  for (const key of ["sort", "sort_dir", "limit", "offset", "year", "genres", "keywords"]) {
+    const value = state?.[key];
+    if (Array.isArray(value) ? value.length : value !== "" && value != null) filters[key] = value;
+  }
+  const mediaType = normalizeBrowseMediaType(state?.media_type);
+  if (mediaType) filters.media_type = mediaType;
+  // Never forward the "all" sentinel to the reader — resolve it to the cap.
+  if (isAllPageSize(filters.limit)) filters.limit = MEDIA_BROWSE_ALL_CAP;
+  if (state?.watch_state === "unwatched") filters.unwatched_only = true;
+  if (state?.watch_state === "watched") filters.min_view_count = 1;
+  if (state?.watch_state === "in_progress") filters.in_progress_only = true;
+  // Keep an explicit code even when it is unknown. Dropping it would return
+  // the unfiltered library.
+  const language = normalizeLanguageCode(state?.language);
+  if (language && !filters.original_language) filters.original_language = language;
+  return filters;
+}
+
+export function mediaBrowseWatchState(item: LibraryItem | null | undefined) {
+  const explicit = String(item?.watch_state || "").toLowerCase();
+  const watched = Boolean(item?.watched || Number(item?.view_count) > 0 || explicit === "watched");
+  if (watched) return "watched";
+  const inProgress = Boolean(
+    item?.view_offset ||
+    item?.view_offset_ms ||
+    explicit === "partial" ||
+    explicit === "in_progress",
+  );
+  return inProgress ? "in_progress" : "unwatched";
+}
+
+export function matchesMediaBrowseWatchState(item: LibraryItem | null | undefined, watchState: JsParam) {
+  return !watchState || mediaBrowseWatchState(item) === watchState;
+}
+
+export function loadMediaBrowseColumns(scope = "default") {
+  try {
+    const stored = JSON.parse(localStorage.getItem(`${STORAGE_PREFIX}${scope}`) || "null");
+    if (Array.isArray(stored) && stored.length) return stored.filter((id) => MEDIA_BROWSE_COLUMNS.some((column) => column.id === id));
+  } catch {
+    // Browser storage is optional.
+  }
+  return MEDIA_BROWSE_COLUMNS.map((column) => column.id);
+}
+
+export function saveMediaBrowseColumns(scope: JsParam, columns: JsParam) {
+  try {
+    localStorage.setItem(`${STORAGE_PREFIX}${scope}`, JSON.stringify(stringList(columns)));
+  } catch {
+    // Private browsing or quota failures should not prevent browsing.
+  }
+}
+
+export function libraryExportHref(state: JsParam, columns = []) {
+  const params = buildMediaBrowseParams(state);
+  const language = normalizeLanguageCode(state?.language);
+  if (language) {
+    params.delete("language");
+    params.set("original_language", language);
+  }
+  if (columns.length) params.set("columns", columns.join(","));
+  return `/api/library/export.csv?${params.toString()}`;
+}
+
+/** Serialize the currently visible local collection without widening its scope. */
+export function mediaBrowseRowsToCsv(items: LibraryItem[] | null | undefined, columns: JsParam) {
+  const quote = (value: JsParam) => {
+    const isList = Array.isArray(value);
+    const text = isList ? value.join(" · ") : String(value ?? "");
+    return isList || /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+  };
+  const valueFor = (item: JsParam, column: JsParam) => {
+    if (column === "watch_state") {
+      return mediaBrowseWatchState(item).replace("_", " ").replace(/^./, (char) => char.toUpperCase());
+    }
+    if (column === "vote_average") return item?.vote_average ?? item?.rating ?? "";
+    return item?.[column] ?? "";
+  };
+  return [
+    columns.join(","),
+    ...(items || []).map((item) => columns.map((column: JsParam) => quote(valueFor(item, column))).join(",")),
+  ].join("\n");
+}

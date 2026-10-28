@@ -16,7 +16,7 @@ describe("kebab action flash", () => {
 
   it("ShareActionMenu flashes confirmation outside the open menu", () => {
     const src = readFileSync(join(root, "components/ShareActionMenu.jsx"), "utf8");
-    const flashHelper = readFileSync(join(root, "lib/householdSocial.js"), "utf8");
+    const flashHelper = readFileSync(join(root, "lib/householdSocial.ts"), "utf8");
     assert.match(src, /data-testid="share-action-flash"/);
     assert.match(src, /libraryShareFlash\("copy"\)/);
     assert.match(flashHelper, /Private household library link copied\./);

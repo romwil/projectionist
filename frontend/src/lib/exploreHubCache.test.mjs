@@ -16,7 +16,7 @@ import {
   rememberContinueWatchingProgress,
   spliceContinueWatchingRail,
   writeExploreHubCache,
-} from "./exploreHubCache.js";
+} from "./exploreHubCache.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
