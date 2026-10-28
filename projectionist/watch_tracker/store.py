@@ -509,6 +509,11 @@ def attach_user_watch_summaries(
             if "view_count" in value:
                 value["plex_played_event_count"] = int(value.get("view_count") or 0)
             value.update(summary)
+            if str(summary.get("tracker_coverage") or "none") != "none":
+                if "sittings_observed" in summary:
+                    value["play_sessions"] = int(summary.get("sittings_observed") or 0)
+            if "view_count" in value:
+                value["plex_played_event_count"] = int(value.get("view_count") or 0)
         return value
 
     return _walk(payload)

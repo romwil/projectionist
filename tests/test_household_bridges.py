@@ -1310,6 +1310,42 @@ class HouseholdBridgeTests(unittest.TestCase):
         self.assertNotIn("previously used", why)
         self.assertNotIn("crash lands", why)
 
+    def test_tracker_watched_title_is_not_recommended_as_unwatched(self) -> None:
+        seed = _title(
+            self.db,
+            rating_key="rk-heat",
+            tmdb_id=949,
+            title="Heat",
+            year=1995,
+            summary=BAKE_PLOT,
+        )
+        peer = _title(
+            self.db,
+            rating_key="rk-thief",
+            tmdb_id=11334,
+            title="Thief",
+            year=1981,
+            summary=SPY_PLOT,
+        )
+        _explainable_neighbor(
+            self.db, seed, peer, seed_text=BAKE_PLOT, peer_text=SPY_PLOT
+        )
+        _insert_completion(
+            self.db,
+            user_id="will",
+            rating_key="rk-heat",
+            completed_at_ms=1_700_000_000_000,
+        )
+        _insert_completion(
+            self.db,
+            user_id="will",
+            rating_key="rk-thief",
+            completed_at_ms=1_700_000_100_000,
+        )
+        picks = list_linked_unwatched(self.db, limit=8)
+        self.assertEqual(picks, [])
+        self.assertFalse(any(item.get("title") == "Thief" for item in picks))
+
 
 if __name__ == "__main__":
     unittest.main()

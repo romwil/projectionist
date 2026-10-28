@@ -3510,10 +3510,25 @@ class ToolRegistry:
                 params,
             ).fetchall()
 
-        row = next(
-            (r for r in rows if self._card_allowed(row_to_title_card(dict(r)))),
-            None,
+        from projectionist.notifications.recommendation_reasons import (
+            named_bridge_for_item,
+            tracker_watched_item_ids,
         )
+        from projectionist.youth.rating_gate import resolve_youth_max_rating
+
+        watched_ids = tracker_watched_item_ids(self.db)
+        youth_max = resolve_youth_max_rating(self.settings) if self.is_youth else None
+        row = None
+        for candidate in rows:
+            try:
+                if int(candidate["id"]) in watched_ids:
+                    continue
+            except (TypeError, ValueError, KeyError):
+                pass
+            if not self._card_allowed(row_to_title_card(dict(candidate))):
+                continue
+            row = candidate
+            break
         if not row:
             return json.dumps({"error": "No unwatched titles match the criteria."})
 
@@ -3527,53 +3542,30 @@ class ToolRegistry:
                 genres_list = parsed if isinstance(parsed, list) else []
             except (TypeError, ValueError, json.JSONDecodeError):
                 genres_list = []
-        from projectionist.notifications.recommendation_reasons import named_unwatched_pick
-        from projectionist.youth.rating_gate import resolve_youth_max_rating
-
-        genre_needles = [g.strip() for g in genres_filter.split(",") if g.strip()] if genres_filter else []
-        youth_max = resolve_youth_max_rating(self.settings) if self.is_youth else None
-        named = named_unwatched_pick(
-            self.db,
-            user_id=self.user_id,
-            multi_user_enabled=bool(self.user_id),
-            youth_max_rating=youth_max,
-            genre_needles=genre_needles,
-            max_runtime=int(max_runtime) if max_runtime is not None else None,
-        )
-        if named:
-            explanation = named.get("explanation") if isinstance(named.get("explanation"), dict) else None
-            sentence = str((explanation or {}).get("sentence") or named.get("why") or "").strip()
-            card = _feed_item_to_title_card(
-                {
-                    **named,
-                    "overview": named.get("summary") or named.get("overview") or "",
-                    "why": sentence,
-                    "recommendation_reason": sentence,
-                }
-            )
-            self._offer_card(card)
-            tool_item = _card_to_tool_item(card)
-            if explanation:
-                tool_item["explanation"] = explanation
-            return json.dumps(
-                {
-                    "quick_pick": True,
-                    "item": tool_item,
-                    "why": sentence,
-                    "explanation": explanation,
-                }
-            )
 
         # row_to_title_card expects genres as a JSON string (sqlite shape).
         item = dict(row)
         item["genres"] = json.dumps(genres_list)
-        card = row_to_title_card(item, reason="")
+        explanation = named_bridge_for_item(
+            self.db,
+            dict(row),
+            user_id=self.user_id,
+            multi_user_enabled=bool(
+                getattr(self.settings.features, "multi_user_enabled", False)
+            ),
+            youth_max_rating=youth_max,
+        )
+        sentence = str((explanation or {}).get("sentence") or "").strip()
+        card = row_to_title_card(item, reason=sentence)
         self._offer_card(card)
-
+        tool_item = _card_to_tool_item(card)
+        if explanation:
+            tool_item["explanation"] = explanation
         return json.dumps({
             "quick_pick": True,
-            "item": _card_to_tool_item(card),
-            "why": "",
+            "item": tool_item,
+            "why": sentence,
+            "explanation": explanation,
         })
 
 
@@ -4309,14 +4301,17 @@ def build_system_prompt(
         "When Seerr is enabled for household members, use request_via_seerr instead of add_to_radarr/add_to_sonarr.\n"
         "Star ratings accept half-stars (e.g. 4.5); never ask users to round fractional ratings.\n"
         "For movies, Plex view_count is a per-user completed-or-marked-played counter, not playback sessions. "
-        "Tool items preserve that legacy value as plex_played_event_count and completed_watches. When "
-        "tracker_coverage is not none, prefer tracked_completions for this signed-in user and always state "
-        "the completion_confidence breakdown. Say “tracked completion” for certain/likely evidence and "
+        "Tool items preserve that legacy value as plex_played_event_count and completed_watches. Projectionist "
+        "ingests Plex history into the watch tracker. When tracker_coverage is not none, prefer "
+        "tracked_completions and sittings_observed for this signed-in user — play_sessions is sittings_observed, "
+        "not a Plex viewCount alias — and always state the completion_confidence breakdown. Never flatten "
+        "tracked completions into “watched twice.” Say “tracked completion” for certain/likely evidence and "
         "“Plex played event” for plex_event_only; a tracked rewatch is max(tracked_completions - 1, 0) only "
         "for this same user. Never combine household users, infer favourite status from frequency, or claim "
         "that any confidence level proves uninterrupted or attentive viewing. When tracker_coverage is none, "
-        "fall back to completed_watches, rewatch_count, watch_state, partial, and watch_progress_percent. "
-        "play_sessions=null means Projectionist has no per-session history evidence. A partial sitting may leave "
+        "fall back to completed_watches, rewatch_count, watch_state, partial, and watch_progress_percent, and "
+        "play_sessions stays null for that title (no user-scoped tracker evidence yet, not “history is not "
+        "ingested”). A partial sitting may leave "
         "only a playhead and must not be called a completed play or rewatch; partial may be true alongside "
         "watch_state=watched when an earlier completion exists. Say “Plex has marked this played N times” when "
         "the distinction matters; on the no-coverage fallback, only call a movie a possible rewatch when "
