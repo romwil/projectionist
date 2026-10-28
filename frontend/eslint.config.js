@@ -10,6 +10,7 @@ import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import prettier from "eslint-config-prettier";
 import globals from "globals";
+import tseslint from "typescript-eslint";
 
 export default [
   {
@@ -58,6 +59,47 @@ export default [
       // Downgraded for the baseline so pre-existing code doesn't fail the gate.
       // Re-promote to "error" as the code is cleaned up in follow-up passes.
       "no-unused-vars": "warn",
+      "no-empty": "warn",
+      "react/no-unescaped-entities": "warn",
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/immutability": "warn",
+      "react-hooks/purity": "warn",
+      "react-hooks/exhaustive-deps": "warn",
+    },
+  },
+  {
+    files: ["**/*.{ts,tsx}"],
+    languageOptions: {
+      parser: tseslint.parser,
+      ecmaVersion: 2022,
+      sourceType: "module",
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+      },
+      parserOptions: {
+        ecmaFeatures: { jsx: true },
+      },
+    },
+    settings: {
+      react: { version: "18" },
+    },
+    plugins: {
+      react,
+      "react-hooks": reactHooks,
+      "react-refresh": reactRefresh,
+      "@typescript-eslint": tseslint.plugin,
+    },
+    rules: {
+      ...react.configs.recommended.rules,
+      ...react.configs["jsx-runtime"].rules,
+      ...reactHooks.configs.recommended.rules,
+      "react/prop-types": "off",
+      "react/react-in-jsx-scope": "off",
+      "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
+      // Match the JSX baseline: unused stays warn, not error.
+      "no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": "warn",
       "no-empty": "warn",
       "react/no-unescaped-entities": "warn",
       "react-hooks/set-state-in-effect": "warn",
