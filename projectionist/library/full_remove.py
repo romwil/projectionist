@@ -1,10 +1,11 @@
-"""Owner full-remove: *arr (files + exclusion) → Plex metadata → Projectionist index.
+"""Owner full-remove: *arr (files + exclusion) → Plex on-disk fallback → index.
 
 Prefer Radarr/Sonarr delete APIs for disk cleanup and list-exclusion. When the
-title is not in Radarr or Sonarr, that is not a stop: delete media files this
-app already knows the path for, remove the Plex entry, and drop the index.
-Do not add an import exclusion for a title *arr does not have. Plex metadata
-delete does not remove media from disk.
+title is not in Radarr or Sonarr, delete files this app can see, then ask Plex
+to delete the item from disk and the library (Plex Web's saveFile=0 path). Do
+not add an import exclusion for a title *arr does not have. A no-op must not
+be reported as removed: if neither local files nor Plex actually deleted
+anything, the index row stays and the title is listed under ``errors``.
 
 Before DELETE, snapshot file paths / folders / sizes from *arr GET responses so the
 API can return a removal summary and application logs can record per-title detail.
@@ -23,7 +24,7 @@ from projectionist.connectors.arr_errors import (
     format_arr_http_error,
     is_arr_not_found_error,
 )
-from projectionist.connectors.plex import PlexClient
+from projectionist.connectors.plex import PlexClient, is_plex_not_found_error
 from projectionist.connectors.radarr import RadarrClient
 from projectionist.connectors.sonarr import SonarrClient
 from projectionist.library.db import Database
@@ -32,7 +33,7 @@ from projectionist.scheduler.tasks.purge_candidates import drop_cached_purge_key
 logger = logging.getLogger("projectionist.library.full_remove")
 
 LIBRARY_DELETE_MODES = frozenset({"index", "full"})
-PATH_UNKNOWN_NOTE = "File path was unknown."
+PLEX_DISK_NOTE = "Removed from disk via Plex."
 
 
 def normalize_library_delete_mode(value: Any) -> str:
@@ -378,22 +379,50 @@ def _known_media_paths(row: Any) -> List[str]:
     return _dedupe_paths(paths)
 
 
-def _plex_known_media_paths(settings: Settings, rating_key: str, media_type: str) -> List[str]:
-    """File paths Plex already has for this rating key.
+def _plex_media_snapshot(settings: Settings, rating_key: str, media_type: str) -> Dict[str, Any]:
+    """Paths, folders, and sizes Plex already reports for this rating key.
 
-    A failed read does not stop removal — the caller still drops Plex and the index.
+    A failed read returns an empty snapshot so the caller can still try a Plex
+    delete (or fail honestly). A 404 means the item is not in Plex.
     """
+    empty = {
+        "files": [],
+        "folders": [],
+        "bytes_freed": 0,
+        "media_ids": [],
+        "not_found": False,
+    }
     if plex_configuration_error(settings):
-        return []
+        return empty
     try:
         client = PlexClient(settings.plex_url, settings.plex_token)
-        return client.media_file_paths(
+        parts = client.media_file_parts(
             rating_key,
             include_leaves=_media_type_for_arr(media_type) != "movie",
         )
-    except Exception as error:  # noqa: BLE001 — path lookup must not block the delete
+    except Exception as error:  # noqa: BLE001 — snapshot is best-effort
         logger.warning("full_remove plex path read failed for %s: %s", rating_key, error)
-        return []
+        empty["not_found"] = is_plex_not_found_error(error)
+        return empty
+    files: List[str] = []
+    bytes_freed = 0
+    media_ids: List[str] = []
+    for part in parts:
+        path = _as_path(part.get("file") if isinstance(part, Mapping) else "")
+        if path:
+            files.append(path)
+        bytes_freed += _as_nonneg_int(part.get("size") if isinstance(part, Mapping) else 0)
+        media_id = str(part.get("media_id") or "").strip() if isinstance(part, Mapping) else ""
+        if media_id and media_id not in media_ids:
+            media_ids.append(media_id)
+    files = _dedupe_paths(files)
+    return {
+        "files": files,
+        "folders": infer_removed_folders(files),
+        "bytes_freed": bytes_freed,
+        "media_ids": media_ids,
+        "not_found": False,
+    }
 
 
 def _append_note(note: str, extra: str) -> str:
@@ -562,16 +591,32 @@ def _remove_from_arr(
     }
 
 
-def _remove_from_plex(settings: Settings, rating_key: str) -> Dict[str, Any]:
+def _remove_from_plex(
+    settings: Settings,
+    rating_key: str,
+    *,
+    delete_files: bool = False,
+) -> Dict[str, Any]:
     config_error = plex_configuration_error(settings)
     if config_error:
         return {"removed": False, "skipped": True, "reason": "plex_not_configured"}
     try:
-        PlexClient(settings.plex_url, settings.plex_token).delete_metadata(rating_key)
+        client = PlexClient(settings.plex_url, settings.plex_token)
+        if delete_files:
+            client.delete_media(rating_key, delete_files=True)
+        else:
+            client.delete_metadata(rating_key)
     except Exception as error:  # noqa: BLE001 — surface to owner as plex step result
-        logger.warning("Plex metadata delete failed for %s: %s", rating_key, error)
+        logger.warning("Plex delete failed for %s delete_files=%s: %s", rating_key, delete_files, error)
+        if delete_files and is_plex_not_found_error(error):
+            return {
+                "removed": False,
+                "skipped": False,
+                "reason": "plex_not_found",
+                "error": str(error),
+            }
         return {"removed": False, "skipped": False, "reason": "plex_error", "error": str(error)}
-    return {"removed": True, "skipped": False}
+    return {"removed": True, "skipped": False, "delete_files": bool(delete_files)}
 
 
 def _failed_step(key: str, title: str, message: str) -> Dict[str, Any]:
@@ -612,6 +657,36 @@ def _commit_removed_entry(
     return {"status": "removed", "entry": entry, "deleted": removed > 0}
 
 
+def _absent_arr_service(arr_result: Mapping[str, Any], media_type: str) -> str:
+    raw = str(arr_result.get("service") or "").strip().lower()
+    if raw in {"radarr", "sonarr"}:
+        return raw.title()
+    return "Radarr" if _media_type_for_arr(media_type) == "movie" else "Sonarr"
+
+
+def _absent_no_delete_error(title: str, service: str, plex: Mapping[str, Any]) -> str:
+    reason = str(plex.get("reason") or "")
+    if reason == "plex_not_configured":
+        return (
+            f'"{title}" is not in {service} and Plex is not configured. '
+            "Files were not removed."
+        )
+    if reason == "plex_not_found":
+        return (
+            f'"{title}" is not in {service} and is not in Plex. '
+            "Files were not removed."
+        )
+    if plex.get("error"):
+        return (
+            f'"{title}" is not in {service} and Plex did not remove it '
+            f'({plex.get("error")}). Files were not removed.'
+        )
+    return (
+        f'"{title}" is not in {service} and could not be deleted via Plex. '
+        "Files were not removed."
+    )
+
+
 def _finish_absent_arr_remove(
     db: Database,
     settings: Settings,
@@ -626,21 +701,19 @@ def _finish_absent_arr_remove(
 ) -> Dict[str, Any]:
     """Continue full remove after Radarr/Sonarr reports the title is absent.
 
-    Deletes files when a path is already known (library row, the *arr snapshot
-    taken before a 404 delete, or the file path Plex already reports). A path
-    Plex names on the host is used when that file is visible in this container.
-    Does not add an import exclusion. Permission errors and a Plex reject fail
-    the title and leave the index row. An unknown path still drops the index
-    and says so — it does not claim bytes were freed.
+    Prefer files this container can already see. When those are missing, ask
+    Plex to delete the item from disk and the library — Plex can see host
+    paths this container often cannot. Does not add an import exclusion.
+    Permission errors, a Plex reject, and a true no-op (not in *arr and not
+    deleted via Plex) fail the title and leave the index row.
     """
+    plex_snapshot = _plex_media_snapshot(settings, key, media_type)
     known = _dedupe_paths(
         list(_known_media_paths(row))
         + list(arr_result.get("files") or [])
-        + list(_plex_known_media_paths(settings, key, media_type))
+        + list(plex_snapshot.get("files") or [])
     )
     note = str(arr_result.get("note") or "").strip()
-    if not known:
-        note = _append_note(note, PATH_UNKNOWN_NOTE)
     try:
         disk = delete_known_media_files(_visible_media_paths(known, settings))
     except OSError as error:
@@ -649,26 +722,48 @@ def _finish_absent_arr_remove(
     files = list(disk.get("files") or [])
     folders = list(disk.get("folders") or [])
     bytes_freed = int(disk.get("bytes_freed") or 0)
-    if bytes_freed > 0:
-        bytes_source = "disk"
-    elif library_bytes > 0 and files:
-        bytes_freed = int(library_bytes)
-        bytes_source = "library_estimate"
-    else:
-        bytes_source = "unknown"
     arr_meta = {
         key_name: value
         for key_name, value in arr_result.items()
         if key_name not in {"files", "folders", "bytes_freed", "bytes_source", "note"}
     }
     entry["arr"] = arr_meta
-    entry["files"] = files
-    entry["folders"] = folders
-    entry["bytes_freed"] = bytes_freed
-    entry["bytes_source"] = bytes_source
-    entry["note"] = note
+    service = _absent_arr_service(arr_result, media_type)
 
-    plex = _remove_from_plex(settings, key)
+    if files:
+        if bytes_freed > 0:
+            bytes_source = "disk"
+        elif library_bytes > 0:
+            bytes_freed = int(library_bytes)
+            bytes_source = "library_estimate"
+        else:
+            bytes_source = "unknown"
+        entry["files"] = files
+        entry["folders"] = folders
+        entry["bytes_freed"] = bytes_freed
+        entry["bytes_source"] = bytes_source
+        entry["note"] = note
+        entry["removed_via"] = "disk"
+        plex = _remove_from_plex(settings, key, delete_files=False)
+        entry["plex"] = plex
+        if plex.get("reason") == "plex_error":
+            return _failed_step(
+                key,
+                title,
+                str(plex.get("error") or "Plex rejected the library delete"),
+            )
+        return _commit_removed_entry(
+            db,
+            entry,
+            key=key,
+            title=title,
+            media_type=media_type,
+            files=files,
+            folders=folders,
+            bytes_freed=bytes_freed,
+        )
+
+    plex = _remove_from_plex(settings, key, delete_files=True)
     entry["plex"] = plex
     if plex.get("reason") == "plex_error":
         return _failed_step(
@@ -676,16 +771,35 @@ def _finish_absent_arr_remove(
             title,
             str(plex.get("error") or "Plex rejected the library delete"),
         )
-    return _commit_removed_entry(
-        db,
-        entry,
-        key=key,
-        title=title,
-        media_type=media_type,
-        files=files,
-        folders=folders,
-        bytes_freed=bytes_freed,
-    )
+    if plex.get("removed"):
+        files = list(plex_snapshot.get("files") or [])
+        folders = list(plex_snapshot.get("folders") or []) or infer_removed_folders(files)
+        bytes_freed = int(plex_snapshot.get("bytes_freed") or 0)
+        if bytes_freed > 0:
+            bytes_source = "plex"
+        elif library_bytes > 0:
+            bytes_freed = int(library_bytes)
+            bytes_source = "library_estimate"
+        else:
+            bytes_source = "unknown"
+        entry["files"] = files
+        entry["folders"] = folders
+        entry["bytes_freed"] = bytes_freed
+        entry["bytes_source"] = bytes_source
+        entry["note"] = _append_note(note, PLEX_DISK_NOTE)
+        entry["removed_via"] = "plex"
+        return _commit_removed_entry(
+            db,
+            entry,
+            key=key,
+            title=title,
+            media_type=media_type,
+            files=files,
+            folders=folders,
+            bytes_freed=bytes_freed,
+        )
+
+    return _failed_step(key, title, _absent_no_delete_error(title, service, plex))
 
 
 def _not_found_error(key: str, title: str) -> Dict[str, Any]:
@@ -778,8 +892,9 @@ def _full_remove_one(
     entry["bytes_freed"] = bytes_freed
     entry["bytes_source"] = str(snapshot.get("bytes_source") or "unknown")
     entry["note"] = str(snapshot.get("note") or "")
+    entry["removed_via"] = str(arr_result.get("service") or "arr")
 
-    entry["plex"] = _remove_from_plex(settings, key)
+    entry["plex"] = _remove_from_plex(settings, key, delete_files=False)
     removed = db.delete_library_items_by_rating_keys([key])
     entry["index_deleted"] = removed > 0
     entry["ok"] = removed > 0
@@ -982,17 +1097,19 @@ def full_remove_library_items(
     settings: Settings,
     rating_keys: Sequence[str],
 ) -> Dict[str, Any]:
-    """Fully remove titles: *arr files+exclusion, Plex metadata, then index rows.
+    """Fully remove titles: *arr files+exclusion, Plex on-disk fallback, then index.
 
-    A title that is not in Radarr or Sonarr is still removed: known media files
-    are deleted, the Plex entry is removed when configured, and the index row
-    is dropped. The result notes the missing *arr entry and does not add an
-    import exclusion. Other failures (file permission errors, a Plex reject on
-    that path, Radarr/Sonarr not configured or another *arr error) leave the
-    index row and are reported under ``errors``.
+    A title that is not in Radarr or Sonarr is removed only when local files
+    were deleted or Plex deleted the item from disk. The result notes the
+    missing *arr entry, sets ``removed_via`` to ``disk`` or ``plex``, and does
+    not add an import exclusion. A no-op (not in *arr and Plex unavailable,
+    missing, or rejected) leaves the index row and is reported under
+    ``errors``. Other failures (file permission errors, Radarr/Sonarr not
+    configured or another *arr error) also leave the index.
 
     After a successful *arr delete, a Plex cleanup failure still allows the
-    index delete (files are already gone via *arr).
+    index delete (files are already gone via *arr). ``removed_via`` is the
+    *arr service name (radarr/sonarr).
 
     Successful results include ``files``, ``folders``, and ``bytes_freed``.
     Aggregate ``totals`` sums those fields across results.

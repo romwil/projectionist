@@ -6,8 +6,8 @@ import { fileURLToPath } from "node:url";
 import { readAllStyles } from "./readStyles.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const advanced = readFileSync(join(here, "../pages/admin/LiveChannelsAdvanced.jsx"), "utf8");
-const panel = readFileSync(join(here, "../components/admin/MuzakFolderPanel.jsx"), "utf8");
+const advanced = readFileSync(join(here, "../pages/admin/LiveChannelsAdvanced.tsx"), "utf8");
+const panel = readFileSync(join(here, "../components/admin/MuzakFolderPanel.tsx"), "utf8");
 const styles = readAllStyles();
 
 /** Source of the element that carries `data-testid`, including nested divs. */

@@ -14,7 +14,7 @@ import {
   yirPathFromGenerateResult,
   YIR_DEFAULT_DURATION_MS,
   YIR_SELF_GENERATE_PAYLOAD,
-} from "./yearInReview.js";
+} from "./yearInReview.ts";
 
 describe("yearInReview helpers", () => {
   it("uses chapter duration when valid", () => {

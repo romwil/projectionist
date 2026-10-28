@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CHAT_LAUNCHER_CHIPS, resolveChatLauncherChipAction } from "./chatLauncherChips.js";
+import { CHAT_LAUNCHER_CHIPS, resolveChatLauncherChipAction } from "./chatLauncherChips.ts";
 
 test("chat launcher chips", () => {
   assert.equal(CHAT_LAUNCHER_CHIPS.length, 3);

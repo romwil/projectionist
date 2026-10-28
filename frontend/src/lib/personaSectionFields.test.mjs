@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const source = readFileSync(join(here, "../components/PersonaSection.jsx"), "utf8");
+const source = readFileSync(join(here, "../components/PersonaSection.tsx"), "utf8");
 
 describe("PersonaSection admin slider fields", () => {
   it("only declares slider keys supported by /api/persona PersonaMetrics", () => {

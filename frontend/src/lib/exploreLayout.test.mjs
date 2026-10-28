@@ -7,7 +7,7 @@ import { readAllStyles } from "./readStyles.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const styles = readAllStyles();
-const explorePage = readFileSync(join(here, "../pages/ExplorePage.jsx"), "utf8");
+const explorePage = readFileSync(join(here, "../pages/ExplorePage.tsx"), "utf8");
 
 describe("explore and recommendations responsive layout", () => {
   it("contains explore page overflow and local poster-rail scrolling", () => {
@@ -135,7 +135,7 @@ describe("explore and recommendations responsive layout", () => {
   });
 
   it("paints the Explore shell instead of a full-page loader while auth settles", () => {
-    const appShell = readFileSync(join(here, "../layouts/AppShell.jsx"), "utf8");
+    const appShell = readFileSync(join(here, "../layouts/AppShell.tsx"), "utf8");
     assert.match(explorePage, /blockUntilAuth=\{false\}/);
     assert.match(appShell, /blockUntilAuth && !authReady/);
     assert.match(appShell, /login-lede">Loading…/);

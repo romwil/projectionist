@@ -6,7 +6,7 @@ import {
   filterPurgeCandidatesByMediaType,
   normalizePurgeMediaTypeFilter,
   sortPurgeCandidates,
-} from "./dashboardCharts.js";
+} from "./dashboardCharts.ts";
 
 // ── buildRuntimeBuckets ──
 

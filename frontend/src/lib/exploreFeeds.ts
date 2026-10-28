@@ -1,0 +1,465 @@
+import type {JsonObject, LibraryItem, JsParam} from "../api/types";
+/** Normalize Explore feed API payloads into a stable rail shape. */
+export const EXPLORE_PAGE_SIZES = [20, 40, 100];
+export const DEFAULT_EXPLORE_PAGE_SIZE = 20;
+export const ADMIN_TASKS_PATH = "/admin/tasks";
+
+/** Notes that mean idle caches / enrichment have not warmed yet (owner can fix in tasks). */
+const OWNER_EMPTY_CTA_RULES = [
+  {
+    test: /plot_neighbors|neighbors cache|plot-similarity data|similar titles yet|not built yet/i,
+    label: "Refresh similar titles",
+  },
+  {
+    test: /summary_motifs|plot motifs|plot patterns yet/i,
+    label: "Refresh plot patterns",
+  },
+  {
+    test: /metadata_enrichment|not enriched|enrich release|release dates|release_date|first_air_date/i,
+    label: "Refresh title details",
+  },
+  {
+    test: /named kinship|no named links from what you've watched/i,
+    label: "Open Scheduled Tasks",
+  },
+  { test: /library sync|added_at yet/i, label: "Open Scheduled Tasks" },
+];
+
+/**
+ * Owner-only primary CTA for honest empty rails that need cache/enrichment work.
+ * Members/guests get the note only — no admin deep link.
+ */
+export function ownerEmptyStateCta(note: JsParam, { isOwner = false }: JsParam = {}) {
+  if (!isOwner) return null;
+  const text = String(note || "").trim();
+  if (!text) return null;
+  for (const rule of OWNER_EMPTY_CTA_RULES) {
+    if (rule.test.test(text)) {
+      return { label: rule.label, href: ADMIN_TASKS_PATH };
+    }
+  }
+  return null;
+}
+
+export const EXPLORE_SECTIONS: Record<string, any> = {
+  "recently-added": {
+    id: "recently-added",
+    title: "Recently Added",
+    subtitle: "Fresh arrivals from the last 30 days",
+    defaultDays: 30,
+    supportsMediaType: true,
+    feed: "recently-added",
+    /** Server feed order (added_at DESC) — label shown instead of opaque "Default". */
+    defaultSortLabel: "Date added",
+  },
+  "recent-releases": {
+    id: "recent-releases",
+    title: "Recent Releases",
+    subtitle: "Library titles released in the last 90 days",
+    defaultDays: 90,
+    supportsMediaType: true,
+    feed: "recent-releases",
+    /** Server feed order (release/first-air date DESC). */
+    defaultSortLabel: "Release date",
+  },
+};
+
+export function getExploreSectionConfig(sectionId: JsParam) {
+  const key = String(sectionId || "").trim();
+  return EXPLORE_SECTIONS[key] || null;
+}
+
+export function normalizePageSize(raw: unknown, allowed = EXPLORE_PAGE_SIZES) {
+  const value = Number(raw);
+  return allowed.includes(value) ? value : DEFAULT_EXPLORE_PAGE_SIZE;
+}
+
+export function normalizeFeedOffset(raw: unknown) {
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0) return 0;
+  return Math.floor(value);
+}
+
+export function normalizeMediaTypeFilter(raw: unknown) {
+  const value = String(raw || "").trim().toLowerCase();
+  if (value === "movie" || value === "movies") return "movie";
+  if (value === "show" || value === "shows" || value === "tv") return "show";
+  return null;
+}
+
+/** Client-side section result sorts (feeds keep server order as default). */
+export const EXPLORE_SECTION_SORTS = [
+  { id: "default", label: "Default" },
+  { id: "title", label: "Title" },
+  { id: "year", label: "Year" },
+  { id: "rating", label: "Rating" },
+];
+
+/** Sort dropdown options for an Explore section page (section-specific default label). */
+export function exploreSectionSortOptions(sectionId: JsParam) {
+  const config = getExploreSectionConfig(sectionId);
+  const defaultLabel = config?.defaultSortLabel || "Feed order";
+  return EXPLORE_SECTION_SORTS.map((option) =>
+    option.id === "default" ? { ...option, label: defaultLabel } : option,
+  );
+}
+
+export function normalizeSectionSort(raw: unknown) {
+  const value = String(raw || "").trim().toLowerCase();
+  return EXPLORE_SECTION_SORTS.some((opt) => opt.id === value) ? value : "default";
+}
+
+function normalizeSectionList(raw: unknown) {
+  if (Array.isArray(raw)) return raw.map((value) => String(value).trim()).filter(Boolean);
+  return String(raw || "").split(",").map((value) => value.trim()).filter(Boolean);
+}
+
+/** Sort a page of feed items without mutating the input. */
+export function sortExploreSectionItems(items: LibraryItem[] | null | undefined, sortId: JsParam, sortDir = "desc") {
+  const list = Array.isArray(items) ? items.slice() : [];
+  const sort = normalizeSectionSort(sortId);
+  const direction = sortDir === "asc" ? 1 : -1;
+  if (sort === "default") return list;
+  list.sort((a, b) => {
+    if (sort === "title") {
+      return String(a?.title || "").localeCompare(String(b?.title || ""), undefined, {
+        sensitivity: "base",
+      }) * direction;
+    }
+    if (sort === "year") {
+      const ay = Number(a?.year);
+      const by = Number(b?.year);
+      const aMissing = !Number.isFinite(ay);
+      const bMissing = !Number.isFinite(by);
+      if (aMissing && bMissing) return String(a?.title || "").localeCompare(String(b?.title || "")) * direction;
+      if (aMissing) return 1;
+      if (bMissing) return -1;
+      return (ay - by) * direction;
+    }
+    if (sort === "rating") {
+      const ar = Number(a?.rating ?? a?.vote_average);
+      const br = Number(b?.rating ?? b?.vote_average);
+      const aMissing = !Number.isFinite(ar);
+      const bMissing = !Number.isFinite(br);
+      if (aMissing && bMissing) return String(a?.title || "").localeCompare(String(b?.title || "")) * direction;
+      if (aMissing) return 1;
+      if (bMissing) return -1;
+      return (ar - br) * direction;
+    }
+    return 0;
+  });
+  return list;
+}
+
+/** Parse section listing query params from URLSearchParams. */
+export function parseExploreSectionQuery(searchParams: JsParam) {
+  const params = searchParams instanceof URLSearchParams ? searchParams : new URLSearchParams(searchParams);
+  return {
+    limit: normalizePageSize(params.get("limit")),
+    offset: normalizeFeedOffset(params.get("offset")),
+    mediaType: normalizeMediaTypeFilter(params.get("media_type")),
+    sort: normalizeSectionSort(params.get("sort")),
+    sort_dir: params.get("sort_dir") === "asc" ? "asc" : "desc",
+    view: params.get("view") === "list" ? "list" : "poster",
+    watch_state: ["unwatched", "in_progress", "watched"].includes(params.get("watch_state") || "")
+      ? params.get("watch_state")
+      : "",
+    year: String(params.get("year") || "").trim(),
+    genres: normalizeSectionList(params.get("genres")),
+  };
+}
+
+/** Build updated search params for section listing navigation. */
+export function buildExploreSectionQuery(current: JsParam, updates: JsParam = {}) {
+  const next = {
+    limit: current?.limit ?? DEFAULT_EXPLORE_PAGE_SIZE,
+    offset: current?.offset ?? 0,
+    mediaType: current?.mediaType ?? null,
+    sort: current?.sort ?? "default",
+    sort_dir: current?.sort_dir ?? "desc",
+    view: current?.view ?? "poster",
+    watch_state: current?.watch_state ?? "",
+    year: current?.year ?? "",
+    genres: current?.genres ?? [],
+    ...updates,
+  };
+  const params = new URLSearchParams();
+  if (next.mediaType) params.set("media_type", next.mediaType);
+  if (next.limit !== DEFAULT_EXPLORE_PAGE_SIZE) params.set("limit", String(next.limit));
+  if (next.offset > 0) params.set("offset", String(next.offset));
+  if (next.sort && next.sort !== "default") params.set("sort", next.sort);
+  if (next.sort_dir === "asc") params.set("sort_dir", "asc");
+  if (next.view === "list") params.set("view", "list");
+  if (next.watch_state) params.set("watch_state", next.watch_state);
+  if (next.year) params.set("year", String(next.year));
+  const genres = normalizeSectionList(next.genres);
+  if (genres.length) params.set("genres", genres.join(","));
+  return params;
+}
+
+export function feedPaginationSummary(payload: JsParam) {
+  const total = Number(payload?.total ?? payload?.total_matched) || 0;
+  const offset = normalizeFeedOffset(payload?.offset);
+  const limit = Number(payload?.limit) || DEFAULT_EXPLORE_PAGE_SIZE;
+  const returned = Array.isArray(payload?.items) ? payload.items.length : 0;
+  const page = limit > 0 ? Math.floor(offset / limit) + 1 : 1;
+  const pageCount = limit > 0 ? Math.max(1, Math.ceil(total / limit)) : 1;
+  return {
+    total,
+    offset,
+    limit,
+    returned,
+    page,
+    pageCount,
+    hasMore: Boolean(payload?.has_more) || offset + returned < total,
+    hasPrev: offset > 0,
+  };
+}
+
+export function normalizeFeed(payload: JsParam, { fallbackNote = "Nothing to show yet." }: JsParam = {}) {
+  if (!payload || typeof payload !== "object") {
+    return { items: [], note: fallbackNote, total: 0, meta: {} };
+  }
+  const items = Array.isArray(payload.items) ? payload.items : [];
+  const note =
+    typeof payload.note === "string" && payload.note.trim()
+      ? payload.note.trim()
+      : items.length
+        ? null
+        : fallbackNote;
+  const { items: _i, note: _n, total: _t, ...meta } = payload;
+  return {
+    items,
+    note,
+    total: Number.isFinite(payload.total) ? payload.total : items.length,
+    meta,
+  };
+}
+
+/** Toggle a motif value in a selected list (case-sensitive values from API). */
+export function toggleMotifSelection(selected: JsParam, value: unknown) {
+  const list = Array.isArray(selected) ? selected : [];
+  const key = String(value || "").trim();
+  if (!key) return list.slice();
+  if (list.includes(key)) return list.filter((v) => v !== key);
+  return [...list, key];
+}
+
+/** Page sizes for Plot Lab motif walls (library query max is 50). */
+export const PLOT_LAB_PAGE_SIZES = [20, 40, 50];
+export const DEFAULT_PLOT_LAB_PAGE_SIZE = 20;
+export const PLOT_LAB_MOTIF_CATALOG_LIMIT = 160;
+
+/** Plot Lab match modes: hybrid (default) AND; any = ranked OR across tokens. */
+export const PLOT_MATCH_MODES = ["hybrid", "motifs", "any"];
+export const DEFAULT_PLOT_MATCH_MODE = "hybrid";
+
+export function normalizePlotMatchMode(raw: unknown) {
+  const value = String(raw || "").trim().toLowerCase();
+  if (value === "motifs" || value === "motif" || value === "pure") return "motifs";
+  if (value === "any" || value === "or" || value === "ranked" || value === "ranked_or") {
+    return "any";
+  }
+  return DEFAULT_PLOT_MATCH_MODE;
+}
+
+/** Build library query params for motif-filtered poster walls. */
+export function buildMotifQueryParams(motifs: JsParam,
+  {
+    limit = DEFAULT_PLOT_LAB_PAGE_SIZE,
+    offset = 0,
+    mediaType = null,
+    plotMatchMode = DEFAULT_PLOT_MATCH_MODE,
+    themes = [],
+  }: JsParam = {},
+) {
+  const params = new URLSearchParams();
+  const pageSize = normalizePageSize(limit, PLOT_LAB_PAGE_SIZES);
+  const pageOffset = normalizeFeedOffset(offset);
+  params.set("limit", String(pageSize));
+  if (pageOffset > 0) params.set("offset", String(pageOffset));
+  const cleaned = (Array.isArray(motifs) ? motifs : [])
+    .map((m) => String(m || "").trim())
+    .filter(Boolean);
+  if (cleaned.length) params.set("motifs", cleaned.join(","));
+  const cleanedThemes = (Array.isArray(themes) ? themes : [])
+    .map((t) => String(t || "").trim())
+    .filter(Boolean);
+  if (cleanedThemes.length) params.set("themes", cleanedThemes.join(","));
+  const media = normalizeMediaTypeFilter(mediaType);
+  if (media) params.set("media_type", media);
+  const mode = normalizePlotMatchMode(plotMatchMode);
+  // Always send mode so Plot Lab defaults stay explicit on the API.
+  params.set("plot_match_mode", mode);
+  return params;
+}
+
+/**
+ * Normalize Plot Lab “Why?” payload from a library query item.
+ * Prefers server-attached motif_why / excerpts / match_layers when present.
+ */
+export function resolveMotifWhy(item: LibraryItem | null | undefined, selectedMotifs: JsParam[] = []) {
+  if (!item || typeof item !== "object") return null;
+  const matched = Array.isArray(item.matched_motifs)
+    ? item.matched_motifs.map((m) => String(m || "").trim()).filter(Boolean)
+    : [];
+  const selected = (Array.isArray(selectedMotifs) ? selectedMotifs : [])
+    .map((m) => String(m || "").trim())
+    .filter(Boolean);
+  const excerpts = Array.isArray(item.motif_excerpts)
+    ? item.motif_excerpts
+        .map((entry) => ({
+          motif: String(entry?.motif || "").trim(),
+          excerpt: String(entry?.excerpt || "").trim(),
+        }))
+        .filter((entry) => entry.motif && entry.excerpt)
+    : [];
+  const matchLayers = Array.isArray(item.match_layers)
+    ? item.match_layers
+        .map((entry) => ({
+          motif: String(entry?.motif || "").trim(),
+          layers: Array.isArray(entry?.layers)
+            ? entry.layers.map((layer: JsParam) => String(layer || "").trim()).filter(Boolean)
+            : [],
+        }))
+        .filter((entry) => entry.motif && entry.layers.length)
+    : [];
+  const summary = String(item.motif_why || "").trim();
+  if (!matched.length && !summary && selected.length < 1) return null;
+  if (!matched.length && !summary) return null;
+  return {
+    matched,
+    selected,
+    excerpts,
+    matchLayers,
+    summary:
+      summary ||
+      (matched.length
+        ? `Selected because its plot signals include ${matched.map((m) => `“${m}”`).join(", ")}.`
+        : "Selected motifs are linked via plot signals."),
+  };
+}
+
+/** Format library total runtime for Pulse (days/hours when large). */
+export function formatTotalRuntimeMinutes(minutes: JsParam) {
+  const total = Math.round(Number(minutes));
+  if (!Number.isFinite(total) || total <= 0) return null;
+  const days = Math.floor(total / 1440);
+  const hours = Math.floor((total % 1440) / 60);
+  const mins = total % 60;
+  if (days > 0) {
+    return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+  }
+  if (hours > 0) {
+    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  }
+  return `${mins}m`;
+}
+
+function mediaTypeSlice(payload: JsParam, mediaType: string) {
+  const byType = payload?.by_media_type;
+  if (!byType || typeof byType !== "object") return null;
+  const slice = byType[mediaType];
+  return slice && typeof slice === "object" ? slice : null;
+}
+
+function buildMediaPulseCard(id: string, label: string, count: unknown, overviewSlice: JsParam, healthSlice: JsParam) {
+  if (count == null) return null;
+  const metrics: JsParam[] = [];
+
+  const unwatchedPct = healthSlice?.unwatched_pct;
+  if (unwatchedPct != null) {
+    metrics.push({
+      id: "unwatched",
+      label: "Unwatched",
+      value: `${Number(unwatchedPct).toFixed(0)}%`,
+    });
+  }
+
+  if (healthSlice?.stale_adds != null) {
+    metrics.push({
+      id: "stale",
+      label: "Stale adds",
+      value: String(healthSlice.stale_adds),
+      detail: "Added 90+ days ago, never watched",
+    });
+  }
+
+  const topGenre = overviewSlice?.top_genre;
+  if (topGenre?.genre) {
+    metrics.push({
+      id: "genre",
+      label: "Top genre",
+      value: String(topGenre.genre),
+      detail: topGenre.count != null ? `${topGenre.count} titles` : undefined,
+    });
+  }
+
+  const runtimeLabel = formatTotalRuntimeMinutes(overviewSlice?.total_runtime_minutes);
+  if (runtimeLabel) {
+    metrics.push({
+      id: "runtime",
+      label: "Total runtime",
+      value: runtimeLabel,
+    });
+  }
+
+  return {
+    id,
+    label,
+    value: String(count),
+    kind: "media",
+    metrics,
+  };
+}
+
+/**
+ * Editorial Library Pulse stats from overview + health payloads.
+ * Titles summary plus richer Movies/Shows cards with per-type breakdowns.
+ */
+export function buildPulseStats(overview: JsParam, health: JsParam) {
+  const ov = overview && typeof overview === "object" ? overview : {};
+  const hl = health && typeof health === "object" ? health : {};
+  const stats: JsParam[] = [];
+
+  const total = ov.total ?? hl.total;
+  if (total != null) {
+    stats.push({ id: "total", label: "Titles", value: String(total), kind: "summary" });
+  }
+
+  const movieOv = mediaTypeSlice(ov, "movie");
+  const showOv = mediaTypeSlice(ov, "show");
+  const movieHl = mediaTypeSlice(hl, "movie");
+  const showHl = mediaTypeSlice(hl, "show");
+
+  const moviesCard = buildMediaPulseCard(
+    "movies",
+    "Movies",
+    ov.movies ?? movieOv?.count ?? movieHl?.total,
+    movieOv,
+    movieHl,
+  );
+  if (moviesCard) stats.push(moviesCard);
+
+  const showsCard = buildMediaPulseCard(
+    "shows",
+    "Shows",
+    ov.shows ?? showOv?.count ?? showHl?.total,
+    showOv,
+    showHl,
+  );
+  if (showsCard) stats.push(showsCard);
+
+  return stats;
+}
+
+/** Extract motif chip list from `/api/library/motifs` (or facets catalog). */
+export function normalizeMotifFacets(payload: JsParam) {
+  const facets = Array.isArray(payload?.facets) ? payload.facets : [];
+  return facets
+    .map((f: JsParam) => ({
+      value: String(f?.value || "").trim(),
+      count: Number(f?.count) || 0,
+    }))
+    .filter((f: JsParam) => f.value);
+}

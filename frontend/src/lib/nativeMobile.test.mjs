@@ -8,7 +8,7 @@ import { readAllStyles } from "./readStyles.mjs";
 const here = dirname(fileURLToPath(import.meta.url));
 const styles = readAllStyles();
 const indexHtml = readFileSync(join(here, "../../index.html"), "utf8");
-const appJsx = readFileSync(join(here, "../components/ChatWorkspace.jsx"), "utf8");
+const appJsx = readFileSync(join(here, "../components/ChatWorkspace.tsx"), "utf8");
 
 describe("native mobile tokens and global touch chrome", () => {
   it("exposes shared tap and input-size tokens", () => {
@@ -122,7 +122,7 @@ describe("native mobile member contract (phone 768)", () => {
       styles,
       /@media \(max-width: 720px\)[\s\S]*?\.search-page \.explore-search\s*\{[^}]*flex-direction:\s*row/s,
     );
-    const page = readFileSync(join(here, "../pages/LibraryBrowsePage.jsx"), "utf8");
+    const page = readFileSync(join(here, "../pages/LibraryBrowsePage.tsx"), "utf8");
     assert.match(page, /isSearchRoute \? null/);
     assert.doesNotMatch(page, /title=\{isSearchRoute \? "Search"/);
     assert.match(

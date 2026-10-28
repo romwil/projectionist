@@ -31,7 +31,7 @@ import {
   summarizeLastStatus,
   taskDisplayName,
   taskRowTone,
-} from "./scheduledTasks.js";
+} from "./scheduledTasks.ts";
 
 describe("scheduledTasks helpers", () => {
   it("formats known and unknown task names", () => {

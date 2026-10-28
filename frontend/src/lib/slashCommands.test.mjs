@@ -13,7 +13,7 @@ import {
   formatSyncDeniedMessage,
   formatSyncStartedMessage,
   parseSlashCommand,
-} from "./slashCommands.js";
+} from "./slashCommands.ts";
 
 test("parseSlashCommand returns null for normal chat", () => {
   assert.equal(parseSlashCommand("find neo-noir films"), null);

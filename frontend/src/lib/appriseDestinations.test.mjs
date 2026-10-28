@@ -10,7 +10,7 @@ import {
   parseAppriseUrlFields,
   serializeAppriseDestinationRows,
   splitAppriseUrls,
-} from "./appriseDestinations.js";
+} from "./appriseDestinations.ts";
 
 describe("splitAppriseUrls", () => {
   it("splits newlines and skips comments", () => {

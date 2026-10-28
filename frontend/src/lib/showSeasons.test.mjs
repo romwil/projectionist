@@ -6,7 +6,7 @@ import {
   formatShowBytes,
   normalizeShowSeasonsPayload,
   showSeasonsSummaryLine,
-} from "./showSeasons.js";
+} from "./showSeasons.ts";
 
 describe("showSeasons helpers", () => {
   it("formats episode codes and season labels", () => {

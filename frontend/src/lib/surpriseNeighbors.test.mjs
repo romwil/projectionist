@@ -7,7 +7,7 @@ import {
   genreContrast,
   metadataOverlapFromScores,
   visibleSurpriseItems,
-} from "./surpriseNeighbors.js";
+} from "./surpriseNeighbors.ts";
 
 test("SURPRISE_SECTION_INTRO frames the section", () => {
   assert.match(SURPRISE_SECTION_INTRO, /story/i);

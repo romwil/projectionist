@@ -96,6 +96,52 @@ class PlexEpisodeParsingTests(unittest.TestCase):
         self.assertEqual(item.imdb_id, "tt0096734")
         self.assertEqual(item.tvdb_id, "5869")
 
+    def test_media_file_parts_includes_size_and_media_id(self) -> None:
+        xml = ET.fromstring(
+            """
+            <MediaContainer>
+              <Video ratingKey="5">
+                <Media id="88">
+                  <Part file="/movies/The Furious.mkv" size="6400" />
+                </Media>
+              </Video>
+            </MediaContainer>
+            """
+        )
+        client = self._client()
+        with patch.object(client, "_request_xml", return_value=xml):
+            parts = client.media_file_parts("5")
+        self.assertEqual(
+            parts,
+            [{"file": "/movies/The Furious.mkv", "size": 6400, "media_id": "88"}],
+        )
+        with patch.object(client, "_request_xml", return_value=xml):
+            self.assertEqual(client.media_file_paths("5"), ["/movies/The Furious.mkv"])
+
+    def test_delete_media_asks_plex_to_remove_files(self) -> None:
+        client = self._client()
+        with (
+            patch.object(
+                client,
+                "media_file_parts",
+                return_value=[{"file": "/movies/a.mkv", "size": 9, "media_id": "44"}],
+            ),
+            patch.object(client, "_request_empty") as empty,
+        ):
+            client.delete_media("123", delete_files=True)
+        paths = [call.args[0] for call in empty.call_args_list]
+        self.assertTrue(any("/library/metadata/123/media/44" in path for path in paths))
+        self.assertTrue(any("saveFile=0" in path for path in paths))
+        self.assertTrue(all(call.kwargs.get("method") == "DELETE" for call in empty.call_args_list))
+
+    def test_delete_metadata_does_not_ask_to_save_or_delete_files(self) -> None:
+        client = self._client()
+        with patch.object(client, "_request_empty") as empty:
+            client.delete_metadata("123")
+        empty.assert_called_once()
+        self.assertEqual(empty.call_args.args[0], "/library/metadata/123")
+        self.assertNotIn("saveFile", empty.call_args.args[0])
+
 
 if __name__ == "__main__":
     unittest.main()

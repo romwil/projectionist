@@ -68,7 +68,7 @@ Quiet oval controls must remain discoverable: selectors use a `selectable-oval` 
 
 ## Single workspace layout
 
-Projectionist serves one React application (`frontend/src/App.jsx`) with a shared **AppShell** chrome on authenticated browse/detail routes:
+The SPA is TypeScript. Projectionist serves one React application (`frontend/src/App.tsx`) with a shared **AppShell** chrome on authenticated browse/detail routes:
 
 | Region | Contents |
 |--------|----------|

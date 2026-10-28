@@ -13,7 +13,7 @@ import {
   parseMediaBrowse,
   queryFiltersFromBrowse,
   resolvePageSizeLimit,
-} from "./mediaBrowse.js";
+} from "./mediaBrowse.ts";
 
 test("parseMediaBrowse keeps supported URL state and caps limit at the ceiling", () => {
   const state = parseMediaBrowse(new URLSearchParams("view=list&sort=vote_average&sort_dir=desc&limit=99999&genres=Drama,Sci-Fi"));

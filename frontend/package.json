@@ -1,16 +1,17 @@
 {
   "name": "projectionist-frontend",
   "private": true,
-  "version": "1.37.67",
+  "version": "1.37.68",
   "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "test:unit": "node --test src/lib/*.test.mjs",
-    "test:coverage": "c8 node --test src/lib/*.test.mjs",
+    "build": "tsc --noEmit && vite build",
+    "test:unit": "node --import tsx --test src/lib/*.test.mjs",
+    "test:coverage": "c8 node --import tsx --test src/lib/*.test.mjs",
     "preview": "vite preview",
     "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
     "format": "prettier --check src",
     "format:write": "prettier --write src",
     "test:e2e": "cd .. && npm run test:e2e"
@@ -37,6 +38,9 @@
     "eslint-plugin-react-refresh": "^0.5.3",
     "globals": "^17.7.0",
     "prettier": "^3.9.5",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.1",
     "vite": "^5.4.11"
   }
 }

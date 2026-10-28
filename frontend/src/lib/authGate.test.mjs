@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createAuthSnapshotStore } from "./authGate.js";
+import { createAuthSnapshotStore } from "./authGate.ts";
 
 test("concurrent auth reads share one features call and one session call", async () => {
   let features = 0;

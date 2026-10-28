@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { libraryBrowsePath } from "./browseLinks.js";
+import { libraryBrowsePath } from "./browseLinks.ts";
 import {
   MEDIA_BROWSE_SORTS,
   MEDIA_BROWSE_TV_SORTS,
@@ -11,19 +11,19 @@ import {
   movieLandingBrowseDefaults,
   parseMediaBrowse,
   queryFiltersFromBrowse,
-} from "./mediaBrowse.js";
-import { browseLanguageOptions } from "./languageNames.js";
+} from "./mediaBrowse.ts";
+import { browseLanguageOptions } from "./languageNames.ts";
 
-const page = readFileSync(new URL("../pages/LibraryBrowsePage.jsx", import.meta.url), "utf8");
+const page = readFileSync(new URL("../pages/LibraryBrowsePage.tsx", import.meta.url), "utf8");
 const controls = readFileSync(
-  new URL("../components/MediaBrowseControls.jsx", import.meta.url),
+  new URL("../components/MediaBrowseControls.tsx", import.meta.url),
   "utf8",
 );
 const recentlyAdded = readFileSync(
-  new URL("../pages/ExploreSectionPage.jsx", import.meta.url),
+  new URL("../pages/ExploreSectionPage.tsx", import.meta.url),
   "utf8",
 );
-const tags = readFileSync(new URL("../pages/TagPage.jsx", import.meta.url), "utf8");
+const tags = readFileSync(new URL("../pages/TagPage.tsx", import.meta.url), "utf8");
 
 function toolbarBlock(source, testId) {
   const start = source.indexOf(`data-testid="${testId}"`);

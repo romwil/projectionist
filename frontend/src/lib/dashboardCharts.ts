@@ -1,0 +1,78 @@
+import type {JsonObject, JsParam} from "../api/types";
+/**
+ * Pure utility functions for the Owner Dashboard charts.
+ * Extracted so they can be imported by both DashboardPage.jsx and Node tests.
+ */
+
+const RUNTIME_BUCKET_ORDER = ["Short (<90m)", "Medium (90–120m)", "Long (120–150m)", "Epic (150m+)"];
+
+const RUNTIME_LABEL_MAP: Record<string, any> = {
+  short: "Short (<90m)",
+  medium: "Medium (90–120m)",
+  long: "Long (120–150m)",
+  epic: "Epic (150m+)",
+};
+
+function bucketRuntime(minutes: JsParam) {
+  if (minutes < 90) return "Short (<90m)";
+  if (minutes < 120) return "Medium (90–120m)";
+  if (minutes < 150) return "Long (120–150m)";
+  return "Epic (150m+)";
+}
+
+/**
+ * Groups aggregate runtime entries into canonical duration buckets,
+ * returned in display order (Short → Epic).
+ */
+export function buildRuntimeBuckets(runtimeData: JsParam) {
+  if (!runtimeData?.length) return [];
+  const buckets: JsParam = {};
+  for (const entry of runtimeData) {
+    const raw = entry.label || entry.group || "";
+    const key = RUNTIME_LABEL_MAP[raw.toLowerCase()] || raw || bucketRuntime(entry.avg_runtime ?? entry.value ?? 0);
+    buckets[key] = (buckets[key] || 0) + (entry.count ?? entry.value ?? 1);
+  }
+  return RUNTIME_BUCKET_ORDER.filter((k) => buckets[k]).map((k) => ({ label: k, value: buckets[k] }));
+}
+
+/**
+ * Normalize Storage Intelligence media-type filter tabs.
+ * ``null`` / ``"all"`` / blank → all types; otherwise ``"movie"`` or ``"show"``.
+ */
+export function normalizePurgeMediaTypeFilter(value: unknown) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw || raw === "all") return null;
+  if (raw === "show" || raw === "tv") return "show";
+  if (raw === "movie" || raw === "movies") return "movie";
+  return null;
+}
+
+/**
+ * Filter purge candidates by movie vs show. Pass null/all for no filter.
+ */
+export function filterPurgeCandidatesByMediaType(candidates: JsParam, mediaType: string) {
+  if (!candidates?.length) return [];
+  const filter = normalizePurgeMediaTypeFilter(mediaType);
+  if (!filter) return [...candidates];
+  return candidates.filter(
+    (item: JsParam) => String(item?.media_type || "").trim().toLowerCase() === filter,
+  );
+}
+
+/**
+ * Sort purge candidates by any key, ascending or descending.
+ * Returns a new array (does not mutate the original).
+ */
+export function sortPurgeCandidates(candidates: JsParam, sortKey: JsParam, sortDir: JsParam) {
+  if (!candidates?.length) return [];
+  const copy = [...candidates];
+  copy.sort((a, b) => {
+    let av = a[sortKey], bv = b[sortKey];
+    if (typeof av === "string") av = av.toLowerCase();
+    if (typeof bv === "string") bv = bv.toLowerCase();
+    if (av < bv) return sortDir === "asc" ? -1 : 1;
+    if (av > bv) return sortDir === "asc" ? 1 : -1;
+    return 0;
+  });
+  return copy;
+}
