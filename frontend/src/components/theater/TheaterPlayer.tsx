@@ -26,6 +26,7 @@ import {
   playStageChrome,
   theaterHlsConfig,
   toggleTheaterFullscreen,
+  shouldPublishTheaterPauseStatus,
 } from "../../lib/theaterPlayer.js";
 import { silenceNativeTextTracks } from "../../lib/subtitleCues.js";
 import { playShrunkAfterReload } from "../../lib/inAppPip.js";
@@ -238,9 +239,10 @@ export default function TheaterPlayer({
   const pointerPosRef = useRef<{ x: number; y: number } | null>(null);
   // Keep parent callbacks out of the HLS effect deps. LibraryPlayer (and Live)
   // pass inline onHlsRef / onStatus — putting those in deps remounts hls.js on
-  // every status tick (loading→ready→playing), which looks like: OSD flash,
+  // every status tick (loading→playing), which looks like: OSD flash,
   // poster still, then permanent stall with no honest error.
   const onStatusRef = useRef(onStatus);
+  const ignoreMediaPauseRef = useRef(false);
   const onHlsRefRef = useRef(onHlsRef);
   const onVideoRefRef = useRef(onVideoRef);
   const onRootRefRef = useRef(onRootRef);
@@ -421,6 +423,7 @@ export default function TheaterPlayer({
     let destroyed = false;
     let attachTimer: ReturnType<typeof setTimeout> | null = null;
     let stallTimer: ReturnType<typeof setTimeout> | null = null;
+    ignoreMediaPauseRef.current = true;
     onStatusRef.current?.("loading");
 
     const skipProgressive = () => {
@@ -432,6 +435,7 @@ export default function TheaterPlayer({
       if (resumeMutedIfBlockedRef.current) {
         playShrunkAfterReload(video).then((result) => {
           if (destroyed) return;
+          ignoreMediaPauseRef.current = false;
           onAutoplayResultRef.current?.(result);
           onStatusRef.current?.(result.playing ? "playing" : "paused");
         });
@@ -441,6 +445,7 @@ export default function TheaterPlayer({
       const playTimeoutMs = mediaMode === "progressive" ? BUMPER_PLAY_TIMEOUT_MS : 0;
       const finishPlay = (next: string | undefined) => {
         if (destroyed) return;
+        ignoreMediaPauseRef.current = false;
         if (mediaMode === "progressive" && next !== "playing") {
           skipProgressive();
           return;
@@ -478,6 +483,7 @@ export default function TheaterPlayer({
 
     const attachHls = () => {
       if (destroyed || !video || !Hls.isSupported()) return;
+      ignoreMediaPauseRef.current = true;
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
@@ -490,7 +496,6 @@ export default function TheaterPlayer({
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         if (destroyed) return;
         muteNativeSubs();
-        onStatusRef.current?.("ready");
         onManifestParsedRef.current?.(hls);
         startAutoplay();
       });
@@ -513,6 +518,7 @@ export default function TheaterPlayer({
             onStatusRef.current?.("error");
             return;
           }
+          ignoreMediaPauseRef.current = true;
           hls.recoverMediaError();
           return;
         }
@@ -522,6 +528,7 @@ export default function TheaterPlayer({
 
     const attachProgressive = () => {
       if (destroyed || !video) return;
+      ignoreMediaPauseRef.current = true;
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
@@ -532,7 +539,6 @@ export default function TheaterPlayer({
         if (destroyed || settled) return;
         settled = true;
         muteNativeSubs();
-        onStatusRef.current?.("ready");
         startAutoplay();
       };
       const onFail = () => {
@@ -562,11 +568,11 @@ export default function TheaterPlayer({
     } else if (Hls.isSupported()) {
       attachHls();
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      ignoreMediaPauseRef.current = true;
       video.src = src;
       video.addEventListener("loadedmetadata", () => {
         if (!destroyed) {
           muteNativeSubs();
-          onStatusRef.current?.("ready");
           startAutoplay();
         }
       });
@@ -582,6 +588,7 @@ export default function TheaterPlayer({
 
     return () => {
       destroyed = true;
+      ignoreMediaPauseRef.current = true;
       if (attachTimer != null) window.clearTimeout(attachTimer);
       if (stallTimer != null) window.clearTimeout(stallTimer);
       onAttachApiRef.current?.(null);
@@ -712,6 +719,7 @@ export default function TheaterPlayer({
       return;
     }
     if (held) onPictureReadyRef.current?.();
+    ignoreMediaPauseRef.current = false;
     notePlayingFrame();
     onPlaying?.();
     onStatus?.("playing");
@@ -800,6 +808,7 @@ export default function TheaterPlayer({
         }}
         onPause={() => {
           endHoldToRate();
+          if (!shouldPublishTheaterPauseStatus({ ignoreMediaPause: ignoreMediaPauseRef.current })) return;
           onStatus?.("paused");
         }}
         onWaiting={() => {

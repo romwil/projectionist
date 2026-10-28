@@ -54,6 +54,7 @@ import {
   shouldRevealPlaybackPicture,
   shouldAutoResumePlayback,
   shouldPauseOnVisibilityHide,
+  shouldPublishTheaterPauseStatus,
   shouldResumeOnPageShow,
   shouldResumeFromOffset,
   shouldStopSessionOnPageHide,
@@ -483,6 +484,31 @@ test("stage gesture ignores the click that completes a double-tap", async () => 
   handle({});
   await new Promise((resolve) => setTimeout(resolve, 60));
   assert.equal(singles.length, 1);
+});
+
+test("native pause during remount/load/recover is not a published pause", () => {
+  assert.equal(shouldPublishTheaterPauseStatus({ ignoreMediaPause: true }), false);
+  assert.equal(shouldPublishTheaterPauseStatus({ ignoreMediaPause: false }), true);
+  assert.equal(shouldPublishTheaterPauseStatus({}), true);
+  const theater = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "../components/theater/TheaterPlayer.tsx"),
+    "utf8",
+  );
+  const parsed = theater.slice(
+    theater.indexOf("Hls.Events.MANIFEST_PARSED"),
+    theater.indexOf("Hls.Events.SUBTITLE_TRACKS_UPDATED"),
+  );
+  assert.doesNotMatch(parsed, /onStatus.*\("ready"\)/);
+  assert.match(parsed, /startAutoplay/);
+  assert.match(theater, /ignoreMediaPauseRef/);
+  assert.match(theater, /shouldPublishTheaterPauseStatus/);
+  const live = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "../components/live/LivePlayer.tsx"),
+    "utf8",
+  );
+  assert.match(live, /liveUiStatusFromTheater/);
+  assert.match(live, /liveShowsTapHint/);
+  assert.doesNotMatch(live, /statusRef\.current !== "paused"/);
 });
 
 test("pause-on-hide is opt-in only; default keeps playing", () => {

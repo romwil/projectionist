@@ -559,6 +559,14 @@ export function shouldPauseOnVisibilityHide({ pauseWhenBackgrounded, visibilityS
   return Boolean(pauseWhenBackgrounded) && visibilityState === "hidden";
 }
 
+/**
+ * Native `pause` fires for remount, `video.load()`, and `recoverMediaError`.
+ * Those are not a user pause — do not publish `paused` while attaching/recovering.
+ */
+export function shouldPublishTheaterPauseStatus({ ignoreMediaPause = false }: JsParam = {}) {
+  return !ignoreMediaPause;
+}
+
 export function notePlayingBeforeHide({ playing, visibilityState }: JsParam) {
   if (visibilityState !== "hidden") return null;
   return Boolean(playing);
