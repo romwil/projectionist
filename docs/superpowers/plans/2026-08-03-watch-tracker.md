@@ -52,24 +52,24 @@ The UI may say “2 tracked completions” and show confidence. It must not flat
 |---|---|---|
 | Plex metadata sync | `projectionist/connectors/plex.py` parses movie/show/episode `viewCount`, `viewOffset`, and `lastViewedAt`. `projectionist/library/sync.py` writes those aggregates during library and episode sync. | Useful compatibility snapshot, not event history. The household server token also cannot represent every member’s personal state. |
 | SQLite library model | `library_items` stores title-level `view_count` / `last_viewed_at`; later migrations add `view_offset_ms` / `duration_ms`. `library_episodes` stores episode `view_count`, `last_viewed_at`, `view_offset_ms`, and `duration_ms`. | Do not overload either table with event rows. Add a separate watch domain linked by `rating_key` and optional local item IDs. |
-| Play counts | `projectionist/library/play_counts.py` uses movie `view_count`; for shows it sums episode `view_count`. It already labels movie counts as completed-or-marked-played and leaves `play_sessions` unknown. | Keep this as the Phase 0 fallback. Later prefer tracker summaries only when user-scoped coverage exists. |
+| Play counts | `projectionist/library/play_counts.py` uses movie `view_count`; for shows it sums episode `view_count`. Plex counts stay labeled `plex_played_event_count`. When `tracker_coverage != none`, prefer `tracked_completions` / `sittings_observed` (`play_sessions` matches sittings). Unknown `play_sessions` only when this title has no coverage. | Phase 0 fallback remains for no-coverage titles. Do not flatten tracker counts into “watched twice.” |
 | Progress state | `projectionist/library/watch_progress.py` and `frontend/src/lib/watchProgress.js` derive watched/partial/unwatched from aggregate count, playhead, and TV episode totals. | Preserve for cards during rollout. Add a tracker-backed user summary rather than silently changing these global fields. |
 | Mark watched | `projectionist/library/watch_state.py` updates local aggregate state and calls `PlexClient.scrobble` / `unscrobble`, preferring the signed-in user’s Plex token and otherwise falling back to the server token. | Emit a normalized manual action observation. A manual mark is `plex_event_only`, never `certain`; unscrobble is a correction event, not deletion of audit history. |
 | Plex webhooks | `projectionist/web/webhooks.py` accepts `media.pause`, `media.stop`, and `media.scrobble`, maps `Account.id` through `users.plex_user_id`, computes completion percentage, and currently uses the event only to queue a rating prompt. Unmapped accounts fail closed for prompts. | This is already a Phase 2 event source. Refactor it to persist normalized observations before prompt derivation; continue failing closed for personal UX. |
 | Rating prompts | `projectionist/reviews/store.py` scans aggregate progress or optional Tautulli metadata and stores one prompt per `(user_id, rating_key)`. Multi-user library sync does not invent personal ownership. | Trigger prompts from a new completion transition eventually, while keeping current scan fallback until tracker coverage is adequate. |
 | Tautulli | The stack already exposes optional Tautulli configuration. `projectionist/connectors/tautulli.py` currently supports libraries, media info, metadata, and never-watched checks; purge scoring and rating prompts use it. It does not ingest Tautulli history. | Tautulli is common enough here to support as an enhanced adapter, but only after the core Plex path. |
 | User identity | `users.plex_user_id` maps Plex `Account.id` to Projectionist users; personal Plex tokens may be stored encrypted. Local/OIDC users may have no Plex identity. | `user_id` remains nullable at ingest, but `source_user_key` is mandatory. Unmapped observations remain isolated and are never shown as someone’s personal history. |
-| Agent language | Agent tool payloads expose `completed_watches`, `rewatch_count`, `partial`, progress percentage, explicit count semantics, and `play_sessions=None`. The system prompt warns against treating counts as playback sessions. | This is the Phase 0 baseline. Phase 4 introduces new fields rather than changing meanings in place. |
+| Agent language | Agent tool payloads expose `completed_watches`, `rewatch_count`, `partial`, progress percentage, `plex_played_event_count`, and tracker fields. `play_sessions` is `sittings_observed` when coverage exists; otherwise null for that title. | Phase 4 shipped. Prefer tracker evidence when `tracker_coverage != none`; never “watched twice.” |
 | Scheduler | `projectionist/scheduler/engine.py` runs registered `TaskDefinition` jobs with persisted status and intervals; task modules register from `projectionist/scheduler/tasks/__init__.py`. | Use a small I/O task for history polling. Active-session polling needs a shorter dedicated loop or carefully justified scheduler interval; do not force high-frequency work into long idle cycles without measuring it. |
 
 ### Phase 0 status: honesty baseline
 
 Phase 0 is substantially present in `library/play_counts.py`, agent instructions, `docs/HELP.md`, and title/card semantics:
 
-- movie counts are labeled Plex completed-or-marked-played events;
+- movie counts are labeled Plex completed-or-marked-played events (`plex_played_event_count`);
 - TV counts are episode `viewCount` sums;
 - unfinished playheads remain partial;
-- `play_sessions` is explicitly unknown;
+- `play_sessions` is unknown only when `tracker_coverage` is `none` for that title; otherwise it is `sittings_observed`;
 - manual marks and duplicate scrobbles are disclosed.
 
 Keep these tests and copy as regression gates throughout later phases. Do not remove the fallback until per-user tracker coverage and migration behavior are proven.
@@ -649,6 +649,8 @@ Expected: API authorization passes; data model and privacy limits are both prese
 
 ### Task 7: Materialize sessions and completions
 
+**Status: shipped** (`projectionist/watch_tracker/correlate.py`, `tests/test_watch_correlation.py`).
+
 **Files:**
 - Create: `projectionist/watch_tracker/correlate.py`
 - Modify: `projectionist/watch_tracker/store.py`
@@ -656,9 +658,9 @@ Expected: API authorization passes; data model and privacy limits are both prese
 - Modify: `projectionist/library/db/migrations.py`
 - Test: `tests/test_watch_correlation.py`
 
-- [ ] Add migrations for sessions, session-event links, and completions.
-- [ ] Implement the exact merge, threshold, and suppression rules from §5.
-- [ ] Use table-driven tests for:
+- [x] Add migrations for sessions, session-event links, and completions.
+- [x] Implement the exact merge, threshold, and suppression rules from §5.
+- [x] Use table-driven tests for:
   - one uninterrupted movie;
   - pause/resume across three sittings;
   - reconnect duplicate scrobbles;
@@ -672,6 +674,8 @@ Expected: API authorization passes; data model and privacy limits are both prese
 
 ### Task 8: Move prompts to completion transitions
 
+**Status: leftover (postponed).** Rating prompts still queue from the 85% near-complete scan, not from watch-completion transitions. Parking-lot agent: one TECH-DEBT.md line only — do not copy the P0/P1 board.
+
 **Files:**
 - Modify: `projectionist/reviews/store.py`
 - Modify: `projectionist/web/webhooks.py`
@@ -683,6 +687,8 @@ Expected: API authorization passes; data model and privacy limits are both prese
 
 ### Task 9: Add user summary APIs and agent fields
 
+**Status: shipped.** User summary APIs, `attach_user_watch_summaries`, and agent fields exist. Honesty follow-up: `play_counts.py` + system prompt prefer `tracked_completions` / `sittings_observed` when `tracker_coverage != none`, keep Plex labeled `plex_played_event_count`, and never flatten to “watched twice.”
+
 **Files:**
 - Create: `projectionist/watch_tracker/api.py`
 - Modify: `projectionist/web/app.py`
@@ -691,12 +697,14 @@ Expected: API authorization passes; data model and privacy limits are both prese
 - Test: `tests/test_watch_tracker_api.py`
 - Test: `tests/test_agent_tools.py`
 
-- [ ] Add current-user summary and owner-only diagnostics endpoints.
-- [ ] Add tracker fields beside legacy aggregate semantics.
-- [ ] Update system instructions to prefer tracked evidence and state confidence.
-- [ ] Test cross-user authorization and no-coverage fallback.
+- [x] Add current-user summary and owner-only diagnostics endpoints.
+- [x] Add tracker fields beside legacy aggregate semantics.
+- [x] Update system instructions to prefer tracked evidence and state confidence.
+- [x] Test cross-user authorization and no-coverage fallback.
 
 ### Task 10: Add watch-history UI
+
+**Status: leftover (postponed).** A `WatchHistoryTimeline` stub is mounted on title detail and `watchTracker.js` exists, but confidence / “Why this count?” / episode rollups / not flattening to “watched twice” are unfinished. Parking-lot agent: one TECH-DEBT.md line for WatchHistoryTimeline honesty — do not copy the P0/P1 board.
 
 **Files:**
 - Create: `frontend/src/components/WatchHistoryTimeline.jsx`
@@ -707,9 +715,9 @@ Expected: API authorization passes; data model and privacy limits are both prese
 - Test: `frontend/src/lib/watchTracker.test.mjs`
 - Test: `e2e/watch-tracker.spec.ts`
 
-- [ ] Render tracked completions, sittings, confidence, and evidence explanation.
+- [x] Render tracked completions, sittings, confidence, and evidence explanation. *(stub only — dates + “Watched N times”; confidence / why-this-count leftover)*
 - [ ] Use episode rollups for shows.
-- [ ] Show legacy Plex aggregate only as a labeled fallback.
+- [x] Show legacy Plex aggregate only as a labeled fallback.
 - [ ] Verify owner/member isolation, empty states, theme safety, keyboard access, and narrow screens.
 
 ### Task 11: Add optional Tautulli history

@@ -72,19 +72,36 @@ def watch_activity_fields(item: Mapping[str, Any]) -> Dict[str, Any]:
     """Return explicit, conservative semantics for agent-facing watch counters.
 
     Plex ``viewCount`` is a per-user completed/marked-played counter, not a
-    playback-session counter. Projectionist does not currently ingest Plex
-    history events, so ``play_sessions`` is deliberately unknown.
+    playback-session counter. Keep it labeled ``plex_played_event_count``.
+    History is ingested into the watch tracker; when ``tracker_coverage`` is
+    not ``none``, prefer ``tracked_completions`` / ``sittings_observed`` and
+    set ``play_sessions`` to observed sittings. Never flatten those into
+    “watched twice.” ``play_sessions`` is unknown only when this item has no
+    user-scoped tracker coverage yet.
     """
     media = str(_row_get(item, "media_type") or "").strip().lower()
     count = effective_view_count(item)
-    state = watch_progress_state({**dict(item), "view_count": count})
+    payload = dict(item)
+    state = watch_progress_state({**payload, "view_count": count})
     offset = _as_nonneg_int(_row_get(item, "view_offset_ms"))
+    coverage = str(_row_get(item, "tracker_coverage") or "none").strip().lower()
+    has_tracker = coverage not in {"", "none"}
     fields: Dict[str, Any] = {
         "watch_state": state,
         # A movie can have completed history and a new unfinished sitting.
         "partial": state == "partial" or (media != "show" and offset > 0),
+        "plex_played_event_count": count,
         "play_sessions": None,
     }
+    if has_tracker:
+        if _row_get(item, "tracked_completions") is not None:
+            fields["tracked_completions"] = _as_nonneg_int(
+                _row_get(item, "tracked_completions")
+            )
+        if _row_get(item, "sittings_observed") is not None:
+            sittings = _as_nonneg_int(_row_get(item, "sittings_observed"))
+            fields["sittings_observed"] = sittings
+            fields["play_sessions"] = sittings
     if media == "show":
         fields["count_semantics"] = "plex_episode_completed_or_marked_played_sum"
         return fields

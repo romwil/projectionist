@@ -18,6 +18,7 @@ Continue Watching prefers live Plex on-deck reads, then local in-progress rows.
 from __future__ import annotations
 
 import json
+import random
 import time
 from datetime import date
 from typing import Any, Dict, List, Mapping, Optional, Sequence
@@ -2345,6 +2346,7 @@ def feed_pick_for_me(
         multi_user_enabled=multi_user_enabled,
         youth_max_rating=youth_max_rating,
     )
+    random.shuffle(named)
     items: List[Dict[str, Any]] = []
     seen: set[int] = set()
     for pick in named:

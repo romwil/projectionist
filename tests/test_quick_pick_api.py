@@ -151,6 +151,91 @@ class QuickPickApiTests(unittest.TestCase):
         body = resp.json()
         self.assertEqual(body["item"]["title"], "Horror Only")
 
+    def test_quick_pick_does_not_always_repeat_named_bridge(self) -> None:
+        from projectionist.library.plot_kinship import plot_link_json, specific_plot_link
+        from projectionist.watch_tracker.models import WatchEventInput
+        from projectionist.watch_tracker.store import ingest_watch_events
+
+        bake = "Amateur bakers compete around a signature bake inside a failing colony."
+        spy = "Rivals reunite after amateur bakers compete and ruin a signature bake tonight."
+        seed_id = self.db.upsert_library_item(
+            {
+                "rating_key": "rk-heat",
+                "media_type": "movie",
+                "title": "Heat",
+                "year": 1995,
+                "summary": bake,
+                "view_count": 0,
+                "genres": ["Crime"],
+            }
+        )
+        named_id = self.db.upsert_library_item(
+            {
+                "rating_key": "rk-thief",
+                "media_type": "movie",
+                "title": "Thief",
+                "year": 1981,
+                "summary": spy,
+                "view_count": 0,
+                "genres": ["Crime"],
+            }
+        )
+        self.db.upsert_library_item(
+            {
+                "rating_key": "rk-random",
+                "media_type": "movie",
+                "title": "Random Unwatched",
+                "year": 2020,
+                "summary": "A surprise with no named bridge.",
+                "view_count": 0,
+                "genres": ["Comedy"],
+            }
+        )
+        self.db.upsert_plex_user(
+            user_id="viewer-a",
+            display_name="Viewer A",
+            email=None,
+            plex_user_id="plex-a",
+            role="member",
+        )
+        ingest_watch_events(
+            self.db,
+            [
+                WatchEventInput(
+                    source="plex_history",
+                    source_event_id="heat-played",
+                    source_event_kind="history_played",
+                    server_machine_id="server",
+                    source_user_key="plex-a",
+                    rating_key="rk-heat",
+                    media_type="movie",
+                    occurred_at_ms=1_704_067_200_000,
+                    terminal=True,
+                ),
+            ],
+        )
+        link = specific_plot_link(seed_text=bake, peer_text=spy, shelf_labels=set())
+        with self.db.connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO item_neighbors
+                    (item_id, neighbor_id, score, surprise_score, explainable, plot_link_json)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (seed_id, named_id, 0.92, 0.8, 1 if link else 0, plot_link_json(link) or "{}"),
+            )
+
+        titles = set()
+        for _ in range(30):
+            resp = self.client.get("/api/library/quick-pick")
+            self.assertEqual(resp.status_code, 200)
+            item = resp.json().get("item") or {}
+            title = str(item.get("title") or "")
+            if title:
+                titles.add(title)
+        self.assertIn("Random Unwatched", titles)
+        self.assertGreater(len(titles), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
