@@ -29,6 +29,7 @@ import {
 } from "../../lib/theaterPlayer.js";
 import { silenceNativeTextTracks } from "../../lib/subtitleCues.js";
 import { playShrunkAfterReload } from "../../lib/inAppPip.js";
+import { BUMPER_FIRST_FRAME_STALL_MS, BUMPER_PLAY_TIMEOUT_MS } from "../../lib/prerollClient.js";
 
 export type TheaterPlaybackStatus = "idle" | "loading" | "ready" | "playing" | "paused" | "error";
 export type TheaterMediaMode = "hls" | "progressive";
@@ -256,6 +257,7 @@ export default function TheaterPlayer({
   const onManifestParsedRef = useRef(onManifestParsed);
   const onSubtitleTracksRef = useRef(onSubtitleTracks);
   const onAttachApiRef = useRef(onAttachApi);
+  const onEndedRef = useRef(onEnded);
   const bottomTapRef = useRef<{ visibleAtPointerDown: boolean } | null>(null);
   const holdRef = useRef({ active: false, downAt: 0 });
   const waitingSinceRef = useRef<number | null>(null);
@@ -281,6 +283,7 @@ export default function TheaterPlayer({
     onManifestParsedRef.current = onManifestParsed;
     onSubtitleTracksRef.current = onSubtitleTracks;
     onAttachApiRef.current = onAttachApi;
+    onEndedRef.current = onEnded;
   });
   const [internalOsd, setInternalOsd] = useState(true);
   const osdVisible = osdVisibleProp ?? internalOsd;
@@ -416,7 +419,14 @@ export default function TheaterPlayer({
     if (!video || !src) return undefined;
 
     let destroyed = false;
+    let attachTimer: ReturnType<typeof setTimeout> | null = null;
+    let stallTimer: ReturnType<typeof setTimeout> | null = null;
     onStatusRef.current?.("loading");
+
+    const skipProgressive = () => {
+      if (destroyed) return;
+      onEndedRef.current?.();
+    };
 
     const startAutoplay = () => {
       if (resumeMutedIfBlockedRef.current) {
@@ -428,14 +438,35 @@ export default function TheaterPlayer({
         return;
       }
       const customPlay = playMediaRef.current;
+      const playTimeoutMs = mediaMode === "progressive" ? BUMPER_PLAY_TIMEOUT_MS : 0;
+      const finishPlay = (next: string | undefined) => {
+        if (destroyed) return;
+        if (mediaMode === "progressive" && next !== "playing") {
+          skipProgressive();
+          return;
+        }
+        onStatusRef.current?.(next === "playing" ? "playing" : (next as TheaterPlaybackStatus) || "paused");
+        if (mediaMode === "progressive") {
+          stallTimer = window.setTimeout(() => {
+            if (destroyed) return;
+            if ((video.currentTime || 0) < 0.2) skipProgressive();
+          }, BUMPER_FIRST_FRAME_STALL_MS);
+        }
+      };
       if (customPlay) {
-        customPlay(video).then((next) => {
-          if (destroyed) return;
-          onStatusRef.current?.(next === "playing" ? "playing" : (next as TheaterPlaybackStatus) || "paused");
-        });
+        const played = Promise.resolve(customPlay(video));
+        if (playTimeoutMs > 0) {
+          const timer = window.setTimeout(() => finishPlay("timeout"), playTimeoutMs);
+          played.then((next) => {
+            window.clearTimeout(timer);
+            finishPlay(next);
+          });
+          return;
+        }
+        played.then((next) => finishPlay(next));
         return;
       }
-      video.play?.().then(() => onStatusRef.current?.("playing")).catch(() => onStatusRef.current?.("paused"));
+      video.play?.().then(() => finishPlay("playing")).catch(() => finishPlay("paused"));
     };
 
     const muteNativeSubs = () => {
@@ -496,14 +527,26 @@ export default function TheaterPlayer({
         hlsRef.current = null;
         onHlsRefRef.current?.(null);
       }
+      let settled = false;
       const onReady = () => {
-        if (destroyed) return;
+        if (destroyed || settled) return;
+        settled = true;
         muteNativeSubs();
         onStatusRef.current?.("ready");
         startAutoplay();
       };
+      const onFail = () => {
+        if (destroyed || settled) return;
+        settled = true;
+        skipProgressive();
+      };
       video.addEventListener("loadedmetadata", onReady, { once: true });
+      video.addEventListener("error", onFail, { once: true });
       video.src = src;
+      video.load();
+      attachTimer = window.setTimeout(() => {
+        if (!settled) onFail();
+      }, BUMPER_PLAY_TIMEOUT_MS);
     };
 
     const remount = () => {
@@ -539,6 +582,8 @@ export default function TheaterPlayer({
 
     return () => {
       destroyed = true;
+      if (attachTimer != null) window.clearTimeout(attachTimer);
+      if (stallTimer != null) window.clearTimeout(stallTimer);
       onAttachApiRef.current?.(null);
       video.textTracks?.removeEventListener?.("addtrack", muteNativeSubs);
       if (hlsRef.current) {

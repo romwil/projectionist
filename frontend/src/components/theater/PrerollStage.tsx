@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import TuningInterstitial from "./TuningInterstitial";
-import { PREROLL_TAP_COPY, playBumperVideo } from "../../lib/prerollClient.js";
+import {
+  BUMPER_PLAY_TIMEOUT_MS,
+  PREROLL_TAP_COPY,
+  bumperWatchDecision,
+  playBumperVideo,
+} from "../../lib/prerollClient.js";
 
 export type PrerollStageProps = {
   src?: string;
@@ -12,7 +17,7 @@ export type PrerollStageProps = {
  * Progressive preroll bumper. Plays through with no title and no skip control.
  * Each mount owns its own video — no shared playhead across clients.
  * iOS may pause unmuted autoplay; muted-first then unmute, and the tap overlay
- * always calls play() (it is not a no-op).
+ * always calls play() (it is not a no-op). A hung first frame skips to the show.
  */
 export default function PrerollStage({
   src = "",
@@ -24,6 +29,7 @@ export default function PrerollStage({
   const [error, setError] = useState("");
   const [needsGesture, setNeedsGesture] = useState(false);
   const needsGestureRef = useRef(false);
+  const playResultRef = useRef("idle");
   // LivePlayer re-renders about once a second for the OSD clock, and both
   // players pass inline onDone. That identity must not retrigger this effect:
   // cleanup strips `src`, then the effect loads and plays again, which
@@ -35,6 +41,7 @@ export default function PrerollStage({
 
   function markGestureNeeded() {
     needsGestureRef.current = true;
+    playResultRef.current = "ready";
     setNeedsGesture(true);
     setError(PREROLL_TAP_COPY);
     setStatus("paused");
@@ -42,6 +49,7 @@ export default function PrerollStage({
 
   function markPlaying() {
     needsGestureRef.current = false;
+    playResultRef.current = "playing";
     setNeedsGesture(false);
     setError("");
     setStatus("playing");
@@ -54,6 +62,10 @@ export default function PrerollStage({
       markPlaying();
       return;
     }
+    if (result === "idle") {
+      onDoneRef.current?.();
+      return;
+    }
     markGestureNeeded();
   }
 
@@ -64,21 +76,73 @@ export default function PrerollStage({
       return undefined;
     }
     let cancelled = false;
+    let watchTimer: ReturnType<typeof setTimeout> | null = null;
     needsGestureRef.current = false;
+    playResultRef.current = "idle";
     setNeedsGesture(false);
     setStatus("loading");
     setError("");
     video.setAttribute("playsinline", "true");
     video.setAttribute("webkit-playsinline", "true");
+
+    const skip = () => {
+      if (cancelled) return;
+      cancelled = true;
+      onDoneRef.current?.();
+    };
+
+    const startedAt = Date.now();
+    const tickWatch = () => {
+      if (cancelled) return;
+      const decision = bumperWatchDecision({
+        playResult: playResultRef.current,
+        currentTime: video.currentTime,
+        error: Boolean(video.error),
+        elapsedMs: Date.now() - startedAt,
+      });
+      if (decision === "skip") {
+        skip();
+        return;
+      }
+      watchTimer = window.setTimeout(tickWatch, 400);
+    };
+
+    const startWatch = () => {
+      if (watchTimer != null) return;
+      watchTimer = window.setTimeout(tickWatch, 400);
+    };
+
+    const onReady = () => {
+      if (cancelled || playResultRef.current !== "idle") return;
+      playBumperVideo(video).then((result) => {
+        if (cancelled) return;
+        if (result === "playing") {
+          markPlaying();
+          startWatch();
+          return;
+        }
+        if (result === "idle") {
+          skip();
+          return;
+        }
+        markGestureNeeded();
+        startWatch();
+      });
+    };
+
+    video.addEventListener("loadeddata", onReady, { once: true });
+    video.addEventListener("canplay", onReady, { once: true });
     video.src = src;
     video.load();
-    playBumperVideo(video).then((result) => {
+    const attachTimer = window.setTimeout(() => {
       if (cancelled) return;
-      if (result === "playing") markPlaying();
-      else markGestureNeeded();
-    });
+      if (playResultRef.current === "idle" && (video.readyState || 0) < 2) skip();
+    }, BUMPER_PLAY_TIMEOUT_MS);
+
     return () => {
       cancelled = true;
+      window.clearTimeout(attachTimer);
+      if (watchTimer != null) window.clearTimeout(watchTimer);
       video.removeAttribute("src");
       video.load();
     };
@@ -99,9 +163,10 @@ export default function PrerollStage({
         controls={false}
         data-testid={`${testId}-video`}
         onPlaying={markPlaying}
-        onWaiting={() => {
-          if (needsGestureRef.current) return;
-          setStatus("loading");
+        onTimeUpdate={() => {
+          const video = videoRef.current;
+          if (!video || video.currentTime < 0.2) return;
+          if (status !== "playing") markPlaying();
         }}
         onEnded={() => onDoneRef.current?.()}
         onError={() => {

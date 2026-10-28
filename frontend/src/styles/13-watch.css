@@ -807,11 +807,13 @@ html:has([data-theater-mode="true"]) #root {
   text-wrap: balance;
 }
 
-/* Host preroll bumper overlay */
+/* Host preroll bumper overlay.
+ * Below .theater-osd (z-index 5) so a frozen first frame cannot trap Ch± / keys.
+ * Full-bleed still covers the picture; skip-on-fail clears this if play stalls. */
 .preroll-stage {
   position: absolute;
   inset: 0;
-  z-index: 5;
+  z-index: 3;
   background: #000;
   display: grid;
   place-items: center;

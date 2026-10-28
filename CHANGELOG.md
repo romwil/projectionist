@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [1.37.69] — 2026-10-28
+
+One patch on 1.37.68: native Live does not freeze on a bumper after a program. The pad between shows is commercials or a slate, not a stuck preroll.
+
+### Highlights
+- **Live does not freeze on a bumper.** After a program, the picture keeps going. If a movie-start bumper hangs on the first frame, it times out and the lineup continues.
+- **Between programs is commercials or a slate.** The pad is not a looping preroll. Channel controls stay above the overlay, so Ch± still works.
+
+### Fixed
+- **Host preroll is a movie-start overlay, not flex filler.** `flexPlaybackPlan` refuses `/api/preroll/asset/` URLs (and other progressive files) during flex. The pad is Plex commercial keys (HLS) or the named Between programs slate.
+- **A frozen bumper skips instead of hanging the theater.** `playBumperVideo` races `play()` with a 6s timeout. `bumperWatchDecision` skips a first-frame stall after 4s, a hung attach, or autoplay that never starts. `PrerollStage` and progressive `TheaterPlayer` both continue to the next item.
+- **Live OSD stays above the bumper overlay.** `.preroll-stage` is z-index 3 under `.theater-osd` (5) so a frozen first frame cannot trap Ch± / keys.
+
+### Verification
+- Focused frontend unit — 79/79 (`prerollClient`, `liveChannels`, `theaterPlayer`). Flex pad with `/api/preroll/asset/` is slate, not play; frozen bumper `bumperWatchDecision` skips.
+- Full frontend unit 1115/1115. `npm run lint` 0 errors (352 warnings). `npx tsc --noEmit` clean. `npm run build` ran `tsc --noEmit && vite build`. ConfirmModal hooks remain `useConfirmModal.tsx`. Dockerfile still copies `frontend/tsconfig.json` into the Hub frontend stage (`test_frontend_stage_copies_tsconfig_for_tsc_build`).
+- Focused pytest — 22 passed (`test_theater_delight`, `test_live_native_schedule`, `test_version`) with `--no-cov`.
+- `tests/test_version.py` after `./scripts/patch-release.sh 1.37.69`.
+
 ## [1.37.68] — 2026-10-28
 
 One patch on 1.37.67: the SPA is TypeScript so Hub cannot ship an untyped UI, and full library delete falls back to Plex on-disk when a title is not in Radarr or Sonarr.
