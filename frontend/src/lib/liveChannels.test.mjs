@@ -76,7 +76,35 @@ describe("liveChannels helpers", () => {
     assert.equal(merged.streamTracks.length, 1);
     assert.equal(merged.plexTracks.length, 1);
     assert.equal(merged.plexTracks[0].proxyUrl.includes("/subtitles/9/file"), true);
+    assert.ok(merged.plexTracks[0].proxyUrl.startsWith("/api/"));
     assert.equal(merged.emptyMessage, "");
+    assert.equal(merged.needsFetch, false);
+
+    const overlayOnly = mergeLiveCcTracks([], {
+      plex_streams: [
+        {
+          id: "1",
+          label: "English (PGS Overlay)",
+          display_title: "English (PGS Overlay)",
+          format: "pgs",
+          key: "/library/streams/1",
+          proxy_url: "/api/library/items/55/subtitles/1/file",
+          renderable: true,
+          image: true,
+        },
+        {
+          id: "2",
+          label: "English",
+          proxy_url: "plex://streams/2",
+          renderable: true,
+        },
+      ],
+      can_download: true,
+      plex_rating_key: "55",
+    });
+    assert.equal(overlayOnly.plexTracks.length, 0);
+    assert.equal(overlayOnly.needsFetch, true);
+    assert.ok(!JSON.stringify(overlayOnly.plexTracks).includes("plex://"));
   });
 
   it("builds auth’d stream + watch hrefs", () => {
@@ -201,6 +229,20 @@ describe("liveChannels helpers", () => {
     const fatal = liveHlsErrorPolicy({ fatal: true, type: "networkError" }, { networkRetries: 5 });
     assert.equal(fatal.action, "fatal");
     assert.equal(fatal.error, true);
+
+    const subFatal = liveHlsErrorPolicy(
+      { fatal: true, type: "networkError", details: "subtitleTrackLoadError" },
+      { networkRetries: 0 },
+    );
+    assert.equal(subFatal.action, "ignore");
+    assert.equal(subFatal.keepPlaying, true);
+    const subFrag = liveHlsErrorPolicy({
+      fatal: true,
+      type: "networkError",
+      details: "subtitleFragLoadError",
+    });
+    assert.equal(subFrag.action, "ignore");
+    assert.equal(subFrag.keepPlaying, true);
   });
 
   it("holds soft-stall UI briefly after recovery to avoid clear→flash loops", () => {

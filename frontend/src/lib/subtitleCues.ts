@@ -1,15 +1,19 @@
 import type {JsonObject, JsParam} from "../api/types";
 /** Pure helpers for Projectionist's one subtitle model (Live + Play). */
 
-export const SUBTITLE_FETCH_FAILED =
-  "Couldn’t load this subtitle track from Plex. Try another track, or watch in Plex.";
+export const SUBTITLE_FETCH_FAILED = "No usable captions for this track. Off stays Off.";
 export const SUBTITLE_EMPTY_TRACKS = "No subtitle tracks are attached to this title in Plex.";
 export const SUBTITLE_NO_TEXT_TRACKS = "No text captions we can draw. Off stays Off.";
 export const SUBTITLE_DELAY_STEP_SEC = 0.5;
 export const SUBTITLE_DELAY_MAX_SEC = 30;
 export const SUBTITLE_BURN_IN_NOTE = "Plex captions restart playback. Timing is overlay-only.";
+export const SUBTITLE_ORIGIN_SLOP_MS = 1500;
+export const LIVE_SUBTITLE_ELAPSED_MAX_SEC = 6 * 3600;
 export const IMAGE_SUBTITLE_FORMATS = new Set([
   "pgs",
+  "pgssub",
+  "pgs_subtitle",
+  "hdmv_pgs",
   "hdmv_pgs_subtitle",
   "hdmv_text_subtitle",
   "vobsub",
@@ -18,6 +22,7 @@ export const IMAGE_SUBTITLE_FORMATS = new Set([
   "dvb_subtitle",
   "dvbsub",
   "xsub",
+  "overlay",
 ]);
 const BURN_IN_LANGUAGE_NAMES: Record<string, any> = {
   en: "English",
@@ -230,6 +235,11 @@ export function subtitleLanguageMatches(language: JsParam, code: unknown) {
   return false;
 }
 
+/** True for Projectionist's cookie-authed VTT proxy — never plex:// or a PMS stream URL. */
+export function isOurSubtitleProxyUrl(url: unknown) {
+  return /^\/api\/library\/items\/[^/]+\/subtitles\/[^/]+\/file$/.test(String(url || "").trim());
+}
+
 /**
  * Normalize server rows (`plex_streams` on Live, `streams` on library items) into picker tracks.
  * Image-based / unreadable tracks are omitted — dead “can’t draw” chips are not a choice.
@@ -241,13 +251,14 @@ export function normalizeSubtitleTracks(rows: JsParam) {
     .map((row, index) => {
       const id = String(row.id ?? index);
       const proxyUrl = String(row.proxy_url || "");
-      const renderable = row.renderable !== false && Boolean(proxyUrl);
+      const image = isImageSubtitleStream(row);
+      const renderable = row.renderable !== false && isOurSubtitleProxyUrl(proxyUrl) && !image;
       return {
         index: `plex-${id}`,
         id,
         label: String(row.label || row.display_title || row.language || `Track ${index + 1}`),
         language: String(row.language_code || row.language || ""),
-        proxyUrl,
+        proxyUrl: renderable ? proxyUrl : "",
         renderable,
         unavailableReason: renderable ? "" : String(row.unavailable_reason || ""),
         selected: Boolean(row.selected),
@@ -260,8 +271,10 @@ export function normalizeSubtitleTracks(rows: JsParam) {
 export function isImageSubtitleStream(row: JsParam) {
   if (!row || typeof row !== "object") return false;
   if (row.image === true) return true;
-  const fmt = String(row.format || "").trim().toLowerCase();
-  return IMAGE_SUBTITLE_FORMATS.has(fmt);
+  const fmt = String(row.format || row.codec || "").trim().toLowerCase();
+  if (IMAGE_SUBTITLE_FORMATS.has(fmt)) return true;
+  const label = `${row.display_title || ""} ${row.label || ""} ${row.title || ""}`.toLowerCase();
+  return /\b(pgs|vobsub|dvd\s*sub|hdmv|overlay)\b/.test(label);
 }
 
 export function plexBurnInLanguageLabel(row: JsParam) {
@@ -376,4 +389,38 @@ export function liveProgramClockSec(osd: JsParam, nowMs = Date.now()) {
   const start = Number(program?.started_at ?? program?.start);
   if (!Number.isFinite(start)) return null;
   return Math.max(0, nowMs / 1000 - start);
+}
+
+/**
+ * Extra ms to add to `video.currentTime` so file-relative cues match a mid-title
+ * Live tune. Same rule as Library Play resume: shift only when the media timeline
+ * is still near 0 while the program is already in progress. Missing or wild
+ * elapsed (no tune offset, copyts already at the offset, >6h) → 0 (unshifted).
+ */
+export function liveSubtitleOriginMs({ currentTimeSec, programElapsedSec }: JsParam = {}) {
+  const media = Number(currentTimeSec);
+  if (!Number.isFinite(media) || media < 0) return 0;
+  const elapsed = Number(programElapsedSec);
+  if (!Number.isFinite(elapsed) || elapsed < 0 || elapsed > LIVE_SUBTITLE_ELAPSED_MAX_SEC) return 0;
+  const mediaMs = Math.round(media * 1000);
+  const committed = Math.round(elapsed * 1000);
+  if (committed > SUBTITLE_ORIGIN_SLOP_MS && mediaMs + SUBTITLE_ORIGIN_SLOP_MS < committed) {
+    return committed;
+  }
+  return 0;
+}
+
+/**
+ * File-relative seconds for Live overlay lookup: tune offset + stream time when
+ * the HLS timeline is 0-based; otherwise `currentTime` unshifted.
+ */
+export function liveSubtitleLookupSec({ currentTimeSec, programElapsedSec, delaySec = 0 }: JsParam = {}) {
+  const media = Number(currentTimeSec);
+  if (!Number.isFinite(media)) return Number.NaN;
+  const originMs = liveSubtitleOriginMs({ currentTimeSec: media, programElapsedSec });
+  return subtitleLookupTimeSec({
+    currentTimeSec: Math.max(0, media),
+    originMs,
+    delaySec,
+  });
 }

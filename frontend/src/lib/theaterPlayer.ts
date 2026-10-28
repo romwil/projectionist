@@ -301,9 +301,11 @@ export function theaterHlsConfig() {
     manifestLoadingTimeOut: 20000,
     levelLoadingTimeOut: 20000,
     fragLoadingTimeOut: 30000,
-    // Projectionist draws soft Plex tracks itself. Native WebVTT from the
-    // playlist must not paint a second caption layer under the overlay.
+    // Projectionist draws soft tracks itself. Do not fetch playlist WebVTT
+    // (often a Plex overlay URL that 404s and can stall Live).
     renderTextTracksNatively: false,
+    enableWebVTT: false,
+    enableIMSC1: false,
     xhrSetup: (xhr: JsParam) => {
       xhr.withCredentials = true;
     },

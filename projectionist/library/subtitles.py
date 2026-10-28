@@ -24,6 +24,9 @@ DOWNLOAD_SOFT_FAIL = (
 IMAGE_SUBTITLE_FORMATS = frozenset(
     {
         "pgs",
+        "pgssub",
+        "pgs_subtitle",
+        "hdmv_pgs",
         "hdmv_pgs_subtitle",
         "hdmv_text_subtitle",
         "vobsub",
@@ -32,6 +35,7 @@ IMAGE_SUBTITLE_FORMATS = frozenset(
         "dvb_subtitle",
         "dvbsub",
         "xsub",
+        "overlay",
     }
 )
 IMAGE_SUBTITLE_NOTE = (
@@ -39,6 +43,10 @@ IMAGE_SUBTITLE_NOTE = (
     "Pick another track or watch in Plex."
 )
 _NATIVE_TEXT_FORMATS = frozenset({"srt", "subrip", "vtt", "webvtt"})
+_IMAGE_TITLE_RE = re.compile(r"\b(pgs|vobsub|dvd\s*sub|hdmv|overlay)\b", re.I)
+_OUR_SUBTITLE_PROXY_RE = re.compile(
+    r"^/api/library/items/[^/]+/subtitles/[^/]+/file$"
+)
 
 
 def _subtitle_row(stream: Mapping[str, Any] | PlexSubtitleStream) -> Mapping[str, Any]:
@@ -49,8 +57,38 @@ def _subtitle_row(stream: Mapping[str, Any] | PlexSubtitleStream) -> Mapping[str
 
 def subtitle_is_renderable(stream: Mapping[str, Any] | PlexSubtitleStream) -> bool:
     """True when the track is text we can fetch and render (not PGS/VobSub bitmap)."""
-    fmt = str(_subtitle_row(stream).get("format") or "").strip().lower()
-    return fmt not in IMAGE_SUBTITLE_FORMATS
+    row = _subtitle_row(stream)
+    fmt = str(row.get("format") or row.get("codec") or "").strip().lower()
+    if fmt in IMAGE_SUBTITLE_FORMATS:
+        return False
+    blob = " ".join(str(row.get(key) or "") for key in ("display_title", "title", "label"))
+    if _IMAGE_TITLE_RE.search(blob):
+        return False
+    return True
+
+
+def is_our_subtitle_proxy_url(url: Any) -> bool:
+    """True for Projectionist's cookie-authed VTT proxy — never a plex:// or PMS path."""
+    return bool(_OUR_SUBTITLE_PROXY_RE.match(str(url or "").strip()))
+
+
+def sanitize_live_plex_streams(streams: Sequence[Any] | None) -> List[Dict[str, Any]]:
+    """Keep only our proxy URLs. Overlay/PGS keys are not loadable text."""
+    out: List[Dict[str, Any]] = []
+    for row in streams or []:
+        if not isinstance(row, Mapping):
+            continue
+        item = dict(row)
+        url = str(item.get("proxy_url") or "").strip()
+        renderable = bool(item.get("renderable")) and is_our_subtitle_proxy_url(url)
+        if not renderable:
+            item["proxy_url"] = ""
+            item["renderable"] = False
+        else:
+            item["proxy_url"] = url
+            item["renderable"] = True
+        out.append(item)
+    return out
 
 
 def normalize_subtitle_language(value: Any, *, default: str = "en") -> str:
@@ -450,7 +488,7 @@ def live_subtitles_payload(
         return base
 
     listed = list_item_subtitles(settings, rating_key)
-    base["plex_streams"] = list(listed.get("streams") or [])
+    base["plex_streams"] = sanitize_live_plex_streams(listed.get("streams") or [])
     base["has_preferred"] = bool(listed.get("has_preferred"))
     base["can_download"] = bool(listed.get("ok")) and not bool(listed.get("has_preferred"))
     if listed.get("ok") and base["plex_streams"]:

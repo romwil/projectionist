@@ -29,9 +29,10 @@ import {
 import { toggleTheaterFullscreen } from "../../lib/theaterPlayer.js";
 import {
   clampSubtitleDelay,
-  liveProgramClockSec,
+  liveSubtitleLookupSec,
   resolveSubtitlePresentation,
   silenceNativeTextTracks,
+  SUBTITLE_NO_TEXT_TRACKS,
 } from "../../lib/subtitleCues.js";
 import { formatLiveStreamError, liveStreamHealthCopy } from "../../lib/liveChannelsCopy.js";
 import { pickLiveSoftStallPhrase } from "../../lib/liveStreamSoftStallCopy.js";
@@ -115,6 +116,8 @@ export default function LivePlayer({
   const pauseProgramEndRef = useRef<any>(null);
   const finishThenLiveRef = useRef(false);
   const remountLiveRef = useRef<any>(null);
+  const tuneOffsetSecRef = useRef<number | null>(null);
+  const lastFilePositionRef = useRef<number | null>(null);
 
   const channelId = channel?.id || "";
   const osd = buildOsdModel(channel, osdTick, { selectedProgram });
@@ -129,6 +132,8 @@ export default function LivePlayer({
     prerollCueRef.current = "";
     finishThenLiveRef.current = false;
     pauseProgramEndRef.current = null;
+    tuneOffsetSecRef.current = null;
+    lastFilePositionRef.current = null;
   }
   const nowPlexKey = osd?.plexRatingKey || channel?.now?.plex_rating_key || "";
   const ccMerged = mergeLiveCcTracks(textTracks, plexCc);
@@ -143,9 +148,16 @@ export default function LivePlayer({
     softTrackReady: plexSubs.state === "ready",
     nativeTrackIndex,
   });
-  const osdRef = useRef(osd);
-  osdRef.current = osd;
-  const getSubtitleTimeSec = useCallback(() => liveProgramClockSec(osdRef.current, Date.now()), []);
+  const getSubtitleTimeSec = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return Number.NaN;
+    const lookup = liveSubtitleLookupSec({
+      currentTimeSec: video.currentTime,
+      programElapsedSec: tuneOffsetSecRef.current,
+    });
+    if (Number.isFinite(lookup)) lastFilePositionRef.current = lookup;
+    return lookup;
+  }, []);
 
   useEffect(() => {
     statusRef.current = status;
@@ -299,7 +311,7 @@ export default function LivePlayer({
     setSubDelay(0);
   }, [channelId, nowPlexKey]);
 
-  // Richer CC: when now-playing maps to a Plex rating key, list attached tracks.
+  // Same caption path as library Play: our VTT proxy, fetch text CC when needed.
   useEffect(() => {
     if (!channelId) {
       setPlexCc(null);
@@ -308,17 +320,56 @@ export default function LivePlayer({
     }
     let cancelled = false;
     setCcDownloadNote("");
-    getLiveChannelSubtitles(channelId)
-      .then((payload) => {
-        if (!cancelled) setPlexCc(payload || null);
-      })
-      .catch(() => {
-        if (!cancelled) setPlexCc(null);
-      });
+    (async () => {
+      try {
+        const listed = await getLiveChannelSubtitles(channelId);
+        if (cancelled) return;
+        const first = mergeLiveCcTracks([], listed);
+        let downloaded = null;
+        if (first.needsFetch && listed?.can_download) {
+          setCcDownloadNote("Looking for text captions…");
+          try {
+            const result = await downloadLiveChannelSubtitles(channelId);
+            if (cancelled) return;
+            downloaded = Array.isArray(result?.streams) ? result.streams : [];
+            if (result?.ok && !downloaded.length) {
+              const refreshed = await getLiveChannelSubtitles(channelId);
+              if (cancelled) return;
+              downloaded = refreshed?.plex_streams ?? [];
+            }
+          } catch {
+            // Keep listed tracks — empty is better than wiping a usable sidecar.
+          }
+        }
+        if (cancelled) return;
+        const payload = { ...(listed || {}), downloaded_streams: downloaded };
+        setPlexCc(payload);
+        const resolved = mergeLiveCcTracks([], payload);
+        if (resolved.autoSelectIndex !== -1) setActiveTrack(resolved.autoSelectIndex);
+        if (resolved.plexTracks.length) {
+          setCcDownloadNote("");
+        } else if (first.needsFetch) {
+          setCcDownloadNote(String(listed?.empty_message || SUBTITLE_NO_TEXT_TRACKS));
+        } else {
+          setCcDownloadNote("");
+        }
+      } catch {
+        if (!cancelled) {
+          setPlexCc(null);
+          setCcDownloadNote("");
+        }
+      }
+    })();
     return () => {
       cancelled = true;
     };
   }, [channelId, nowPlexKey]);
+
+  useEffect(() => {
+    if (plexSubs.state !== "error" || !activePlexTrack) return;
+    setActiveTrack(-1);
+    setCcDownloadNote(SUBTITLE_NO_TEXT_TRACKS);
+  }, [plexSubs.state, activePlexTrack]);
 
   // Requests a bumper only when a movie is starting or about to air.
   useEffect(() => {
@@ -579,6 +630,9 @@ export default function LivePlayer({
       try {
         const tuned = await tuneLiveChannel(channelId);
         if (destroyed) return;
+        const rawOffset = Number(tuned?.offset_ms);
+        tuneOffsetSecRef.current =
+          Number.isFinite(rawOffset) && rawOffset >= 0 ? rawOffset / 1000 : null;
         plan = flexPlaybackPlan(tuned);
         setFlexSlate(plan.slate ? plan.slateCopy || flexSlateCopy({ nextTitle: osd?.nextDisplay || osd?.nextTitle || tuned?.next_title }) : "");
         if (plan.url) {
@@ -638,6 +692,14 @@ export default function LivePlayer({
     return () => clearInterval(tick);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- poll per channel tune
   }, [channelId]);
+
+  useEffect(() => {
+    if (!attachKey) return;
+    const last = lastFilePositionRef.current;
+    if (Number.isFinite(last) && (last as number) >= 0) {
+      tuneOffsetSecRef.current = last as number;
+    }
+  }, [attachKey]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -920,8 +982,8 @@ export default function LivePlayer({
           tracks={ccMerged.plexTracks}
           activeId={activeTrack}
           onSelect={selectCcTrack}
-          state={activePlexTrack ? plexSubs.state : "idle"}
-          error={plexSubs.error}
+          state={activePlexTrack && plexSubs.state !== "error" ? plexSubs.state : "idle"}
+          error=""
           note={ccDownloadNote}
           emptyMessage={ccMerged.hasAny ? "" : ccMerged.emptyMessage || LIVE_CC_EMPTY_STREAM}
           delaySec={subDelay}
