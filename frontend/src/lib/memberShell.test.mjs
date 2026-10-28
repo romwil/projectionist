@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { guestDeepLinkBlocked, resolveMemberShell, shellRootClass } from "./memberShell.js";
+import { guestDeepLinkBlocked, resolveMemberShell, shellRootClass } from "./memberShell.ts";
 
 describe("resolveMemberShell", () => {
   it("stays default when multi-user is off", () => {

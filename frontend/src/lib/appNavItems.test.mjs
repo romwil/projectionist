@@ -3,15 +3,15 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { ROUTES } from "./backNav.js";
-import { libraryHubPath } from "./libraryTabs.js";
+import { ROUTES } from "./backNav.ts";
+import { libraryHubPath } from "./libraryTabs.ts";
 import {
   APP_NAV_CORE_ITEMS,
   YOUTH_NAV_ITEMS,
   buildAppNavItems,
-} from "./appNavItems.js";
-import { ADMIN_NAV, adminNavLinks } from "./adminNav.js";
-import { buildPrimaryNavItems } from "./primaryNav.js";
+} from "./appNavItems.ts";
+import { ADMIN_NAV, adminNavLinks } from "./adminNav.ts";
+import { buildPrimaryNavItems } from "./primaryNav.ts";
 
 /** Ids between the Navigate heading and the next heading. */
 function navigateBlock(items) {

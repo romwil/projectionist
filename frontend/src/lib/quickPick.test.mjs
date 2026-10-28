@@ -11,7 +11,7 @@ import {
   quickPickMoodQuery,
   quickPickToAssistantMessage,
   resolveQuickPickMood,
-} from "./quickPick.js";
+} from "./quickPick.ts";
 
 test("normalizeQuickPickResult keeps a successful pick", () => {
   const item = { title: "Arrival", media_type: "movie", rating_key: "1" };

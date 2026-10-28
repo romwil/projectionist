@@ -7,7 +7,7 @@ import {
   PREROLL_TAP_COPY,
   shouldPlayLivePreroll,
   shouldPlayMoviePreroll,
-} from "./prerollClient.js";
+} from "./prerollClient.ts";
 
 describe("prerollClient", () => {
   it("normalizes next-preroll payloads and rejects empties", () => {

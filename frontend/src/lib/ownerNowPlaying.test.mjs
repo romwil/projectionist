@@ -4,7 +4,7 @@ import {
   formatHealthChip,
   isPlaceholderNowTitle,
   normalizeOwnerNowPlaying,
-} from "./ownerNowPlaying.js";
+} from "./ownerNowPlaying.ts";
 import { readAllStyles } from "./readStyles.mjs";
 
 const styles = readAllStyles();

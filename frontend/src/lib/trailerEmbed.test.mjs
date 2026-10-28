@@ -6,8 +6,8 @@ import { describe, it } from "node:test";
 
 const src = join(dirname(fileURLToPath(import.meta.url)), "..");
 const trailerSources = [
-  readFileSync(join(src, "pages", "TitleDetailPage.jsx"), "utf8"),
-  readFileSync(join(src, "components", "PosterOverlayControls.jsx"), "utf8"),
+  readFileSync(join(src, "pages", "TitleDetailPage.tsx"), "utf8"),
+  readFileSync(join(src, "components", "PosterOverlayControls.tsx"), "utf8"),
 ];
 
 describe("YouTube trailer embeds", () => {

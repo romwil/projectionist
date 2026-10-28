@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { isAllowedMarkdownHref, markdownLinkKind } from "./markdownHref.js";
+import { isAllowedMarkdownHref, markdownLinkKind } from "./markdownHref.ts";
 
 describe("markdown href allowlist", () => {
   it("allows http(s), in-app title/library, and hash fragments", () => {
@@ -39,7 +39,7 @@ describe("markdown href allowlist", () => {
 
 describe("MessageText wires the allowlist and rehype-sanitize", () => {
   const src = readFileSync(
-    join(dirname(fileURLToPath(import.meta.url)), "../components/MessageText.jsx"),
+    join(dirname(fileURLToPath(import.meta.url)), "../components/MessageText.tsx"),
     "utf8",
   );
 

@@ -5,7 +5,7 @@ import {
   linkifyKnownTitles,
   titleItemFromHref,
   titleRefsFromBlocks,
-} from "./titleDigIn.js";
+} from "./titleDigIn.ts";
 
 describe("titleItemFromHref", () => {
   it("parses tmdb movie/show paths", () => {

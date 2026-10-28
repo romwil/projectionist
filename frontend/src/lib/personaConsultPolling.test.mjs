@@ -7,7 +7,7 @@ import {
   PERSONA_CONSULT_POLL_MS,
   PERSONA_CONSULT_POLL_WINDOW_MS,
   shouldSchedulePersonaConsultPoll,
-} from "./personaConsultPolling.js";
+} from "./personaConsultPolling.ts";
 
 describe("persona consult polling", () => {
   it("merges callback messages by id without duplicating existing messages", () => {

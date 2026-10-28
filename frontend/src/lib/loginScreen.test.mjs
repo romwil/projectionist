@@ -6,7 +6,7 @@ import {
   loginLede,
   plexAdvancedCopy,
   resolveAuthMethods,
-} from "./loginScreen.js";
+} from "./loginScreen.ts";
 
 describe("resolveAuthMethods", () => {
   it("puts Plex first even when local is listed first upstream", () => {

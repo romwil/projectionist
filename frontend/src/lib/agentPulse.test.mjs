@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { agentPulseTitle, projectionistBrandAriaLabel, resolveAgentPulse } from "./agentPulse.js";
+import { agentPulseTitle, projectionistBrandAriaLabel, resolveAgentPulse } from "./agentPulse.ts";
 
 test("resolveAgentPulse ignores jobs and stays idle by default", () => {
   assert.equal(resolveAgentPulse(), "idle");

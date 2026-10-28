@@ -9,7 +9,7 @@ import {
   nextActivityPanelExpanded,
   summarizeToolResult,
   truncateText,
-} from "./agentActivityLog.js";
+} from "./agentActivityLog.ts";
 
 test("truncateText shortens long strings with ellipsis", () => {
   assert.equal(truncateText("short"), "short");

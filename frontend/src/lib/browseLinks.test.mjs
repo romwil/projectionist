@@ -12,7 +12,7 @@ import {
   libraryBrowsePath,
   personPath,
   tagPath,
-} from "./browseLinks.js";
+} from "./browseLinks.ts";
 
 describe("browseLinks", () => {
   it("builds person paths from numeric ids", () => {

@@ -6,7 +6,7 @@ import {
   SEARCH_OPTIONAL_SUMMARY,
   chatHomeOptionalGroup,
   searchOptionalGroup,
-} from "./optionalPageExtras.js";
+} from "./optionalPageExtras.ts";
 import { readAllStyles } from "./readStyles.mjs";
 
 function detailsTag(source, testId) {
@@ -50,7 +50,7 @@ describe("optional page extras", () => {
 
   it("keeps chat home extras in one closed disclosure under the welcome", () => {
     const workspace = readFileSync(
-      new URL("../components/ChatWorkspace.jsx", import.meta.url),
+      new URL("../components/ChatWorkspace.tsx", import.meta.url),
       "utf8",
     );
     const welcome = workspace.indexOf("<WelcomePanel");
@@ -70,7 +70,7 @@ describe("optional page extras", () => {
 
   it("keeps search hits ahead of one closed beyond-the-library disclosure", () => {
     const page = readFileSync(
-      new URL("../pages/LibraryBrowsePage.jsx", import.meta.url),
+      new URL("../pages/LibraryBrowsePage.tsx", import.meta.url),
       "utf8",
     );
     const results = page.indexOf('testId="library-browse-results"');

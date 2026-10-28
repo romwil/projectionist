@@ -13,14 +13,14 @@ import {
   snapshotIsBusy,
   startVisibleBusyPoll,
   syncToastIsOpen,
-} from "./visibleBusyPoll.js";
+} from "./visibleBusyPoll.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const configPage = readFileSync(join(here, "../pages/ConfigPage.jsx"), "utf8");
-const libraries = readFileSync(join(here, "../pages/admin/LibrariesSection.jsx"), "utf8");
-const libraryJobs = readFileSync(join(here, "../hooks/useLibraryJobs.js"), "utf8");
-const liveAdmin = readFileSync(join(here, "../hooks/useLiveChannelsAdmin.jsx"), "utf8");
-const app = readFileSync(join(here, "../App.jsx"), "utf8");
+const configPage = readFileSync(join(here, "../pages/ConfigPage.tsx"), "utf8");
+const libraries = readFileSync(join(here, "../pages/admin/LibrariesSection.tsx"), "utf8");
+const libraryJobs = readFileSync(join(here, "../hooks/useLibraryJobs.ts"), "utf8");
+const liveAdmin = readFileSync(join(here, "../hooks/useLiveChannelsAdmin.tsx"), "utf8");
+const app = readFileSync(join(here, "../App.tsx"), "utf8");
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));

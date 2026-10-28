@@ -28,7 +28,6 @@ Developer audience. Product parks that already have a home are **pointers**, not
 | **Jittered connector GET retries** | Idempotent reads only (429/5xx). Architecture review **M3**. |
 | Bulk **IdleScheduler → `BaseAugmentationTask`** | After Phase C pilots. No second runner. Greenfield IdleScheduler / global-priority rewrite is out — miss queue in **1.37.57** is enough. |
 | **Vite 8** + **React Router 7** | Dependabot may alert; not a 1.37.x program. Today: Vite 5 + RR 6. |
-| Full **TSX rewrite** of the JSX SPA (~192 files on origin/main) | Own program, not a drive-by. |
 | **WatchHistoryTimeline** UI honesty | Do not flatten tracker sittings to “watched twice.” Surface confidence / “Why this count?” instead of a second play-count vocabulary. P0-1 shipped `play_counts` + chat prompt; this UI is leftover. |
 | Rating prompts from the **85% scan** | Still queued from near-complete scan, not completion transitions. Watch-tracker plan leftover; not this patch. |
 

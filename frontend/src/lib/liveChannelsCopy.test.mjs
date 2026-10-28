@@ -13,8 +13,8 @@ import {
   liveSetupStepNumbers,
   liveStreamHealthCopy,
   liveUserEmptyCopy,
-} from "./liveChannelsCopy.js";
-import { LIVE_SOFT_STALL_PHRASES } from "./liveStreamSoftStallCopy.js";
+} from "./liveChannelsCopy.ts";
+import { LIVE_SOFT_STALL_PHRASES } from "./liveStreamSoftStallCopy.ts";
 
 describe("liveChannelsCopy", () => {
   it("uses household warming copy without Tunarr", () => {

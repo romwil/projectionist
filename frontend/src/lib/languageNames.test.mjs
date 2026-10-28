@@ -5,7 +5,7 @@ import {
   isKnownLanguageCode,
   languageFacetKey,
   normalizeLanguageCode,
-} from "./languageNames.js";
+} from "./languageNames.ts";
 
 describe("languageNames", () => {
   it("maps common ISO codes to display names", () => {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildHouseholdHealthChips, liveReadinessChip } from "./householdHealth.js";
+import { buildHouseholdHealthChips, liveReadinessChip } from "./householdHealth.ts";
 
 describe("liveReadinessChip", () => {
   it("reports on air when ready", () => {

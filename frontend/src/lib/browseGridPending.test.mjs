@@ -14,7 +14,7 @@ test("poster results hide the stray loading line; an empty in-flight grid shows 
       contents: `
         import { createElement } from "react";
         import { renderToStaticMarkup } from "react-dom/server";
-        import BrowseResultsRegion from "./components/BrowseResultsRegion.jsx";
+        import BrowseResultsRegion from "./components/BrowseResultsRegion.tsx";
 
         export function renderSettled(loading) {
           return renderToStaticMarkup(
@@ -90,7 +90,7 @@ test("poster results hide the stray loading line; an empty in-flight grid shows 
   }
 
   const region = readFileSync(
-    new URL("../components/BrowseResultsRegion.jsx", import.meta.url),
+    new URL("../components/BrowseResultsRegion.tsx", import.meta.url),
     "utf8",
   );
   assert.match(region, /waiting = Boolean\(loading\) && !hasItems && !error/);
@@ -101,16 +101,16 @@ test("poster results hide the stray loading line; an empty in-flight grid shows 
   assert.match(styles, /html\[data-theme="lights-up"\] \.browse-grid-pending-card/);
 
   for (const file of [
-    "../pages/LibraryBrowsePage.jsx",
-    "../pages/TagPage.jsx",
-    "../pages/ExploreSectionPage.jsx",
+    "../pages/LibraryBrowsePage.tsx",
+    "../pages/TagPage.tsx",
+    "../pages/ExploreSectionPage.tsx",
   ]) {
     const source = readFileSync(new URL(file, import.meta.url), "utf8");
     assert.match(source, /<BrowseResultsRegion/);
     assert.doesNotMatch(source, /status status-secondary">Loading/);
   }
 
-  const browse = readFileSync(new URL("../pages/LibraryBrowsePage.jsx", import.meta.url), "utf8");
+  const browse = readFileSync(new URL("../pages/LibraryBrowsePage.tsx", import.meta.url), "utf8");
   assert.match(browse, /browseFacetsFollowGrid\(gridSettled\)/);
   assert.match(browse, /getLibraryAggregate\("language"/);
   assert.match(browse, /queryLibrary\(filters\)/);

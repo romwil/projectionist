@@ -19,7 +19,7 @@ import {
   silenceNativeTextTracks,
   stepSubtitleDelay,
   subtitleLookupTimeSec,
-} from "./subtitleCues.js";
+} from "./subtitleCues.ts";
 
 const VTT = `WEBVTT
 

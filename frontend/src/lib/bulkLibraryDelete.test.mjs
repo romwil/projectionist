@@ -29,7 +29,7 @@ import {
   LIBRARY_DELETE_NOTICE_KEY,
   normalizeLibraryDeleteMode,
   partitionBulkDeleteSelection,
-} from "./bulkLibraryDelete.js";
+} from "./bulkLibraryDelete.ts";
 import { readAllStyles } from "./readStyles.mjs";
 
 const styles = readAllStyles();
@@ -105,14 +105,14 @@ describe("bulkLibraryDelete typed confirm", () => {
   it("freezes selection while delete dialog is open and surfaces empty-confirm errors", () => {
     const libDir = join(dirname(fileURLToPath(import.meta.url)), "..");
     const dialog = readFileSync(
-      join(libDir, "components", "BulkLibraryDeleteDialog.jsx"),
+      join(libDir, "components", "BulkLibraryDeleteDialog.tsx"),
       "utf8",
     );
-    const dashboard = readFileSync(join(libDir, "pages", "DashboardPage.jsx"), "utf8");
-    const browse = readFileSync(join(libDir, "pages", "LibraryBrowsePage.jsx"), "utf8");
-    const explore = readFileSync(join(libDir, "pages", "ExploreSectionPage.jsx"), "utf8");
-    const languageLanding = readFileSync(join(libDir, "pages", "LanguageLandingPage.jsx"), "utf8");
-    const watchlist = readFileSync(join(libDir, "pages", "WatchlistPage.jsx"), "utf8");
+    const dashboard = readFileSync(join(libDir, "pages", "DashboardPage.tsx"), "utf8");
+    const browse = readFileSync(join(libDir, "pages", "LibraryBrowsePage.tsx"), "utf8");
+    const explore = readFileSync(join(libDir, "pages", "ExploreSectionPage.tsx"), "utf8");
+    const languageLanding = readFileSync(join(libDir, "pages", "LanguageLandingPage.tsx"), "utf8");
+    const watchlist = readFileSync(join(libDir, "pages", "WatchlistPage.tsx"), "utf8");
 
     assert.match(BULK_DELETE_EMPTY_SELECTION_MESSAGE, /No titles selected/);
     assert.match(dialog, /preview\.total > 0/);
@@ -183,10 +183,10 @@ describe("typed DELETE preference", () => {
 
   it("keeps scope choice and hides the DELETE field when confirmation is off", () => {
     const libDir = join(dirname(fileURLToPath(import.meta.url)), "..");
-    const dialog = readFileSync(join(libDir, "components", "BulkLibraryDeleteDialog.jsx"), "utf8");
-    const phrase = readFileSync(join(libDir, "components", "DeleteConfirmPhrase.jsx"), "utf8");
-    const scoped = readFileSync(join(libDir, "components", "ScopedTvRemoveDialog.jsx"), "utf8");
-    const libraries = readFileSync(join(libDir, "pages", "admin", "LibrariesSection.jsx"), "utf8");
+    const dialog = readFileSync(join(libDir, "components", "BulkLibraryDeleteDialog.tsx"), "utf8");
+    const phrase = readFileSync(join(libDir, "components", "DeleteConfirmPhrase.tsx"), "utf8");
+    const scoped = readFileSync(join(libDir, "components", "ScopedTvRemoveDialog.tsx"), "utf8");
+    const libraries = readFileSync(join(libDir, "pages", "admin", "LibrariesSection.tsx"), "utf8");
     const styles = readFileSync(join(libDir, "styles", "10-explore-delight.css"), "utf8");
 
     assert.match(dialog, /bulk-library-delete-modes/);
@@ -422,19 +422,19 @@ describe("owner title-detail delete gating", () => {
 
   it("wires title detail surfaces to BulkLibraryDeleteDialog and deleteLibraryItems", () => {
     const libDir = join(dirname(fileURLToPath(import.meta.url)), "..");
-    const page = readFileSync(join(libDir, "pages", "TitleDetailPage.jsx"), "utf8");
+    const page = readFileSync(join(libDir, "pages", "TitleDetailPage.tsx"), "utf8");
     const interactions = readFileSync(
-      join(libDir, "hooks", "useTitleDetailInteractions.js"),
+      join(libDir, "hooks", "useTitleDetailInteractions.ts"),
       "utf8",
     );
-    const content = readFileSync(join(libDir, "components", "TitleDetailContent.jsx"), "utf8");
-    const ctaBar = readFileSync(join(libDir, "components", "TitleCtaBar.jsx"), "utf8");
+    const content = readFileSync(join(libDir, "components", "TitleDetailContent.tsx"), "utf8");
+    const ctaBar = readFileSync(join(libDir, "components", "TitleCtaBar.tsx"), "utf8");
     const dialog = readFileSync(
-      join(libDir, "components", "BulkLibraryDeleteDialog.jsx"),
+      join(libDir, "components", "BulkLibraryDeleteDialog.tsx"),
       "utf8",
     );
     const removalSummary = readFileSync(
-      join(libDir, "components", "RemovalSummaryDialog.jsx"),
+      join(libDir, "components", "RemovalSummaryDialog.tsx"),
       "utf8",
     );
     assert.match(page, /BulkLibraryDeleteDialog/);
@@ -456,12 +456,12 @@ describe("owner title-detail delete gating", () => {
   it("portals delete dialog above title-detail drawer dismiss targets", () => {
     const libDir = join(dirname(fileURLToPath(import.meta.url)), "..");
     const dialog = readFileSync(
-      join(libDir, "components", "BulkLibraryDeleteDialog.jsx"),
+      join(libDir, "components", "BulkLibraryDeleteDialog.tsx"),
       "utf8",
     );
-    const drawer = readFileSync(join(libDir, "components", "TitleDetailDrawer.jsx"), "utf8");
+    const drawer = readFileSync(join(libDir, "components", "TitleDetailDrawer.tsx"), "utf8");
     const interactions = readFileSync(
-      join(libDir, "hooks", "useTitleDetailInteractions.js"),
+      join(libDir, "hooks", "useTitleDetailInteractions.ts"),
       "utf8",
     );
     const css = readFileSync(join(libDir, "styles", "10-explore-delight.css"), "utf8");

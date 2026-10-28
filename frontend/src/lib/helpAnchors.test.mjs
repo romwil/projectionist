@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSlugger, slugify, targetIdFromHash } from "./helpAnchors.js";
+import { createSlugger, slugify, targetIdFromHash } from "./helpAnchors.ts";
 
 test("slugify matches the Help anchors used across the app", () => {
   assert.equal(slugify("Start here"), "start-here");

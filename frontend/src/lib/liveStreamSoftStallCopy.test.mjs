@@ -4,7 +4,7 @@ import {
   LIVE_SOFT_STALL_PHRASES,
   pickLiveSoftStallPhrase,
   resetLiveSoftStallPhraseMemory,
-} from "./liveStreamSoftStallCopy.js";
+} from "./liveStreamSoftStallCopy.ts";
 
 describe("liveStreamSoftStallCopy", () => {
   beforeEach(() => {

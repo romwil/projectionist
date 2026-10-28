@@ -9,7 +9,7 @@ import {
   chatErrorMessage,
   isNightOwlHour,
   pickStoredThreadId,
-} from "./chatSession.js";
+} from "./chatSession.ts";
 
 test("appendPerfectPickAck appends to the first text block only", () => {
   const message = {

@@ -17,7 +17,7 @@ import {
   themeToDataAttr,
   PAUSE_WHEN_BACKGROUNDED_KEY,
   PLAY_BLACK_FRAME_KEY,
-} from "./uiPrefs.js";
+} from "./uiPrefs.ts";
 
 test("normalizeUiFontSize accepts small medium large", () => {
   assert.equal(normalizeUiFontSize("small"), "small");

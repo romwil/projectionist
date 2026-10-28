@@ -9,7 +9,7 @@ import {
   queuePadPayload,
   queuePadSlots,
   queuePadSummary,
-} from "./liveQueuePad.js";
+} from "./liveQueuePad.ts";
 
 test("slot math: 4 playing + up to 5 → 1 pad; 5 + 5 → 0; 0 + 3 → 3", () => {
   assert.equal(queuePadSlots(5, 4), 1);

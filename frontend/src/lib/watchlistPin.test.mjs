@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { allowWatchlistPin } from "./watchlistPin.js";
+import { allowWatchlistPin } from "./watchlistPin.ts";
 
 test("allowWatchlistPin rejects purge cards", () => {
   assert.equal(allowWatchlistPin({ card_kind: "purge", title: "X" }), false);

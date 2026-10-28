@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const root = dirname(fileURLToPath(import.meta.url));
 const css = readFileSync(join(root, "../styles/02-nav-chrome.css"), "utf8");
-const messageText = readFileSync(join(root, "../components/MessageText.jsx"), "utf8");
+const messageText = readFileSync(join(root, "../components/MessageText.tsx"), "utf8");
 
 function ruleBody(source, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
