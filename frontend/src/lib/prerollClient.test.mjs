@@ -153,6 +153,7 @@ describe("prerollClient", () => {
         at(nextStart - 60),
       ),
       false,
+      "flex pad in the last 180s is still a pad, not a movie-start bumper",
     );
     assert.equal(
       shouldPlayLivePreroll(

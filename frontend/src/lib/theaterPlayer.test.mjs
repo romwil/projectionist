@@ -409,6 +409,10 @@ test("Live and Weather mount TheaterPlayer; LibraryPlayer keeps session overlays
   assert.match(live, /<TheaterPlayer/);
   assert.match(live, /tuneLiveChannel/);
   assert.match(live, /flexPlaybackPlan/);
+  assert.match(live, /livePadHandoff/);
+  assert.match(live, /liveFlexHoldMs/);
+  assert.match(live, /padHandoff\.allowBumper/);
+  assert.match(live, /padHandoff\.showSlate/);
   assert.match(live, /tryPlayLiveVideo/);
   assert.match(live, /liveHlsErrorPolicy/);
   assert.match(live, /liveSubtitleLookupSec/);
