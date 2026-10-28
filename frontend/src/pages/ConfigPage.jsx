@@ -63,6 +63,7 @@ import { liveChannelsStartTimeoutAlertType } from "../lib/liveChannelsEngineFeed
 import { craftSoftCapHonestyNote } from "../lib/liveChannelsCopy.js";
 import { isLiveJobBusy } from "../lib/liveChannelsJob.js";
 import { filterLiveCollections } from "../lib/liveChannelsCraft.js";
+import { seerrSyncConfirmOptions } from "../lib/seerrHousehold.js";
 import {
   canToggleSecretVisibility,
   isSecretConfigured,
@@ -1084,8 +1085,8 @@ export default function ConfigPage() {
   }
 
   async function handleUserSyncSeerr(entry) {
-    const authToken = window.prompt(
-      `Paste a Plex auth token for ${entry.display_name || "this user"} to sync their Seerr account.`,
+    const authToken = await confirm(
+      seerrSyncConfirmOptions(entry.display_name || entry.email || entry.id),
     );
     if (!authToken || !String(authToken).trim()) return;
     try {

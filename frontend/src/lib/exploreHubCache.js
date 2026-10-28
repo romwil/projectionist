@@ -364,8 +364,19 @@ export function rememberContinueWatchingProgress(progress, storage = globalThis.
  * Partial rails (some posters already present) must keep polling — stopping
  * at the first non-empty payload is what left the slow rails blank.
  */
+export const EXPLORE_HUB_WARMING_POLL_MS = 1200;
+export const EXPLORE_HUB_WARMING_MAX_ATTEMPTS = 30;
+export const EXPLORE_HUB_WARMING_STALL_MESSAGE =
+  "Explore is still warming — some shelves may be incomplete. Refresh to try again.";
+
 export function exploreHubStillWarming(payload) {
   return Boolean(payload?.warming);
+}
+
+export function exploreHubLoadError(err, { hasCache = false } = {}) {
+  const message = String(err?.message || "").trim() || "Could not load Explore.";
+  if (!hasCache) return message;
+  return `${message} Showing shelves from the last successful load.`;
 }
 
 /** Normalize a hub rail into the shape ExplorePage rails expect. */
