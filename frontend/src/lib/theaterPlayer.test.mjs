@@ -508,7 +508,30 @@ test("native pause during remount/load/recover is not a published pause", () => 
   );
   assert.match(live, /liveUiStatusFromTheater/);
   assert.match(live, /liveShowsTapHint/);
+  assert.match(live, /commitLiveUserPlaybackStatus\(statusRef, next\)/);
   assert.doesNotMatch(live, /statusRef\.current !== "paused"/);
+});
+
+test("Live remount rebases captions on remountLiveRef and recover, not only attachKey", () => {
+  const live = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "../components/live/LivePlayer.tsx"),
+    "utf8",
+  );
+  assert.match(live, /liveCaptionElapsedSecAfterRemount/);
+  assert.match(live, /rebaseLiveCaptionsForRemount\(\{ snapshot: true \}\)/);
+  assert.match(live, /rebaseLiveCaptionsForRemount\(\{ snapshot: false \}\)/);
+  const attachApi = live.slice(
+    live.indexOf("const handleAttachApi"),
+    live.indexOf("}, [channelId, preroll, scheduleEpoch]"),
+  );
+  assert.match(attachApi, /rebaseLiveCaptionsForRemount\(\{ snapshot: true \}\)/);
+  assert.match(attachApi, /api\.remount\(\)/);
+  const recover = live.slice(
+    live.indexOf("if (policy.action === \"remount\")"),
+    live.indexOf("if (policy.action === \"fatal\")"),
+  );
+  assert.match(recover, /rebaseLiveCaptionsForRemount\(\{ snapshot: true \}\)/);
+  assert.match(recover, /recoverMediaError/);
 });
 
 test("pause-on-hide is opt-in only; default keeps playing", () => {

@@ -63,7 +63,8 @@ def get_weekly_letter(user=Depends(require_role("owner"))) -> Dict[str, Any]:
     from projectionist.notifications.weekly_letter import compose_weekly_letter
 
     db = _db()
-    return {**_state(db, _settings()), "letter": compose_weekly_letter(db)}
+    settings = _settings()
+    return {**_state(db, settings), "letter": compose_weekly_letter(db, settings=settings)}
 
 
 @router.put("/api/admin/weekly-letter")
