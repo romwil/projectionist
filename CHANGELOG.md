@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [1.37.71] — 2026-10-28
+
+One patch on 1.37.70: the house letter names disk capacity separately from movie and episode bytes, Inbox Show/Sort/Type stay on the list while you read, and Live pause chrome plus remounted captions stay with the picture.
+
+### Highlights
+- **The house letter names capacity, not library used.** “The disks hold” is the volume size. Movies and shows get their own used figures — shows count episode files, not the show-row slice.
+- **Show/Sort/Type stay on the inbox list.** Opening a letter does not hide the mailbox tools behind the reader. Each row shows when it was sent.
+- **Paused · tap to play stays until you unpause.** Recovering the stream does not snap the overlay away. Captions remount at the same place in the file.
+
+### Fixed
+- **House-letter disk copy is capacity vs library used.** `volume_capacity_bytes` is the de-duplicated media-root filesystem size. Movie used is movie `file_size`; show used is episode `file_size`, not SUM of show-row sizes. Capacity 0 omits “the disks hold” rather than substituting library used.
+- **Inbox reader chrome.** Show/Sort/Type live on the mailbox list, not the open letter. List rows include the same sent datetime as the letter header.
+- **Live user-pause wins.** `statusRef` is committed immediately on pause so Theater `onPause` cannot map playing+paused back to playing. HLS recover/Rejoin remount rebases captions to the last file position via `attachKey`.
+
+### Verification
+- Focused pytest — 26 passed (`test_weekly_letter`, `test_version`) with `--no-cov`. Capacity vs movie `file_size` vs episode `file_size`; lockstep 1.37.71; Dockerfile still copies `frontend/tsconfig.json`.
+- Focused frontend unit 107/107 (`inboxMailbox`, `liveChannels`, `subtitleCues`, `theaterPlayer`). List filters leave the open letter; row datetime matches the letter header; user pause wins over a lagged `statusRef`; HLS remount rebases caption origin to last file position.
+- Cherry-picks onto `origin/main` (`f37e248`) had no file conflicts. House-letter disk copy, Inbox list chrome, and Live pause+caption remount all landed. ConfirmModal hooks remain `useConfirmModal.tsx`. `tests/test_version.py` after `./scripts/patch-release.sh 1.37.71`.
+
 ## [1.37.70] — 2026-10-28
 
 One patch on 1.37.69: Live captions come from our VTT aligned to mid-program, Paused · tap to play is only a real pause, a playing bumper is not cut short, and full remove drops the index when the files are gone.
