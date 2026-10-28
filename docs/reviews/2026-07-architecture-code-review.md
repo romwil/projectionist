@@ -44,7 +44,7 @@ Design deltas vs original letter:
 |----|----------|--------|--------|------------------------|
 | H6 | High | M | **Done** | `.github/workflows/ci.yml` `docker-smoke` builds image + curls `/api/health` |
 | H7 | High | S | **Done** | Conditional chown in `scripts/docker-entrypoint.sh`; UID 1000 documented; no PUID/PGID |
-| H1 | High | L | Open (partial) | Finish router/tool/repo splits; carve `web/app.py` (~7244), `App.jsx` (~2025), `ConfigPage.jsx` (~3803) as of 1.35.5. Incremental carves landed (`live_channels_routes.py`, `LiveChannelsSection.jsx`, `HouseholdSection.jsx`). 1.36 Wave 0 extracts Libraries; Wave 3 finishes remaining H1. |
+| H1 | High | L | Open (partial) | Library+chat HTTP carved from `app.py` (~4.3k composition root; `library_routes.py` ~2.0k, `chat_routes.py` ~0.4k). Remaining: `App.jsx` (~1.7k), `ConfigPage.jsx` (~3.1k), `agent/tools/__init__.py` (~4.4k). |
 | H4 | High | L | **Done** (Hybrid C) | Encrypt UI secrets; env wins; migrate plaintext; `credential_marker` rename |
 | H5 | High | M | **Done** (Multi-user gates B) | Gate personal agent writes when multi-user is on |
 | H8 | High | L | Open | Embeddings as JSON TEXT; `get_embeddings()` still full-table `json.loads`. Optional sqlite-vec ANN is a prefilter only. Expand only if measured (1.36 craft rule). |
@@ -372,11 +372,13 @@ Respectfully,
 
 | Artifact | Notes |
 |----------|-------|
-| `projectionist/library/db/` | Package of mixins (`_schema.py` ~1.5k, others smaller); public `Database` re-export |
-| `projectionist/agent/tools/` | Package (`__init__.py` ~3k + `_definitions.py` ~1.3k) |
+| `projectionist/library/db/` | Package of mixins; ~12.4k LOC across the package; public `Database` re-export |
+| `projectionist/agent/tools/` | Package (`__init__.py` ~4.4k + `_definitions.py`) |
 | `frontend/src/styles/` | 11 CSS partials; `styles.css` is import-only |
-| `projectionist/web/app.py` | Still the largest single module (~5.6k LOC) |
-| `ConfigPage.jsx` / `App.jsx` | Still large (~2.5k / ~1.9k) |
+| `projectionist/web/app.py` | Composition root ~4.3k LOC after library+chat carve (was ~6.5k) |
+| `library_routes.py` / `chat_routes.py` | ~2.0k / ~0.4k; house `register_*(app, db_factory, settings_factory)` |
+| `live_channels_routes.py` / `live_channels/` | ~1.7k router; ~15.2k package |
+| `ConfigPage.jsx` / `App.jsx` | Still large (~3.1k / ~1.7k) |
 
 ## Appendix B - Related living docs
 

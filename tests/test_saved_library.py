@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from projectionist.library.db import Database
-from projectionist.web.app import _persona_voiced_library_summary
+from projectionist.web.library_routes import _persona_voiced_library_summary
 from projectionist.config_store import FeatureFlags, Settings
 from projectionist.web.library_privacy import (
     SAVED_LIBRARY_RAIL_LIMIT,
@@ -62,7 +62,7 @@ class SavedLibraryTests(unittest.TestCase):
 
     def test_summary_falls_back_when_llm_is_unavailable(self) -> None:
         content = {"blocks": [{"type": "text", "content": "Watch Stalker for its meditative science-fiction atmosphere."}]}
-        with patch("projectionist.web.app.get_chat_provider", side_effect=RuntimeError("offline")):
+        with patch("projectionist.web.library_routes.get_chat_provider", side_effect=RuntimeError("offline")):
             summary = asyncio.run(_persona_voiced_library_summary(content, persona={"name": "Jefferson"}))
         self.assertEqual(summary, "Watch Stalker for its meditative science-fiction atmosphere.")
 

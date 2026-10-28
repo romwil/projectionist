@@ -142,7 +142,7 @@ flowchart LR
     end
 
     subgraph backend [Backend - FastAPI]
-        Routes[app.py routes]
+        Routes[app.py composition + domain routers]
         Setup[setup.py wizard]
         JobMgr[jobs.py]
     end
@@ -203,6 +203,21 @@ See [WEB_UI.md](WEB_UI.md) and [DESIGN.md](DESIGN.md).
 - **Webhooks** — `POST /api/webhooks/plex` for near-completion rating prompts (optional shared secret).
 - **JobManager** — background library sync with progress polling.
 - **CuratorAgent** — accepts `lens_id`; builds persona-aware system prompt; tool list respects feature flags.
+- **Route composition** — `app.py` is the composition root (lifespan, middleware, leftover domains). Library HTTP lives in `library_routes.py` (`register_library_routes(app, db_factory, settings_factory, …)`); chat HTTP lives in `chat_routes.py`. Same house factory pattern as playback / holidays / webhooks — route modules do not `import projectionist.web.app`.
+
+Approximate letter sizes (origin/main after the library+chat carve):
+
+| Artifact | ~LOC |
+|----------|------|
+| `projectionist/web/app.py` | 4.3k (was ~6.5k / ~191 `@app` routes before this carve) |
+| `projectionist/web/library_routes.py` | 2.0k (54 library/saved-library/search routes) |
+| `projectionist/web/chat_routes.py` | 0.4k (11 chat routes) |
+| `projectionist/web/live_channels_routes.py` | 1.7k |
+| `projectionist/live_channels/` | 15.2k |
+| `projectionist/library/db/` | 12.4k |
+| `projectionist/agent/tools/__init__.py` | 4.4k |
+| `frontend/src/pages/ConfigPage.jsx` | 3.1k |
+| `frontend/src/App.jsx` | 1.7k |
 
 ### Library and RAG
 

@@ -186,7 +186,7 @@ class LlmUsageApiTests(unittest.TestCase):
 
 class LibrarySummaryCoalesceTests(unittest.IsolatedAsyncioTestCase):
     async def test_short_deterministic_summary_skips_llm(self) -> None:
-        import projectionist.web.app as app_mod
+        import projectionist.web.library_routes as library_routes
 
         content = {
             "blocks": [
@@ -196,12 +196,12 @@ class LibrarySummaryCoalesceTests(unittest.IsolatedAsyncioTestCase):
         # Patch chat provider — must not be called for short sources.
         provider = MagicMock()
         provider.chat = AsyncMock(side_effect=AssertionError("LLM should be skipped"))
-        original = app_mod.get_chat_provider
-        app_mod.get_chat_provider = lambda _settings: provider  # type: ignore[assignment]
+        original = library_routes.get_chat_provider
+        library_routes.get_chat_provider = lambda _settings: provider  # type: ignore[assignment]
         try:
-            summary = await app_mod._persona_voiced_library_summary(content, persona={"name": "Test"})
+            summary = await library_routes._persona_voiced_library_summary(content, persona={"name": "Test"})
         finally:
-            app_mod.get_chat_provider = original  # type: ignore[assignment]
+            library_routes.get_chat_provider = original  # type: ignore[assignment]
         self.assertIn("cozy comedies", summary)
         provider.chat.assert_not_called()
 

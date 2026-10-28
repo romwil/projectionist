@@ -185,7 +185,7 @@ class ChatRateLimitIntegrationTests(unittest.TestCase):
         self._tmpdir.cleanup()
 
     def test_chat_rate_limit_blocks_excess_requests(self) -> None:
-        with patch("projectionist.web.app.CuratorAgent") as agent_cls:
+        with patch("projectionist.web.chat_routes.CuratorAgent") as agent_cls:
             agent = AsyncMock()
             agent.run = AsyncMock(return_value={"reply": "ok", "blocks": []})
             agent_cls.return_value = agent
@@ -208,7 +208,7 @@ class ChatRateLimitIntegrationTests(unittest.TestCase):
             self.assertEqual(resp.status_code, 429)
 
     def test_chat_within_limit_succeeds(self) -> None:
-        with patch("projectionist.web.app.CuratorAgent") as agent_cls:
+        with patch("projectionist.web.chat_routes.CuratorAgent") as agent_cls:
             agent = AsyncMock()
             agent.run = AsyncMock(return_value={"reply": "ok", "blocks": []})
             agent_cls.return_value = agent
@@ -220,7 +220,7 @@ class ChatRateLimitIntegrationTests(unittest.TestCase):
             self.assertIn(resp.status_code, (200, 400))
 
     def test_rate_limit_returns_retry_after_header(self) -> None:
-        with patch("projectionist.web.app.CuratorAgent") as agent_cls:
+        with patch("projectionist.web.chat_routes.CuratorAgent") as agent_cls:
             agent = AsyncMock()
             agent.run = AsyncMock(return_value={"reply": "ok", "blocks": []})
             agent_cls.return_value = agent

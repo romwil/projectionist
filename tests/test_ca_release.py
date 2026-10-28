@@ -259,7 +259,10 @@ class LibraryApiContractTests(CaApiFixture):
             with patch.object(
                 db, "all_library_items", side_effect=AssertionError("must not load every row")
             ):
-                with patch.object(self.app_mod, "compute_knowledge_coverage", return_value={}):
+                with patch(
+                    "projectionist.web.library_routes.get_cached_knowledge_coverage",
+                    return_value={},
+                ):
                     resp = self.client.get("/api/library/stats")
         self.assertEqual(resp.status_code, 200)
         body = resp.json()

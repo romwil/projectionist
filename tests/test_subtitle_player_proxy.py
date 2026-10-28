@@ -142,7 +142,7 @@ class FileRouteTests(unittest.TestCase):
     """Call the route function directly (no DATA_DIR / auth middleware needed)."""
 
     def _call(self, stream_id: str, *, fetch):
-        from projectionist.web import app as app_mod
+        from projectionist.web import library_routes as library_mod
 
         client = PlexClient("http://plex.test:32400", "SECRET-TOKEN")
         listed = {
@@ -152,12 +152,12 @@ class FileRouteTests(unittest.TestCase):
                 decorate_subtitle_row("123", PGS.to_dict()),
             ],
         }
-        with patch.object(app_mod, "_settings", return_value=_Settings()), patch(
+        with patch.object(library_mod, "_settings", return_value=_Settings()), patch(
             "projectionist.library.subtitles.list_item_subtitles", return_value=listed
         ), patch("projectionist.library.subtitles.plex_client_from_settings", return_value=client), patch.object(
             client, "fetch_subtitle_bytes", **fetch
         ):
-            return app_mod.library_item_subtitle_file_endpoint("123", stream_id, user=None)
+            return library_mod.library_item_subtitle_file_endpoint("123", stream_id, user=None)
 
     def test_route_serves_vtt_without_token(self) -> None:
         resp = self._call("9001", fetch={"return_value": b"1\n00:00:01,000 --> 00:00:02,000\nHi\n"})

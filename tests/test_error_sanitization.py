@@ -101,7 +101,7 @@ class ErrorSanitizationTests(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_chat_500_does_not_leak_traceback(self) -> None:
-        with patch("projectionist.web.app.CuratorAgent") as agent_cls:
+        with patch("projectionist.web.chat_routes.CuratorAgent") as agent_cls:
             agent = AsyncMock()
             agent.run = AsyncMock(
                 side_effect=RuntimeError(
@@ -120,7 +120,7 @@ class ErrorSanitizationTests(unittest.TestCase):
     def test_chat_502_llm_error_does_not_leak_api_key(self) -> None:
         from projectionist.agent.providers import LLMProviderError
 
-        with patch("projectionist.web.app.CuratorAgent") as agent_cls:
+        with patch("projectionist.web.chat_routes.CuratorAgent") as agent_cls:
             agent = AsyncMock()
             agent.run = AsyncMock(
                 side_effect=LLMProviderError(
