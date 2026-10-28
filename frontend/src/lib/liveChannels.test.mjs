@@ -41,6 +41,7 @@ import {
   summarizeLiveVideoBuffer,
   liveShowsTapHint,
   liveUiStatusFromTheater,
+  commitLiveUserPlaybackStatus,
   toggleLiveVideoPlayback,
   tryPlayLiveVideo,
 } from "./liveChannels.ts";
@@ -381,6 +382,32 @@ describe("liveChannels helpers", () => {
 
     // Stale Rejoin ready must not overlay a playing stream.
     assert.equal(liveUiStatusFromTheater("playing", "ready"), "playing");
+  });
+
+  it("user pause wins over a later Theater paused while statusRef was still playing", () => {
+    // Theater remount/load pause is not Live user-pause chrome.
+    assert.equal(liveUiStatusFromTheater("playing", "paused"), "playing");
+    assert.equal(liveShowsTapHint(liveUiStatusFromTheater("playing", "paused")), false);
+
+    // The race: togglePlayback setStatus("paused") after await without writing
+    // statusRef. Native onPause then maps playing+paused → playing and hides
+    // “Paused · tap to play” while the video is paused.
+    const stale = { current: "playing" };
+    const snapped = liveUiStatusFromTheater(stale.current, "paused");
+    assert.equal(snapped, "playing");
+    assert.equal(liveShowsTapHint(snapped), false);
+
+    const statusRef = { current: "playing" };
+    assert.equal(commitLiveUserPlaybackStatus(statusRef, "paused"), "paused");
+    assert.equal(statusRef.current, "paused");
+    const mapped = liveUiStatusFromTheater(statusRef.current, "paused");
+    assert.equal(mapped, "paused");
+    assert.equal(liveShowsTapHint(mapped), true);
+
+    // Resume still lets Theater false-pause stay off the overlay.
+    assert.equal(commitLiveUserPlaybackStatus(statusRef, "playing"), "playing");
+    assert.equal(liveUiStatusFromTheater(statusRef.current, "paused"), "playing");
+    assert.equal(liveShowsTapHint(liveUiStatusFromTheater(statusRef.current, "paused")), false);
   });
 
   it("formats clocks and OSD progress", () => {

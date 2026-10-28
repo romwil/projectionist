@@ -18,12 +18,18 @@ from projectionist.library.health import STALE_ADD_DAYS
 from projectionist.notifications.weekly_letter import (
     compose_weekly_letter,
     deliver_weekly_letter,
+    disk_sentence,
     format_bytes,
     format_hours,
+    gather_house_stats,
     load_letter_settings,
     save_letter_settings,
+    volume_capacity_bytes,
     week_bucket,
 )
+
+TB = 1024**4
+GB = 1024**3
 
 
 def _db(tmp: str) -> Database:
@@ -83,14 +89,126 @@ class HouseLetterTests(unittest.TestCase):
         self.assertIn("12 hours", body)
         self.assertIn("Lawrence of Arabia", body)
         self.assertIn("I will not send a fleet", body)
-        self.assertIn("disks hold", body.lower())
+        self.assertIn("movies take", body.lower())
+        self.assertNotIn("disks hold", body.lower())
 
     def test_format_hours_and_bytes(self) -> None:
         self.assertEqual(format_hours(0), "no timed hours")
         self.assertEqual(format_hours(30 * 60 * 1000), "less than an hour")
         self.assertEqual(format_hours(12 * 3_600_000), "12 hours")
         self.assertEqual(format_bytes(0), "an unknown amount of disk")
-        self.assertEqual(format_bytes(40 * 1024**3), "40 GB")
+        self.assertEqual(format_bytes(40 * GB), "40 GB")
+        self.assertEqual(format_bytes(38 * TB), "38 TB")
+        self.assertEqual(format_bytes(int(37.6 * TB)), "37.6 TB")
+
+    def test_disk_sentence_keeps_capacity_apart_from_library_used(self) -> None:
+        text = disk_sentence(
+            {
+                "capacity_bytes": 38 * TB,
+                "movie_bytes": 12 * TB,
+                "show_bytes": 2 * TB,
+            }
+        )
+        self.assertEqual(
+            text,
+            "The disks hold 38 TB. Movies take 12 TB; shows take 2 TB.",
+        )
+        self.assertNotIn("Movies take 38 TB", text)
+
+    def test_disk_sentence_omits_capacity_when_unknown(self) -> None:
+        text = disk_sentence(
+            {
+                "capacity_bytes": 0,
+                "movie_bytes": 12 * TB,
+                "show_bytes": 2 * TB,
+            }
+        )
+        self.assertEqual(text, "Movies take 12 TB; shows take 2 TB.")
+        self.assertNotIn("disks hold", text.lower())
+
+    def test_disk_sentence_omits_empty_used_clauses(self) -> None:
+        movies_only = disk_sentence(
+            {"capacity_bytes": 38 * TB, "movie_bytes": 12 * TB, "show_bytes": 0}
+        )
+        self.assertEqual(movies_only, "The disks hold 38 TB. Movies take 12 TB.")
+        self.assertNotIn("shows take", movies_only.lower())
+        self.assertNotIn("unknown", movies_only.lower())
+        shows_only = disk_sentence(
+            {"capacity_bytes": 0, "movie_bytes": 0, "show_bytes": 60 * GB}
+        )
+        self.assertEqual(shows_only, "Shows take 60 GB.")
+
+    def test_letter_does_not_reuse_capacity_as_movies_take(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = _db(tmp)
+            db.upsert_library_item(
+                {
+                    "rating_key": "rk-movies",
+                    "media_type": "movie",
+                    "title": "Heat",
+                    "year": 1995,
+                    "file_size": 12 * TB,
+                    "view_count": 1,
+                }
+            )
+            show_id = db.upsert_library_item(
+                {
+                    "rating_key": "rk-show",
+                    "media_type": "show",
+                    "title": "The Wire",
+                    "year": 2002,
+                    "file_size": 60 * GB,
+                    "view_count": 1,
+                }
+            )
+            db.upsert_library_episodes(
+                [
+                    {
+                        "show_item_id": show_id,
+                        "rating_key": "ep-1",
+                        "season_number": 1,
+                        "episode_number": 1,
+                        "title": "The Target",
+                        "view_count": 1,
+                        "file_size": TB,
+                    },
+                    {
+                        "show_item_id": show_id,
+                        "rating_key": "ep-2",
+                        "season_number": 1,
+                        "episode_number": 2,
+                        "title": "The Detail",
+                        "view_count": 1,
+                        "file_size": TB,
+                    },
+                ],
+            )
+            stats = gather_house_stats(db, capacity_bytes=38 * TB)
+            letter = compose_weekly_letter(db, capacity_bytes=38 * TB)
+
+        self.assertEqual(stats["capacity_bytes"], 38 * TB)
+        self.assertEqual(stats["movie_bytes"], 12 * TB)
+        self.assertEqual(stats["show_bytes"], 2 * TB)
+        self.assertNotEqual(stats["movie_bytes"], stats["capacity_bytes"])
+        body = letter["body"]
+        self.assertIn("The disks hold 38 TB.", body)
+        self.assertIn("Movies take 12 TB; shows take 2 TB.", body)
+        self.assertNotIn("Movies take 38 TB", body)
+        self.assertNotIn("shows take 60 GB", body.lower())
+
+    def test_volume_capacity_dedupes_same_device(self) -> None:
+        import shutil
+
+        self.assertEqual(volume_capacity_bytes(None), 0)
+        with tempfile.TemporaryDirectory() as tmp:
+            movies = Path(tmp) / "movies"
+            tv = Path(tmp) / "tv"
+            movies.mkdir()
+            tv.mkdir()
+            settings = Settings(movies_root=str(movies), tv_root=str(tv))
+            cap = volume_capacity_bytes(settings)
+            self.assertEqual(cap, shutil.disk_usage(tmp).total)
+            self.assertGreater(cap, 0)
 
     def test_closing_paragraph_names_no_removed_features(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
