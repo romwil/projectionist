@@ -11,6 +11,7 @@ import {
   classifyLiveStreamHealth,
   formatClock,
   isHlsBufferStallDetail,
+  liveHlsErrorPolicy,
   isLivePlayerChromeTarget,
   LIVE_CC_EMPTY_AIRING,
   LIVE_CC_EMPTY_STREAM,
@@ -169,6 +170,37 @@ describe("liveChannels helpers", () => {
     assert.ok(isHlsBufferStallDetail("bufferStalledError"));
     assert.ok(isHlsBufferStallDetail("bufferNudgeOnStall"));
     assert.equal(isHlsBufferStallDetail("fragLoadError"), false);
+  });
+
+  it("recovers live HLS errors without retuning", () => {
+    assert.equal(liveHlsErrorPolicy(null).action, "ignore");
+    assert.equal(
+      liveHlsErrorPolicy({ fatal: false, details: "bufferStalledError" }).action,
+      "stall-nudge",
+    );
+    assert.equal(liveHlsErrorPolicy({ fatal: false, details: "fragParsingError" }).action, "ignore");
+
+    const first = liveHlsErrorPolicy({ fatal: true, type: "networkError" }, { networkRetries: 0 });
+    assert.equal(first.action, "startLoad");
+    assert.equal(first.networkRetries, 1);
+    assert.equal(first.keepPlaying, true);
+
+    const third = liveHlsErrorPolicy({ fatal: true, type: "networkError" }, { networkRetries: 2 });
+    assert.equal(third.action, "startLoad");
+    assert.equal(third.networkRetries, 3);
+
+    const remount = liveHlsErrorPolicy({ fatal: true, type: "networkError" }, { networkRetries: 3 });
+    assert.equal(remount.action, "remount");
+    assert.equal(remount.networkRetries, 4);
+    assert.equal(remount.remountDelayMs, 1500 * 4);
+
+    const media = liveHlsErrorPolicy({ fatal: true, type: "mediaError" }, { networkRetries: 1 });
+    assert.equal(media.action, "recoverMedia");
+    assert.equal(media.networkRetries, 1);
+
+    const fatal = liveHlsErrorPolicy({ fatal: true, type: "networkError" }, { networkRetries: 5 });
+    assert.equal(fatal.action, "fatal");
+    assert.equal(fatal.error, true);
   });
 
   it("holds soft-stall UI briefly after recovery to avoid clear→flash loops", () => {

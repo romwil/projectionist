@@ -1125,6 +1125,16 @@
   color: var(--wx-ink);
   padding: 1.25rem 1.25rem 1.5rem;
 }
+.theater-player.weather-channel {
+  display: block;
+  align-items: stretch;
+  justify-content: flex-start;
+  background: #100e0c;
+}
+.theater-player.weather-channel .theater-player-video,
+.theater-player.weather-channel .live-osd.theater-osd {
+  display: none;
+}
 .weather-channel-sky {
   position: absolute;
   inset: 0;

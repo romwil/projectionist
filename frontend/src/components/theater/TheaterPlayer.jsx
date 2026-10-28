@@ -31,8 +31,8 @@ import { playShrunkAfterReload } from "../../lib/inAppPip.js";
 
 /**
  * Shared theater shell: auth’d HLS video, idle OSD, fullscreen, stall copy.
- * LivePlayer stays the live specialization (tune, Ch±, guide %). LibraryPlayer
- * adds VOD skip / scrub / resume on top of this shell.
+ * LivePlayer mounts this for tune / Ch± / guide %. LibraryPlayer adds VOD
+ * skip / scrub / resume. Weather uses the same stage with no media src.
  */
 export default function TheaterPlayer({
   src = "",
@@ -40,6 +40,7 @@ export default function TheaterPlayer({
   className = "",
   testId = "theater-player",
   videoTestId = "theater-player-video",
+  osdTestId,
   autoFullscreen = false,
   loading = false,
   loadingCopy = "warming the reel",
@@ -64,11 +65,13 @@ export default function TheaterPlayer({
   onEnded,
   onPlaying,
   onWaiting,
+  onStalled,
   onStageActivate,
   onStageDoubleActivate,
   onKeyDown,
   onVideoRef,
   onHlsRef,
+  onRootRef,
   onOsdVisibility,
   pausedFrameClean = false,
   /** After a shrunk-play reload, start muted if unmuted autoplay is blocked. */
@@ -80,6 +83,25 @@ export default function TheaterPlayer({
   blackFrame = false,
   /** Library Play only: delayed buffering OSD. Live has its own chips. */
   bufferingEnabled = false,
+  /**
+   * Live bumper/filler files use progressive (mp4) attach. Default HLS.
+   * Empty `src` skips attach (preroll, resume gate, weather boards).
+   */
+  mediaMode = "hls",
+  /** Bump to remount HLS against the same URL without re-tuning. */
+  attachKey = 0,
+  /** Live: tryPlayLiveVideo so Safari/iPad can unmute-fallback. */
+  playMedia,
+  /**
+   * Live HLS recovery. Return true to skip the shell’s default fatal handler.
+   * `ctx.remount()` re-attaches the current src without a new tune.
+   */
+  onHlsError,
+  onManifestParsed,
+  onSubtitleTracks,
+  onAttachApi,
+  /** Extra data-* on the stage root (channel, stream-health, weather sky). */
+  dataAttrs = null,
   children,
 }) {
   const rootRef = useRef(null);
@@ -94,6 +116,7 @@ export default function TheaterPlayer({
   const onStatusRef = useRef(onStatus);
   const onHlsRefRef = useRef(onHlsRef);
   const onVideoRefRef = useRef(onVideoRef);
+  const onRootRefRef = useRef(onRootRef);
   const onBumpOsdRef = useRef(onBumpOsd);
   const onOsdVisibilityRef = useRef(onOsdVisibility);
   const onPictureReadyRef = useRef(onPictureReady);
@@ -102,6 +125,11 @@ export default function TheaterPlayer({
   const onAutoplayResultRef = useRef(onAutoplayResult);
   const holdToDoubleSpeedRef = useRef(holdToDoubleSpeed);
   const bufferingEnabledRef = useRef(bufferingEnabled);
+  const playMediaRef = useRef(playMedia);
+  const onHlsErrorRef = useRef(onHlsError);
+  const onManifestParsedRef = useRef(onManifestParsed);
+  const onSubtitleTracksRef = useRef(onSubtitleTracks);
+  const onAttachApiRef = useRef(onAttachApi);
   const bottomTapRef = useRef(null);
   const holdRef = useRef({ active: false, downAt: 0 });
   const waitingSinceRef = useRef(null);
@@ -113,6 +141,7 @@ export default function TheaterPlayer({
     onStatusRef.current = onStatus;
     onHlsRefRef.current = onHlsRef;
     onVideoRefRef.current = onVideoRef;
+    onRootRefRef.current = onRootRef;
     onBumpOsdRef.current = onBumpOsd;
     onOsdVisibilityRef.current = onOsdVisibility;
     onPictureReadyRef.current = onPictureReady;
@@ -121,6 +150,11 @@ export default function TheaterPlayer({
     onAutoplayResultRef.current = onAutoplayResult;
     holdToDoubleSpeedRef.current = holdToDoubleSpeed;
     bufferingEnabledRef.current = bufferingEnabled;
+    playMediaRef.current = playMedia;
+    onHlsErrorRef.current = onHlsError;
+    onManifestParsedRef.current = onManifestParsed;
+    onSubtitleTracksRef.current = onSubtitleTracks;
+    onAttachApiRef.current = onAttachApi;
   });
   const [internalOsd, setInternalOsd] = useState(true);
   const osdVisible = osdVisibleProp ?? internalOsd;
@@ -232,6 +266,11 @@ export default function TheaterPlayer({
     return () => onVideoRefRef.current?.(null);
   }, []);
 
+  useEffect(() => {
+    onRootRefRef.current?.(rootRef.current);
+    return () => onRootRefRef.current?.(null);
+  }, []);
+
   useLayoutEffect(() => {
     const video = videoRef.current;
     if (video?.dataset?.shrunkHoldMute === "1") video.muted = true;
@@ -262,6 +301,14 @@ export default function TheaterPlayer({
         });
         return;
       }
+      const customPlay = playMediaRef.current;
+      if (customPlay) {
+        customPlay(video).then((next) => {
+          if (destroyed) return;
+          onStatusRef.current?.(next === "playing" ? "playing" : next || "paused");
+        });
+        return;
+      }
       video.play?.().then(() => onStatusRef.current?.("playing")).catch(() => onStatusRef.current?.("paused"));
     };
 
@@ -287,11 +334,18 @@ export default function TheaterPlayer({
         if (destroyed) return;
         muteNativeSubs();
         onStatusRef.current?.("ready");
+        onManifestParsedRef.current?.(hls);
         startAutoplay();
       });
-      hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, muteNativeSubs);
+      hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, () => {
+        muteNativeSubs();
+        onSubtitleTracksRef.current?.(hls);
+      });
       hls.on(Hls.Events.ERROR, (_event, data) => {
-        if (destroyed || !data?.fatal) return;
+        if (destroyed || !data) return;
+        const handled = onHlsErrorRef.current?.(data, { hls, remount: attachHls, video });
+        if (handled) return;
+        if (!data.fatal) return;
         if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
           hls.startLoad();
           return;
@@ -309,9 +363,34 @@ export default function TheaterPlayer({
       });
     };
 
+    const attachProgressive = () => {
+      if (destroyed || !video) return;
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+        onHlsRefRef.current?.(null);
+      }
+      const onReady = () => {
+        if (destroyed) return;
+        muteNativeSubs();
+        onStatusRef.current?.("ready");
+        startAutoplay();
+      };
+      video.addEventListener("loadedmetadata", onReady, { once: true });
+      video.src = src;
+    };
+
+    const remount = () => {
+      if (destroyed) return;
+      if (mediaMode === "progressive") attachProgressive();
+      else attachHls();
+    };
+
     video.textTracks?.addEventListener?.("addtrack", muteNativeSubs);
 
-    if (Hls.isSupported()) {
+    if (mediaMode === "progressive") {
+      attachProgressive();
+    } else if (Hls.isSupported()) {
       attachHls();
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = src;
@@ -326,12 +405,15 @@ export default function TheaterPlayer({
       onStatusRef.current?.("error");
     }
 
+    onAttachApiRef.current?.({ remount });
+
     if (autoFullscreen && rootRef.current) {
       toggleTheaterFullscreen(rootRef.current, { video });
     }
 
     return () => {
       destroyed = true;
+      onAttachApiRef.current?.(null);
       video.textTracks?.removeEventListener?.("addtrack", muteNativeSubs);
       if (hlsRef.current) {
         hlsRef.current.destroy();
@@ -341,7 +423,7 @@ export default function TheaterPlayer({
       video.removeAttribute("src");
       video.load();
     };
-  }, [src, autoFullscreen]);
+  }, [src, autoFullscreen, attachKey, mediaMode]);
 
   function toggleFullscreen() {
     toggleTheaterFullscreen(rootRef.current, { video: videoRef.current });
@@ -465,6 +547,13 @@ export default function TheaterPlayer({
   }
 
   const frame = playStageChrome(blackFrame);
+  const extraData = {};
+  if (dataAttrs && typeof dataAttrs === "object") {
+    for (const [key, value] of Object.entries(dataAttrs)) {
+      extraData[key.startsWith("data-") ? key : `data-${key}`] = value;
+    }
+  }
+  const showVideo = Boolean(src) || pictureHold;
 
   return (
     <div
@@ -474,7 +563,9 @@ export default function TheaterPlayer({
       data-osd={osdVisible ? "visible" : "hidden"}
       data-picture-hold={pictureHold ? "true" : "false"}
       data-play-frame={frame.dataPlayFrame}
+      data-media={src ? mediaMode : "none"}
       tabIndex={0}
+      {...extraData}
       onMouseMove={handlePointerMove}
       onFocus={bumpOsd}
       onPointerDown={(event) => {
@@ -524,6 +615,7 @@ export default function TheaterPlayer({
         autoPlay
         muted={false}
         controls={false}
+        hidden={!showVideo}
         data-testid={videoTestId}
         data-picture-hold={pictureHold ? "true" : "false"}
         onTimeUpdate={(event) => onTimeUpdate?.(event.currentTarget)}
@@ -543,7 +635,10 @@ export default function TheaterPlayer({
           noteWaiting();
           onWaiting?.();
         }}
-        onStalled={() => noteWaiting()}
+        onStalled={() => {
+          noteWaiting();
+          onStalled?.();
+        }}
         onRateChange={syncHoldChip}
       />
 
@@ -594,7 +689,7 @@ export default function TheaterPlayer({
 
       <div
         className={`live-osd theater-osd${osdVisible ? " is-visible" : ""}`}
-        data-testid={`${testId}-osd`}
+        data-testid={osdTestId || `${testId}-osd`}
         aria-hidden={!osdVisible}
         data-theater-chrome="true"
       >
