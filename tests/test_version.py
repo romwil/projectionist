@@ -158,5 +158,13 @@ class VersionTests(unittest.TestCase):
                 )
 
 
+class DockerfileFrontendTests(unittest.TestCase):
+    def test_frontend_stage_copies_tsconfig_for_tsc_build(self) -> None:
+        dockerfile = (_REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
+        self.assertIn("frontend/tsconfig.json", dockerfile)
+        pkg = json.loads((_REPO_ROOT / "frontend/package.json").read_text(encoding="utf-8"))
+        self.assertIn("tsc --noEmit", pkg.get("scripts", {}).get("build", ""))
+
+
 if __name__ == "__main__":
     unittest.main()
