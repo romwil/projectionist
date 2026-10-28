@@ -8,7 +8,7 @@
     "strict": true,
     "noImplicitAny": true,
     "noEmit": true,
-    "allowJs": true,
+    "allowJs": false,
     "isolatedModules": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
