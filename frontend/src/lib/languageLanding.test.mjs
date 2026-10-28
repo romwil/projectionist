@@ -99,10 +99,10 @@ test("toolbar updates keep the relative language param", () => {
 });
 
 test("language landing renders shared browse controls instead of the Explore hub", () => {
-  const landing = readFileSync(join(srcDir, "pages", "LanguageLandingPage.jsx"), "utf8");
-  const explore = readFileSync(join(srcDir, "pages", "ExplorePage.jsx"), "utf8");
-  const detail = readFileSync(join(srcDir, "components", "TitleDetailContent.jsx"), "utf8");
-  const controls = readFileSync(join(srcDir, "components", "MediaBrowseControls.jsx"), "utf8");
+  const landing = readFileSync(join(srcDir, "pages", "LanguageLandingPage.tsx"), "utf8");
+  const explore = readFileSync(join(srcDir, "pages", "ExplorePage.tsx"), "utf8");
+  const detail = readFileSync(join(srcDir, "components", "TitleDetailContent.tsx"), "utf8");
+  const controls = readFileSync(join(srcDir, "components", "MediaBrowseControls.tsx"), "utf8");
 
   assert.match(landing, /MediaBrowseControls/);
   assert.match(landing, /MediaBrowsePagination/);

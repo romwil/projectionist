@@ -33,7 +33,7 @@ test("named member headline and home chip", () => {
 });
 
 test("chat home opens the dedicated whisper route", () => {
-  const workspaceJsx = readFileSync(new URL("../components/ChatWorkspace.jsx", import.meta.url), "utf8");
+  const workspaceJsx = readFileSync(new URL("../components/ChatWorkspace.tsx", import.meta.url), "utf8");
   const routesJsx = readFileSync(new URL("../AppRoutes.jsx", import.meta.url), "utf8");
   assert.match(workspaceJsx, /WhisperInboxLink/);
   assert.match(workspaceJsx, /<WhisperInboxLink/);

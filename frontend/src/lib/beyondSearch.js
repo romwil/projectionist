@@ -26,6 +26,7 @@ export const BEYOND_STATUS = {
 /**
  * The affordance only makes sense with an active search query, and is hidden
  * once external search is known to be unavailable (TMDB not configured).
+ * @param {{ q?: string, unavailable?: boolean }} [opts]
  */
 export function shouldShowBeyondAffordance({ q, unavailable = false } = {}) {
   if (unavailable) return false;

@@ -589,6 +589,7 @@ export async function getSystemConfig() {
   return api("/system-config");
 }
 
+/** @param {{ limit?: number, level?: string, logger?: string, q?: string }} [opts] */
 export async function getAdminLogs({ limit = 300, level, logger, q } = {}) {
   const params = new URLSearchParams();
   if (limit != null) params.set("limit", String(limit));
@@ -899,6 +900,7 @@ export async function deleteTasteCluster(clusterTag) {
   return api(`/taste/${encodeURIComponent(clusterTag)}`, { method: "DELETE" });
 }
 
+/** @param {{ likes?: any[], dislikes?: any[] }} [opts] */
 export async function submitTasteQuiz({ likes = [], dislikes = [] } = {}) {
   return api("/taste/quiz", {
     method: "POST",
@@ -1622,6 +1624,7 @@ export async function queryLibrary(filters = {}) {
  * `error.status === 503` when external search is unavailable (e.g. TMDB not
  * configured) so callers can grey the affordance with a helpful note.
  */
+/** @param {{ q?: string, mediaType?: string, limit?: number }} [opts] */
 export async function searchExternal({ q, mediaType = "movie", limit = 20 } = {}) {
   const params = new URLSearchParams();
   params.set("q", String(q || "").trim());
@@ -2173,6 +2176,7 @@ export async function getScheduledTaskRate(name, { lookback_hours = 72 } = {}) {
   return api(`/admin/scheduled-tasks/${encodeURIComponent(name)}/rate?${search}`);
 }
 
+/** @param {{ days?: number, model?: string, purpose?: string, persona_id?: string }} [opts] */
 export async function getLlmUsage({ days = 7, model, purpose, persona_id } = {}) {
   const search = new URLSearchParams({ days: String(days || 7) });
   if (model) search.set("model", model);

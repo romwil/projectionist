@@ -6,7 +6,7 @@ import { BulkActionProgressProvider } from "./components/BulkActionProgress";
 import { TitleDetailOverlayProvider } from "./components/TitleDetailOverlayProvider";
 import WhatsNewGate from "./components/WhatsNewGate";
 import LiveStickyOsd from "./components/LiveStickyOsd";
-import InAppPlaybackHost from "./components/theater/InAppPlaybackHost.jsx";
+import InAppPlaybackHost from "./components/theater/InAppPlaybackHost";
 import "./styles.css";
 
 createRoot(document.getElementById("root")).render(

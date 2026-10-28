@@ -15,7 +15,7 @@ describe("llm usage UI smoke", () => {
   });
 
   it("ships LlmUsagePage with filters and chart panels", () => {
-    const src = readFileSync(join(__dirname, "../pages/LlmUsagePage.jsx"), "utf8");
+    const src = readFileSync(join(__dirname, "../pages/LlmUsagePage.tsx"), "utf8");
     assert.match(src, /data-testid="llm-usage-page"/);
     assert.match(src, /data-testid="llm-usage-filters"/);
     assert.match(src, /getLlmUsage/);
@@ -26,7 +26,7 @@ describe("llm usage UI smoke", () => {
   it("wires model catalog API into ConfigPage cheaper-tier picks", () => {
     const src = [
       readFileSync(join(__dirname, "../pages/ConfigPage.jsx"), "utf8"),
-      readFileSync(join(__dirname, "../pages/admin/ConnectionsSection.jsx"), "utf8"),
+      readFileSync(join(__dirname, "../pages/admin/ConnectionsSection.tsx"), "utf8"),
     ].join("\n");
     assert.match(src, /getLlmModelCatalog/);
     assert.match(src, /llm-cheaper-picks/);

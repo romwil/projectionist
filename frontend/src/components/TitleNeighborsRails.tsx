@@ -1,0 +1,281 @@
+import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import { getTitleRelations } from "../api/client";
+import {
+  hasSpecificStoryLink,
+  relationWhyCopy,
+  relatedTitlesPath,
+  surprisingPlotNeighbors,
+} from "../lib/relationUx.js";
+import { titleDetailPath } from "../lib/titleLinks.js";
+import PosterOverlayControls from "./PosterOverlayControls";
+import TitleDetailLink from "./TitleDetailLink";
+import TitleYearText from "./TitleYearText";
+
+/** Props for TitleNeighborCard. `any` = API/handler bags until Wave 4 client generics. */
+type TitleNeighborCardProps = {
+  item?: any;
+  testId?: string;
+  why?: any;
+};
+
+function TitleNeighborCard({ item, testId, why = null }: TitleNeighborCardProps) {
+  const libraryItem = { ...item, in_library: true };
+  const path = titleDetailPath(libraryItem);
+  const poster = libraryItem.poster_url ? (
+    <img src={libraryItem.poster_url} alt="" loading="lazy" />
+  ) : (
+    <div className="poster-fallback">{libraryItem.title?.slice(0, 1) || "?"}</div>
+  );
+
+  return (
+    <article className="title-neighbor-card" data-testid={testId}>
+      <div className="title-neighbor-poster">
+        {path ? (
+          <TitleDetailLink item={libraryItem} className="title-neighbor-poster-link">
+            {poster}
+          </TitleDetailLink>
+        ) : (
+          poster
+        )}
+        <PosterOverlayControls item={libraryItem} testPrefix="title-neighbor" />
+      </div>
+      <h3>
+        {path ? (
+          <TitleDetailLink item={libraryItem}>
+            <TitleYearText item={libraryItem} />
+          </TitleDetailLink>
+        ) : (
+          <TitleYearText item={libraryItem} />
+        )}
+      </h3>
+      {why?.label ? (
+        <p className="title-neighbor-why" data-testid={`${testId}-why`}>
+          {why.label}
+          {why.detail ? <span className="title-neighbor-why-detail"> · {why.detail}</span> : null}
+        </p>
+      ) : null}
+    </article>
+  );
+}
+
+/**
+ * Collection / crew / More-like-this poster rails.
+ * Used on the full title page and the phone title sheet.
+ */
+/** Props for TitleNeighborsRails. `any` = API/handler bags until Wave 4 client generics. */
+type TitleNeighborsRailsProps = {
+  mediaType?: any;
+  itemId?: string;
+  idType?: any;
+  detail?: any;
+  showConnectionsEntry?: boolean;
+  compact?: boolean;
+};
+
+export default function TitleNeighborsRails({
+  mediaType,
+  itemId,
+  idType = "tmdb",
+  detail,
+  showConnectionsEntry = false,
+  compact = false,
+}: TitleNeighborsRailsProps) {
+  const [relations, setRelations] = useState<any | null>(null);
+  const [neighborMode, setNeighborMode] = useState("similar");
+  const carouselRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!mediaType || !itemId) {
+      setRelations([]);
+      return undefined;
+    }
+    let cancelled = false;
+    getTitleRelations(mediaType, itemId, { idType, limit: 50 })
+      .then((data) => {
+        if (!cancelled) setRelations(Array.isArray(data?.items) ? data.items : []);
+      })
+      .catch(() => {
+        if (!cancelled) setRelations([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mediaType, itemId, idType]);
+
+  const collectionEdges = (relations || []).filter((edge: any) => edge.relation === "collection");
+  const crewEdges = (relations || []).filter((edge: any) =>
+    ["shared_crew", "directed_by", "written_by"].includes(edge.relation),
+  );
+  const plotEdges = (relations || []).filter(
+    (edge: any) => edge.relation === "neighbor" && hasSpecificStoryLink(edge.why),
+  );
+  const neighbors =
+    neighborMode === "surprising" ? surprisingPlotNeighbors(plotEdges) : plotEdges;
+  const showNeighbors = plotEdges.length > 0;
+  const relatedPath = relatedTitlesPath(detail);
+
+  function scrollCarousel(dir: any) {
+    const node = carouselRef.current;
+    if (!node) return;
+    node.scrollBy({ left: dir * 320, behavior: "smooth" });
+  }
+
+  if (relations === null) {
+    return compact ? (
+      <p className="title-neighbors-intro" data-testid="title-neighbors-loading">
+        Loading more like this…
+      </p>
+    ) : null;
+  }
+
+  return (
+    <>
+      {showConnectionsEntry ? (
+        <section className="title-relations-entry" data-testid="title-relations-entry">
+          <div>
+            <h2>Title connections</h2>
+            <p>Follow this title through collections, shared filmmakers, and plot kinship.</p>
+          </div>
+          <Link to={relatedPath} className="title-cta title-cta-ghost title-relations-cta">
+            Related titles
+            <span className="material-symbols-outlined" aria-hidden="true">
+              arrow_forward
+            </span>
+          </Link>
+        </section>
+      ) : null}
+
+      {showConnectionsEntry && !relations.length ? (
+        <p className="title-relations-cold-note status status-secondary">
+          Connections are still warming up for this title. The background library refresh may
+          add them later.
+        </p>
+      ) : null}
+
+      {collectionEdges.length ? (
+        <section className="title-neighbors title-collection-rail" data-testid="title-collection-rail">
+          <div className="title-neighbors-header">
+            <h2>
+              More in{" "}
+              {detail?.collection_name ||
+                collectionEdges[0]?.why?.collection_name ||
+                "this collection"}
+            </h2>
+          </div>
+          <div className="title-neighbors-track">
+            {collectionEdges.map((edge: any) => (
+              <TitleNeighborCard
+                key={`${edge.relation}-${edge.to_id}`}
+                item={edge.peer}
+                testId="title-collection-peer"
+                why={relationWhyCopy(edge.why)}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {crewEdges.length ? (
+        <section className="title-neighbors title-crew-rail" data-testid="title-crew-rail">
+          <div className="title-neighbors-header">
+            <h2>Shared cast &amp; crew</h2>
+          </div>
+          <div className="title-neighbors-track">
+            {crewEdges.map((edge: any) => (
+              <TitleNeighborCard
+                key={`${edge.relation}-${edge.to_id}`}
+                item={edge.peer}
+                testId="title-crew-peer"
+                why={relationWhyCopy(edge.why)}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {showNeighbors ? (
+        <section
+          className={`title-neighbors${neighborMode === "surprising" ? " title-neighbors--surprising" : ""}`}
+          data-testid="title-neighbors"
+        >
+          <div className="title-neighbors-header">
+            <h2>
+              {compact
+                ? "More like this"
+                : neighborMode === "surprising"
+                  ? "Surprisingly similar"
+                  : "Similar plot"}
+            </h2>
+            <div className="title-neighbors-controls">
+              <div className="title-neighbors-modes" role="group" aria-label="Neighbor ranking">
+                <button
+                  type="button"
+                  className={`ghost title-neighbors-mode${neighborMode === "similar" ? " is-active" : ""}`}
+                  data-testid="title-neighbors-similar"
+                  aria-pressed={neighborMode === "similar"}
+                  onClick={() => setNeighborMode("similar")}
+                >
+                  Similar
+                </button>
+                <button
+                  type="button"
+                  className={`ghost title-neighbors-mode${neighborMode === "surprising" ? " is-active" : ""}`}
+                  data-testid="title-neighbors-surprising"
+                  aria-pressed={neighborMode === "surprising"}
+                  onClick={() => setNeighborMode("surprising")}
+                >
+                  Surprising
+                </button>
+              </div>
+              <button
+                type="button"
+                className="ghost title-neighbors-nav"
+                aria-label="Scroll left"
+                onClick={() => scrollCarousel(-1)}
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">
+                  chevron_left
+                </span>
+              </button>
+              <button
+                type="button"
+                className="ghost title-neighbors-nav"
+                aria-label="Scroll right"
+                onClick={() => scrollCarousel(1)}
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">
+                  chevron_right
+                </span>
+              </button>
+            </div>
+          </div>
+          {neighborMode === "surprising" ? (
+            <p className="title-neighbors-intro" data-testid="title-neighbors-surprise-intro">
+              A story connection the shelf would not suggest. A title is included only when we can say what the plots share.
+            </p>
+          ) : null}
+          {neighborMode === "surprising" && !neighbors.length ? (
+            <p className="title-neighbors-intro">
+              No surprising connection is ready yet. Similar plot matches are still available.
+            </p>
+          ) : null}
+          <div className="title-neighbors-track" ref={carouselRef}>
+            {neighbors.map((edge: any) => (
+              <TitleNeighborCard
+                key={`${edge.relation}-${edge.to_id}`}
+                item={edge.peer}
+                testId="title-neighbor-card"
+                why={relationWhyCopy(edge.why)}
+              />
+            ))}
+          </div>
+        </section>
+      ) : compact ? (
+        <p className="title-neighbors-intro" data-testid="title-neighbors-empty">
+          No close story matches in your library for this title.
+        </p>
+      ) : null}
+    </>
+  );
+}

@@ -15,10 +15,10 @@ const srcRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const styles = readAllStyles();
 
 const CARD_SURFACES = [
-  "components/LibraryMediaCard.jsx",
-  "components/TitleNeighborsRails.jsx",
-  "components/TitleCard.jsx",
-  "pages/RelatedTitlesPage.jsx",
+  "components/LibraryMediaCard.tsx",
+  "components/TitleNeighborsRails.tsx",
+  "components/TitleCard.tsx",
+  "pages/RelatedTitlesPage.tsx",
   "lib/liveProgramDetail.js",
 ];
 

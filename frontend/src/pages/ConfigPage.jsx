@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useConfirmModal } from "../hooks/useConfirmModal.jsx";
+import { useConfirmModal } from "../hooks/useConfirmModal";
 import { Link, Navigate, useNavigate, useOutletContext, useParams } from "react-router-dom";
 import {
   AUTO_CERTIFY_SERVICES,

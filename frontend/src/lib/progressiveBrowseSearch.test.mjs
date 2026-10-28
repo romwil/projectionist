@@ -40,7 +40,7 @@ describe("progressiveBrowseSearch", () => {
 
   it("wires progressive as-you-type search onto LibraryBrowsePage via existing q", () => {
     const page = readFileSync(
-      join(dirname(fileURLToPath(import.meta.url)), "..", "pages", "LibraryBrowsePage.jsx"),
+      join(dirname(fileURLToPath(import.meta.url)), "..", "pages", "LibraryBrowsePage.tsx"),
       "utf8",
     );
     assert.match(page, /LibrarySearchBar/);

@@ -13,7 +13,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 describe("Newsletters Year in Review visibility", () => {
   it("always mounts YearInReviewAdminPanel (not gated on mailConfigured)", () => {
-    const page = readFileSync(join(root, "pages", "NewslettersPage.jsx"), "utf8");
+    const page = readFileSync(join(root, "pages", "NewslettersPage.tsx"), "utf8");
 
     assert.match(page, /import YearInReviewAdminPanel from/);
     assert.match(page, /data-testid="admin-newsletters"/);
@@ -38,7 +38,7 @@ describe("Newsletters Year in Review visibility", () => {
 
   it("panel always emits YIR section markers regardless of mailConfigured prop", () => {
     const panel = readFileSync(
-      join(root, "components", "admin", "YearInReviewAdminPanel.jsx"),
+      join(root, "components", "admin", "YearInReviewAdminPanel.tsx"),
       "utf8",
     );
 

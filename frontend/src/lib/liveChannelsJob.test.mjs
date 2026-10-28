@@ -16,7 +16,7 @@ import { readAllStyles } from "./readStyles.mjs";
 const styles = readAllStyles();
 const adminDir = join(dirname(fileURLToPath(import.meta.url)), "../pages/admin");
 // The owner studio + the behind-the-scenes panels together are "the Live section".
-const liveSection = ["LiveChannelsStudio.jsx", "LiveChannelsAdvanced.jsx"]
+const liveSection = ["LiveChannelsStudio.tsx", "LiveChannelsAdvanced.tsx"]
   .map((file) => readFileSync(join(adminDir, file), "utf8"))
   .join("\n");
 

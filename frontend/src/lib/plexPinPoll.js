@@ -27,6 +27,7 @@ export function plexPinPollSucceeded(result, { peek = false } = {}) {
  * Poll until Plex links the PIN or the deadline passes.
  * The first check runs immediately. Success calls `onSuccess` once and stops.
  *
+ * @param {{ poll?: Function, onSuccess?: Function, onTimeout?: Function, onError?: Function, deadline?: number, peek?: boolean, intervalMs?: number, now?: Function, schedule?: Function, clear?: Function }} [opts]
  * @returns {() => void} stop
  */
 export function startPlexPinPoll({

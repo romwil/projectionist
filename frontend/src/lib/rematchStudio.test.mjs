@@ -17,9 +17,9 @@ import {
 } from "./rematchStudio.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const libraries = readFileSync(join(here, "../pages/admin/LibrariesSection.jsx"), "utf8");
-const rematch = readFileSync(join(here, "../pages/admin/RematchStudio.jsx"), "utf8");
-const repair = readFileSync(join(here, "../pages/admin/RepairMiss.jsx"), "utf8");
+const libraries = readFileSync(join(here, "../pages/admin/LibrariesSection.tsx"), "utf8");
+const rematch = readFileSync(join(here, "../pages/admin/RematchStudio.tsx"), "utf8");
+const repair = readFileSync(join(here, "../pages/admin/RepairMiss.tsx"), "utf8");
 
 describe("rematch studio copy", () => {
   it("labels Presence/Savages vs same-title conflicts", () => {

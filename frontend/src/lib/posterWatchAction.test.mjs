@@ -116,7 +116,7 @@ describe("watchedStatePatch", () => {
 
 describe("poster menu style contract", () => {
   it("gives every poster menu action one class and one type style", () => {
-    const menu = readFileSync(join(root, "components/PosterActionMenu.jsx"), "utf8");
+    const menu = readFileSync(join(root, "components/PosterActionMenu.tsx"), "utf8");
     const css = readFileSync(join(root, "styles/03-browse-controls.css"), "utf8");
     const popover = menu.slice(menu.indexOf('className="poster-action-popover"'), menu.indexOf("document.body"));
     assert.ok(popover.includes("poster-action-popover"));

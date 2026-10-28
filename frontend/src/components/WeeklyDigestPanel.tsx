@@ -1,0 +1,166 @@
+import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { cancelWeeklyDigest, generateWeeklyDigest, getWeeklyDigest, getWeeklyDigestStatus } from "../api/client";
+import AdminExecutionCard from "./AdminExecutionCard";
+import TitleDetailLink from "./TitleDetailLink";
+import { titleDetailPath } from "../lib/titleLinks.js";
+import { formatDigestTitle, normalizeWeeklyDigest } from "../lib/weeklyDigest.js";
+
+/** Owner "This week in your library" in-app digest (no email required). */
+export default function WeeklyDigestPanel() {
+  const [latest, setLatest] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [digestJob, setDigestJob] = useState<any | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await getWeeklyDigest();
+      setLatest(data?.latest || null);
+      setError("");
+    } catch (err: any) {
+      setError((err as { message?: string }).message || "Could not load the weekly digest.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function poll() {
+      try {
+        const snap = await getWeeklyDigestStatus();
+        if (cancelled) return;
+        setDigestJob(snap);
+        setBusy(Boolean(snap?.busy));
+        if (!snap?.busy && snap?.result?.latest) {
+          setLatest(snap.result.latest);
+        }
+      } catch {
+        /* keep last snapshot */
+      }
+    }
+    poll();
+    const interval = setInterval(poll, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
+  async function handleGenerate() {
+    setBusy(true);
+    setError("");
+    try {
+      const snap = await generateWeeklyDigest();
+      setDigestJob(snap);
+    } catch (err: any) {
+      setError((err as { message?: string }).message || "Could not generate the digest.");
+      setBusy(false);
+    }
+  }
+
+  const model = normalizeWeeklyDigest(latest);
+  const generatedLabel = model?.generatedAt
+    ? new Date(model.generatedAt * 1000).toLocaleString()
+    : null;
+
+  return (
+    <section className="weekly-digest" data-testid="weekly-digest">
+      <div className="weekly-digest-head">
+        <div>
+          <h3 className="dash-panel-title">This week in your library</h3>
+          {generatedLabel ? (
+            <p className="weekly-digest-meta">Snapshot from {generatedLabel}</p>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          className="ghost"
+          data-testid="weekly-digest-generate"
+          disabled={busy || Boolean(digestJob?.busy)}
+          onClick={handleGenerate}
+        >
+          {digestJob?.busy ? "Generating…" : "Generate now"}
+        </button>
+      </div>
+      <AdminExecutionCard
+        job={digestJob}
+        testId="weekly-digest-progress"
+        phaseLabels={{ generating: "Assembling digest", done: "Digest ready" }}
+        onCancel={async () => {
+          try {
+            setDigestJob(await cancelWeeklyDigest());
+          } catch (err: any) {
+            setError((err as { message?: string }).message || "Could not cancel.");
+          }
+        }}
+      />
+
+      {error ? <p className="dash-panel-error">{error}</p> : null}
+
+      {loading ? (
+        <p className="status status-secondary">Loading digest…</p>
+      ) : !model ? (
+        <p className="dash-empty" data-testid="weekly-digest-empty">
+          No digest yet. It builds automatically each week, or generate one now.
+        </p>
+      ) : (
+        <>
+          <div className="weekly-digest-stats">
+            {model.stats.map((stat) => (
+              <Link
+                key={stat.id}
+                to={stat.to}
+                className="weekly-digest-stat"
+                data-testid={`weekly-digest-stat-${stat.id}`}
+              >
+                <span className="weekly-digest-stat-value">{stat.value}</span>
+                <span className="weekly-digest-stat-label">{stat.label}</span>
+              </Link>
+            ))}
+          </div>
+          {model.newTitles.length ? (
+            <>
+              <p className="weekly-digest-meta">New additions</p>
+              <ul className="weekly-digest-titles">
+                {model.newTitles.map((item, index) => {
+                  const label = formatDigestTitle(item);
+                  const digIn = titleDetailPath(item);
+                  return (
+                    <li
+                      key={`${item.title}-${(item as any).tmdb_id || (item as any).rating_key || index}`}
+                      className="weekly-digest-title-chip"
+                    >
+                      {digIn ? (
+                        <TitleDetailLink item={item} className="weekly-digest-title-link">
+                          {(item as any).poster_url ? (
+                            <img
+                              className="weekly-digest-title-poster"
+                              src={(item as any).poster_url}
+                              alt=""
+                              loading="lazy"
+                            />
+                          ) : null}
+                          <span>{label}</span>
+                        </TitleDetailLink>
+                      ) : (
+                        label
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          ) : null}
+        </>
+      )}
+    </section>
+  );
+}

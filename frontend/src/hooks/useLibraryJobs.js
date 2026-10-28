@@ -7,6 +7,7 @@ import {
 } from "../lib/configLibraryJobs.js";
 import { jobIsActive, startVisibleBusyPoll } from "../lib/visibleBusyPoll.js";
 
+/** @param {{ enabled?: boolean, setLibraryStats?: Function, setLibraryHealth?: Function, setActionFeedback?: Function }} [opts] */
 export default function useLibraryJobs({
   enabled = true,
   setLibraryStats,

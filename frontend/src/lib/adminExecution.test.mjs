@@ -16,7 +16,7 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const configPage = readFileSync(join(here, "../pages/ConfigPage.jsx"), "utf8");
-const libraries = readFileSync(join(here, "../pages/admin/LibrariesSection.jsx"), "utf8");
+const libraries = readFileSync(join(here, "../pages/admin/LibrariesSection.tsx"), "utf8");
 const client = readFileSync(join(here, "../api/client.js"), "utf8");
 const help = readFileSync(join(here, "../../../docs/HELP.md"), "utf8");
 

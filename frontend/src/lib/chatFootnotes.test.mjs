@@ -13,7 +13,7 @@ test("chat markdown stylesheet styles footnote refs and section", () => {
 });
 
 test("MessageText wires footnote-friendly markdown components", () => {
-  const src = readFileSync(join(root, "src/components/MessageText.jsx"), "utf8");
+  const src = readFileSync(join(root, "src/components/MessageText.tsx"), "utf8");
   assert.match(src, /markdown-footnotes/);
   assert.match(src, /markdown-footnote-ref/);
   assert.match(src, /remarkGfm/);
@@ -44,7 +44,7 @@ test("footnoteIdFromHref reads GFM footnote anchors", async () => {
 });
 
 test("MessageText opens a footnote sheet instead of a raw dump", () => {
-  const src = readFileSync(join(root, "src/components/MessageText.jsx"), "utf8");
+  const src = readFileSync(join(root, "src/components/MessageText.tsx"), "utf8");
   assert.match(src, /parseMarkdownFootnotes/);
   assert.match(src, /data-testid="chat-footnote-sheet"/);
   assert.match(src, /role="dialog"/);
@@ -69,7 +69,7 @@ test("walk footnote ids get a walk sheet label", async () => {
 });
 
 test("MessageText labels walk footnote sheets", () => {
-  const src = readFileSync(join(root, "src/components/MessageText.jsx"), "utf8");
+  const src = readFileSync(join(root, "src/components/MessageText.tsx"), "utf8");
   assert.match(src, /footnoteSheetLabel/);
   assert.match(src, /data-walk-kind/);
 });

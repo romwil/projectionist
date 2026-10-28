@@ -1,3 +1,4 @@
+/** @param {{ total?: number, asynchronous?: boolean }} [opts] */
 export function shouldShowBulkActionProgress({ total, asynchronous = false } = {}) {
   return Number(total) > 1 || Boolean(asynchronous);
 }

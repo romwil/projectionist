@@ -14,16 +14,16 @@ import {
 } from "./mediaBrowse.js";
 import { browseLanguageOptions } from "./languageNames.js";
 
-const page = readFileSync(new URL("../pages/LibraryBrowsePage.jsx", import.meta.url), "utf8");
+const page = readFileSync(new URL("../pages/LibraryBrowsePage.tsx", import.meta.url), "utf8");
 const controls = readFileSync(
-  new URL("../components/MediaBrowseControls.jsx", import.meta.url),
+  new URL("../components/MediaBrowseControls.tsx", import.meta.url),
   "utf8",
 );
 const recentlyAdded = readFileSync(
-  new URL("../pages/ExploreSectionPage.jsx", import.meta.url),
+  new URL("../pages/ExploreSectionPage.tsx", import.meta.url),
   "utf8",
 );
-const tags = readFileSync(new URL("../pages/TagPage.jsx", import.meta.url), "utf8");
+const tags = readFileSync(new URL("../pages/TagPage.tsx", import.meta.url), "utf8");
 
 function toolbarBlock(source, testId) {
   const start = source.indexOf(`data-testid="${testId}"`);

@@ -39,7 +39,7 @@ describe("markdown href allowlist", () => {
 
 describe("MessageText wires the allowlist and rehype-sanitize", () => {
   const src = readFileSync(
-    join(dirname(fileURLToPath(import.meta.url)), "../components/MessageText.jsx"),
+    join(dirname(fileURLToPath(import.meta.url)), "../components/MessageText.tsx"),
     "utf8",
   );
 
