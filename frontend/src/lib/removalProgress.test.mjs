@@ -94,7 +94,7 @@ describe("multi-title removal progress", () => {
         contents: `
           import { createElement } from "react";
           import { renderToStaticMarkup } from "react-dom/server";
-          import RemovalSummaryDialog from "./components/RemovalSummaryDialog.jsx";
+          import RemovalSummaryDialog from "./components/RemovalSummaryDialog.tsx";
           export function renderRemoval(result) {
             return renderToStaticMarkup(
               createElement(RemovalSummaryDialog, { open: true, result }),

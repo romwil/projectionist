@@ -34,6 +34,7 @@ export function harvestResultListItems(heading = "", items = []) {
   return source.filter((item) => item && item.in_library !== true);
 }
 
+/** @param {{ heading?: string, items?: any[] }} [opts] */
 export function buildAgentRailPrompt({ heading = "", items = [] } = {}) {
   const rows = stableResultItems(items).map((item) => {
     const title = cleanText(item.title, 160);

@@ -51,6 +51,7 @@ export function canProposeMediaActions(role, options = {}) {
 /**
  * Capability for Add / Request CTAs given role + requestPathFromFeatures.
  * Members on the Seerr path may request.
+ * @param {{ role?: string, requestPath?: string, multiUserEnabled?: boolean }} [opts]
  */
 export function resolveAddCapability({
   role,
@@ -115,6 +116,9 @@ export function alreadyInArrMessage(response, { label, service }) {
   return response?.message || `"${label}" is already in ${service}.`;
 }
 
+/** @param {any[]} [items]
+ * @param {{ requestPath?: string, role?: string, multiUserEnabled?: boolean }} [opts]
+ */
 export function groupAddableItems(
   items = [],
   { requestPath = "arr", role, multiUserEnabled = true } = {},

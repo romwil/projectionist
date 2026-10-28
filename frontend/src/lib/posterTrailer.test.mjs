@@ -52,7 +52,7 @@ describe("poster trailer lookup", () => {
   });
 
   it("poster control uses the shared menu-action-flash toast in both themes", () => {
-    const overlay = readFileSync(join(root, "components/PosterOverlayControls.jsx"), "utf8");
+    const overlay = readFileSync(join(root, "components/PosterOverlayControls.tsx"), "utf8");
     const css = readFileSync(join(root, "styles/07-persona-editorial.css"), "utf8");
     const tokens = readFileSync(join(root, "styles/01-tokens.css"), "utf8");
     assert.match(overlay, /trailerLookupOutcome/);

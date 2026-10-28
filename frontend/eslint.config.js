@@ -19,11 +19,6 @@ export default [
       "coverage/**",
       "node_modules/**",
       "public/**",
-      // These two files use a trailing comma inside a parenthesized expression
-      // (`(cond ? a : b,)`) that esbuild tolerates but spec-compliant parsers
-      // reject. Excluded until the source is corrected in a follow-up.
-      "src/pages/WatchlistPage.jsx",
-      "src/pages/ExploreSectionPage.jsx",
     ],
   },
   js.configs.recommended,
@@ -99,6 +94,8 @@ export default [
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       // Match the JSX baseline: unused stays warn, not error.
       "no-unused-vars": "off",
+      // Type-only `React.ReactNode` / namespace refs; tsc already checks undef.
+      "no-undef": "off",
       "@typescript-eslint/no-unused-vars": "warn",
       "no-empty": "warn",
       "react/no-unescaped-entities": "warn",

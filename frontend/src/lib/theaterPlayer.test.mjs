@@ -398,11 +398,11 @@ test("library buffering chip waits for holdMs then hides when playing with a fra
 
 test("Live and Weather mount TheaterPlayer; LibraryPlayer keeps session overlays", () => {
   const root = dirname(fileURLToPath(import.meta.url));
-  const live = readFileSync(join(root, "../components/live/LivePlayer.jsx"), "utf8");
-  const weather = readFileSync(join(root, "../components/live/WeatherChannelPlayer.jsx"), "utf8");
-  const library = readFileSync(join(root, "../components/theater/LibraryPlayer.jsx"), "utf8");
-  const theater = readFileSync(join(root, "../components/theater/TheaterPlayer.jsx"), "utf8");
-  assert.match(live, /import TheaterPlayer from "\.\.\/theater\/TheaterPlayer\.jsx"/);
+  const live = readFileSync(join(root, "../components/live/LivePlayer.tsx"), "utf8");
+  const weather = readFileSync(join(root, "../components/live/WeatherChannelPlayer.tsx"), "utf8");
+  const library = readFileSync(join(root, "../components/theater/LibraryPlayer.tsx"), "utf8");
+  const theater = readFileSync(join(root, "../components/theater/TheaterPlayer.tsx"), "utf8");
+  assert.match(live, /import TheaterPlayer from "\.\.\/theater\/TheaterPlayer"/);
   assert.match(live, /<TheaterPlayer/);
   assert.match(live, /tuneLiveChannel/);
   assert.match(live, /flexPlaybackPlan/);
@@ -410,7 +410,7 @@ test("Live and Weather mount TheaterPlayer; LibraryPlayer keeps session overlays
   assert.match(live, /liveHlsErrorPolicy/);
   assert.doesNotMatch(live, /new Hls\(/);
   assert.doesNotMatch(live, /holdToDoubleSpeed/);
-  assert.match(weather, /import TheaterPlayer from "\.\.\/theater\/TheaterPlayer\.jsx"/);
+  assert.match(weather, /import TheaterPlayer from "\.\.\/theater\/TheaterPlayer"/);
   assert.match(weather, /<TheaterPlayer/);
   assert.match(library, /<TheaterPlayer/);
   assert.match(library, /library-resume-gate/);
@@ -424,9 +424,9 @@ test("Live and Weather mount TheaterPlayer; LibraryPlayer keeps session overlays
 
 test("library Play wires hold-to-2x and buffering; Live TV does not", () => {
   const root = dirname(fileURLToPath(import.meta.url));
-  const library = readFileSync(join(root, "../components/theater/LibraryPlayer.jsx"), "utf8");
-  const theater = readFileSync(join(root, "../components/theater/TheaterPlayer.jsx"), "utf8");
-  const live = readFileSync(join(root, "../components/live/LivePlayer.jsx"), "utf8");
+  const library = readFileSync(join(root, "../components/theater/LibraryPlayer.tsx"), "utf8");
+  const theater = readFileSync(join(root, "../components/theater/TheaterPlayer.tsx"), "utf8");
+  const live = readFileSync(join(root, "../components/live/LivePlayer.tsx"), "utf8");
   const css = readFileSync(join(root, "../styles/13-watch.css"), "utf8");
   assert.match(library, /holdToDoubleSpeed/);
   assert.match(library, /bufferingEnabled=\{!error/);
@@ -651,11 +651,11 @@ test("More black-frame toggle switches stage chrome class and background", () =>
 test("Play wires iOS fullscreen, black frame, and title-clock captions", () => {
   const root = dirname(fileURLToPath(import.meta.url));
   const player = [
-    readFileSync(join(root, "../components/theater/LibraryPlayer.jsx"), "utf8"),
-    readFileSync(join(root, "../components/theater/LibraryPlayerOsd.jsx"), "utf8"),
+    readFileSync(join(root, "../components/theater/LibraryPlayer.tsx"), "utf8"),
+    readFileSync(join(root, "../components/theater/LibraryPlayerOsd.tsx"), "utf8"),
   ].join("\n");
-  const stage = readFileSync(join(root, "../components/theater/TheaterPlayer.jsx"), "utf8");
-  const picker = readFileSync(join(root, "../components/theater/SubtitlePicker.jsx"), "utf8");
+  const stage = readFileSync(join(root, "../components/theater/TheaterPlayer.tsx"), "utf8");
+  const picker = readFileSync(join(root, "../components/theater/SubtitlePicker.tsx"), "utf8");
   const cues = readFileSync(join(root, "./subtitleCues.js"), "utf8");
   const css = readFileSync(join(root, "../styles/13-watch.css"), "utf8");
   const liveCss = readFileSync(join(root, "../styles/12-live.css"), "utf8");
@@ -835,8 +835,8 @@ test("seek playhead follows a 0-based transcoder timeline and copyts", () => {
 
 test("Play seek holds the picture instead of the static tuning overlay", () => {
   const root = dirname(fileURLToPath(import.meta.url));
-  const player = readFileSync(join(root, "../components/theater/LibraryPlayer.jsx"), "utf8");
-  const stage = readFileSync(join(root, "../components/theater/TheaterPlayer.jsx"), "utf8");
+  const player = readFileSync(join(root, "../components/theater/LibraryPlayer.tsx"), "utf8");
+  const stage = readFileSync(join(root, "../components/theater/TheaterPlayer.tsx"), "utf8");
   const css = readFileSync(join(root, "../styles/13-watch.css"), "utf8");
   assert.match(player, /playbackSrcForSeek\(session\.stream_url, seekEpoch\)/);
   assert.match(player, /pictureHold=\{pictureHold\}/);

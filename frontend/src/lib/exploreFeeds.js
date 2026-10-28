@@ -262,7 +262,10 @@ export function normalizePlotMatchMode(raw) {
   return DEFAULT_PLOT_MATCH_MODE;
 }
 
-/** Build library query params for motif-filtered poster walls. */
+/** Build library query params for motif-filtered poster walls.
+ * @param {any[]} [motifs]
+ * @param {{ limit?: number, offset?: number, mediaType?: string | null, plotMatchMode?: string, themes?: any[] }} [opts]
+ */
 export function buildMotifQueryParams(
   motifs,
   {

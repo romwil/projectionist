@@ -73,9 +73,9 @@ test("shouldOpenTitleOverlayClick allows plain left clicks only", () => {
 });
 
 test("Open full page sits on the sheet header and closes the overlay on same-tab navigate", () => {
-  const content = readFileSync(join(componentsDir, "TitleDetailContent.jsx"), "utf8");
-  const drawer = readFileSync(join(componentsDir, "TitleDetailDrawer.jsx"), "utf8");
-  const neighbors = readFileSync(join(componentsDir, "TitleNeighborsRails.jsx"), "utf8");
+  const content = readFileSync(join(componentsDir, "TitleDetailContent.tsx"), "utf8");
+  const drawer = readFileSync(join(componentsDir, "TitleDetailDrawer.tsx"), "utf8");
+  const neighbors = readFileSync(join(componentsDir, "TitleNeighborsRails.tsx"), "utf8");
   const headerEnd = drawer.indexOf('className="title-detail-drawer-body"');
   const openIdx = drawer.indexOf("title-detail-open-full");
   assert.ok(openIdx > 0 && headerEnd > openIdx);

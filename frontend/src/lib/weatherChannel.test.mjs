@@ -86,7 +86,7 @@ describe("weatherChannel boards", () => {
 
   it("unset music is forecast with no soundtrack, not a fake bed", () => {
     const player = readFileSync(
-      join(dirname(fileURLToPath(import.meta.url)), "../components/live/WeatherChannelPlayer.jsx"),
+      join(dirname(fileURLToPath(import.meta.url)), "../components/live/WeatherChannelPlayer.tsx"),
       "utf8",
     );
     assert.match(player, /no soundtrack|muzak_note/i);
@@ -96,10 +96,10 @@ describe("weatherChannel boards", () => {
 
   it("mounts the weather boards through TheaterPlayer", () => {
     const player = readFileSync(
-      join(dirname(fileURLToPath(import.meta.url)), "../components/live/WeatherChannelPlayer.jsx"),
+      join(dirname(fileURLToPath(import.meta.url)), "../components/live/WeatherChannelPlayer.tsx"),
       "utf8",
     );
-    assert.match(player, /import TheaterPlayer from "\.\.\/theater\/TheaterPlayer\.jsx"/);
+    assert.match(player, /import TheaterPlayer from "\.\.\/theater\/TheaterPlayer"/);
     assert.match(player, /<TheaterPlayer/);
     assert.match(player, /data-testid="weather-channel-muzak"/);
     assert.doesNotMatch(player, /new Hls\(/);

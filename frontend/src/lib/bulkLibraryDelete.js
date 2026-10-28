@@ -67,6 +67,9 @@ export function canBulkDeleteLibraryItem(item) {
  * Owner-only delete affordance for a single title (detail page CTA).
  * Single-user mode is treated as owner.
  */
+/** @param {any} item
+ * @param {{ role?: string, multiUserEnabled?: boolean }} [opts]
+ */
 export function canOwnerDeleteLibraryTitle(item, { role, multiUserEnabled = true } = {}) {
   const normalized = normalizeUserRole(role, { multiUserEnabled });
   if (normalized !== "owner") return false;
@@ -214,6 +217,9 @@ export function hasRemovalSummary(result) {
   );
 }
 
+/** @param {any} result
+ * @param {{ titles?: string[] }} [opts]
+ */
 export function formatBulkLibraryDeleteResultMessage(result, { titles = [] } = {}) {
   const mode = normalizeLibraryDeleteMode(result?.mode);
   const deleted = Number(result?.deleted) || 0;

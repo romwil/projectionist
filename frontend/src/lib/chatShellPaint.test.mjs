@@ -12,7 +12,7 @@ function source(rel) {
 
 describe("chat and live first paint", () => {
   it("does not replace chat with a full-page loader while auth or features hang", () => {
-    const chat = source("components/ChatWorkspace.jsx");
+    const chat = source("components/ChatWorkspace.tsx");
     assert.match(chat, /data-testid="chat-workspace"/);
     assert.match(chat, /data-testid="workspace-main"/);
     assert.match(chat, /className="composer composer-raised"/);
@@ -22,10 +22,10 @@ describe("chat and live first paint", () => {
   });
 
   it("paints the same Live peer from the install stamp before auth settles", () => {
-    const gate = source("components/UserMenu.jsx");
-    const settings = source("layouts/SettingsLayout.jsx");
-    const admin = source("layouts/AdminLayout.jsx");
-    const shell = source("layouts/AppShell.jsx");
+    const gate = source("components/UserMenu.tsx");
+    const settings = source("layouts/SettingsLayout.tsx");
+    const admin = source("layouts/AdminLayout.tsx");
+    const shell = source("layouts/AppShell.tsx");
     for (const file of [gate, settings, admin]) {
       assert.match(file, /initialLiveChannelsReady/);
     }
@@ -35,7 +35,7 @@ describe("chat and live first paint", () => {
   });
 
   it("starts the live guide without waiting on auth and caps a hung warming poll", () => {
-    const page = source("pages/LivePage.jsx");
+    const page = source("pages/LivePage.tsx");
     assert.match(page, /readLiveGuideCache/);
     assert.match(page, /timeoutMs: LIVE_GUIDE_WAIT_MS/);
     assert.match(page, /shouldShowGuideSkeleton/);

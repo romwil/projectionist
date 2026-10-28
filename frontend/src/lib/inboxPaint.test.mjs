@@ -23,7 +23,7 @@ test("inbox first paint is a short unread page, then older rows", () => {
 });
 
 test("inbox page paints before auth and does not load the full unread window first", () => {
-  const page = readFileSync(join(root, "pages/InboxPage.jsx"), "utf8");
+  const page = readFileSync(join(root, "pages/InboxPage.tsx"), "utf8");
   assert.match(page, /blockUntilAuth=\{false\}/);
   assert.match(page, /inboxListParams/);
   assert.doesNotMatch(page, /if \(!authReady\)/);

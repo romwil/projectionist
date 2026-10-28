@@ -351,6 +351,7 @@ export function longSkipFits(viewport) {
  * on each event restarts the HLS session and the player locks. Preview during
  * the burst; commit once on release, or once after the burst goes quiet if
  * pointerup never arrives.
+ * @param {{ onCommit?: Function, quietMs?: number, lostEndMs?: number }} [opts]
  */
 export function createScrubCommit({ onCommit, quietMs = 180, lostEndMs = 700 } = {}) {
   let dragging = false;
@@ -455,7 +456,9 @@ export function seekTimelineOriginMs({ currentTimeSec, committedOffsetMs } = {})
   return 0;
 }
 
-/** Playhead after a seek, including a 0-based transcoder timeline. */
+/** Playhead after a seek, including a 0-based transcoder timeline.
+ * @param {{ currentTimeSec?: number, originMs?: number }} [opts]
+ */
 export function playheadMsFromMedia({ currentTimeSec, originMs = 0 } = {}) {
   const mediaMs = Math.max(0, Math.round((Number(currentTimeSec) || 0) * 1000));
   const origin = Math.max(0, Math.round(Number(originMs) || 0));
@@ -631,6 +634,8 @@ function exitWebkitVideoFullscreen(video) {
  * `video.webkitEnterFullscreen` from the user gesture instead. Desktop still
  * prefers element fullscreen so custom OSD stays. CSS immersive remains the
  * last fallback when neither API exists.
+ * @param {any} [root]
+ * @param {{ immersiveClass?: string, video?: any, userAgent?: string, maxTouchPoints?: number }} [opts]
  * @returns {"exit"|"enter"|"webkit"|"immersive"|"noop"}
  */
 export function toggleTheaterFullscreen(

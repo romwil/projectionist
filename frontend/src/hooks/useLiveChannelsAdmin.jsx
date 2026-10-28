@@ -16,7 +16,7 @@ import { isLiveJobBusy } from "../lib/liveChannelsJob.js";
 import { filterLiveCollections } from "../lib/liveChannelsCraft.js";
 import { ownerLiveText } from "../lib/liveChannelsOwnerCopy.js";
 import { formatPublishFeedback } from "../lib/liveChannelsPublishFeedback.js";
-import { isLiveChannelsLaunched } from "../pages/admin/LiveChannelsParts.jsx";
+import { isLiveChannelsLaunched } from "../pages/admin/LiveChannelsParts";
 import { startVisibleBusyPoll } from "../lib/visibleBusyPoll.js";
 
 export { formatPublishFeedback };

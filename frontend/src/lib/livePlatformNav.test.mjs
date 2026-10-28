@@ -13,9 +13,9 @@ function source(rel) {
 
 describe("live platform nav", () => {
   it("mounts in-app /live in AppShell so guide uses the shared primary nav", () => {
-    const page = source("pages/LivePage.jsx");
-    const shell = source("layouts/AppShell.jsx");
-    const topbar = source("components/PrimaryTopbar.jsx");
+    const page = source("pages/LivePage.tsx");
+    const shell = source("layouts/AppShell.tsx");
+    const topbar = source("components/PrimaryTopbar.tsx");
 
     assert.match(page, /import AppShell from "\.\.\/layouts\/AppShell"/);
     assert.match(page, /function LivePlatformFrame/);

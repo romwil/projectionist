@@ -15,7 +15,7 @@ describe("kebab action flash", () => {
   });
 
   it("ShareActionMenu flashes confirmation outside the open menu", () => {
-    const src = readFileSync(join(root, "components/ShareActionMenu.jsx"), "utf8");
+    const src = readFileSync(join(root, "components/ShareActionMenu.tsx"), "utf8");
     const flashHelper = readFileSync(join(root, "lib/householdSocial.js"), "utf8");
     assert.match(src, /data-testid="share-action-flash"/);
     assert.match(src, /libraryShareFlash\("copy"\)/);
@@ -26,7 +26,7 @@ describe("kebab action flash", () => {
   });
 
   it("PosterActionMenu uses the same flash toast pattern", () => {
-    const src = readFileSync(join(root, "components/PosterActionMenu.jsx"), "utf8");
+    const src = readFileSync(join(root, "components/PosterActionMenu.tsx"), "utf8");
     assert.match(src, /data-testid="poster-action-flash"/);
     assert.match(src, /flashStatus\(/);
     assert.doesNotMatch(src, /poster-action-status/);

@@ -22,14 +22,14 @@ function walkJsx(dir, acc = []) {
     const full = join(dir, name);
     const st = statSync(full);
     if (st.isDirectory()) walkJsx(full, acc);
-    else if (/\.(jsx|js)$/.test(name)) acc.push(full);
+    else if (/\.(jsx|js|tsx|ts)$/.test(name)) acc.push(full);
   }
   return acc;
 }
 
 describe("ConfirmModal chrome", () => {
-  const modal = readFileSync(join(srcRoot, "components", "ConfirmModal.jsx"), "utf8");
-  const hook = readFileSync(join(srcRoot, "hooks", "useConfirmModal.jsx"), "utf8");
+  const modal = readFileSync(join(srcRoot, "components", "ConfirmModal.tsx"), "utf8");
+  const hook = readFileSync(join(srcRoot, "hooks", "useConfirmModal.tsx"), "utf8");
   const styles = readAllStyles();
 
   it("reuses RecommendModal overlay chrome, not a native dialog", () => {
@@ -70,7 +70,7 @@ describe("ConfirmModal chrome", () => {
 
 describe("YIR generate confirm", () => {
   const notifications = readFileSync(
-    join(srcRoot, "pages", "settings", "NotificationsSettingsPage.jsx"),
+    join(srcRoot, "pages", "settings", "NotificationsSettingsPage.tsx"),
     "utf8",
   );
 
@@ -140,7 +140,7 @@ describe("no mixed native confirms", () => {
 
   it("puts Config Seerr token paste on ConfirmModal", () => {
     const config = readFileSync(join(srcRoot, "pages", "ConfigPage.jsx"), "utf8");
-    const household = readFileSync(join(srcRoot, "pages", "admin", "HouseholdSection.jsx"), "utf8");
+    const household = readFileSync(join(srcRoot, "pages", "admin", "HouseholdSection.tsx"), "utf8");
     assert.match(config, /seerrSyncConfirmOptions/);
     assert.match(config, /handleRotateMcpKey/);
     assert.match(config, /useConfirmModal/);

@@ -1,0 +1,835 @@
+import { startTransition, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
+import {
+  addWatchlistPin,
+  confirmAction,
+  deleteLibraryItems,
+  getFeatures,
+  getLibraryAggregate,
+  proposeAction,
+  queryLibrary,
+  searchExternal,
+} from "../api/client";
+import BackLink from "../components/BackLink";
+import { useBulkActionProgress } from "../components/BulkActionProgress";
+import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog";
+import RemovalSummaryDialog from "../components/RemovalSummaryDialog";
+import BrowseResultsRegion from "../components/BrowseResultsRegion";
+import MediaBrowseControls from "../components/MediaBrowseControls";
+import MediaBrowsePagination from "../components/MediaBrowsePagination";
+import MediaBrowseResults from "../components/MediaBrowseResults";
+import RecommendModal from "../components/RecommendModal";
+import TitleCard from "../components/TitleCard";
+import TurnstyleResultsOverlay from "../components/TurnstyleResultsOverlay";
+import { useAuthGate } from "../components/UserMenu";
+import { useRemovalProgressSession } from "../hooks/useRemovalProgressSession.js";
+import AppShell from "../layouts/AppShell";
+import {
+  alreadyInArrMessage,
+  buildProposeActionBody,
+  isAlreadyInArr,
+  normalizeUserRole,
+  requestPathFromFeatures,
+  serviceLabelForTarget,
+} from "../lib/addActions.js";
+import {
+  BEYOND_STATUS,
+  BEYOND_TURNSTYLE_TITLE,
+  beyondCtaLabel,
+  beyondEmptyMessage,
+  beyondErrorNote,
+  beyondSectionSubtitle,
+  beyondStatusForError,
+  beyondStatusForResult,
+  beyondTurnstyleExpand,
+  beyondUnavailableNote,
+  normalizeExternalResults,
+  shouldShowBeyondAffordance,
+} from "../lib/beyondSearch.js";
+import { ROUTES } from "../lib/browseLinks.js";
+import { SEARCH_OPTIONAL_SUMMARY, searchOptionalGroup } from "../lib/optionalPageExtras.js";
+import {
+  BULK_DELETE_EMPTY_SELECTION_MESSAGE,
+  formatBulkLibraryDeleteResultMessage,
+  libraryBrowseItemKey,
+  partitionBulkDeleteSelection,
+} from "../lib/bulkLibraryDelete.js";
+import {
+  MEDIA_BROWSE_PAGE_SIZES,
+  MEDIA_BROWSE_TV_SORTS,
+  browseFacetsFollowGrid,
+  buildMediaBrowseParams,
+  isAllPageSize,
+  isMovieBrowseLanding,
+  movieLandingBrowseDefaults,
+  parseMediaBrowse,
+  queryFiltersFromBrowse,
+  resolvePageSizeLimit,
+  beyondSearchMediaType,
+} from "../lib/mediaBrowse.js";
+import {
+  BROWSE_SEARCH_DEBOUNCE_MS,
+  nextBrowseSearchQuery,
+  setBrowseSearchQueryParam,
+} from "../lib/progressiveBrowseSearch.js";
+import LibrarySearchBar from "../components/LibrarySearchBar";
+import { allowWatchlistPin } from "../lib/watchlistPin.js";
+import { browseLanguageOptions } from "../lib/languageNames.js";
+
+function browseHeading(mediaType: any, q: any) {
+  if (q) return `Search: ${q}`;
+  if (mediaType === "movie") return "Movies";
+  if (mediaType === "show") return "TV shows";
+  return "Browse library";
+}
+
+function browseSubtitle(mediaType: any, q: any) {
+  if (q) return "Titles across your library matching your search";
+  if (mediaType === "movie") return "Every movie in your library";
+  if (mediaType === "show") return "Shows ordered by the freshest episode that just landed";
+  return "Every title in your library";
+}
+
+type LibraryBrowsePageProps = {
+  embedded?: boolean;
+};
+
+export default function LibraryBrowsePage({ embedded = false }: LibraryBrowsePageProps) {
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { isOwner, multiUserEnabled } = useAuthGate();
+  const { start, update, finish } = useBulkActionProgress();
+  const removal = useRemovalProgressSession();
+  const isSearchRoute =
+    location.pathname === ROUTES.search || location.pathname.startsWith(`${ROUTES.search}/`);
+
+  const browse = useMemo(
+    () =>
+      parseMediaBrowse(
+        searchParams,
+        isMovieBrowseLanding(location.pathname, searchParams) ? movieLandingBrowseDefaults() : {},
+      ),
+    [location.pathname, searchParams],
+  );
+  const initialMediaType = String(searchParams.get("media_type") || "")
+    .trim()
+    .toLowerCase();
+  const [landingTypeScope, setLandingTypeScope] = useState(
+    initialMediaType === "movie" || initialMediaType === "show" ? initialMediaType : "",
+  );
+  const ignoreScopeReset = useRef(false);
+  const seenMediaType = useRef(searchParams.get("media_type") || "");
+  const q = (searchParams.get("q") || "").trim();
+  const isAll = isAllPageSize(browse.limit);
+
+  const [state, setState] = useState<any>({
+    loading: true,
+    items: [] as any[],
+    total: 0,
+    returned: 0,
+    hasMore: false,
+    offset: 0,
+    error: "",
+  });
+  const [columns, setColumns] = useState<any | null>(null);
+  const [filterOptions, setFilterOptions] = useState<any>({ years: [] as any[], genres: [] as any[], languages: [] as any[] });
+  const [gridSettled, setGridSettled] = useState(false);
+  const [facetScope, setFacetScope] = useState<any | null>(null);
+  const [recommendItem, setRecommendItem] = useState<any | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [actionStatus, setActionStatus] = useState("");
+  const [pinning, setPinning] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [access, setAccess] = useState<any>({
+    userRole: "owner",
+    requestPath: "arr",
+    multiUserEnabled: false,
+  });
+  const [beyond, setBeyond] = useState<any>({
+    status: BEYOND_STATUS.idle,
+    items: [] as any[],
+    total: 0,
+  });
+  const [turnstyleOpen, setTurnstyleOpen] = useState(false);
+  // Progressive search: draft drives the input; debounced commit writes URL `q`
+  // so the existing queryLibrary + Beyond path filters as the user types.
+  const [draftQ, setDraftQ] = useState(q);
+
+  useEffect(() => {
+    const next = searchParams.get("media_type") || "";
+    if (next === seenMediaType.current) return;
+    seenMediaType.current = next;
+    if (ignoreScopeReset.current) {
+      ignoreScopeReset.current = false;
+      return;
+    }
+    const mediaType = next.trim().toLowerCase();
+    setLandingTypeScope(mediaType === "movie" || mediaType === "show" ? mediaType : "");
+  }, [searchParams]);
+
+  useEffect(() => {
+    setDraftQ(q);
+  }, [q]);
+
+  useEffect(() => {
+    const next = nextBrowseSearchQuery(draftQ, q);
+    if (next === null) return undefined;
+    const timer = setTimeout(() => {
+      commitBrowseQuery(draftQ);
+    }, BROWSE_SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+    // commitBrowseQuery closes over browse/q; draftQ + q are the progressive inputs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftQ, q, browse]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getFeatures()
+      .then((data) => {
+        if (cancelled) return;
+        const enabled = Boolean(data?.features?.multi_user_enabled);
+        setAccess({
+          userRole: normalizeUserRole(data?.user?.role, { multiUserEnabled: enabled }),
+          requestPath: requestPathFromFeatures(data),
+          multiUserEnabled: enabled,
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAccess({ userRole: "owner", requestPath: "arr", multiUserEnabled: false });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!browseFacetsFollowGrid(gridSettled) || facetScope === null) return undefined;
+    let cancelled = false;
+    const mediaType = facetScope === "movie" || facetScope === "show" ? facetScope : "";
+    const aggregateOptions = { ...(mediaType ? { mediaType } : {}), topExamples: 0 };
+    Promise.all([
+      getLibraryAggregate("year", aggregateOptions).catch(() => ({ buckets: [] })),
+      getLibraryAggregate("genre", aggregateOptions).catch(() => ({ buckets: [] })),
+      getLibraryAggregate("language", aggregateOptions).catch(() => ({ buckets: [] })),
+    ]).then(([yearAgg, genreAgg, languageAgg]) => {
+      if (cancelled) return;
+      setFilterOptions({
+        years: [
+          ...new Set((yearAgg?.buckets || []).map((bucket: any) => bucket.year).filter(Boolean)),
+        ].sort((a, b) => (b as any) - (a as any)),
+        genres: [
+          ...new Set((genreAgg?.buckets || []).map((bucket: any) => bucket.genre).filter(Boolean)),
+        ].sort(),
+        languages: browseLanguageOptions(
+          (languageAgg?.buckets || []).map((bucket: any) => bucket.value),
+        ),
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [gridSettled, facetScope]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setState((prev: any) => ({ ...prev, loading: true, error: "" }));
+    setSelected(new Set());
+    setActionStatus("");
+    setDeleteOpen(false);
+    setDeleteError("");
+    setBeyond({ status: BEYOND_STATUS.idle, items: [], total: 0 });
+    setTurnstyleOpen(false);
+
+    const filters: any = queryFiltersFromBrowse(browse);
+    // The reader takes year_from/year_to, not a bare year.
+    if (browse.year) {
+      filters.year_from = browse.year;
+      filters.year_to = browse.year;
+      delete filters.year;
+    }
+    if (isAll) {
+      filters.limit = resolvePageSizeLimit("all");
+      filters.offset = 0;
+    }
+    if (q) filters.query = q;
+
+    queryLibrary(filters)
+      .then((data) => {
+        if (cancelled) return;
+        const items = Array.isArray(data?.items) ? data.items : [];
+        setState({
+          loading: false,
+          items,
+          total: Number(data?.total_matched ?? items.length) || 0,
+          returned: Number(data?.returned ?? items.length) || items.length,
+          hasMore: Boolean(data?.has_more),
+          offset: Number(data?.offset ?? browse.offset) || 0,
+          error: "",
+        });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setState({
+          loading: false,
+          items: [],
+          total: 0,
+          returned: 0,
+          hasMore: false,
+          offset: 0,
+          error: (err as { message?: string }).message || "Could not load titles.",
+        });
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setGridSettled(true);
+        const nextScope = browse.media_type || "";
+        setFacetScope((current: any) => (current === nextScope ? current : nextScope));
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [browse, q, isAll]);
+
+  const pinnableKeys = useMemo(
+    () => new Set(state.items.filter(allowWatchlistPin).map(libraryBrowseItemKey)),
+    [state.items],
+  );
+
+  const deletePartition = useMemo(
+    () => partitionBulkDeleteSelection(state.items, selected, libraryBrowseItemKey),
+    [state.items, selected],
+  );
+
+  const pageSize = isAll ? state.returned || 1 : Number(browse.limit) || 48;
+  const page = isAll ? 1 : Math.floor(state.offset / pageSize) + 1;
+  const pageCount = isAll ? 1 : Math.max(1, Math.ceil(state.total / pageSize));
+  const capped = isAll && state.total > state.returned;
+  const paginationSummary = isAll
+    ? capped
+      ? `Showing first ${state.returned} of ${state.total} titles`
+      : `${state.total} title${state.total === 1 ? "" : "s"}`
+    : `Page ${page} of ${pageCount}${state.total ? ` · ${state.total} titles` : ""}`;
+
+  function commitBrowseQuery(draft: any, { resetOffset = true } = {}) {
+    const next = nextBrowseSearchQuery(draft, q);
+    if (next === null) return;
+    startTransition(() => {
+      const params = buildMediaBrowseParams(browse, resetOffset ? { offset: 0 } : {});
+      setBrowseSearchQueryParam(params, next);
+      setSearchParams(params, { replace: true });
+    });
+  }
+
+  function updateBrowse(patch: any) {
+    if (Object.hasOwn(patch, "media_type")) ignoreScopeReset.current = true;
+    const params = buildMediaBrowseParams(browse, patch);
+    setBrowseSearchQueryParam(params, q);
+    setSearchParams(params, { replace: true });
+  }
+
+  function handleOffset(nextOffset: any) {
+    updateBrowse({ offset: Math.max(0, nextOffset) });
+  }
+
+  function handleSearchSubmit(event: any) {
+    event.preventDefault();
+    commitBrowseQuery(draftQ);
+  }
+
+  function toggleSelect(item: any) {
+    if (deleteOpen || deleting) return;
+    const key = libraryBrowseItemKey(item);
+    if (!pinnableKeys.has(key)) return;
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function selectAllOnPage() {
+    if (deleteOpen || deleting) return;
+    setSelected(new Set(pinnableKeys) as Set<string>);
+  }
+
+  function clearSelection() {
+    if (deleteOpen || deleting) return;
+    setSelected(new Set());
+  }
+
+  async function handleBulkPin() {
+    if (!selected.size || pinning) return;
+    const targets = state.items.filter(
+      (item: any) => selected.has(libraryBrowseItemKey(item)) && allowWatchlistPin(item),
+    );
+    if (!targets.length) return;
+    const progressId = start({
+      label: "Pinning to watchlist",
+      total: targets.length,
+      asynchronous: true,
+    });
+    setPinning(true);
+    setActionStatus("");
+    let ok = 0;
+    let failed = 0;
+    for (const item of targets) {
+      try {
+        await addWatchlistPin({
+          tmdb_id: item.tmdb_id || undefined,
+          tvdb_id: item.tvdb_id || undefined,
+          media_type: item.media_type,
+          title: item.title || "Untitled",
+        });
+        ok += 1;
+      } catch {
+        failed += 1;
+      } finally {
+        update(progressId, ok + failed);
+      }
+    }
+    setPinning(false);
+    const summary = failed
+      ? `Pinned ${ok}; ${failed} failed.`
+      : `Pinned ${ok} title${ok === 1 ? "" : "s"} to watchlist.`;
+    setActionStatus(summary);
+    finish(progressId, { label: summary, state: failed ? "error" : "success" });
+    setSelected(new Set());
+  }
+
+  function openBulkDelete() {
+    if (!isOwner || !selected.size) return;
+    setDeleteError("");
+    setDeleteOpen(true);
+  }
+
+  async function handleBulkDeleteConfirm({ mode }: any = {}) {
+    if (!isOwner || deleting) return;
+    const { ratingKeys, titles } = deletePartition;
+    if (!ratingKeys.length) {
+      setDeleteError(BULK_DELETE_EMPTY_SELECTION_MESSAGE);
+      return;
+    }
+    setDeleteOpen(false);
+    setDeleting(true);
+    setDeleteError("");
+    const targets = ratingKeys.map((rating_key, index) => ({
+      rating_key,
+      title: titles[index],
+    }));
+    try {
+      const result = await removal.run({
+        mode,
+        targets,
+        stream: (opts: any) => deleteLibraryItems(ratingKeys, { mode, ...opts }),
+      });
+      const deletedCount = Number(result?.deleted) || 0;
+      const errors = Array.isArray(result?.errors) ? result.errors : [];
+      const okKeys = new Set(
+        (Array.isArray(result?.results) ? result.results : [])
+          .filter((entry: any) => entry?.index_deleted)
+          .map((entry: any) => String(entry.rating_key || "").trim())
+          .filter(Boolean),
+      );
+      // Index-only responses omit per-item results — treat all requested keys as removed.
+      const drop = okKeys.size ? okKeys : mode === "full" ? okKeys : new Set(ratingKeys);
+      if (drop.size) {
+        setState((prev: any) => {
+          const nextItems = prev.items.filter((item: any) => {
+            const key = String(item?.rating_key || item?.plex_rating_key || "").trim();
+            return !key || !drop.has(key);
+          });
+          return {
+            ...prev,
+            items: nextItems,
+            returned: nextItems.length,
+            total: Math.max(0, prev.total - deletedCount),
+          };
+        });
+        setSelected(new Set());
+      }
+      setActionStatus(formatBulkLibraryDeleteResultMessage(result, { titles: titles as any }));
+      if (errors.length && !deletedCount) return;
+    } catch (err: any) {
+      setActionStatus((err as { message?: string }).message || "Could not delete selected titles.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function handleBeyondSearch() {
+    if (!q || beyond.status === BEYOND_STATUS.loading) return;
+    setBeyond((prev: any) => ({ ...prev, status: BEYOND_STATUS.loading }));
+    try {
+      const payload = await searchExternal({ q, mediaType: beyondSearchMediaType(browse.media_type) });
+      const { items, total } = normalizeExternalResults(payload);
+      setBeyond({ status: beyondStatusForResult(payload), items, total });
+    } catch (err: any) {
+      setBeyond({ status: beyondStatusForError(err), items: [], total: 0 });
+    }
+  }
+
+  // TitleCard owns its own add button state; this resolves on success and
+  // throws on failure so the card can show Added / Retry.
+  async function handleBeyondAdd(item: any, target: any) {
+    const label = item.title || "this title";
+    const service = serviceLabelForTarget(target);
+    const proposal = await proposeAction(buildProposeActionBody(item, target));
+    if (isAlreadyInArr(proposal)) {
+      setActionStatus(alreadyInArrMessage(proposal, { label, service }));
+      return proposal;
+    }
+    const confirm = await confirmAction(proposal.confirmation_token);
+    if (isAlreadyInArr(confirm)) {
+      setActionStatus(alreadyInArrMessage(confirm, { label, service }));
+      return confirm;
+    }
+    setActionStatus(
+      target === "seerr" ? `Requested “${label}” in Seerr.` : `Added “${label}” to ${service}.`,
+    );
+    return confirm;
+  }
+
+  function handleBeyondDismiss(item: any) {
+    setBeyond((prev: any) => ({
+      ...prev,
+      items: prev.items.filter((entry: any) => entry !== item),
+    }));
+  }
+
+  const hasLibraryResults = state.items.length > 0;
+  const showBeyondAffordance = shouldShowBeyondAffordance({
+    q,
+    unavailable: beyond.status === BEYOND_STATUS.unavailable,
+  });
+  const beyondBusy = beyond.status === BEYOND_STATUS.loading;
+  const beyondActivated = beyond.status !== BEYOND_STATUS.idle;
+  const beyondExpand = beyondTurnstyleExpand(beyond.items, { title: BEYOND_TURNSTYLE_TITLE });
+
+  const recommendProps = multiUserEnabled
+    ? { showRecommend: true, onRecommend: setRecommendItem }
+    : { showRecommend: false };
+
+  const searchExtras = searchOptionalGroup({
+    isSearchRoute,
+    showBeyond: showBeyondAffordance,
+    beyondUnavailable: beyond.status === BEYOND_STATUS.unavailable,
+  });
+
+  const beyondRegion = (
+    <>
+      {showBeyondAffordance ? (
+        <section
+          className={`explore-beyond ${hasLibraryResults ? "is-secondary" : "is-prominent"}`}
+          data-testid="explore-beyond"
+        >
+          {!beyondActivated ? (
+            <div className="explore-beyond-cta" data-testid="explore-beyond-cta">
+              <p className="explore-beyond-lead">
+                {hasLibraryResults
+                  ? "Looking for something you don’t own yet?"
+                  : "Not in your library — want to look further afield?"}
+              </p>
+              <button
+                type="button"
+                className={hasLibraryResults ? "ghost" : ""}
+                data-testid="explore-beyond-button"
+                onClick={handleBeyondSearch}
+              >
+                {beyondCtaLabel({ q })}
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="explore-beyond-heading">
+                <h2 data-testid="explore-beyond-title">Beyond your collection</h2>
+                <p className="explore-section-subtitle">{beyondSectionSubtitle({ q })}</p>
+              </div>
+              {beyond.status === BEYOND_STATUS.loaded && beyondExpand.show ? (
+                <div className="explore-beyond-actions bulk-confirm-actions">
+                  <button
+                    type="button"
+                    className="confirm-all-button viewport-expand-btn"
+                    data-testid="explore-beyond-expand"
+                    onClick={() => setTurnstyleOpen(true)}
+                  >
+                    {beyondExpand.label}
+                  </button>
+                </div>
+              ) : null}
+              {beyondBusy ? (
+                <p className="status status-secondary" data-testid="explore-beyond-loading">
+                  Searching beyond your collection…
+                </p>
+              ) : null}
+              {beyond.status === BEYOND_STATUS.error ? (
+                <p className="error" data-testid="explore-beyond-error">
+                  {beyondErrorNote()}
+                </p>
+              ) : null}
+              {beyond.status === BEYOND_STATUS.empty ? (
+                <p
+                  className="explore-empty status status-secondary"
+                  data-testid="explore-beyond-empty"
+                >
+                  {beyondEmptyMessage({ q })}
+                </p>
+              ) : null}
+              {beyond.status === BEYOND_STATUS.loaded ? (
+                <div
+                  className="inline-cards explore-beyond-grid"
+                  data-testid="explore-beyond-results"
+                >
+                  {beyond.items.map((item: any) => (
+                    <TitleCard
+                      key={`beyond-${item.media_type}-${item.tmdb_id || item.tvdb_id || item.title}`}
+                      item={item}
+                      onAdd={handleBeyondAdd}
+                      onDismiss={handleBeyondDismiss}
+                      requestPath={access.requestPath}
+                      userRole={access.userRole}
+                      multiUserEnabled={access.multiUserEnabled}
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </>
+          )}
+        </section>
+      ) : null}
+
+      {beyond.status === BEYOND_STATUS.unavailable ? (
+        <p
+          className="status status-secondary explore-beyond-note"
+          data-testid="explore-beyond-unavailable"
+        >
+          {beyondUnavailableNote()}
+        </p>
+      ) : null}
+    </>
+  );
+
+  const pageBody = (
+    <>
+      {!embedded ? (
+        <section
+          className={`explore-section-hero${isSearchRoute ? " search-page-hero" : ""}`}
+          data-testid="library-browse-hero"
+        >
+          {isSearchRoute ? null : (
+            <>
+              <p className="person-eyebrow">Explore</p>
+              <h1 data-testid="library-browse-title">{browseHeading(browse.media_type, q)}</h1>
+              <p className="explore-section-subtitle">{browseSubtitle(browse.media_type, q)}</p>
+            </>
+          )}
+          <LibrarySearchBar
+            className="library-browse-search"
+            testId="library-browse-search"
+            placeholder="Search titles…"
+            value={draftQ}
+            onChange={(event) => setDraftQ(event.target.value)}
+            onSubmit={handleSearchSubmit}
+          />
+        </section>
+      ) : null}
+
+      <div className="explore-section-toolbar" data-testid="library-browse-toolbar">
+        <MediaBrowseControls
+          state={browse}
+          onChange={updateBrowse}
+          columns={columns}
+          onColumnsChange={setColumns}
+          columnScope="browse"
+          filterOptions={filterOptions}
+          pageSizes={MEDIA_BROWSE_PAGE_SIZES}
+          sortOptions={browse.media_type === "show" ? MEDIA_BROWSE_TV_SORTS : undefined}
+          mediaTypeScope={landingTypeScope}
+        />
+        <div className="explore-section-toolbar-row">
+          <div className="explore-section-toolbar-primary">
+            <p className="explore-section-pagination-summary" data-testid="library-browse-summary">
+              {paginationSummary}
+            </p>
+            {selected.size ? (
+              <p
+                className="explore-section-selection-summary"
+                data-testid="library-browse-selection-summary"
+              >
+                {selected.size} selected
+                {isOwner && deletePartition.unavailable.length
+                  ? ` · ${deletePartition.unavailable.length} not deletable`
+                  : ""}
+              </p>
+            ) : null}
+          </div>
+          <div className="explore-section-bulk" data-testid="library-browse-bulk">
+            <button
+              type="button"
+              className="ghost"
+              data-testid="library-browse-select-all"
+              disabled={!pinnableKeys.size || deleteOpen || deleting}
+              onClick={selectAllOnPage}
+            >
+              Select page
+            </button>
+            <button
+              type="button"
+              className="ghost"
+              data-testid="library-browse-clear-selection"
+              disabled={!selected.size || deleteOpen || deleting}
+              onClick={clearSelection}
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              className="ghost"
+              data-testid="library-browse-bulk-pin"
+              disabled={!selected.size || pinning}
+              onClick={handleBulkPin}
+            >
+              {pinning ? "Pinning…" : `Pin ${selected.size || ""} to watchlist`.trim()}
+            </button>
+            {isOwner ? (
+              <button
+                type="button"
+                className="btn-danger"
+                data-testid="library-browse-bulk-delete"
+                disabled={!selected.size || !deletePartition.ratingKeys.length || deleting}
+                onClick={openBulkDelete}
+              >
+                Delete
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      {actionStatus ? (
+        <p
+          className="status status-secondary explore-section-action-status"
+          data-testid="library-browse-action-status"
+        >
+          {actionStatus}
+        </p>
+      ) : null}
+
+      <BrowseResultsRegion
+        testId="library-browse-results"
+        loading={state.loading}
+        error={state.error}
+        hasItems={state.items.length > 0}
+        empty={
+          <p className="explore-empty status status-secondary" data-testid="library-browse-empty">
+            {q ? `No library titles match “${q}”.` : "No titles match these filters yet."}
+          </p>
+        }
+      >
+        <MediaBrowseResults
+          state={browse}
+          items={state.items}
+          columns={columns || undefined}
+          selectable
+          selected={selected}
+          onToggleSelect={toggleSelect}
+          getItemKey={libraryBrowseItemKey}
+          cardProps={{ testId: "library-browse-card", ...recommendProps }}
+        />
+      </BrowseResultsRegion>
+
+      {!state.loading && !state.error && state.items.length ? (
+        <MediaBrowsePagination
+          summary={paginationSummary}
+          pageSize={isAll ? "all" : pageSize}
+          pageSizes={MEDIA_BROWSE_PAGE_SIZES}
+          onPageSizeChange={(limit) => updateBrowse({ limit, offset: 0 })}
+          hasPrevious={!isAll && state.offset > 0}
+          hasNext={!isAll && state.hasMore}
+          onPrevious={() => handleOffset(state.offset - pageSize)}
+          onNext={() => handleOffset(state.offset + pageSize)}
+          testIdPrefix="library-browse"
+        />
+      ) : null}
+
+      {searchExtras.show ? (
+        <details className="optional-disclosure" data-testid="search-optional-beyond">
+          <summary>{SEARCH_OPTIONAL_SUMMARY}</summary>
+          {beyondRegion}
+        </details>
+      ) : (
+        beyondRegion
+      )}
+
+      <RemovalSummaryDialog
+        open={Boolean(removal.summary)}
+        result={removal.summary}
+        cancelRequested={removal.cancelRequested}
+        onCancelRemaining={removal.cancelRemaining}
+        onClose={removal.dismiss}
+      />
+
+      <BulkLibraryDeleteDialog
+        open={deleteOpen}
+        titles={deletePartition.titles}
+        unavailableCount={deletePartition.unavailable.length}
+        loading={deleting}
+        error={deleteError}
+        onCancel={() => {
+          if (deleting) return;
+          setDeleteOpen(false);
+          setDeleteError("");
+        }}
+        onConfirm={handleBulkDeleteConfirm}
+      />
+
+      <RecommendModal
+        item={recommendItem}
+        open={Boolean(recommendItem)}
+        onClose={() => setRecommendItem(null)}
+      />
+
+      {turnstyleOpen ? (
+        <TurnstyleResultsOverlay
+          payload={{ title: beyondExpand.title, items: beyond.items }}
+          onClose={() => setTurnstyleOpen(false)}
+          onAdd={handleBeyondAdd}
+          onDismiss={handleBeyondDismiss}
+          requestPath={access.requestPath}
+          userRole={access.userRole}
+          multiUserEnabled={access.multiUserEnabled}
+        />
+      ) : null}
+    </>
+  );
+
+  if (embedded) return pageBody;
+
+  return (
+    <AppShell
+      className={`app-root explore-section-page library-browse-page${isSearchRoute ? " search-page" : ""}`}
+      testId={isSearchRoute ? "search-page" : "library-browse-page"}
+      variant={isSearchRoute ? "topbar" : "browse"}
+      leading={
+        isSearchRoute ? null : <BackLink fallbackTo={ROUTES.explore} testId="library-browse-back" />
+      }
+      actions={
+        isSearchRoute ? null : (
+          <Link
+            to={ROUTES.explore}
+            className="app-topbar-link"
+            data-testid="library-browse-hub-link"
+          >
+            Explore hub
+          </Link>
+        )
+      }
+    >
+      {pageBody}
+    </AppShell>
+  );
+}
