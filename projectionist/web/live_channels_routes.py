@@ -1521,22 +1521,9 @@ def live_channels_channel_subtitles_endpoint(
         None,
     )
     now = channel.get("now") if isinstance(channel, Mapping) else None
-    payload = live_subtitles_payload(settings, channel_id=cid, now_program=now)
-    # Attach proxy URLs for fetchable Plex sidecar streams (LivePlayer TextTrack).
-    streams = []
-    for row in payload.get("plex_streams") or []:
-        if not isinstance(row, Mapping):
-            continue
-        item = dict(row)
-        stream_id = str(item.get("id") or "").strip()
-        if stream_id and item.get("key"):
-            item["proxy_url"] = (
-                f"/api/library/items/{payload.get('plex_rating_key')}/subtitles/"
-                f"{stream_id}/file"
-            )
-        streams.append(item)
-    payload["plex_streams"] = streams
-    return payload
+    # proxy_url is our /api/library/.../file (decorate_subtitle_row). Never
+    # re-attach a raw Plex stream key — overlay/PGS sidecars 404 there.
+    return live_subtitles_payload(settings, channel_id=cid, now_program=now)
 
 
 @router.post("/api/live-channels/channels/{channel_id}/subtitles/download")

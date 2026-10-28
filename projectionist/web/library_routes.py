@@ -699,7 +699,7 @@ def library_item_subtitle_file_endpoint(
     except Exception as error:  # noqa: BLE001
         raise HTTPException(
             status_code=502,
-            detail=_safe_error_detail(error, "Could not fetch subtitle file from Plex"),
+            detail="This subtitle track isn’t available as text.",
         ) from error
     return Response(
         content=text.encode("utf-8"),

@@ -209,6 +209,89 @@ class TvRemoveTests(unittest.TestCase):
             self.assertEqual(len(remaining), 1)
             self.assertEqual(str(remaining[0]["rating_key"]), "ep-2")
 
+    def test_absent_sonarr_partial_season_keeps_failed_episode_index(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            show_id = self._seed(db)
+            settings = MagicMock()
+            settings.sonarr_url = "http://sonarr.test"
+            settings.sonarr_api_key = "key"
+            settings.plex_url = "http://plex.test"
+            settings.plex_token = "tok"
+
+            from projectionist.connectors.arr_errors import ArrTitleNotFoundError
+
+            with (
+                patch(
+                    "projectionist.library.tv_remove.resolve_arr_removal_target",
+                    side_effect=ArrTitleNotFoundError("Sonarr", title="The Expanse"),
+                ),
+                patch("projectionist.library.tv_remove.PlexClient") as plex_cls,
+                patch(
+                    "projectionist.library.tv_remove.plex_configuration_error",
+                    return_value=None,
+                ),
+            ):
+                plex = MagicMock()
+
+                def media_file_parts(key, include_leaves=False):
+                    del include_leaves
+                    if key == "ep-1":
+                        return [
+                            {
+                                "file": "/tv/The Expanse/S01E01.mkv",
+                                "size": 4000,
+                                "media_id": "1",
+                            }
+                        ]
+                    return [
+                        {
+                            "file": "/tv/The Expanse/S01E02.mkv",
+                            "size": 5000,
+                            "media_id": "2",
+                        }
+                    ]
+
+                def delete_media(key, delete_files=True):
+                    del delete_files
+                    if key == "ep-2":
+                        raise RuntimeError(
+                            "HTTP 500 from http://plex.test/library/metadata/ep-2"
+                        )
+
+                plex.media_file_parts.side_effect = media_file_parts
+                plex.delete_media.side_effect = delete_media
+                plex_cls.return_value = plex
+                payload = remove_tv_scope(
+                    db,
+                    settings,
+                    scope="season",
+                    show_id=show_id,
+                    season_number=1,
+                )
+
+            remaining = db.library_episodes_for_show(show_id)
+            self.assertEqual(len(remaining), 1)
+            self.assertEqual(str(remaining[0]["rating_key"]), "ep-2")
+            self.assertEqual(payload["deleted"], 1)
+            self.assertEqual(len(payload["errors"]), 1)
+            self.assertEqual(payload["errors"][0]["rating_key"], "ep-2")
+            self.assertFalse(payload["errors"][0]["index_deleted"])
+            self.assertIn("Files were not removed", payload["errors"][0]["error"])
+            entry = payload["results"][0]
+            self.assertFalse(entry["ok"])
+            self.assertTrue(entry["index_deleted"])
+            self.assertEqual(entry["files"], ["/tv/The Expanse/S01E01.mkv"])
+            self.assertEqual(entry["bytes_freed"], 4000)
+            self.assertEqual(entry["bytes_source"], "plex")
+            self.assertIn("remain in the index", entry["note"])
+            self.assertEqual(payload["totals"]["files"], 1)
+            self.assertEqual(payload["totals"]["bytes_freed"], 4000)
+            self.assertEqual(
+                [call.args[0] for call in plex.delete_media.call_args_list],
+                ["ep-1", "ep-2"],
+            )
+
     def test_remove_episode_fails_when_not_in_sonarr_or_plex(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
