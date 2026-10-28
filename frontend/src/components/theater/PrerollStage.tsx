@@ -3,6 +3,8 @@ import TuningInterstitial from "./TuningInterstitial";
 import {
   BUMPER_PLAY_TIMEOUT_MS,
   PREROLL_TAP_COPY,
+  bumperPlaySettle,
+  bumperReadyPlayGate,
   bumperWatchDecision,
   playBumperVideo,
 } from "../../lib/prerollClient.js";
@@ -18,6 +20,7 @@ export type PrerollStageProps = {
  * Each mount owns its own video — no shared playhead across clients.
  * iOS may pause unmuted autoplay; muted-first then unmute, and the tap overlay
  * always calls play() (it is not a no-op). A hung first frame skips to the show.
+ * loadeddata and canplay share onReady; only one play() may be in flight.
  */
 export default function PrerollStage({
   src = "",
@@ -58,15 +61,22 @@ export default function PrerollStage({
   async function attemptPlay() {
     const video = videoRef.current;
     const result = await playBumperVideo(video);
-    if (result === "playing") {
+    const action = bumperPlaySettle({
+      result,
+      playResult: playResultRef.current,
+      videoPlaying: Boolean(video && !video.paused && !video.ended),
+    });
+    if (action === "playing") {
       markPlaying();
       return;
     }
-    if (result === "idle") {
+    if (action === "skip") {
       onDoneRef.current?.();
       return;
     }
-    markGestureNeeded();
+    if (action === "gesture") {
+      markGestureNeeded();
+    }
   }
 
   useEffect(() => {
@@ -76,6 +86,7 @@ export default function PrerollStage({
       return undefined;
     }
     let cancelled = false;
+    let playInFlight = false;
     let watchTimer: ReturnType<typeof setTimeout> | null = null;
     needsGestureRef.current = false;
     playResultRef.current = "idle";
@@ -113,20 +124,36 @@ export default function PrerollStage({
     };
 
     const onReady = () => {
-      if (cancelled || playResultRef.current !== "idle") return;
+      if (
+        bumperReadyPlayGate({
+          cancelled,
+          playResult: playResultRef.current,
+          playInFlight,
+        }) !== "start"
+      ) {
+        return;
+      }
+      playInFlight = true;
       playBumperVideo(video).then((result) => {
-        if (cancelled) return;
-        if (result === "playing") {
+        const action = bumperPlaySettle({
+          cancelled,
+          result,
+          playResult: playResultRef.current,
+          videoPlaying: Boolean(video && !video.paused && !video.ended),
+        });
+        if (action === "playing") {
           markPlaying();
           startWatch();
           return;
         }
-        if (result === "idle") {
+        if (action === "skip") {
           skip();
           return;
         }
-        markGestureNeeded();
-        startWatch();
+        if (action === "gesture") {
+          markGestureNeeded();
+          startWatch();
+        }
       });
     };
 

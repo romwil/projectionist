@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **A bumper that is already playing is not cut short.** `loadeddata` and `canplay` used to start overlapping `play()` calls; a later timeout or autoplay rejection skipped Live and library prerolls while they were on screen. One in-flight play, and settle keeps a bumper that already reached playing. Frozen first-frame still times out; flex pad is still not a stuck preroll.
+
 ## [1.37.69] — 2026-10-28
 
 One patch on 1.37.68: native Live does not freeze on a bumper after a program. The pad between shows is commercials or a slate, not a stuck preroll.
