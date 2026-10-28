@@ -266,6 +266,56 @@ export function isHlsBufferStallDetail(detail) {
 }
 
 /**
+ * Recover from an hls.js ERROR without re-tuning. Mid-watch `tuneLiveChannel`
+ * start-over kills the native lineup session; callers remount HLS on the same URL.
+ *
+ * @param {{ type?: string, details?: string, fatal?: boolean } | null | undefined} data
+ * @param {{ networkRetries?: number }} [state]
+ * @returns {{
+ *   action: "ignore" | "stall-nudge" | "startLoad" | "remount" | "recoverMedia" | "fatal",
+ *   handled: boolean,
+ *   stall?: boolean,
+ *   keepPlaying?: boolean,
+ *   error?: boolean,
+ *   networkRetries: number,
+ *   remountDelayMs?: number,
+ * }}
+ */
+export function liveHlsErrorPolicy(data, { networkRetries = 0 } = {}) {
+  const retries = Math.max(0, Math.floor(Number(networkRetries) || 0));
+  if (!data) return { action: "ignore", handled: true, networkRetries: retries };
+  const fatal = Boolean(data.fatal);
+  const type = String(data.type || "");
+  if (!fatal) {
+    if (isHlsBufferStallDetail(data.details)) {
+      return { action: "stall-nudge", handled: true, stall: true, networkRetries: retries };
+    }
+    return { action: "ignore", handled: true, networkRetries: retries };
+  }
+  if (type === "networkError" && retries < 5) {
+    const next = retries + 1;
+    const base = {
+      handled: true,
+      stall: true,
+      keepPlaying: true,
+      networkRetries: next,
+    };
+    if (next <= 3) return { ...base, action: "startLoad" };
+    return { ...base, action: "remount", remountDelayMs: 1500 * Math.min(next, 4) };
+  }
+  if (type === "mediaError") {
+    return {
+      action: "recoverMedia",
+      handled: true,
+      stall: true,
+      keepPlaying: true,
+      networkRetries: retries,
+    };
+  }
+  return { action: "fatal", handled: true, error: true, networkRetries: retries };
+}
+
+/**
  * Classify mid-watch stream health for OSD honesty.
  *
  * Initial tune (`loading`), hard `error`, idle, and user `paused` stay `"ok"` so we

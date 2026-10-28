@@ -6,7 +6,10 @@ import { fileURLToPath } from "node:url";
 
 const root = dirname(fileURLToPath(import.meta.url));
 const watchCss = readFileSync(join(root, "../styles/13-watch.css"), "utf8");
-const playerSrc = readFileSync(join(root, "../components/theater/LibraryPlayer.jsx"), "utf8");
+const playerSrc = [
+  readFileSync(join(root, "../components/theater/LibraryPlayer.jsx"), "utf8"),
+  readFileSync(join(root, "../components/theater/LibraryPlayerOsd.jsx"), "utf8"),
+].join("\n");
 
 const marker = "/*\n * lights-up-player-chrome";
 const lightsUp = watchCss.slice(watchCss.indexOf(marker));
@@ -31,10 +34,11 @@ describe("Play controls follow Lights Up", () => {
 
 describe("Play ±30 controls", () => {
   it("renders ±30 through the same skip path and hides them unless the bar is wide", () => {
-    assert.match(playerSrc, /skipBy\(-SKIP_LONG_SECONDS\)/);
-    assert.match(playerSrc, /skipBy\(SKIP_LONG_SECONDS\)/);
-    assert.match(playerSrc, /skipBy\(-SKIP_SECONDS\)/);
-    assert.match(playerSrc, /skipBy\(SKIP_SECONDS\)/);
+    assert.match(playerSrc, /onSkipBy\(-SKIP_LONG_SECONDS\)/);
+    assert.match(playerSrc, /onSkipBy\(SKIP_LONG_SECONDS\)/);
+    assert.match(playerSrc, /onSkipBy\(-SKIP_SECONDS\)/);
+    assert.match(playerSrc, /onSkipBy\(SKIP_SECONDS\)/);
+    assert.match(playerSrc, /onSkipBy=\{skipBy\}/);
     assert.match(playerSrc, /data-long-skip=\{longSkip \? "true" : "false"\}/);
     assert.match(playerSrc, /longSkip \?/);
     assert.match(watchCss, /\.theater-osd-skip-long\s*\{\s*display:\s*none;/);
