@@ -2,10 +2,71 @@
  * Client helpers for Projectionist preroll bumpers (independent per browser).
  */
 
-import { tryPlayLiveVideo } from "./liveChannels.js";
+import { isLivePrerollAssetUrl, tryPlayLiveVideo } from "./liveChannels.js";
 import type {JsonObject, JsParam} from "../api/types";
 
+export { isLivePrerollAssetUrl };
+
 export const PREROLL_TAP_COPY = "Tap the picture to start the bumper.";
+/** Give autoplay / metadata this long, then skip rather than freeze the theater. */
+export const BUMPER_PLAY_TIMEOUT_MS = 6000;
+/** Playing but stuck on frame 0 — skip instead of a dead first-frame hang. */
+export const BUMPER_FIRST_FRAME_STALL_MS = 4000;
+
+export type BumperWatchDecision = "keep" | "watch" | "wait" | "gesture" | "skip";
+
+/**
+ * Race a play() promise so a hung autoplay cannot pin Live on the first frame.
+ * @param {Promise<unknown>} playPromise
+ * @param {number} [timeoutMs]
+ */
+export function promiseWithTimeout(playPromise: Promise<unknown>, timeoutMs = BUMPER_PLAY_TIMEOUT_MS) {
+  const ms = Number(timeoutMs);
+  if (!Number.isFinite(ms) || ms <= 0) return playPromise;
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve("timeout"), ms);
+    Promise.resolve(playPromise).then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve("timeout");
+      },
+    );
+  });
+}
+
+/**
+ * Keep a bumper that is actually moving. Skip a freeze, error, or hung play.
+ * Autoplay-blocked stays on the tap overlay until the timeout, then skips.
+ */
+export function bumperWatchDecision({
+  playResult = "idle",
+  currentTime = 0,
+  error = false,
+  elapsedMs = 0,
+  playTimeoutMs = BUMPER_PLAY_TIMEOUT_MS,
+  stallMs = BUMPER_FIRST_FRAME_STALL_MS,
+}: JsParam = {}): BumperWatchDecision {
+  if (error) return "skip";
+  const time = Number(currentTime);
+  const elapsed = Number(elapsedMs);
+  const timeout = Number(playTimeoutMs);
+  const stall = Number(stallMs);
+  if (playResult === "playing") {
+    if (Number.isFinite(time) && time >= 0.2) return "keep";
+    if (Number.isFinite(elapsed) && Number.isFinite(stall) && elapsed >= stall) return "skip";
+    return "watch";
+  }
+  if (playResult === "ready") {
+    if (Number.isFinite(elapsed) && Number.isFinite(timeout) && elapsed >= timeout) return "skip";
+    return "gesture";
+  }
+  if (Number.isFinite(elapsed) && Number.isFinite(timeout) && elapsed >= timeout) return "skip";
+  return "wait";
+}
 
 /**
  * @param {unknown} payload
@@ -96,8 +157,10 @@ export function liveMovieComingOn(osd: JsParam, nowMs = Date.now()) {
  * @param {HTMLMediaElement|null|undefined} video
  * @returns {Promise<"playing"|"ready"|"idle">}
  */
-export async function playBumperVideo(video: JsParam) {
-  return tryPlayLiveVideo(video);
+export async function playBumperVideo(video: JsParam, { timeoutMs = BUMPER_PLAY_TIMEOUT_MS }: JsParam = {}) {
+  if (!video) return "idle";
+  const result = await promiseWithTimeout(tryPlayLiveVideo(video), timeoutMs);
+  return result === "timeout" ? "idle" : result;
 }
 
 /**

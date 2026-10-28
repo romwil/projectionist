@@ -327,7 +327,7 @@
   }
 }
 
-/* Named flex card when neither filler nor preroll can paint the video. */
+/* Named flex card when the pad has no playable Plex commercial keys. */
 .live-flex-slate {
   position: absolute;
   inset: 0;

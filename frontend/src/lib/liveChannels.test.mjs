@@ -362,8 +362,10 @@ describe("liveChannels helpers", () => {
       },
       nowMs,
     );
-    assert.equal(bumper.play, true);
+    assert.equal(bumper.play, false);
+    assert.equal(bumper.slate, true);
     assert.equal(bumper.progressive, true);
+    assert.match(bumper.slateCopy, /Between programs/);
 
     const black = flexPlaybackPlan({ is_flex: true, ends_at: nowMs / 1000 + 20, stream_url: "" }, nowMs);
     assert.equal(black.play, false);

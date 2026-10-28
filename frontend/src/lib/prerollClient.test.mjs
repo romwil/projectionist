@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  bumperWatchDecision,
+  isLivePrerollAssetUrl,
   livePrerollCueId,
   normalizePrerollPayload,
   playBumperVideo,
@@ -23,6 +25,28 @@ describe("prerollClient", () => {
     assert.equal(ok.id, "clip-1");
     assert.equal(ok.url, "/api/preroll/asset/clip-1");
     assert.equal(ok.title, "Bumper");
+  });
+
+  it("skips a bumper that never starts or freezes on the first frame", async () => {
+    assert.equal(isLivePrerollAssetUrl("/api/preroll/asset/abc"), true);
+    assert.equal(isLivePrerollAssetUrl("/api/library/playback/sess/index.m3u8"), false);
+    assert.equal(bumperWatchDecision({ playResult: "playing", currentTime: 1.2, elapsedMs: 200 }), "keep");
+    assert.equal(
+      bumperWatchDecision({ playResult: "playing", currentTime: 0, elapsedMs: 5000, stallMs: 4000 }),
+      "skip",
+    );
+    assert.equal(bumperWatchDecision({ playResult: "ready", elapsedMs: 200, playTimeoutMs: 6000 }), "gesture");
+    assert.equal(bumperWatchDecision({ playResult: "ready", elapsedMs: 7000, playTimeoutMs: 6000 }), "skip");
+    assert.equal(bumperWatchDecision({ playResult: "idle", elapsedMs: 7000, playTimeoutMs: 6000 }), "skip");
+    assert.equal(bumperWatchDecision({ error: true, playResult: "playing", currentTime: 0 }), "skip");
+
+    const hung = {
+      muted: false,
+      play() {
+        return new Promise(() => {});
+      },
+    };
+    assert.equal(await playBumperVideo(hung, { timeoutMs: 25 }), "idle");
   });
 
   it("bumper overlay tap calls video.play(); autoplay-blocked path is not a no-op", async () => {
