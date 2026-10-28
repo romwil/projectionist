@@ -14,6 +14,8 @@ export const BUMPER_PLAY_TIMEOUT_MS = 6000;
 export const BUMPER_FIRST_FRAME_STALL_MS = 4000;
 
 export type BumperWatchDecision = "keep" | "watch" | "wait" | "gesture" | "skip";
+export type BumperPlayGate = "start" | "ignore";
+export type BumperPlaySettleAction = "playing" | "skip" | "gesture" | "ignore";
 
 /**
  * Race a play() promise so a hung autoplay cannot pin Live on the first frame.
@@ -66,6 +68,36 @@ export function bumperWatchDecision({
   }
   if (Number.isFinite(elapsed) && Number.isFinite(timeout) && elapsed >= timeout) return "skip";
   return "wait";
+}
+
+/**
+ * loadeddata and canplay both call onReady. playResult stays idle until
+ * playBumperVideo settles, so the second event must not start another play().
+ */
+export function bumperReadyPlayGate({
+  cancelled = false,
+  playResult = "idle",
+  playInFlight = false,
+}: JsParam = {}): BumperPlayGate {
+  if (cancelled || playInFlight) return "ignore";
+  if (playResult !== "idle") return "ignore";
+  return "start";
+}
+
+/**
+ * Settle one playBumperVideo attempt. A later timeout or overlapping autoplay
+ * rejection must not skip a bumper that already reached playing.
+ */
+export function bumperPlaySettle({
+  cancelled = false,
+  result = "idle",
+  playResult = "idle",
+  videoPlaying = false,
+}: JsParam = {}): BumperPlaySettleAction {
+  if (cancelled) return "ignore";
+  if (playResult === "playing" || result === "playing" || videoPlaying) return "playing";
+  if (result === "idle") return "skip";
+  return "gesture";
 }
 
 /**

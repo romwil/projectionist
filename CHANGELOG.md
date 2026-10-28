@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+## [1.37.70] — 2026-10-28
+
+One patch on 1.37.69: Live captions come from our VTT aligned to mid-program, Paused · tap to play is only a real pause, a playing bumper is not cut short, and full remove drops the index when the files are gone.
+
+### Highlights
+- **Live captions match the picture.** Closed captions come from our VTT, lined up with the part of the show that’s on now — not a missing Plex sidecar and not the start of the file.
+- **Paused · tap to play means you paused.** Recovering the stream no longer flashes a tap overlay while the picture is already running.
+- **A bumper that started keeps playing.** Overlapping play calls no longer skip a preroll that is already on screen.
+- **Full remove means the row is gone.** If the files already left disk, the library index drops. A partial season only drops the episodes that actually left.
+
+### Fixed
+- **Live CC uses our VTT proxy and auto-aligns cues to the tune offset.** Stop re-attaching Plex overlay/sidecar URLs that 404. File-relative cues shift by the mid-program HLS origin so captions match the picture without a manual delay.
+- **Live tap-to-play is for user pause and blocked autoplay, not remount or HLS recover.** `TheaterPlayer` emits `paused` on `video.load()` / `recoverMediaError` and `ready` on manifest parse; Live was treating those as chrome states and ignoring later `playing`, so Rejoin/recovery could stick on Paused · tap to play while the stream ran.
+- **A bumper that is already playing is not cut short.** `loadeddata` and `canplay` used to start overlapping `play()` calls; a later timeout or autoplay rejection skipped Live and library prerolls while they were on screen. One in-flight play, and settle keeps a bumper that already reached playing. Frozen first-frame still times out; flex pad is still not a stuck preroll.
+- **Plex 404 after disk unlink drops the index.** Full remove already unlinked files must still drop the library row when Plex 404s. A Sonarr-absent season only drops episodes Plex actually removed.
+
+### Verification
+- Focused pytest — 40 passed (`test_full_remove_without_arr`, `test_tv_remove`, `test_subtitle_player_proxy`, `test_version`) with `--no-cov`. ACRCloud env unset. Plex 404 after disk unlink drops the index; partial season keeps failed episode rows.
+- Frontend unit 1123/1123. `npm run lint` 0 errors (353 warnings). `npx tsc --noEmit` clean. `npm run build` ran `tsc --noEmit && vite build`. ConfirmModal hooks remain `useConfirmModal.tsx`. Dockerfile still copies `frontend/tsconfig.json` into the Hub frontend stage (`test_frontend_stage_copies_tsconfig_for_tsc_build`).
+- Cherry-picks onto `origin/main` (`1f887cd`) had no file conflicts. Live own VTT + auto offset, Live paused=user only, and one in-flight bumper `play()` all landed. `tests/test_version.py` after `./scripts/patch-release.sh 1.37.70`.
+
 ## [1.37.69] — 2026-10-28
 
 One patch on 1.37.68: native Live does not freeze on a bumper after a program. The pad between shows is commercials or a slate, not a stuck preroll.

@@ -38,18 +38,12 @@ export default function useSubtitleCues(url: string): SubtitleCues {
       try {
         const response = await fetch(url, { credentials: "include", signal: controller.signal });
         if (!response.ok) {
-          let detail = "";
-          try {
-            detail = JSON.parse(await response.text())?.detail || "";
-          } catch {
-            // non-JSON error body
-          }
-          throw new Error(typeof detail === "string" && detail ? detail : SUBTITLE_FETCH_FAILED);
+          throw new Error(SUBTITLE_FETCH_FAILED);
         }
         const cues = parseVtt(await response.text());
         if (cancelled) return;
         if (!cues.length) {
-          setResult({ url, cues: [], state: "error", error: "This subtitle track came back empty from Plex." });
+          setResult({ url, cues: [], state: "error", error: SUBTITLE_FETCH_FAILED });
           return;
         }
         setResult({ url, cues, state: "ready", error: "" });
