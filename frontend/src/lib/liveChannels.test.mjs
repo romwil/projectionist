@@ -22,6 +22,8 @@ import {
   liveProgramKey,
   flexPlaybackPlan,
   flexSlateCopy,
+  livePadHandoff,
+  liveFlexHoldMs,
   BETWEEN_PROGRAMS_TITLE,
   liveStreamUrl,
   liveWatchHref,
@@ -476,6 +478,93 @@ describe("liveChannels helpers", () => {
       flexSlateCopy({ nextTitle: "Heat" }),
       "Between programs — up next: Heat",
     );
+  });
+
+  it("live pad handoff never flashes a bumper over slate, then attaches the next movie", () => {
+    const pad = livePadHandoff({
+      isFlex: true,
+      secondsRemaining: 90,
+      tunedIsFlex: true,
+      tunedHasFiller: false,
+      prerollActive: false,
+    });
+    assert.equal(pad.stage, "slate");
+    const unknownLeft = livePadHandoff({
+      isFlex: true,
+      secondsRemaining: null,
+      tunedIsFlex: true,
+    });
+    assert.equal(unknownLeft.stage, "slate");
+    assert.equal(unknownLeft.attachProgram, false);
+    assert.equal(pad.allowBumper, false);
+    assert.equal(pad.showSlate, true);
+    assert.equal(pad.attachProgram, false);
+
+    const filler = livePadHandoff({
+      isFlex: true,
+      secondsRemaining: 90,
+      tunedIsFlex: true,
+      tunedHasFiller: true,
+    });
+    assert.equal(filler.stage, "filler");
+    assert.equal(filler.allowBumper, false);
+    assert.equal(filler.showSlate, false);
+
+    const bumperFlash = livePadHandoff({
+      isFlex: true,
+      secondsRemaining: 90,
+      tunedIsFlex: true,
+      tunedHasFiller: false,
+      prerollActive: true,
+    });
+    assert.equal(bumperFlash.allowBumper, false);
+    assert.equal(bumperFlash.showSlate, true);
+    assert.equal(bumperFlash.attachProgram, false);
+
+    const due = livePadHandoff({
+      isFlex: false,
+      secondsRemaining: 0,
+      tunedIsFlex: true,
+      tunedHasFiller: false,
+      prerollActive: true,
+    });
+    assert.equal(due.stage, "program");
+    assert.equal(due.allowBumper, false);
+    assert.equal(due.showSlate, false);
+    assert.equal(due.attachProgram, true);
+
+    const clampedFlex = livePadHandoff({
+      isFlex: true,
+      secondsRemaining: 0,
+      tunedIsFlex: true,
+      prerollActive: false,
+    });
+    assert.equal(clampedFlex.stage, "program");
+    assert.equal(clampedFlex.showSlate, false);
+    assert.equal(clampedFlex.attachProgram, true);
+
+    const joinMovie = livePadHandoff({
+      isFlex: false,
+      tunedIsFlex: false,
+      prerollActive: false,
+    });
+    assert.equal(joinMovie.allowBumper, true);
+    assert.equal(joinMovie.attachProgram, true);
+    assert.equal(joinMovie.showSlate, false);
+
+    const joinBumper = livePadHandoff({
+      isFlex: false,
+      tunedIsFlex: false,
+      prerollActive: true,
+    });
+    assert.equal(joinBumper.stage, "bumper");
+    assert.equal(joinBumper.allowBumper, true);
+    assert.equal(joinBumper.attachProgram, false);
+
+    const nowMs = 1_700_000_000_000;
+    assert.equal(liveFlexHoldMs({ secondsRemaining: 90, nowMs }), 90_000);
+    assert.equal(liveFlexHoldMs({ nextStart: nowMs / 1000 + 30, secondsRemaining: 90, nowMs }), 30_000);
+    assert.equal(liveFlexHoldMs({ nextStart: nowMs / 1000 - 5, secondsRemaining: 0, nowMs }), 250);
   });
 
   it("OSD keeps flex honest and surfaces next episode as Up next", () => {

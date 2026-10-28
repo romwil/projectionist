@@ -114,6 +114,95 @@ export function flexSlateCopy({ nextTitle = "", slateCopy = "" }: JsParam = {}) 
   return next ? `${BETWEEN_PROGRAMS_TITLE} — up next: ${next}` : BETWEEN_PROGRAMS_TITLE;
 }
 
+function asHoldSeconds(value: unknown) {
+  if (value == null || value === "") return Number.NaN;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : Number.NaN;
+}
+
+export type LivePadStage = "filler" | "slate" | "bumper" | "program";
+
+export type LivePadHandoff = {
+  stage: LivePadStage;
+  /** Host preroll overlay. False during a flex pad and when coming off one. */
+  allowBumper: boolean;
+  showSlate: boolean;
+  /** Tune/attach the rating key that owns the clock. */
+  attachProgram: boolean;
+};
+
+/**
+ * Flex pad vs movie-start bumper vs attaching the next file.
+ *
+ * The pad between titles is Plex filler HLS or the named Between-programs
+ * slate — never a host preroll. A bumper is only when a movie is already on
+ * (join during the ~180s start window), not as a flash on top of the pad.
+ * Once the next program owns the clock, never remount the slate.
+ */
+export function livePadHandoff({
+  isFlex = false,
+  secondsRemaining = null,
+  tunedIsFlex = false,
+  tunedHasFiller = false,
+  prerollActive = false,
+}: JsParam = {}): LivePadHandoff {
+  const left = asHoldSeconds(secondsRemaining);
+  const remainingDone = Number.isFinite(left) && left <= 0.5;
+  const padClockOpen = Boolean(isFlex) && !remainingDone;
+  if (!padClockOpen) {
+    const fromPad = Boolean(tunedIsFlex) || Boolean(isFlex);
+    if (fromPad) {
+      return {
+        stage: "program",
+        allowBumper: false,
+        showSlate: false,
+        attachProgram: true,
+      };
+    }
+    return {
+      stage: prerollActive ? "bumper" : "program",
+      allowBumper: true,
+      showSlate: false,
+      attachProgram: !prerollActive,
+    };
+  }
+  if (prerollActive) {
+    return {
+      stage: tunedHasFiller ? "filler" : "slate",
+      allowBumper: false,
+      showSlate: !tunedHasFiller,
+      attachProgram: false,
+    };
+  }
+  return {
+    stage: tunedHasFiller ? "filler" : "slate",
+    allowBumper: false,
+    showSlate: !tunedHasFiller,
+    attachProgram: false,
+  };
+}
+
+/**
+ * Wall-clock wait until the next real title, independent of bumper mount.
+ * Bumper overlay used to live in the same effect as this timer and cancel it.
+ */
+export function liveFlexHoldMs({
+  nextStart = null,
+  secondsRemaining = null,
+  nowMs = Date.now(),
+}: JsParam = {}) {
+  const fromRemaining = asHoldSeconds(secondsRemaining);
+  const fromStart = asHoldSeconds(nextStart);
+  let wait = Number.NaN;
+  if (Number.isFinite(fromRemaining)) wait = fromRemaining * 1000;
+  if (Number.isFinite(fromStart)) {
+    const until = fromStart * 1000 - Number(nowMs);
+    wait = Number.isFinite(wait) ? Math.min(wait, until) : until;
+  }
+  if (!Number.isFinite(wait)) return 15_000;
+  return Math.max(250, wait);
+}
+
 export function liveWatchHref(channelId: string | number | null | undefined, { popout = false }: JsParam = {}) {
   const params = new URLSearchParams();
   const id = String(channelId || "").trim();
