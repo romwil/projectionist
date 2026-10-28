@@ -13,7 +13,10 @@ import {
   inboxListParams,
   inboxPageSelection,
   inboxReplySubmission,
+  inboxRowWhen,
   inboxScanPreview,
+  inboxShowsListFilters,
+  formatInboxWhen,
   isAgentInboxNote,
   visibleInboxReply,
 } from "./inboxMailbox.ts";
@@ -101,4 +104,45 @@ test("a reply continues the same note instead of a blank chat", () => {
     inboxAgentOutboundMessage("The week in films.", "And the other one?", { first: false }),
     "And the other one?",
   );
+});
+
+test("list filters stay on the inbox and leave the open letter", () => {
+  assert.equal(inboxShowsListFilters(null), true);
+  assert.equal(inboxShowsListFilters(undefined), true);
+  assert.equal(inboxShowsListFilters({ id: "letter", title: "A letter about the house" }), false);
+  const page = readFileSync(join(root, "pages/InboxPage.tsx"), "utf8");
+  assert.match(page, /inboxShowsListFilters\(openItem\)/);
+  assert.match(page, /showListFilters \? \(/);
+  const toolbarStart = page.indexOf("showListFilters ? (");
+  const toolbarEnd = page.indexOf(") : null}", toolbarStart);
+  const toolbarBlock = page.slice(toolbarStart, toolbarEnd);
+  assert.match(toolbarBlock, /className="inbox-toolbar"/);
+  assert.match(toolbarBlock, /inbox-toolbar-controls/);
+  assert.match(toolbarBlock, /data-testid="inbox-status"/);
+  assert.match(toolbarBlock, /data-testid="inbox-sort"/);
+  const afterToolbar = page.slice(toolbarEnd);
+  assert.match(afterToolbar, /<InboxNote/);
+  assert.doesNotMatch(afterToolbar, /inbox-status/);
+  assert.doesNotMatch(afterToolbar, /inbox-sort/);
+  assert.doesNotMatch(afterToolbar, /inbox-kind/);
+});
+
+test("a list row shows the same sent datetime as the open letter", () => {
+  const createdAt = Date.UTC(2026, 9, 25, 21, 33) / 1000;
+  const item = { id: "house", title: "A letter about the house", created_at: createdAt };
+  const when = inboxRowWhen(item);
+  assert.equal(when, formatInboxWhen(inboxFullMessage(item).when));
+  assert.equal(when, formatInboxWhen(createdAt));
+  assert.ok(when);
+  assert.match(when, /2026/);
+  assert.equal(inboxRowWhen({ id: "empty", title: "Note" }), "");
+  assert.equal(inboxRowWhen({ id: "zero", created_at: 0 }), "");
+  assert.equal(inboxRowWhen({ id: "null", created_at: null }), "");
+  assert.equal(formatInboxWhen(""), "");
+  const page = readFileSync(join(root, "pages/InboxPage.tsx"), "utf8");
+  const note = readFileSync(join(root, "components/InboxNote.tsx"), "utf8");
+  assert.match(page, /inboxRowWhen\(item\)/);
+  assert.match(page, /inbox-row-when/);
+  assert.match(note, /formatInboxWhen\(full\.when\)/);
+  assert.match(note, /inbox-note-when/);
 });
