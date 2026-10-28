@@ -228,6 +228,34 @@ export async function toggleLiveVideoPlayback(video: JsParam) {
 }
 
 /**
+ * Map TheaterPlayer `onStatus` onto Live chrome.
+ *
+ * Live `paused` is a **user** pause (`togglePlayback`). The shell also emits
+ * `paused` for remount, `video.load()`, and `recoverMediaError` — those must
+ * not paint “Paused · tap to play” while media is playing, and a later
+ * `playing` must clear a false pause.
+ *
+ * Live `ready` is blocked autoplay / gesture needed. Manifest parsed is not ready.
+ */
+export function liveUiStatusFromTheater(current: unknown, next: unknown) {
+  const from = typeof current === "string" && current ? current : "idle";
+  if (next === "playing") return "playing";
+  if (next === "error") return "error";
+  if (next === "loading") return from === "paused" ? "paused" : "loading";
+  if (next === "ready") {
+    if (from === "playing" || from === "paused" || from === "error") return from;
+    return "ready";
+  }
+  if (next === "paused" || next === "idle" || next == null || next === "") return from;
+  return typeof next === "string" ? next : from;
+}
+
+/** Live tap-to-play chrome: user pause, or autoplay blocked pending a gesture. */
+export function liveShowsTapHint(status: unknown) {
+  return status === "ready" || status === "paused";
+}
+
+/**
  * Escalate brief buffering copy to “stalled — retrying” after this many ms.
  * Playhead-frozen detection uses the same window.
  */

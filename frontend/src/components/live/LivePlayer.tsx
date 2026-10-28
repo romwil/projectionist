@@ -23,6 +23,8 @@ import {
   recordLivePlaybackDiag,
   stepLiveStreamHealthUi,
   summarizeLiveVideoBuffer,
+  liveShowsTapHint,
+  liveUiStatusFromTheater,
   toggleLiveVideoPlayback,
   tryPlayLiveVideo,
 } from "../../lib/liveChannels.js";
@@ -515,27 +517,25 @@ export default function LivePlayer({
     return true;
   }
 
+  function handleManifestParsed() {
+    setError("");
+    recordLivePlaybackDiag("manifest-parsed", diagBase());
+    syncTracks();
+  }
+
   function handlePlayerStatus(next: any) {
-    if (next === "ready") {
-      setError("");
-      recordLivePlaybackDiag("manifest-parsed", diagBase());
-      syncTracks();
-    }
+    if (next === "ready") setError("");
     if (next === "playing") {
-      if (statusRef.current !== "paused" && statusRef.current !== "error") {
-        setStatus("playing");
-      }
       clearStallSignals({ logEvent: "video-playing" });
       lastProgressAtRef.current = Date.now();
       lastProgressTimeRef.current = videoRef.current?.currentTime;
-      return;
     }
     if (next === "error") {
-      setStatus("error");
       setError((prev) => prev || "HLS playback is not supported in this browser.");
-      return;
     }
-    setStatus(next);
+    const mapped = liveUiStatusFromTheater(statusRef.current, next);
+    statusRef.current = mapped;
+    setStatus(mapped);
   }
 
   function handleWaiting() {
@@ -858,7 +858,7 @@ export default function LivePlayer({
   const forceOsd = ccOpen || status === "loading" || status === "error" || streamHealth !== "ok";
   const showOsd = forceOsd || shellOsd;
   const flexL3 = buildFlexLowerThird(osd);
-  const showTapHint = status === "ready" || status === "paused";
+  const showTapHint = liveShowsTapHint(status);
   const showHealthChip =
     Boolean(healthCopy) && status !== "loading" && status !== "error" && !error;
 
@@ -1036,7 +1036,7 @@ export default function LivePlayer({
       onRootRef={handleRootRef}
       onAttachApi={handleAttachApi}
       onHlsError={handleHlsError}
-      onManifestParsed={syncTracks}
+      onManifestParsed={handleManifestParsed}
       onSubtitleTracks={handleSubtitleTracks}
       playMedia={tryPlayLiveVideo}
       mediaMode={mediaMode as any}

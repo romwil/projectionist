@@ -39,6 +39,8 @@ import {
   shouldBumpOsdFromPointerMove,
   stepLiveStreamHealthUi,
   summarizeLiveVideoBuffer,
+  liveShowsTapHint,
+  liveUiStatusFromTheater,
   toggleLiveVideoPlayback,
   tryPlayLiveVideo,
 } from "./liveChannels.ts";
@@ -350,6 +352,35 @@ describe("liveChannels helpers", () => {
     assert.equal(blocked.paused, false);
 
     assert.equal(await toggleLiveVideoPlayback(null), "idle");
+  });
+
+  it("maps Theater lifecycle events without a false Live pause tap-hint", () => {
+    // HLS recover / Rejoin: a later playing must clear a false paused.
+    assert.equal(liveUiStatusFromTheater("paused", "playing"), "playing");
+    assert.equal(liveShowsTapHint(liveUiStatusFromTheater("paused", "playing")), false);
+
+    // Remount / video.load() pause must not paint “Paused · tap to play”.
+    assert.equal(liveUiStatusFromTheater("playing", "paused"), "playing");
+    assert.equal(liveShowsTapHint(liveUiStatusFromTheater("playing", "paused")), false);
+    assert.equal(liveUiStatusFromTheater("loading", "paused"), "loading");
+    assert.equal(liveShowsTapHint(liveUiStatusFromTheater("loading", "paused")), false);
+
+    // Manifest parsed is not blocked autoplay; stay Tuning until play() settles.
+    assert.equal(liveUiStatusFromTheater("loading", "loading"), "loading");
+    assert.equal(liveShowsTapHint("loading"), false);
+
+    // Blocked autoplay still needs a gesture.
+    assert.equal(liveUiStatusFromTheater("loading", "ready"), "ready");
+    assert.equal(liveShowsTapHint("ready"), true);
+
+    // User pause still pauses; remount while paused keeps pause chrome.
+    assert.equal(liveShowsTapHint("paused"), true);
+    assert.equal(liveUiStatusFromTheater("paused", "paused"), "paused");
+    assert.equal(liveUiStatusFromTheater("paused", "loading"), "paused");
+    assert.equal(liveShowsTapHint(liveUiStatusFromTheater("paused", "paused")), true);
+
+    // Stale Rejoin ready must not overlay a playing stream.
+    assert.equal(liveUiStatusFromTheater("playing", "ready"), "playing");
   });
 
   it("formats clocks and OSD progress", () => {
