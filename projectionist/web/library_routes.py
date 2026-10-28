@@ -1529,7 +1529,7 @@ async def library_export_csv(
             output.seek(0)
             output.truncate(0)
 
-    filename = f"curatorx-library-{date.today().isoformat()}.csv"
+    filename = f"projectionist-library-{date.today().isoformat()}.csv"
     return StreamingResponse(
         rows(),
         media_type="text/csv; charset=utf-8",

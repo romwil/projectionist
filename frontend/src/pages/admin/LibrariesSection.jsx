@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useConfirmModal } from "../../hooks/useConfirmModal.jsx";
+import useLibraryJobs from "../../hooks/useLibraryJobs.js";
 import InlineAlert from "../../components/InlineAlert";
 import SettingsToggle from "../../components/settings/SettingsToggle";
 import AdminExecutionCard from "../../components/AdminExecutionCard";
@@ -63,11 +64,9 @@ import {
  * Wave 0 unblocks episode investigation without two agents editing ConfigPage.
  */
 export default function LibrariesSection({
-  syncingLibrary,
-  handleLibrarySync,
-  activeSyncJob,
   libraryStats,
-  trackedSyncJobId,
+  setLibraryStats,
+  setLibraryHealth,
   actionAlert,
   radarrGapStats,
   registeringRadarr,
@@ -98,6 +97,16 @@ export default function LibrariesSection({
   setActionFeedback,
   CertifiedBadge,
 }) {
+  const {
+    syncingLibrary,
+    handleLibrarySync,
+    activeSyncJob,
+    trackedSyncJobId,
+  } = useLibraryJobs({
+    setLibraryStats,
+    setLibraryHealth,
+    setActionFeedback,
+  });
   const [investigateHint, setInvestigateHint] = useState(null);
   const [repairRetryingId, setRepairRetryingId] = useState("");
   const [repairSkippingId, setRepairSkippingId] = useState("");
