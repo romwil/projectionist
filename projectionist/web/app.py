@@ -507,7 +507,7 @@ _docs_url = "/docs" if _openapi_exposed() else None
 _redoc_url = "/redoc" if _openapi_exposed() else None
 
 app = FastAPI(
-    title="CuratorX",
+    title="Projectionist",
     version=__version__,
     lifespan=lifespan,
     openapi_url=_openapi_url,
@@ -883,14 +883,14 @@ class MailSettingsPayload(BaseModel):
     enabled: bool = False
     provider: str = "off"
     from_email: str = ""
-    from_name: str = "CuratorX"
+    from_name: str = "Projectionist"
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_username: str = ""
     smtp_password: str = ""
     smtp_use_tls: bool = True
     resend_api_key: str = ""
-    subject_prefix: str = "[CuratorX]"
+    subject_prefix: str = "[Projectionist]"
     footer_text: str = ""
     logo_url: str = ""
 
@@ -2247,7 +2247,7 @@ def dismiss_purge_candidates_endpoint(
 def export_training_corpus(user=Depends(require_role("owner"))) -> JSONResponse:
     del user
     payload = _db().export_training_corpus()
-    filename = f"curatorx-training-corpus-{int(payload['exported_at'])}.json"
+    filename = f"projectionist-training-corpus-{int(payload['exported_at'])}.json"
     return JSONResponse(
         content=payload,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
@@ -3207,7 +3207,7 @@ async def library_export_csv(
             output.seek(0)
             output.truncate(0)
 
-    filename = f"curatorx-library-{date.today().isoformat()}.csv"
+    filename = f"projectionist-library-{date.today().isoformat()}.csv"
     return StreamingResponse(
         rows(),
         media_type="text/csv; charset=utf-8",
@@ -6224,9 +6224,9 @@ def test_mail_send(
         result = send_mail(
             settings,
             to_email=to_email,
-            subject="CuratorX mail test",
+            subject="Projectionist mail test",
             body_text=(
-                "This is a test message from CuratorX.\n\n"
+                "This is a test message from Projectionist.\n\n"
                 "If you received it, your mail settings are working."
             ),
         )

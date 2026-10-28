@@ -30,7 +30,7 @@ class PlexPinHelperTests(unittest.TestCase):
         self.assertTrue(url.startswith("https://app.plex.tv/auth/#!?"))
         self.assertIn("clientID=cid-1", url)
         self.assertIn("code=CODE12", url)
-        self.assertIn("CuratorX", url)
+        self.assertIn("Projectionist", url)
 
     def test_create_plex_pin_parses_response(self) -> None:
         payload = {
@@ -51,7 +51,7 @@ class PlexPinHelperTests(unittest.TestCase):
         self.assertEqual(args[0], "https://plex.tv/api/v2/pins?strong=true")
         self.assertEqual(kwargs["method"], "POST")
         self.assertEqual(kwargs["headers"]["X-Plex-Client-Identifier"], "client-abc")
-        self.assertEqual(kwargs["headers"]["X-Plex-Product"], "CuratorX")
+        self.assertEqual(kwargs["headers"]["X-Plex-Product"], "Projectionist")
 
     def test_fetch_plex_pin(self) -> None:
         payload = {"id": 99, "code": "ZZZZ", "authToken": "tok-1"}

@@ -24,7 +24,7 @@ def _headers(token: str) -> Dict[str, str]:
     return {
         "Accept": "application/xml",
         "X-Plex-Token": token.strip(),
-        "X-Plex-Product": "CuratorX",
+        "X-Plex-Product": "Projectionist",
         "X-Plex-Client-Identifier": "curatorx-watchlist",
     }
 

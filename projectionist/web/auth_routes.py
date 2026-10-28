@@ -71,9 +71,9 @@ def register_auth_routes(app):
         if format == "json":
             return JSONResponse(
                 content=payload,
-                headers={"Content-Disposition": 'attachment; filename="curatorx-memory.json"'},
+                headers={"Content-Disposition": 'attachment; filename="projectionist-memory.json"'},
             )
-        lines = ["# CuratorX memory export", ""]
+        lines = ["# Projectionist memory export", ""]
 
         lines.append("## Private notes")
         if payload["notes"]:
@@ -117,7 +117,7 @@ def register_auth_routes(app):
         return Response(
             content="\n".join(lines),
             media_type="text/markdown",
-            headers={"Content-Disposition": 'attachment; filename="curatorx-memory.md"'},
+            headers={"Content-Disposition": 'attachment; filename="projectionist-memory.md"'},
         )
 
 
