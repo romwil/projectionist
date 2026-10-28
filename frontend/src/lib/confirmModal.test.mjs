@@ -11,6 +11,7 @@ import {
   yirAdminGenerateConfirmOptions,
 } from "./yearInReview.js";
 import { newsletterConfirmOptions } from "./weeklyNewsletter.js";
+import { seerrSyncConfirmOptions } from "./seerrHousehold.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const srcRoot = join(here, "..");
@@ -49,6 +50,14 @@ describe("ConfirmModal chrome", () => {
     assert.match(modal, /onClick=\{onCancel\}/);
     assert.match(modal, /data-testid="confirm-modal-cancel"/);
     assert.match(modal, /data-testid="confirm-modal-confirm"/);
+  });
+
+  it("hosts an in-app prompt field instead of window.prompt", () => {
+    assert.match(modal, /data-testid="confirm-modal-prompt"/);
+    assert.match(hook, /prompt: options\.prompt \|\| null/);
+    assert.match(styles, /\.confirm-modal-field\s*\{/);
+    assert.equal(/window\.prompt\s*\(/.test(modal), false);
+    assert.equal(/window\.prompt\s*\(/.test(hook), false);
   });
 
   it("keeps dimmed-stage + danger primary in the shared overlay stylesheet", () => {
@@ -120,12 +129,27 @@ describe("YIR generate confirm", () => {
 });
 
 describe("no mixed native confirms", () => {
-  it("leaves no window.confirm in frontend/src", () => {
+  it("leaves no window.confirm or window.prompt in frontend/src", () => {
     const hits = [];
     for (const file of walkJsx(srcRoot)) {
       const text = readFileSync(file, "utf8");
-      if (/\bwindow\.confirm\s*\(/.test(text)) hits.push(file.slice(srcRoot.length + 1));
+      if (/\bwindow\.(confirm|prompt)\s*\(/.test(text)) hits.push(file.slice(srcRoot.length + 1));
     }
     assert.deepEqual(hits, []);
+  });
+
+  it("puts Config Seerr token paste on ConfirmModal", () => {
+    const config = readFileSync(join(srcRoot, "pages", "ConfigPage.jsx"), "utf8");
+    const household = readFileSync(join(srcRoot, "pages", "admin", "HouseholdSection.jsx"), "utf8");
+    assert.match(config, /seerrSyncConfirmOptions/);
+    assert.match(config, /handleRotateMcpKey/);
+    assert.match(config, /useConfirmModal/);
+    assert.equal(/\bwindow\.prompt\s*\(/.test(config), false);
+    assert.match(household, /handleUserSyncSeerr/);
+    const opts = seerrSyncConfirmOptions("Ada");
+    assert.equal(opts.title, "Sync Seerr account");
+    assert.match(opts.body, /Ada/);
+    assert.equal(opts.prompt.type, "password");
+    assert.equal(opts.confirmLabel, "Sync");
   });
 });
