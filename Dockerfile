@@ -7,7 +7,9 @@
 # That writes .docker-deps/ with the version pinned to 0.0.0 so a patch bump
 # does not reinstall npm or pip dependencies.
 
-# Frontend is JavaScript. Build it once on the builder's own architecture.
+# Frontend is TypeScript. Build it once on the builder's own architecture.
+# Hub `npm run build` is `tsc --noEmit && vite build` — tsconfig.json must be
+# in this stage or tsc prints usage and the image never ships.
 # A multi-arch release otherwise runs Vite under QEMU for amd64, where esbuild
 # either crawls or dies ("The service was stopped"). The runtime stages still
 # follow the target platform so wheels and ffmpeg match the image.
@@ -20,7 +22,7 @@ COPY .docker-deps/frontend/package.json .docker-deps/frontend/package-lock.json 
 RUN --mount=type=cache,target=/root/.npm \
     npm ci
 
-COPY frontend/index.html frontend/vite.config.js ./
+COPY frontend/index.html frontend/vite.config.js frontend/tsconfig.json ./
 COPY frontend/src ./src
 COPY frontend/public/favicon.svg ./public/favicon.svg
 # PrivacyPage / HelpPage import @docs/*.md (alias → /docs in this stage)
