@@ -239,7 +239,7 @@ class ApiAuthzTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.text.splitlines()[0], "title,year")
         self.assertIn("CSV Title,2024", response.text)
-        self.assertIn("curatorx-library-", response.headers["content-disposition"])
+        self.assertIn("projectionist-library-", response.headers["content-disposition"])
 
     def test_member_can_report_but_cannot_repair_media_issue(self) -> None:
         self._enable_multi_user_via_api()

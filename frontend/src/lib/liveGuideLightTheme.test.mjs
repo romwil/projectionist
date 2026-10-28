@@ -108,16 +108,17 @@ html[data-theme="lights-up"] .live-guide-cell.is-focused`,
     assert.match(ticker, /border-color:\s*var\(--border\)/);
   });
 
-  it("leaves the Lights Down guide and weather board on the dark chamber", () => {
+  it("paints Lights Down Live from 01-tokens, not a second chamber hex palette", () => {
     const before = css.slice(0, css.indexOf(marker));
-    // The shell layout rule also contains `.live-page`. The dark chamber is the
-    // base `.live-page` block, which still starts the guide under Lights Down.
-    assert.match(ruleBody(before, "\n.live-page"), /#07080c/);
-    assert.match(ruleBody(before, ".live-guide-rail"), /rgba\(8,\s*9,\s*14,\s*0\.96\)/);
-    assert.match(ruleBody(before, ".live-guide-cell"), /rgba\(28,\s*32,\s*41,\s*0\.92\)/);
-    assert.match(ruleBody(before, ".live-program-hover"), /rgba\(16,\s*18,\s*24,\s*0\.97\)/);
-    assert.match(ruleBody(before, ".weather-channel"), /#100e0c/);
-    assert.match(ruleBody(before, ".weather-channel"), /--wx-ink:\s*#f4efe4/);
+    assert.match(ruleBody(before, "\n.live-page"), /var\(--live-bg\)/);
+    assert.match(ruleBody(before, "\n.live-page"), /var\(--workspace-wash-b\)/);
+    assert.doesNotMatch(ruleBody(before, "\n.live-page"), /#07080c|#12151c|#050608/);
+    assert.match(ruleBody(before, ".live-guide-rail"), /var\(--workspace-base\)/);
+    assert.match(ruleBody(before, ".live-guide-cell"), /var\(--surface-raised\)/);
+    assert.match(ruleBody(before, ".live-program-hover"), /var\(--surface\)/);
+    assert.match(ruleBody(before, ".weather-channel"), /--wx-ink:\s*var\(--ink-on-media\)/);
+    assert.match(ruleBody(before, ".weather-channel"), /--wx-amber:\s*var\(--accent\)/);
+    assert.doesNotMatch(css, /#07080c|#100e0c|#f4efe4|#ffb800|#050608/);
     assert.doesNotMatch(before, /html\[data-theme="lights-up"\]/);
   });
 });

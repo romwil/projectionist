@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import { ROUTES } from "./backNav.js";
 import { libraryHubPath } from "./libraryTabs.js";
 import {
@@ -215,5 +218,26 @@ describe("buildAppNavItems", () => {
     assert.equal(ids.includes("tour"), false);
     assert.equal(ids.includes("inbox"), true);
     assert.equal(ids.includes("my-journey"), true);
+  });
+});
+
+describe("AppNav chrome stylesheet", () => {
+  const stylesDir = join(dirname(fileURLToPath(import.meta.url)), "../styles");
+  const navCss = readFileSync(join(stylesDir, "02-nav-chrome.css"), "utf8");
+  const delightCss = readFileSync(join(stylesDir, "10-explore-delight.css"), "utf8");
+  const tokens = readFileSync(join(stylesDir, "01-tokens.css"), "utf8");
+
+  it("keeps the hamburger drawer in nav chrome, not Explore delight", () => {
+    assert.match(navCss, /\.app-nav-layer\s*\{/);
+    assert.match(navCss, /\.app-nav-drawer\s*\{/);
+    assert.doesNotMatch(delightCss, /\.app-nav-layer\s*\{/);
+    assert.doesNotMatch(delightCss, /\.app-nav-drawer\s*\{/);
+  });
+
+  it("paints AppNav from tokens instead of explore hex fallbacks", () => {
+    assert.match(navCss, /\.app-nav-drawer\s*\{[^}]*background:\s*var\(--surface\)/s);
+    assert.match(navCss, /\.app-nav-badge\s*\{[^}]*background:\s*var\(--accent\)/s);
+    assert.match(tokens, /--live-bg:\s*var\(--workspace-base\)/);
+    assert.match(tokens, /--picture-black:\s*#000/);
   });
 });

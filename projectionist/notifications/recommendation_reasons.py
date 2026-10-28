@@ -36,6 +36,7 @@ _ITEM_COLUMNS = """
 """
 _SEED_SOURCES_WATCH = ("completion", "session", "watch_event", "library_view")
 _SEED_SOURCES_SAVED = ("watchlist",)
+_TRACKER_KEY_CHUNK = 400
 
 
 def _as_dict(row: Any) -> Dict[str, Any]:
@@ -852,6 +853,105 @@ def specific_bridge(
     return None
 
 
+def tracker_watched_item_ids(db: Database) -> set[int]:
+    """Library item ids the household tracker already observed as watched/started.
+
+    Completions, sessions, and events all count — ``view_count`` of 0 is not
+    enough to call a title unwatched once the ledger has evidence.
+    """
+    try:
+        with db.connect() as conn:
+            keys: List[str] = []
+            seen_keys: set[str] = set()
+
+            def _collect(sql: str) -> None:
+                if not sql:
+                    return
+                try:
+                    rows = conn.execute(sql)
+                except Exception:  # noqa: BLE001 — partial fixtures
+                    return
+                for row in rows:
+                    for field in ("rating_key", "parent_rating_key"):
+                        key = str(row[field] or "").strip()
+                        if key and key not in seen_keys:
+                            seen_keys.add(key)
+                            keys.append(key)
+
+            if _table_exists(conn, "watch_completions"):
+                _collect(
+                    """
+                    SELECT rating_key, parent_rating_key
+                    FROM watch_completions
+                    WHERE superseded_by_completion_id IS NULL
+                    """
+                )
+            if _table_exists(conn, "watch_sessions"):
+                _collect("SELECT rating_key, parent_rating_key FROM watch_sessions")
+            if _table_exists(conn, "watch_events"):
+                _collect(
+                    """
+                    SELECT rating_key, parent_rating_key
+                    FROM watch_events
+                    WHERE duplicate_of_event_id IS NULL
+                    """
+                )
+            if not keys:
+                return set()
+            ids: set[int] = set()
+            for start in range(0, len(keys), _TRACKER_KEY_CHUNK):
+                chunk = keys[start : start + _TRACKER_KEY_CHUNK]
+                placeholders = ",".join("?" for _ in chunk)
+                for row in conn.execute(
+                    f"SELECT id FROM library_items WHERE rating_key IN ({placeholders})",
+                    chunk,
+                ):
+                    try:
+                        ids.add(int(row["id"]))
+                    except (TypeError, ValueError, KeyError):
+                        continue
+            return ids
+    except Exception:  # noqa: BLE001 — missing tables on partial fixtures
+        return set()
+
+
+def _peer_is_unwatched(row: Mapping[str, Any], watched_ids: set[int]) -> bool:
+    try:
+        if int(row.get("view_count") or 0) > 0:
+            return False
+    except (TypeError, ValueError):
+        return False
+    try:
+        if int(row["id"]) in watched_ids:
+            return False
+    except (TypeError, ValueError, KeyError):
+        pass
+    return True
+
+
+def named_bridge_for_item(
+    db: Database,
+    row: Mapping[str, Any],
+    *,
+    user_id: Optional[str] = None,
+    multi_user_enabled: bool = False,
+    youth_max_rating: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """``watched_bridge`` for an already-chosen unwatched row, or None."""
+    if not _peer_is_unwatched(row, tracker_watched_item_ids(db)):
+        return None
+    if not _youth_row_allowed(row, youth_max_rating):
+        return None
+    watched = watched_library_rows(
+        db, user_id=user_id, multi_user_enabled=multi_user_enabled
+    )
+    if youth_max_rating:
+        watched = [seed for seed in watched if _youth_row_allowed(seed, youth_max_rating)]
+    if not watched:
+        return None
+    return specific_bridge(db, row, watched)
+
+
 def _plot_phrase_candidate_ids(
     db: Database, seed: Mapping[str, Any], *, limit: int = 16
 ) -> List[int]:
@@ -906,7 +1006,12 @@ def _plot_phrase_candidate_ids(
     return found
 
 
-def _candidate_ids(db: Database, seeds: Sequence[Mapping[str, Any]]) -> List[int]:
+def _candidate_ids(
+    db: Database,
+    seeds: Sequence[Mapping[str, Any]],
+    *,
+    exclude_ids: Optional[set[int]] = None,
+) -> List[int]:
     seed_ids: List[int] = []
     for seed in seeds:
         try:
@@ -915,9 +1020,10 @@ def _candidate_ids(db: Database, seeds: Sequence[Mapping[str, Any]]) -> List[int
             continue
     found: List[int] = []
     seen = set(seed_ids)
+    blocked = exclude_ids or set()
 
     def _add(item_id: int) -> None:
-        if item_id <= 0 or item_id in seen:
+        if item_id <= 0 or item_id in seen or item_id in blocked:
             return
         seen.add(item_id)
         found.append(item_id)
@@ -1093,7 +1199,8 @@ def list_linked_unwatched(
             continue
     if not seed_ids:
         return []
-    candidate_ids = _candidate_ids(db, watched[:8])
+    watched_ids = tracker_watched_item_ids(db)
+    candidate_ids = _candidate_ids(db, watched[:8], exclude_ids=watched_ids)
     loaded = _load_items(db, candidate_ids)
     picks: List[Dict[str, Any]] = []
     for item_id in candidate_ids:
@@ -1102,10 +1209,7 @@ def list_linked_unwatched(
         row = loaded.get(item_id)
         if row is None:
             continue
-        try:
-            if int(row.get("view_count") or 0) > 0:
-                continue
-        except (TypeError, ValueError):
+        if not _peer_is_unwatched(row, watched_ids):
             continue
         if not _youth_row_allowed(row, youth_max_rating):
             continue

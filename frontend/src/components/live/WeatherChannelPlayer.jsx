@@ -12,6 +12,7 @@ import {
   weatherTickerLines,
 } from "../../lib/weatherChannel.js";
 import WeatherLocationPicker from "../weather/WeatherLocationPicker";
+import TheaterPlayer from "../theater/TheaterPlayer.jsx";
 
 function SkyGlyph({ sky }) {
   const common = {
@@ -180,11 +181,12 @@ export default function WeatherChannelPlayer({ className = "", onClose }) {
     : null;
 
   return (
-    <div
+    <TheaterPlayer
+      src=""
       className={`weather-channel ${className}`.trim()}
-      data-testid="weather-channel"
-      data-sky={sky}
-      data-board={active || "empty"}
+      testId="weather-channel"
+      osdVisible={false}
+      dataAttrs={{ sky, board: active || "empty" }}
     >
       <div className="weather-channel-sky" aria-hidden="true" />
       <header className="weather-channel-header">
@@ -298,6 +300,6 @@ export default function WeatherChannelPlayer({ className = "", onClose }) {
           : payload?.muzak_note || "No soundtrack — the forecast plays without music."}
       </p>
       <audio ref={audioRef} data-testid="weather-channel-muzak" />
-    </div>
+    </TheaterPlayer>
   );
 }

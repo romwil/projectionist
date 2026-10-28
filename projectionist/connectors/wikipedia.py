@@ -11,7 +11,7 @@ from typing import Any, Mapping, Optional
 
 from projectionist.connectors.http import request_json
 
-USER_AGENT = "CuratorX/1.0 (homelab media curator; https://github.com/willrompala/mediacurator)"
+USER_AGENT = "Projectionist/1.0 (homelab media curator; https://github.com/romwil/projectionist)"
 API = "https://en.wikipedia.org/w/api.php"
 
 

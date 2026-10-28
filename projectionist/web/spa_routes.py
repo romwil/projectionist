@@ -24,7 +24,7 @@ def _index_html() -> str:
     fallback = (_static_dir or Path()) / "index.html"
     if fallback.exists():
         return fallback.read_text(encoding="utf-8")
-    return "<h1>CuratorX</h1><p>Build the frontend with <code>npm run build</code>.</p>"
+    return "<h1>Projectionist</h1><p>Build the frontend with <code>npm run build</code>.</p>"
 
 
 def _serve_index() -> HTMLResponse:

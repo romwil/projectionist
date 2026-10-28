@@ -52,7 +52,7 @@ def _from_header(mail: MailSettings) -> str:
 
 
 def _apply_subject_prefix(mail: MailSettings, subject: str) -> str:
-    cleaned = str(subject or "").strip() or "CuratorX"
+    cleaned = str(subject or "").strip() or "Projectionist"
     prefix = str(mail.subject_prefix or "").strip()
     if not prefix:
         return cleaned

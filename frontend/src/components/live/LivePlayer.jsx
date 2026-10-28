@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import Hls from "hls.js";
 import {
   downloadLiveChannelSubtitles,
   fetchNextPreroll,
@@ -12,24 +11,21 @@ import {
   classifyLiveStreamHealth,
   formatClock,
   formatWallTime,
-  isHlsBufferStallDetail,
-  isLivePlayerChromeTarget,
   LIVE_CC_EMPTY_STREAM,
   LIVE_STALL_ESCALATE_MS,
   LIVE_STALL_NOTICE_MS,
   flexPlaybackPlan,
   flexSlateCopy,
+  liveHlsErrorPolicy,
   liveStreamUrl,
   mergeLiveCcTracks,
-  OSD_IDLE_MS,
   recordLivePlaybackDiag,
-  shouldBumpOsdFromPointerMove,
   stepLiveStreamHealthUi,
   summarizeLiveVideoBuffer,
   toggleLiveVideoPlayback,
   tryPlayLiveVideo,
 } from "../../lib/liveChannels.js";
-import { theaterHlsConfig, toggleTheaterFullscreen } from "../../lib/theaterPlayer.js";
+import { toggleTheaterFullscreen } from "../../lib/theaterPlayer.js";
 import {
   clampSubtitleDelay,
   liveProgramClockSec,
@@ -47,7 +43,7 @@ import {
 } from "../../lib/livePauseBoundary.js";
 import { livePrerollCueId, normalizePrerollPayload } from "../../lib/prerollClient.js";
 import LiveProgramHoverCard from "./LiveProgramHoverCard.jsx";
-import TuningInterstitial from "../theater/TuningInterstitial.jsx";
+import TheaterPlayer from "../theater/TheaterPlayer.jsx";
 import PrerollStage from "../theater/PrerollStage.jsx";
 import SubtitleOverlay from "../theater/SubtitleOverlay.jsx";
 import SubtitlePicker from "../theater/SubtitlePicker.jsx";
@@ -70,9 +66,15 @@ export default function LivePlayer({
   const [nextHover, setNextHover] = useState(null);
   const rootRef = useRef(null);
   const hlsRef = useRef(null);
-  const idleTimerRef = useRef(null);
-  const pointerPosRef = useRef(null);
   const statusRef = useRef("idle");
+  const [rootEl, setRootEl] = useState(null);
+  const [mediaSrc, setMediaSrc] = useState("");
+  const [mediaMode, setMediaMode] = useState("hls");
+  const [attachKey, setAttachKey] = useState(0);
+  const [shellOsd, setShellOsd] = useState(true);
+  const networkRetriesRef = useRef(0);
+  const recoverTimerRef = useRef(null);
+  const stallNudgeTimerRef = useRef(null);
   const waitingSinceRef = useRef(null);
   const mediaStalledRef = useRef(false);
   const hlsBufferStalledRef = useRef(false);
@@ -81,7 +83,6 @@ export default function LivePlayer({
   const lastProgressAtRef = useRef(null);
   const lastProgressTimeRef = useRef(null);
   const lastMediaUrlRef = useRef("");
-  const [osdVisible, setOsdVisible] = useState(true);
   const [osdTick, setOsdTick] = useState(Date.now());
   const [status, setStatus] = useState("idle");
   const [scheduleEpoch, setScheduleEpoch] = useState(0);
@@ -257,15 +258,7 @@ export default function LivePlayer({
   }
 
   function bumpOsd() {
-    setOsdVisible(true);
-    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    idleTimerRef.current = setTimeout(() => setOsdVisible(false), OSD_IDLE_MS);
-  }
-
-  function onPointerActivity(event) {
-    const { bump, pos } = shouldBumpOsdFromPointerMove(pointerPosRef.current, event);
-    pointerPosRef.current = pos;
-    if (bump) bumpOsd();
+    setShellOsd(true);
   }
 
   useEffect(() => {
@@ -274,28 +267,19 @@ export default function LivePlayer({
   }, []);
 
   useEffect(() => {
-    const el = rootRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    if (!rootEl || typeof ResizeObserver === "undefined") return undefined;
     let debounce = null;
     const ro = new ResizeObserver((entries) => {
       const width = entries[0]?.contentRect?.width || 0;
       if (debounce) clearTimeout(debounce);
       debounce = setTimeout(() => setNarrow(width < 480), 100);
     });
-    ro.observe(el);
+    ro.observe(rootEl);
     return () => {
       ro.disconnect();
       if (debounce) clearTimeout(debounce);
     };
-  }, []);
-
-  useEffect(() => {
-    bumpOsd();
-    return () => {
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reveal OSD on channel change only
-  }, [channelId]);
+  }, [rootEl]);
 
   // A Plex track belongs to one airing — drop it when the title behind the channel changes.
   useEffect(() => {
@@ -378,15 +362,191 @@ export default function LivePlayer({
     });
   }, [status]);
 
-  useEffect(() => {
+  function syncTracks() {
     const video = videoRef.current;
-    if (!video || !channelId || preroll) return undefined;
+    if (!video) return;
+    const list = [];
+    for (let i = 0; i < video.textTracks.length; i += 1) {
+      const track = video.textTracks[i];
+      list.push({
+        index: i,
+        label: track.label || track.language || `Track ${i + 1}`,
+        language: track.language || "",
+      });
+    }
+    setTextTracks(list);
+  }
+
+  function handleSubtitleTracks(hls) {
+    const subs = hls?.subtitleTracks || [];
+    if (subs.length) {
+      setTextTracks(
+        subs.map((track, index) => ({
+          index,
+          label: track.name || track.lang || `CC ${index + 1}`,
+          language: track.lang || "",
+          viaHls: true,
+        })),
+      );
+    } else {
+      syncTracks();
+    }
+  }
+
+  function handleHlsError(data, { hls, remount } = {}) {
+    const policy = liveHlsErrorPolicy(data, { networkRetries: networkRetriesRef.current });
+    const detail = data?.details || "";
+    const fatal = Boolean(data?.fatal);
+    recordLivePlaybackDiag(fatal ? "hls-error-fatal" : "hls-error", diagBase({
+      hlsType: data?.type,
+      hlsDetails: detail,
+      fatal,
+      httpCode: data?.response?.code,
+      fragUrl: data?.frag?.url || data?.url || "",
+    }));
+    networkRetriesRef.current = policy.networkRetries;
+    if (policy.stall) {
+      hlsBufferStalledRef.current = true;
+      noteStallSignal();
+    }
+    if (policy.keepPlaying) {
+      setStatus("playing");
+      setError("");
+    }
+    if (policy.action === "stall-nudge") {
+      if (!stallNudgeTimerRef.current) {
+        stallNudgeTimerRef.current = setTimeout(() => {
+          stallNudgeTimerRef.current = null;
+          try {
+            hlsRef.current?.startLoad?.();
+            recordLivePlaybackDiag("stall-nudge-startLoad", diagBase());
+          } catch {
+            // ignore
+          }
+        }, LIVE_STALL_ESCALATE_MS);
+      }
+      return true;
+    }
+    if (policy.action === "startLoad") {
+      hls?.startLoad?.();
+      return true;
+    }
+    if (policy.action === "remount") {
+      if (recoverTimerRef.current) clearTimeout(recoverTimerRef.current);
+      recoverTimerRef.current = setTimeout(() => {
+        recoverTimerRef.current = null;
+        remount?.();
+      }, policy.remountDelayMs);
+      return true;
+    }
+    if (policy.action === "recoverMedia") {
+      hls?.recoverMediaError?.();
+      return true;
+    }
+    if (policy.action === "fatal") {
+      setStatus("error");
+      resetStallUiState();
+      setError(formatLiveStreamError(data));
+      return true;
+    }
+    return true;
+  }
+
+  function handlePlayerStatus(next) {
+    if (next === "ready") {
+      setError("");
+      recordLivePlaybackDiag("manifest-parsed", diagBase());
+      syncTracks();
+    }
+    if (next === "playing") {
+      if (statusRef.current !== "paused" && statusRef.current !== "error") {
+        setStatus("playing");
+      }
+      clearStallSignals({ logEvent: "video-playing" });
+      lastProgressAtRef.current = Date.now();
+      lastProgressTimeRef.current = videoRef.current?.currentTime;
+      return;
+    }
+    if (next === "error") {
+      setStatus("error");
+      setError((prev) => prev || "HLS playback is not supported in this browser.");
+      return;
+    }
+    setStatus(next);
+  }
+
+  function handleWaiting() {
+    if (statusRef.current === "loading" || statusRef.current === "paused") return;
+    recordLivePlaybackDiag("video-waiting", diagBase());
+    noteStallSignal();
+  }
+
+  function handleStalled() {
+    if (statusRef.current === "loading" || statusRef.current === "paused") return;
+    mediaStalledRef.current = true;
+    recordLivePlaybackDiag("video-stalled", diagBase());
+    noteStallSignal();
+  }
+
+  function handleTimeUpdate(video) {
+    const t = video?.currentTime;
+    if (
+      lastProgressTimeRef.current == null
+      || Math.abs(t - lastProgressTimeRef.current) >= 0.2
+    ) {
+      lastProgressTimeRef.current = t;
+      lastProgressAtRef.current = Date.now();
+      if (
+        waitingSinceRef.current != null
+        || mediaStalledRef.current
+        || hlsBufferStalledRef.current
+      ) {
+        clearStallSignals({ logEvent: "playhead-advanced" });
+      }
+    }
+  }
+
+  function handleEnded() {
+    if (finishThenLiveRef.current) {
+      finishThenLiveRef.current = false;
+      setPauseBoundary(null);
+      pauseProgramEndRef.current = null;
+      remountLiveRef.current?.();
+    }
+    setScheduleEpoch((epoch) => epoch + 1);
+  }
+
+  const handleVideoRef = useCallback((el) => {
+    videoRef.current = el;
+  }, []);
+  const handleHlsRef = useCallback((hls) => {
+    hlsRef.current = hls;
+  }, []);
+  const handleRootRef = useCallback((el) => {
+    rootRef.current = el;
+    setRootEl(el);
+  }, []);
+  const handleAttachApi = useCallback((api) => {
+    remountLiveRef.current = api?.remount
+      ? () => {
+          finishThenLiveRef.current = false;
+          api.remount();
+        }
+      : null;
+  }, []);
+
+  useEffect(() => {
+    if (!channelId || preroll) {
+      setMediaSrc("");
+      return undefined;
+    }
 
     let url = liveStreamUrl(channelId);
     lastMediaUrlRef.current = url;
     setError("");
     setStatus("loading");
     resetStallUiState();
+    networkRetriesRef.current = 0;
     lastProgressAtRef.current = null;
     lastProgressTimeRef.current = null;
     setTextTracks([]);
@@ -397,182 +557,11 @@ export default function LivePlayer({
     });
 
     let destroyed = false;
-    let networkRetries = 0;
-    let recoverTimer = null;
-    let stallNudgeTimer = null;
-    const syncTracks = () => {
-      if (destroyed || !video) return;
-      const list = [];
-      for (let i = 0; i < video.textTracks.length; i += 1) {
-        const track = video.textTracks[i];
-        list.push({
-          index: i,
-          label: track.label || track.language || `Track ${i + 1}`,
-          language: track.language || "",
-        });
-        track.mode = i === activeTrack ? "showing" : "disabled";
-      }
-      setTextTracks(list);
-    };
+    let holdTimer = null;
 
-    const beginPlay = () => {
-      tryPlayLiveVideo(video).then((next) => {
-        if (!destroyed) {
-          setStatus(next);
-          if (next === "playing") {
-            clearStallSignals();
-            lastProgressAtRef.current = Date.now();
-            lastProgressTimeRef.current = video.currentTime;
-          }
-        }
-      });
-    };
-
-    const attachHls = () => {
-      if (destroyed || !video || !Hls.isSupported()) return;
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
-      }
-      const hls = new Hls(theaterHlsConfig());
-      hlsRef.current = hls;
-      hls.loadSource(url);
-      hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        if (destroyed) return;
-        setError("");
-        recordLivePlaybackDiag("manifest-parsed", diagBase());
-        beginPlay();
-        syncTracks();
-      });
-      hls.on(Hls.Events.ERROR, (_event, data) => {
-        if (destroyed || !data) return;
-        const detail = data.details || "";
-        const fatal = Boolean(data.fatal);
-        recordLivePlaybackDiag(fatal ? "hls-error-fatal" : "hls-error", diagBase({
-          hlsType: data.type,
-          hlsDetails: detail,
-          fatal,
-          httpCode: data.response?.code,
-          fragUrl: data.frag?.url || data.url || "",
-        }));
-        // Non-fatal buffer underruns leave status=playing with a frozen frame —
-        // surface living-room honesty + gentle startLoad nudge.
-        if (!fatal) {
-          if (isHlsBufferStallDetail(detail)) {
-            hlsBufferStalledRef.current = true;
-            noteStallSignal();
-            if (!stallNudgeTimer) {
-              stallNudgeTimer = setTimeout(() => {
-                stallNudgeTimer = null;
-                if (destroyed || !hlsRef.current) return;
-                try {
-                  hlsRef.current.startLoad();
-                  recordLivePlaybackDiag("stall-nudge-startLoad", diagBase());
-                } catch {
-                  // ignore
-                }
-              }, LIVE_STALL_ESCALATE_MS);
-            }
-          }
-          return;
-        }
-        // Soft recover without re-calling tune (tune start-over mid-watch kills Tunarr).
-        if (data.type === Hls.ErrorTypes.NETWORK_ERROR && networkRetries < 5) {
-          networkRetries += 1;
-          setStatus("playing");
-          setError("");
-          hlsBufferStalledRef.current = true;
-          noteStallSignal();
-          if (networkRetries <= 3) {
-            hls.startLoad();
-            return;
-          }
-          // Later retries: remount HLS against the same URL after a short pause.
-          if (recoverTimer) clearTimeout(recoverTimer);
-          recoverTimer = setTimeout(() => {
-            if (!destroyed) attachHls();
-          }, 1500 * Math.min(networkRetries, 4));
-          return;
-        }
-        if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-          setStatus("playing");
-          setError("");
-          hlsBufferStalledRef.current = true;
-          noteStallSignal();
-          hls.recoverMediaError();
-          return;
-        }
-        setStatus("error");
-        resetStallUiState();
-        setError(formatLiveStreamError(data));
-      });
-      hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, () => {
-        // Prefer native textTracks once demuxed; also surface HLS subtitle tracks.
-        const subs = hls.subtitleTracks || [];
-        if (subs.length) {
-          setTextTracks(
-            subs.map((track, index) => ({
-              index,
-              label: track.name || track.lang || `CC ${index + 1}`,
-              language: track.lang || "",
-              viaHls: true,
-            })),
-          );
-        } else {
-          syncTracks();
-        }
-      });
-    };
-
-    const startPlayback = () => {
-      if (destroyed || !video) return;
-
-      if (Hls.isSupported()) {
-        attachHls();
-      } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-        video.src = url;
-        video.addEventListener("loadedmetadata", () => {
-          if (destroyed) return;
-          setError("");
-          beginPlay();
-          syncTracks();
-        });
-      } else {
-        setStatus("error");
-        setError("HLS playback is not supported in this browser.");
-      }
-
-      if (autoFullscreen && rootRef.current?.requestFullscreen) {
-        rootRef.current.requestFullscreen().catch(() => {});
-      }
-    };
-
-    // Warm + start-over BEFORE loadSource so tune cannot reset the HLS session
-    // out from under the first playlist/segment fetches. Mid-play recoveries
-    // intentionally skip tuneLiveChannel (see attachHls error path).
-    const onEnded = () => {
-      if (destroyed) return;
-      setScheduleEpoch((epoch) => epoch + 1);
-    };
-    video.addEventListener("ended", onEnded);
-
-    const startProgressive = () => {
-      if (destroyed || !video) return;
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
-      }
-      const onReady = () => {
-        if (destroyed) return;
-        setError("");
-        beginPlay();
-        syncTracks();
-      };
-      video.addEventListener("loadedmetadata", onReady, { once: true });
-      video.src = url;
-    };
-
+    // Warm + start-over BEFORE the shell loadSource so tune cannot reset the
+    // HLS session out from under the first playlist/segment fetches. Mid-play
+    // recoveries remount HLS on the same URL (see liveHlsErrorPolicy).
     (async () => {
       let plan = flexPlaybackPlan(null);
       try {
@@ -594,108 +583,48 @@ export default function LivePlayer({
       }
       if (destroyed) return;
       if (plan.holdMs > 0) {
-        recoverTimer = window.setTimeout(() => {
+        holdTimer = window.setTimeout(() => {
           if (!destroyed) setScheduleEpoch((epoch) => epoch + 1);
         }, plan.holdMs);
       }
-      // Flex with a filler URL plays in this element. Returning early used to
-      // leave the empty <video> (background #000) covering the stage while the
-      // Up next clock kept moving.
+      // Flex with a filler URL plays in the shared shell. Returning early used
+      // to leave an empty <video> covering the stage while Up next kept moving.
       if (plan.play) {
-        if (plan.progressive) startProgressive();
-        else startPlayback();
+        setMediaMode(plan.progressive ? "progressive" : "hls");
+        setMediaSrc(url);
         return;
       }
+      setMediaSrc("");
       if (plan.holdMs > 0) {
         setStatus("playing");
         return;
       }
-      startPlayback();
+      setMediaMode("hls");
+      setMediaSrc(url);
     })();
-
-    remountLiveRef.current = () => {
-      if (destroyed) return;
-      finishThenLiveRef.current = false;
-      attachHls();
-    };
 
     return () => {
       destroyed = true;
-      remountLiveRef.current = null;
-      if (recoverTimer) clearTimeout(recoverTimer);
-      if (stallNudgeTimer) clearTimeout(stallNudgeTimer);
-      clearStallUiTimer();
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
+      if (holdTimer) window.clearTimeout(holdTimer);
+      if (recoverTimerRef.current) {
+        clearTimeout(recoverTimerRef.current);
+        recoverTimerRef.current = null;
       }
-      video.removeEventListener("ended", onEnded);
-      video.removeAttribute("src");
-      video.load();
+      if (stallNudgeTimerRef.current) {
+        clearTimeout(stallNudgeTimerRef.current);
+        stallNudgeTimerRef.current = null;
+      }
     };
-    // activeTrack intentionally omitted — applied in separate effect
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelId, autoFullscreen, preroll, scheduleEpoch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- tune per channel / bumper / flex hold
+  }, [channelId, preroll, scheduleEpoch]);
 
-  // Detect buffer underruns / frozen playhead while status stays "playing".
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !channelId) return undefined;
-
-    const onWaiting = () => {
-      if (statusRef.current === "loading" || statusRef.current === "paused") return;
-      recordLivePlaybackDiag("video-waiting", diagBase());
-      noteStallSignal();
-    };
-    const onStalled = () => {
-      if (statusRef.current === "loading" || statusRef.current === "paused") return;
-      mediaStalledRef.current = true;
-      recordLivePlaybackDiag("video-stalled", diagBase());
-      noteStallSignal();
-    };
-    const onPlaying = () => {
-      if (statusRef.current !== "paused" && statusRef.current !== "error") {
-        setStatus("playing");
-      }
-      clearStallSignals({ logEvent: "video-playing" });
-      lastProgressAtRef.current = Date.now();
-      lastProgressTimeRef.current = video.currentTime;
-    };
-    const onTimeUpdate = () => {
-      const t = video.currentTime;
-      if (
-        lastProgressTimeRef.current == null
-        || Math.abs(t - lastProgressTimeRef.current) >= 0.2
-      ) {
-        lastProgressTimeRef.current = t;
-        lastProgressAtRef.current = Date.now();
-        if (
-          waitingSinceRef.current != null
-          || mediaStalledRef.current
-          || hlsBufferStalledRef.current
-        ) {
-          clearStallSignals({ logEvent: "playhead-advanced" });
-        }
-      }
-    };
-
-    video.addEventListener("waiting", onWaiting);
-    video.addEventListener("stalled", onStalled);
-    video.addEventListener("playing", onPlaying);
-    video.addEventListener("timeupdate", onTimeUpdate);
+    if (!channelId) return undefined;
     const tick = setInterval(() => {
-      // Poll for notice/escalate/hold edges; chrome stays up via streamHealth !== "ok".
       recomputeStreamHealth(Date.now(), { bump: true });
     }, 1000);
-
-    return () => {
-      video.removeEventListener("waiting", onWaiting);
-      video.removeEventListener("stalled", onStalled);
-      video.removeEventListener("playing", onPlaying);
-      video.removeEventListener("timeupdate", onTimeUpdate);
-      clearInterval(tick);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- attach per channel tune
+    return () => clearInterval(tick);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- poll per channel tune
   }, [channelId]);
 
   useEffect(() => {
@@ -805,7 +734,8 @@ export default function LivePlayer({
     setPauseBoundary({ open: false });
     pauseProgramEndRef.current = null;
     finishThenLiveRef.current = false;
-    remountLiveRef.current?.();
+    if (remountLiveRef.current) remountLiveRef.current();
+    else setAttachKey((key) => key + 1);
     const video = videoRef.current;
     if (video) {
       hlsRef.current?.startLoad?.();
@@ -825,18 +755,6 @@ export default function LivePlayer({
     }
   }
 
-  function onStageClick(event) {
-    if (isLivePlayerChromeTarget(event.target)) return;
-    // Only the video stage (and tap-to-play overlay) toggles — not OSD chrome.
-    const onVideo = event.target === videoRef.current;
-    const onGesture =
-      typeof event.target?.closest === "function" &&
-      event.target.closest("[data-testid='live-player-tap']");
-    if (!onVideo && !onGesture) return;
-    event.preventDefault();
-    togglePlayback();
-  }
-
   function onKeyDown(event) {
     const key = event.key;
     if (key === "ArrowUp") {
@@ -852,13 +770,8 @@ export default function LivePlayer({
       event.preventDefault();
       setCcOpen((open) => !open);
       bumpOsd();
-    } else if (key === "f" || key === "F") {
-      event.preventDefault();
-      toggleFullscreen();
     } else if (key === "Escape") {
       setCcOpen(false);
-      bumpOsd();
-    } else {
       bumpOsd();
     }
   }
@@ -868,46 +781,230 @@ export default function LivePlayer({
     phrase: softStallPhrase,
     allowPick: false,
   });
-  const showOsd =
-    osdVisible || ccOpen || status === "loading" || status === "error" || streamHealth !== "ok";
+  const forceOsd = ccOpen || status === "loading" || status === "error" || streamHealth !== "ok";
+  const showOsd = forceOsd || shellOsd;
   const flexL3 = buildFlexLowerThird(osd);
   const showTapHint = status === "ready" || status === "paused";
   const showHealthChip =
     Boolean(healthCopy) && status !== "loading" && status !== "error" && !error;
 
-  return (
-    <div
-      ref={rootRef}
-      className={`live-player${isCompact ? " live-player--compact" : ""} ${className}`.trim()}
-      data-testid="live-player"
-      data-channel={channelId}
-      data-status={status}
-      data-stream-health={streamHealth}
-      tabIndex={0}
-      onMouseMove={onPointerActivity}
-      onFocus={bumpOsd}
-      onPointerDown={onPointerActivity}
-      onClick={onStageClick}
-      onKeyDown={onKeyDown}
-    >
-      <video
-        ref={videoRef}
-        className="live-player-video"
-        playsInline
-        autoPlay
-        muted={false}
-        controls={false}
-        data-testid="live-player-video"
-        onEnded={() => {
-          if (finishThenLiveRef.current) {
-            finishThenLiveRef.current = false;
-            setPauseBoundary(null);
-            pauseProgramEndRef.current = null;
-            remountLiveRef.current?.();
-          }
-        }}
-      />
+  const liveOsd = (
+    <div className="live-osd-inner">
+      <div className="live-osd-channel">
+        {osd?.iconUrl ? (
+          <img className="live-osd-logo" src={osd.iconUrl} alt="" />
+        ) : (
+          <span className="live-osd-ch-num" data-testid="live-osd-number">
+            {osd?.number != null ? osd.number : "—"}
+          </span>
+        )}
+        <div className="live-osd-meta">
+          <p className="live-osd-station" data-testid="live-osd-station">
+            {osd?.number != null ? `${osd.number} · ` : ""}
+            {osd?.name || "Channel"}
+          </p>
+          <h2 className="live-osd-title" data-testid="live-osd-title">
+            {osd?.title || (status === "loading" ? "Tuning…" : "Nothing scheduled")}
+          </h2>
+          {osd?.poolNotice ? (
+            <p className="live-osd-pool-notice" data-testid="live-osd-pool-notice">
+              {osd.poolNotice}
+            </p>
+          ) : null}
+          {osd?.episode && !isCompact ? (
+            <p className="live-osd-episode" data-testid="live-osd-episode">
+              {osd.episode}
+            </p>
+          ) : null}
+        </div>
+        {osd?.rating ? (
+          <span className="live-osd-rating" data-testid="live-osd-rating">
+            {osd.rating}
+          </span>
+        ) : null}
+      </div>
 
+      <div className="live-osd-progress-row">
+        <span data-testid="live-osd-elapsed">{formatClock(osd?.secondsElapsed)}</span>
+        <div
+          className="live-osd-progress"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(osd?.percent || 0)}
+          data-testid="live-osd-progress"
+        >
+          <span
+            className="live-osd-progress-fill"
+            style={{ width: `${Math.max(0, Math.min(100, osd?.percent || 0))}%` }}
+          />
+        </div>
+        <span data-testid="live-osd-remaining">
+          {osd?.secondsRemaining != null ? `${formatClock(osd.secondsRemaining)} left` : ""}
+        </span>
+      </div>
+
+      {!isCompact && (osd?.nextDisplay || osd?.nextTitle) ? (
+        <p
+          className="live-osd-next"
+          data-testid="live-osd-next"
+          onMouseEnter={(event) => {
+            if (nextHoverLeaveTimer.current) {
+              clearTimeout(nextHoverLeaveTimer.current);
+              nextHoverLeaveTimer.current = null;
+            }
+            if (!osd?.nextProgram || osd.nextProgram.is_flex) {
+              setNextHover(null);
+              return;
+            }
+            const rect = event.currentTarget.getBoundingClientRect();
+            setNextHover({
+              program: osd.nextProgram,
+              anchor: { top: rect.top, bottom: rect.bottom, left: rect.left },
+            });
+          }}
+          onMouseLeave={() => {
+            if (nextHoverLeaveTimer.current) clearTimeout(nextHoverLeaveTimer.current);
+            nextHoverLeaveTimer.current = setTimeout(() => setNextHover(null), 160);
+          }}
+        >
+          Next · {osd.nextDisplay || osd.nextTitle}
+          {osd.nextStart ? ` · ${formatWallTime(osd.nextStart)}` : ""}
+        </p>
+      ) : null}
+      {isCompact && (osd?.nextDisplay || osd?.nextTitle) ? (
+        <p className="live-osd-next live-osd-next--compact" data-testid="live-osd-next">
+          Next · {osd.nextDisplay || osd.nextTitle}
+        </p>
+      ) : null}
+
+      <div className="live-osd-actions">
+        <button type="button" className="ghost live-osd-btn" onClick={() => stepChannel(-1)} data-testid="live-osd-ch-up">
+          Ch −
+        </button>
+        <button type="button" className="ghost live-osd-btn" onClick={() => stepChannel(1)} data-testid="live-osd-ch-down">
+          Ch +
+        </button>
+        <button
+          type="button"
+          className="ghost live-osd-btn"
+          onClick={() => {
+            setCcOpen((open) => !open);
+            bumpOsd();
+          }}
+          data-testid="live-osd-cc"
+          aria-expanded={ccOpen}
+        >
+          CC
+        </button>
+        <button type="button" className="ghost live-osd-btn" onClick={toggleFullscreen} data-testid="live-osd-fs">
+          Fullscreen
+        </button>
+      </div>
+
+      {ccOpen ? (
+        <SubtitlePicker
+          testId="live-cc-picker"
+          tracks={ccMerged.plexTracks}
+          activeId={activeTrack}
+          onSelect={selectCcTrack}
+          state={activePlexTrack ? plexSubs.state : "idle"}
+          error={plexSubs.error}
+          note={ccDownloadNote}
+          emptyMessage={ccMerged.hasAny ? "" : ccMerged.emptyMessage || LIVE_CC_EMPTY_STREAM}
+          delaySec={subDelay}
+          onDelayChange={(value) => setSubDelay(clampSubtitleDelay(value))}
+          leading={ccMerged.streamTracks.map((track) => (
+            <button
+              key={`stream-${track.index}`}
+              type="button"
+              className={`ghost live-cc-option${activeTrack === track.index ? " is-active" : ""}`}
+              onClick={() => selectCcTrack(track)}
+            >
+              {track.label}
+            </button>
+          ))}
+          trailing={
+            ccMerged.canDownload ? (
+              <button
+                type="button"
+                className="ghost live-cc-option"
+                data-testid="live-cc-ask-plex"
+                disabled={ccDownloadBusy}
+                onClick={askPlexForSubtitles}
+              >
+                {ccDownloadBusy ? "Asking Plex…" : "Ask Plex for subtitles"}
+              </button>
+            ) : null
+          }
+        />
+      ) : null}
+    </div>
+  );
+
+  return (
+    <TheaterPlayer
+      src={preroll ? "" : mediaSrc}
+      className={`live-player--shell${isCompact ? " live-player--compact" : ""} ${className}`.trim()}
+      testId="live-player"
+      videoTestId="live-player-video"
+      osdTestId="live-osd"
+      autoFullscreen={autoFullscreen}
+      loading={!preroll && status === "loading"}
+      loadingCopy="Tuning…"
+      error={error}
+      osd={liveOsd}
+      osdVisible={forceOsd ? true : undefined}
+      onOsdVisibility={setShellOsd}
+      onStatus={handlePlayerStatus}
+      onVideoRef={handleVideoRef}
+      onHlsRef={handleHlsRef}
+      onRootRef={handleRootRef}
+      onAttachApi={handleAttachApi}
+      onHlsError={handleHlsError}
+      onManifestParsed={syncTracks}
+      onSubtitleTracks={handleSubtitleTracks}
+      playMedia={tryPlayLiveVideo}
+      mediaMode={mediaMode}
+      attachKey={attachKey}
+      onWaiting={handleWaiting}
+      onStalled={handleStalled}
+      onTimeUpdate={handleTimeUpdate}
+      onEnded={handleEnded}
+      onStageActivate={() => {
+        togglePlayback();
+      }}
+      onKeyDown={onKeyDown}
+      dataAttrs={{
+        channel: channelId,
+        status,
+        "stream-health": streamHealth,
+      }}
+      healthNode={
+        showHealthChip ? (
+          <div
+            className={`live-player-status live-player-status--health${
+              streamHealth === "stalled" ? " live-player-status--stalled" : ""
+            }`}
+            data-testid="live-player-health"
+            data-health={streamHealth}
+          >
+            <span className="live-player-spinner" aria-hidden="true" />
+            <p>{healthCopy}</p>
+          </div>
+        ) : null
+      }
+      gestureNode={
+        showTapHint ? (
+          <div
+            className="live-player-status live-player-status--gesture"
+            data-testid="live-player-tap"
+          >
+            <p>{status === "paused" ? "Paused · tap to play" : "Tap to play"}</p>
+          </div>
+        ) : null
+      }
+    >
       {subPresentation.showOverlay ? (
         <SubtitleOverlay
           cues={plexSubs.cues}
@@ -932,11 +1029,6 @@ export default function LivePlayer({
         </div>
       ) : null}
 
-      <TuningInterstitial
-        active={!preroll && status === "loading"}
-        testId="live-player-tuning"
-      />
-
       {pauseBoundary?.open ? (
         <div className="live-pause-boundary" data-testid="live-pause-boundary" role="dialog" aria-modal="true">
           <div className="live-pause-boundary-card">
@@ -955,34 +1047,6 @@ export default function LivePlayer({
               </button>
             </div>
           </div>
-        </div>
-      ) : null}
-
-      {showHealthChip ? (
-        <div
-          className={`live-player-status live-player-status--health${
-            streamHealth === "stalled" ? " live-player-status--stalled" : ""
-          }`}
-          data-testid="live-player-health"
-          data-health={streamHealth}
-        >
-          <span className="live-player-spinner" aria-hidden="true" />
-          <p>{healthCopy}</p>
-        </div>
-      ) : null}
-
-      {error ? (
-        <div className="live-player-status live-player-status--error" data-testid="live-player-error">
-          <p>{error}</p>
-        </div>
-      ) : null}
-
-      {showTapHint ? (
-        <div
-          className="live-player-status live-player-status--gesture"
-          data-testid="live-player-tap"
-        >
-          <p>{status === "paused" ? "Paused · tap to play" : "Tap to play"}</p>
         </div>
       ) : null}
 
@@ -1014,164 +1078,6 @@ export default function LivePlayer({
         </aside>
       ) : null}
 
-      <div
-        className={`live-osd${showOsd ? " is-visible" : ""}`}
-        data-testid="live-osd"
-        aria-hidden={!showOsd}
-      >
-        <div className="live-osd-inner">
-          <div className="live-osd-channel">
-            {osd?.iconUrl ? (
-              <img className="live-osd-logo" src={osd.iconUrl} alt="" />
-            ) : (
-              <span className="live-osd-ch-num" data-testid="live-osd-number">
-                {osd?.number != null ? osd.number : "—"}
-              </span>
-            )}
-            <div className="live-osd-meta">
-              <p className="live-osd-station" data-testid="live-osd-station">
-                {osd?.number != null ? `${osd.number} · ` : ""}
-                {osd?.name || "Channel"}
-              </p>
-              <h2 className="live-osd-title" data-testid="live-osd-title">
-                {osd?.title || (status === "loading" ? "Tuning…" : "Nothing scheduled")}
-              </h2>
-              {osd?.poolNotice ? (
-                <p className="live-osd-pool-notice" data-testid="live-osd-pool-notice">
-                  {osd.poolNotice}
-                </p>
-              ) : null}
-              {osd?.episode && !isCompact ? (
-                <p className="live-osd-episode" data-testid="live-osd-episode">
-                  {osd.episode}
-                </p>
-              ) : null}
-            </div>
-            {osd?.rating ? (
-              <span className="live-osd-rating" data-testid="live-osd-rating">
-                {osd.rating}
-              </span>
-            ) : null}
-          </div>
-
-          <div className="live-osd-progress-row">
-            <span data-testid="live-osd-elapsed">{formatClock(osd?.secondsElapsed)}</span>
-            <div
-              className="live-osd-progress"
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={Math.round(osd?.percent || 0)}
-              data-testid="live-osd-progress"
-            >
-              <span
-                className="live-osd-progress-fill"
-                style={{ width: `${Math.max(0, Math.min(100, osd?.percent || 0))}%` }}
-              />
-            </div>
-            <span data-testid="live-osd-remaining">
-              {osd?.secondsRemaining != null ? `${formatClock(osd.secondsRemaining)} left` : ""}
-            </span>
-          </div>
-
-          {!isCompact && (osd?.nextDisplay || osd?.nextTitle) ? (
-            <p
-              className="live-osd-next"
-              data-testid="live-osd-next"
-              onMouseEnter={(event) => {
-                if (nextHoverLeaveTimer.current) {
-                  clearTimeout(nextHoverLeaveTimer.current);
-                  nextHoverLeaveTimer.current = null;
-                }
-                if (!osd?.nextProgram || osd.nextProgram.is_flex) {
-                  setNextHover(null);
-                  return;
-                }
-                const rect = event.currentTarget.getBoundingClientRect();
-                setNextHover({
-                  program: osd.nextProgram,
-                  anchor: { top: rect.top, bottom: rect.bottom, left: rect.left },
-                });
-              }}
-              onMouseLeave={() => {
-                if (nextHoverLeaveTimer.current) clearTimeout(nextHoverLeaveTimer.current);
-                nextHoverLeaveTimer.current = setTimeout(() => setNextHover(null), 160);
-              }}
-            >
-              Next · {osd.nextDisplay || osd.nextTitle}
-              {osd.nextStart ? ` · ${formatWallTime(osd.nextStart)}` : ""}
-            </p>
-          ) : null}
-          {isCompact && (osd?.nextDisplay || osd?.nextTitle) ? (
-            <p className="live-osd-next live-osd-next--compact" data-testid="live-osd-next">
-              Next · {osd.nextDisplay || osd.nextTitle}
-            </p>
-          ) : null}
-
-          <div className="live-osd-actions">
-            <button type="button" className="ghost live-osd-btn" onClick={() => stepChannel(-1)} data-testid="live-osd-ch-up">
-              Ch −
-            </button>
-            <button type="button" className="ghost live-osd-btn" onClick={() => stepChannel(1)} data-testid="live-osd-ch-down">
-              Ch +
-            </button>
-            <button
-              type="button"
-              className="ghost live-osd-btn"
-              onClick={() => {
-                setCcOpen((open) => !open);
-                bumpOsd();
-              }}
-              data-testid="live-osd-cc"
-              aria-expanded={ccOpen}
-            >
-              CC
-            </button>
-            <button type="button" className="ghost live-osd-btn" onClick={toggleFullscreen} data-testid="live-osd-fs">
-              Fullscreen
-            </button>
-          </div>
-
-          {ccOpen ? (
-            <SubtitlePicker
-              testId="live-cc-picker"
-              tracks={ccMerged.plexTracks}
-              activeId={activeTrack}
-              onSelect={selectCcTrack}
-              state={activePlexTrack ? plexSubs.state : "idle"}
-              error={plexSubs.error}
-              note={ccDownloadNote}
-              emptyMessage={ccMerged.hasAny ? "" : ccMerged.emptyMessage || LIVE_CC_EMPTY_STREAM}
-              delaySec={subDelay}
-              onDelayChange={(value) => setSubDelay(clampSubtitleDelay(value))}
-              leading={ccMerged.streamTracks.map((track) => (
-                <button
-                  key={`stream-${track.index}`}
-                  type="button"
-                  className={`ghost live-cc-option${activeTrack === track.index ? " is-active" : ""}`}
-                  onClick={() => selectCcTrack(track)}
-                >
-                  {track.label}
-                </button>
-              ))}
-              trailing={
-                ccMerged.canDownload ? (
-                  <button
-                    type="button"
-                    className="ghost live-cc-option"
-                    data-testid="live-cc-ask-plex"
-                    disabled={ccDownloadBusy}
-                    onClick={askPlexForSubtitles}
-                  >
-                    {ccDownloadBusy ? "Asking Plex…" : "Ask Plex for subtitles"}
-                  </button>
-                ) : null
-              }
-            />
-          ) : null}
-        </div>
-      </div>
-
       <LiveProgramHoverCard
         program={nextHover?.program}
         kind="next"
@@ -1185,6 +1091,6 @@ export default function LivePlayer({
         }}
         onClose={() => setNextHover(null)}
       />
-    </div>
+    </TheaterPlayer>
   );
 }

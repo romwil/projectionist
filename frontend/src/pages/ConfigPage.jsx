@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useConfirmModal } from "../hooks/useConfirmModal.jsx";
 import { Link, Navigate, useNavigate, useOutletContext, useParams } from "react-router-dom";
 import {
@@ -13,25 +13,16 @@ import {
   getAuthMe,
   getFeatures,
   getHealth,
-  getLiveChannelsCraftOptions,
-  getLiveChannelsContinuityStatus,
-  getLiveChannelsLifecycleStatus,
-  getLiveChannelsPublishStatus,
-  getLiveChannelsStatus,
-  getLiveChannelsTunarrLogs,
   getLlmModelCatalog,
   getPersona,
   getSettings,
   saveAskDeleteConfirmation,
   getWizardStatus,
   getPlexSections,
-  listJobs,
   deleteUser,
   listUsers,
   patchUserDisabled,
   patchUserYouthMode,
-  postLiveChannelsContinuityRepair,
-  postLiveChannelsLifecycle,
   putPersona,
   putSystemConfig,
   registerRadarrExisting,
@@ -52,24 +43,20 @@ import {
 } from "../api/client";
 import AdvancedSettings from "../components/AdvancedSettings";
 import PersonaSection from "../components/PersonaSection";
-import LiveChannelsSection, { isLiveChannelsLaunched } from "./admin/LiveChannelsSection";
-import { ownerLiveText } from "../lib/liveChannelsOwnerCopy.js";
+import LiveChannelsSection from "./admin/LiveChannelsSection";
 import HouseholdSection from "./admin/HouseholdSection";
 import LibrariesSection from "./admin/LibrariesSection";
 import OverviewSection from "./admin/OverviewSection";
 import ConnectionsSection from "./admin/ConnectionsSection";
 import SeerrSection from "./admin/SeerrSection";
-import { liveChannelsStartTimeoutAlertType } from "../lib/liveChannelsEngineFeedback.js";
-import { craftSoftCapHonestyNote } from "../lib/liveChannelsCopy.js";
-import { isLiveJobBusy } from "../lib/liveChannelsJob.js";
-import { filterLiveCollections } from "../lib/liveChannelsCraft.js";
+import { seerrSyncConfirmOptions } from "../lib/seerrHousehold.js";
 import {
   canToggleSecretVisibility,
   isSecretConfigured,
   secretPlaceholder,
   seerrSecretPlaceholder,
 } from "../lib/secretField.js";
-import { jobIsActive, startVisibleBusyPoll } from "../lib/visibleBusyPoll.js";
+import { startVisibleBusyPoll } from "../lib/visibleBusyPoll.js";
 
 const ADMIN_SECTIONS = new Set([
   "overview",
@@ -248,68 +235,6 @@ function InlineAlert({ type, message, details, testId }) {
   );
 }
 
-function formatPublishFeedback(result) {
-  const published = result?.count_published || 0;
-  const skipped = result?.count_skipped || 0;
-  const errors = result?.count_errors || 0;
-  const updated = result?.count_programming_updated || 0;
-  const renamed = result?.count_renamed || 0;
-  const matched = result?.matched;
-  const matchTotal = result?.match_total;
-  const lineup = result?.lineup_programs ?? result?.program_count;
-  const plexSync = result?.plex_sync;
-  // Only mention skip/error counts when non-zero — "skipped 0" looked like a miss
-  // when a name clash quietly refreshed an existing station instead of creating one.
-  const parts = [`Published ${published}`];
-  if (skipped) parts.push(`skipped ${skipped}`);
-  if (errors) parts.push(`errors ${errors}`);
-  if (updated) parts.push(`lineups refreshed ${updated}`);
-  if (renamed) parts.push(`renamed ${renamed}`);
-  if (result?.remapped_number_from != null && result?.remapped_number_to != null) {
-    parts.push(`number ${result.remapped_number_from}→${result.remapped_number_to}`);
-  }
-  if (matchTotal > 0) {
-    parts.push(`matched ${matched ?? 0}/${matchTotal}`);
-  }
-  if (lineup != null && lineup !== "") {
-    parts.push(`lineup ${lineup} programs`);
-  }
-  if (plexSync && plexSync.skipped !== true) {
-    const mapped = plexSync.mapped;
-    const expected = plexSync.expected;
-    if (expected != null && mapped != null) {
-      parts.push(`Plex mapped ${mapped}/${expected}`);
-    }
-  }
-  const honesty = craftSoftCapHonestyNote(result || {});
-  const noteAlreadyIncludesHonesty = Boolean(result?.note)
-    && honesty
-    && String(result.note).includes(honesty.slice(0, 24));
-  const noteTail = result?.note
-    ? noteAlreadyIncludesHonesty
-      ? ` ${result.note}`
-      : ` ${result.note}${honesty && !String(result.note).includes("soft cap") ? ` ${honesty}` : ""}`
-    : honesty
-      ? ` ${honesty}`
-      : "";
-  const summary = `${parts.join(", ")}.${noteTail}`;
-  const details = [
-    ...(result?.errors || []).map((err) => {
-      const label = [err?.number, err?.name].filter((part) => part != null && part !== "").join(" · ");
-      return `${label || "Channel"}: ${err?.error || "unknown error"}`;
-    }),
-    ...(result?.skipped || []).map((row) => {
-      const label = [row?.number, row?.name].filter((part) => part != null && part !== "").join(" · ");
-      const reason = row?.reason || "skipped";
-      const note = row?.note ? ` — ${row.note}` : "";
-      return `${label || "Channel"}: ${reason}${note}`;
-    }),
-  ];
-  const plexFailed = result?.plex_sync_failed || plexSync?.ok === false;
-  const type = errors > 0 || result?.ok === false || plexFailed ? "error" : "success";
-  return { summary, details, type };
-}
-
 function CertifiedBadge({ certified, testing, serviceId }) {
   if (testing) {
     return (
@@ -341,9 +266,6 @@ function connectionStatusAlert(actionAlert, area, result, certified) {
   if (result.state === "success" && certified) return { type: null, message: null };
   return { type: result.state, message: result.message };
 }
-
-/** Engine up + at least one station → maintenance-first UI (not the setup journey). */
-
 
 function serviceCredentialsPresent(service, settings) {
   if (!settings) return false;
@@ -484,68 +406,19 @@ export default function ConfigPage() {
   const [libraryHealth, setLibraryHealth] = useState(null);
   const [exportingCorpus, setExportingCorpus] = useState(false);
   const [exportingSnapshot, setExportingSnapshot] = useState(false);
-  const [syncingLibrary, setSyncingLibrary] = useState(false);
   const [registeringRadarr, setRegisteringRadarr] = useState(false);
   const [radarrGapStats, setRadarrGapStats] = useState(null);
   const [radarrRegister, setRadarrRegister] = useState(null);
   const [sonarrMissing, setSonarrMissing] = useState(null);
   const [sonarrIncludeSpecials, setSonarrIncludeSpecials] = useState(false);
-  const [activeSyncJob, setActiveSyncJob] = useState(null);
   const [featureFlags, setFeatureFlags] = useState(null);
   const [appVersion, setAppVersion] = useState("");
   const [managedUsers, setManagedUsers] = useState([]);
   const [usersLoading, setUsersLoading] = useState(false);
   const [mcpRevealedKeys, setMcpRevealedKeys] = useState({});
   const [mcpKeyBusy, setMcpKeyBusy] = useState(null);
-  const [liveChannelsStatus, setLiveChannelsStatus] = useState(null);
-  const [livePreflight, setLivePreflight] = useState(null);
-  const [liveStarters, setLiveStarters] = useState(null);
-  const [liveCraftOptions, setLiveCraftOptions] = useState(null);
-  const [liveCraft, setLiveCraft] = useState({
-    name: "",
-    number: "",
-    source: "motif",
-    programming_mode: "shuffle",
-    media_scope: "both",
-    motif: "",
-    cluster_tag: "",
-    collection_id: "",
-    collection_title: "",
-    youth_safe: false,
-    genres: [],
-    decade: "",
-    theme: "",
-    content_rating: "",
-  });
-  const [liveCraftPreview, setLiveCraftPreview] = useState(null);
-  const [liveCraftPreviewBusy, setLiveCraftPreviewBusy] = useState(false);
-  const [fillerPathDraft, setFillerPathDraft] = useState("");
-  const [padFlexDraft, setPadFlexDraft] = useState("");
-  const [exclusionNameDraft, setExclusionNameDraft] = useState("");
-  const [stationSettingsOpen, setStationSettingsOpen] = useState(null);
-  const [liveAttach, setLiveAttach] = useState(null);
-  const [liveBusy, setLiveBusy] = useState(null);
-  const [liveEngineProgress, setLiveEngineProgress] = useState(null);
-  const [liveEngineError, setLiveEngineError] = useState("");
-  const [liveContinuityProgress, setLiveContinuityProgress] = useState(null);
-  const [livePublishProgress, setLivePublishProgress] = useState(null);
-  /** Per-card success/error for Live Channels (not the page-bottom banner). */
-  const [liveBlockFeedback, setLiveBlockFeedback] = useState({});
-  const [selectedStarters, setSelectedStarters] = useState({});
-  const [tunarrLogsOpen, setTunarrLogsOpen] = useState(false);
-  const [tunarrLogs, setTunarrLogs] = useState(null);
-  const [tunarrLogsBusy, setTunarrLogsBusy] = useState(false);
-  const [liveChannelsTab, setLiveChannelsTab] = useState(null); // null = auto by launch state
-  const [collectionFilter, setCollectionFilter] = useState("");
   const [modelCatalog, setModelCatalog] = useState(null);
   const [modelCatalogLoading, setModelCatalogLoading] = useState(false);
-  const trackedSyncJobIdRef = useRef(null);
-  const syncWasRunningRef = useRef(false);
-  const syncingLibraryRef = useRef(false);
-  syncingLibraryRef.current = syncingLibrary;
-  const enginePollRef = useRef(null);
-  const continuityPollRef = useRef(null);
-  const publishPollRef = useRef(null);
   const { confirm, modal } = useConfirmModal();
 
   useEffect(() => {
@@ -562,27 +435,6 @@ export default function ConfigPage() {
   const preview = useMemo(() => wizardPersonaPreview(persona), [persona]);
   const movieSections = useMemo(() => sections.filter((s) => s.type === "movie"), [sections]);
   const tvSections = useMemo(() => sections.filter((s) => s.type === "show"), [sections]);
-  const liveLaunched = useMemo(
-    () => isLiveChannelsLaunched(liveChannelsStatus, liveEngineProgress),
-    [liveChannelsStatus, liveEngineProgress],
-  );
-  const effectiveLiveTab = liveChannelsTab || (liveLaunched ? "stations" : "setup");
-  const filteredLiveCollections = useMemo(
-    () =>
-      filterLiveCollections(liveCraftOptions?.collections, {
-        mediaScope: liveCraft.media_scope || "both",
-        filterQuery: collectionFilter,
-        selectedId: liveCraft.collection_id,
-      }),
-    [
-      liveCraftOptions?.collections,
-      collectionFilter,
-      liveCraft.collection_id,
-      liveCraft.media_scope,
-    ],
-  );
-  const fillerBinds = settings?.tunarr?.filler_binds || [];
-
   function applyCertifications(certMap) {
     setCertifications(certMap || {});
     const initialResults = {};
@@ -674,119 +526,6 @@ export default function ConfigPage() {
   }, [settings?.features?.multi_user_enabled]);
 
   useEffect(() => {
-    if (showWizard || (section !== "live-channels" && section !== "overview")) return;
-    if (!settings?.features?.live_channels_enabled) {
-      setLiveChannelsStatus(null);
-      return;
-    }
-    getLiveChannelsStatus()
-      .then(setLiveChannelsStatus)
-      .catch(() => setLiveChannelsStatus(null));
-    getLiveChannelsCraftOptions()
-      .then((opts) => {
-        setLiveCraftOptions(opts);
-        // Provisional (warming) numbers must not seed the form — wait for the real ones.
-        if (opts?.warming) return;
-        setLiveCraft((prev) => ({
-          ...prev,
-          number: prev.number || String(opts.next_channel_number || 100),
-          motif: prev.motif || opts.motifs?.[0]?.value || "",
-          cluster_tag: prev.cluster_tag || opts.taste_clusters?.[0]?.cluster_tag || "",
-        }));
-        if (opts?.pad_flex_max_minutes != null) {
-          setPadFlexDraft((prev) => (prev === "" ? String(opts.pad_flex_max_minutes) : prev));
-        }
-        if (opts?.exclusion_collection_name) {
-          setExclusionNameDraft((prev) => (prev === "" ? opts.exclusion_collection_name : prev));
-        }
-      })
-      .catch(() => setLiveCraftOptions(null));
-    if (settings?.tunarr?.docker_orchestration) {
-      getLiveChannelsLifecycleStatus()
-        .then(setLiveEngineProgress)
-        .catch(() => {});
-    }
-  }, [showWizard, section, settings?.features?.live_channels_enabled, settings?.tunarr?.url, settings?.tunarr?.docker_orchestration]);
-
-  // Server serves Live status / craft / lifecycle stale-while-revalidate. While
-  // stale/warming, re-poll briefly so real probes replace the cached snapshot.
-  const liveStatusRevalidating = Boolean(liveChannelsStatus?.warming || liveChannelsStatus?.stale);
-  const liveCraftWarming = Boolean(liveCraftOptions?.warming);
-  const liveLifecycleRevalidating = Boolean(
-    liveEngineProgress?.warming || liveEngineProgress?.stale,
-  );
-  useEffect(() => {
-    if (showWizard || (section !== "live-channels" && section !== "overview")) return undefined;
-    if (!liveStatusRevalidating && !liveCraftWarming && !liveLifecycleRevalidating) {
-      return undefined;
-    }
-    let tries = 0;
-    const timer = setInterval(() => {
-      tries += 1;
-      if (tries > 12) {
-        clearInterval(timer);
-        return;
-      }
-      if (liveStatusRevalidating) {
-        getLiveChannelsStatus()
-          .then(setLiveChannelsStatus)
-          .catch(() => {});
-      }
-      if (liveCraftWarming) {
-        getLiveChannelsCraftOptions()
-          .then((opts) => {
-            setLiveCraftOptions(opts);
-            if (opts?.warming) return;
-            setLiveCraft((prev) => ({
-              ...prev,
-              number: prev.number || String(opts.next_channel_number || 100),
-              motif: prev.motif || opts.motifs?.[0]?.value || "",
-              cluster_tag: prev.cluster_tag || opts.taste_clusters?.[0]?.cluster_tag || "",
-            }));
-          })
-          .catch(() => {});
-      }
-      if (liveLifecycleRevalidating) {
-        getLiveChannelsLifecycleStatus()
-          .then(setLiveEngineProgress)
-          .catch(() => {});
-      }
-    }, 2500);
-    return () => clearInterval(timer);
-  }, [showWizard, section, liveStatusRevalidating, liveCraftWarming, liveLifecycleRevalidating]);
-
-  const liveJobBusy = isLiveJobBusy(liveChannelsStatus?.job);
-  useEffect(() => {
-    const localBusy = Boolean(liveBusy) && liveBusy !== "status" && liveBusy !== "attach";
-    if ((!liveJobBusy && !localBusy) || showWizard) return undefined;
-    if (section !== "live-channels" && section !== "overview") return undefined;
-    return startVisibleBusyPoll(
-      () =>
-        getLiveChannelsStatus()
-          .then(setLiveChannelsStatus)
-          .catch(() => {}),
-      { isBusy: () => true },
-    );
-  }, [liveJobBusy, liveBusy, section, showWizard]);
-
-  useEffect(() => {
-    return () => {
-      if (enginePollRef.current) {
-        clearInterval(enginePollRef.current);
-        enginePollRef.current = null;
-      }
-      if (continuityPollRef.current) {
-        clearInterval(continuityPollRef.current);
-        continuityPollRef.current = null;
-      }
-      if (publishPollRef.current) {
-        clearInterval(publishPollRef.current);
-        publishPollRef.current = null;
-      }
-    };
-  }, []);
-
-  useEffect(() => {
     if (!settings || autoCertifyDone || autoCertifying) return;
 
     const pending = AUTO_CERTIFY_SERVICES.filter(
@@ -853,48 +592,6 @@ export default function ConfigPage() {
       .then(setRadarrGapStats)
       .catch(() => setRadarrGapStats(null));
   }, [showWizard]);
-
-  useEffect(() => {
-    if (showWizard || section !== "libraries") return undefined;
-
-    let cancelled = false;
-
-    async function pollSyncJobs() {
-      try {
-        const jobs = await listJobs();
-        if (cancelled) return;
-        const syncJobs = jobs.filter((job) => job.job_type === "library_sync");
-        const running = syncJobs.find((job) => jobIsActive(job));
-        const trackedId = trackedSyncJobIdRef.current;
-        const tracked =
-          (trackedId && syncJobs.find((job) => job.id === trackedId)) || syncJobs[0] || null;
-        const active = running || tracked;
-        setActiveSyncJob(active);
-        const isRunning = Boolean(running);
-        setSyncingLibrary(isRunning);
-        if (syncWasRunningRef.current && !isRunning && active?.status === "completed") {
-          api("/library/stats")
-            .then(setLibraryStats)
-            .catch(() => {});
-          api("/library/health")
-            .then(setLibraryHealth)
-            .catch(() => {});
-        }
-        syncWasRunningRef.current = isRunning;
-      } catch {
-        if (!cancelled) setSyncingLibrary(false);
-      }
-    }
-
-    const stop = startVisibleBusyPoll(pollSyncJobs, {
-      isBusy: () => Boolean(syncingLibraryRef.current || syncWasRunningRef.current),
-      isEnabled: () => !cancelled,
-    });
-    return () => {
-      cancelled = true;
-      stop();
-    };
-  }, [showWizard, section]);
 
   useEffect(() => {
     if (showWizard || section !== "libraries") return undefined;
@@ -1084,8 +781,8 @@ export default function ConfigPage() {
   }
 
   async function handleUserSyncSeerr(entry) {
-    const authToken = window.prompt(
-      `Paste a Plex auth token for ${entry.display_name || "this user"} to sync their Seerr account.`,
+    const authToken = await confirm(
+      seerrSyncConfirmOptions(entry.display_name || entry.email || entry.id),
     );
     if (!authToken || !String(authToken).trim()) return;
     try {
@@ -1177,51 +874,8 @@ export default function ConfigPage() {
     );
   }
 
-  function setLiveFeedback(block, type, message, options = {}) {
-    const key = String(block || "general").trim() || "general";
-    const details = Array.isArray(options.details) ? options.details : null;
-    setLiveBlockFeedback((prev) => ({
-      ...prev,
-      [key]: { type, message, details },
-    }));
-    // Live Channels feedback is inline on the card — never the page-bottom banner.
-    setActionAlert((prev) => (prev?.area === "live-channels" ? null : prev));
-    setStatus("");
-  }
-
-  function clearLiveFeedback(block) {
-    if (!block) {
-      setLiveBlockFeedback({});
-      return;
-    }
-    setLiveBlockFeedback((prev) => {
-      if (!prev[block]) return prev;
-      const next = { ...prev };
-      delete next[block];
-      return next;
-    });
-  }
-
-  function renderLiveBlockAlert(block) {
-    const fb = liveBlockFeedback[block];
-    if (!fb?.message) return null;
-    return (
-      <InlineAlert
-        type={fb.type}
-        message={ownerLiveText(fb.message)}
-        details={Array.isArray(fb.details) ? fb.details.map(ownerLiveText) : fb.details}
-        testId={`live-channels-${block}-alert`}
-      />
-    );
-  }
-
   function setActionFeedback(area, type, message, options = {}) {
     const details = Array.isArray(options.details) ? options.details : null;
-    // Live Channels: route to the card block (options.block). Do not park at page bottom.
-    if (area === "live-channels") {
-      setLiveFeedback(options.block || "general", type, message, { details });
-      return;
-    }
     setActionAlert({ area, type, message, details });
     // Areas that render their own InlineAlert should not also fill the page footer
     // status line (that produced duplicate red bar + plain text).
@@ -1232,27 +886,7 @@ export default function ConfigPage() {
     }
   }
 
-  async function refreshTunarrLogs() {
-    setTunarrLogsBusy(true);
-    try {
-      const payload = await getLiveChannelsTunarrLogs(200);
-      setTunarrLogs(payload);
-    } catch (error) {
-      setTunarrLogs({
-        ok: false,
-        text: "",
-        source: "",
-        message: error.message || "Could not load broadcast engine logs.",
-      });
-    } finally {
-      setTunarrLogsBusy(false);
-    }
-  }
-
   function clearActionFeedback(area) {
-    if (area === "live-channels") {
-      clearLiveFeedback();
-    }
     setActionAlert((prev) => (prev?.area === area ? null : prev));
   }
 
@@ -1467,635 +1101,6 @@ export default function ConfigPage() {
       );
     } catch (error) {
       setActionFeedback("plex-sections", "error", error.message);
-    }
-  }
-
-  async function handleLiveChannelsEnabled(enabled) {
-    if (
-      !enabled &&
-      !(await confirm({
-        title: "Turn off Live Channels",
-        body: "Turn off Live Channels? On now hides for the household. Saved channels stay on disk.",
-        confirmLabel: "Turn off",
-        danger: true,
-      }))
-    ) {
-      return;
-    }
-    clearActionFeedback("live-channels");
-    updateFeatureFlags({ live_channels_enabled: enabled });
-    setLiveBusy(enabled ? "enable" : "disable");
-    try {
-      await persistSettings({
-        features: { ...(settings.features || {}), live_channels_enabled: enabled },
-      });
-      if (enabled) {
-        getLiveChannelsStatus().then(setLiveChannelsStatus).catch(() => {});
-      } else {
-        setLiveChannelsStatus(null);
-        setLivePreflight(null);
-        setLiveStarters(null);
-        setLiveAttach(null);
-        setLiveEngineProgress(null);
-        setLiveEngineError("");
-        setLiveChannelsTab(null);
-        setCollectionFilter("");
-        stopEngineProgressPoll();
-      }
-    } catch (error) {
-      updateFeatureFlags({ live_channels_enabled: !enabled });
-      setActionFeedback("live-channels", "error", error.message, { block: "hero" });
-    } finally {
-      setLiveBusy(null);
-    }
-  }
-
-  function stopEngineProgressPoll() {
-    if (enginePollRef.current) {
-      clearInterval(enginePollRef.current);
-      enginePollRef.current = null;
-    }
-  }
-
-  async function pollEngineProgressOnce() {
-    try {
-      const progress = await getLiveChannelsLifecycleStatus();
-      setLiveEngineProgress(progress);
-      if (progress?.ready) {
-        setLiveEngineError("");
-      } else if (progress?.phase === "error" && progress?.error) {
-        setLiveEngineError(progress.error);
-      }
-      return progress;
-    } catch {
-      return null;
-    }
-  }
-
-  function stopContinuityProgressPoll() {
-    if (continuityPollRef.current) {
-      clearInterval(continuityPollRef.current);
-      continuityPollRef.current = null;
-    }
-  }
-
-  async function pollContinuityProgressOnce() {
-    try {
-      const progress = await getLiveChannelsContinuityStatus();
-      setLiveContinuityProgress(progress);
-      return progress;
-    } catch {
-      return null;
-    }
-  }
-
-  function continuityPhaseLabel(phase) {
-    switch (phase) {
-      case "queued":
-        return "Queued";
-      case "remounting":
-        return "Restarting TV engine";
-      case "waiting_ready":
-        return "Waiting for TV engine ready";
-      case "scoping_libraries":
-        return "Scoping libraries";
-      case "scanning_filler":
-        return "Scanning breaks";
-      case "attaching":
-        return "Attaching breaks";
-      case "refilling":
-        return "Refilling lineups";
-      case "warming":
-        return "Warming streams";
-      case "done":
-        return "Finished";
-      case "error":
-        return "Failed";
-      default:
-        return "Working…";
-    }
-  }
-
-  async function runContinuityJob(body = {}, { successFallback = "Continuity update finished.", block = "stations" } = {}) {
-    clearLiveFeedback(block);
-    clearActionFeedback("live-channels");
-    setLiveBusy("continuity-repair");
-    setLiveContinuityProgress({
-      phase: "queued",
-      percent: 5,
-      message: "Starting continuity job…",
-      busy: true,
-      ok: true,
-      determinate: true,
-    });
-    stopContinuityProgressPoll();
-    const startedAt = Date.now();
-    const timeoutMs = 12 * 60 * 1000;
-    continuityPollRef.current = setInterval(() => {
-      pollContinuityProgressOnce().then((progress) => {
-        if (!progress) return;
-        if (
-          progress.phase === "done" ||
-          progress.phase === "error" ||
-          (!progress.busy && progress.phase !== "queued") ||
-          Date.now() - startedAt > timeoutMs
-        ) {
-          stopContinuityProgressPoll();
-        }
-      });
-    }, 1500);
-
-    try {
-      const accepted = await postLiveChannelsContinuityRepair(body);
-      if (accepted?.async === false && accepted?.ok != null) {
-        // Sync diagnostic path — finish immediately.
-        stopContinuityProgressPoll();
-        setLiveContinuityProgress({
-          phase: accepted.ok ? "done" : "error",
-          percent: accepted.ok ? 100 : 0,
-          message: accepted.message || successFallback,
-          busy: false,
-          ok: Boolean(accepted.ok),
-          error: accepted.ok ? "" : accepted.message,
-          result: accepted,
-        });
-        setActionFeedback("live-channels",
-          accepted.ok ? "success" : "error",
-          accepted.message || successFallback,
-          { block },
-        );
-        setLiveChannelsStatus(await getLiveChannelsStatus());
-        return accepted;
-      }
-
-      const deadline = Date.now() + timeoutMs;
-      let progress = await pollContinuityProgressOnce();
-      while (Date.now() < deadline) {
-        if (progress?.phase === "done" || progress?.phase === "error") break;
-        if (progress && !progress.busy && progress.phase !== "queued") break;
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        progress = await pollContinuityProgressOnce();
-      }
-      stopContinuityProgressPoll();
-      if (progress?.phase === "done") {
-        setActionFeedback("live-channels",
-          "success",
-          progress.message || progress.result?.message || successFallback,
-          { block },
-        );
-        setLiveChannelsStatus(await getLiveChannelsStatus());
-      } else if (progress?.phase === "error") {
-        setActionFeedback("live-channels",
-          "error",
-          progress.error || progress.message || "Continuity repair failed.",
-          { block },
-        );
-      } else {
-        setActionFeedback("live-channels",
-          "error",
-          "Timed out waiting for continuity repair. Check Admin Logs for live_channels.continuity stages.",
-          { block },
-        );
-      }
-      return progress;
-    } catch (error) {
-      stopContinuityProgressPoll();
-      setLiveContinuityProgress((prev) => ({
-        ...(prev || {}),
-        phase: "error",
-        percent: 0,
-        busy: false,
-        ok: false,
-        error: error.message,
-        message: error.message,
-      }));
-      setActionFeedback("live-channels", "error", error.message, { block });
-      throw error;
-    } finally {
-      stopContinuityProgressPoll();
-      setLiveBusy(null);
-    }
-  }
-
-  function stopPublishProgressPoll() {
-    if (publishPollRef.current) {
-      clearInterval(publishPollRef.current);
-      publishPollRef.current = null;
-    }
-  }
-
-  async function pollPublishProgressOnce() {
-    try {
-      const progress = await getLiveChannelsPublishStatus();
-      setLivePublishProgress(progress);
-      return progress;
-    } catch {
-      return null;
-    }
-  }
-
-  function publishPhaseLabel(phase) {
-    switch (phase) {
-      case "queued":
-        return "Queued";
-      case "wiring":
-        return "Wiring media source";
-      case "matching":
-        return "Matching titles";
-      case "publishing":
-        return "Publishing station";
-      case "plex_sync":
-        return "Refreshing Plex channels";
-      case "warming":
-        return "Warming streams";
-      case "done":
-        return "Finished";
-      case "error":
-        return "Failed";
-      default:
-        return "Working…";
-    }
-  }
-
-  async function runPublishJob(startFn, { busyKey = "publish", block = "collection", successFallback = "Publish finished." } = {}) {
-    clearLiveFeedback(block);
-    clearActionFeedback("live-channels");
-    setLiveBusy(busyKey);
-    setLivePublishProgress({
-      phase: "queued",
-      percent: 5,
-      message: "Starting publish…",
-      busy: true,
-      ok: true,
-      determinate: true,
-    });
-    stopPublishProgressPoll();
-    const startedAt = Date.now();
-    const timeoutMs = 12 * 60 * 1000;
-    publishPollRef.current = setInterval(() => {
-      pollPublishProgressOnce().then((progress) => {
-        if (!progress) return;
-        if (
-          progress.phase === "done" ||
-          progress.phase === "error" ||
-          (!progress.busy && progress.phase !== "queued") ||
-          Date.now() - startedAt > timeoutMs
-        ) {
-          stopPublishProgressPoll();
-        }
-      });
-    }, 1500);
-
-    try {
-      const accepted = await startFn();
-      if (accepted?.async === false && accepted?.ok != null) {
-        stopPublishProgressPoll();
-        const feedback = formatPublishFeedback(accepted);
-        setLivePublishProgress({
-          phase: accepted.ok !== false && !accepted.count_errors ? "done" : "error",
-          percent: 100,
-          message: feedback.summary,
-          busy: false,
-          ok: feedback.type !== "error",
-          error: feedback.type === "error" ? feedback.summary : "",
-          result: accepted,
-        });
-        setActionFeedback("live-channels", feedback.type, feedback.summary, {
-          block,
-          details: feedback.details,
-        });
-        setLiveChannelsStatus(await getLiveChannelsStatus());
-        setLiveCraftOptions(await getLiveChannelsCraftOptions());
-        return accepted;
-      }
-
-      const deadline = Date.now() + timeoutMs;
-      let progress = await pollPublishProgressOnce();
-      while (Date.now() < deadline) {
-        if (progress?.phase === "done" || progress?.phase === "error") break;
-        if (progress && !progress.busy && progress.phase !== "queued") break;
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        progress = await pollPublishProgressOnce();
-      }
-      stopPublishProgressPoll();
-      if (progress?.phase === "done") {
-        const result = progress.result || {};
-        const feedback = formatPublishFeedback({
-          ...result,
-          note: progress.message || result.note,
-          ok: true,
-        });
-        setActionFeedback("live-channels", "success", feedback.summary, {
-          block,
-          details: feedback.details,
-        });
-        setLiveChannelsStatus(await getLiveChannelsStatus());
-        setLiveCraftOptions(await getLiveChannelsCraftOptions());
-      } else if (progress?.phase === "error") {
-        setActionFeedback("live-channels", "error", progress.error || progress.message || "Publish failed.", {
-          block,
-        });
-      } else {
-        setActionFeedback("live-channels", "error", "Timed out waiting for publish. Check Admin Logs for live_channels.publish stages.", {
-          block,
-        });
-      }
-      return progress;
-    } catch (error) {
-      stopPublishProgressPoll();
-      setLivePublishProgress((prev) => ({
-        ...(prev || {}),
-        phase: "error",
-        percent: 0,
-        busy: false,
-        ok: false,
-        error: error.message,
-        message: error.message,
-      }));
-      setActionFeedback("live-channels", "error", error.message, { block });
-      throw error;
-    } finally {
-      stopPublishProgressPoll();
-      setLiveBusy(null);
-    }
-  }
-
-  function renderPublishProgress(block) {
-    const publishBusy =
-      liveBusy === "collection" || liveBusy === "craft" || liveBusy === "show";
-    const busyMatch =
-      (block === "collection" && liveBusy === "collection") ||
-      (block === "craft" && liveBusy === "craft") ||
-      (block === "show" && liveBusy === "show") ||
-      (block === "publish" && publishBusy);
-    if (
-      !(
-        busyMatch ||
-        (livePublishProgress &&
-          livePublishProgress.phase &&
-          livePublishProgress.phase !== "idle" &&
-          (publishBusy || livePublishProgress.mode === block))
-      )
-    ) {
-      return null;
-    }
-    const done = livePublishProgress?.phase === "done";
-    const failed = livePublishProgress?.phase === "error";
-    return (
-      <div
-        className="live-channels-engine-progress"
-        data-testid={`live-channels-publish-progress-${block}`}
-      >
-        {done ? (
-          <InlineAlert
-            type="success"
-            message={livePublishProgress?.message || "Publish finished"}
-            testId={`live-channels-publish-success-${block}`}
-          />
-        ) : (
-          <>
-            <p className="live-channels-engine-progress-headline">
-              {livePublishProgress?.message || "Publishing…"}
-            </p>
-            <div
-              className="live-channels-engine-progress-bar"
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={
-                Number.isFinite(livePublishProgress?.percent)
-                  ? livePublishProgress.percent
-                  : undefined
-              }
-              aria-label="Publish progress"
-            >
-              <span
-                className="live-channels-engine-progress-fill"
-                style={{
-                  width: `${Math.max(
-                    8,
-                    Math.min(100, Number(livePublishProgress?.percent) || 15),
-                  )}%`,
-                }}
-              />
-            </div>
-            <p className="wizard-note live-channels-engine-phase">
-              {publishPhaseLabel(livePublishProgress?.phase)}
-              {Number.isFinite(livePublishProgress?.percent)
-                ? ` · ${livePublishProgress.percent}%`
-                : ""}
-            </p>
-          </>
-        )}
-        {failed ? (
-          <div
-            className="inline-alert inline-alert-error"
-            data-testid={`live-channels-publish-error-${block}`}
-            role="alert"
-          >
-            <span className="inline-alert-message">
-              {livePublishProgress?.error || livePublishProgress?.message}
-            </span>
-          </div>
-        ) : null}
-      </div>
-    );
-  }
-
-  function renderContinuityProgress() {
-    if (
-      !(
-        liveBusy === "continuity-repair" ||
-        (liveContinuityProgress &&
-          liveContinuityProgress.phase &&
-          liveContinuityProgress.phase !== "idle")
-      )
-    ) {
-      return null;
-    }
-    const done = liveContinuityProgress?.phase === "done";
-    const failed = liveContinuityProgress?.phase === "error";
-    return (
-      <div
-        className="live-channels-engine-progress"
-        data-testid="live-channels-continuity-progress"
-      >
-        {done ? (
-          <InlineAlert
-            type="success"
-            message={liveContinuityProgress?.message || "Continuity repair finished"}
-            testId="live-channels-continuity-success"
-          />
-        ) : (
-          <>
-            <p className="live-channels-engine-progress-headline">
-              {liveContinuityProgress?.message ||
-                (liveBusy === "continuity-repair" ? "Repairing continuity…" : "Working…")}
-            </p>
-            <div
-              className={`live-channels-engine-progress-bar${
-                liveBusy === "continuity-repair" && !(liveContinuityProgress?.percent > 0)
-                  ? " is-indeterminate"
-                  : ""
-              }`}
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={
-                Number.isFinite(liveContinuityProgress?.percent)
-                  ? liveContinuityProgress.percent
-                  : undefined
-              }
-              aria-label="Continuity repair progress"
-            >
-              <span
-                className="live-channels-engine-progress-fill"
-                style={{
-                  width: `${Math.max(
-                    8,
-                    Math.min(100, Number(liveContinuityProgress?.percent) || 15),
-                  )}%`,
-                }}
-              />
-            </div>
-            <p className="wizard-note live-channels-engine-phase">
-              {continuityPhaseLabel(liveContinuityProgress?.phase)}
-              {Number.isFinite(liveContinuityProgress?.percent)
-                ? ` · ${liveContinuityProgress.percent}%`
-                : ""}
-            </p>
-          </>
-        )}
-        {failed ? (
-          <div
-            className="inline-alert inline-alert-error"
-            data-testid="live-channels-continuity-error"
-            role="alert"
-          >
-            <span className="inline-alert-message">
-              {liveContinuityProgress?.error || liveContinuityProgress?.message}
-            </span>
-          </div>
-        ) : null}
-      </div>
-    );
-  }
-
-  async function startBroadcastEngine() {
-    clearActionFeedback("live-channels");
-    setLiveEngineError("");
-    setLiveBusy("lifecycle");
-    setLiveEngineProgress({
-      phase: "pulling",
-      percent: 15,
-      message: "Pulling image",
-      ready: false,
-      busy: true,
-      ok: true,
-      determinate: true,
-    });
-    stopEngineProgressPoll();
-    const startedAt = Date.now();
-    const timeoutMs = 5 * 60 * 1000;
-    enginePollRef.current = setInterval(() => {
-      pollEngineProgressOnce().then((progress) => {
-        if (!progress) return;
-        if (progress.ready || progress.phase === "error" || Date.now() - startedAt > timeoutMs) {
-          stopEngineProgressPoll();
-        }
-      });
-    }, 1500);
-
-    try {
-      const result = await postLiveChannelsLifecycle("ensure_running");
-      if (result.tunarr_url) {
-        updateTunarrSettings({ url: result.tunarr_url });
-      }
-      if (!result.ok) {
-        const message = result.message || "TV engine failed to start.";
-        setLiveEngineError(message);
-        setLiveEngineProgress((prev) => ({
-          ...(prev || {}),
-          phase: "error",
-          percent: 0,
-          message,
-          ready: false,
-          busy: false,
-          ok: false,
-          error: message,
-        }));
-        setActionFeedback("live-channels", "error", message, { block: "engine" });
-        stopEngineProgressPoll();
-        setLiveBusy(null);
-        return;
-      }
-      // Keep polling until Tunarr HTTP is ready (log banner alone is not enough), up to ~5 min.
-      const deadline = Date.now() + timeoutMs;
-      let progress = await pollEngineProgressOnce();
-      while (Date.now() < deadline) {
-        if (progress?.ready && progress?.http_ready) break;
-        if (progress?.ready) break;
-        if (progress?.phase === "error") break;
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        progress = await pollEngineProgressOnce();
-      }
-      stopEngineProgressPoll();
-      if (progress?.ready) {
-        setActionFeedback("live-channels",
-          "success",
-          progress.message || "TV engine is ready!",
-          { block: "engine" },
-        );
-      } else if (progress?.phase === "error") {
-        setLiveEngineError(progress.error || progress.message || "TV engine failed.");
-        setActionFeedback("live-channels", "error", progress.error || progress.message, { block: "engine" });
-      } else {
-        const stillStarting = Boolean(progress?.still_starting || progress?.container_running);
-        const timeoutMsg = stillStarting
-          ? "TV engine is still starting — HTTP not ready yet. Meili/scan noise during boot is normal; try again shortly."
-          : "Timed out waiting for the TV engine to become ready. Check TV engine logs below.";
-        // stillStarting: container up, HTTP not ready — soft notice (ok:true), not a failure.
-        setLiveEngineError(stillStarting ? "" : timeoutMsg);
-        setLiveEngineProgress((prev) => ({
-          ...(prev || {}),
-          phase: stillStarting ? "waiting_ready" : "error",
-          percent: prev?.percent || 80,
-          message: timeoutMsg,
-          ready: false,
-          busy: false,
-          ok: stillStarting,
-          error: stillStarting ? "" : timeoutMsg,
-          still_starting: stillStarting,
-        }));
-        setActionFeedback(
-          "live-channels",
-          liveChannelsStartTimeoutAlertType(stillStarting),
-          timeoutMsg,
-          { block: "engine" },
-        );
-      }
-      const status = await getLiveChannelsStatus();
-      setLiveChannelsStatus(status);
-      if (result.tunarr_url) {
-        await getSettings().then(setSettings).catch(() => {});
-      }
-    } catch (error) {
-      stopEngineProgressPoll();
-      const message = error.message || "TV engine failed to start.";
-      setLiveEngineError(message);
-      setLiveEngineProgress((prev) => ({
-        ...(prev || {}),
-        phase: "error",
-        percent: 0,
-        message,
-        ready: false,
-        busy: false,
-        ok: false,
-        error: message,
-      }));
-      setActionFeedback("live-channels", "error", message, { block: "engine" });
-    } finally {
-      setLiveBusy(null);
     }
   }
 
@@ -2618,27 +1623,6 @@ export default function ConfigPage() {
     );
   }
 
-  async function handleLibrarySync() {
-    setSyncingLibrary(true);
-    setActionFeedback("library-sync", null);
-    try {
-      const job = await api("/library/sync", { method: "POST" });
-      trackedSyncJobIdRef.current = job.id;
-      setActiveSyncJob(job);
-      syncWasRunningRef.current = job.status === "running" || job.status === "queued";
-      setActionFeedback("library-sync", {
-        type: "success",
-        message: "Library sync started. Progress appears below.",
-      });
-    } catch (error) {
-      setSyncingLibrary(false);
-      setActionFeedback("library-sync", {
-        type: "error",
-        message: error.message || "Library sync failed to start.",
-      });
-    }
-  }
-
   async function handleRegisterRadarrExisting() {
     setActionFeedback("radarr-register", null);
     try {
@@ -2783,7 +1767,6 @@ export default function ConfigPage() {
             settings={settings}
             sections={sections}
             featureFlags={featureFlags}
-            liveChannelsStatus={liveChannelsStatus}
             setShowWizard={setShowWizard}
             handleExportTrainingCorpus={handleExportTrainingCorpus}
             exportingCorpus={exportingCorpus}
@@ -2882,78 +1865,22 @@ export default function ConfigPage() {
             persistSettings={persistSettings}
             updateTunarrSettings={updateTunarrSettings}
             updateFeatureFlags={updateFeatureFlags}
+            setSettings={setSettings}
             testing={testing}
             testResults={testResults}
             certifications={certifications}
             runTest={runTest}
             actionAlert={actionAlert}
-            setActionFeedback={setActionFeedback}
-            clearActionFeedback={clearActionFeedback}
             CertifiedBadge={CertifiedBadge}
-            liveChannelsStatus={liveChannelsStatus}
-            setLiveChannelsStatus={setLiveChannelsStatus}
-            livePreflight={livePreflight}
-            setLivePreflight={setLivePreflight}
-            liveCraftOptions={liveCraftOptions}
-            setLiveCraftOptions={setLiveCraftOptions}
-            liveCraft={liveCraft}
-            setLiveCraft={setLiveCraft}
-            liveCraftPreview={liveCraftPreview}
-            setLiveCraftPreview={setLiveCraftPreview}
-            liveCraftPreviewBusy={liveCraftPreviewBusy}
-            setLiveCraftPreviewBusy={setLiveCraftPreviewBusy}
-            fillerPathDraft={fillerPathDraft}
-            setFillerPathDraft={setFillerPathDraft}
-            padFlexDraft={padFlexDraft}
-            setPadFlexDraft={setPadFlexDraft}
-            exclusionNameDraft={exclusionNameDraft}
-            setExclusionNameDraft={setExclusionNameDraft}
-            liveAttach={liveAttach}
-            setLiveAttach={setLiveAttach}
-            liveBusy={liveBusy}
-            setLiveBusy={setLiveBusy}
-            liveEngineProgress={liveEngineProgress}
-            liveEngineError={liveEngineError}
-            liveContinuityProgress={liveContinuityProgress}
-            livePublishProgress={livePublishProgress}
-            liveStarters={liveStarters}
-            setLiveStarters={setLiveStarters}
-            selectedStarters={selectedStarters}
-            setSelectedStarters={setSelectedStarters}
-            tunarrLogsOpen={tunarrLogsOpen}
-            setTunarrLogsOpen={setTunarrLogsOpen}
-            tunarrLogs={tunarrLogs}
-            tunarrLogsBusy={tunarrLogsBusy}
-            liveChannelsTab={liveChannelsTab}
-            setLiveChannelsTab={setLiveChannelsTab}
-            stationSettingsOpen={stationSettingsOpen}
-            setStationSettingsOpen={setStationSettingsOpen}
-            collectionFilter={collectionFilter}
-            setCollectionFilter={setCollectionFilter}
-            filteredLiveCollections={filteredLiveCollections}
-            liveLaunched={liveLaunched}
-            effectiveLiveTab={effectiveLiveTab}
-            fillerBinds={fillerBinds}
-            handleLiveChannelsEnabled={handleLiveChannelsEnabled}
-            renderLiveBlockAlert={renderLiveBlockAlert}
-            renderPublishProgress={renderPublishProgress}
-            renderContinuityProgress={renderContinuityProgress}
-            startBroadcastEngine={startBroadcastEngine}
-            runContinuityJob={runContinuityJob}
-            runPublishJob={runPublishJob}
-            refreshTunarrLogs={refreshTunarrLogs}
-            formatPublishFeedback={formatPublishFeedback}
           />
         ) : null}
 
 
         {showSection("libraries") ? (
           <LibrariesSection
-            syncingLibrary={syncingLibrary}
-            handleLibrarySync={handleLibrarySync}
-            activeSyncJob={activeSyncJob}
             libraryStats={libraryStats}
-            trackedSyncJobId={trackedSyncJobIdRef.current}
+            setLibraryStats={setLibraryStats}
+            setLibraryHealth={setLibraryHealth}
             actionAlert={actionAlert}
             radarrGapStats={radarrGapStats}
             registeringRadarr={registeringRadarr}

@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { getLiveChannelsStatus } from "../../api/client";
 import InlineAlert from "../../components/InlineAlert";
 import SectionHelp from "../../components/SectionHelp";
 import { buildHouseholdHealthChips } from "../../lib/householdHealth.js";
@@ -16,7 +18,6 @@ export default function OverviewSection({
   settings,
   sections,
   featureFlags,
-  liveChannelsStatus,
   setShowWizard,
   handleExportTrainingCorpus,
   exportingCorpus,
@@ -25,6 +26,24 @@ export default function OverviewSection({
   actionAlert,
 }) {
   const liveOn = Boolean(settings?.features?.live_channels_enabled);
+  const [liveChannelsStatus, setLiveChannelsStatus] = useState(null);
+  useEffect(() => {
+    if (!liveOn) {
+      setLiveChannelsStatus(null);
+      return undefined;
+    }
+    let cancelled = false;
+    getLiveChannelsStatus()
+      .then((status) => {
+        if (!cancelled) setLiveChannelsStatus(status);
+      })
+      .catch(() => {
+        if (!cancelled) setLiveChannelsStatus(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [liveOn]);
   const tip = liveOnboardingTip({
     liveEnabled: liveOn,
     libraryMapped: sections.length > 0,

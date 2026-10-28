@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+## [1.37.66] — 2026-10-28
+
+One patch on 1.37.65: watch history stays honest, confirms and Explore warming finish in-app, Live and Library share one theater shell, and the weekly ship no longer opens the old god files.
+
+### Highlights
+- **Surprise Me stays a surprise.** The dice is a random unwatched pick, not the same named title every click. Continue Watching does not invent an episode you have not started.
+- **Play, Live, and Weather share one theater.** Chrome, idle OSD, and fullscreen come from the same shell, so the picture behaves the same whether you tuned a station or opened a library title.
+- **Confirms stay in the app — including Seerr tokens.** Explore does not go quiet while rails are still warming. Live and nav colors follow the house tokens.
+- **The name you see is Projectionist.** FastAPI title, mail subjects, and export filenames match the product. Cookie, database, and Compose `CURATORX_*` twins stay for existing installs.
+
+### Added
+- **`docs/TECH-DEBT.md` parking lot** for postponed platform bets (SQLite WAL, cookie/DB/compose CuratorX twins, Vite 8 / React Router 7, WatchHistoryTimeline UI leftover). Not a second build board.
+
+### Changed
+- **Watch honesty.** Tracker sittings win over Plex `viewCount` aliases: `play_sessions` is `sittings_observed`, not a flattened “watched twice.” Surprise Me skips tracker-watched ids and attaches a named bridge only when that random title has one. Tonight Continue Watching does not invent episodes.
+- **ConfirmModal leftovers + hub warming + CSS tokens.** Seerr household sync uses the in-app token field. Explore hub cache keeps warming rails pending instead of going quiet. Live and AppNav colors come from design tokens (`--live-bg`, `--live-line`, nav chrome).
+- **One TheaterPlayer shell.** LivePlayer, WeatherChannelPlayer, and LibraryPlayer mount `TheaterPlayer` so chrome and playback share one stage. Library OSD splits into `LibraryPlayerOsd`.
+- **Library and chat HTTP carved out of `app.py`.** `register_library_routes` + `register_chat_routes`; `app.py` stays the lifespan composition root.
+- **Agent tools split by domain** (`tonight`, `library`, `prompt`, `registry`, …) with a thin `__init__.py` registry. Chat session state lives in `useChatSession`. ConfigPage Live Channels and library jobs extract to `useLiveChannelsAdmin` / `useLibraryJobs`.
+- **User-visible CuratorX → Projectionist** (FastAPI title, mail test subject, training-corpus and library CSV filenames). Cookie `curatorx_session`, legacy `curatorx.db`, and compose `${CURATORX_*}` twins stay.
+
+### Verification
+- Focused pytest — 262 passed (`test_play_counts`, `test_quick_pick_api`, `test_tonight_watch`, `test_agent_tools`, `test_agent_tool_registry`, `test_library_chat_carve`, `test_household_bridges`, `test_h1_shell_extract`, `test_version`, `test_ca_release`, `test_api_contract`, `test_chat_stream`, `test_agent_tools_validation`, `test_continue_watching_after_play`) with `--no-cov`.
+- Full `pytest tests/` — 2683 passed, 43 skipped, coverage 76.60% (floor 74%). Five auth/invite setUp failures while `frontend/dist/assets` was missing (parallel SPA build); `tests/test_auth.py` + `tests/test_invites.py` 35 passed after the SPA compile.
+- Frontend unit 1112/1112. `npm run lint` 0 errors (173 pre-existing warnings). `npm run build` compiled (`useConfirmModal.jsx`; TheaterPlayer weather uses token `--bg`, not `#100e0c`).
+- `tests/test_version.py` after `./scripts/patch-release.sh 1.37.66`.
+
 ## [1.37.65] — 2026-10-27
 
 One patch on 1.37.64: the Dependabot-equivalent security floors that missed the 1.37.64 tag. No product change. Vite 5 and React Router 6 stay.

@@ -135,7 +135,7 @@ class PurgeCandidatesApiCacheTests(unittest.TestCase):
         self.assertFalse(body["stale"])
         self.assertTrue(body["cached"])
 
-    @patch("projectionist.web.app.recompute_purge_candidates")
+    @patch("projectionist.web.library_routes.recompute_purge_candidates")
     def test_refresh_endpoint_recomputes(self, mock_recompute) -> None:
         mock_recompute.return_value = {
             "items": [{"title": "Fresh", "rating_key": "fresh-1"}],

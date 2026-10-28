@@ -58,6 +58,10 @@
   /* Ink for a surface that stays dark in both themes (the picture, a poster veil). */
   --ink-on-media: #e6e2d6;
   --muted-on-media: #c8c2b4;
+  --picture-black: #000;
+  --live-bg: var(--workspace-base);
+  --live-panel: color-mix(in srgb, var(--surface) 92%, transparent);
+  --live-line: color-mix(in srgb, var(--text) 12%, transparent);
   font-family: var(--font-body);
   font-size: var(--base-font-size);
   line-height: var(--leading-body);
@@ -84,6 +88,10 @@ html[data-theme="lights-down"] {
   --workspace-wash-a: #1a1612;
   --workspace-wash-b: #12151c;
   --workspace-base: #0c0d11;
+  --picture-black: #000;
+  --live-bg: var(--workspace-base);
+  --live-panel: color-mix(in srgb, var(--surface) 92%, transparent);
+  --live-line: color-mix(in srgb, var(--text) 12%, transparent);
 }
 
 /* Gallery paper / Lights Up */
@@ -107,6 +115,10 @@ html[data-theme="lights-up"] {
   --workspace-wash-a: #f0ebe0;
   --workspace-wash-b: #e8e4d8;
   --workspace-base: #f5f2ea;
+  --picture-black: #000;
+  --live-bg: var(--bg);
+  --live-panel: var(--surface);
+  --live-line: var(--border-subtle);
 }
 
 html {

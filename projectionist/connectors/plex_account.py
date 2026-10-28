@@ -10,7 +10,7 @@ from urllib.parse import urlencode
 
 from projectionist.connectors.http import request_json
 
-PLEX_PRODUCT = "CuratorX"
+PLEX_PRODUCT = "Projectionist"
 PLEX_VERSION = "Plex OAuth"
 CLIENT_ID_FILENAME = "plex_oauth_client_id"
 # Status polls run while the Plex window is open. A 20s socket timeout holds

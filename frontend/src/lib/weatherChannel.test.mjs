@@ -93,4 +93,15 @@ describe("weatherChannel boards", () => {
     assert.match(player, /payload\?\.muzak\?\.url/);
     assert.doesNotMatch(player, /fake soundtrack/i);
   });
+
+  it("mounts the weather boards through TheaterPlayer", () => {
+    const player = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "../components/live/WeatherChannelPlayer.jsx"),
+      "utf8",
+    );
+    assert.match(player, /import TheaterPlayer from "\.\.\/theater\/TheaterPlayer\.jsx"/);
+    assert.match(player, /<TheaterPlayer/);
+    assert.match(player, /data-testid="weather-channel-muzak"/);
+    assert.doesNotMatch(player, /new Hls\(/);
+  });
 });

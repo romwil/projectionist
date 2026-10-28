@@ -18,6 +18,8 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const configPage = readFileSync(join(here, "../pages/ConfigPage.jsx"), "utf8");
 const libraries = readFileSync(join(here, "../pages/admin/LibrariesSection.jsx"), "utf8");
+const libraryJobs = readFileSync(join(here, "../hooks/useLibraryJobs.js"), "utf8");
+const liveAdmin = readFileSync(join(here, "../hooks/useLiveChannelsAdmin.jsx"), "utf8");
 const app = readFileSync(join(here, "../App.jsx"), "utf8");
 
 function wait(ms) {
@@ -133,14 +135,17 @@ describe("visible busy poll wiring", () => {
   });
 
   it("does not remount the Live poll on every status object", () => {
-    assert.match(configPage, /liveJobBusy/);
-    assert.match(configPage, /\[liveJobBusy, liveBusy, section, showWizard\]/);
-    assert.doesNotMatch(configPage, /liveChannelsStatus\?\.job,/);
+    assert.match(liveAdmin, /liveJobBusy/);
+    assert.match(liveAdmin, /\[liveJobBusy, liveBusy\]/);
+    assert.doesNotMatch(liveAdmin, /liveChannelsStatus\?\.job,/);
   });
 
   it("does not remount library sync poll when Sync is clicked", () => {
-    assert.match(configPage, /syncingLibraryRef/);
-    assert.match(configPage, /\[showWizard, section\]/);
-    assert.doesNotMatch(configPage, /\[showWizard, section, syncingLibrary\]/);
+    assert.match(libraryJobs, /syncingLibraryRef/);
+    assert.match(libraryJobs, /\[enabled, setLibraryHealth, setLibraryStats\]/);
+    assert.doesNotMatch(
+      libraryJobs,
+      /\[enabled, setLibraryHealth, setLibraryStats, syncingLibrary\]/,
+    );
   });
 });

@@ -22,7 +22,7 @@ def notify_owners_of_access_request(
     owners = [u for u in db.list_users(limit=100) if u.get("role") == "owner" and not u.get("disabled")]
     results = []
     name = str(request_row.get("display_name") or "Someone")
-    body_bits = [f"{name} asked to join your CuratorX household."]
+    body_bits = [f"{name} asked to join your Projectionist household."]
     if request_row.get("email"):
         body_bits.append(f"Email: {request_row['email']}")
     if request_row.get("message"):

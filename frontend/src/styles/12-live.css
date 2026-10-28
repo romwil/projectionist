@@ -20,14 +20,11 @@
 }
 
 .live-page {
-  --live-bg: #07080c;
-  --live-panel: rgba(12, 14, 20, 0.92);
-  --live-line: rgba(230, 226, 214, 0.12);
   min-height: 100vh;
   min-height: 100dvh;
   background:
-    radial-gradient(120% 80% at 50% -10%, rgba(255, 184, 0, 0.08), transparent 55%),
-    linear-gradient(180deg, #12151c 0%, var(--live-bg) 42%, #050608 100%);
+    radial-gradient(120% 80% at 50% -10%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 55%),
+    linear-gradient(180deg, var(--workspace-wash-b) 0%, var(--live-bg) 42%, var(--bg) 100%);
   color: var(--text);
   display: flex;
   flex-direction: column;
@@ -97,7 +94,7 @@
   padding: 0.5rem 1rem;
   padding-top: max(0.5rem, env(safe-area-inset-top));
   border-bottom: 1px solid var(--live-line);
-  background: rgba(7, 8, 12, 0.72);
+  background: color-mix(in srgb, var(--live-bg) 72%, transparent);
   backdrop-filter: blur(10px);
   z-index: 5;
   flex-wrap: wrap;
@@ -231,7 +228,7 @@
 .live-guide-skeleton-row {
   height: 4.5rem;
   border-radius: 0.35rem;
-  background: rgba(230, 226, 214, 0.06);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
 }
 
 /* Player */
@@ -239,7 +236,7 @@
   position: relative;
   flex: 1;
   min-height: 0;
-  background: #000;
+  background: var(--picture-black);
   outline: none;
   display: flex;
   align-items: center;
@@ -250,7 +247,7 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
-  background: #000;
+  background: var(--picture-black);
   cursor: pointer;
 }
 
@@ -302,7 +299,7 @@
 }
 
 .live-player-status--stalled p {
-  border-color: rgba(255, 196, 120, 0.45);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 .live-player-spinner {
@@ -342,8 +339,8 @@
   gap: 0.55rem;
   padding: 2rem 1.5rem;
   background:
-    radial-gradient(80% 55% at 50% 38%, rgba(255, 184, 0, 0.18), transparent 62%),
-    linear-gradient(180deg, #1c212c 0%, #0b0d12 100%);
+    radial-gradient(80% 55% at 50% 38%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 62%),
+    linear-gradient(180deg, var(--surface-raised) 0%, var(--workspace-base) 100%);
   color: var(--text);
   text-align: center;
   pointer-events: none;
@@ -394,9 +391,13 @@
   max-width: min(36rem, 100%);
   padding: 0.7rem 1rem 0.75rem;
   border-radius: 10px;
-  border: 1px solid rgba(255, 184, 0, 0.18);
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
   border-left: 3px solid var(--accent);
-  background: linear-gradient(135deg, rgba(10, 12, 18, 0.78), rgba(8, 9, 14, 0.55));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--surface) 78%, transparent),
+    color-mix(in srgb, var(--workspace-base) 55%, transparent)
+  );
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
   backdrop-filter: blur(10px);
 }
@@ -499,7 +500,11 @@
 }
 
 .live-osd-inner {
-  background: linear-gradient(180deg, rgba(10, 12, 18, 0.55), rgba(8, 9, 14, 0.92));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface) 55%, transparent),
+    color-mix(in srgb, var(--workspace-base) 92%, transparent)
+  );
   border: 1px solid var(--live-line);
   border-radius: 14px 14px 10px 10px;
   padding: 0.85rem 1rem max(0.85rem, env(safe-area-inset-bottom));
@@ -621,7 +626,7 @@
 .live-osd-next:hover,
 .live-osd-next:focus-visible {
   color: var(--text);
-  background: rgba(255, 184, 0, 0.08);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .live-osd-actions {
@@ -696,7 +701,7 @@
   position: sticky;
   left: 0;
   z-index: 3;
-  background: rgba(8, 9, 14, 0.96);
+  background: color-mix(in srgb, var(--workspace-base) 96%, transparent);
   border-right: 1px solid var(--live-line);
 }
 
@@ -711,7 +716,7 @@
   border-bottom: 1px solid var(--live-line);
   position: sticky;
   top: 0;
-  background: rgba(8, 9, 14, 0.98);
+  background: color-mix(in srgb, var(--workspace-base) 98%, transparent);
   z-index: 4;
 }
 
@@ -798,7 +803,7 @@
   z-index: 2;
   box-sizing: border-box;
   height: var(--guide-head-h);
-  background: rgba(8, 9, 14, 0.96);
+  background: color-mix(in srgb, var(--workspace-base) 96%, transparent);
   border-bottom: 1px solid var(--live-line);
 }
 
@@ -810,7 +815,7 @@
   bottom: 0;
   box-sizing: border-box;
   padding: 0.7rem 0 0 0.4rem;
-  border-left: 1px solid rgba(230, 226, 214, 0.22);
+  border-left: 1px solid color-mix(in srgb, var(--text) 22%, transparent);
   white-space: nowrap;
   overflow: hidden;
   font-size: var(--text-xs);
@@ -822,8 +827,8 @@
   position: relative;
   /* Half-hour hairlines (faint) + hour lines (stronger), same px as the header ticks. */
   background-image:
-    linear-gradient(to right, rgba(230, 226, 214, 0.2) 0 1px, transparent 1px),
-    linear-gradient(to right, rgba(230, 226, 214, 0.07) 0 1px, transparent 1px);
+    linear-gradient(to right, color-mix(in srgb, var(--text) 20%, transparent) 0 1px, transparent 1px),
+    linear-gradient(to right, color-mix(in srgb, var(--text) 7%, transparent) 0 1px, transparent 1px);
   background-size:
     var(--guide-hour-px) 100%,
     var(--guide-slot-px) 100%;
@@ -837,7 +842,7 @@
   width: 2px;
   margin-left: -1px; /* centre the 2px line on the exact "now" x */
   background: var(--accent);
-  box-shadow: 0 0 12px rgba(255, 184, 0, 0.45);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 45%, transparent);
   z-index: 1;
   pointer-events: none;
 }
@@ -851,7 +856,7 @@
 }
 
 .live-guide-row.is-focused {
-  background: rgba(255, 184, 0, 0.04);
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
 }
 
 .live-guide-cell {
@@ -866,7 +871,7 @@
   padding: 0.35rem 0.55rem;
   border: 1px solid var(--live-line);
   border-radius: 8px;
-  background: rgba(28, 32, 41, 0.92);
+  background: color-mix(in srgb, var(--surface-raised) 92%, transparent);
   color: var(--text);
   text-align: left;
   cursor: pointer;
@@ -880,8 +885,8 @@
 
 .live-guide-cell:hover,
 .live-guide-cell.is-focused {
-  border-color: rgba(255, 184, 0, 0.55);
-  background: rgba(40, 34, 20, 0.95);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent-soft) 65%, var(--surface-raised));
   transform: translateY(-1px);
 }
 
@@ -916,8 +921,8 @@
   flex-direction: column;
   width: min(260px, calc(100vw - 16px));
   border-radius: 10px;
-  border: 1px solid rgba(255, 184, 0, 0.35);
-  background: rgba(16, 18, 24, 0.97);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--surface) 97%, transparent);
   color: var(--text);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
   cursor: pointer;
@@ -933,7 +938,7 @@
 
 .live-program-hover:hover,
 .live-program-hover:focus-within {
-  border-color: rgba(255, 184, 0, 0.7);
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
   outline: none;
 }
 
@@ -1073,9 +1078,9 @@
   width: min(26rem, 100%);
   padding: 1.25rem 1.35rem;
   border-radius: 0.75rem;
-  background: var(--surface-raised, #1a1610);
-  color: var(--text, #f4efe4);
-  border: 1px solid rgba(255, 184, 0, 0.28);
+  background: var(--surface-raised);
+  color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
   display: grid;
   gap: 0.55rem;
 }
@@ -1109,57 +1114,67 @@
 
 /* Weather Channel cable experience — dark amber theater, sky behind the type */
 .weather-channel {
-  --wx-ink: #f4efe4;
-  --wx-amber: #ffb800;
-  --wx-dim: rgba(244, 239, 228, 0.78);
+  --wx-ink: var(--ink-on-media);
+  --wx-amber: var(--accent);
+  --wx-dim: color-mix(in srgb, var(--ink-on-media) 78%, transparent);
   position: relative;
   min-height: min(78vh, 44rem);
   overflow: hidden;
   border-radius: 0.75rem;
-  background: #100e0c;
+  background: var(--bg);
   color: var(--wx-ink);
   padding: 1.25rem 1.25rem 1.5rem;
+}
+.theater-player.weather-channel {
+  display: block;
+  align-items: stretch;
+  justify-content: flex-start;
+  background: var(--bg);
+}
+.theater-player.weather-channel .theater-player-video,
+.theater-player.weather-channel .live-osd.theater-osd {
+  display: none;
 }
 .weather-channel-sky {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(ellipse at 70% 0%, rgba(255, 184, 0, 0.18), transparent 42%),
-    linear-gradient(180deg, #1a1612 0%, #100e0c 62%, #0a0908 100%);
+    radial-gradient(ellipse at 70% 0%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 42%),
+    linear-gradient(180deg, var(--workspace-wash-a) 0%, var(--bg) 62%, var(--workspace-base) 100%);
   pointer-events: none;
 }
 .weather-channel[data-sky="clear"] .weather-channel-sky {
   background:
-    radial-gradient(circle at 78% 16%, rgba(255, 196, 72, 0.85), rgba(255, 184, 0, 0.15) 18%, transparent 36%),
-    radial-gradient(ellipse at 50% 110%, rgba(255, 160, 40, 0.22), transparent 46%),
-    linear-gradient(180deg, #2a2114 0%, #14110d 58%, #0c0b09 100%);
+    radial-gradient(circle at 78% 16%, color-mix(in srgb, var(--accent) 85%, transparent), color-mix(in srgb, var(--accent) 15%, transparent) 18%, transparent 36%),
+    radial-gradient(ellipse at 50% 110%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 46%),
+    linear-gradient(180deg, var(--workspace-wash-a) 0%, var(--surface) 58%, var(--workspace-base) 100%);
 }
 .weather-channel[data-sky="cloudy"] .weather-channel-sky {
   background:
-    radial-gradient(ellipse at 22% 28%, rgba(180, 176, 168, 0.28), transparent 36%),
-    radial-gradient(ellipse at 70% 18%, rgba(120, 116, 108, 0.35), transparent 40%),
-    linear-gradient(180deg, #2a2824 0%, #161411 55%, #0c0b09 100%);
+    radial-gradient(ellipse at 22% 28%, color-mix(in srgb, var(--muted) 28%, transparent), transparent 36%),
+    radial-gradient(ellipse at 70% 18%, color-mix(in srgb, var(--muted) 35%, transparent), transparent 40%),
+    linear-gradient(180deg, var(--surface-raised) 0%, var(--surface) 55%, var(--workspace-base) 100%);
 }
 .weather-channel[data-sky="rain"] .weather-channel-sky {
   background:
     repeating-linear-gradient(
       105deg,
       transparent 0 10px,
-      rgba(244, 239, 228, 0.05) 10px 11px
+      color-mix(in srgb, var(--ink-on-media) 5%, transparent) 10px 11px
     ),
-    radial-gradient(ellipse at 30% 0%, rgba(255, 184, 0, 0.12), transparent 40%),
-    linear-gradient(180deg, #1c2428 0%, #101416 50%, #0a0c0d 100%);
+    radial-gradient(ellipse at 30% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 40%),
+    linear-gradient(180deg, var(--workspace-wash-b) 0%, var(--bg) 50%, var(--workspace-base) 100%);
 }
 .weather-channel[data-sky="storm"] .weather-channel-sky {
   background:
-    radial-gradient(ellipse at 62% 22%, rgba(255, 184, 0, 0.28), transparent 26%),
-    linear-gradient(180deg, #1a140c 0%, #120e0c 40%, #070605 100%);
+    radial-gradient(ellipse at 62% 22%, color-mix(in srgb, var(--accent) 28%, transparent), transparent 26%),
+    linear-gradient(180deg, var(--workspace-wash-a) 0%, var(--bg) 40%, var(--workspace-base) 100%);
 }
 .weather-channel[data-sky="snow"] .weather-channel-sky {
   background:
-    radial-gradient(circle at 20% 20%, rgba(244, 239, 228, 0.16), transparent 18%),
-    radial-gradient(circle at 70% 30%, rgba(244, 239, 228, 0.1), transparent 16%),
-    linear-gradient(180deg, #24282c 0%, #141618 58%, #0c0d0e 100%);
+    radial-gradient(circle at 20% 20%, color-mix(in srgb, var(--ink-on-media) 16%, transparent), transparent 18%),
+    radial-gradient(circle at 70% 30%, color-mix(in srgb, var(--ink-on-media) 10%, transparent), transparent 16%),
+    linear-gradient(180deg, var(--surface-raised) 0%, var(--surface) 58%, var(--workspace-base) 100%);
 }
 .weather-channel-header,
 .weather-channel-status,
@@ -1249,7 +1264,7 @@
   gap: 0.45rem;
   margin: 0;
   padding: 0.65rem 0 0.75rem;
-  border-block: 1px solid rgba(255, 184, 0, 0.35);
+  border-block: 1px solid color-mix(in srgb, var(--wx-amber) 35%, transparent);
 }
 .weather-day-col {
   display: flex;
@@ -1329,10 +1344,10 @@
 }
 .weather-channel-ticker {
   overflow: hidden;
-  border-block: 1px solid rgba(255, 184, 0, 0.35);
+  border-block: 1px solid color-mix(in srgb, var(--wx-amber) 35%, transparent);
   padding-block: 0.65rem;
   margin-bottom: 0.85rem;
-  background: rgba(8, 7, 6, 0.35);
+  background: color-mix(in srgb, var(--workspace-base) 35%, transparent);
 }
 .weather-channel-ticker-track {
   display: flex;
@@ -1363,7 +1378,7 @@
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
 }
 .weather-channel-status--error {
-  color: #ffb4a8;
+  color: var(--danger);
 }
 .weather-place-picker {
   display: grid;
@@ -1396,7 +1411,7 @@
 .weather-place-picker--channel .field-help,
 .weather-place-picker--channel .weather-place-status,
 .weather-place-picker--channel .weather-place-current {
-  color: #d5e6f7;
+  color: var(--muted-on-media);
 }
 
 /* Projectionist-drawn subtitles (Plex tracks) — shared by Live + Play. */
