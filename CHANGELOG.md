@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- **Explore language walls use the catalog Language control.** The extra All / Movies / TV pills are gone — Type stays in the shared dropdown. Clearing Language stays on the wall and shows **All languages**. The language list is every original language in the library, not a 50-bucket cap.
+
 ## [1.37.66] — 2026-10-28
 
 One patch on 1.37.65: watch history stays honest, confirms and Explore warming finish in-app, Live and Library share one theater shell, and the weekly ship no longer opens the old god files.
