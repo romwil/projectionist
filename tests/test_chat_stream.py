@@ -40,7 +40,7 @@ class ChatStreamTests(unittest.TestCase):
             yield json.dumps({"type": "token", "content": "Hi"})
             yield json.dumps({"type": "done"})
 
-        with patch("projectionist.web.app.stream_agent", fake_stream):
+        with patch("projectionist.web.chat_routes.stream_agent", fake_stream):
             resp = self.client.post(
                 "/api/chat/stream",
                 json={"message": "hello", "session_id": "stream-s1"},
