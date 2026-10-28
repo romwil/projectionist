@@ -1,6 +1,42 @@
 {
-  "generated_at": "2026-10-27T22:05:43Z",
+  "generated_at": "2026-10-28T01:56:38Z",
   "releases": [
+    {
+      "version": "1.37.66",
+      "date": "2026-10-28",
+      "summary": "One patch on 1.37.65: watch history stays honest, confirms and Explore warming finish in-app, Live and Library share one theater shell, and the weekly ship no longer opens the old god files.",
+      "highlights": [
+        "**Surprise Me stays a surprise.** The dice is a random unwatched pick, not the same named title every click. Continue Watching does not invent an episode you have not started.",
+        "**Play, Live, and Weather share one theater.** Chrome, idle OSD, and fullscreen come from the same shell, so the picture behaves the same whether you tuned a station or opened a library title.",
+        "**Confirms stay in the app — including Seerr tokens.** Explore does not go quiet while rails are still warming. Live and nav colors follow the house tokens.",
+        "**The name you see is Projectionist.** FastAPI title, mail subjects, and export filenames match the product. Cookie, database, and Compose `CURATORX_*` twins stay for existing installs."
+      ],
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "**`docs/TECH-DEBT.md` parking lot** for postponed platform bets (SQLite WAL, cookie/DB/compose CuratorX twins, Vite 8 / React Router 7, WatchHistoryTimeline UI leftover). Not a second build board."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "**Watch honesty.** Tracker sittings win over Plex `viewCount` aliases: `play_sessions` is `sittings_observed`, not a flattened “watched twice.” Surprise Me skips tracker-watched ids and attaches a named bridge only when that random title has one. Tonight Continue Watching does not invent episodes.",
+            "**ConfirmModal leftovers + hub warming + CSS tokens.** Seerr household sync uses the in-app token field. Explore hub cache keeps warming rails pending instead of going quiet. Live and AppNav colors come from design tokens (`--live-bg`, `--live-line`, nav chrome).",
+            "**One TheaterPlayer shell.** LivePlayer, WeatherChannelPlayer, and LibraryPlayer mount `TheaterPlayer` so chrome and playback share one stage. Library OSD splits into `LibraryPlayerOsd`.",
+            "**Library and chat HTTP carved out of `app.py`.** `register_library_routes` + `register_chat_routes`; `app.py` stays the lifespan composition root.",
+            "**Agent tools split by domain** (`tonight`, `library`, `prompt`, `registry`, …) with a thin `__init__.py` registry. Chat session state lives in `useChatSession`. ConfigPage Live Channels and library jobs extract to `useLiveChannelsAdmin` / `useLibraryJobs`.",
+            "**User-visible CuratorX → Projectionist** (FastAPI title, mail test subject, training-corpus and library CSV filenames). Cookie `curatorx_session`, legacy `curatorx.db`, and compose `${CURATORX_*}` twins stay."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Focused pytest on touched areas, then full `tests/` with coverage floor 74%. Frontend unit, lint (0 errors), and `npm run build`."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.65",
       "date": "2026-10-27",

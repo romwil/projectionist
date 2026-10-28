@@ -6,6 +6,7 @@ import ConfirmModal from "../components/ConfirmModal";
  *
  *   const { confirm, modal } = useConfirmModal();
  *   if (!(await confirm({ title, body, danger }))) return;
+ *   const token = await confirm({ title, body, prompt: { label, type: "password" } });
  *   // render {modal} in the component tree
  */
 export function useConfirmModal() {
@@ -28,7 +29,10 @@ export function useConfirmModal() {
     };
   }, []);
 
-  const onConfirm = useCallback(() => settle(true), [settle]);
+  const onConfirm = useCallback(
+    (value) => settle(typeof value === "string" ? value : true),
+    [settle],
+  );
   const onCancel = useCallback(() => settle(false), [settle]);
 
   const confirm = useCallback((options = {}) => {
@@ -41,6 +45,7 @@ export function useConfirmModal() {
         confirmLabel: options.confirmLabel || "Confirm",
         cancelLabel: options.cancelLabel || "Cancel",
         danger: Boolean(options.danger),
+        prompt: options.prompt || null,
       });
     });
   }, []);
@@ -53,6 +58,7 @@ export function useConfirmModal() {
       confirmLabel={request?.confirmLabel}
       cancelLabel={request?.cancelLabel}
       danger={Boolean(request?.danger)}
+      prompt={request?.prompt || null}
       onConfirm={onConfirm}
       onCancel={onCancel}
     />

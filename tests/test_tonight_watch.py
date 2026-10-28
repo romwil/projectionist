@@ -318,6 +318,85 @@ class TonightWatchBuilderTests(unittest.TestCase):
         self.assertNotIn("ordinary people", blob)
         self.assertNotIn("watch tonight", blob)
 
+    def test_finished_episode_leftover_offset_is_not_continue(self) -> None:
+        show = _title(
+            self.db,
+            rating_key="rk-done",
+            tmdb_id=2100,
+            title="Just Finished",
+            year=2020,
+            media_type="show",
+            summary="A closed case.",
+        )
+        self.db.upsert_library_episode(
+            {
+                "show_item_id": show,
+                "rating_key": "ep-done-s1e1",
+                "season_number": 1,
+                "episode_number": 1,
+                "title": "Pilot",
+                "view_count": 1,
+                "view_offset_ms": 28 * 60_000,
+                "duration_ms": 30 * 60_000,
+            }
+        )
+        self.db.update_show_episode_rollups(show)
+        payload = build_tonight_watch(self.db)
+        self.assertFalse(any(item["title"] == "Just Finished" for item in payload["continue"]))
+        for item in payload["continue"]:
+            self.assertNotIn("S1E1", item.get("sentence") or "")
+
+    def test_in_progress_show_does_not_invent_next_episode(self) -> None:
+        show = _title(
+            self.db,
+            rating_key="rk-lost",
+            tmdb_id=2200,
+            title="Lost",
+            year=2004,
+            media_type="show",
+            summary="Survivors wait on an island.",
+        )
+        self.db.upsert_library_episode(
+            {
+                "show_item_id": show,
+                "rating_key": "ep-lost-s0e1",
+                "season_number": 0,
+                "episode_number": 1,
+                "title": "Special",
+                "view_count": 0,
+            }
+        )
+        self.db.upsert_library_episode(
+            {
+                "show_item_id": show,
+                "rating_key": "ep-lost-s1e1",
+                "season_number": 1,
+                "episode_number": 1,
+                "title": "Pilot",
+                "view_count": 1,
+            }
+        )
+        self.db.upsert_library_episode(
+            {
+                "show_item_id": show,
+                "rating_key": "ep-lost-s1e2",
+                "season_number": 1,
+                "episode_number": 2,
+                "title": "Tabula Rasa",
+                "view_count": 0,
+            }
+        )
+        self.db.update_show_episode_rollups(show)
+        payload = build_tonight_watch(self.db)
+        continues = [item for item in payload["continue"] if item["title"] == "Lost"]
+        self.assertTrue(continues)
+        for item in continues:
+            self.assertNotIn("season", item)
+            self.assertNotIn("episode", item)
+            sentence = item.get("sentence") or ""
+            self.assertNotIn("S0E1", sentence)
+            self.assertNotIn("S1E2", sentence)
+
     def test_in_progress_tv_is_continue_not_watched_bridge(self) -> None:
         """TN-02 Success: paused episode is continue with season/episode."""
         _seed_house_contagion(self.db)

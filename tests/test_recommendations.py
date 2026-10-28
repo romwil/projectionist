@@ -122,7 +122,7 @@ class RecommendationsAndPrefsTests(unittest.TestCase):
             encoding="utf-8",
         )
         with patch(
-            "projectionist.web.app.cached_plex_friendly_name",
+            "projectionist.web.library_routes.cached_plex_friendly_name",
             return_value="Automat818",
         ):
             resp = self.client.get("/api/library/stats")

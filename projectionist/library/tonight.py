@@ -167,6 +167,7 @@ def list_tonight_continue(
             FROM library_episodes le
             JOIN library_items li ON li.id = le.show_item_id
             WHERE COALESCE(le.view_offset_ms, 0) > 0
+              AND COALESCE(le.view_count, 0) = 0
             ORDER BY COALESCE(le.last_viewed_at, 0) DESC, li.title ASC
             LIMIT ?
             """,
@@ -218,45 +219,28 @@ def list_tonight_continue(
                 show_titles,
             ).fetchall()
         by_title = {str(_as_dict(row).get("title") or ""): _as_dict(row) for row in show_rows}
-        with db.connect() as conn:
-            for title in show_titles:
-                if len(items) >= capped:
-                    break
-                show = by_title.get(title)
-                if show is None or not _youth_ok(show, youth_max_rating):
-                    continue
-                show_key = _rating_key(show.get("rating_key"))
-                if show_key and show_key in seen_show_keys:
-                    continue
-                nxt = conn.execute(
-                    """
-                    SELECT rating_key, season_number, episode_number, title, view_offset_ms
-                    FROM library_episodes
-                    WHERE show_item_id = ?
-                      AND (view_count IS NULL OR view_count = 0)
-                    ORDER BY season_number ASC, episode_number ASC
-                    LIMIT 1
-                    """,
-                    (int(show["id"]),),
-                ).fetchone()
-                if nxt is None:
-                    continue
-                episode = _as_dict(nxt)
-                if show_key:
-                    seen_show_keys.add(show_key)
-                items.append(
-                    _continue_item(
-                        title=title,
-                        year=show.get("year"),
-                        media_type="show",
-                        rating_key=_rating_key(episode.get("rating_key")),
-                        season=_row_int(episode, "season_number"),
-                        episode=_row_int(episode, "episode_number"),
-                        episode_title=str(episode.get("title") or "").strip(),
-                        view_offset_ms=_row_int(episode, "view_offset_ms"),
-                        show_rating_key=show_key,
-                    )
+        for title in show_titles:
+            if len(items) >= capped:
+                break
+            show = by_title.get(title)
+            if show is None or not _youth_ok(show, youth_max_rating):
+                continue
+            show_key = _rating_key(show.get("rating_key"))
+            if show_key and show_key in seen_show_keys:
+                continue
+            if show_key:
+                seen_show_keys.add(show_key)
+            # Show-level resume only. Do not invent the next unwatched episode
+            # (season-0 specials / skipped episodes are not on-deck).
+            items.append(
+                _continue_item(
+                    title=title,
+                    year=show.get("year"),
+                    media_type="show",
+                    rating_key=show_key,
+                    show_rating_key=show_key,
                 )
+            )
 
     if len(items) >= capped:
         return items[:capped]

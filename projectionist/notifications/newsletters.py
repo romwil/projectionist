@@ -15,6 +15,7 @@ from projectionist.library.feeds import feed_recently_added
 from projectionist.notifications.recommendation_reasons import (
     library_row_for_ref,
     specific_bridge,
+    tracker_watched_item_ids,
     watched_library_rows,
 )
 from projectionist.notifications.service import deliver_notification
@@ -159,6 +160,7 @@ def build_member_newsletter(
     watched = watched_library_rows(
         db, user_id=member_id, multi_user_enabled=multi_user
     )
+    tracker_watched = tracker_watched_item_ids(db)
     linked: List[Dict[str, Any]] = []
     for item in titles:
         if not isinstance(item, dict):
@@ -168,6 +170,11 @@ def build_member_newsletter(
             continue
         try:
             if int(row.get("view_count") or 0) > 0:
+                continue
+        except (TypeError, ValueError):
+            continue
+        try:
+            if int(row.get("id") or 0) in tracker_watched:
                 continue
         except (TypeError, ValueError):
             continue

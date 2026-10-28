@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useConfirmModal } from "../../hooks/useConfirmModal.jsx";
+import useLiveChannelsAdmin from "../../hooks/useLiveChannelsAdmin.jsx";
 import { getLiveChannelsStatus, refillLiveChannelsChannel } from "../../api/client";
 import { buildCraftFiltersPayload, craftDraftFromStation } from "../../lib/liveChannelsCraft.js";
 import { ownerLiveText } from "../../lib/liveChannelsOwnerCopy.js";
@@ -10,12 +11,25 @@ export { buildCraftFiltersPayload, craftDraftFromStation };
 export { LiveJobRail, LiveReadyBadge, LiveStatusCheck, isLiveChannelsLaunched } from "./LiveChannelsParts.jsx";
 
 /**
- * Admin → Live Channels. A native studio for the owner flow (turn on, create a
- * channel, go on air, seasonal shelves) with the connection/health plumbing
- * tucked into Setup → Advanced. ConfigPage owns the shared state (status
- * polling, publish jobs); this wrapper only owns the open channel-settings draft.
+ * Admin → Live Channels. Owns Live status, craft, publish, and engine jobs;
+ * ConfigPage only passes shared settings helpers.
  */
-export default function LiveChannelsSection(props) {
+export default function LiveChannelsSection(shared) {
+  const { confirm, modal } = useConfirmModal();
+  const live = useLiveChannelsAdmin({
+    settings: shared.settings,
+    persistSettings: shared.persistSettings,
+    updateTunarrSettings: shared.updateTunarrSettings,
+    updateFeatureFlags: shared.updateFeatureFlags,
+    setSettings: shared.setSettings,
+    confirm,
+  });
+  const props = {
+    ...shared,
+    ...live,
+    setActionFeedback: live.setActionFeedback,
+    clearActionFeedback: live.clearActionFeedback,
+  };
   const {
     liveChannelsStatus,
     setLiveChannelsStatus,
@@ -26,7 +40,6 @@ export default function LiveChannelsSection(props) {
     setActionFeedback,
   } = props;
   const [stationCraftDraft, setStationCraftDraft] = useState(null);
-  const { confirm, modal } = useConfirmModal();
 
   function openStationSettings(channelId) {
     if (stationSettingsOpen === channelId) {

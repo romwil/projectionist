@@ -39,18 +39,30 @@ class H1ShellExtractTests(unittest.TestCase):
 
     def test_extracted_routers_export_register(self) -> None:
         from projectionist.web.auth_routes import register_auth_routes
+        from projectionist.web.chat_routes import register_chat_routes, router as chat_router
+        from projectionist.web.library_routes import register_library_routes, router as library_router
         from projectionist.web.setup_routes import register_setup_routes
         from projectionist.web.spa_routes import register_spa_routes, router as spa_router
 
         self.assertTrue(callable(register_spa_routes))
         self.assertTrue(callable(register_auth_routes))
         self.assertTrue(callable(register_setup_routes))
+        self.assertTrue(callable(register_library_routes))
+        self.assertTrue(callable(register_chat_routes))
         paths = {getattr(route, "path", None) for route in spa_router.routes}
         self.assertIn("/chat", paths)
         self.assertIn("/admin/{section}", paths)
         self.assertIn("/settings/{section}", paths)
         self.assertIn("/watch/{rating_key}", paths)
         self.assertIn("/watch/{rating_key}/popout", paths)
+        library_paths = {getattr(route, "path", None) for route in library_router.routes}
+        self.assertIn("/api/library/stats", library_paths)
+        self.assertIn("/api/library/query", library_paths)
+        self.assertIn("/api/saved-library", library_paths)
+        chat_paths = {getattr(route, "path", None) for route in chat_router.routes}
+        self.assertIn("/api/chat", chat_paths)
+        self.assertIn("/api/chat/stream", chat_paths)
+        self.assertIn("/api/chat/threads", chat_paths)
 
     def test_health_and_setup_still_served(self) -> None:
         health = self.client.get("/api/health")
