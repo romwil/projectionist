@@ -420,6 +420,8 @@ test("Live and Weather mount TheaterPlayer; LibraryPlayer keeps session overlays
   assert.match(theater, /playMedia/);
   assert.match(theater, /mediaMode = "hls"/);
   assert.match(theater, /attachKey = 0/);
+  assert.match(theater, /skipProgressive/);
+  assert.match(theater, /BUMPER_FIRST_FRAME_STALL_MS/);
 });
 
 test("library Play wires hold-to-2x and buffering; Live TV does not", () => {
