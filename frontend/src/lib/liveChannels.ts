@@ -235,6 +235,10 @@ export async function toggleLiveVideoPlayback(video: JsParam) {
  * not paint “Paused · tap to play” while media is playing, and a later
  * `playing` must clear a false pause.
  *
+ * Because Theater `paused` is ignored while chrome is `playing`, user pause
+ * must write `statusRef` itself (`commitLiveUserPlaybackStatus`) or a later
+ * `onPause` maps `playing + paused` back to `playing` and hides the overlay.
+ *
  * Live `ready` is blocked autoplay / gesture needed. Manifest parsed is not ready.
  */
 export function liveUiStatusFromTheater(current: unknown, next: unknown) {
@@ -248,6 +252,21 @@ export function liveUiStatusFromTheater(current: unknown, next: unknown) {
   }
   if (next === "paused" || next === "idle" || next == null || next === "") return from;
   return typeof next === "string" ? next : from;
+}
+
+/**
+ * Write user-initiated Live chrome onto the same ref `handlePlayerStatus` reads.
+ * `togglePlayback` awaits `video.pause()`; native `onPause` can run after that
+ * await while React `status` is still `playing`. If the ref is stale, Theater
+ * `paused` keeps previous chrome (`playing`) and “Paused · tap to play” snaps off.
+ */
+export function commitLiveUserPlaybackStatus(
+  statusRef: { current?: unknown } | null | undefined,
+  next: unknown,
+) {
+  const status = typeof next === "string" && next ? next : "idle";
+  if (statusRef && typeof statusRef === "object") statusRef.current = status;
+  return status;
 }
 
 /** Live tap-to-play chrome: user pause, or autoplay blocked pending a gesture. */
