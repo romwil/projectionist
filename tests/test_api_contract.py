@@ -95,7 +95,7 @@ class ApiContractTests(unittest.TestCase):
     def test_chat_returns_json_error_on_llm_failure(self) -> None:
         from unittest.mock import AsyncMock, patch
 
-        with patch("projectionist.web.app.CuratorAgent") as agent_cls:
+        with patch("projectionist.web.chat_routes.CuratorAgent") as agent_cls:
             agent = AsyncMock()
             agent.run = AsyncMock(side_effect=RuntimeError("LLM provider unavailable"))
             agent_cls.return_value = agent
@@ -381,7 +381,7 @@ class ApiContractTests(unittest.TestCase):
         self.assertEqual(threads[0]["id"], session_id)
         self.assertEqual(threads[0]["thread_title"], "Neo-noir hunt")
 
-        with patch("projectionist.web.app.CuratorAgent") as agent_cls:
+        with patch("projectionist.web.chat_routes.CuratorAgent") as agent_cls:
             agent = AsyncMock()
             agent.run = AsyncMock(
                 return_value={
