@@ -13,6 +13,11 @@ export const LIVE_CC_EMPTY_STREAM = "No subtitles on this stream";
 export const LIVE_CC_EMPTY_AIRING = "No captions available for this airing";
 export const BETWEEN_PROGRAMS_TITLE = "Between programs";
 
+/** Host preroll files are movie-start overlays, not flex-pad commercials. */
+export function isLivePrerollAssetUrl(url: unknown) {
+  return /\/api\/preroll\/asset\//i.test(String(url || "").trim());
+}
+
 /**
  * Merge HLS/native stream tracks with Plex-attached tracks for the CC picker.
  * Stream tracks win for in-player display; Plex rows fill when the encode is bare.
@@ -61,9 +66,12 @@ export function flexPlaybackPlan(tuned: JsParam, nowMs = Date.now()) {
     holdMs = Number.isFinite(endsAt) ? Math.max(1000, endsAt * 1000 - nowMs) : 15000;
   }
   const kind = String(tuned?.playback_kind || "").trim().toLowerCase();
+  const hostPreroll = isLivePrerollAssetUrl(url);
   const progressive =
-    kind === "progressive" || /\.(mp4|m4v|webm|mov)(\?|$)/i.test(url);
-  const play = Boolean(url);
+    kind === "progressive" || hostPreroll || /\.(mp4|m4v|webm|mov)(\?|$)/i.test(url);
+  // Flex pad: Plex commercial keys (HLS) or the named slate. Host bumpers are
+  // the movie-start overlay, not filler — looping them here froze Live.
+  const play = Boolean(url) && !(isFlex && (hostPreroll || progressive));
   const slate = Boolean(isFlex && !play);
   return {
     url,
