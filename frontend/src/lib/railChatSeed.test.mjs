@@ -8,7 +8,7 @@ import {
   expandRailItem,
   mergeRailSeedCards,
   railItemsToTitleCards,
-} from "./railChatSeed.js";
+} from "./railChatSeed.ts";
 
 describe("railChatSeed", () => {
   it("compacts and expands stable ids + why", () => {

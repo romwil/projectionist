@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { personaChipLabel, personaDropdownLabel } from "./personaLabels.js";
+import { personaChipLabel, personaDropdownLabel } from "./personaLabels.ts";
 
 describe("personaDropdownLabel", () => {
   it("formats nickname — name for builtins", () => {

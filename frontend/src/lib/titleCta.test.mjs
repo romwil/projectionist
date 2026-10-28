@@ -10,7 +10,7 @@ import {
   TITLE_CTA_PHONE_OVERFLOW,
   TITLE_CTA_SECONDARY_ORDER,
   watchedCtaPresentation,
-} from "./titleCta.js";
+} from "./titleCta.ts";
 
 const stylesDir = join(dirname(fileURLToPath(import.meta.url)), "../styles");
 

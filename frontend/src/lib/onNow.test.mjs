@@ -7,8 +7,8 @@ import {
   formatRemaining,
   normalizeOnNow,
   visibleOnNowChannels,
-} from "./onNow.js";
-import { plexLiveTvUrl } from "./titleLinks.js";
+} from "./onNow.ts";
+import { plexLiveTvUrl } from "./titleLinks.ts";
 import { readAllStyles } from "./readStyles.mjs";
 
 const styles = readAllStyles();

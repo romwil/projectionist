@@ -5,7 +5,7 @@ import {
   optimisticPinFromItem,
   removePinById,
   upsertPin,
-} from "./optimisticWatchlist.js";
+} from "./optimisticWatchlist.ts";
 
 describe("optimisticWatchlist", () => {
   it("builds an optimistic pin from a title card", () => {

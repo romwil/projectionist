@@ -1,0 +1,278 @@
+import { itemHasLibraryIdentity } from "./titleAvailability.js";
+import type {ChatMessage, Features, JsonObject, LibraryItem, JsParam} from "../api/types";
+
+/** True when Radarr/Sonarr already has this title (queued or downloaded). */
+export function itemIsAlreadyQueued(item: LibraryItem | null | undefined) {
+  return Boolean(item?.already_queued || item?.in_radarr || item?.in_sonarr);
+}
+
+/** Titles that still need an Add/Request CTA — not owned, not already queued. */
+export function itemIsAcquirable(item: LibraryItem | null | undefined) {
+  return Boolean(item && !itemHasLibraryIdentity(item) && !itemIsAlreadyQueued(item));
+}
+
+export function isAddableToRadarr(item: LibraryItem | null | undefined) {
+  return Boolean(itemIsAcquirable(item) && item?.media_type === "movie" && item?.tmdb_id);
+}
+
+export function isAddableToSonarr(item: LibraryItem | null | undefined) {
+  return Boolean(itemIsAcquirable(item) && item?.media_type === "show" && item?.tvdb_id);
+}
+
+export function isRequestableInSeerr(item: LibraryItem | null | undefined) {
+  return Boolean(
+    itemIsAcquirable(item) &&
+      item?.tmdb_id &&
+      (item?.media_type === "movie" || item?.media_type === "show"),
+  );
+}
+
+export function usesSeerrRequestPath(features: Features | null | undefined) {
+  return Boolean(features?.features?.seerr_enabled && features?.request_path === "seerr");
+}
+
+export function requestPathFromFeatures(features: Features | null | undefined) {
+  return usesSeerrRequestPath(features) ? "seerr" : "arr";
+}
+
+/** Normalize household role; single-user / unknown defaults to owner (full capability). */
+export function normalizeUserRole(role: unknown, { multiUserEnabled = true }: JsParam = {}): string {
+  if (!multiUserEnabled) return "owner";
+  const value = String(role || "").trim().toLowerCase();
+  if (value === "owner") return "owner";
+  if (value === "member" || value === "guest") return "member";
+  return "owner";
+}
+
+/** Guests no longer exist; leftover guest ids map to member via normalizeUserRole. */
+export function canProposeMediaActions(role: string, options: JsParam = {}) {
+  return normalizeUserRole(role, options) !== "guest";
+}
+
+/**
+ * Capability for Add / Request CTAs given role + requestPathFromFeatures.
+ * Members on the Seerr path may request.
+ * @param {{ role?: string, requestPath?: string, multiUserEnabled?: boolean }} [opts]
+ */
+export function resolveAddCapability(
+  {
+  role,
+  requestPath = "arr",
+  multiUserEnabled = true,
+}: JsParam = {},
+) {
+  const normalized = normalizeUserRole(role, { multiUserEnabled });
+  const path = requestPath === "seerr" ? "seerr" : "arr";
+  const useSeerr = path === "seerr";
+  return {
+    role: normalized,
+    requestPath: path,
+    canAdd: !useSeerr,
+    canRequest: useSeerr,
+    showGuidedCopy: false,
+    guidedCopy: null,
+  };
+}
+
+/** True when a non-library title would otherwise show an Add/Request affordance. */
+export function itemNeedsAddGuidance(item: LibraryItem | null | undefined) {
+  return Boolean(
+    itemIsAcquirable(item) &&
+      (item!.tmdb_id || item!.tvdb_id) &&
+      (item!.media_type === "movie" || item!.media_type === "show" || !item!.media_type),
+  );
+}
+
+export function serviceLabelForTarget(target: JsParam) {
+  if (target === "seerr") return "Seerr";
+  if (target === "sonarr") return "Sonarr";
+  return "Radarr";
+}
+
+export function actionForTarget(target: JsParam) {
+  if (target === "seerr") return "request_seerr";
+  if (target === "sonarr") return "add_sonarr";
+  return "add_radarr";
+}
+
+export function buildProposeActionBody(item: LibraryItem | null | undefined, target: JsParam) {
+  if (target === "seerr") {
+    return {
+      action: "request_seerr",
+      media_type: item!.media_type,
+      tmdb_id: item!.tmdb_id,
+      tvdb_id: item!.tvdb_id,
+      title: item!.title,
+    };
+  }
+  if (target === "sonarr") {
+    return { action: "add_sonarr", tvdb_id: item!.tvdb_id, title: item!.title };
+  }
+  return { action: "add_radarr", tmdb_id: item!.tmdb_id, title: item!.title };
+}
+
+export function isAlreadyInArr(response: JsParam) {
+  return Boolean(response?.already_exists);
+}
+
+export function alreadyInArrMessage(response: JsParam, { label, service }: JsParam) {
+  return response?.message || `"${label}" is already in ${service}.`;
+}
+
+/** @param {any[]} [items]
+ * @param {{ requestPath?: string, role?: string, multiUserEnabled?: boolean }} [opts]
+ */
+export function groupAddableItems(
+  items: LibraryItem[] | null | undefined = [],
+  { requestPath = "arr", role, multiUserEnabled = true }: JsParam = {},
+) {
+  if (!canProposeMediaActions(role, { multiUserEnabled })) {
+    return { radarr: [], sonarr: [], seerr: [] };
+  }
+  if (requestPath === "seerr") {
+    const seerr = items!.filter(isRequestableInSeerr);
+    return { radarr: [], sonarr: [], seerr };
+  }
+  return {
+    radarr: items!.filter(isAddableToRadarr),
+    sonarr: items!.filter(isAddableToSonarr),
+    seerr: [],
+  };
+}
+
+export function collectTitleCardItems(blocks: unknown[] = []) {
+  const items: unknown[] = [];
+  for (const block of blocks) {
+    if ((block as JsParam)?.type === "title_cards") {
+      items.push(...((block as JsParam).items || []));
+    }
+  }
+  return items;
+}
+
+export function collectAddableFromMessage(message: JsParam, options: JsParam = {}) {
+  if (!message || message.role !== "assistant") {
+    return { radarr: [], sonarr: [], seerr: [] };
+  }
+  // Align Confirm counts with the same displayable set inline cards / turnstyle use.
+  const items = collectTitleCardItems(message.blocks).filter(
+    (item) => (item as JsParam)?.title || (item as JsParam)?.tmdb_id || (item as JsParam)?.tvdb_id || (item as JsParam)?.rating_key,
+  );
+  return groupAddableItems(items as LibraryItem[], options);
+}
+
+/** True when the latest assistant turn already hosts in-chat bulk confirm UI. */
+export function lastAssistantHasTitleCards(messages: ChatMessage[] = []) {
+  const last = [...messages].reverse().find((message) => message.role === "assistant");
+  return Boolean(last?.blocks?.some((block) => block.type === "title_cards"));
+}
+
+export function normalizePendingTokens(pendingTokens: JsParam) {
+  if (!Array.isArray(pendingTokens)) return [];
+  return pendingTokens
+    .map((entry) => {
+      if (typeof entry === "string") {
+        return { token: entry, action: "add_radarr" };
+      }
+      if (entry?.token) {
+        return { token: entry.token, action: entry.action || "add_radarr" };
+      }
+      return null;
+    })
+    .filter(Boolean);
+}
+
+const TOKEN_ACTION_GROUPS = {
+  add: new Set(["add_radarr", "add_sonarr", "request_seerr"]),
+  remove: new Set(["remove_arr"]),
+  plex: new Set(["create_plex_collection", "add_to_plex_collection"]),
+};
+
+export function summarizePendingTokenActions(entries: unknown[] = []) {
+  const counts = { add: 0, remove: 0, plex: 0, other: 0 };
+  for (const entry of entries) {
+    const action = (entry as JsParam).action || "add_radarr";
+    if (TOKEN_ACTION_GROUPS.add.has(action)) counts.add += 1;
+    else if (TOKEN_ACTION_GROUPS.remove.has(action)) counts.remove += 1;
+    else if (TOKEN_ACTION_GROUPS.plex.has(action)) counts.plex += 1;
+    else counts.other += 1;
+  }
+  return counts;
+}
+
+export function tokenConfirmPrompt(count: unknown, entries = []) {
+  const summary = summarizePendingTokenActions(entries);
+  if (count === 1) {
+    if (summary.remove === 1 && summary.add === 0 && summary.plex === 0) {
+      return "Confirm this proposed removal?";
+    }
+    if (summary.add === 1 && summary.remove === 0 && summary.plex === 0) {
+      return "Confirm this proposed add?";
+    }
+    if (summary.plex === 1 && summary.add === 0 && summary.remove === 0) {
+      return "Confirm this proposed Plex action?";
+    }
+    return "Confirm this proposed action?";
+  }
+  if (summary.remove > 0 && summary.add === 0 && summary.plex === 0) {
+    const noun = summary.remove === 1 ? "removal" : "removals";
+    return `Confirm all ${count} proposed ${noun}?`;
+  }
+  if (summary.add > 0 && summary.remove === 0 && summary.plex === 0) {
+    const noun = summary.add === 1 ? "add" : "adds";
+    return `Confirm all ${count} proposed ${noun}?`;
+  }
+  if (summary.plex > 0 && summary.add === 0 && summary.remove === 0) {
+    const noun = summary.plex === 1 ? "Plex action" : "Plex actions";
+    return `Confirm all ${count} proposed ${noun}?`;
+  }
+  return `Confirm all ${count} proposed actions?`;
+}
+
+export function tokenConfirmButtonLabel(count: unknown, entries = []) {
+  const summary = summarizePendingTokenActions(entries);
+  if (count === 1) {
+    if (summary.remove === 1 && summary.add === 0 && summary.plex === 0) {
+      return "Confirm removal";
+    }
+    if (summary.add === 1 && summary.remove === 0 && summary.plex === 0) {
+      return "Confirm add";
+    }
+    if (summary.plex === 1 && summary.add === 0 && summary.remove === 0) {
+      return "Confirm Plex action";
+    }
+    return "Confirm";
+  }
+  if (summary.remove > 0 && summary.add === 0 && summary.plex === 0) {
+    return `Confirm all ${count} removals`;
+  }
+  if (summary.add > 0 && summary.remove === 0 && summary.plex === 0) {
+    return `Confirm all ${count} adds`;
+  }
+  if (summary.plex > 0 && summary.add === 0 && summary.remove === 0) {
+    return `Confirm all ${count} Plex actions`;
+  }
+  return `Confirm all ${count}`;
+}
+
+export function tokenConfirmSuccessMessage(count: unknown, entries = []) {
+  const summary = summarizePendingTokenActions(entries);
+  if (summary.remove > 0 && summary.add === 0 && summary.plex === 0) {
+    return `Confirmed ${count} removal${count === 1 ? "" : "s"}.`;
+  }
+  if (summary.add > 0 && summary.remove === 0 && summary.plex === 0) {
+    return `Confirmed ${count} add${count === 1 ? "" : "s"}.`;
+  }
+  return `Confirmed ${count} action${count === 1 ? "" : "s"}.`;
+}
+
+export function tokenConfirmFailureMessage(entries: unknown[] = []) {
+  const summary = summarizePendingTokenActions(entries);
+  if (summary.remove > 0 && summary.add === 0) {
+    return "Could not confirm proposed removals.";
+  }
+  if (summary.add > 0 && summary.remove === 0) {
+    return "Could not confirm proposed adds.";
+  }
+  return "Could not confirm proposed actions.";
+}

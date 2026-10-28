@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import {
   GENERIC_RESULTS_PLACEHOLDER,
   mergeStreamedBlocks,
-} from "./mergeStreamedBlocks.js";
+} from "./mergeStreamedBlocks.ts";
 
 const SEVEN_MOVIES = Array.from({ length: 7 }, (_, i) => ({
   media_type: "movie",

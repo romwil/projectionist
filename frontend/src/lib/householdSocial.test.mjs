@@ -11,7 +11,7 @@ import {
   normalizeRecommendIntent,
   recommendModalCopy,
   recommendationIntent,
-} from "./householdSocial.js";
+} from "./householdSocial.ts";
 
 test("normalizeRecommendIntent accepts watch-party aliases", () => {
   assert.equal(normalizeRecommendIntent("watch_party"), "watch_party");

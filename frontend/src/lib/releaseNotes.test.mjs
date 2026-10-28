@@ -13,7 +13,7 @@ import {
   plainChangelogText,
   setLastSeenVersion,
   shouldShowWhatsNew,
-} from "./releaseNotes.js";
+} from "./releaseNotes.ts";
 
 test("compareSemver orders patch/minor/major", () => {
   assert.ok(compareSemver("1.8.3", "1.8.2") > 0);

@@ -4,7 +4,7 @@ import {
   CURATOR_CAPABILITIES,
   curatorCapabilitiesIntro,
   curatorCapabilityLabels,
-} from "./curatorCapabilities.js";
+} from "./curatorCapabilities.ts";
 
 describe("curatorCapabilities", () => {
   it("lists product-facing capabilities without raw tool names", () => {

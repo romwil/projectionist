@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const clientSrc = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "../api/client.js"),
+  join(dirname(fileURLToPath(import.meta.url)), "../api/client.ts"),
   "utf8",
 );
 
@@ -16,7 +16,7 @@ describe("sendChatStream", () => {
     const fn = clientSrc.slice(start, nextExport === -1 ? undefined : nextExport);
     assert.match(fn, /method:\s*["']POST["']/);
     assert.match(fn, /JSON\.stringify\(body\)/);
-    assert.match(fn, /response\.body\.getReader\(\)/);
+    assert.match(fn, /response\.body\??\.getReader\(\)/);
     assert.equal(fn.includes("EventSource"), false);
     assert.equal(fn.includes("URLSearchParams"), false);
     assert.equal(fn.includes("new EventSource"), false);
@@ -37,7 +37,7 @@ function sseResponse(chunks) {
 }
 
 async function runStream(chunks, extra = {}) {
-  const { sendChatStream } = await import("../api/client.js");
+  const { sendChatStream } = await import("../api/client.ts");
   const original = globalThis.fetch;
   globalThis.fetch = async () => sseResponse(chunks);
   const seen = { done: [], errors: [], tokens: [] };

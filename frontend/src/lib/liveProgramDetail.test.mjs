@@ -7,7 +7,7 @@ import {
   formatSeasonEpisodeCode,
   programDigInItem,
   programEpisodeTitle,
-} from "./liveProgramDetail.js";
+} from "./liveProgramDetail.ts";
 
 describe("liveProgramDetail helpers", () => {
   it("formats TV episode labels without inventing titles", () => {

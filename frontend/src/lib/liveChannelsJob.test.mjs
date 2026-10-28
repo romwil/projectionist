@@ -10,7 +10,7 @@ import {
   liveJobRailCopy,
   liveJobSnippet,
   plexRebuildConfirmMessage,
-} from "./liveChannelsJob.js";
+} from "./liveChannelsJob.ts";
 import { readAllStyles } from "./readStyles.mjs";
 
 const styles = readAllStyles();

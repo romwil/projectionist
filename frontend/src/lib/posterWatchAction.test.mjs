@@ -8,12 +8,12 @@ import {
   rememberContinueWatchingProgress,
   writeExploreHubCache,
   readExploreHubCache,
-} from "./exploreHubCache.js";
+} from "./exploreHubCache.ts";
 import {
   commitPosterWatched,
   posterWatchAction,
   watchedStatePatch,
-} from "./posterWatchAction.js";
+} from "./posterWatchAction.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 

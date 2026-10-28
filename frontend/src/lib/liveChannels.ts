@@ -1,0 +1,1013 @@
+/** Pure helpers for Projectionist `/live` watch + guide. */
+
+import type {JsonObject, LibraryItem, JsParam} from "../api/types";
+import { ROUTES } from "./backNav.js";
+import { normalizeSubtitleTracks } from "./subtitleCues.js";
+import {
+  formatProgramDisplayTitle,
+  formatProgramEpisodeLabel,
+} from "./liveProgramDetail.js";
+
+/** Living-room empty copy for Live CC when neither stream nor Plex tracks exist. */
+export const LIVE_CC_EMPTY_STREAM = "No subtitles on this stream";
+export const LIVE_CC_EMPTY_AIRING = "No captions available for this airing";
+export const BETWEEN_PROGRAMS_TITLE = "Between programs";
+
+/**
+ * Merge HLS/native stream tracks with Plex-attached tracks for the CC picker.
+ * Stream tracks win for in-player display; Plex rows fill when the encode is bare.
+ */
+export function mergeLiveCcTracks(streamTracks: unknown[] = [], plexPayload: JsParam = null) {
+  const stream = Array.isArray(streamTracks) ? streamTracks : [];
+  const plexRows = Array.isArray(plexPayload?.plex_streams) ? plexPayload.plex_streams : [];
+  const plex = normalizeSubtitleTracks(plexRows).map((track) => ({ ...track, viaPlex: true, streamId: track.id }));
+  const hasAny = stream.length > 0 || plex.length > 0;
+  let emptyMessage = "";
+  if (!hasAny) {
+    emptyMessage = plexPayload
+      ? String(plexPayload.empty_message || LIVE_CC_EMPTY_AIRING)
+      : LIVE_CC_EMPTY_STREAM;
+  }
+  return {
+    streamTracks: stream,
+    plexTracks: plex,
+    canDownload: Boolean(plexPayload?.can_download),
+    plexRatingKey: plexPayload?.plex_rating_key || "",
+    emptyMessage,
+    hasAny,
+  };
+}
+
+export function liveStreamUrl(channelId: string) {
+  const id = encodeURIComponent(String(channelId || "").trim());
+  if (!id) return "";
+  return `/api/live-channels/stream/${id}/index.m3u8`;
+}
+
+/**
+ * What to put in the live video element after tune.
+ * A flex pad keeps its Up next chrome (`holdMs`) and still plays when tune
+ * returned a filler stream. An empty flex URL is the black frame — do not
+ * pretend the default channel playlist is that filler.
+ * @param {object|null|undefined} tuned
+ * @param {number} [nowMs]
+ */
+export function flexPlaybackPlan(tuned: JsParam, nowMs = Date.now()) {
+  const url = String(tuned?.stream_url || "").trim();
+  const isFlex = Boolean(tuned?.is_flex);
+  let holdMs = 0;
+  if (isFlex) {
+    const endsAt = Number(tuned?.ends_at);
+    holdMs = Number.isFinite(endsAt) ? Math.max(1000, endsAt * 1000 - nowMs) : 15000;
+  }
+  const kind = String(tuned?.playback_kind || "").trim().toLowerCase();
+  const progressive =
+    kind === "progressive" || /\.(mp4|m4v|webm|mov)(\?|$)/i.test(url);
+  const play = Boolean(url);
+  const slate = Boolean(isFlex && !play);
+  return {
+    url,
+    holdMs,
+    progressive,
+    play,
+    slate,
+    slateCopy: slate
+      ? flexSlateCopy({
+          nextTitle: tuned?.next_title || tuned?.nextTitle || "",
+          slateCopy: tuned?.slate_copy,
+        })
+      : "",
+  };
+}
+
+/**
+ * Named station card when a flex pad has no playable filler.
+ * @param {{ nextTitle?: string, slateCopy?: string }} [input]
+ */
+export function flexSlateCopy({ nextTitle = "", slateCopy = "" }: JsParam = {}) {
+  const canned = String(slateCopy || "").trim();
+  if (canned) return canned;
+  const next = String(nextTitle || "").trim();
+  return next ? `${BETWEEN_PROGRAMS_TITLE} — up next: ${next}` : BETWEEN_PROGRAMS_TITLE;
+}
+
+export function liveWatchHref(channelId: string, { popout = false }: JsParam = {}) {
+  const params = new URLSearchParams();
+  const id = String(channelId || "").trim();
+  if (id) params.set("channel", id);
+  const path = popout ? ROUTES.liveWatch : ROUTES.live;
+  const qs = params.toString();
+  return qs ? `${path}?${qs}` : path;
+}
+
+/** Opener guide URL after pop-out — keeps channel selected without starting HLS. */
+export function liveGuideHref(channelId: string) {
+  const params = new URLSearchParams();
+  const id = String(channelId || "").trim();
+  if (id) params.set("channel", id);
+  params.set("mode", "guide");
+  return `${ROUTES.live}?${params.toString()}`;
+}
+
+/**
+ * Single-session pop-out handoff: TV window URL + opener guide URL.
+ * Caller must window.open(popoutHref) synchronously, then navigate opener to guideHref
+ * so the original LivePlayer unloads before the pop-out tunes.
+ */
+export function popoutHandoff(channelId: string) {
+  const id = String(channelId || "").trim();
+  return {
+    popoutHref: liveWatchHref(id, { popout: true }),
+    guideHref: liveGuideHref(id),
+  };
+}
+
+/** True when a click landed on OSD / chrome controls (not the video stage). */
+export function isLivePlayerChromeTarget(target: JsParam) {
+  if (!target || typeof target.closest !== "function") return false;
+  return Boolean(
+    target.closest(
+      "button, a, input, select, textarea, [role='button'], .live-osd-actions, .live-cc-picker, .live-program-hover, .live-chrome, .preroll-stage",
+    ),
+  );
+}
+
+/** Idle delay before the cable-box OSD slides away (Watch + pop-out). */
+export const OSD_IDLE_MS = 3500;
+
+/**
+ * Whether a pointer/mouse move should reveal or keep the OSD visible.
+ *
+ * Browsers fire a zero-delta `mousemove` when an overlay disappears under a
+ * stationary cursor. Treating those as activity creates a hide↔show loop that
+ * leaves the detail pane stuck on screen — especially in the small `/live/watch`
+ * pop-out where the cursor often rests over the OSD.
+ *
+ * @param {{x: number, y: number}|null|undefined} prev
+ * @param {{clientX?: number, clientY?: number}|null|undefined} next
+ * @returns {{bump: boolean, pos: {x: number, y: number}|null}}
+ */
+export function shouldBumpOsdFromPointerMove(prev: JsParam, next: JsParam) {
+  const x = Number(next?.clientX);
+  const y = Number(next?.clientY);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    return { bump: true, pos: prev || null };
+  }
+  if (
+    prev &&
+    Number.isFinite(prev.x) &&
+    Number.isFinite(prev.y) &&
+    prev.x === x &&
+    prev.y === y
+  ) {
+    return { bump: false, pos: prev };
+  }
+  return { bump: true, pos: { x, y } };
+}
+
+/**
+ * Start playback with muted-first fallback (pop-out / Safari autoplay).
+ * @param {HTMLMediaElement|null|undefined} video
+ * @returns {Promise<"playing"|"ready"|"idle">}
+ */
+export async function tryPlayLiveVideo(video: JsParam) {
+  if (!video) return "idle";
+  try {
+    await video.play();
+    return "playing";
+  } catch {
+    const preferUnmuted = !video.muted;
+    try {
+      video.muted = true;
+      await video.play();
+      if (preferUnmuted) {
+        video.muted = false;
+      }
+      return "playing";
+    } catch {
+      return "ready";
+    }
+  }
+}
+
+/**
+ * Toggle pause ↔ play for live HLS. Pause freezes; play resumes (caller may startLoad).
+ * @param {HTMLMediaElement|null|undefined} video
+ * @returns {Promise<"playing"|"paused"|"ready"|"idle">}
+ */
+export async function toggleLiveVideoPlayback(video: JsParam) {
+  if (!video) return "idle";
+  if (!video.paused) {
+    video.pause();
+    return "paused";
+  }
+  return tryPlayLiveVideo(video);
+}
+
+/**
+ * Escalate brief buffering copy to “stalled — retrying” after this many ms.
+ * Playhead-frozen detection uses the same window.
+ */
+export const LIVE_STALL_ESCALATE_MS = 4000;
+
+/**
+ * Do not paint buffering/stalled OSD chips until a stall signal has lasted this long.
+ * Typical HLS micro-underruns are often under 500ms — short enough users barely notice —
+ * so 1200ms sits above those hiccups and well below the 4s escalate window.
+ */
+export const LIVE_STALL_NOTICE_MS = 1200;
+
+/**
+ * After recovery, keep the last non-ok health chip/chrome sticky for this long so a
+ * second micro-stall cannot clear→flash→reopen the bottom OSD in a loop.
+ */
+export const LIVE_STALL_HOLD_MS = 1000;
+
+/** Max ring-buffer entries retained on ``window.__projectionistLiveDiag``. */
+export const LIVE_DIAG_RING_MAX = 40;
+
+/**
+ * Snapshot media element state for stall diagnostics.
+ * @param {HTMLMediaElement|null|undefined} video
+ */
+export function summarizeLiveVideoBuffer(video: JsParam) {
+  if (!video) return null;
+  const ranges: unknown[] = [];
+  try {
+    const buffered = video.buffered;
+    for (let i = 0; i < buffered.length; i += 1) {
+      ranges.push({
+        start: Number(buffered.start(i).toFixed(3)),
+        end: Number(buffered.end(i).toFixed(3)),
+      });
+    }
+  } catch {
+    // InvalidStateError before metadata — ignore.
+  }
+  return {
+    readyState: video.readyState,
+    networkState: video.networkState,
+    currentTime: Number(Number(video.currentTime || 0).toFixed(3)),
+    paused: Boolean(video.paused),
+    ended: Boolean(video.ended),
+    muted: Boolean(video.muted),
+    buffered: ranges,
+  };
+}
+
+/**
+ * True when an hls.js ERROR detail is a buffer underrun / stall nudge (often non-fatal).
+ * @param {unknown} detail
+ */
+export function isHlsBufferStallDetail(detail: LibraryItem | null | undefined) {
+  const text = String(detail || "");
+  return /bufferStalledError|bufferNudgeOnStall|BUFFER_STALLED|BUFFER_NUDGE_ON_STALL/i.test(
+    text,
+  );
+}
+
+/**
+ * Recover from an hls.js ERROR without re-tuning. Mid-watch `tuneLiveChannel`
+ * start-over kills the native lineup session; callers remount HLS on the same URL.
+ *
+ * @param {{ type?: string, details?: string, fatal?: boolean } | null | undefined} data
+ * @param {{ networkRetries?: number }} [state]
+ * @returns {{
+ *   action: "ignore" | "stall-nudge" | "startLoad" | "remount" | "recoverMedia" | "fatal",
+ *   handled: boolean,
+ *   stall?: boolean,
+ *   keepPlaying?: boolean,
+ *   error?: boolean,
+ *   networkRetries: number,
+ *   remountDelayMs?: number,
+ * }}
+ */
+export function liveHlsErrorPolicy(data: JsParam, { networkRetries = 0 }: JsParam = {}) {
+  const retries = Math.max(0, Math.floor(Number(networkRetries) || 0));
+  if (!data) return { action: "ignore", handled: true, networkRetries: retries };
+  const fatal = Boolean(data.fatal);
+  const type = String(data.type || "");
+  if (!fatal) {
+    if (isHlsBufferStallDetail(data.details)) {
+      return { action: "stall-nudge", handled: true, stall: true, networkRetries: retries };
+    }
+    return { action: "ignore", handled: true, networkRetries: retries };
+  }
+  if (type === "networkError" && retries < 5) {
+    const next = retries + 1;
+    const base = {
+      handled: true,
+      stall: true,
+      keepPlaying: true,
+      networkRetries: next,
+    };
+    if (next <= 3) return { ...base, action: "startLoad" };
+    return { ...base, action: "remount", remountDelayMs: 1500 * Math.min(next, 4) };
+  }
+  if (type === "mediaError") {
+    return {
+      action: "recoverMedia",
+      handled: true,
+      stall: true,
+      keepPlaying: true,
+      networkRetries: retries,
+    };
+  }
+  return { action: "fatal", handled: true, error: true, networkRetries: retries };
+}
+
+/**
+ * Classify mid-watch stream health for OSD honesty.
+ *
+ * Initial tune (`loading`), hard `error`, idle, and user `paused` stay `"ok"` so we
+ * do not paint Buffering… over Tuning… / Pause / error chips.
+ *
+ * Brief `waiting` / hls.js buffer stalls stay `"ok"` until `waitingMs` reaches
+ * `noticeMs` — callers still track signals immediately for diagnostics + recovery.
+ * `playheadFrozen` already implies a long freeze (see {@link LIVE_STALL_ESCALATE_MS}).
+ *
+ * @param {{
+ *   playbackStatus?: string,
+ *   waiting?: boolean,
+ *   mediaStalled?: boolean,
+ *   hlsBufferStalled?: boolean,
+ *   playheadFrozen?: boolean,
+ *   waitingMs?: number,
+ *   noticeMs?: number,
+ *   escalateMs?: number,
+ * }} [input]
+ * @returns {"ok"|"buffering"|"stalled"}
+ */
+export function classifyLiveStreamHealth(
+  {
+  playbackStatus = "idle",
+  waiting = false,
+  mediaStalled = false,
+  hlsBufferStalled = false,
+  playheadFrozen = false,
+  waitingMs = 0,
+  noticeMs = LIVE_STALL_NOTICE_MS,
+  escalateMs = LIVE_STALL_ESCALATE_MS,
+}: JsParam = {},
+) {
+  if (
+    playbackStatus === "loading"
+    || playbackStatus === "error"
+    || playbackStatus === "idle"
+    || playbackStatus === "paused"
+  ) {
+    return "ok";
+  }
+  const signaled = waiting || mediaStalled || hlsBufferStalled || playheadFrozen;
+  if (!signaled) return "ok";
+  // Frozen playhead is already past escalateMs of no progress — surface immediately.
+  if (playheadFrozen || waitingMs >= escalateMs) return "stalled";
+  if (waitingMs < noticeMs) return "ok";
+  return "buffering";
+}
+
+/**
+ * Hysteresis for Live soft-stall UI: suppress clear→flash loops after brief recovery.
+ *
+ * While `rawHealth` is non-ok, mirror it. When raw recovers, keep the previous chip
+ * until `holdMs` elapses so a follow-on micro-stall does not restart the flash cycle.
+ *
+ * @param {{ displayed?: "ok"|"buffering"|"stalled", stickyUntil?: number|null }} [state]
+ * @param {{ rawHealth?: "ok"|"buffering"|"stalled", nowMs?: number, holdMs?: number }} [input]
+ * @returns {{ displayed: "ok"|"buffering"|"stalled", stickyUntil: number|null }}
+ */
+export function stepLiveStreamHealthUi(
+  state: JsParam = {},
+  { rawHealth = "ok", nowMs = Date.now(), holdMs = LIVE_STALL_HOLD_MS }: JsParam = {},
+) {
+  const displayed = state.displayed === "buffering" || state.displayed === "stalled"
+    ? state.displayed
+    : "ok";
+  const stickyUntil = Number.isFinite(state.stickyUntil) ? Number(state.stickyUntil) : null;
+
+  if (rawHealth === "buffering" || rawHealth === "stalled") {
+    return { displayed: rawHealth, stickyUntil: null };
+  }
+
+  if (displayed === "ok") {
+    return { displayed: "ok", stickyUntil: null };
+  }
+
+  const until = stickyUntil == null ? nowMs + Math.max(0, Number(holdMs) || 0) : stickyUntil;
+  if (nowMs < until) {
+    return { displayed, stickyUntil: until };
+  }
+  return { displayed: "ok", stickyUntil: null };
+}
+
+/**
+ * Append a structured live-playback diagnostic and mirror it to the console.
+ * Owners can inspect ``window.__projectionistLiveDiag`` after a freeze.
+ *
+ * @param {string} event
+ * @param {Record<string, unknown>} [payload]
+ * @param {{ ringMax?: number, sink?: { info?: Function }|null }} [options]
+ */
+export function recordLivePlaybackDiag(event: JsParam, payload: JsParam = {}, options: JsParam = {}) {
+  const ringMax = Number(options.ringMax) > 0 ? Number(options.ringMax) : LIVE_DIAG_RING_MAX;
+  const entry = {
+    t: new Date().toISOString(),
+    event: String(event || "event"),
+    ...payload,
+  };
+  const sink = options.sink !== undefined ? options.sink : console;
+  try {
+    sink?.info?.("[live-playback]", entry.event, entry);
+  } catch {
+    // ignore logging failures
+  }
+  if (typeof globalThis !== "undefined") {
+    const root = globalThis as typeof globalThis & { __projectionistLiveDiag?: unknown[] };
+    if (!Array.isArray(root.__projectionistLiveDiag)) {
+      root.__projectionistLiveDiag = [];
+    }
+    root.__projectionistLiveDiag.push(entry);
+    while (root.__projectionistLiveDiag.length > ringMax) {
+      root.__projectionistLiveDiag.shift();
+    }
+  }
+  return entry;
+}
+
+export function formatClock(seconds: unknown) {
+  if (seconds == null || !Number.isFinite(Number(seconds))) return "";
+  const total = Math.max(0, Math.round(Number(seconds)));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (h > 0) {
+    return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  }
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+export function formatWallTime(epochSeconds: JsParam) {
+  if (epochSeconds == null || !Number.isFinite(Number(epochSeconds))) return "";
+  try {
+    return new Date(Number(epochSeconds) * 1000).toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Effective airing window for a guide program.
+ * Caps padded guide ``stop`` at file ``durationSeconds`` when present (past-EOF).
+ * @param {object|null|undefined} program
+ * @returns {{start: number|null, stop: number|null}}
+ */
+export function programAiringBounds(program: JsParam) {
+  if (!program || typeof program !== "object") return { start: null, stop: null };
+  const startRaw = program.start ?? program.started_at;
+  const stopRaw = program.stop ?? program.ends_at;
+  const start = Number.isFinite(Number(startRaw)) ? Number(startRaw) : null;
+  let stop = Number.isFinite(Number(stopRaw)) ? Number(stopRaw) : null;
+  let durationSec = null;
+  if (program.durationSeconds != null && Number.isFinite(Number(program.durationSeconds))) {
+    durationSec = Number(program.durationSeconds);
+  } else if (program.duration_seconds != null && Number.isFinite(Number(program.duration_seconds))) {
+    durationSec = Number(program.duration_seconds);
+  } else if (program.duration != null && Number.isFinite(Number(program.duration))) {
+    const raw = Number(program.duration);
+    durationSec = raw >= 1000 ? raw / 1000 : raw;
+  }
+  if (stop == null && start != null && durationSec != null) {
+    stop = start + durationSec;
+  }
+  if (start != null && durationSec != null) {
+    const fileEnd = start + durationSec;
+    stop = stop == null ? fileEnd : Math.min(stop, fileEnd);
+  }
+  return { start, stop };
+}
+
+function programsMatch(a: JsParam, b: JsParam) {
+  if (!a || !b) return false;
+  const aStart = Number(a.start ?? a.started_at);
+  const bStart = Number(b.start ?? b.started_at);
+  const aTitle = String(a.title || "").trim();
+  const bTitle = String(b.title || "").trim();
+  if (!aTitle || !bTitle || !Number.isFinite(aStart) || !Number.isFinite(bStart)) return false;
+  return aTitle === bTitle && aStart === bStart;
+}
+
+function toOsdProgram(program: JsParam) {
+  if (!program || typeof program !== "object") return null;
+  const title = String(program.title || "").trim();
+  if (!title) return null;
+  const { start, stop } = programAiringBounds(program);
+  const episodeTitle = String(program.episode_title || "").trim();
+  return {
+    ...program,
+    title,
+    episode_title: episodeTitle || null,
+    episode: program.episode ?? program.episode_number ?? null,
+    content_rating: String(program.content_rating || program.rating || "").trim() || null,
+    start,
+    stop,
+    started_at: start,
+    ends_at: stop,
+    is_flex: Boolean(program.isFlex ?? program.is_flex),
+    is_paused: Boolean(program.is_paused ?? program.isPaused),
+    plex_rating_key: program.plex_rating_key || program.plexRatingKey || null,
+    show_plex_rating_key: program.show_plex_rating_key || program.showPlexRatingKey || null,
+  };
+}
+
+/**
+ * Pick airing + following program (mirrors backend pick_now_and_next).
+ * Latest start wins among overlaps; past-EOF padded stops do not stay airing.
+ *
+ * @param {object[]} programs
+ * @param {number} nowSec
+ * @param {{ selectedProgram?: object|null }} [options]
+ */
+export function pickNowAndNext(programs: JsParam, nowSec: unknown, { selectedProgram = null }: JsParam = {}) {
+  const ts = Number(nowSec);
+  const ordered = (Array.isArray(programs) ? programs : [])
+    .filter((p) => p && typeof p === "object" && String(p.title || "").trim())
+    .slice()
+    .sort((a, b) => {
+      const as = Number(a.start ?? a.started_at);
+      const bs = Number(b.start ?? b.started_at);
+      return (Number.isFinite(as) ? as : 0) - (Number.isFinite(bs) ? bs : 0);
+    });
+
+  const airing: unknown[] = [];
+  let firstFuture = null;
+  for (let index = 0; index < ordered.length; index += 1) {
+    const program = ordered[index];
+    const { start, stop } = programAiringBounds(program);
+    if (start != null && stop != null && start <= ts && ts < stop) {
+      airing.push({ start, index, program });
+      continue;
+    }
+    if (firstFuture == null && start != null && start > ts && !airing.length) {
+      firstFuture = program;
+    }
+  }
+
+  let nowProg = null;
+  let nextProg = null;
+  if (airing.length) {
+    airing.sort((a, b) => (a as JsParam).start - (b as JsParam).start);
+    const chosen = airing[airing.length - 1];
+    nowProg = toOsdProgram((chosen as JsParam).program);
+    // Prefer next real title — skip chained flex / guideFlexTitle pads so
+    // countdowns are not stuck on Tunarr's ~6h placeholder block.
+    let flexFallback = null;
+    for (let j = (chosen as JsParam).index + 1; j < ordered.length; j += 1) {
+      const candidate = toOsdProgram(ordered[j]);
+      if (!candidate) continue;
+      if (candidate.is_flex) {
+        if (!flexFallback) flexFallback = candidate;
+        continue;
+      }
+      nextProg = candidate;
+      break;
+    }
+    if (!nextProg) nextProg = flexFallback;
+  } else if (firstFuture) {
+    nextProg = toOsdProgram(firstFuture);
+  }
+
+  const selected = selectedProgram && typeof selectedProgram === "object" ? selectedProgram : null;
+  if (selected) {
+    const { start: selStart, stop: selStop } = programAiringBounds(selected);
+    const selectedAiring =
+      selStart != null && selStop != null && selStart <= ts && ts < selStop;
+    const selectedIsNext = nextProg && programsMatch(selected, nextProg);
+    // Explicit guide click: prefer the selected airing, or promote the clicked
+    // next title once the prior slot is dead (past EOF / past stop).
+    if (
+      selectedAiring
+      || (!nowProg && selectedIsNext)
+      || (!nowProg && selStart != null && selStart <= ts)
+    ) {
+      nowProg = toOsdProgram(selected);
+      nextProg = null;
+      const selIdx = ordered.findIndex((p) => programsMatch(p, selected));
+      if (selIdx >= 0) {
+        for (let j = selIdx + 1; j < ordered.length; j += 1) {
+          nextProg = toOsdProgram(ordered[j]);
+          if (nextProg) break;
+        }
+      }
+    } else if (
+      !nowProg
+      && selStart != null
+      && selStart > ts
+      && programsMatch(selected, firstFuture)
+    ) {
+      // Clicked the upcoming title while nothing is airing — show it as now.
+      nowProg = toOsdProgram(selected);
+      nextProg = null;
+      const selIdx = ordered.findIndex((p) => programsMatch(p, selected));
+      if (selIdx >= 0) {
+        for (let j = selIdx + 1; j < ordered.length; j += 1) {
+          nextProg = toOsdProgram(ordered[j]);
+          if (nextProg) break;
+        }
+      }
+    }
+  }
+
+  if (!nowProg && !nextProg && ordered.length) {
+    nowProg = toOsdProgram(ordered[0]);
+    if (ordered.length > 1) nextProg = toOsdProgram(ordered[1]);
+  }
+
+  return { now: nowProg, next: nextProg };
+}
+
+/**
+ * Stable guide-cell key for selection highlighting / tune handoff.
+ * @param {string} channelId
+ * @param {object|null|undefined} program
+ */
+export function liveProgramKey(channelId: string, program: JsParam) {
+  if (!program) return "";
+  const start = program.start ?? program.started_at;
+  const title = String(program.title || "").trim();
+  if (start == null || !title) return "";
+  return `${String(channelId || "")}:${start}:${title}`;
+}
+
+/**
+ * @param {object|null|undefined} channel
+ * @param {number} [nowMs]
+ * @param {{ selectedProgram?: object|null }} [options]
+ */
+export function buildOsdModel(channel: JsParam, nowMs = Date.now(), { selectedProgram = null }: JsParam = {}) {
+  if (!channel || typeof channel !== "object") return null;
+  const nowSec = nowMs / 1000;
+  const programs = Array.isArray(channel.programs) ? channel.programs : [];
+  let now = null;
+  let next = null;
+  if (programs.length) {
+    const slots = pickNowAndNext(programs, nowSec, { selectedProgram });
+    now = slots.now;
+    next = slots.next;
+  } else {
+    now = channel.now && typeof channel.now === "object" ? toOsdProgram(channel.now) : null;
+    next = channel.next && typeof channel.next === "object" ? toOsdProgram(channel.next) : null;
+    // Stale snapshot fallback: drop a dead "now" once remaining hits 0.
+    if (now) {
+      const { start: deadStart, stop: deadStop } = programAiringBounds(now);
+      if (deadStart != null && deadStop != null && nowSec >= deadStop) {
+        if (next && Number(next.start ?? next.started_at) <= nowSec) {
+          now = next;
+          next = null;
+        } else {
+          now = null;
+        }
+      }
+    }
+  }
+
+  const isFlex = Boolean(now?.is_flex);
+  let secondsElapsed = now?.seconds_elapsed ?? null;
+  let secondsRemaining = now?.seconds_remaining ?? null;
+  let percent = now?.percent ?? null;
+  const start = now?.started_at ?? now?.start ?? null;
+  let end = now?.ends_at ?? now?.stop ?? null;
+  // Tunarr guideFlexTitle pads are often a synthetic ~6h block. During flex,
+  // clamp the progress edge to the next real program's start so movie channels
+  // do not show multi-hour "left" countdowns.
+  if (isFlex && next && !next.is_flex) {
+    const nextStart = Number(next.started_at ?? next.start);
+    if (Number.isFinite(nextStart) && (end == null || Number(end) > nextStart + 1)) {
+      end = nextStart;
+      if (now && typeof now === "object") {
+        now = { ...now, ends_at: nextStart, stop: nextStart };
+      }
+    }
+  }
+  if (start != null && end != null && Number.isFinite(Number(start)) && Number.isFinite(Number(end))) {
+    const duration = Math.max(0, Number(end) - Number(start));
+    if (duration > 0) {
+      if (nowSec < Number(start)) {
+        secondsElapsed = 0;
+        secondsRemaining = duration;
+        percent = 0;
+      } else {
+        secondsElapsed = Math.max(0, Math.min(duration, nowSec - Number(start)));
+        secondsRemaining = Math.max(0, Number(end) - nowSec);
+        percent = Math.max(0, Math.min(100, (secondsElapsed / duration) * 100));
+      }
+    }
+  }
+  const durationSeconds =
+    start != null && end != null ? Math.max(0, Number(end) - Number(start)) : null;
+  const nextTitle = String(next?.title || "").trim();
+  const nextEpisode = formatProgramEpisodeLabel(next) || String(next?.episode_title || "").trim();
+  const nextDisplay = formatProgramDisplayTitle(next) || nextTitle;
+  // During Continuity/flex, never show a stolen content episode on "now" — the
+  // upcoming show belongs in Next (and optionally as an Up-next subtitle).
+  let title = isFlex ? BETWEEN_PROGRAMS_TITLE : String(now?.title || "").trim();
+  let episode = isFlex ? "" : formatProgramEpisodeLabel(now) || String(now?.episode_title || "").trim();
+  if (isFlex && nextDisplay) {
+    episode = `Up next: ${nextDisplay}`;
+  } else if (isFlex && nextTitle) {
+    episode = `Up next: ${nextTitle}`;
+  }
+  const poolNotice = String(channel.pool_notice || channel.poolNotice || "").trim();
+  return {
+    id: String(channel.id || ""),
+    number: channel.number == null ? null : Number(channel.number),
+    name: String(channel.name || "Channel").trim() || "Channel",
+    iconUrl: String(channel.icon_url || channel.iconUrl || "").trim(),
+    title,
+    episode,
+    poolNotice,
+    rating: isFlex ? "" : String(now?.content_rating || "").trim(),
+    isFlex,
+    nowProgram: isFlex ? null : now,
+    nextProgram: next,
+    nextTitle,
+    nextEpisode,
+    nextDisplay,
+    nextStart: next?.started_at ?? next?.start ?? null,
+    secondsElapsed,
+    secondsRemaining,
+    durationSeconds,
+    percent,
+    isPaused: Boolean(now?.is_paused),
+    plexRatingKey: String(now?.plex_rating_key || "").trim(),
+    showPlexRatingKey: String(now?.show_plex_rating_key || "").trim(),
+  };
+}
+
+/**
+ * Quiet persistent lower-third while Continuity/flex fills the air.
+ * Independent of cable OSD idle hide — vanishes when ``isFlex`` clears.
+ * @param {ReturnType<typeof buildOsdModel>|null|undefined} osd
+ * @returns {{ eyebrow: string, title: string, time: string, sentence: string }|null}
+ */
+export function buildFlexLowerThird(osd: JsParam) {
+  if (!osd || typeof osd !== "object" || !osd.isFlex) return null;
+  const title = String(osd.nextDisplay || osd.nextTitle || "").trim();
+  const time = formatWallTime(osd.nextStart);
+  const sentence = title && time
+    ? `Up next: ${title} at ${time}`
+    : title
+      ? `Up next: ${title}`
+      : "Up next";
+  return {
+    eyebrow: "Up next",
+    title,
+    time,
+    sentence,
+  };
+}
+
+/**
+ * Keep one channel's cells from painting on top of each other.
+ * A later start wins the shared instant: the earlier stop is trimmed to it.
+ * @param {object[]} programs
+ */
+export function separateOverlappingGuidePrograms(programs: JsParam) {
+  const ordered = (Array.isArray(programs) ? programs : [])
+    .filter((program) => program && typeof program === "object")
+    .slice()
+    .sort((a, b) => Number(a.start) - Number(b.start));
+  return ordered.map((program, index) => {
+    const next = ordered[index + 1];
+    const stop = Number(program.stop);
+    const nextStart = Number(next?.start);
+    if (!Number.isFinite(stop) || !Number.isFinite(nextStart) || stop <= nextStart) {
+      return program;
+    }
+    return { ...program, stop: nextStart };
+  });
+}
+
+/**
+ * Map a guide/on-now program into the EPG cell shape (episode title + dig-in fields).
+ * @param {object} program
+ */
+function normalizeGuideProgram(program: JsParam) {
+  const isFlex = Boolean(program.is_flex || program.isFlex);
+  const title = isFlex ? BETWEEN_PROGRAMS_TITLE : String(program.title || "").trim();
+  if (!title) return null;
+  const episode =
+    formatProgramEpisodeLabel(program) || String(program.episode_title || "").trim();
+  // Prefer guide start/stop for EPG width; ends_at may be file-EOF capped.
+  const start = program.start ?? program.started_at ?? null;
+  const stop = program.stop ?? program.ends_at ?? null;
+  let durationSeconds = null;
+  if (program.duration_seconds != null && Number.isFinite(Number(program.duration_seconds))) {
+    durationSeconds = Number(program.duration_seconds);
+  } else if (program.durationSeconds != null && Number.isFinite(Number(program.durationSeconds))) {
+    durationSeconds = Number(program.durationSeconds);
+  }
+  return {
+    title,
+    episode,
+    episode_title: String(program.episode_title || "").trim(),
+    season: program.season ?? null,
+    episode_number: program.episode ?? program.episode_number ?? null,
+    year: program.year ?? null,
+    overview: String(program.overview || "").trim(),
+    media_type: String(program.media_type || "").trim(),
+    rating: String(program.content_rating || "").trim(),
+    content_rating: String(program.content_rating || "").trim(),
+    start,
+    stop,
+    durationSeconds,
+    duration_seconds: durationSeconds,
+    isFlex,
+    is_flex: isFlex,
+    plex_rating_key: program.plex_rating_key || null,
+    show_plex_rating_key: program.show_plex_rating_key || null,
+  };
+}
+
+/** Synthetic last-dial station. Not a Tunarr channel. */
+export const WEATHER_CHANNEL_ID = "weather";
+
+/**
+ * Cable extra at the end of a ready guide: one all-day Local forecast block.
+ * Does not invent a schedule of shows.
+ * @param {ReturnType<typeof normalizeGuide>} guide
+ */
+export function appendWeatherChannel(guide: JsParam) {
+  if (!guide?.ready || !Array.isArray(guide.channels) || !guide.channels.length) return guide;
+  if (guide.channels.some((channel: JsParam) => channel?.id === WEATHER_CHANNEL_ID || channel?.kind === "weather")) {
+    return guide;
+  }
+  const numbers = guide.channels
+    .map((channel: JsParam) => Number(channel?.number))
+    .filter((n: JsParam) => Number.isFinite(n));
+  const number = numbers.length ? Math.max(...numbers) + 1 : null;
+  // Same half-hour-aligned bounds the guide grid draws, so the block's left edge
+  // sits on the first tick and its right edge on the last (not mid-column).
+  const { gridStart: start, gridEnd: stop } = guideGridBounds(guide.windowStart, guide.windowEnd);
+  return {
+    ...guide,
+    channels: [
+      ...guide.channels,
+      {
+        id: WEATHER_CHANNEL_ID,
+        kind: "weather",
+        name: "Weather",
+        number,
+        iconUrl: "",
+        now: null,
+        next: null,
+        programs: [
+          {
+            title: "Local forecast",
+            episode: "",
+            episode_title: "",
+            start,
+            stop,
+            media_type: "",
+            isFlex: false,
+            is_flex: false,
+            rating: "",
+          },
+        ],
+      },
+    ],
+  };
+}
+
+export function isWeatherChannelId(channelId: string) {
+  return String(channelId || "").trim() === WEATHER_CHANNEL_ID;
+}
+
+/**
+ * Normalize guide API into EPG rows with programs.
+ * @param {object|null|undefined} snapshot
+ */
+export function normalizeGuide(snapshot: JsParam) {
+  if (!snapshot || typeof snapshot !== "object" || !snapshot.enabled) return null;
+  const generatedAt = Number(snapshot.generated_at) || Date.now() / 1000;
+  const windowSeconds = Number(snapshot.window_seconds) || 6 * 3600;
+  const channels = (Array.isArray(snapshot.channels) ? snapshot.channels : [])
+    .map((channel: JsParam) => {
+      if (!channel || typeof channel !== "object") return null;
+      const programs = separateOverlappingGuidePrograms(
+        (Array.isArray(channel.programs) ? channel.programs : [])
+          .map((program: JsParam) =>
+            program && typeof program === "object" ? normalizeGuideProgram(program) : null,
+          )
+          .filter(Boolean),
+      );
+      // Ensure now/next appear even when programs list is thin.
+      if (!programs.length && channel.now) {
+        const fallback = normalizeGuideProgram(channel.now);
+        if (fallback) programs.push(fallback);
+      }
+      return {
+        id: String(channel.id || ""),
+        name: String(channel.name || "Channel").trim() || "Channel",
+        number: channel.number == null ? null : Number(channel.number),
+        iconUrl: String(channel.icon_url || "").trim(),
+        now: channel.now || null,
+        next: channel.next || null,
+        poolNotice: String(channel.pool_notice || channel.poolNotice || "").trim(),
+        programs,
+      };
+    })
+    .filter(Boolean);
+
+  return {
+    enabled: true,
+    ready: Boolean(snapshot.ready) && channels.length > 0,
+    // Server is still building the first guide (SWR cold start) — poll, don't show "not ready".
+    warming: Boolean(snapshot.warming),
+    stale: Boolean(snapshot.stale),
+    reason: String(snapshot.reason || ""),
+    generatedAt,
+    windowStart: generatedAt,
+    windowEnd: generatedAt + windowSeconds,
+    hours: Number(snapshot.hours) || windowSeconds / 3600,
+    watchHint: String(snapshot.watch_hint || snapshot.plex_hint || ""),
+    channels,
+  };
+}
+
+/** Guide grid unit: one column = 30 minutes. */
+export const GUIDE_SLOT_SECONDS = 1800;
+
+/**
+ * Half-hour-aligned grid bounds for a guide window. The server window starts at an
+ * arbitrary "generated at" instant; snapping outward means every tick is a column
+ * edge and every column is the same width.
+ * @returns {{gridStart: number, gridEnd: number, slotCount: number}}
+ */
+export function guideGridBounds(windowStart: unknown, windowEnd: unknown) {
+  const ws = Number.isFinite(Number(windowStart)) ? Number(windowStart) : Date.now() / 1000;
+  const we = Number.isFinite(Number(windowEnd)) && Number(windowEnd) > ws ? Number(windowEnd) : ws + 6 * 3600;
+  const gridStart = Math.floor(ws / GUIDE_SLOT_SECONDS) * GUIDE_SLOT_SECONDS;
+  const gridEnd = Math.max(
+    gridStart + GUIDE_SLOT_SECONDS,
+    Math.ceil(we / GUIDE_SLOT_SECONDS) * GUIDE_SLOT_SECONDS,
+  );
+  return { gridStart, gridEnd, slotCount: (gridEnd - gridStart) / GUIDE_SLOT_SECONDS };
+}
+
+/**
+ * The ONE time scale for the Live Guide: time header ticks, program cells, the
+ * now-line and the row gridlines all derive their x from `xForTime`.
+ * @returns {{gridStart:number, gridEnd:number, slotCount:number, pxPerHour:number,
+ *   pxPerSlot:number, width:number, xForTime:(t:number)=>number, marks:number[]}}
+ */
+export function guideTimeScale(windowStart: unknown, windowEnd: unknown, pxPerHour: unknown) {
+  const { gridStart, gridEnd, slotCount } = guideGridBounds(windowStart, windowEnd);
+  const pxPerSlot = ((pxPerHour as JsParam) * GUIDE_SLOT_SECONDS) / 3600;
+  const marks: unknown[] = [];
+  for (let i = 0; i < slotCount; i += 1) marks.push(gridStart + i * GUIDE_SLOT_SECONDS);
+  return {
+    gridStart,
+    gridEnd,
+    slotCount,
+    pxPerHour,
+    pxPerSlot,
+    width: slotCount * pxPerSlot,
+    xForTime: (t: JsParam) => ((Number(t) - gridStart) / 3600) * (pxPerHour as JsParam),
+    marks,
+  };
+}
+
+/**
+ * Pixel layout for a program cell in a horizontal EPG. Left edge = start on the
+ * shared scale; width = true duration (no minimum, so short blocks never overlap
+ * their neighbour or drift the rest of the row).
+ * `windowStart`/`windowEnd` here are the aligned grid bounds from `guideTimeScale`.
+ */
+export function programCellStyle(program: JsParam, windowStart: unknown, windowEnd: unknown, pxPerHour: unknown) {
+  const start = Number(program?.start);
+  const stop = Number(program?.stop);
+  if (!Number.isFinite(start) || !Number.isFinite(stop) || stop <= start) {
+    return { display: "none" };
+  }
+  const clampedStart = Math.max(start, Number(windowStart));
+  const clampedStop = Math.min(stop, Number(windowEnd));
+  if (clampedStop <= clampedStart) return { display: "none" };
+  const leftHours = (clampedStart - (windowStart as JsParam)) / 3600;
+  const widthHours = (clampedStop - clampedStart) / 3600;
+  return {
+    left: `${leftHours * (pxPerHour as JsParam)}px`,
+    width: `${widthHours * (pxPerHour as JsParam)}px`,
+  };
+}
+
+export function adjacentChannelId(channels: JsParam, currentId: unknown, delta: unknown) {
+  const list = Array.isArray(channels) ? channels : [];
+  if (!list.length) return "";
+  const idx = list.findIndex((c) => c.id === currentId);
+  if (idx < 0) return list[0]?.id || "";
+  const next = Math.max(0, Math.min(list.length - 1, idx + (delta as JsParam)));
+  return list[next]?.id || "";
+}

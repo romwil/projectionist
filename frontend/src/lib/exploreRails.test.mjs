@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { embeddingCoverageLabel } from "./knowledgeCoverage.js";
+import { embeddingCoverageLabel } from "./knowledgeCoverage.ts";
 
 const root = dirname(fileURLToPath(import.meta.url));
 

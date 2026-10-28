@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { isAllowedMarkdownHref, markdownLinkKind } from "./markdownHref.js";
+import { isAllowedMarkdownHref, markdownLinkKind } from "./markdownHref.ts";
 
 describe("markdown href allowlist", () => {
   it("allows http(s), in-app title/library, and hash fragments", () => {
