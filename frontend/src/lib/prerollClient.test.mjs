@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
+  bumperPlaySettle,
+  bumperReadyPlayGate,
   bumperWatchDecision,
   isLivePrerollAssetUrl,
   livePrerollCueId,
@@ -47,6 +52,33 @@ describe("prerollClient", () => {
       },
     };
     assert.equal(await playBumperVideo(hung, { timeoutMs: 25 }), "idle");
+  });
+
+  it("starts one bumper play; skip-while-playing does not abort", () => {
+    assert.equal(bumperReadyPlayGate({ playResult: "idle", playInFlight: false }), "start");
+    assert.equal(bumperReadyPlayGate({ playResult: "idle", playInFlight: true }), "ignore");
+    assert.equal(bumperReadyPlayGate({ playResult: "playing", playInFlight: false }), "ignore");
+    assert.equal(bumperReadyPlayGate({ playResult: "ready", playInFlight: false }), "ignore");
+    assert.equal(bumperReadyPlayGate({ cancelled: true, playResult: "idle" }), "ignore");
+
+    assert.equal(bumperPlaySettle({ result: "playing", playResult: "idle" }), "playing");
+    assert.equal(bumperPlaySettle({ result: "idle", playResult: "playing" }), "playing");
+    assert.equal(
+      bumperPlaySettle({ result: "idle", playResult: "idle", videoPlaying: true }),
+      "playing",
+    );
+    assert.equal(bumperPlaySettle({ result: "ready", playResult: "playing" }), "playing");
+    assert.equal(bumperPlaySettle({ result: "idle", playResult: "idle" }), "skip");
+    assert.equal(bumperPlaySettle({ result: "ready", playResult: "idle" }), "gesture");
+    assert.equal(bumperPlaySettle({ cancelled: true, result: "idle" }), "ignore");
+
+    const root = dirname(fileURLToPath(import.meta.url));
+    const stage = readFileSync(join(root, "../components/theater/PrerollStage.tsx"), "utf8");
+    assert.match(stage, /bumperReadyPlayGate/);
+    assert.match(stage, /bumperPlaySettle/);
+    assert.match(stage, /playInFlight/);
+    assert.match(stage, /loadeddata/);
+    assert.match(stage, /canplay/);
   });
 
   it("bumper overlay tap calls video.play(); autoplay-blocked path is not a no-op", async () => {
