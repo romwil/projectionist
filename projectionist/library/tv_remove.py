@@ -17,6 +17,7 @@ from projectionist.connectors.sonarr import SonarrClient
 from projectionist.library.db import Database
 from projectionist.library.full_remove import (
     PLEX_DISK_NOTE,
+    _append_note,
     _as_dict,
     _as_nonneg_int,
     _as_path,
@@ -143,9 +144,18 @@ def _remove_plex_keys(
 ) -> Dict[str, Any]:
     config_error = plex_configuration_error(settings)
     if config_error:
-        return {"removed": 0, "skipped": True, "reason": "plex_not_configured"}
+        return {
+            "removed": 0,
+            "removed_keys": [],
+            "failed_keys": [],
+            "skipped": True,
+            "reason": "plex_not_configured",
+            "errors": [],
+            "delete_files": bool(delete_files),
+        }
     client = PlexClient(settings.plex_url, settings.plex_token)
-    removed = 0
+    removed_keys: List[str] = []
+    failed_keys: List[str] = []
     not_found = 0
     errors: List[str] = []
     for key in rating_keys:
@@ -157,7 +167,7 @@ def _remove_plex_keys(
                 client.delete_media(text, delete_files=True)
             else:
                 client.delete_metadata(text)
-            removed += 1
+            removed_keys.append(text)
         except Exception as error:  # noqa: BLE001 — continue other episodes
             logger.warning(
                 "Plex episode delete failed for %s delete_files=%s: %s",
@@ -167,12 +177,15 @@ def _remove_plex_keys(
             )
             if delete_files and is_plex_not_found_error(error):
                 not_found += 1
+            failed_keys.append(text)
             errors.append(str(error))
     reason = ""
-    if removed == 0 and not_found and not_found == len(errors):
+    if not removed_keys and not_found and not_found == len(errors):
         reason = "plex_not_found"
     return {
-        "removed": removed,
+        "removed": len(removed_keys),
+        "removed_keys": removed_keys,
+        "failed_keys": failed_keys,
         "skipped": False,
         "reason": reason,
         "errors": errors[:5],
@@ -183,31 +196,96 @@ def _remove_plex_keys(
 def _plex_episode_snapshot(settings: Settings, rating_keys: Sequence[str]) -> Dict[str, Any]:
     files: List[str] = []
     bytes_freed = 0
+    by_key: Dict[str, Dict[str, Any]] = {}
     if plex_configuration_error(settings):
-        return {"files": [], "folders": [], "bytes_freed": 0}
+        return {"files": [], "folders": [], "bytes_freed": 0, "by_key": {}}
     client = PlexClient(settings.plex_url, settings.plex_token)
     seen: Set[str] = set()
     for key in rating_keys:
         text = str(key or "").strip()
         if not text:
             continue
+        key_files: List[str] = []
+        key_bytes = 0
         try:
             parts = client.media_file_parts(text, include_leaves=False)
         except Exception as error:  # noqa: BLE001 — snapshot is best-effort
             logger.warning("tv_remove plex path read failed for %s: %s", text, error)
+            by_key[text] = {"files": [], "bytes_freed": 0}
             continue
         for part in parts:
             path = _as_path(part.get("file") if isinstance(part, Mapping) else "")
             if not path or path in seen:
                 continue
             seen.add(path)
+            size = _as_nonneg_int(part.get("size") if isinstance(part, Mapping) else 0)
             files.append(path)
-            bytes_freed += _as_nonneg_int(part.get("size") if isinstance(part, Mapping) else 0)
+            key_files.append(path)
+            bytes_freed += size
+            key_bytes += size
+        by_key[text] = {"files": key_files, "bytes_freed": key_bytes}
+    return {
+        "files": files,
+        "folders": infer_removed_folders(files),
+        "bytes_freed": bytes_freed,
+        "by_key": by_key,
+    }
+
+
+def _snapshot_for_removed_keys(
+    snapshot: Mapping[str, Any],
+    removed_keys: Sequence[str],
+) -> Dict[str, Any]:
+    """Keep file/byte totals for episodes Plex actually deleted."""
+    by_key = snapshot.get("by_key")
+    if not isinstance(by_key, Mapping):
+        return {
+            "files": list(snapshot.get("files") or []),
+            "folders": list(snapshot.get("folders") or []),
+            "bytes_freed": int(snapshot.get("bytes_freed") or 0),
+        }
+    files: List[str] = []
+    bytes_freed = 0
+    seen: Set[str] = set()
+    for key in removed_keys:
+        part = by_key.get(str(key)) or {}
+        if not isinstance(part, Mapping):
+            continue
+        for path in part.get("files") or []:
+            text = str(path or "").strip()
+            if not text or text in seen:
+                continue
+            seen.add(text)
+            files.append(text)
+        bytes_freed += int(part.get("bytes_freed") or 0)
     return {
         "files": files,
         "folders": infer_removed_folders(files),
         "bytes_freed": bytes_freed,
     }
+
+
+def _drop_episode_index_for_keys(
+    db: Database,
+    show_item_id: int,
+    rating_keys: Sequence[str],
+) -> int:
+    dropped = 0
+    for key in rating_keys:
+        text = str(key or "").strip()
+        if text:
+            dropped += db.delete_episode_by_rating_key(show_item_id, text)
+    return dropped
+
+
+def _episode_error_title(
+    rating_key: str,
+    *,
+    label: str,
+    episode_titles: Mapping[str, str],
+) -> str:
+    named = str(episode_titles.get(rating_key) or "").strip()
+    return named or label
 
 
 def _finish_absent_sonarr_tv_remove(
@@ -226,10 +304,16 @@ def _finish_absent_sonarr_tv_remove(
     library_bytes: int,
     show_tmdb: Optional[int],
     show_tvdb: Optional[int],
+    episode_bytes: Optional[Mapping[str, int]] = None,
+    episode_titles: Optional[Mapping[str, str]] = None,
 ) -> Dict[str, Any]:
     """Season/episode remove when Sonarr does not have the show: Plex on-disk delete."""
     snapshot = _plex_episode_snapshot(settings, plex_keys)
     plex_result = _remove_plex_keys(settings, plex_keys, delete_files=True)
+    removed_keys = [str(key) for key in (plex_result.get("removed_keys") or [])]
+    failed_keys = [str(key) for key in (plex_result.get("failed_keys") or [])]
+    titles = dict(episode_titles or {})
+    sizes = {str(key): int(value or 0) for key, value in dict(episode_bytes or {}).items()}
     if not plex_result.get("removed"):
         if plex_result.get("reason") == "plex_not_configured" or plex_result.get("skipped"):
             raise RuntimeError(
@@ -248,23 +332,30 @@ def _finish_absent_sonarr_tv_remove(
             "Files were not removed."
         )
 
-    if normalized == "season":
-        index_deleted = db.delete_episodes_for_season(show_item_id, int(season_number))
-    else:
-        index_deleted = db.delete_episode_by_rating_key(
-            show_item_id, str(episode_rating_key or "").strip()
-        )
-
-    files = list(snapshot.get("files") or [])
-    folders = list(snapshot.get("folders") or [])
-    bytes_freed = int(snapshot.get("bytes_freed") or 0)
+    index_deleted = _drop_episode_index_for_keys(db, show_item_id, removed_keys)
+    selected = _snapshot_for_removed_keys(snapshot, removed_keys)
+    files = list(selected.get("files") or [])
+    folders = list(selected.get("folders") or [])
+    bytes_freed = int(selected.get("bytes_freed") or 0)
     if bytes_freed > 0:
         bytes_source = "plex"
-    elif library_bytes > 0:
-        bytes_freed = int(library_bytes)
-        bytes_source = "library_estimate"
     else:
-        bytes_source = "unknown"
+        removed_library_bytes = sum(sizes.get(key, 0) for key in removed_keys)
+        if not failed_keys and library_bytes > 0:
+            bytes_freed = int(library_bytes)
+            bytes_source = "library_estimate"
+        elif removed_library_bytes > 0:
+            bytes_freed = removed_library_bytes
+            bytes_source = "library_estimate"
+        else:
+            bytes_source = "unknown"
+    complete = not failed_keys
+    note = f'"{title}" is not in Sonarr. {PLEX_DISK_NOTE}'
+    if failed_keys:
+        note = _append_note(
+            note,
+            f"{len(failed_keys)} episode(s) were not removed and remain in the index.",
+        )
     entry = {
         "rating_key": str(_row_value(show_row, "rating_key") or ""),
         "title": label,
@@ -272,13 +363,13 @@ def _finish_absent_sonarr_tv_remove(
         "scope": normalized,
         "season_number": match_season,
         "episode_rating_key": str(episode_rating_key or "").strip() or None,
-        "ok": index_deleted > 0 or bool(plex_result.get("removed")),
+        "ok": complete and (index_deleted > 0 or bool(removed_keys)),
         "index_deleted": index_deleted > 0,
         "files": files,
         "folders": folders,
         "bytes_freed": bytes_freed,
         "bytes_source": bytes_source,
-        "note": f'"{title}" is not in Sonarr. {PLEX_DISK_NOTE}',
+        "note": note,
         "removed_via": "plex",
         "arr": {
             "service": "sonarr",
@@ -293,21 +384,39 @@ def _finish_absent_sonarr_tv_remove(
         "tmdb_id": show_tmdb,
         "tvdb_id": show_tvdb,
     }
+    failure_errors: List[Dict[str, Any]] = []
+    plex_errors = list(plex_result.get("errors") or [])
+    for index, key in enumerate(failed_keys):
+        detail = plex_errors[index] if index < len(plex_errors) else ""
+        ep_title = _episode_error_title(key, label=label, episode_titles=titles)
+        suffix = f" ({detail})" if detail else ""
+        failure_errors.append(
+            {
+                "rating_key": key,
+                "title": ep_title,
+                "error": (
+                    f'"{ep_title}" is not in Sonarr and Plex did not remove it{suffix}. '
+                    "Files were not removed."
+                ),
+                "index_deleted": False,
+            }
+        )
     logger.info(
-        "tv_remove plex fallback scope=%s title=%r files=%d bytes_freed=%d",
+        "tv_remove plex fallback scope=%s title=%r files=%d bytes_freed=%d remaining=%d",
         normalized,
         label,
         len(files),
         bytes_freed,
+        len(failed_keys),
     )
     from projectionist.library.full_remove import aggregate_removal_totals
 
     return {
         "mode": "full",
         "scope": normalized,
-        "deleted": 1 if entry["ok"] else 0,
+        "deleted": 1 if index_deleted > 0 or bool(removed_keys) else 0,
         "results": [entry],
-        "errors": [],
+        "errors": failure_errors,
         "totals": aggregate_removal_totals([entry]),
     }
 
@@ -395,6 +504,17 @@ def remove_tv_scope(
             title=title,
         )
     except ArrTitleNotFoundError:
+        episode_bytes = {
+            str(ep["rating_key"]).strip(): int(ep["file_size"] or 0)
+            for ep in target_eps
+            if str(ep["rating_key"] or "").strip()
+        }
+        episode_titles = {
+            str(ep["rating_key"]).strip(): str(ep["title"] or "").strip()
+            or str(ep["rating_key"]).strip()
+            for ep in target_eps
+            if str(ep["rating_key"] or "").strip()
+        }
         return _finish_absent_sonarr_tv_remove(
             db,
             settings,
@@ -410,6 +530,8 @@ def remove_tv_scope(
             library_bytes=library_bytes,
             show_tmdb=show_tmdb,
             show_tvdb=show_tvdb,
+            episode_bytes=episode_bytes,
+            episode_titles=episode_titles,
         )
     except RuntimeError as error:
         raise RuntimeError(format_arr_http_error(error)) from error
