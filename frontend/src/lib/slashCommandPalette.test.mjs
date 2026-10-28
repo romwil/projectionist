@@ -4,7 +4,7 @@ import {
   filterSlashCommandPalette,
   formatSlashCommandInsert,
   shouldShowSlashCommandPalette,
-} from "./slashCommandPalette.js";
+} from "./slashCommandPalette.ts";
 
 test("slash command palette", () => {
   assert.ok(filterSlashCommandPalette("/").length > 0);

@@ -6,7 +6,7 @@ import time
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Callable, List, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from projectionist.connectors.http import merge_plex_provider_ids, optional_int, request_empty, request_xml
 
@@ -266,29 +266,49 @@ class PlexSubtitleStream:
         return base
 
 
-def _plex_part_files(root) -> List[str]:
-    paths: List[str] = []
+def is_plex_not_found_error(error: BaseException) -> bool:
+    """True when a Plex HTTP call failed with 404 (item already gone)."""
+    return "HTTP 404" in str(error or "")
+
+
+def _plex_part_size(raw: Any) -> int:
+    try:
+        return max(0, int(raw or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _plex_media_parts(root) -> List[Dict[str, Any]]:
+    """Part file path + size + parent Media id from a metadata XML tree."""
+    parts: List[Dict[str, Any]] = []
     seen: set[str] = set()
+    for media in root.findall(".//Media"):
+        media_id = str(media.attrib.get("id") or "").strip()
+        for part in media.findall("Part"):
+            file_path = str(part.attrib.get("file") or "").strip()
+            if not file_path or file_path in seen:
+                continue
+            seen.add(file_path)
+            parts.append(
+                {
+                    "file": file_path,
+                    "size": _plex_part_size(part.attrib.get("size")),
+                    "media_id": media_id,
+                }
+            )
     for part in root.findall(".//Part"):
         file_path = str(part.attrib.get("file") or "").strip()
         if not file_path or file_path in seen:
             continue
         seen.add(file_path)
-        paths.append(file_path)
-    return paths
-
-
-def _plex_part_files_merged(*groups: Sequence[str]) -> List[str]:
-    paths: List[str] = []
-    seen: set[str] = set()
-    for group in groups:
-        for raw in group:
-            file_path = str(raw or "").strip()
-            if not file_path or file_path in seen:
-                continue
-            seen.add(file_path)
-            paths.append(file_path)
-    return paths
+        parts.append(
+            {
+                "file": file_path,
+                "size": _plex_part_size(part.attrib.get("size")),
+                "media_id": "",
+            }
+        )
+    return parts
 
 
 class PlexClient:
@@ -777,26 +797,43 @@ class PlexClient:
                 return section.key
         raise RuntimeError(f"No Plex {section_type} library section found")
 
-    def media_file_paths(self, rating_key: str, *, include_leaves: bool = False) -> List[str]:
-        """File paths Plex already reports on this item (Part ``file`` attributes).
+    def media_file_parts(
+        self, rating_key: str, *, include_leaves: bool = False
+    ) -> List[Dict[str, Any]]:
+        """Part file path, size, and Media id Plex already reports on this item.
 
         Show metadata often has no episode parts (or only a trailer). ``include_leaves``
-        also reads ``allLeaves`` and merges those paths. A failed leaves request
-        returns the paths already collected from the item itself.
+        also reads ``allLeaves`` and merges those parts. A failed leaves request
+        returns the parts already collected from the item itself.
         """
         key = str(rating_key or "").strip()
         if not key:
             raise ValueError("rating_key is required")
         quoted = urllib.parse.quote(key)
         root = self._request_xml(f"/library/metadata/{quoted}")
-        paths = _plex_part_files(root)
+        parts = _plex_media_parts(root)
         if not include_leaves:
-            return paths
+            return parts
         try:
             leaves = self._request_xml(f"/library/metadata/{quoted}/allLeaves")
         except Exception:
-            return paths
-        return _plex_part_files_merged(paths, _plex_part_files(leaves))
+            return parts
+        seen = {str(part.get("file") or "") for part in parts}
+        for extra in _plex_media_parts(leaves):
+            file_path = str(extra.get("file") or "")
+            if not file_path or file_path in seen:
+                continue
+            seen.add(file_path)
+            parts.append(extra)
+        return parts
+
+    def media_file_paths(self, rating_key: str, *, include_leaves: bool = False) -> List[str]:
+        """File paths Plex already reports on this item (Part ``file`` attributes)."""
+        return [
+            str(part["file"])
+            for part in self.media_file_parts(rating_key, include_leaves=include_leaves)
+            if part.get("file")
+        ]
 
     def delete_metadata(self, rating_key: str) -> None:
         """Remove a library item from Plex (metadata only; does not delete disk files)."""
@@ -804,6 +841,52 @@ class PlexClient:
         if not key:
             raise ValueError("rating_key is required")
         self._request_empty(f"/library/metadata/{urllib.parse.quote(key)}", method="DELETE")
+
+    def delete_media(self, rating_key: str, *, delete_files: bool = True) -> None:
+        """Remove a library item from Plex, optionally deleting on-disk media.
+
+        When ``delete_files`` is true this matches Plex Web's "Delete the data file"
+        checkbox: each Media id is DELETEd, then the item is DELETEd with
+        ``saveFile=0``. Metadata-only delete keeps files on disk.
+        """
+        key = str(rating_key or "").strip()
+        if not key:
+            raise ValueError("rating_key is required")
+        if not delete_files:
+            self.delete_metadata(key)
+            return
+        quoted = urllib.parse.quote(key)
+        media_ids: List[str] = []
+        try:
+            for part in self.media_file_parts(key, include_leaves=True):
+                media_id = str(part.get("media_id") or "").strip()
+                if media_id and media_id not in media_ids:
+                    media_ids.append(media_id)
+        except Exception as error:
+            if is_plex_not_found_error(error):
+                raise
+            media_ids = []
+        deleted_media = 0
+        for media_id in media_ids:
+            try:
+                self._request_empty(
+                    f"/library/metadata/{quoted}/media/{urllib.parse.quote(media_id)}",
+                    method="DELETE",
+                )
+                deleted_media += 1
+            except Exception as error:
+                if is_plex_not_found_error(error):
+                    continue
+                raise
+        try:
+            self._request_empty(
+                f"/library/metadata/{quoted}?saveFile=0",
+                method="DELETE",
+            )
+        except Exception as error:
+            if is_plex_not_found_error(error) and deleted_media:
+                return
+            raise
 
     def refresh_section(self, section_key: str) -> None:
         """Ask Plex to rescan a library section after files change on disk."""

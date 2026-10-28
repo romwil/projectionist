@@ -8,7 +8,7 @@ import {
   isTranscriptRestore,
   resolveAutoScroll,
   resolveLatestTurnAnchorIndex,
-} from "./chatScroll.js";
+} from "./chatScroll.ts";
 
 describe("computeFollowScrollTop", () => {
   it("pins the latest user message near the top of the viewport", () => {

@@ -5,7 +5,7 @@ import {
   setupCommitInviteOnly,
   setupCommitTrustProxy,
   setupInviteOnlyDefault,
-} from "./setupWizard.js";
+} from "./setupWizard.ts";
 
 describe("setupInviteOnlyDefault", () => {
   it("starts Private Household with invite-only off", () => {

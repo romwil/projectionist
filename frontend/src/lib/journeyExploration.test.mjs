@@ -8,7 +8,7 @@ import {
   personChatHref,
   personExploreHref,
   personShelfLabel,
-} from "./journeyExploration.js";
+} from "./journeyExploration.ts";
 
 describe("journeyExploration", () => {
   it("uses cinema-map copy without achievement language", () => {

@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { decadeYearRange, exploreCountryPath, exploreDecadePath } from "./browseLinks.js";
+import { decadeYearRange, exploreCountryPath, exploreDecadePath } from "./browseLinks.ts";
 import {
   countryBrowsePath,
   decadeBrowsePath,
   decadeLabel,
   languageBrowseMeta,
-} from "./titleDetailMeta.js";
+} from "./titleDetailMeta.ts";
 
 describe("titleDetailMeta", () => {
   it("builds decade labels and browse paths", () => {

@@ -13,7 +13,7 @@ import {
   shelfPatchFromForm,
   shelfRoleLabel,
   visibleCuratedShelf,
-} from "./seasonalShelves.js";
+} from "./seasonalShelves.ts";
 
 test("moveShelfId moves one row and clamps at the ends", () => {
   assert.deepEqual(moveShelfId([1, 2, 3], 2, -1), [1, 3, 2]);

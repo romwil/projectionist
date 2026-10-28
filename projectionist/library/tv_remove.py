@@ -12,10 +12,11 @@ from projectionist.connectors.arr_errors import (
     format_arr_http_error,
     is_arr_not_found_error,
 )
-from projectionist.connectors.plex import PlexClient
+from projectionist.connectors.plex import PlexClient, is_plex_not_found_error
 from projectionist.connectors.sonarr import SonarrClient
 from projectionist.library.db import Database
 from projectionist.library.full_remove import (
+    PLEX_DISK_NOTE,
     _as_dict,
     _as_nonneg_int,
     _as_path,
@@ -134,27 +135,180 @@ def _snapshot_from_episode_files(
     )
 
 
-def _remove_plex_keys(settings: Settings, rating_keys: Sequence[str]) -> Dict[str, Any]:
+def _remove_plex_keys(
+    settings: Settings,
+    rating_keys: Sequence[str],
+    *,
+    delete_files: bool = False,
+) -> Dict[str, Any]:
     config_error = plex_configuration_error(settings)
     if config_error:
         return {"removed": 0, "skipped": True, "reason": "plex_not_configured"}
     client = PlexClient(settings.plex_url, settings.plex_token)
     removed = 0
+    not_found = 0
     errors: List[str] = []
     for key in rating_keys:
         text = str(key or "").strip()
         if not text:
             continue
         try:
-            client.delete_metadata(text)
+            if delete_files:
+                client.delete_media(text, delete_files=True)
+            else:
+                client.delete_metadata(text)
             removed += 1
         except Exception as error:  # noqa: BLE001 — continue other episodes
-            logger.warning("Plex episode metadata delete failed for %s: %s", text, error)
+            logger.warning(
+                "Plex episode delete failed for %s delete_files=%s: %s",
+                text,
+                delete_files,
+                error,
+            )
+            if delete_files and is_plex_not_found_error(error):
+                not_found += 1
             errors.append(str(error))
+    reason = ""
+    if removed == 0 and not_found and not_found == len(errors):
+        reason = "plex_not_found"
     return {
         "removed": removed,
         "skipped": False,
+        "reason": reason,
         "errors": errors[:5],
+        "delete_files": bool(delete_files),
+    }
+
+
+def _plex_episode_snapshot(settings: Settings, rating_keys: Sequence[str]) -> Dict[str, Any]:
+    files: List[str] = []
+    bytes_freed = 0
+    if plex_configuration_error(settings):
+        return {"files": [], "folders": [], "bytes_freed": 0}
+    client = PlexClient(settings.plex_url, settings.plex_token)
+    seen: Set[str] = set()
+    for key in rating_keys:
+        text = str(key or "").strip()
+        if not text:
+            continue
+        try:
+            parts = client.media_file_parts(text, include_leaves=False)
+        except Exception as error:  # noqa: BLE001 — snapshot is best-effort
+            logger.warning("tv_remove plex path read failed for %s: %s", text, error)
+            continue
+        for part in parts:
+            path = _as_path(part.get("file") if isinstance(part, Mapping) else "")
+            if not path or path in seen:
+                continue
+            seen.add(path)
+            files.append(path)
+            bytes_freed += _as_nonneg_int(part.get("size") if isinstance(part, Mapping) else 0)
+    return {
+        "files": files,
+        "folders": infer_removed_folders(files),
+        "bytes_freed": bytes_freed,
+    }
+
+
+def _finish_absent_sonarr_tv_remove(
+    db: Database,
+    settings: Settings,
+    *,
+    normalized: str,
+    show_row: Any,
+    show_item_id: int,
+    title: str,
+    label: str,
+    match_season: Optional[int],
+    episode_rating_key: Optional[str],
+    season_number: Optional[int],
+    plex_keys: Sequence[str],
+    library_bytes: int,
+    show_tmdb: Optional[int],
+    show_tvdb: Optional[int],
+) -> Dict[str, Any]:
+    """Season/episode remove when Sonarr does not have the show: Plex on-disk delete."""
+    snapshot = _plex_episode_snapshot(settings, plex_keys)
+    plex_result = _remove_plex_keys(settings, plex_keys, delete_files=True)
+    if not plex_result.get("removed"):
+        if plex_result.get("reason") == "plex_not_configured" or plex_result.get("skipped"):
+            raise RuntimeError(
+                f'"{title}" is not in Sonarr and Plex is not configured. Files were not removed.'
+            )
+        if plex_result.get("reason") == "plex_not_found":
+            raise RuntimeError(
+                f'"{title}" is not in Sonarr and is not in Plex. Files were not removed.'
+            )
+        detail = ""
+        errors = plex_result.get("errors") or []
+        if errors:
+            detail = f" ({errors[0]})"
+        raise RuntimeError(
+            f'"{title}" is not in Sonarr and Plex did not remove it{detail}. '
+            "Files were not removed."
+        )
+
+    if normalized == "season":
+        index_deleted = db.delete_episodes_for_season(show_item_id, int(season_number))
+    else:
+        index_deleted = db.delete_episode_by_rating_key(
+            show_item_id, str(episode_rating_key or "").strip()
+        )
+
+    files = list(snapshot.get("files") or [])
+    folders = list(snapshot.get("folders") or [])
+    bytes_freed = int(snapshot.get("bytes_freed") or 0)
+    if bytes_freed > 0:
+        bytes_source = "plex"
+    elif library_bytes > 0:
+        bytes_freed = int(library_bytes)
+        bytes_source = "library_estimate"
+    else:
+        bytes_source = "unknown"
+    entry = {
+        "rating_key": str(_row_value(show_row, "rating_key") or ""),
+        "title": label,
+        "media_type": "show",
+        "scope": normalized,
+        "season_number": match_season,
+        "episode_rating_key": str(episode_rating_key or "").strip() or None,
+        "ok": index_deleted > 0 or bool(plex_result.get("removed")),
+        "index_deleted": index_deleted > 0,
+        "files": files,
+        "folders": folders,
+        "bytes_freed": bytes_freed,
+        "bytes_source": bytes_source,
+        "note": f'"{title}" is not in Sonarr. {PLEX_DISK_NOTE}',
+        "removed_via": "plex",
+        "arr": {
+            "service": "sonarr",
+            "removed": False,
+            "absent": True,
+            "arr_id": None,
+            "delete_files": False,
+            "add_exclusion": False,
+        },
+        "plex": plex_result,
+        "show_id": show_item_id,
+        "tmdb_id": show_tmdb,
+        "tvdb_id": show_tvdb,
+    }
+    logger.info(
+        "tv_remove plex fallback scope=%s title=%r files=%d bytes_freed=%d",
+        normalized,
+        label,
+        len(files),
+        bytes_freed,
+    )
+    from projectionist.library.full_remove import aggregate_removal_totals
+
+    return {
+        "mode": "full",
+        "scope": normalized,
+        "deleted": 1 if entry["ok"] else 0,
+        "results": [entry],
+        "errors": [],
+        "totals": aggregate_removal_totals([entry]),
     }
 
 
@@ -170,7 +324,7 @@ def remove_tv_scope(
     season_number: Optional[int] = None,
     episode_rating_key: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Remove one season or episode: Sonarr files → Plex metadata → index rows."""
+    """Remove one season or episode: Sonarr files → Plex on-disk fallback → index."""
     normalized = normalize_tv_remove_scope(scope)
     show_row = _resolve_show_row(
         db,
@@ -241,7 +395,22 @@ def remove_tv_scope(
             title=title,
         )
     except ArrTitleNotFoundError:
-        raise
+        return _finish_absent_sonarr_tv_remove(
+            db,
+            settings,
+            normalized=normalized,
+            show_row=show_row,
+            show_item_id=show_item_id,
+            title=title,
+            label=label,
+            match_season=match_season,
+            episode_rating_key=episode_rating_key,
+            season_number=season_number,
+            plex_keys=plex_keys,
+            library_bytes=library_bytes,
+            show_tmdb=show_tmdb,
+            show_tvdb=show_tvdb,
+        )
     except RuntimeError as error:
         raise RuntimeError(format_arr_http_error(error)) from error
 
@@ -324,6 +493,7 @@ def remove_tv_scope(
             "episode_file_ids": file_ids,
             "delete_files": True,
         },
+        "removed_via": "sonarr",
         "plex": plex_result,
         "show_id": show_item_id,
         "tmdb_id": show_tmdb,

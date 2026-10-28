@@ -5,7 +5,7 @@ import {
   isAddBlockedForKey,
   withAddInFlight,
   withoutAddInFlight,
-} from "./addConcurrency.js";
+} from "./addConcurrency.ts";
 
 describe("add concurrency", () => {
   it("builds distinct keys per card/target", () => {

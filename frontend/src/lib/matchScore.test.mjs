@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { formatMatchPercent } from "./matchScore.js";
+import { formatMatchPercent } from "./matchScore.ts";
 
 test("formatMatchPercent returns empty for missing scores", () => {
   assert.equal(formatMatchPercent(null), "");

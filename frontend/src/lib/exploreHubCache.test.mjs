@@ -16,7 +16,7 @@ import {
   rememberContinueWatchingProgress,
   spliceContinueWatchingRail,
   writeExploreHubCache,
-} from "./exploreHubCache.js";
+} from "./exploreHubCache.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -303,7 +303,7 @@ describe("exploreHubCache", () => {
   });
 
   it("ExplorePage live-refreshes Continue Watching on mount and visibility", () => {
-    const src = readFileSync(join(here, "../pages/ExplorePage.jsx"), "utf8");
+    const src = readFileSync(join(here, "../pages/ExplorePage.tsx"), "utf8");
     assert.match(src, /getExploreFeedContinueWatching/);
     assert.match(src, /visibilitychange/);
     assert.match(src, /pageshow/);
@@ -323,7 +323,7 @@ describe("exploreHubCache", () => {
     const waiting = hubRailState(stalled, "seasonal_spotlight");
     assert.equal(waiting.loading, true);
     assert.match(EXPLORE_HUB_WARMING_STALL_MESSAGE, /still warming/);
-    const src = readFileSync(join(here, "../pages/ExplorePage.jsx"), "utf8");
+    const src = readFileSync(join(here, "../pages/ExplorePage.tsx"), "utf8");
     assert.match(src, /EXPLORE_HUB_WARMING_STALL_MESSAGE/);
     assert.match(src, /explore-hub-status/);
     assert.doesNotMatch(src, /warming:\s*false/);
@@ -335,7 +335,7 @@ describe("exploreHubCache", () => {
       exploreHubLoadError(new Error("hub down"), { hasCache: true }),
       /hub down.*last successful load/,
     );
-    const src = readFileSync(join(here, "../pages/ExplorePage.jsx"), "utf8");
+    const src = readFileSync(join(here, "../pages/ExplorePage.tsx"), "utf8");
     assert.match(src, /exploreHubLoadError/);
     assert.doesNotMatch(src, /error: prev\.payload \? ""/);
   });

@@ -12,6 +12,10 @@ export default defineConfig({
     alias: {
       "@docs": path.resolve(repoRoot, "docs"),
     },
+    // TypeScript ESM convention: import "./foo.js" while the source is foo.ts.
+    extensionAlias: {
+      ".js": [".ts", ".tsx", ".js", ".jsx"],
+    },
   },
   build: {
     outDir: "dist",

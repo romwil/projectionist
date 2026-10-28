@@ -1,6 +1,30 @@
 {
-  "generated_at": "2026-10-28T03:23:38Z",
+  "generated_at": "2026-10-28T04:16:42Z",
   "releases": [
+    {
+      "version": "1.37.68",
+      "date": "2026-10-28",
+      "summary": "One patch on 1.37.67: the SPA is TypeScript so Hub cannot ship an untyped UI, and full library delete falls back to Plex on-disk when a title is not in Radarr or Sonarr.",
+      "highlights": [
+        "**The app is typed before it ships.** Hub cannot publish an untyped UI — the production build type-checks first.",
+        "**Full remove still means the files go.** If a title is not in Radarr or Sonarr, Projectionist asks Plex to delete it from disk instead of marking it Removed with 0 B."
+      ],
+      "sections": [
+        {
+          "title": "Changed",
+          "bullets": [
+            "**SPA is TypeScript.** Waves 0–6 convert the frontend to `.ts` / `.tsx`. `npm run build` is `tsc --noEmit && vite build`. The TypeScript rewrite row is gone from `docs/TECH-DEBT.md`. ConfirmModal hooks stay `.tsx` (the 1.37.64 `.js` footgun).",
+            "**Library full-remove falls back to Plex on-disk delete** when the title is not in Radarr or Sonarr. Files this container can already see are still unlinked first. A true no-op leaves the index row and lists the title under Could not fully remove. The summary shows **Removed via Plex** instead of a fake 0 B."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Placeholder — filled after gates."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.67",
       "date": "2026-10-28",

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { bulkActionProgressView, shouldShowBulkActionProgress } from "./bulkActionProgress.js";
+import { bulkActionProgressView, shouldShowBulkActionProgress } from "./bulkActionProgress.ts";
 
 test("shows progress for multi-item work and asynchronous single-item work", () => {
   assert.equal(shouldShowBulkActionProgress({ total: 2 }), true);

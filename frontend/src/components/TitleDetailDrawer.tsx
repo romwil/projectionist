@@ -1,0 +1,406 @@
+import { useEffect, useId, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import BulkLibraryDeleteDialog from "./BulkLibraryDeleteDialog";
+import MarkBadMediaDialog from "./MarkBadMediaDialog";
+import RecommendModal from "./RecommendModal";
+import RemovalSummaryDialog from "./RemovalSummaryDialog";
+import TitleDetailContent from "./TitleDetailContent";
+import TitleNeighborsRails from "./TitleNeighborsRails";
+import TitleReviewModal from "./TitleReviewModal";
+import { useTitleDetail } from "../hooks/useTitleDetail.js";
+import { useTitleDetailInteractions } from "../hooks/useTitleDetailInteractions.js";
+import {
+  canOwnerDeleteLibraryTitle,
+  LIBRARY_DELETE_MODE_INDEX,
+} from "../lib/bulkLibraryDelete.js";
+import { titleDetailHrefFromTarget } from "../lib/titleDetailDrawer.js";
+
+function getFocusableElements(root: any) {
+  if (!root) return [];
+  return [
+    ...root.querySelectorAll(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
+  ];
+}
+
+  /**
+   * Modal overlay for in-context title detail (reusable from posters/lists).
+   * Pass `target`: { mediaType, itemId, idType } from titleDetailTargetFromItem().
+   *
+   * Optional delete UI props match BulkLibraryDeleteDialog (e.g. Storage Intelligence
+   * passes ``deleteSurface="purge"`` + full-remove default).
+   */
+/** Props for TitleDetailDrawer. `any` = overlay target/handlers until Wave 4. */
+type TitleDetailDrawerProps = {
+  open?: boolean;
+  target?: any;
+  onClose?: (...args: any[]) => void;
+  returnFocusRef?: React.RefObject<HTMLElement | null> | { current?: HTMLElement | null };
+  onDeleted?: (...args: any[]) => void;
+  deleteDefaultMode?: string;
+  deleteSurface?: string;
+};
+
+export default function TitleDetailDrawer({
+  open,
+  target,
+  onClose,
+  returnFocusRef,
+  onDeleted,
+  deleteDefaultMode = LIBRARY_DELETE_MODE_INDEX,
+  deleteSurface = "",
+}: TitleDetailDrawerProps) {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const titleId = useId();
+  const [trailerOpen, setTrailerOpen] = useState(false);
+  const [recommendOpen, setRecommendOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+
+  const mediaType = target?.mediaType;
+  const itemId = target?.itemId;
+  const idType = target?.idType || "tmdb";
+
+  const { detail, setDetail, error, loading }: any = useTitleDetail({
+    mediaType,
+    itemId,
+    idType,
+    enabled: open && Boolean(target),
+  });
+
+  const interactions = useTitleDetailInteractions({
+    detail,
+    setDetail,
+    // Refresh parent lists as soon as the API succeeds (even while summary is open).
+    onDeleteSuccess: (result: any) => {
+      onDeleted?.(result);
+    },
+    onDeleted: () => {
+      onClose?.();
+    },
+  });
+
+  const fullPageHref = titleDetailHrefFromTarget(target);
+  const trailerKey = String(detail?.trailer_youtube_key || "").trim();
+  const busyDeleting = Boolean(interactions.deleting || interactions.removalSummary);
+
+  useEffect(() => {
+    if (!open) {
+      setTrailerOpen(false);
+      setRecommendOpen(false);
+      setReviewOpen(false);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const focusTimer = window.setTimeout(() => {
+      closeButtonRef.current?.focus();
+    }, 0);
+
+    function onKeyDown(event: any) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        // Do not dismiss while a full remove is running or the summary is open.
+        if (interactions.deleting || interactions.removalSummary) return;
+        // Portaled More / peer menus live on document.body above the sheet —
+        // let their Escape handler close first so More does not also close the drawer.
+        if (document.querySelector('[aria-expanded="true"][aria-haspopup="menu"]')) {
+          return;
+        }
+        onClose?.();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = getFocusableElements(panelRef.current);
+      if (!focusable.length) {
+        event.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      const returnNode = returnFocusRef?.current;
+      if (returnNode && typeof returnNode.focus === "function") {
+        returnNode.focus();
+      } else if (previousFocus && typeof (previousFocus as any).focus === "function") {
+        (previousFocus as any).focus();
+      }
+    };
+  }, [
+    open,
+    onClose,
+    returnFocusRef,
+    interactions.deleting,
+    interactions.removalSummary,
+  ]);
+
+  useEffect(() => {
+    if (!trailerOpen) return undefined;
+    function onKey(event: any) {
+      if (event.key === "Escape") setTrailerOpen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [trailerOpen]);
+
+  const canDeleteLibrary = canOwnerDeleteLibraryTitle(detail, {
+    role: interactions.userRole,
+    multiUserEnabled: interactions.multiUserEnabled,
+  });
+
+  function requestClose() {
+    if (busyDeleting) return;
+    onClose?.();
+  }
+
+  // Keep delete/summary portals mounted after the drawer closes so a slow full
+  // remove can still surface totals instead of vanishing silently.
+  if (!open && !interactions.deleteOpen && !interactions.removalSummary && !interactions.deleting) {
+    return null;
+  }
+
+  return (
+    <>
+      {open ? (
+        <>
+          <button
+            type="button"
+            className="title-detail-drawer-scrim"
+            data-testid="title-detail-drawer-scrim"
+            aria-label="Close title detail"
+            onClick={requestClose}
+          />
+
+          <aside
+            ref={panelRef}
+            className="title-detail-drawer-panel title-detail-drawer-panel--modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            data-testid="title-detail-drawer"
+          >
+            <header className="title-detail-drawer-header">
+              <p className="title-detail-drawer-eyebrow">
+                {detail?.media_type === "show" ? "TV Show" : "Movie"}
+              </p>
+              <div className="title-detail-drawer-header-actions">
+                {fullPageHref ? (
+                  <Link
+                    to={fullPageHref}
+                    className="title-cta title-cta-primary title-detail-open-full"
+                    data-testid="title-detail-open-full"
+                    onClick={(event) => {
+                      if (
+                        event.defaultPrevented ||
+                        (typeof event.button === "number" && event.button !== 0) ||
+                        event.metaKey ||
+                        event.ctrlKey ||
+                        event.shiftKey ||
+                        event.altKey
+                      ) {
+                        return;
+                      }
+                      requestClose();
+                    }}
+                  >
+                    Open full page
+                  </Link>
+                ) : null}
+                <button
+                  ref={closeButtonRef}
+                  type="button"
+                  className="title-detail-drawer-close ghost"
+                  data-testid="title-detail-drawer-close"
+                  aria-label="Close"
+                  disabled={busyDeleting}
+                  onClick={requestClose}
+                >
+                  <span className="material-symbols-outlined" aria-hidden="true">
+                    close
+                  </span>
+                </button>
+              </div>
+            </header>
+
+            <div className="title-detail-drawer-body">
+              {loading ? (
+                <div className="title-detail-drawer-loading" aria-live="polite">
+                  <div className="dash-skeleton" aria-label="Loading title">
+                    <div className="dash-skeleton-bar" />
+                    <div className="dash-skeleton-bar short" />
+                    <div className="dash-skeleton-bar" />
+                  </div>
+                </div>
+              ) : error ? (
+                <p className="error title-detail-drawer-error" role="alert">
+                  {error}
+                </p>
+              ) : detail ? (
+                <>
+                  <TitleDetailContent
+                    detail={detail}
+                    variant="compact"
+                    titleId={titleId}
+                    multiUserEnabled={interactions.multiUserEnabled}
+                    userRole={interactions.userRole}
+                    requestPath={interactions.requestPath}
+                    addStatus={interactions.addStatus}
+                    addMessage={interactions.addMessage}
+                    watchStatus={interactions.watchStatus}
+                    watchMessage={interactions.watchMessage}
+                    deleting={interactions.deleting}
+                    markingBadMedia={interactions.badMediaLoading}
+                    badMediaMessage={interactions.badMediaMessage}
+                    onRequestAdd={interactions.handleRequestAdd}
+                    onToggleWatched={interactions.handleToggleWatched}
+                    onOpenTrailer={() => setTrailerOpen(true)}
+                    onOpenReview={() => setReviewOpen(true)}
+                    onOpenRecommend={() => setRecommendOpen(true)}
+                    onOpenDelete={interactions.openLibraryDelete}
+                    onOpenMarkBadMedia={interactions.openMarkBadMedia}
+                  />
+                  <TitleNeighborsRails
+                    mediaType={mediaType}
+                    itemId={itemId}
+                    idType={idType}
+                    detail={detail}
+                    compact
+                  />
+                </>
+              ) : null}
+            </div>
+          </aside>
+        </>
+      ) : null}
+
+      {open && trailerOpen && trailerKey && detail ? (
+        <div
+          className="trailer-modal-backdrop"
+          data-testid="trailer-modal"
+          onClick={() => setTrailerOpen(false)}
+        >
+          <div
+            className="trailer-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Trailer for ${(detail as any).title}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="trailer-modal-header">
+              <h2>Trailer</h2>
+              <div className="trailer-modal-actions">
+                <a
+                  className="btn-link ghost"
+                  href={`https://www.youtube.com/watch?v=${encodeURIComponent(trailerKey)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Open on YouTube
+                </a>
+                <button
+                  type="button"
+                  className="ghost"
+                  data-testid="close-trailer-modal"
+                  onClick={() => setTrailerOpen(false)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+            <div className="trailer-modal-frame">
+              <iframe
+                title={`${(detail as any).title} trailer`}
+                src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(trailerKey)}?autoplay=1&rel=0`}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                referrerPolicy="strict-origin-when-cross-origin"
+                allowFullScreen
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {open ? (
+        <>
+          <RecommendModal
+            item={detail}
+            open={recommendOpen}
+            onClose={() => setRecommendOpen(false)}
+          />
+
+          <TitleReviewModal
+            detail={detail}
+            open={reviewOpen}
+            onClose={() => setReviewOpen(false)}
+            onSaved={(saved) => {
+              setDetail((prev: any) =>
+                prev
+                  ? {
+                      ...prev,
+                      user_stars: saved?.stars ?? (prev as any).user_stars,
+                    }
+                  : prev,
+              );
+            }}
+          />
+        </>
+      ) : null}
+
+      <BulkLibraryDeleteDialog
+        open={interactions.deleteOpen}
+        titles={canDeleteLibrary ? [detail?.title || "Untitled"] : []}
+        loading={interactions.deleting}
+        error={interactions.deleteError}
+        defaultMode={deleteDefaultMode || LIBRARY_DELETE_MODE_INDEX}
+        surface={deleteSurface}
+        onCancel={() => {
+          if (interactions.deleting) return;
+          interactions.setDeleteOpen(false);
+          interactions.setDeleteError("");
+        }}
+        onConfirm={interactions.handleLibraryDeleteConfirm}
+      />
+
+      <MarkBadMediaDialog
+        open={interactions.badMediaOpen}
+        title={detail?.title || "Untitled"}
+        mediaType={detail?.media_type || "movie"}
+        loading={interactions.badMediaLoading}
+        error={interactions.badMediaError}
+        onCancel={() => {
+          if (interactions.badMediaLoading) return;
+          interactions.setBadMediaOpen(false);
+        }}
+        onConfirm={interactions.handleMarkBadMediaConfirm}
+      />
+
+      <RemovalSummaryDialog
+        open={Boolean(interactions.removalSummary)}
+        result={interactions.removalSummary}
+        cancelRequested={interactions.removalCancelRequested}
+        onCancelRemaining={interactions.cancelRemovalRemaining}
+        onClose={interactions.dismissRemovalSummary}
+      />
+    </>
+  );
+}

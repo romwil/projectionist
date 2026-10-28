@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ROUTES } from "./backNav.js";
+import { ROUTES } from "./backNav.ts";
 import {
   ADMIN_NAV,
   SINGLE_USER_ADMIN_LINK_IDS,
@@ -8,7 +8,7 @@ import {
   adminNavLinks,
   buildAdminDrawerItems,
   isAdminPath,
-} from "./adminNav.js";
+} from "./adminNav.ts";
 
 describe("adminNav", () => {
   it("lists core admin sections including Health, Logs, Youth, and Taxonomy", () => {

@@ -7,8 +7,8 @@ import { fileURLToPath } from "node:url";
 const root = dirname(fileURLToPath(import.meta.url));
 const watchCss = readFileSync(join(root, "../styles/13-watch.css"), "utf8");
 const playerSrc = [
-  readFileSync(join(root, "../components/theater/LibraryPlayer.jsx"), "utf8"),
-  readFileSync(join(root, "../components/theater/LibraryPlayerOsd.jsx"), "utf8"),
+  readFileSync(join(root, "../components/theater/LibraryPlayer.tsx"), "utf8"),
+  readFileSync(join(root, "../components/theater/LibraryPlayerOsd.tsx"), "utf8"),
 ].join("\n");
 
 const marker = "/*\n * lights-up-player-chrome";

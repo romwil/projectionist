@@ -1,0 +1,609 @@
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import {
+  dismissPlotNeighbor,
+  getLibraryFacets,
+  getLibraryMotifs,
+  getLibraryNeighbors,
+  queryLibrary,
+} from "../api/client";
+import BackLink from "../components/BackLink";
+import HelpHint from "../components/HelpHint";
+import MediaBrowseControls from "../components/MediaBrowseControls";
+import MediaBrowseResults from "../components/MediaBrowseResults";
+import OwnerEmptyStateCta from "../components/OwnerEmptyStateCta";
+import RecommendModal from "../components/RecommendModal";
+import SurprisingNeighborsShowcase from "../components/SurprisingNeighborsShowcase";
+import { useAuthGate } from "../components/UserMenu";
+import AppShell from "../layouts/AppShell";
+import { ROUTES } from "../lib/browseLinks.js";
+import {
+  DEFAULT_PLOT_LAB_PAGE_SIZE,
+  DEFAULT_PLOT_MATCH_MODE,
+  PLOT_LAB_MOTIF_CATALOG_LIMIT,
+  PLOT_LAB_PAGE_SIZES,
+  buildMotifQueryParams,
+  feedPaginationSummary,
+  normalizeFeed,
+  normalizeMediaTypeFilter,
+  normalizeMotifFacets,
+  normalizePageSize,
+  normalizePlotMatchMode,
+  resolveMotifWhy,
+  toggleMotifSelection,
+} from "../lib/exploreFeeds.js";
+import { DEFAULT_MEDIA_BROWSE, queryFiltersFromBrowse } from "../lib/mediaBrowse.js";
+import { SURPRISE_SECTION_INTRO } from "../lib/surpriseNeighbors.js";
+
+const MEDIA_TABS = [
+  { id: "all", label: "All", mediaType: null },
+  { id: "movie", label: "Movies", mediaType: "movie" },
+  { id: "show", label: "TV Shows", mediaType: "show" },
+];
+
+/** Props for MotifWallPagination. `any` = API/handler bags until Wave 4 client generics. */
+type MotifWallPaginationProps = {
+  summary?: any;
+  pageSize?: any;
+  onPageChange?: (...args: any[]) => void;
+  onPageSizeChange?: (...args: any[]) => void;
+};
+
+function MotifWallPagination({ summary, pageSize, onPageChange, onPageSizeChange }: MotifWallPaginationProps) {
+  if (!summary.total && !summary.returned) return null;
+  const from = summary.total ? summary.offset + 1 : 0;
+  const to = summary.offset + summary.returned;
+  return (
+    <div className="explore-section-pagination plot-lab-pagination" data-testid="plot-lab-pagination">
+      <p className="explore-section-pagination-summary" data-testid="plot-lab-page-summary">
+        Showing {from}–{to} of {summary.total}
+        {summary.pageCount > 1 ? ` · Page ${summary.page} of ${summary.pageCount}` : ""}
+      </p>
+      <div className="explore-section-pagination-controls">
+        <label className="explore-section-page-size">
+          <span>Per page</span>
+          <select
+            value={pageSize}
+            data-testid="plot-lab-page-size"
+            onChange={(event) => onPageSizeChange?.(Number(event.target.value))}
+          >
+            {PLOT_LAB_PAGE_SIZES.map((size) => (
+              <option key={size} value={size}>
+                {size}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="explore-section-page-nav">
+          <button
+            type="button"
+            className="ghost"
+            data-testid="plot-lab-prev"
+            disabled={!summary.hasPrev}
+            onClick={() => onPageChange?.(summary.page - 1)}
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            className="ghost"
+            data-testid="plot-lab-next"
+            disabled={!summary.hasMore}
+            onClick={() => onPageChange?.(summary.page + 1)}
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function PlotLabPage() {
+  const { isOwner, multiUserEnabled } = useAuthGate();
+  const [motifs, setMotifs] = useState<any[]>([]);
+  const [themes, setThemes] = useState<any[]>([]);
+  const [motifsNote, setMotifsNote] = useState("");
+  const [motifsLoading, setMotifsLoading] = useState(true);
+  const [selectedMotifs, setSelectedMotifs] = useState<any[]>([]);
+  const [selectedThemes, setSelectedThemes] = useState<any[]>([]);
+  const [mediaType, setMediaType] = useState<any | null>(null);
+  const [plotMatchMode, setPlotMatchMode] = useState(DEFAULT_PLOT_MATCH_MODE);
+  const [pageSize, setPageSize] = useState(DEFAULT_PLOT_LAB_PAGE_SIZE);
+  const [offset, setOffset] = useState(0);
+  const [motifWall, setMotifWall] = useState<any>({
+    loading: false,
+    items: [] as any[],
+    note: null,
+    error: "",
+    payload: null,
+  });
+  const [seed, setSeed] = useState<any | null>(null);
+  const [seedQuery, setSeedQuery] = useState("");
+  const [seedHits, setSeedHits] = useState<any[]>([]);
+  const [neighbors, setNeighbors] = useState<any>({ loading: false, items: [] as any[], note: null, error: "" });
+  const [neighborDismissBusy, setNeighborDismissBusy] = useState<any | null>(null);
+  const [recommendItem, setRecommendItem] = useState<any | null>(null);
+  const [browse, setBrowse] = useState<any>({ ...DEFAULT_MEDIA_BROWSE, sort: "title", sort_dir: "asc" });
+  const [columns, setColumns] = useState<any | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setMotifsLoading(true);
+    Promise.all([
+      getLibraryMotifs({ limit: PLOT_LAB_MOTIF_CATALOG_LIMIT }),
+      getLibraryFacets("theme", PLOT_LAB_MOTIF_CATALOG_LIMIT).catch(() => ({ facets: [] })),
+    ])
+      .then(([motifData, themeData]) => {
+        if (cancelled) return;
+        const facets = normalizeMotifFacets(motifData);
+        const themeFacets = normalizeMotifFacets(themeData);
+        setMotifs(facets);
+        setThemes(themeFacets);
+        setMotifsNote(
+          facets.length
+            ? ""
+            : "No plot patterns yet — the background library refresh is still filling them in.",
+        );
+        setMotifsLoading(false);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setMotifs([]);
+        setThemes([]);
+        setMotifsNote((err as { message?: string }).message || "Could not load motifs.");
+        setMotifsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedMotifs.length && !selectedThemes.length) {
+      setMotifWall({ loading: false, items: [], note: null, error: "", payload: null });
+      return undefined;
+    }
+    let cancelled = false;
+    setMotifWall((prev: any) => ({ ...prev, loading: true, error: "" }));
+    const params = buildMotifQueryParams(selectedMotifs, {
+      limit: pageSize,
+      offset,
+      mediaType: browse.media_type || mediaType,
+      plotMatchMode,
+      themes: selectedThemes,
+    });
+    queryLibrary({
+      ...Object.fromEntries(params.entries()),
+      ...queryFiltersFromBrowse(browse),
+      limit: pageSize,
+      offset,
+    } as any)
+      .then((data) => {
+        if (cancelled) return;
+        const items = Array.isArray(data?.items) ? data.items : [];
+        setMotifWall({
+          loading: false,
+          items,
+          note: items.length ? null : "No titles match the selected plot signals.",
+          error: "",
+          payload: data,
+        });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setMotifWall({
+          loading: false,
+          items: [],
+          note: null,
+          error: (err as { message?: string }).message || "Could not filter by motifs.",
+          payload: null,
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [browse, selectedMotifs, selectedThemes, mediaType, pageSize, offset, plotMatchMode]);
+
+  useEffect(() => {
+    if (!seed?.id) {
+      setNeighbors({ loading: false, items: [], note: null, error: "" });
+      return undefined;
+    }
+    let cancelled = false;
+    setNeighbors({ loading: true, items: [], note: null, error: "" });
+    getLibraryNeighbors(seed.id, { mode: "surprising", limit: 12 })
+      .then((data) => {
+        if (cancelled) return;
+        const normalized = normalizeFeed(data, {
+          fallbackNote:
+            "No similar titles yet — plot-similarity data is still filling in for this title.",
+        });
+        setNeighbors({
+          loading: false,
+          items: normalized.items,
+          note: normalized.note,
+          error: "",
+        });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setNeighbors({
+          loading: false,
+          items: [],
+          note: null,
+          error: (err as { message?: string }).message || "Could not load surprising similar titles.",
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [seed]);
+
+  useEffect(() => {
+    const q = seedQuery.trim();
+    if (q.length < 2) {
+      setSeedHits([]);
+      return undefined;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      const filters = { query: q, limit: 6 };
+      const media = normalizeMediaTypeFilter(mediaType);
+      if (media) (filters as any).media_type = media;
+      queryLibrary(filters)
+        .then((data) => {
+          if (cancelled) return;
+          setSeedHits(Array.isArray(data?.items) ? data.items : []);
+        })
+        .catch(() => {
+          if (!cancelled) setSeedHits([]);
+        });
+    }, 220);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [seedQuery, mediaType]);
+
+  const wallSummary = useMemo(
+    () =>
+      feedPaginationSummary({
+        ...(motifWall.payload || {}),
+        items: motifWall.items,
+        total: motifWall.payload?.total_matched ?? motifWall.payload?.total ?? 0,
+        offset,
+        limit: pageSize,
+      }),
+    [motifWall.items, motifWall.payload, offset, pageSize],
+  );
+
+  const activeMediaTab =
+    MEDIA_TABS.find((tab) => tab.mediaType === mediaType)?.id || "all";
+
+  function handleToggleMotif(value: any) {
+    setSelectedMotifs((prev) => toggleMotifSelection(prev, value));
+    setOffset(0);
+  }
+
+  function handleToggleTheme(value: any) {
+    setSelectedThemes((prev) => toggleMotifSelection(prev, value));
+    setOffset(0);
+  }
+
+  function handleMediaTab(nextType: any) {
+    const normalized = normalizeMediaTypeFilter(nextType);
+    setMediaType(normalized);
+    setBrowse((current: any) => ({ ...current, media_type: normalized || "", offset: 0 }));
+    setOffset(0);
+  }
+
+  function handlePlotMatchMode(nextMode: any) {
+    setPlotMatchMode(normalizePlotMatchMode(nextMode));
+    setOffset(0);
+  }
+
+  function handlePageSizeChange(nextSize: any) {
+    setPageSize(normalizePageSize(nextSize, PLOT_LAB_PAGE_SIZES));
+    setOffset(0);
+  }
+
+  function handlePageChange(page: any) {
+    const nextPage = Math.max(1, page);
+    setOffset((nextPage - 1) * pageSize);
+  }
+
+  function handleSeed(item: any) {
+    setSeed(item);
+    setSeedQuery(item.title || "");
+    setSeedHits([]);
+  }
+
+  async function handleDismissNeighbor(item: any) {
+    if (!seed?.id || !item?.id) return;
+    setNeighborDismissBusy(item.id);
+    try {
+      await dismissPlotNeighbor(seed.id, item.id);
+      setNeighbors((prev: any) => ({
+        ...prev,
+        items: (prev.items || []).filter((row: any) => row.id !== item.id),
+      }));
+    } catch {
+      // Keep UI stable — owner can retry.
+    } finally {
+      setNeighborDismissBusy(null);
+    }
+  }
+
+  return (
+    <AppShell
+      className="app-root explore-page plot-lab-page"
+      testId="plot-lab-page"
+      title="Plot Lab"
+      eyebrow="Motifs, poster walls, and surprising narrative neighbors"
+      actions={<BackLink fallbackTo={ROUTES.explore} testId="plot-lab-back" />}
+    >
+      <main className="explore-main">
+        {motifsLoading ? (
+          <p className="status status-secondary">Loading motifs…</p>
+        ) : motifsNote && !motifs.length ? (
+          <div className="explore-empty-block">
+            <p className="explore-empty status status-secondary">{motifsNote}</p>
+            <OwnerEmptyStateCta note={motifsNote} isOwner={isOwner} />
+          </div>
+        ) : null}
+
+        {motifs.length ? (
+          <>
+            <div
+              className="explore-media-tabs plot-lab-media-tabs"
+              role="tablist"
+              aria-label="Media type"
+              data-testid="plot-lab-media-tabs"
+            >
+              {MEDIA_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeMediaTab === tab.id}
+                  className={`explore-media-tab${activeMediaTab === tab.id ? " is-active" : ""}`}
+                  data-testid={`plot-lab-tab-${tab.id}`}
+                  onClick={() => handleMediaTab(tab.mediaType)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            <p className="explore-section-subtitle" data-testid="plot-lab-motif-hint">
+              Motifs — tap to filter. Multiple selections AND together.
+            </p>
+            <div
+              className="explore-motif-chips explore-motif-chips-scroll"
+              data-testid="explore-motif-chips"
+            >
+              {motifs.map((facet) => {
+                const active = selectedMotifs.includes(facet.value);
+                return (
+                  <button
+                    key={facet.value}
+                    type="button"
+                    className={`explore-motif-chip${active ? " is-active" : ""}`}
+                    data-testid="explore-motif-chip"
+                    aria-pressed={active}
+                    onClick={() => handleToggleMotif(facet.value)}
+                  >
+                    {facet.value}
+                    {facet.count ? <span className="explore-motif-count">{facet.count}</span> : null}
+                  </button>
+                );
+              })}
+            </div>
+            {themes.length ? (
+              <>
+                <p className="explore-section-subtitle" data-testid="plot-lab-theme-hint">
+                  Themes — grouped from existing title tags without generating new plot text.
+                </p>
+                <div
+                  className="explore-motif-chips explore-motif-chips-scroll"
+                  data-testid="explore-theme-chips"
+                >
+                  {themes.map((facet) => {
+                    const active = selectedThemes.includes(facet.value);
+                    return (
+                      <button
+                        key={facet.value}
+                        type="button"
+                        className={`explore-motif-chip explore-theme-chip${active ? " is-active" : ""}`}
+                        data-testid="explore-theme-chip"
+                        aria-pressed={active}
+                        onClick={() => handleToggleTheme(facet.value)}
+                      >
+                        {facet.value}
+                        {facet.count ? (
+                          <span className="explore-motif-count">{facet.count}</span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            ) : null}
+          </>
+        ) : null}
+
+        {selectedMotifs.length || selectedThemes.length ? (
+          <div className="explore-plot-lab-wall" data-testid="explore-motif-wall">
+            <h3 className="explore-plot-lab-heading">Plot wall</h3>
+            {selectedMotifs.length ? (
+              <div
+                className="explore-media-tabs plot-lab-match-mode"
+                role="tablist"
+                aria-label="Plot match mode"
+                data-testid="plot-lab-match-mode"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={plotMatchMode === "hybrid"}
+                  className={`explore-media-tab${plotMatchMode === "hybrid" ? " is-active" : ""}`}
+                  data-testid="plot-lab-mode-hybrid"
+                  onClick={() => handlePlotMatchMode("hybrid")}
+                >
+                  Multi-signal
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={plotMatchMode === "motifs"}
+                  className={`explore-media-tab${plotMatchMode === "motifs" ? " is-active" : ""}`}
+                  data-testid="plot-lab-mode-motifs"
+                  onClick={() => handlePlotMatchMode("motifs")}
+                >
+                  Motifs only
+                </button>
+              </div>
+            ) : null}
+            <p className="explore-section-subtitle" data-testid="plot-lab-intersection-hint">
+              {selectedMotifs.length
+                ? plotMatchMode === "motifs"
+                  ? `Titles matching all selected motifs (${selectedMotifs.join(" · ")}).`
+                  : `Multi-signal: each selected token may match via motif, keyword, or plot text (${selectedMotifs.join(" · ")}).`
+                : "Filtering by selected themes."}
+              {selectedThemes.length
+                ? ` Themes also required: ${selectedThemes.join(" · ")}.`
+                : ""}{" "}
+              Tap Why? on a poster for which layer matched.{" "}
+              <HelpHint
+                anchor="why-motif-walls-feel-sparse"
+                variant="link"
+                label="Why walls feel sparse"
+                title="Why motif walls feel sparse"
+                testId="plot-lab-sparse-help"
+              />
+            </p>
+            <MediaBrowseControls
+              state={browse}
+              onChange={(patch) => {
+                setBrowse((current: any) => ({ ...current, ...patch }));
+                if (Object.hasOwn(patch, "media_type")) setMediaType(normalizeMediaTypeFilter(patch.media_type));
+              }}
+              columns={columns}
+              onColumnsChange={setColumns}
+              columnScope="plot-lab"
+            />
+            {motifWall.error || motifWall.note ? (
+              <p className="explore-empty status status-secondary">
+                {motifWall.error || motifWall.note}
+              </p>
+            ) : null}
+            {motifWall.loading ? (
+              <p className="status status-secondary">Filtering titles…</p>
+            ) : motifWall.items.length ? (
+              <>
+                <MotifWallPagination
+                  summary={wallSummary}
+                  pageSize={pageSize}
+                  onPageChange={handlePageChange}
+                  onPageSizeChange={handlePageSizeChange}
+                />
+                <MediaBrowseResults
+                  state={browse}
+                  items={motifWall.items}
+                  columns={columns || undefined}
+                  cardProps={(item: any) => ({
+                    onSeed: handleSeed,
+                    showRecommend: multiUserEnabled,
+                    onRecommend: multiUserEnabled ? setRecommendItem : undefined,
+                    motifWhy: resolveMotifWhy(item, selectedMotifs),
+                  })}
+                />
+                <MotifWallPagination
+                  summary={wallSummary}
+                  pageSize={pageSize}
+                  onPageChange={handlePageChange}
+                  onPageSizeChange={handlePageSizeChange}
+                />
+              </>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="explore-seed-panel surprise-neighbors-panel" data-testid="explore-seed-panel">
+          <h3 className="explore-plot-lab-heading">Surprising neighbors</h3>
+          <p className="explore-section-subtitle" data-testid="surprise-neighbors-blurb">
+            {seed
+              ? SURPRISE_SECTION_INTRO
+              : "Pick a seed title to surface narrative oddballs from the plot cache — titles that share DNA but sit far from the obvious shelf."}
+          </p>
+          <label className="explore-seed-label" htmlFor="explore-seed-input">
+            Seed title
+          </label>
+          <input
+            id="explore-seed-input"
+            className="explore-seed-input"
+            data-testid="explore-seed-input"
+            type="search"
+            placeholder="Search your library…"
+            value={seedQuery}
+            onChange={(e) => setSeedQuery(e.target.value)}
+            autoComplete="off"
+          />
+          {seedHits.length ? (
+            <ul className="explore-seed-hits" data-testid="explore-seed-hits">
+              {seedHits.map((item) => (
+                <li key={item.id || item.rating_key || item.title}>
+                  <button type="button" onClick={() => handleSeed(item)}>
+                    {item.title}
+                    {item.year ? ` (${item.year})` : ""}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {seed ? (
+            <p className="explore-seed-active" data-testid="explore-seed-active">
+              Seed: <strong>{seed.title}</strong>
+              {seed.year ? ` (${seed.year})` : ""}
+            </p>
+          ) : null}
+          {neighbors.error || neighbors.note ? (
+            <div className="explore-empty-block">
+              <p className="explore-empty status status-secondary">
+                {neighbors.error || neighbors.note}
+              </p>
+              {!neighbors.error && !neighbors.items.length ? (
+                <OwnerEmptyStateCta note={neighbors.note} isOwner={isOwner} />
+              ) : null}
+            </div>
+          ) : null}
+          <SurprisingNeighborsShowcase
+            testId="explore-neighbors-rail"
+            items={neighbors.items}
+            loading={neighbors.loading}
+            seedGenres={Array.isArray(seed?.genres) ? seed.genres : []}
+            showIntro={false}
+            seedItemId={seed?.id ?? null}
+            onDismissNeighbor={isOwner ? handleDismissNeighbor : null}
+            dismissBusyId={neighborDismissBusy}
+          />
+        </div>
+
+        <p className="explore-hub-link-row">
+          <Link to={ROUTES.explore} className="app-topbar-link">
+            Explore hub
+          </Link>
+          <Link to={ROUTES.tags} className="app-topbar-link">
+            Tag search
+          </Link>
+        </p>
+      </main>
+
+      <RecommendModal
+        item={recommendItem}
+        open={Boolean(recommendItem)}
+        onClose={() => setRecommendItem(null)}
+      />
+    </AppShell>
+  );
+}

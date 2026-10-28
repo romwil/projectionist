@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   resolveDockDropTarget,
   statusDockDropHint,
-} from "./easterEggs.js";
+} from "./easterEggs.ts";
 
 test("resolveDockDropTarget routes movies to Radarr and shows to Sonarr", () => {
   const connections = { radarrConnected: true, sonarrConnected: true };

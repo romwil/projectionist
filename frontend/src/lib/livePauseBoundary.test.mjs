@@ -9,7 +9,7 @@ import {
   pauseBoundaryOnPauseGesture,
   programEndSecFromOsd,
   shouldPromptPausePastBoundary,
-} from "./livePauseBoundary.js";
+} from "./livePauseBoundary.ts";
 
 describe("livePauseBoundary", () => {
   it("prompts only when paused past program end and not dismissed", () => {
@@ -107,7 +107,7 @@ describe("livePauseBoundary", () => {
 
   it("names Rejoin live and Finish this, and says finishing stretches the clock", () => {
     const live = readFileSync(
-      join(dirname(fileURLToPath(import.meta.url)), "../components/live/LivePlayer.jsx"),
+      join(dirname(fileURLToPath(import.meta.url)), "../components/live/LivePlayer.tsx"),
       "utf8",
     );
     assert.match(live, /Rejoin live/);

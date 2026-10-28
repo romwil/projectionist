@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ROUTES } from "./backNav.js";
-import { initialLiveChannelsReady, LIVE_NAV_READY_KEY } from "./liveNavReady.js";
+import { ROUTES } from "./backNav.ts";
+import { initialLiveChannelsReady, LIVE_NAV_READY_KEY } from "./liveNavReady.ts";
 import {
   PRIMARY_NAV_ITEMS,
   buildPrimaryDrawerItems,
   buildPrimaryNavItems,
   isPrimaryNavActive,
   primaryNavVisibleIds,
-} from "./primaryNav.js";
+} from "./primaryNav.ts";
 
 describe("primaryNav", () => {
   it("orders peers Search → Chat → Explore → Live → Inbox → Admin → My Journey → Settings", () => {

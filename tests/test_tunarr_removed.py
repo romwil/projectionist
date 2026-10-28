@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PROD = ROOT / "projectionist"
-ADMIN = ROOT / "frontend" / "src" / "pages" / "admin" / "LiveChannelsAdvanced.jsx"
+ADMIN = ROOT / "frontend" / "src" / "pages" / "admin" / "LiveChannelsAdvanced.tsx"
 
 
 def _imports_tunarr_client(path: Path) -> bool:

@@ -133,7 +133,7 @@ The application runs as a **single process** (Uvicorn + FastAPI). The React fron
 ```mermaid
 flowchart LR
     subgraph frontend [Frontend - Vite React]
-        App[App.jsx routes]
+        App[App.tsx routes]
         ChatThread[ChatThread lens-bound]
         Cards[TitleCard]
         Config[ConfigPage persona sliders]
@@ -183,6 +183,8 @@ flowchart LR
 
 ### Frontend (Vite / React)
 
+The SPA is TypeScript; Hub `npm run build` runs `tsc --noEmit` before Vite.
+
 - **Single workspace** — chat thread, welcome panel, watchlist sidebar, keyboard shortcuts.
 - **Explore hub** — `/explore` cinema browse (Recently Added + feed rails); Plot Lab for multi-signal plot intersections + neighbor discovery.
 - **Help** — `/help` in-app guide (role-aware); deep education in [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md).
@@ -216,8 +218,8 @@ Approximate letter sizes (origin/main after the library+chat carve):
 | `projectionist/live_channels/` | 15.2k |
 | `projectionist/library/db/` | 12.4k |
 | `projectionist/agent/tools/__init__.py` | 4.4k |
-| `frontend/src/pages/ConfigPage.jsx` | 3.1k |
-| `frontend/src/App.jsx` | 1.7k |
+| `frontend/src/pages/ConfigPage.tsx` | 2.1k |
+| `frontend/src/App.tsx` | 0.6k |
 
 ### Library and RAG
 
@@ -268,7 +270,7 @@ Two-phase: propose token → user confirm → execute. TTL 600 seconds.
 |-------|--------|-----------|
 | Runtime | Python 3.10+ | Async-friendly, homelab standard |
 | Web | FastAPI + Uvicorn | Typed routes, SSE |
-| Frontend | Vite + React | Single-workspace SPA without SSR complexity |
+| Frontend | Vite + React + TypeScript | Single-workspace SPA without SSR complexity |
 | Database | SQLite | Zero-ops; single-file backup |
 | Vectors | NumPy + JSON in SQLite | Adequate for home libraries |
 | Container | Multi-stage Docker | Node build + Python slim |
