@@ -8,7 +8,7 @@ import {
   saveVoicePrefs,
   speechSupported,
   VOICE_PREFS_KEY,
-} from "./voicePrefs.js";
+} from "./voicePrefs.ts";
 
 function memoryStorage(seed = {}) {
   const map = new Map(Object.entries(seed));

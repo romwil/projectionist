@@ -9,7 +9,7 @@ import {
   memberFacingCopyOk,
   personaPathways,
   prerequisitesMet,
-} from "./journeyAchievements.js";
+} from "./journeyAchievements.ts";
 
 describe("journeyAchievements", () => {
   it("ships a substantial catalog across tiers and categories", () => {

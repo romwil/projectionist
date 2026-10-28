@@ -10,7 +10,7 @@ import {
   speakText,
   stopSpeaking,
   stripMarkdownForSpeech,
-} from "./voiceSpeech.js";
+} from "./voiceSpeech.ts";
 
 test("stripMarkdownForSpeech removes common markdown noise", () => {
   assert.equal(

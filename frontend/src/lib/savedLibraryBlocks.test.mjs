@@ -4,7 +4,7 @@ import {
   SAVED_LIBRARY_RAIL_LIMIT,
   sanitizeSavedRailItems,
   savedLibraryBlocks,
-} from "./savedLibraryBlocks.js";
+} from "./savedLibraryBlocks.ts";
 
 const SEVEN_MOVIES = Array.from({ length: 7 }, (_, i) => ({
   media_type: "movie",

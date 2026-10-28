@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { liveChannelsStartTimeoutAlertType } from "./liveChannelsEngineFeedback.js";
+import { liveChannelsStartTimeoutAlertType } from "./liveChannelsEngineFeedback.ts";
 
 describe("liveChannelsStartTimeoutAlertType", () => {
   it("uses success for still-starting (soft / in-progress)", () => {

@@ -5,7 +5,7 @@ import {
   healthTabHref,
   legacyHealthTabFromPath,
   resolveHealthTab,
-} from "./healthTabs.js";
+} from "./healthTabs.ts";
 
 describe("healthTabs", () => {
   it("defaults to sync health tab", () => {

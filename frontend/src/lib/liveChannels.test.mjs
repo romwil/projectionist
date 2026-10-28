@@ -41,7 +41,7 @@ import {
   summarizeLiveVideoBuffer,
   toggleLiveVideoPlayback,
   tryPlayLiveVideo,
-} from "./liveChannels.js";
+} from "./liveChannels.ts";
 
 describe("liveChannels helpers", () => {
   it("merges stream + Plex CC tracks with honest empty copy", () => {

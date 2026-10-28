@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { inboxFollowUpParams, INBOX_FIRST_PAINT_LIMIT, INBOX_FIRST_PAINT_PARAMS, INBOX_LIST_PARAMS } from "./recommendationInbox.js";
+import { inboxFollowUpParams, INBOX_FIRST_PAINT_LIMIT, INBOX_FIRST_PAINT_PARAMS, INBOX_LIST_PARAMS } from "./recommendationInbox.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 

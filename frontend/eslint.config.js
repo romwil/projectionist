@@ -99,6 +99,8 @@ export default [
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       // Match the JSX baseline: unused stays warn, not error.
       "no-unused-vars": "off",
+      // TS already checks names; no-undef false-positives on DOM lib types.
+      "no-undef": "off",
       "@typescript-eslint/no-unused-vars": "warn",
       "no-empty": "warn",
       "react/no-unescaped-entities": "warn",

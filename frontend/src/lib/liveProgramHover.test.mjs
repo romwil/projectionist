@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { placeProgramHoverCard } from "./liveProgramHover.js";
+import { placeProgramHoverCard } from "./liveProgramHover.ts";
 
 /** Visible guide under the top bar, matching a bottom Drive-In row. */
 const guide = { top: 128, right: 1440, bottom: 820, left: 0 };

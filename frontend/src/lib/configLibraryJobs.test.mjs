@@ -5,7 +5,7 @@ import {
   librarySyncFailedFeedback,
   librarySyncStartedFeedback,
   selectActiveSyncJob,
-} from "./configLibraryJobs.js";
+} from "./configLibraryJobs.ts";
 
 test("selectActiveSyncJob prefers a running library_sync job", () => {
   const jobs = [

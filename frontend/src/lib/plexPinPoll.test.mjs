@@ -9,7 +9,7 @@ import {
   plexPinPollDelayMs,
   plexPinPollSucceeded,
   startPlexPinPoll,
-} from "./plexPinPoll.js";
+} from "./plexPinPoll.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 

@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { LIVE_ADMIN_GLOSSARY } from "./liveChannelsCopy.js";
+import { LIVE_ADMIN_GLOSSARY } from "./liveChannelsCopy.ts";
 import {
   GLOSSARY_FALLBACK_HELP,
   GLOSSARY_HELP,
   glossaryEntry,
   glossaryLabels,
   sectionHelpPlainBody,
-} from "./glossary.js";
+} from "./glossary.ts";
 
 describe("glossary", () => {
   it("resolves ops keys through the Live Admin glossary", () => {

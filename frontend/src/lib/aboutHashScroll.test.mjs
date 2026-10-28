@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { aboutHashTargetId, scrollAboutHashIntoView } from "./aboutHashScroll.js";
+import { aboutHashTargetId, scrollAboutHashIntoView } from "./aboutHashScroll.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const aboutPage = readFileSync(join(here, "../pages/AboutPage.jsx"), "utf8");

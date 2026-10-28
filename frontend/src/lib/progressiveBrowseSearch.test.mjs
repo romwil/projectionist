@@ -8,7 +8,7 @@ import {
   nextBrowseSearchQuery,
   normalizeBrowseSearchQuery,
   setBrowseSearchQueryParam,
-} from "./progressiveBrowseSearch.js";
+} from "./progressiveBrowseSearch.ts";
 
 describe("progressiveBrowseSearch", () => {
   it("normalizes draft queries and exposes a light debounce budget", () => {

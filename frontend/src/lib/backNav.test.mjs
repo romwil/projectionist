@@ -22,7 +22,7 @@ import {
   watchlistBrowseHref,
   watchlistPanelHref,
   withReturnTo,
-} from "./backNav.js";
+} from "./backNav.ts";
 
 describe("resolveBackTarget", () => {
   it("prefers internal from state over fallback", () => {

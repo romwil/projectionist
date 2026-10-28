@@ -9,9 +9,9 @@ import {
   YIR_SELF_GENERATE_PAYLOAD,
   runConfirmedYirGenerate,
   yirAdminGenerateConfirmOptions,
-} from "./yearInReview.js";
-import { newsletterConfirmOptions } from "./weeklyNewsletter.js";
-import { seerrSyncConfirmOptions } from "./seerrHousehold.js";
+} from "./yearInReview.ts";
+import { newsletterConfirmOptions } from "./weeklyNewsletter.ts";
+import { seerrSyncConfirmOptions } from "./seerrHousehold.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const srcRoot = join(here, "..");

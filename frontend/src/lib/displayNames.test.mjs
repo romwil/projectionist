@@ -5,14 +5,14 @@ import {
   knowledgeEventDisplayName,
   knowledgeGapDisplayName,
   knowledgeTaskDisplayName,
-} from "./knowledgeOpsDisplay.js";
+} from "./knowledgeOpsDisplay.ts";
 import {
   actDescriptionForStagedItem,
   actLabelForStagedItem,
   retrievalFailureSummary,
   stagedItemDisplayTitle,
-} from "./knowledgeOpsActions.js";
-import { taskDisplayName } from "./scheduledTasks.js";
+} from "./knowledgeOpsActions.ts";
+import { taskDisplayName } from "./scheduledTasks.ts";
 
 test("scheduled task ids keep plain owner-facing names", () => {
   assert.equal(taskDisplayName("semantic_embeddings"), "Plot similarity index");

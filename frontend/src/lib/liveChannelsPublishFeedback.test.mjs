@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { formatPublishFeedback } from "./liveChannelsPublishFeedback.js";
+import { formatPublishFeedback } from "./liveChannelsPublishFeedback.ts";
 
 test("formatPublishFeedback summarizes a clean publish", () => {
   const feedback = formatPublishFeedback({

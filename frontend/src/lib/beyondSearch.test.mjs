@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { resolveAddCapability } from "./addActions.js";
+import { resolveAddCapability } from "./addActions.ts";
 import {
   BEYOND_STATUS,
   BEYOND_TURNSTYLE_TITLE,
@@ -15,7 +15,7 @@ import {
   isTmdbUnavailableError,
   normalizeExternalResults,
   shouldShowBeyondAffordance,
-} from "./beyondSearch.js";
+} from "./beyondSearch.ts";
 
 test("affordance visibility is gated on an active query", () => {
   assert.equal(shouldShowBeyondAffordance({ q: "" }), false);

@@ -6,7 +6,7 @@ import {
   libraryHubPath,
   libraryShelvesDetailPath,
   parseLibraryTab,
-} from "./libraryTabs.js";
+} from "./libraryTabs.ts";
 
 test("parseLibraryTab", () => {
   assert.equal(parseLibraryTab(new URLSearchParams()), DEFAULT_LIBRARY_TAB);

@@ -7,8 +7,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "test:unit": "node --test src/lib/*.test.mjs",
-    "test:coverage": "c8 node --test src/lib/*.test.mjs",
+    "test:unit": "node --import tsx --test src/lib/*.test.mjs",
+    "test:coverage": "c8 node --import tsx --test src/lib/*.test.mjs",
     "preview": "vite preview",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
@@ -38,6 +38,7 @@
     "eslint-plugin-react-refresh": "^0.5.3",
     "globals": "^17.7.0",
     "prettier": "^3.9.5",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.72.1",
     "vite": "^5.4.11"

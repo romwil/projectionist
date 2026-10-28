@@ -6,7 +6,7 @@ import {
   SEARCH_OPTIONAL_SUMMARY,
   chatHomeOptionalGroup,
   searchOptionalGroup,
-} from "./optionalPageExtras.js";
+} from "./optionalPageExtras.ts";
 import { readAllStyles } from "./readStyles.mjs";
 
 function detailsTag(source, testId) {

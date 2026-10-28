@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { formatKinshipMissHit, kinshipMissWhyLabel } from "./kinshipMiss.js";
+import { formatKinshipMissHit, kinshipMissWhyLabel } from "./kinshipMiss.ts";
 
 test("kinshipMissWhyLabel maps stored and public why codes", () => {
   assert.equal(kinshipMissWhyLabel("more_like_this_empty"), "Empty More Like This");

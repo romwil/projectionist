@@ -37,7 +37,7 @@ import {
   selectedFileIds,
   selectionMap,
   UNREADABLE_MEDIA,
-} from "./episodeInvestigate.js";
+} from "./episodeInvestigate.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const libraries = readFileSync(join(here, "../pages/admin/LibrariesSection.jsx"), "utf8");
