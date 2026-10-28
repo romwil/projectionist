@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { savedLibraryChatHref } from "./backNav.js";
+import { savedLibraryChatHref } from "./backNav.ts";
 import {
   CHAT_SCROLL_REGION_CLASS,
   MESSAGE_CONTAINMENT_CLASSES,
@@ -16,7 +16,7 @@ import {
   messageTextContainmentStyle,
   pickResumeThread,
   resumeChipFromThread,
-} from "./chatLayout.js";
+} from "./chatLayout.ts";
 import { readAllStyles } from "./readStyles.mjs";
 
 describe("chatLayout containment", () => {

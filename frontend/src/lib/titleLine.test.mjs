@@ -9,7 +9,7 @@ import {
   titleAlreadyHasYear,
   titleLineParts,
   titleWithYear,
-} from "./titleLine.js";
+} from "./titleLine.ts";
 
 const srcRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const styles = readAllStyles();
@@ -19,7 +19,7 @@ const CARD_SURFACES = [
   "components/TitleNeighborsRails.tsx",
   "components/TitleCard.tsx",
   "pages/RelatedTitlesPage.tsx",
-  "lib/liveProgramDetail.js",
+  "lib/liveProgramDetail.ts",
 ];
 
 describe("titleLine helper", () => {

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
-import { adminNavLinks } from "./adminNav.js";
+import { adminNavLinks } from "./adminNav.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

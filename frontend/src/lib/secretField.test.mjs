@@ -5,7 +5,7 @@ import {
   isSecretConfigured,
   secretPlaceholder,
   seerrSecretPlaceholder,
-} from "./secretField.js";
+} from "./secretField.ts";
 
 describe("secretPlaceholder", () => {
   it("prefers env source copy", () => {

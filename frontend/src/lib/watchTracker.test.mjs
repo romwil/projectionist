@@ -10,7 +10,7 @@ import {
   episodeHistorySummary,
   normalizeWatchSummary,
   trackedCompletionCardLabel,
-} from "./watchTracker.js";
+} from "./watchTracker.ts";
 
 describe("watch tracker presentation", () => {
   it("keeps no-coverage summaries on the labeled Plex fallback", () => {

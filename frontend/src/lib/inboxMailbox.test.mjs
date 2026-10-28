@@ -16,7 +16,7 @@ import {
   inboxScanPreview,
   isAgentInboxNote,
   visibleInboxReply,
-} from "./inboxMailbox.js";
+} from "./inboxMailbox.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 

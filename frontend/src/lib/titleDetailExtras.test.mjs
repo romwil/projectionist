@@ -9,7 +9,7 @@ import {
   reviewsCtaForDetail,
   titleWatchCountLabel,
   watchedCtaLabel,
-} from "./titleDetailExtras.js";
+} from "./titleDetailExtras.ts";
 
 describe("titleDetailExtras", () => {
   it("formats release badge as YYYY Month D or year-only", () => {

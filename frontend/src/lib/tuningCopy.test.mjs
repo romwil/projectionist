@@ -4,7 +4,7 @@ import {
   TUNING_PHRASES,
   pickTuningPhrase,
   resetTuningPhraseMemory,
-} from "./tuningCopy.js";
+} from "./tuningCopy.ts";
 
 describe("tuningCopy", () => {
   beforeEach(() => {

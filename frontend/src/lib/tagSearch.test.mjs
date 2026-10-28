@@ -9,7 +9,7 @@ import {
   shouldQueryFacetIndex,
   tagSearchEmptyMessage,
   toggleTagSelection,
-} from "./tagSearch.js";
+} from "./tagSearch.ts";
 
 describe("tagSearch", () => {
   it("normalizes facet payloads", () => {

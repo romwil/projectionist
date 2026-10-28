@@ -19,7 +19,7 @@ import {
   resolveMotifWhy,
   sortExploreSectionItems,
   toggleMotifSelection,
-} from "./exploreFeeds.js";
+} from "./exploreFeeds.ts";
 
 test("normalizeFeed keeps API note and items", () => {
   const result = normalizeFeed({

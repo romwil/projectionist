@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { clampTasteWeight, formatTasteWeight } from "./tasteWeight.js";
+import { clampTasteWeight, formatTasteWeight } from "./tasteWeight.ts";
 
 describe("tasteWeight", () => {
   it("clamps profile weights onto 0–1", () => {

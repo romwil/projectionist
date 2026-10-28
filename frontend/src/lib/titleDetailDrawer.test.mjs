@@ -9,7 +9,7 @@ import {
   titleDetailHrefFromTarget,
   titleDetailTargetFromItem,
   titleDetailTargetFromPurgeCandidate,
-} from "./titleDetailDrawer.js";
+} from "./titleDetailDrawer.ts";
 
 const componentsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "components");
 

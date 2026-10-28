@@ -6,7 +6,7 @@ import {
   readLiveGuideCache,
   shouldShowGuideSkeleton,
   writeLiveGuideCache,
-} from "./liveGuidePaint.js";
+} from "./liveGuidePaint.ts";
 
 function memoryStorage() {
   const storage = new Map();

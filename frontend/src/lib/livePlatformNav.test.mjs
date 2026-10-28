@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { buildPrimaryNavItems } from "./primaryNav.js";
+import { buildPrimaryNavItems } from "./primaryNav.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 

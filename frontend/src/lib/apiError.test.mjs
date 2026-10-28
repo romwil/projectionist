@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { formatApiError, looksLikeHtmlOrMarkup, parseApiErrorBody } from "./apiError.js";
+import { formatApiError, looksLikeHtmlOrMarkup, parseApiErrorBody } from "./apiError.ts";
 
 describe("parseApiErrorBody", () => {
   it("prefers FastAPI JSON detail strings", () => {

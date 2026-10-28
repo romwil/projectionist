@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { shouldSubmitComposerOnEnter } from "./composerKeyboard.js";
+import { shouldSubmitComposerOnEnter } from "./composerKeyboard.ts";
 
 function keyEvent(overrides = {}) {
   return {

@@ -9,7 +9,7 @@ import {
   pauseBoundaryOnPauseGesture,
   programEndSecFromOsd,
   shouldPromptPausePastBoundary,
-} from "./livePauseBoundary.js";
+} from "./livePauseBoundary.ts";
 
 describe("livePauseBoundary", () => {
   it("prompts only when paused past program end and not dismissed", () => {

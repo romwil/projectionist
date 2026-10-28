@@ -94,7 +94,7 @@ export default [
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       // Match the JSX baseline: unused stays warn, not error.
       "no-unused-vars": "off",
-      // Type-only `React.ReactNode` / namespace refs; tsc already checks undef.
+      // Type-only `React.ReactNode` / namespace refs and DOM lib types; tsc already checks undef.
       "no-undef": "off",
       "@typescript-eslint/no-unused-vars": "warn",
       "no-empty": "warn",

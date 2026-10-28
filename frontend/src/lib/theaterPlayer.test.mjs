@@ -70,7 +70,7 @@ import {
   isIosSafariUserAgent,
   playStageChrome,
   shouldUseWebkitVideoFullscreen,
-} from "./theaterPlayer.js";
+} from "./theaterPlayer.ts";
 
 test("libraryWatchPath encodes the rating key", () => {
   assert.equal(libraryWatchPath("plex-949"), "/watch/plex-949");
@@ -656,7 +656,7 @@ test("Play wires iOS fullscreen, black frame, and title-clock captions", () => {
   ].join("\n");
   const stage = readFileSync(join(root, "../components/theater/TheaterPlayer.tsx"), "utf8");
   const picker = readFileSync(join(root, "../components/theater/SubtitlePicker.tsx"), "utf8");
-  const cues = readFileSync(join(root, "./subtitleCues.js"), "utf8");
+  const cues = readFileSync(join(root, "./subtitleCues.ts"), "utf8");
   const css = readFileSync(join(root, "../styles/13-watch.css"), "utf8");
   const liveCss = readFileSync(join(root, "../styles/12-live.css"), "utf8");
   assert.match(player, /toggleTheaterFullscreen\(root,\s*\{\s*video:/);

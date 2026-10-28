@@ -10,7 +10,7 @@ import {
   friendlyProgressMessage,
   parseLastSyncTimestamp,
   phaseLabel,
-} from "./jobProgress.js";
+} from "./jobProgress.ts";
 
 test("friendlyProgressMessage maps snake_case keys", () => {
   assert.equal(friendlyProgressMessage("scanning_plex"), "Scanning Plex library…");

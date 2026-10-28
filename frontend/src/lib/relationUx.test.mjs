@@ -9,7 +9,7 @@ import {
   relationWhyCopy,
   relatedTitlesPath,
   surprisingPlotNeighbors,
-} from "./relationUx.js";
+} from "./relationUx.ts";
 
 test("appendRelationBreadcrumb keeps a two-hop trail without duplicate seeds", () => {
   const seed = { library_item_id: 1, title: "Seed" };

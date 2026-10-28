@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { liveTuneAbsoluteUrl, tuneLinkCardDataUrl } from "./liveTuneLink.js";
+import { liveTuneAbsoluteUrl, tuneLinkCardDataUrl } from "./liveTuneLink.ts";
 
 describe("liveTuneLink", () => {
   it("builds an absolute watch deep-link", () => {

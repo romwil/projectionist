@@ -22,7 +22,7 @@ test("MessageText wires footnote-friendly markdown components", () => {
 });
 
 test("parseMarkdownFootnotes extracts [^n] definitions", async () => {
-  const { parseMarkdownFootnotes } = await import("./chatFootnotes.js");
+  const { parseMarkdownFootnotes } = await import("./chatFootnotes.ts");
   assert.deepEqual(
     parseMarkdownFootnotes(
       "Kurosawa cuts on movement[^1] and holds the rain.[^2]\n\n[^1]: Rashomon (1950) — courtyard geometry.\n[^2]: Seven Samurai (1954) — the weather as chorus.\n",
@@ -36,7 +36,7 @@ test("parseMarkdownFootnotes extracts [^n] definitions", async () => {
 });
 
 test("footnoteIdFromHref reads GFM footnote anchors", async () => {
-  const { footnoteIdFromHref } = await import("./chatFootnotes.js");
+  const { footnoteIdFromHref } = await import("./chatFootnotes.ts");
   assert.equal(footnoteIdFromHref("#user-content-fn-1"), "1");
   assert.equal(footnoteIdFromHref("#fn-2"), "2");
   assert.equal(footnoteIdFromHref("#user-content-fnref-3", "3"), "3");
@@ -60,7 +60,7 @@ test("footnote sheet CSS lives next to MessageText", () => {
 });
 
 test("walk footnote ids get a walk sheet label", async () => {
-  const { footnoteSheetLabel, footnoteWalkKind } = await import("./chatFootnotes.js");
+  const { footnoteSheetLabel, footnoteWalkKind } = await import("./chatFootnotes.ts");
   assert.equal(footnoteSheetLabel({ id: "lineage-1" }), "Lineage source 1");
   assert.equal(footnoteSheetLabel({ id: "gap-2" }), "Gap list source 2");
   assert.equal(footnoteSheetLabel({ id: "1" }), "Source 1");

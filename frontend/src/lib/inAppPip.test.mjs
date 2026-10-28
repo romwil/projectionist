@@ -12,7 +12,7 @@ import {
   playerBarActions,
   resolvePlaybackHost,
   shrinkOntoPage,
-} from "./inAppPip.js";
+} from "./inAppPip.ts";
 
 test("shrinking does not call pause", () => {
   let pauses = 0;

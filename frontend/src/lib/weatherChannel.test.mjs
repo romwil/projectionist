@@ -10,7 +10,7 @@ import {
   weatherTickerLines,
   nextWeatherBoardIndex,
   WEATHER_BOARD_DWELL_MS,
-} from "./weatherChannel.js";
+} from "./weatherChannel.ts";
 
 const daily = {
   time: ["2026-10-02", "2026-10-03", "2026-10-04"],

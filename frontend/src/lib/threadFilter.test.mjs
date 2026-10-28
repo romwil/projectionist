@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { filterThreads } from "./threadFilter.js";
+import { filterThreads } from "./threadFilter.ts";
 
 describe("threadFilter", () => {
   it("filters by title or preview", () => {

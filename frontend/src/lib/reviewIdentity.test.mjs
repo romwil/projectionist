@@ -5,7 +5,7 @@ import {
   formatRateTitleLead,
   resolveReviewAddressName,
   resolveReviewUser,
-} from "./reviewIdentity.js";
+} from "./reviewIdentity.ts";
 
 describe("reviewIdentity", () => {
   it("prefers preferred_name over display_name", () => {

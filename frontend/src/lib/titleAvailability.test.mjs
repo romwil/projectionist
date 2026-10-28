@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import {
   titleAvailability,
   titleAvailabilityClassName,
-} from "./titleAvailability.js";
+} from "./titleAvailability.ts";
 
 describe("titleAvailability", () => {
   it("reports in-library first", () => {

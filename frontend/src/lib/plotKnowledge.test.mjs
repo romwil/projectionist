@@ -5,7 +5,7 @@ import {
   buildPlotKnowledgePanel,
   formatMatchLayerLabel,
   formatMatchLayers,
-} from "./plotKnowledge.js";
+} from "./plotKnowledge.ts";
 
 test("formatMatchLayerLabel maps known layers", () => {
   assert.equal(formatMatchLayerLabel("motif"), "Motif");
