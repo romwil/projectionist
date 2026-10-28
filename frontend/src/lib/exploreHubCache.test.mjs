@@ -5,8 +5,10 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   CONTINUE_WATCHING_PROGRESS_KEY,
+  EXPLORE_HUB_WARMING_STALL_MESSAGE,
   clearExploreHubCache,
   dropReflectedContinueWatchingNotes,
+  exploreHubLoadError,
   exploreHubStillWarming,
   hubRailState,
   mergeContinueWatchingNotes,
@@ -307,5 +309,34 @@ describe("exploreHubCache", () => {
     assert.match(src, /pageshow/);
     assert.match(src, /spliceContinueWatchingRail/);
     assert.doesNotMatch(src, /setHub\(\{ loading: true/);
+  });
+
+  it("does not clear warming locally when the poll gives up", () => {
+    const stalled = {
+      warming: true,
+      rails: {
+        recently_added: { items: [{ title: "Heat" }], pending: false },
+        seasonal_spotlight: { items: [], pending: true },
+      },
+    };
+    assert.equal(exploreHubStillWarming(stalled), true);
+    const waiting = hubRailState(stalled, "seasonal_spotlight");
+    assert.equal(waiting.loading, true);
+    assert.match(EXPLORE_HUB_WARMING_STALL_MESSAGE, /still warming/);
+    const src = readFileSync(join(here, "../pages/ExplorePage.jsx"), "utf8");
+    assert.match(src, /EXPLORE_HUB_WARMING_STALL_MESSAGE/);
+    assert.match(src, /explore-hub-status/);
+    assert.doesNotMatch(src, /warming:\s*false/);
+  });
+
+  it("keeps a fetch error visible even when cache already painted", () => {
+    assert.equal(exploreHubLoadError(new Error("hub down")), "hub down");
+    assert.match(
+      exploreHubLoadError(new Error("hub down"), { hasCache: true }),
+      /hub down.*last successful load/,
+    );
+    const src = readFileSync(join(here, "../pages/ExplorePage.jsx"), "utf8");
+    assert.match(src, /exploreHubLoadError/);
+    assert.doesNotMatch(src, /error: prev\.payload \? ""/);
   });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 const FOCUSABLE =
@@ -8,9 +8,21 @@ function stopBubble(event) {
   event.stopPropagation();
 }
 
+function normalizePrompt(prompt) {
+  if (!prompt) return null;
+  if (prompt === true) return { label: "", placeholder: "", type: "text" };
+  return {
+    label: prompt.label || "",
+    placeholder: prompt.placeholder || "",
+    type: prompt.type || "text",
+    defaultValue: prompt.defaultValue || "",
+  };
+}
+
 /**
  * In-app confirm — same overlay chrome as RecommendModal / WhatsNew
  * (dimmed stage, surface card, primary + ghost). No native dialog.
+ * Optional `prompt` is an in-app field (replaces window.prompt).
  */
 export default function ConfirmModal({
   open,
@@ -19,14 +31,35 @@ export default function ConfirmModal({
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
   danger = false,
+  prompt = null,
   onConfirm,
   onCancel,
 }) {
   const titleId = useId();
   const bodyId = useId();
+  const promptId = useId();
   const dialogRef = useRef(null);
   const onCancelRef = useRef(onCancel);
   onCancelRef.current = onCancel;
+  const promptSpec = normalizePrompt(prompt);
+  const hasPrompt = Boolean(promptSpec);
+  const [promptValue, setPromptValue] = useState("");
+  const promptReady = !hasPrompt || Boolean(promptValue.trim());
+
+  useEffect(() => {
+    if (!open) {
+      setPromptValue("");
+      return undefined;
+    }
+    setPromptValue(promptSpec?.defaultValue || "");
+    return undefined;
+  }, [open, promptSpec?.defaultValue]);
+
+  function handleConfirm() {
+    if (!promptReady) return;
+    if (hasPrompt) onConfirm?.(promptValue.trim());
+    else onConfirm?.();
+  }
 
   useEffect(() => {
     if (!open) return undefined;
@@ -41,7 +74,11 @@ export default function ConfirmModal({
     }
 
     const preferred = root?.querySelector(
-      danger ? '[data-testid="confirm-modal-cancel"]' : '[data-testid="confirm-modal-confirm"]',
+      hasPrompt
+        ? '[data-testid="confirm-modal-prompt"]'
+        : danger
+          ? '[data-testid="confirm-modal-cancel"]'
+          : '[data-testid="confirm-modal-confirm"]',
     );
     (preferred || focusables()[0])?.focus();
 
@@ -73,7 +110,7 @@ export default function ConfirmModal({
         previouslyFocused.focus();
       }
     };
-  }, [open, danger]);
+  }, [open, danger, hasPrompt]);
 
   if (!open || typeof document === "undefined") return null;
 
@@ -102,6 +139,29 @@ export default function ConfirmModal({
             {body}
           </p>
         ) : null}
+        {promptSpec ? (
+          <label className="confirm-modal-field" htmlFor={promptId}>
+            {promptSpec.label ? <span>{promptSpec.label}</span> : null}
+            <input
+              id={promptId}
+              type={promptSpec.type === "password" ? "password" : "text"}
+              value={promptValue}
+              placeholder={promptSpec.placeholder}
+              autoComplete="off"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              data-testid="confirm-modal-prompt"
+              onChange={(event) => setPromptValue(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  handleConfirm();
+                }
+              }}
+            />
+          </label>
+        ) : null}
         <div className="recommend-modal-actions">
           <button
             type="button"
@@ -115,7 +175,8 @@ export default function ConfirmModal({
             type="button"
             className={danger ? "primary danger" : "primary"}
             data-testid="confirm-modal-confirm"
-            onClick={onConfirm}
+            disabled={!promptReady}
+            onClick={handleConfirm}
           >
             {confirmLabel}
           </button>
