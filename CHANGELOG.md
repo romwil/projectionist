@@ -2,8 +2,20 @@
 
 ## [Unreleased]
 
+## [1.37.67] — 2026-10-28
+
+One patch on 1.37.66: Explore language walls use the catalog Language control, not a second set of pills.
+
+### Highlights
+- **Language walls stay a wall.** Clearing Language shows **All languages** instead of sending you back to Explore. The extra All / Movies / TV pills are gone — Type stays in the shared dropdown. Every original language in the library is listed, not a 50-bucket cap.
+
 ### Changed
-- **Explore language walls use the catalog Language control.** The extra All / Movies / TV pills are gone — Type stays in the shared dropdown. Clearing Language stays on the wall and shows **All languages**. The language list is every original language in the library, not a 50-bucket cap.
+- **Explore language walls use the catalog Language control.** Drop All / Movies / TV pills; stay on the wall when Language is cleared (`All languages` heading). Language options come from catalog buckets (`languageOptionsFromBuckets`), uncapped.
+
+### Verification
+- Full `pytest tests/` — 2687 passed, 1 failed (`test_vision_default_openai` ACRCloud `available` True from local env keys; same test passed with ACRCloud env unset). Coverage 76.88% (floor 74%).
+- Frontend unit 1113/1113. `npm run lint` 0 errors (173 pre-existing warnings). `npm run build` compiled.
+- `tests/test_version.py` after `./scripts/patch-release.sh 1.37.67`.
 
 ## [1.37.66] — 2026-10-28
 

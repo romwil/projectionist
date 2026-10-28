@@ -1,6 +1,30 @@
 {
-  "generated_at": "2026-10-28T01:56:38Z",
+  "generated_at": "2026-10-28T03:23:38Z",
   "releases": [
+    {
+      "version": "1.37.67",
+      "date": "2026-10-28",
+      "summary": "One patch on 1.37.66: Explore language walls use the catalog Language control, not a second set of pills.",
+      "highlights": [
+        "**Language walls stay a wall.** Clearing Language shows **All languages** instead of sending you back to Explore. The extra All / Movies / TV pills are gone — Type stays in the shared dropdown. Every original language in the library is listed, not a 50-bucket cap."
+      ],
+      "sections": [
+        {
+          "title": "Changed",
+          "bullets": [
+            "**Explore language walls use the catalog Language control.** Drop All / Movies / TV pills; stay on the wall when Language is cleared (`All languages` heading). Language options come from catalog buckets (`languageOptionsFromBuckets`), uncapped."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Full `pytest tests/` — 2687 passed, 1 failed (`test_vision_default_openai` ACRCloud `available` True from local env keys; same test passed with ACRCloud env unset). Coverage 76.88% (floor 74%).",
+            "Frontend unit 1113/1113. `npm run lint` 0 errors (173 pre-existing warnings). `npm run build` compiled.",
+            "`tests/test_version.py` after `./scripts/patch-release.sh 1.37.67`."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.66",
       "date": "2026-10-28",
@@ -32,7 +56,10 @@
         {
           "title": "Verification",
           "bullets": [
-            "Focused pytest on touched areas, then full `tests/` with coverage floor 74%. Frontend unit, lint (0 errors), and `npm run build`."
+            "Focused pytest — 262 passed (`test_play_counts`, `test_quick_pick_api`, `test_tonight_watch`, `test_agent_tools`, `test_agent_tool_registry`, `test_library_chat_carve`, `test_household_bridges`, `test_h1_shell_extract`, `test_version`, `test_ca_release`, `test_api_contract`, `test_chat_stream`, `test_agent_tools_validation`, `test_continue_watching_after_play`) with `--no-cov`.",
+            "Full `pytest tests/` — 2683 passed, 43 skipped, coverage 76.60% (floor 74%). Five auth/invite setUp failures while `frontend/dist/assets` was missing (parallel SPA build); `tests/test_auth.py` + `tests/test_invites.py` 35 passed after the SPA compile.",
+            "Frontend unit 1112/1112. `npm run lint` 0 errors (173 pre-existing warnings). `npm run build` compiled (`useConfirmModal.jsx`; TheaterPlayer weather uses token `--bg`, not `#100e0c`).",
+            "`tests/test_version.py` after `./scripts/patch-release.sh 1.37.66`."
           ]
         }
       ]
