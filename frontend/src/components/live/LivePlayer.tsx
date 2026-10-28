@@ -17,6 +17,8 @@ import {
   LIVE_STALL_NOTICE_MS,
   flexPlaybackPlan,
   flexSlateCopy,
+  liveFlexHoldMs,
+  livePadHandoff,
   liveHlsErrorPolicy,
   liveStreamUrl,
   mergeLiveCcTracks,
@@ -117,15 +119,24 @@ export default function LivePlayer({
   const [preroll, setPreroll] = useState<any>(null); // null = none/ready; object = playing; undefined = resolving
   const [pauseBoundary, setPauseBoundary] = useState<any>(null);
   const [flexSlate, setFlexSlate] = useState("");
+  const [tunedPad, setTunedPad] = useState({ isFlex: false, hasFiller: false });
   const pauseProgramEndRef = useRef<any>(null);
   const finishThenLiveRef = useRef(false);
   const remountLiveRef = useRef<any>(null);
   const tuneOffsetSecRef = useRef<number | null>(null);
   const lastFilePositionRef = useRef<number | null>(null);
+  const flexPadWasOnRef = useRef(false);
 
   const channelId = channel?.id || "";
   const osd = buildOsdModel(channel, osdTick, { selectedProgram });
-  const liveCue = livePrerollCueId(osd, osdTick);
+  const padHandoff = livePadHandoff({
+    isFlex: Boolean(osd?.isFlex),
+    secondsRemaining: osd?.secondsRemaining,
+    tunedIsFlex: tunedPad.isFlex,
+    tunedHasFiller: tunedPad.hasFiller,
+    prerollActive: Boolean(preroll),
+  });
+  const liveCue = padHandoff.allowBumper ? livePrerollCueId(osd, osdTick) : "";
   const prerollCueRef = useRef("");
   const [prerollEpoch, setPrerollEpoch] = useState(channelId);
   if (prerollEpoch !== channelId) {
@@ -133,11 +144,13 @@ export default function LivePlayer({
     setPreroll(null);
     setPauseBoundary(null);
     setFlexSlate("");
+    setTunedPad({ isFlex: false, hasFiller: false });
     prerollCueRef.current = "";
     finishThenLiveRef.current = false;
     pauseProgramEndRef.current = null;
     tuneOffsetSecRef.current = null;
     lastFilePositionRef.current = null;
+    flexPadWasOnRef.current = false;
   }
   const nowPlexKey = osd?.plexRatingKey || channel?.now?.plex_rating_key || "";
   const ccMerged = mergeLiveCcTracks(textTracks, plexCc);
@@ -393,9 +406,9 @@ export default function LivePlayer({
     setCcDownloadNote(SUBTITLE_NO_TEXT_TRACKS);
   }, [plexSubs.state, activePlexTrack]);
 
-  // Requests a bumper only when a movie is starting or about to air.
+  // Requests a bumper only when a movie is starting — never as flex-pad filler.
   useEffect(() => {
-    if (!channelId || !liveCue) return undefined;
+    if (!channelId || !liveCue || !padHandoff.allowBumper) return undefined;
     const token = `${channelId}:${liveCue}`;
     if (prerollCueRef.current === token) return undefined;
     prerollCueRef.current = token;
@@ -403,7 +416,7 @@ export default function LivePlayer({
     (async () => {
       try {
         const bumper = normalizePrerollPayload(await fetchNextPreroll("live"));
-        if (!cancelled) setPreroll(bumper);
+        if (!cancelled && padHandoff.allowBumper) setPreroll(bumper);
       } catch {
         if (!cancelled) setPreroll(null);
       }
@@ -411,7 +424,43 @@ export default function LivePlayer({
     return () => {
       cancelled = true;
     };
-  }, [channelId, liveCue]);
+  }, [channelId, liveCue, padHandoff.allowBumper]);
+
+  // A one-frame bumper on top of a pad must not remount the slate or cancel
+  // the hold-to-next-program timer. Drop it and attach the file that is due.
+  useEffect(() => {
+    if (padHandoff.allowBumper || !preroll) return undefined;
+    setPreroll(null);
+    return undefined;
+  }, [padHandoff.allowBumper, preroll]);
+
+  // Flex-end timer is independent of PrerollStage. Bumper mount used to live
+  // in the tune effect and clear this hold, so China II never attached.
+  useEffect(() => {
+    if (!channelId || !osd?.isFlex) return undefined;
+    const wait = liveFlexHoldMs({
+      nextStart: osd.nextStart,
+      secondsRemaining: osd.secondsRemaining,
+      nowMs: Date.now(),
+    });
+    const timer = window.setTimeout(() => {
+      setScheduleEpoch((epoch) => epoch + 1);
+    }, wait);
+    return () => window.clearTimeout(timer);
+    // remaining is sampled at flex start; nextStart is the stable edge
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- hold until next title, not every OSD tick
+  }, [channelId, osd?.isFlex, osd?.nextStart]);
+
+  useEffect(() => {
+    if (osd?.isFlex) {
+      flexPadWasOnRef.current = true;
+      return;
+    }
+    if (flexPadWasOnRef.current) {
+      flexPadWasOnRef.current = false;
+      setScheduleEpoch((epoch) => epoch + 1);
+    }
+  }, [osd?.isFlex]);
 
   // While paused, ask when wall-clock crosses the program that was airing.
   useEffect(() => {
@@ -658,6 +707,7 @@ export default function LivePlayer({
         tuneOffsetSecRef.current =
           Number.isFinite(rawOffset) && rawOffset >= 0 ? rawOffset / 1000 : null;
         plan = flexPlaybackPlan(tuned);
+        setTunedPad({ isFlex: Boolean(tuned?.is_flex), hasFiller: Boolean(plan.play) });
         setFlexSlate(plan.slate ? plan.slateCopy || flexSlateCopy({ nextTitle: osd?.nextDisplay || osd?.nextTitle || tuned?.next_title }) : "");
         if (plan.url) {
           url = plan.url;
@@ -1121,7 +1171,7 @@ export default function LivePlayer({
         />
       ) : null}
 
-      {preroll ? (
+      {preroll && padHandoff.allowBumper ? (
         <PrerollStage
           src={preroll.url}
           onDone={() => setPreroll(null)}
@@ -1129,7 +1179,7 @@ export default function LivePlayer({
         />
       ) : null}
 
-      {!preroll && flexSlate ? (
+      {!preroll && padHandoff.showSlate && flexSlate ? (
         <div className="live-flex-slate" data-testid="live-flex-slate">
           <p className="live-flex-slate-kicker">{osd?.name || "Station"}</p>
           <h2 className="live-flex-slate-title">{flexSlate}</h2>

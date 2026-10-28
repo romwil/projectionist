@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## [1.37.72] — 2026-10-28
+
+One patch on 1.37.71: the pad between Live titles stays filler or Between programs, so the next movie actually attaches.
+
+### Highlights
+- **The pad between titles is the pad.** Live no longer flashes a bumper over Between programs and then misses the next film. Filler HLS or the slate holds until the next start; the bumper waits for a real movie.
+
+### Fixed
+- **Live slate/bumper handoff.** `livePadHandoff` keeps filler-or-slate during the gap and suppresses bumper there. Mounting a bumper used to live in the same effect as the flex hold timer, so a one-frame preroll cleared the wait, remounted Between programs, and never attached the next rating key. `liveFlexHoldMs` retunes at the next start independently of PrerollStage.
+
+### Verification
+- Focused pytest — 6 passed (`test_version`) with `--no-cov`. Lockstep 1.37.72; Dockerfile still copies `frontend/tsconfig.json`.
+- Focused frontend unit 85/85 (`liveChannels`, `prerollClient`, `theaterPlayer`). Pad handoff never flashes a bumper over slate; hold timer is independent of PrerollStage; next rating key attaches when the program owns the clock.
+- Cherry-pick `9d4252e` onto `origin/main` (`b3d0e9b` / 1.37.71) had no file conflicts. `livePadHandoff` / `liveFlexHoldMs` / LivePlayer wire-up landed. ConfirmModal hooks remain `useConfirmModal.tsx`. Tuner/Tunarr unchanged. `tests/test_version.py` after `./scripts/patch-release.sh 1.37.72`.
+
 ## [1.37.71] — 2026-10-28
 
 One patch on 1.37.70: the house letter names disk capacity separately from movie and episode bytes, Inbox Show/Sort/Type stay on the list while you read, and Live pause chrome plus remounted captions stay with the picture.
