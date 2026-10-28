@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [1.37.68] — 2026-10-28
+
+One patch on 1.37.67: the SPA is TypeScript so Hub cannot ship an untyped UI, and full library delete falls back to Plex on-disk when a title is not in Radarr or Sonarr.
+
+### Highlights
+- **The app is typed before it ships.** Hub cannot publish an untyped UI — the production build type-checks first.
+- **Full remove still means the files go.** If a title is not in Radarr or Sonarr, Projectionist asks Plex to delete it from disk instead of marking it Removed with 0 B.
+
+### Changed
+- **SPA is TypeScript.** Waves 0–6 convert the frontend to `.ts` / `.tsx`. `npm run build` is `tsc --noEmit && vite build`. The TypeScript rewrite row is gone from `docs/TECH-DEBT.md`. ConfirmModal hooks stay `.tsx` (the 1.37.64 `.js` footgun).
+- **Library full-remove falls back to Plex on-disk delete** when the title is not in Radarr or Sonarr. Files this container can already see are still unlinked first. A true no-op leaves the index row and lists the title under Could not fully remove. The summary shows **Removed via Plex** instead of a fake 0 B.
+
+### Verification
+- Full `pytest tests/` — 2694 passed, 2 failed on leftover `.jsx` paths (`AboutPage.jsx`, `LiveChannelsAdvanced.jsx`); both passed after pointing them at `.tsx`. Coverage 76.58% (floor 74%). ACRCloud env unset.
+- Focused pytest — 35 passed (`test_full_remove_without_arr`, `test_tv_remove`, `test_library_items_delete`, `test_plex_episodes`, `test_version`) with `--no-cov`.
+- Frontend unit 1114/1114. `npm run lint` 0 errors (352 warnings). `npx tsc --noEmit` clean. `npm run build` ran `tsc --noEmit && vite build`.
+- `tests/test_version.py` after `./scripts/patch-release.sh 1.37.68`. ConfirmModal hooks remain `useConfirmModal.tsx`.
+
 ## [1.37.67] — 2026-10-28
 
 One patch on 1.37.66: Explore language walls use the catalog Language control, not a second set of pills.

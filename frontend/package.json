@@ -1,7 +1,7 @@
 {
   "name": "projectionist-frontend",
   "private": true,
-  "version": "1.37.67",
+  "version": "1.37.68",
   "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
