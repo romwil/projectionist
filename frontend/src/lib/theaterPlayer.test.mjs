@@ -133,6 +133,8 @@ test("theaterHlsConfig uses credentialed XHR (session cookies on proxy)", () => 
   const cfg = theaterHlsConfig();
   assert.equal(cfg.enableWorker, false);
   assert.equal(cfg.renderTextTracksNatively, false);
+  assert.equal(cfg.enableWebVTT, false);
+  assert.equal(cfg.enableIMSC1, false);
   assert.equal(typeof cfg.xhrSetup, "function");
   const xhr = { withCredentials: false };
   cfg.xhrSetup(xhr);
@@ -408,6 +410,13 @@ test("Live and Weather mount TheaterPlayer; LibraryPlayer keeps session overlays
   assert.match(live, /flexPlaybackPlan/);
   assert.match(live, /tryPlayLiveVideo/);
   assert.match(live, /liveHlsErrorPolicy/);
+  assert.match(live, /liveSubtitleLookupSec/);
+  assert.match(live, /downloadLiveChannelSubtitles/);
+  assert.match(live, /offset_ms/);
+  assert.match(live, /useSubtitleCues\(activePlexTrack\?\.proxyUrl/);
+  assert.doesNotMatch(live, /liveProgramClockSec/);
+  assert.doesNotMatch(live, /plex:\/\//);
+  assert.doesNotMatch(live, /setError\(plexSubs/);
   assert.doesNotMatch(live, /new Hls\(/);
   assert.doesNotMatch(live, /holdToDoubleSpeed/);
   assert.match(weather, /import TheaterPlayer from "\.\.\/theater\/TheaterPlayer"/);

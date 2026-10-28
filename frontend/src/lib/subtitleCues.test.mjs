@@ -6,7 +6,10 @@ import {
   clampSubtitleDelay,
   cleanCueText,
   formatSubtitleDelay,
+  isOurSubtitleProxyUrl,
   liveProgramClockSec,
+  liveSubtitleLookupSec,
+  liveSubtitleOriginMs,
   needsTextSubtitleFetch,
   normalizeSubtitleTracks,
   parseCueTimestamp,
@@ -282,4 +285,76 @@ test("liveProgramClockSec is wall clock minus program start", () => {
   assert.equal(liveProgramClockSec(osd, 1_000_000 + 90_000), 90);
   assert.equal(liveProgramClockSec(osd, 500_000), 0);
   assert.equal(liveProgramClockSec({ nowProgram: null }, 1), null);
+});
+
+test("isOurSubtitleProxyUrl accepts only the cookie-authed VTT route", () => {
+  assert.equal(isOurSubtitleProxyUrl("/api/library/items/55/subtitles/9001/file"), true);
+  assert.equal(isOurSubtitleProxyUrl("plex://streams/9001"), false);
+  assert.equal(isOurSubtitleProxyUrl("/library/streams/9001"), false);
+  assert.equal(isOurSubtitleProxyUrl("http://10.10.1.202:32400/library/streams/9001"), false);
+  assert.equal(isOurSubtitleProxyUrl(""), false);
+});
+
+test("overlay-only Plex streams are not advertised as loadable text", () => {
+  const tracks = normalizeSubtitleTracks([
+    {
+      id: "1",
+      label: "English (PGS Overlay)",
+      display_title: "English (PGS Overlay)",
+      language_code: "eng",
+      format: "pgs",
+      key: "/library/streams/1",
+      proxy_url: "/api/library/items/55/subtitles/1/file",
+      renderable: true,
+      image: true,
+    },
+    {
+      id: "2",
+      label: "English",
+      language_code: "eng",
+      proxy_url: "plex://streams/2",
+      renderable: true,
+    },
+    {
+      id: "3",
+      label: "English (SRT)",
+      language_code: "eng",
+      proxy_url: "/api/library/items/55/subtitles/3/file",
+      renderable: true,
+    },
+  ]);
+  assert.equal(tracks.length, 1);
+  assert.equal(tracks[0].id, "3");
+  assert.equal(tracks[0].proxyUrl, "/api/library/items/55/subtitles/3/file");
+  assert.ok(!JSON.stringify(tracks).includes("plex://"));
+});
+
+test("mid-program Live tune shifts file-relative cues to program elapsed", () => {
+  assert.equal(liveSubtitleLookupSec({ currentTimeSec: 2, programElapsedSec: 2700 }), 2702);
+  assert.equal(liveSubtitleOriginMs({ currentTimeSec: 0, programElapsedSec: 1800 }), 1_800_000);
+  assert.equal(liveSubtitleLookupSec({ currentTimeSec: 0, programElapsedSec: 1800 }), 1800);
+});
+
+test("cue timeline 0 maps to program elapsed at a 0-based HLS attach", () => {
+  const cues = parseVtt(`WEBVTT
+
+00:00:00.000 --> 00:00:02.000
+Opening line
+
+00:30:00.000 --> 00:30:02.000
+Mid-title line
+`);
+  const lookup = liveSubtitleLookupSec({ currentTimeSec: 1, programElapsedSec: 1800 });
+  assert.equal(lookup, 1801);
+  assert.equal(activeCueText(cues, lookup), "Mid-title line");
+  assert.equal(activeCueText(cues, 1), "Opening line");
+});
+
+test("missing Live timing does not invent a huge caption offset", () => {
+  assert.equal(liveSubtitleLookupSec({ currentTimeSec: 12, programElapsedSec: null }), 12);
+  assert.equal(liveSubtitleLookupSec({ currentTimeSec: 12 }), 12);
+  assert.equal(liveSubtitleOriginMs({ currentTimeSec: 5, programElapsedSec: 99_999 }), 0);
+  assert.equal(liveSubtitleLookupSec({ currentTimeSec: 5, programElapsedSec: 99_999 }), 5);
+  assert.equal(liveSubtitleLookupSec({ currentTimeSec: 2700, programElapsedSec: 2700 }), 2700);
+  assert.ok(Number.isNaN(liveSubtitleLookupSec({ currentTimeSec: Number.NaN, programElapsedSec: 1800 })));
 });

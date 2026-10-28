@@ -10,8 +10,10 @@ from projectionist.library.subtitles import (
     IMAGE_SUBTITLE_NOTE,
     decorate_subtitle_row,
     fetch_subtitle_vtt,
+    is_our_subtitle_proxy_url,
     list_item_subtitles,
     live_subtitles_payload,
+    sanitize_live_plex_streams,
     srt_to_vtt,
     subtitle_fetch_paths,
     subtitle_is_renderable,
@@ -37,6 +39,14 @@ SIDECAR = PlexSubtitleStream(
 )
 PGS = PlexSubtitleStream(
     id="9003", language="Japanese", language_code="jpn", format="pgs", key=""
+)
+PGS_SIDECAR = PlexSubtitleStream(
+    id="9004",
+    language="English",
+    language_code="eng",
+    format="pgs",
+    key="/library/streams/9004",
+    display_title="English (PGS Overlay)",
 )
 
 
@@ -75,6 +85,26 @@ class DecorateTests(unittest.TestCase):
         self.assertEqual(row["proxy_url"], "")
         self.assertEqual(row["unavailable_reason"], IMAGE_SUBTITLE_NOTE)
 
+    def test_overlay_sidecar_with_plex_key_is_not_a_text_proxy(self) -> None:
+        self.assertFalse(subtitle_is_renderable(PGS_SIDECAR.to_dict()))
+        row = decorate_subtitle_row("55", PGS_SIDECAR.to_dict())
+        self.assertFalse(row["renderable"])
+        self.assertEqual(row["proxy_url"], "")
+        self.assertFalse(is_our_subtitle_proxy_url("/library/streams/9004"))
+        self.assertFalse(is_our_subtitle_proxy_url("plex://streams/9004"))
+        self.assertTrue(is_our_subtitle_proxy_url("/api/library/items/55/subtitles/9001/file"))
+
+    def test_overlay_label_is_not_renderable_even_when_format_says_srt(self) -> None:
+        row = {
+            "id": "8",
+            "format": "srt",
+            "key": "/library/streams/8",
+            "display_title": "English (PGS Overlay)",
+        }
+        self.assertFalse(subtitle_is_renderable(row))
+        decorated = decorate_subtitle_row("55", row)
+        self.assertEqual(decorated["proxy_url"], "")
+
     def test_list_item_subtitles_decorates_every_row(self) -> None:
         client = PlexClient("http://plex.test:32400", "SECRET-TOKEN")
         with patch("projectionist.library.subtitles.plex_client_from_settings", return_value=client), patch.object(
@@ -100,6 +130,44 @@ class DecorateTests(unittest.TestCase):
                 _Settings(), channel_id="104", now_program={"title": "Drunken Master", "plex_rating_key": "55"}
             )
         self.assertEqual(payload["plex_streams"][0]["proxy_url"], "/api/library/items/55/subtitles/9001/file")
+        self.assertTrue(is_our_subtitle_proxy_url(payload["plex_streams"][0]["proxy_url"]))
+
+    def test_live_payload_does_not_advertise_overlay_sidecar_as_text(self) -> None:
+        client = PlexClient("http://plex.test:32400", "SECRET-TOKEN")
+        with patch("projectionist.library.subtitles.plex_client_from_settings", return_value=client), patch.object(
+            client, "list_subtitle_streams", return_value=[PGS_SIDECAR]
+        ):
+            payload = live_subtitles_payload(
+                _Settings(), channel_id="104", now_program={"title": "Heat", "plex_rating_key": "55"}
+            )
+        row = payload["plex_streams"][0]
+        self.assertEqual(row["proxy_url"], "")
+        self.assertFalse(row["renderable"])
+        self.assertNotIn("plex://", str(payload))
+        self.assertNotIn("/library/streams/", str(row.get("proxy_url") or ""))
+
+    def test_sanitize_strips_plex_and_pms_urls(self) -> None:
+        rows = sanitize_live_plex_streams(
+            [
+                {
+                    "id": "1",
+                    "renderable": True,
+                    "proxy_url": "/api/library/items/55/subtitles/1/file",
+                },
+                {"id": "2", "renderable": True, "proxy_url": "plex://streams/2"},
+                {"id": "3", "renderable": True, "proxy_url": "/library/streams/3"},
+                {
+                    "id": "4",
+                    "renderable": False,
+                    "proxy_url": "/api/library/items/55/subtitles/4/file",
+                },
+            ]
+        )
+        self.assertEqual(rows[0]["proxy_url"], "/api/library/items/55/subtitles/1/file")
+        self.assertEqual(rows[1]["proxy_url"], "")
+        self.assertFalse(rows[1]["renderable"])
+        self.assertEqual(rows[2]["proxy_url"], "")
+        self.assertEqual(rows[3]["proxy_url"], "")
 
 
 class FetchVttTests(unittest.TestCase):
@@ -187,6 +255,8 @@ class FileRouteTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as ctx:
             self._call("9001", fetch={"side_effect": RuntimeError("down")})
         self.assertEqual(ctx.exception.status_code, 502)
+        self.assertNotIn("Plex", str(ctx.exception.detail))
+        self.assertIn("text", str(ctx.exception.detail).lower())
 
 
 if __name__ == "__main__":

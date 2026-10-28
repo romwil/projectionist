@@ -2,7 +2,7 @@
 
 import type {JsonObject, LibraryItem, JsParam} from "../api/types";
 import { ROUTES } from "./backNav.js";
-import { normalizeSubtitleTracks } from "./subtitleCues.js";
+import { isOurSubtitleProxyUrl, resolvePlaySubtitleTracks } from "./subtitleCues.js";
 import {
   formatProgramDisplayTitle,
   formatProgramEpisodeLabel,
@@ -20,12 +20,25 @@ export function isLivePrerollAssetUrl(url: unknown) {
 
 /**
  * Merge HLS/native stream tracks with Plex-attached tracks for the CC picker.
- * Stream tracks win for in-player display; Plex rows fill when the encode is bare.
+ * Same honest path as library Play: our VTT proxy only; overlay/PGS is not a text chip.
  */
 export function mergeLiveCcTracks(streamTracks: JsParam[] = [], plexPayload: JsParam = null) {
   const stream = Array.isArray(streamTracks) ? streamTracks : [];
   const plexRows = Array.isArray(plexPayload?.plex_streams) ? plexPayload.plex_streams : [];
-  const plex = normalizeSubtitleTracks(plexRows).map((track) => ({ ...track, viaPlex: true, streamId: track.id }));
+  const downloaded = Array.isArray(plexPayload?.downloaded_streams)
+    ? plexPayload.downloaded_streams
+    : null;
+  const preferred = Array.isArray(plexPayload?.preferred_languages)
+    ? plexPayload.preferred_languages
+    : ["en"];
+  const resolved = resolvePlaySubtitleTracks({
+    listedStreams: plexRows,
+    downloadedStreams: downloaded,
+    preferredLanguages: preferred,
+  });
+  const plex = resolved.tracks
+    .filter((track) => isOurSubtitleProxyUrl(track.proxyUrl))
+    .map((track) => ({ ...track, viaPlex: true, streamId: track.id }));
   const hasAny = stream.length > 0 || plex.length > 0;
   let emptyMessage = "";
   if (!hasAny) {
@@ -36,6 +49,8 @@ export function mergeLiveCcTracks(streamTracks: JsParam[] = [], plexPayload: JsP
   return {
     streamTracks: stream,
     plexTracks: plex,
+    needsFetch: resolved.needsFetch,
+    autoSelectIndex: resolved.autoSelectIndex,
     canDownload: Boolean(plexPayload?.can_download),
     plexRatingKey: plexPayload?.plex_rating_key || "",
     emptyMessage,
@@ -274,6 +289,13 @@ export function isHlsBufferStallDetail(detail: LibraryItem | null | undefined) {
   );
 }
 
+/** True when hls.js failed to load a playlist subtitle rendition (Plex overlay URL, etc.). */
+export function isHlsSubtitleLoadDetail(detail: unknown) {
+  return /subtitleTrackLoadError|subtitleFragLoadError|SUBTITLE_TRACK_LOAD|SUBTITLE_FRAG_LOAD/i.test(
+    String(detail || ""),
+  );
+}
+
 /**
  * Recover from an hls.js ERROR without re-tuning. Mid-watch `tuneLiveChannel`
  * start-over kills the native lineup session; callers remount HLS on the same URL.
@@ -293,6 +315,9 @@ export function isHlsBufferStallDetail(detail: LibraryItem | null | undefined) {
 export function liveHlsErrorPolicy(data: JsParam, { networkRetries = 0 }: JsParam = {}): JsParam {
   const retries = Math.max(0, Math.floor(Number(networkRetries) || 0));
   if (!data) return { action: "ignore", handled: true, networkRetries: retries };
+  if (isHlsSubtitleLoadDetail(data.details)) {
+    return { action: "ignore", handled: true, keepPlaying: true, networkRetries: retries };
+  }
   const fatal = Boolean(data.fatal);
   const type = String(data.type || "");
   if (!fatal) {
