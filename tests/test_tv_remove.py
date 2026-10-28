@@ -120,6 +120,7 @@ class TvRemoveTests(unittest.TestCase):
             remaining = db.library_episodes_for_show(show_id)
             self.assertEqual(len(remaining), 1)
             self.assertEqual(str(remaining[0]["rating_key"]), "ep-2")
+            self.assertEqual(payload["results"][0]["removed_via"], "sonarr")
 
     def test_remove_season_uses_library_estimate_when_arr_sparse(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -161,6 +162,88 @@ class TvRemoveTests(unittest.TestCase):
             self.assertEqual(entry["bytes_freed"], 9000)
             self.assertIn("folder", entry["note"].lower())
             self.assertEqual(len(db.library_episodes_for_show(show_id)), 0)
+
+    def test_remove_episode_falls_back_to_plex_when_not_in_sonarr(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            show_id = self._seed(db)
+            settings = MagicMock()
+            settings.sonarr_url = "http://sonarr.test"
+            settings.sonarr_api_key = "key"
+            settings.plex_url = "http://plex.test"
+            settings.plex_token = "tok"
+
+            from projectionist.connectors.arr_errors import ArrTitleNotFoundError
+
+            with (
+                patch(
+                    "projectionist.library.tv_remove.resolve_arr_removal_target",
+                    side_effect=ArrTitleNotFoundError("Sonarr", title="The Expanse"),
+                ),
+                patch("projectionist.library.tv_remove.PlexClient") as plex_cls,
+                patch(
+                    "projectionist.library.tv_remove.plex_configuration_error",
+                    return_value=None,
+                ),
+            ):
+                plex = MagicMock()
+                plex.media_file_parts.return_value = [
+                    {"file": "/tv/The Expanse/S01E01.mkv", "size": 4000, "media_id": "3"}
+                ]
+                plex_cls.return_value = plex
+                payload = remove_tv_scope(
+                    db,
+                    settings,
+                    scope="episode",
+                    show_id=show_id,
+                    episode_rating_key="ep-1",
+                )
+
+            self.assertEqual(payload["deleted"], 1)
+            self.assertEqual(payload["results"][0]["removed_via"], "plex")
+            self.assertIn("not in Sonarr", payload["results"][0]["note"])
+            self.assertIn("Removed from disk via Plex", payload["results"][0]["note"])
+            self.assertEqual(payload["totals"]["bytes_freed"], 4000)
+            plex.delete_media.assert_called_once_with("ep-1", delete_files=True)
+            remaining = db.library_episodes_for_show(show_id)
+            self.assertEqual(len(remaining), 1)
+            self.assertEqual(str(remaining[0]["rating_key"]), "ep-2")
+
+    def test_remove_episode_fails_when_not_in_sonarr_or_plex(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            show_id = self._seed(db)
+            settings = MagicMock()
+            settings.sonarr_url = "http://sonarr.test"
+            settings.sonarr_api_key = "key"
+            settings.plex_url = ""
+            settings.plex_token = ""
+
+            from projectionist.connectors.arr_errors import ArrTitleNotFoundError
+
+            with (
+                patch(
+                    "projectionist.library.tv_remove.resolve_arr_removal_target",
+                    side_effect=ArrTitleNotFoundError("Sonarr", title="The Expanse"),
+                ),
+                patch(
+                    "projectionist.library.tv_remove.plex_configuration_error",
+                    return_value="Plex is not configured",
+                ),
+            ):
+                with self.assertRaises(RuntimeError) as raised:
+                    remove_tv_scope(
+                        db,
+                        settings,
+                        scope="episode",
+                        show_id=show_id,
+                        episode_rating_key="ep-1",
+                    )
+
+            self.assertIn("not in Sonarr", str(raised.exception))
+            self.assertIn("Plex is not configured", str(raised.exception))
+            remaining = db.library_episodes_for_show(show_id)
+            self.assertEqual(len(remaining), 2)
 
 
 if __name__ == "__main__":

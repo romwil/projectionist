@@ -6,6 +6,7 @@ import {
   formatRemovalFreedLabel,
   normalizeLibraryDeleteMode,
   normalizeRemovalSummary,
+  removalViaLabel,
 } from "./bulkLibraryDelete.js";
 
 export const REMOVAL_STOP_REMAINING_NOTE =
@@ -29,6 +30,7 @@ function blankItem(target: JsParam) {
     bytes_freed: 0,
     bytes_source: "",
     note: "",
+    removed_via: "",
     error: "",
   };
 }
@@ -55,8 +57,11 @@ export function isLiveRemoval(value: unknown) {
   return Boolean(value && (value as JsParam).live === true && Array.isArray((value as JsParam).items));
 }
 
-export function removalStatusLabel(status: number) {
-  return STATUS_LABEL[status] || "Waiting";
+export function removalStatusLabel(status: unknown, via?: unknown) {
+  if (status === "removed") {
+    return removalViaLabel({ removed_via: via }) || STATUS_LABEL.removed;
+  }
+  return STATUS_LABEL[String(status)] || "Waiting";
 }
 
 function countsFrom(event: JsParam, session: JsParam) {
@@ -88,6 +93,7 @@ export function sessionToRemovalResult(session: JsParam) {
       bytes_freed: Number(item.bytes_freed) || 0,
       bytes_source: item.bytes_source || "unknown",
       note: item.note || "",
+      removed_via: item.removed_via || "",
     }));
   const errors = items
     .filter((item: JsParam) => item.status === "failed")
@@ -205,6 +211,7 @@ export function applyRemovalProgressEvent(session: JsParam, event: JsParam) {
         bytes_freed: Number(entry.bytes_freed) || 0,
         bytes_source: String(entry.bytes_source || ""),
         note: String(entry.note || ""),
+        removed_via: String(entry.removed_via || ""),
         error: "",
       };
     });

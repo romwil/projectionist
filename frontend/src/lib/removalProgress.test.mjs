@@ -8,6 +8,7 @@ import {
   applyRemovalProgressEvent,
   createRemovalSession,
   removalProgressView,
+  removalStatusLabel,
 } from "./removalProgress.ts";
 
 const GB = 1024 ** 3;
@@ -34,6 +35,16 @@ function removedEvent(ratingKey, title, bytes, done) {
     },
   };
 }
+
+describe("removal status labels", () => {
+  it("distinguishes Plex on-disk remove from *arr remove", () => {
+    assert.equal(removalStatusLabel("removed"), "Removed");
+    assert.equal(removalStatusLabel("removed", "radarr"), "Removed");
+    assert.equal(removalStatusLabel("removed", "plex"), "Removed via Plex");
+    assert.equal(removalStatusLabel("removed", "disk"), "Removed from disk");
+    assert.equal(removalStatusLabel("failed"), "Failed");
+  });
+});
 
 describe("multi-title removal progress", () => {
   it("renders a rising done count before the finished totals", async () => {
