@@ -6,7 +6,7 @@ import {
   REVIEW_BATCH_STREAMING_MAX_HEIGHT_VH,
   chatMediaStripClassName,
   chatMediaStripUsesNestedScroll,
-} from "./chatCardScroll.js";
+} from "./chatCardScroll.ts";
 import { readAllStyles } from "./readStyles.mjs";
 
 describe("chatMediaStripUsesNestedScroll", () => {

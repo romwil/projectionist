@@ -6,7 +6,7 @@ import {
   starFillForValue,
   starValueFromKey,
   starValueFromPointerX,
-} from "./starRating.js";
+} from "./starRating.ts";
 
 describe("starRating", () => {
   it("clamps and snaps to half-star steps", () => {

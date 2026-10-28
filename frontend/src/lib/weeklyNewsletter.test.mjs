@@ -5,7 +5,7 @@ import {
   newsletterConfirmOptions,
   newsletterResultMessage,
   NEWSLETTER_SCOPES,
-} from "./weeklyNewsletter.js";
+} from "./weeklyNewsletter.ts";
 
 describe("weeklyNewsletter helpers", () => {
   it("exposes three scopes", () => {

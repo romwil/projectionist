@@ -10,7 +10,7 @@ import {
   episodeHistorySummary,
   normalizeWatchSummary,
   trackedCompletionCardLabel,
-} from "./watchTracker.js";
+} from "./watchTracker.ts";
 
 describe("watch tracker presentation", () => {
   it("keeps no-coverage summaries on the labeled Plex fallback", () => {
@@ -72,10 +72,10 @@ describe("watch tracker presentation", () => {
   it("wires title, show, episode, and card surfaces", () => {
     const src = dirname(fileURLToPath(import.meta.url));
     const components = join(src, "..", "components");
-    const detail = readFileSync(join(components, "TitleDetailContent.jsx"), "utf8");
-    const seasons = readFileSync(join(components, "ShowSeasonsPanel.jsx"), "utf8");
-    const card = readFileSync(join(components, "TitleCard.jsx"), "utf8");
-    const timeline = readFileSync(join(components, "WatchHistoryTimeline.jsx"), "utf8");
+    const detail = readFileSync(join(components, "TitleDetailContent.tsx"), "utf8");
+    const seasons = readFileSync(join(components, "ShowSeasonsPanel.tsx"), "utf8");
+    const card = readFileSync(join(components, "TitleCard.tsx"), "utf8");
+    const timeline = readFileSync(join(components, "WatchHistoryTimeline.tsx"), "utf8");
 
     assert.match(detail, /WatchHistoryTimeline/);
     assert.match(seasons, /getShowWatchSummary/);

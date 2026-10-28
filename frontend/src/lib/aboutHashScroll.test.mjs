@@ -3,10 +3,10 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { aboutHashTargetId, scrollAboutHashIntoView } from "./aboutHashScroll.js";
+import { aboutHashTargetId, scrollAboutHashIntoView } from "./aboutHashScroll.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const aboutPage = readFileSync(join(here, "../pages/AboutPage.jsx"), "utf8");
+const aboutPage = readFileSync(join(here, "../pages/AboutPage.tsx"), "utf8");
 
 describe("about hash scroll", () => {
   it("maps #license and #release-notes and ignores other hashes", () => {
@@ -51,10 +51,10 @@ describe("about hash scroll", () => {
   });
 
   it("wires About sections and paints them without waiting on auth", () => {
-    const shell = readFileSync(join(here, "../layouts/AppShell.jsx"), "utf8");
-    const journey = readFileSync(join(here, "../pages/MyJourneyPage.jsx"), "utf8");
-    const whisper = readFileSync(join(here, "../pages/WhisperInboxPage.jsx"), "utf8");
-    const year = readFileSync(join(here, "../pages/YearInReviewPage.jsx"), "utf8");
+    const shell = readFileSync(join(here, "../layouts/AppShell.tsx"), "utf8");
+    const journey = readFileSync(join(here, "../pages/MyJourneyPage.tsx"), "utf8");
+    const whisper = readFileSync(join(here, "../pages/WhisperInboxPage.tsx"), "utf8");
+    const year = readFileSync(join(here, "../pages/YearInReviewPage.tsx"), "utf8");
     assert.match(aboutPage, /id="license"/);
     assert.match(aboutPage, /id="release-notes"/);
     assert.match(aboutPage, /The story/);

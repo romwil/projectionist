@@ -9,7 +9,7 @@ import {
   plexPinPollDelayMs,
   plexPinPollSucceeded,
   startPlexPinPoll,
-} from "./plexPinPoll.js";
+} from "./plexPinPoll.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -99,9 +99,9 @@ describe("plex PIN poll", () => {
 
   it("is what login, join, and profile use", () => {
     for (const rel of [
-      "../pages/LoginPage.jsx",
-      "../pages/JoinPage.jsx",
-      "../pages/settings/ProfilePage.jsx",
+      "../pages/LoginPage.tsx",
+      "../pages/JoinPage.tsx",
+      "../pages/settings/ProfilePage.tsx",
     ]) {
       const source = readFileSync(join(here, rel), "utf8");
       assert.match(source, /startPlexPinPoll/);

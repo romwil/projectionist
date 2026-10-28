@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { SETTINGS_NAV } from "./settingsNav.js";
+import { SETTINGS_NAV } from "./settingsNav.ts";
 
 describe("settingsNav", () => {
   it("uses descriptive settings rail labels (Wave 4 clarity)", () => {

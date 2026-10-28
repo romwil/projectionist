@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { watchProgressLabel, watchProgressState } from "./watchProgress.js";
+import { watchProgressLabel, watchProgressState } from "./watchProgress.ts";
 
 test("movie watched when view_count > 0", () => {
   assert.equal(watchProgressState({ media_type: "movie", view_count: 1 }), "watched");

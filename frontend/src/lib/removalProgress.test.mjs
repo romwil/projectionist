@@ -8,7 +8,7 @@ import {
   applyRemovalProgressEvent,
   createRemovalSession,
   removalProgressView,
-} from "./removalProgress.js";
+} from "./removalProgress.ts";
 
 const GB = 1024 ** 3;
 const FIRST_BYTES = Math.round(11.99 * GB);
@@ -94,7 +94,7 @@ describe("multi-title removal progress", () => {
         contents: `
           import { createElement } from "react";
           import { renderToStaticMarkup } from "react-dom/server";
-          import RemovalSummaryDialog from "./components/RemovalSummaryDialog.jsx";
+          import RemovalSummaryDialog from "./components/RemovalSummaryDialog.tsx";
           export function renderRemoval(result) {
             return renderToStaticMarkup(
               createElement(RemovalSummaryDialog, { open: true, result }),

@@ -5,7 +5,7 @@ import {
   formatGroomingActionLine,
   formatUndoSuccess,
   groomingActionStatusLabel,
-} from "./groomingActions.js";
+} from "./groomingActions.ts";
 import { readAllStyles } from "./readStyles.mjs";
 
 const styles = readAllStyles();

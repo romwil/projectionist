@@ -15,7 +15,7 @@ import {
   tokenConfirmFailureMessage,
   tokenConfirmPrompt,
   tokenConfirmSuccessMessage,
-} from "./addActions.js";
+} from "./addActions.ts";
 
 test("lastAssistantHasTitleCards detects in-chat bulk confirm host", () => {
   assert.equal(lastAssistantHasTitleCards([]), false);

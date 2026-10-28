@@ -4,8 +4,8 @@ import {
   filterDisplayableCards,
   isDisplayableCard,
   turnstyleItemCount,
-} from "./turnstyleItems.js";
-import { groupAddableItems } from "./addActions.js";
+} from "./turnstyleItems.ts";
+import { groupAddableItems } from "./addActions.ts";
 
 describe("turnstyleItems", () => {
   it("filters empty placeholder cards", () => {

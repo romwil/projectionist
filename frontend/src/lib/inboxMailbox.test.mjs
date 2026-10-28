@@ -16,7 +16,7 @@ import {
   inboxScanPreview,
   isAgentInboxNote,
   visibleInboxReply,
-} from "./inboxMailbox.js";
+} from "./inboxMailbox.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -74,8 +74,8 @@ test("the list can sort, filter unread, select the page, and page", () => {
 });
 
 test("opening an agent note has a composer and a reply stays on the inbox", () => {
-  const note = readFileSync(join(root, "components/InboxNote.jsx"), "utf8");
-  const page = readFileSync(join(root, "pages/InboxPage.jsx"), "utf8");
+  const note = readFileSync(join(root, "components/InboxNote.tsx"), "utf8");
+  const page = readFileSync(join(root, "pages/InboxPage.tsx"), "utf8");
   assert.match(note, /data-testid="inbox-note-composer"/);
   assert.match(note, /inbox-message-body/);
   assert.doesNotMatch(note, /chatAboutTitleHref/);

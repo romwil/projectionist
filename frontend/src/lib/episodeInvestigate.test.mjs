@@ -37,11 +37,11 @@ import {
   selectedFileIds,
   selectionMap,
   UNREADABLE_MEDIA,
-} from "./episodeInvestigate.js";
+} from "./episodeInvestigate.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const libraries = readFileSync(join(here, "../pages/admin/LibrariesSection.jsx"), "utf8");
-const showCombobox = readFileSync(join(here, "../components/InvestigateShowCombobox.jsx"), "utf8");
+const libraries = readFileSync(join(here, "../pages/admin/LibrariesSection.tsx"), "utf8");
+const showCombobox = readFileSync(join(here, "../components/InvestigateShowCombobox.tsx"), "utf8");
 
 const emptyEvidenceRows = [
   { id: "a", confidence: "uncertain", stills: [], identify: { found: false }, reasons: ["not enough independent evidence"] },

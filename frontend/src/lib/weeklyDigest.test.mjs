@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { dedupeDigestTitles, formatDigestTitle, normalizeWeeklyDigest } from "./weeklyDigest.js";
+import { dedupeDigestTitles, formatDigestTitle, normalizeWeeklyDigest } from "./weeklyDigest.ts";
 import { readAllStyles } from "./readStyles.mjs";
 
 const styles = readAllStyles();
