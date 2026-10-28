@@ -25,7 +25,11 @@ import LanguageLandingPage from "./LanguageLandingPage.jsx";
 import { buildPulseStats, normalizeFeed } from "../lib/exploreFeeds.js";
 import {
   CONTINUE_WATCHING_PROGRESS_EVENT,
+  EXPLORE_HUB_WARMING_MAX_ATTEMPTS,
+  EXPLORE_HUB_WARMING_POLL_MS,
+  EXPLORE_HUB_WARMING_STALL_MESSAGE,
   dropReflectedContinueWatchingNotes,
+  exploreHubLoadError,
   exploreHubStillWarming,
   hubRailState,
   mergeContinueWatchingNotes,
@@ -219,8 +223,6 @@ function useExploreHub() {
   useEffect(() => {
     let cancelled = false;
     let pollTimer = null;
-    const WARMING_POLL_MS = 1200;
-    const WARMING_MAX_ATTEMPTS = 30;
     const sessionPayload = withPlayedProgress(cached?.payload) || null;
     let liveContinueWatching = null;
 
@@ -281,13 +283,13 @@ function useExploreHub() {
                 fromCache: Boolean(keep),
               };
             });
-            if (attempt < WARMING_MAX_ATTEMPTS) {
-              pollTimer = window.setTimeout(() => fetchHub(attempt + 1), WARMING_POLL_MS);
+            if (attempt < EXPLORE_HUB_WARMING_MAX_ATTEMPTS) {
+              pollTimer = window.setTimeout(() => fetchHub(attempt + 1), EXPLORE_HUB_WARMING_POLL_MS);
             } else {
               setHub((prev) => ({
                 ...prev,
                 loading: false,
-                payload: prev.payload ? { ...prev.payload, warming: false } : prev.payload,
+                error: EXPLORE_HUB_WARMING_STALL_MESSAGE,
               }));
             }
             return;
@@ -300,7 +302,7 @@ function useExploreHub() {
           setHub((prev) => ({
             loading: false,
             payload: prev.payload,
-            error: prev.payload ? "" : err.message || "Could not load Explore.",
+            error: exploreHubLoadError(err, { hasCache: Boolean(prev.payload) }),
             fromCache: prev.fromCache,
           }));
         });
@@ -372,21 +374,19 @@ function ExploreHubPage() {
   const [facetColumns, setFacetColumns] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const hub = useExploreHub();
-  const continueWatching = hubRailState(hub.payload, "continue_watching", { loading: hub.loading, error: hub.error });
-  const forYou = hubRailState(hub.payload, "for_you", { loading: hub.loading, error: hub.error });
-  const unfinished = hubRailState(hub.payload, "unfinished", { loading: hub.loading, error: hub.error });
-  const afterglow = hubRailState(hub.payload, "afterglow", { loading: hub.loading, error: hub.error });
-  const recentlyAdded = hubRailState(hub.payload, "recently_added", { loading: hub.loading, error: hub.error });
-  const recentlyAddedEpisodes = hubRailState(hub.payload, "recently_added_episodes", {
-    loading: hub.loading,
-    error: hub.error,
-  });
-  const recentReleases = hubRailState(hub.payload, "recent_releases", { loading: hub.loading, error: hub.error });
-  const revisitThese = hubRailState(hub.payload, "revisit_these", { loading: hub.loading, error: hub.error });
-  const onThisDay = hubRailState(hub.payload, "on_this_day", { loading: hub.loading, error: hub.error });
-  const directorSpotlight = hubRailState(hub.payload, "director_spotlight", { loading: hub.loading, error: hub.error });
-  const genreSpotlight = hubRailState(hub.payload, "genre_spotlight", { loading: hub.loading, error: hub.error });
-  const seasonalSpotlight = hubRailState(hub.payload, "seasonal_spotlight", { loading: hub.loading, error: hub.error });
+  const railOpts = { loading: hub.loading, error: hub.payload ? "" : hub.error };
+  const continueWatching = hubRailState(hub.payload, "continue_watching", railOpts);
+  const forYou = hubRailState(hub.payload, "for_you", railOpts);
+  const unfinished = hubRailState(hub.payload, "unfinished", railOpts);
+  const afterglow = hubRailState(hub.payload, "afterglow", railOpts);
+  const recentlyAdded = hubRailState(hub.payload, "recently_added", railOpts);
+  const recentlyAddedEpisodes = hubRailState(hub.payload, "recently_added_episodes", railOpts);
+  const recentReleases = hubRailState(hub.payload, "recent_releases", railOpts);
+  const revisitThese = hubRailState(hub.payload, "revisit_these", railOpts);
+  const onThisDay = hubRailState(hub.payload, "on_this_day", railOpts);
+  const directorSpotlight = hubRailState(hub.payload, "director_spotlight", railOpts);
+  const genreSpotlight = hubRailState(hub.payload, "genre_spotlight", railOpts);
+  const seasonalSpotlight = hubRailState(hub.payload, "seasonal_spotlight", railOpts);
   const pickForMe = useFeed(
     () => (isYouth ? getPickForMeFeed({ limit: 8 }) : Promise.resolve({ items: [] })),
     [isYouth],
@@ -558,6 +558,16 @@ function ExploreHubPage() {
             </Link>
           </nav>
         </div>
+
+        {hub.error ? (
+          <p className="status status-error" data-testid="explore-hub-status">
+            {hub.error}
+          </p>
+        ) : exploreHubStillWarming(hub.payload) ? (
+          <p className="status status-secondary" data-testid="explore-hub-warming">
+            Filling in shelves…
+          </p>
+        ) : null}
 
         <ExploreSection
           id="for-you"
