@@ -119,9 +119,8 @@ def handle_plex_webhook(db: Database, payload: Mapping[str, Any]) -> Dict[str, A
     except Exception:  # noqa: BLE001
         logger.debug("Watch tracker webhook ingest failed", exc_info=True)
 
+    # Rating prompts require observed progress at 85%+. Scrobble is not a fake 90%.
     completion_pct = completion_from_plex_metadata(metadata)
-    if event == "media.scrobble" and (completion_pct is None or completion_pct < COMPLETION_THRESHOLD):
-        completion_pct = 90.0
     if completion_pct is None or completion_pct < COMPLETION_THRESHOLD:
         return {
             "handled": False,

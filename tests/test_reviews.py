@@ -130,6 +130,21 @@ class ReviewStoreTests(unittest.TestCase):
         self.assertEqual(prompts[0]["user_id"], self.user_id)
         self.assertGreaterEqual(prompts[0]["completion_pct"], 85.0)
 
+    def test_scan_skips_progress_below_85_percent(self) -> None:
+        now = time.time()
+        with self.db.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO library_items (
+                    rating_key, media_type, title, view_offset_ms, duration_ms, updated_at
+                ) VALUES ('movie-partial', 'movie', 'Heat', 1000000, 6000000, ?)
+                """,
+                (now,),
+            )
+        queued = scan_for_rating_prompts(self.db, user_id=self.user_id)
+        self.assertEqual(queued, 0)
+        self.assertEqual(list_pending_prompts(self.db, user_id=self.user_id), [])
+
     def test_list_pending_prompts_is_scoped_per_user(self) -> None:
         self._seed_near_complete_movie()
         other_id = "member-other"

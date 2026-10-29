@@ -52,6 +52,9 @@ test.describe("Watch tracker", () => {
     const history = page.getByTestId("watch-history");
     await expect(history).toContainText("Your watch history");
     await expect(history).toContainText("Watched 2 times");
+    await expect(history).toContainText("4 sittings observed");
+    await expect(history).toContainText("Plex played event");
+    await expect(history).toContainText("Why this count?");
     await expect(history).not.toContainText("tracked");
   });
 
