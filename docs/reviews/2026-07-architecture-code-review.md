@@ -50,7 +50,7 @@ Design deltas vs original letter:
 | H8 | High | L | Open | Embeddings as JSON TEXT; `get_embeddings()` still full-table `json.loads`. Optional sqlite-vec ANN is a prefilter only. Expand only if measured (1.36 craft rule). |
 | M1 | Medium | M | **Done** (Audit then enable A) | Orphan cleanup migration -> `PRAGMA foreign_keys=ON` (with M2) |
 | M2 | Medium | L | **Done** | `schema_version` + ordered migration module |
-| M3 | Medium | S | Open | Jittered retry for idempotent connector GETs |
+| M3 | Medium | S | **Done** | Jittered retry for idempotent connector GETs (`GET`/`HEAD` 429/5xx in `connectors/http.py`) |
 | M4 | Medium | M | **Done** (Hybrid C) | Affinity tools -> full-only; catalog stays on privacy |
 | M5 | Medium | M | **Mitigated** | Stored prompt fencing + pytest (`tests/test_prompt_injection.py`); harness TC-PROMPT-01 runs that suite |
 | M6 | Medium | M | Open | Persist quarantine; absolute wall-clock task deadline |
@@ -66,6 +66,8 @@ Design deltas vs original letter:
 **Docker/Unraid ops -> A** after H6/H7 (done) plus M10/M12. Overall letter **A** still needs Trains 1-4: trust (**H4**/**H5**), integrity (**M1**/**M2**), backup/parity (**M10**/**M12**), and privacy/product honesty (**M4**/**M7**). Keep modularizing (**H1**); full god-file elimination and embedding scale (**H8**) can trail if sequenced honestly.
 
 **2026-09-24 hygiene (docs only, 1.35.5 trunk):** still-open rows above re-checked without rewriting the letter. H1/H8/M3/M6/M8 remain open. M10 snapshot is no longer deferred. 1.36 Wave 0/3 is the H1 path ([Phase 6 spec](../superpowers/specs/2026-09-24-delight-phase-6.md)).
+
+**2026-10-28:** **M3** jittered `GET`/`HEAD` retries on 429/5xx landed in `projectionist/connectors/http.py` (cap 3, honor Retry-After, mutating methods never retry, breaker records after retries exhaust).
 
 ---
 
@@ -188,7 +190,7 @@ Default bind `0.0.0.0:8788` + no auth = full admin on any reachable interface (d
 |----|----------|---------|----------------|--------|
 | M1 | Data integrity | `PRAGMA foreign_keys` never enabled - FK clauses in schema are inert. | **Audit then enable (A)** with M2: orphan cleanup migration, then `PRAGMA foreign_keys=ON`. | **Done** |
 | M2 | Schema ops | Migrations are an ad-hoc `_migrate_*` chain on every boot; no schema version table; dual-call of `_migrate_multi_user_columns` historically. | Introduce `schema_version` + ordered migration module (still SQLite). | **Done** |
-| M3 | Connectors | Shared HTTP helpers timeout but do not retry idempotent GETs (429/5xx). | Jittered retry for reads only. | Open |
+| M3 | Connectors | Shared HTTP helpers timeout but do not retry idempotent GETs (429/5xx). | Jittered retry for reads only. | **Done** |
 | M4 | Privacy / MCP | Privacy mode still exposes watch-biased tools (`recommend_hidden_gems`, purge candidates, watch patterns) - raw fields stripped, but results encode household affinity. | **Hybrid (C):** affinity tools -> full only; catalog on privacy. | **Done** |
 | M5 | Prompt safety | Stored cross-user memory/research injection reached the model unfenced. | Fence untrusted tool/memory data; system-prompt clause; pytest TC-PROMPT-01; confirm-gated *arr writes remain. Residual: model behavioral risk + internal ids in tool JSON. | **Mitigated** |
 | M6 | Scheduler | Quarantine is in-memory (clears on restart); heartbeat can extend a wedged task if `should_stop()` keeps getting called. | Persist quarantine; absolute wall-clock deadline even with heartbeats. | Open |
@@ -306,7 +308,7 @@ ARCHITECTURE / DESIGN / DATA_MODEL / SECURITY / PRIVACY / wiki / pentest protoco
 18. **H8** embedding storage + search prefilter (before marketing "works great at 10k+")
 19. **M5** ~~prompt red-team Protocol v1.1~~ → **Mitigated** (fencing + pytest; harness TC-PROMPT-01)
 20. **M6** durable quarantine + absolute task deadline
-21. **M3** jittered GET retries
+21. **M3** ~~jittered GET retries~~ → **Done** (`GET`/`HEAD` 429/5xx in `connectors/http.py`)
 
 ### Optional later (only with evidence)
 
