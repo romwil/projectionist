@@ -116,6 +116,36 @@ class NeighborAnnPrefilterTests(unittest.TestCase):
             self.assertNotIn(far_a, neighbor_ids)
             self.assertNotIn(far_b, neighbor_ids)
 
+    def test_refresh_neighbors_json_text_exact_scan(self) -> None:
+        """Without sqlite-vec, JSON TEXT vectors still score the full corpus."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "projectionist.db")
+            ids = []
+            for i, vec in enumerate(
+                ([1.0, 0.0], [0.9, 0.1], [0.5, 0.5]),
+                start=1,
+            ):
+                item_id = db.upsert_library_item(
+                    {
+                        "rating_key": f"rk-{i}",
+                        "media_type": "movie",
+                        "title": f"Title {i}",
+                        "year": 2000 + i,
+                        "genres": ["Drama"],
+                    }
+                )
+                ids.append(item_id)
+                db.set_embedding(item_id, vec)
+
+            seed, near, far = ids
+            with mock.patch("projectionist.library.neighbors.vec_available", return_value=False):
+                processed = neighbors_mod.refresh_neighbors_for_items(db, [seed], top_k=2)
+            self.assertEqual(processed, 1)
+            rows = db.get_neighbors(seed, limit=10)
+            neighbor_ids = [int(r["neighbor_id"]) for r in rows]
+            self.assertEqual(neighbor_ids[0], near)
+            self.assertIn(far, neighbor_ids)
+
 
 if __name__ == "__main__":
     unittest.main()
