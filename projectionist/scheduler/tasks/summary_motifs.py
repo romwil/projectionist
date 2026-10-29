@@ -25,12 +25,29 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Set, 
 
 from projectionist.config_store import Settings
 from projectionist.library.db import Database
-from projectionist.scheduler.engine import IdleScheduler, TaskDefinition
+from projectionist.scheduler.engine import IdleScheduler
+from projectionist.scheduler.tasks.base_augmentation import register_severity_task
 from projectionist.scheduler.tasks.coverage_signals import emit_motif_deficit_signals
+from projectionist.scheduler.tasks.kinship_augmentation import (
+    KinshipMissAugmentationTask,
+    stage_kinship_demand,
+    with_stage_stats,
+)
 
 logger = logging.getLogger(__name__)
 
 INTERVAL_SECONDS = 86400  # 24 hours
+TASK_NAME = "summary_motifs"
+
+
+class SummaryMotifsAugmentation(KinshipMissAugmentationTask):
+    """Consume kinship-miss demand for scoring order; motif gaps are not exceptions."""
+
+    action = "extract_summary_motifs"
+    stage_when_needed = False
+
+    def __init__(self, db: Database) -> None:
+        super().__init__(db, task_name=TASK_NAME)
 TOKEN_RE = re.compile(r"[a-z][a-z']{1,}")
 # Drop ultra-common English filler that survives DF thresholds in short blurbs.
 # These terms are also disallowed in either position of a bigram: adjacent
@@ -387,15 +404,17 @@ def extract_motif_rows(
 async def run(
     db: Database, settings: Settings, should_stop: Callable[[], bool]
 ) -> Dict[str, Any]:
-    if should_stop():
-        return {"status": "interrupted", "motifs": 0}
+    augmenter = SummaryMotifsAugmentation(db)
+    stage_stats, interrupted = await stage_kinship_demand(augmenter, should_stop)
+    if interrupted:
+        return with_stage_stats({"status": "interrupted", "motifs": 0}, stage_stats)
 
     from projectionist.telemetry.kinship_miss import preferred_item_ids
 
     prefer_ids = preferred_item_ids(db, limit=25)
     rows, demand_prioritized = extract_motif_rows(db, prefer_item_ids=prefer_ids)
     if should_stop():
-        return {"status": "interrupted", "motifs": 0}
+        return with_stage_stats({"status": "interrupted", "motifs": 0}, stage_stats)
 
     count = db.replace_facets_of_type("motif", rows)
     signals = emit_motif_deficit_signals(db)
@@ -405,27 +424,30 @@ async def run(
         demand_prioritized,
         signals,
     )
-    return {
-        "status": "completed",
-        "motifs": count,
-        "unique_items": len({r[0] for r in rows}),
-        "demand_prioritized": demand_prioritized,
-        "coverage_signals": signals,
-    }
+    return with_stage_stats(
+        {
+            "status": "completed",
+            "motifs": count,
+            "unique_items": len({r[0] for r in rows}),
+            "demand_prioritized": demand_prioritized,
+            "coverage_signals": signals,
+        },
+        stage_stats,
+    )
 
 
 def register(scheduler: IdleScheduler) -> None:
-    scheduler.register(
-        TaskDefinition(
-            name="summary_motifs",
-            run_interval_seconds=INTERVAL_SECONDS,
-            enabled=True,
-            off_loop=True,
-            run_fn=run,
-            description=(
-                "Finds recurring plot patterns in available summaries across the whole "
-                "library so discovery filters can group titles by story ideas. Titles "
-                "owners hit with empty kinship shelves are scored first when present."
-            ),
-        )
+    register_severity_task(
+        scheduler,
+        name=TASK_NAME,
+        priority="P2",
+        run_fn=run,
+        run_interval_seconds=INTERVAL_SECONDS,
+        enabled=True,
+        off_loop=True,
+        description=(
+            "Finds recurring plot patterns in available summaries across the whole "
+            "library so discovery filters can group titles by story ideas. Titles "
+            "owners hit with empty kinship shelves are scored first when present."
+        ),
     )

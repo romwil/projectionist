@@ -47,10 +47,10 @@ Design deltas vs original letter:
 | H1 | High | L | Open (partial) | Library+chat HTTP carved from `app.py` (~4.3k composition root; `library_routes.py` ~2.0k, `chat_routes.py` ~0.4k). Remaining: `App.jsx` (~1.7k), `ConfigPage.jsx` (~3.1k), `agent/tools/__init__.py` (~4.4k). |
 | H4 | High | L | **Done** (Hybrid C) | Encrypt UI secrets; env wins; migrate plaintext; `credential_marker` rename |
 | H5 | High | M | **Done** (Multi-user gates B) | Gate personal agent writes when multi-user is on |
-| H8 | High | L | Open | Embeddings as JSON TEXT; `get_embeddings()` still full-table `json.loads`. Optional sqlite-vec ANN is a prefilter only. Expand only if measured (1.36 craft rule). |
+| H8 | High | L | Open (measured 5.4k) | JSON TEXT stays. 2026-10-28 Automat copy: 5426 × 384-dim, `json.loads` 0.29s, `get_embeddings` 0.87s, 15-seed neighbor refresh 4.3s. Id-only callers use `embedding_item_ids()`. BLOB / required sqlite-vec deferred until **10k**. `item_neighbors` remains the read cache. |
 | M1 | Medium | M | **Done** (Audit then enable A) | Orphan cleanup migration -> `PRAGMA foreign_keys=ON` (with M2) |
 | M2 | Medium | L | **Done** | `schema_version` + ordered migration module |
-| M3 | Medium | S | Open | Jittered retry for idempotent connector GETs |
+| M3 | Medium | S | **Done** | Jittered retry for idempotent connector GETs (`GET`/`HEAD` 429/5xx in `connectors/http.py`) |
 | M4 | Medium | M | **Done** (Hybrid C) | Affinity tools -> full-only; catalog stays on privacy |
 | M5 | Medium | M | **Mitigated** | Stored prompt fencing + pytest (`tests/test_prompt_injection.py`); harness TC-PROMPT-01 runs that suite |
 | M6 | Medium | M | Open | Persist quarantine; absolute wall-clock task deadline |
@@ -66,6 +66,10 @@ Design deltas vs original letter:
 **Docker/Unraid ops -> A** after H6/H7 (done) plus M10/M12. Overall letter **A** still needs Trains 1-4: trust (**H4**/**H5**), integrity (**M1**/**M2**), backup/parity (**M10**/**M12**), and privacy/product honesty (**M4**/**M7**). Keep modularizing (**H1**); full god-file elimination and embedding scale (**H8**) can trail if sequenced honestly.
 
 **2026-09-24 hygiene (docs only, 1.35.5 trunk):** still-open rows above re-checked without rewriting the letter. H1/H8/M3/M6/M8 remain open. M10 snapshot is no longer deferred. 1.36 Wave 0/3 is the H1 path ([Phase 6 spec](../superpowers/specs/2026-09-24-delight-phase-6.md)).
+
+**2026-10-28:** **M3** jittered `GET`/`HEAD` retries on 429/5xx landed in `projectionist/connectors/http.py` (cap 3, honor Retry-After, mutating methods never retry, breaker records after retries exhaust).
+
+**2026-10-28 H8 measure (Automat copy, 5426 embeddings):** idle JSON-decode cost is fine; storage unchanged. H8 stays Open until a 10k-library measurement. Id-only `json.loads` path is closed (`embedding_item_ids()`).
 
 ---
 
@@ -164,7 +168,7 @@ Default bind `0.0.0.0:8788` + no auth = full admin on any reachable interface (d
 | H5 | Agent safety | **Done** | Ungated personal writes; Multi-user gates (B) for watchlist/lists/reviews/memory. |
 | H6 | CI / Ops | **Done** | CI Docker build + `/api/health` smoke. |
 | H7 | Ops | **Done** | Conditional chown; UID 1000 documented (no PUID/PGID). |
-| H8 | Data / Scale | Open | Embeddings as JSON TEXT; `get_embeddings()` O(n); prefilter before marketing 10k+. |
+| H8 | Data / Scale | Open (measured 5.4k) | JSON TEXT; id-only callers skip `json.loads`. BLOB/sqlite-vec still optional until 10k. |
 
 **H1 detail:** Split along existing domain lines (routers / tool packages / repositories / chat hooks). No framework change. Partial: db/tools/styles already split.
 
@@ -180,7 +184,7 @@ Default bind `0.0.0.0:8788` + no auth = full admin on any reachable interface (d
 
 **H7 detail:** Entrypoint `chown -R /config` on every root start delayed Unraid recreate/Force Update on large DBs. Conditional chown; document UID 1000 in CA template.
 
-**H8 detail:** Embeddings stored as JSON TEXT; semantic search is O(n) pure Python. Fine to a few thousand titles; painful at 10k+ with fat dims. Binary blob storage + candidate prefilter; keep `item_neighbors` as read cache; sqlite-vec remains a good Future.
+**H8 detail:** Embeddings stored as JSON TEXT; semantic search is O(n) pure Python. **Measured 2026-10-28** on an Automat copy (5426 rows, 384-dim, 45.5 MB TEXT): raw `json.loads` 0.29s, `get_embeddings` 0.87s (~115 MB peak), 15-seed `refresh_neighbors_for_items` 4.3s. Idle cost is fine; BLOB storage + candidate prefilter wait for a **10k** measurement. Id-only callers use `embedding_item_ids()` (do not full-table `json.loads` just to count/rotate). Keep `item_neighbors` as read cache; sqlite-vec remains optional prefilter, not a required dep.
 
 ### Medium
 
@@ -188,7 +192,7 @@ Default bind `0.0.0.0:8788` + no auth = full admin on any reachable interface (d
 |----|----------|---------|----------------|--------|
 | M1 | Data integrity | `PRAGMA foreign_keys` never enabled - FK clauses in schema are inert. | **Audit then enable (A)** with M2: orphan cleanup migration, then `PRAGMA foreign_keys=ON`. | **Done** |
 | M2 | Schema ops | Migrations are an ad-hoc `_migrate_*` chain on every boot; no schema version table; dual-call of `_migrate_multi_user_columns` historically. | Introduce `schema_version` + ordered migration module (still SQLite). | **Done** |
-| M3 | Connectors | Shared HTTP helpers timeout but do not retry idempotent GETs (429/5xx). | Jittered retry for reads only. | Open |
+| M3 | Connectors | Shared HTTP helpers timeout but do not retry idempotent GETs (429/5xx). | Jittered retry for reads only. | **Done** |
 | M4 | Privacy / MCP | Privacy mode still exposes watch-biased tools (`recommend_hidden_gems`, purge candidates, watch patterns) - raw fields stripped, but results encode household affinity. | **Hybrid (C):** affinity tools -> full only; catalog on privacy. | **Done** |
 | M5 | Prompt safety | Stored cross-user memory/research injection reached the model unfenced. | Fence untrusted tool/memory data; system-prompt clause; pytest TC-PROMPT-01; confirm-gated *arr writes remain. Residual: model behavioral risk + internal ids in tool JSON. | **Mitigated** |
 | M6 | Scheduler | Quarantine is in-memory (clears on restart); heartbeat can extend a wedged task if `should_stop()` keeps getting called. | Persist quarantine; absolute wall-clock deadline even with heartbeats. | Open |
@@ -227,7 +231,7 @@ tools are full-MCP only. Operator bind exposure remains a *documented* threat-mo
 
 ### Data model & scale - A- (was B)
 
-Schema is rich and honest. Materialized neighbors / facets / FTS are the correct homelab pattern. **M1/M2** closed (`schema_version`, orphan cleanup, `PRAGMA foreign_keys=ON`). Scale cliff remains embeddings I/O and O(n) semantic search (**H8**).
+Schema is rich and honest. Materialized neighbors / facets / FTS are the correct homelab pattern. **M1/M2** closed (`schema_version`, orphan cleanup, `PRAGMA foreign_keys=ON`). Scale cliff remains embeddings I/O and O(n) semantic search (**H8**) — measured fine at 5.4k; BLOB storage still waits on 10k.
 
 ### Agent / RAG - A- (was B before C1)
 
@@ -303,10 +307,10 @@ ARCHITECTURE / DESIGN / DATA_MODEL / SECURITY / PRIVACY / wiki / pentest protoco
 
 ### Later (after A)
 
-18. **H8** embedding storage + search prefilter (before marketing "works great at 10k+")
+18. **H8** embedding storage + search prefilter (before marketing "works great at 10k+") — 5.4k measured 2026-10-28, JSON TEXT stays; revisit at 10k
 19. **M5** ~~prompt red-team Protocol v1.1~~ → **Mitigated** (fencing + pytest; harness TC-PROMPT-01)
 20. **M6** durable quarantine + absolute task deadline
-21. **M3** jittered GET retries
+21. **M3** ~~jittered GET retries~~ → **Done** (`GET`/`HEAD` 429/5xx in `connectors/http.py`)
 
 ### Optional later (only with evidence)
 

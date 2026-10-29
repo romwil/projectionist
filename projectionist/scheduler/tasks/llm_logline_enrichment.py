@@ -19,7 +19,14 @@ from typing import Any, Callable, Dict
 from projectionist.config_store import Settings
 from projectionist.library.db import Database
 from projectionist.scheduler.autotune import resolve_batch_size
-from projectionist.scheduler.engine import IdleScheduler, TaskDefinition
+from projectionist.scheduler.engine import IdleScheduler
+from projectionist.scheduler.tasks.base_augmentation import register_severity_task
+from projectionist.scheduler.tasks.kinship_augmentation import (
+    KinshipMissAugmentationTask,
+    stage_kinship_demand,
+    with_stage_stats,
+)
+from projectionist.telemetry.kinship_miss import prioritize_enrichment_rows
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +38,32 @@ TIMEOUT_SECONDS = 900
 REQUEST_PAUSE_SECONDS = 1.0
 _MAX_LOGLINE_CHARS = 180
 TASK_NAME = "llm_logline_enrichment"
+
+
+class LlmLoglineAugmentation(KinshipMissAugmentationTask):
+    """Stage kinship-miss titles that still lack an LLM logline."""
+
+    action = "write_llm_logline"
+
+    def __init__(self, db: Database) -> None:
+        super().__init__(db, task_name=TASK_NAME)
+
+    def item_still_needs(self, item_id: int) -> bool:
+        row = self.db.library_item_by_id(int(item_id))
+        if row is None:
+            return False
+        keys = row.keys() if hasattr(row, "keys") else row
+        if "llm_logline" in keys and str(row["llm_logline"] or "").strip():
+            return False
+        plot = "\n".join(
+            part
+            for part in [
+                str(row["summary"] or "").strip() if "summary" in keys else "",
+                str(row["tmdb_overview"] or "").strip() if "tmdb_overview" in keys else "",
+            ]
+            if part
+        )
+        return bool(plot)
 
 
 def _clean_logline(text: str) -> str:
@@ -116,16 +149,38 @@ async def run(
             "note": "llm_logline stays empty until an LLM is configured",
         }
 
+    augmenter = LlmLoglineAugmentation(db)
+    stage_stats, interrupted = await stage_kinship_demand(augmenter, should_stop)
+    if interrupted:
+        return with_stage_stats({"status": "interrupted", "enriched": 0}, stage_stats)
+
     batch_size = resolve_batch_size(db, TASK_NAME, DEFAULT_BATCH_SIZE)
-    backlog = db.items_needing_llm_logline(limit=batch_size)
+
+    def _prefer_logline(database: Database, item_id: int):
+        if not augmenter.item_still_needs(int(item_id)):
+            return None
+        return database.library_item_by_id(int(item_id))
+
+    backlog = prioritize_enrichment_rows(
+        db,
+        db.items_needing_llm_logline(limit=batch_size),
+        limit=batch_size,
+        include_item_id=_prefer_logline,
+    )
     if not backlog:
-        return {"status": "completed", "enriched": 0, "remaining": 0}
+        return with_stage_stats(
+            {"status": "completed", "enriched": 0, "remaining": 0},
+            stage_stats,
+        )
 
     enriched = 0
     errors = 0
     for idx, row in enumerate(backlog):
         if should_stop():
-            return {"status": "interrupted", "enriched": enriched, "errors": errors}
+            return with_stage_stats(
+                {"status": "interrupted", "enriched": enriched, "errors": errors},
+                stage_stats,
+            )
 
         plot = "\n".join(
             part
@@ -171,30 +226,33 @@ async def run(
         errors,
         remaining,
     )
-    return {
-        "status": "completed",
-        "enriched": enriched,
-        "errors": errors,
-        "batch_size": batch_size,
-        "has_more": remaining > 0,
-    }
+    return with_stage_stats(
+        {
+            "status": "completed",
+            "enriched": enriched,
+            "errors": errors,
+            "batch_size": batch_size,
+            "has_more": remaining > 0,
+        },
+        stage_stats,
+    )
 
 
 def register(scheduler: IdleScheduler) -> None:
-    scheduler.register(
-        TaskDefinition(
-            name=TASK_NAME,
-            run_interval_seconds=INTERVAL_SECONDS,
-            enabled=True,
-            timeout_seconds=TIMEOUT_SECONDS,
-            run_fn=run,
-            description=(
-                "When an LLM API key is configured, writes short narrative loglines used "
-                f"in embedding text. Default batch is {DEFAULT_BATCH_SIZE} titles per run; "
-                "owner-saved Items per run is honored (auto-tune may nudge within safety "
-                "caps). Skips cleanly when no LLM is configured."
-            ),
-            items_per_cycle=DEFAULT_BATCH_SIZE,
-            progress_scope="llm_logline_backlog",
-        )
+    register_severity_task(
+        scheduler,
+        name=TASK_NAME,
+        priority="P2",
+        run_fn=run,
+        run_interval_seconds=INTERVAL_SECONDS,
+        enabled=True,
+        timeout_seconds=TIMEOUT_SECONDS,
+        description=(
+            "When an LLM API key is configured, writes short narrative loglines used "
+            f"in embedding text. Default batch is {DEFAULT_BATCH_SIZE} titles per run; "
+            "owner-saved Items per run is honored (auto-tune may nudge within safety "
+            "caps). Skips cleanly when no LLM is configured."
+        ),
+        items_per_cycle=DEFAULT_BATCH_SIZE,
+        progress_scope="llm_logline_backlog",
     )

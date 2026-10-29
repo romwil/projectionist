@@ -3012,10 +3012,10 @@ class PlayheadAlignAndWarmTests(unittest.TestCase):
             }
         ]
         with patch(
-            "projectionist.live_channels.publish.align_channel_playhead_to_program_start",
+            "projectionist.live_channels.publish_playback.align_channel_playhead_to_program_start",
             return_value={"ok": True, "aligned": True, "channel_id": "ch-1"},
         ) as align, patch(
-            "projectionist.live_channels.publish.warm_channel_stream",
+            "projectionist.live_channels.publish_playback.warm_channel_stream",
             return_value={"ok": True, "channel_id": "ch-1", "ts_bytes": 300_000},
         ) as warm:
             result = prepare_channels_for_playback(client, icon_url="")
@@ -3057,7 +3057,7 @@ class PlayheadAlignAndWarmTests(unittest.TestCase):
         with patch(
             "projectionist.live_channels.publish.time.time", return_value=now_ms / 1000
         ), patch(
-            "projectionist.live_channels.publish.warm_channel_stream",
+            "projectionist.live_channels.publish_playback.warm_channel_stream",
             return_value={"ok": True, "channel_id": "ch-stuck", "ts_bytes": 300_000},
         ):
             result = prepare_channels_for_playback(
@@ -3108,7 +3108,7 @@ class PlayheadAlignAndWarmTests(unittest.TestCase):
         with patch(
             "projectionist.live_channels.publish.time.time", return_value=now_ms / 1000
         ), patch(
-            "projectionist.live_channels.publish.warm_channel_stream",
+            "projectionist.live_channels.publish_playback.warm_channel_stream",
             return_value={"ok": True, "channel_id": "ch-104", "ts_bytes": 300_000},
         ):
             result = prepare_channels_for_playback(
@@ -3167,10 +3167,10 @@ class PlayheadAlignAndWarmTests(unittest.TestCase):
             },
         ]
         with patch(
-            "projectionist.live_channels.publish.align_channel_playhead_to_program_start",
+            "projectionist.live_channels.publish_playback.align_channel_playhead_to_program_start",
             return_value={"ok": True, "aligned": True, "channel_id": "x"},
         ) as align, patch(
-            "projectionist.live_channels.publish.warm_channel_stream",
+            "projectionist.live_channels.publish_playback.warm_channel_stream",
             return_value={"ok": True, "channel_id": "x", "ts_bytes": 0},
         ) as warm:
             result = prepare_channels_for_playback(

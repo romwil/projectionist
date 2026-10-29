@@ -48,7 +48,12 @@ def _movie_stop_payload(
     return payload
 
 
-def _episode_scrobble_payload(*, plex_account_id: int | None = 4242) -> dict:
+def _episode_scrobble_payload(
+    *,
+    plex_account_id: int | None = 4242,
+    view_offset: int | None = None,
+    duration: int | None = None,
+) -> dict:
     payload = {
         "event": "media.scrobble",
         "Metadata": {
@@ -61,6 +66,10 @@ def _episode_scrobble_payload(*, plex_account_id: int | None = 4242) -> dict:
             "title": "In Perpetuity",
         },
     }
+    if view_offset is not None:
+        payload["Metadata"]["viewOffset"] = view_offset
+    if duration is not None:
+        payload["Metadata"]["duration"] = duration
     if plex_account_id is not None:
         payload["Account"] = {"id": plex_account_id, "title": "will"}
     return payload
@@ -160,12 +169,40 @@ class PlexWebhookHandlerTests(unittest.TestCase):
         self.assertNotIn("203.0.113.1", stored)
         self.assertNotIn("Private server name", stored)
 
-    def test_scrobble_event_queues_without_view_offset(self) -> None:
+    def test_scrobble_event_does_not_fake_completion_without_view_offset(self) -> None:
         result = handle_plex_webhook(self.db, _episode_scrobble_payload())
+        self.assertFalse(result["handled"])
+        self.assertEqual(result["reason"], "below_threshold")
+        self.assertIsNone(result["completion_pct"])
+        self.assertTrue(result["tracker_ingested"])
+        self.assertEqual(list_pending_prompts(self.db, user_id=self.user["id"]), [])
+        with self.db.connect() as conn:
+            row = conn.execute(
+                "SELECT source_event_kind, progress_ms FROM watch_events"
+            ).fetchone()
+        self.assertEqual(row["source_event_kind"], "plex_scrobble")
+        self.assertIsNone(row["progress_ms"])
+
+    def test_scrobble_event_queues_when_progress_crosses_85(self) -> None:
+        result = handle_plex_webhook(
+            self.db,
+            _episode_scrobble_payload(view_offset=5_400_000, duration=6_000_000),
+        )
         self.assertTrue(result["handled"])
         self.assertTrue(result["queued"])
         prompts = list_pending_prompts(self.db, user_id=self.user["id"])
         self.assertEqual(prompts[0]["title"], "Severance — S01E03")
+        self.assertGreaterEqual(prompts[0]["completion_pct"], 85.0)
+
+    def test_scrobble_event_ingests_below_85_without_queueing(self) -> None:
+        result = handle_plex_webhook(
+            self.db,
+            _episode_scrobble_payload(view_offset=1_000_000, duration=6_000_000),
+        )
+        self.assertFalse(result["handled"])
+        self.assertEqual(result["reason"], "below_threshold")
+        self.assertTrue(result["tracker_ingested"])
+        self.assertEqual(list_pending_prompts(self.db, user_id=self.user["id"]), [])
 
     def test_unknown_account_stays_unmapped_and_never_queues(self) -> None:
         result = handle_plex_webhook(

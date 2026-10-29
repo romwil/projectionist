@@ -23,13 +23,11 @@ Developer audience. Product parks that already have a home are **pointers**, not
 
 | Item | Gate |
 |------|------|
-| Live **`publish.py` split** | After Live mounts `TheaterPlayer` (one theater shell). |
-| Embeddings full-table **`json.loads`** / O(n) cosine (`get_embeddings`) | Until a **10k-library** measurement. Optional `sqlite-vec` stays a prefilter; `item_neighbors` stays the read cache. Architecture review **H8**. |
+| Live **`publish.py` split** | Gate met: Live mounts `TheaterPlayer` (one theater shell). Split itself remains later. |
+| Embeddings full-table **`json.loads`** / O(n) cosine (`get_embeddings`) | **Measured 2026-10-28** on an Automat SQLite copy (not prod writes): **5426** rows, 384-dim, 45.5 MB JSON TEXT. Raw `json.loads` **0.29s** (fetch 0.27s); `Database.get_embeddings` **0.87s** / ~115 MB tracemalloc peak / RSS ~604 MB; `embedding_item_ids()` **2.7ms**. 15-seed `refresh_neighbors_for_items` **4.3s**. Idle cost is fine under the **10k** gate — leave JSON TEXT; sqlite-vec stays optional prefilter; `item_neighbors` stays the read cache. Id-only callers already use `embedding_item_ids()` (`plot_neighbors`). Revisit BLOBs at 10k. Architecture review **H8**. |
 | **Jittered connector GET retries** | Idempotent reads only (429/5xx). Architecture review **M3**. |
 | Bulk **IdleScheduler → `BaseAugmentationTask`** | After Phase C pilots. No second runner. Greenfield IdleScheduler / global-priority rewrite is out — miss queue in **1.37.57** is enough. |
 | **Vite 8** + **React Router 7** | Dependabot may alert; not a 1.37.x program. Today: Vite 5 + RR 6. |
-| **WatchHistoryTimeline** UI honesty | Do not flatten tracker sittings to “watched twice.” Surface confidence / “Why this count?” instead of a second play-count vocabulary. P0-1 shipped `play_counts` + chat prompt; this UI is leftover. |
-| Rating prompts from the **85% scan** | Still queued from near-complete scan, not completion transitions. Watch-tracker plan leftover; not this patch. |
 
 ---
 

@@ -27,7 +27,13 @@ from projectionist.library.neighbors import (
     refresh_neighbors_for_items,
 )
 from projectionist.scheduler.autotune import resolve_batch_size
-from projectionist.scheduler.engine import IdleScheduler, TaskDefinition
+from projectionist.scheduler.engine import IdleScheduler
+from projectionist.scheduler.tasks.base_augmentation import register_severity_task
+from projectionist.scheduler.tasks.kinship_augmentation import (
+    KinshipMissAugmentationTask,
+    stage_kinship_demand,
+    with_stage_stats,
+)
 from projectionist.telemetry.kinship_miss import merge_preferred_ids, preferred_item_ids
 
 logger = logging.getLogger(__name__)
@@ -40,18 +46,48 @@ CURSOR_KEY = "plot_neighbors_cursor"
 TASK_NAME = "plot_neighbors"
 
 
+class PlotNeighborsAugmentation(KinshipMissAugmentationTask):
+    """Stage kinship-miss titles that still lack a neighbor cache."""
+
+    action = "refresh_plot_neighbors"
+
+    def __init__(self, db: Database) -> None:
+        super().__init__(db, task_name=TASK_NAME)
+
+    def item_still_needs(self, item_id: int) -> bool:
+        with self.db.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT e.item_id
+                FROM embeddings e
+                WHERE e.item_id = ?
+                  AND NOT EXISTS (
+                    SELECT 1 FROM item_neighbors n WHERE n.item_id = e.item_id
+                  )
+                """,
+                (int(item_id),),
+            ).fetchone()
+        return row is not None
+
+
 async def run(
     db: Database, settings: Settings, should_stop: Callable[[], bool]
 ) -> Dict[str, Any]:
     del settings
-    if should_stop():
-        return {"status": "interrupted", "processed": 0}
+    augmenter = PlotNeighborsAugmentation(db)
+    stage_stats, interrupted = await stage_kinship_demand(augmenter, should_stop)
+    if interrupted:
+        return with_stage_stats({"status": "interrupted", "processed": 0}, stage_stats)
 
     # Ids only: ``db.get_embeddings()`` JSON-decodes every stored vector (hundreds
-    # of MB on a large library) just to be counted and sorted.
+    # of MB on a large library) just to be counted and sorted. Wave 5 owns that
+    # decode path — this task must keep using ``embedding_item_ids()``.
     emb_ids = db.embedding_item_ids()
     if len(emb_ids) < 2:
-        return {"status": "completed", "processed": 0, "reason": "need_at_least_two_embeddings"}
+        return with_stage_stats(
+            {"status": "completed", "processed": 0, "reason": "need_at_least_two_embeddings"},
+            stage_stats,
+        )
 
     batch_size = resolve_batch_size(db, TASK_NAME, SEEDS_PER_CYCLE)
     missing = db.item_ids_missing_neighbors(limit=batch_size)
@@ -103,7 +139,15 @@ async def run(
             unique_seeds.append(seed_id)
 
     if not unique_seeds:
-        return {"status": "completed", "processed": 0, "seeds": 0, "missing_before": len(missing)}
+        return with_stage_stats(
+            {
+                "status": "completed",
+                "processed": 0,
+                "seeds": 0,
+                "missing_before": len(missing),
+            },
+            stage_stats,
+        )
 
     # Cosine/Jaccard over the full embedding set is CPU-heavy — leave the loop.
     processed = await run_db(
@@ -131,36 +175,39 @@ async def run(
         remaining_missing,
         len(emb_ids),
     )
-    return {
-        "status": "completed",
-        "processed": processed,
-        "seeds": len(unique_seeds),
-        "demand_prioritized": len(demand_seeds),
-        "annotated_explanations": annotated,
-        "top_k": DEFAULT_TOP_K,
-        "cursor": last_seed,
-        "batch_size": batch_size,
-        "missing_neighbors": remaining_missing,
-        "has_more": remaining_missing > 0 or bool(legacy_seeds),
-    }
+    return with_stage_stats(
+        {
+            "status": "completed",
+            "processed": processed,
+            "seeds": len(unique_seeds),
+            "demand_prioritized": len(demand_seeds),
+            "annotated_explanations": annotated,
+            "top_k": DEFAULT_TOP_K,
+            "cursor": last_seed,
+            "batch_size": batch_size,
+            "missing_neighbors": remaining_missing,
+            "has_more": remaining_missing > 0 or bool(legacy_seeds),
+        },
+        stage_stats,
+    )
 
 
 def register(scheduler: IdleScheduler) -> None:
-    scheduler.register(
-        TaskDefinition(
-            name=TASK_NAME,
-            run_interval_seconds=INTERVAL_SECONDS,
-            enabled=True,
-            off_loop=True,
-            run_fn=run,
-            description=(
-                "Refreshes similar-title links from plot-similarity data. Prefers titles "
-                "owners hit with an empty More Like This or Related shelf, then titles "
-                f"that have no matches yet, then revisits about {SEEDS_PER_CYCLE} titles "
-                "per run so large libraries catch up gradually."
-            ),
-            items_per_cycle=SEEDS_PER_CYCLE,
-            catchup_gap_seconds=CATCHUP_GAP_SECONDS,
-            progress_scope="neighbors_backlog",
-        )
+    register_severity_task(
+        scheduler,
+        name=TASK_NAME,
+        priority="P2",
+        run_fn=run,
+        run_interval_seconds=INTERVAL_SECONDS,
+        enabled=True,
+        off_loop=True,
+        description=(
+            "Refreshes similar-title links from plot-similarity data. Prefers titles "
+            "owners hit with an empty More Like This or Related shelf, then titles "
+            f"that have no matches yet, then revisits about {SEEDS_PER_CYCLE} titles "
+            "per run so large libraries catch up gradually."
+        ),
+        items_per_cycle=SEEDS_PER_CYCLE,
+        catchup_gap_seconds=CATCHUP_GAP_SECONDS,
+        progress_scope="neighbors_backlog",
     )
