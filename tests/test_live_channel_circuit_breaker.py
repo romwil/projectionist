@@ -74,7 +74,10 @@ class HostCircuitHttpTests(unittest.TestCase):
         self.assertFalse(host_circuits.is_open(plex))
 
         reset_host_circuits()
-        with patch("urllib.request.urlopen", side_effect=http_error(503)):
+        with (
+            patch("urllib.request.urlopen", side_effect=http_error(503)),
+            patch("projectionist.connectors.http.time.sleep"),
+        ):
             for _ in range(QUARANTINE_THRESHOLD):
                 with self.assertRaises(RuntimeError):
                     request_json(plex)
@@ -232,12 +235,17 @@ class WarmChannelStreamCircuitTests(unittest.TestCase):
 
         client = MagicMock()
         client.base_url = "http://tunarr.test:8000"
-        with patch("urllib.request.urlopen", side_effect=http_503):
+        from projectionist.connectors.http import _IDEMPOTENT_RETRY_ATTEMPTS
+
+        with (
+            patch("urllib.request.urlopen", side_effect=http_503),
+            patch("projectionist.connectors.http.time.sleep"),
+        ):
             result = warm_channel_stream(client, "ch-1", timeout=45, pull_ts=False)
 
         self.assertFalse(result.get("ok"))
-        # Two URLs per loop until the breaker opens (threshold=3), then fail-fast.
-        self.assertLessEqual(calls["n"], QUARANTINE_THRESHOLD)
+        # GET retries (3 attempts) before each breaker failure; trip after threshold.
+        self.assertLessEqual(calls["n"], QUARANTINE_THRESHOLD * _IDEMPOTENT_RETRY_ATTEMPTS)
         self.assertTrue(host_circuits.is_open(client.base_url))
 
 

@@ -5,17 +5,29 @@ from __future__ import annotations
 import ipaddress
 import json
 import logging
+import random
 import socket
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any, Mapping, Optional
 
 from projectionist.circuit_breaker import host_circuits
 from projectionist.logging_config import sanitize_log_message, sanitize_url
 
 logger = logging.getLogger(__name__)
+
+# Idempotent reads only. Mutating methods never retry, even on 429/5xx.
+_IDEMPOTENT_METHODS = frozenset({"GET", "HEAD"})
+_IDEMPOTENT_RETRY_ATTEMPTS = 3
+_RETRY_BASE_DELAY_S = 0.25
+_RETRY_MAX_DELAY_S = 8.0
+_RETRY_AFTER_CAP_S = 30.0
+_RETRY_AFTER_JITTER_S = 0.25
 
 _BLOCKED_HOSTNAMES = frozenset(
     {
@@ -96,6 +108,76 @@ def _http_status_trips_breaker(status: int) -> bool:
     return status >= 500 or status == 429
 
 
+def _is_idempotent_method(method: str) -> bool:
+    return str(method or "").strip().upper() in _IDEMPOTENT_METHODS
+
+
+def _parse_retry_after(raw: Optional[str]) -> Optional[float]:
+    """Parse Retry-After as seconds. Caps at ``_RETRY_AFTER_CAP_S``; past dates -> 0."""
+    cleaned = str(raw or "").strip()
+    if not cleaned:
+        return None
+    try:
+        seconds = float(cleaned)
+    except ValueError:
+        seconds = None
+    if seconds is not None:
+        if seconds < 0:
+            return None
+        return min(seconds, _RETRY_AFTER_CAP_S)
+    try:
+        when = parsedate_to_datetime(cleaned)
+    except (TypeError, ValueError, OverflowError, IndexError):
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    delay = (when - datetime.now(timezone.utc)).total_seconds()
+    if delay < 0:
+        return 0.0
+    return min(delay, _RETRY_AFTER_CAP_S)
+
+
+def _retry_after_from_error(error: urllib.error.HTTPError) -> Optional[float]:
+    headers = getattr(error, "headers", None) or getattr(error, "hdrs", None)
+    if headers is None:
+        return None
+    getter = getattr(headers, "get", None)
+    if not callable(getter):
+        return None
+    raw = getter("Retry-After")
+    if raw is None:
+        raw = getter("retry-after")
+    if raw is None:
+        return None
+    if isinstance(raw, (list, tuple)):
+        raw = raw[0] if raw else None
+    return _parse_retry_after(None if raw is None else str(raw))
+
+
+def _backoff_seconds(attempt: int, retry_after: Optional[float]) -> float:
+    """Delay before the next attempt. ``attempt`` is the 0-based failure index."""
+    if retry_after is not None:
+        jitter = random.uniform(0.0, _RETRY_AFTER_JITTER_S)
+        return min(max(0.0, retry_after) + jitter, _RETRY_AFTER_CAP_S)
+    ceiling = min(_RETRY_MAX_DELAY_S, _RETRY_BASE_DELAY_S * (2 ** attempt))
+    return random.uniform(0.0, ceiling)
+
+
+def _log_http_error(
+    method: str,
+    status: int,
+    safe_url: str,
+    detail: str,
+    *,
+    quiet_statuses: Optional[tuple[int, ...]],
+) -> None:
+    # Optional routes (Plex Live TV when the path is absent) must not warn on every poll.
+    if quiet_statuses and status in quiet_statuses:
+        logger.debug("HTTP %s %s from %s (quiet)", method, status, safe_url)
+    else:
+        logger.warning("HTTP %s %s from %s: %s", method, status, safe_url, detail[:500])
+
+
 def _execute_request(
     url: str,
     *,
@@ -106,43 +188,74 @@ def _execute_request(
     max_bytes: Optional[int] = None,
     quiet_statuses: Optional[tuple[int, ...]] = None,
 ) -> bytes:
-    """urlopen with the shared per-host circuit breaker."""
-    host_circuits.before_request(url)
-    request = urllib.request.Request(url, data=data, method=method, headers=dict(headers or {}))
+    """urlopen with the shared per-host circuit breaker.
+
+    GET/HEAD retry on 429 and 5xx (cap 3 attempts) with jittered backoff and
+    Retry-After. POST/PUT/DELETE never retry. Breaker failures are recorded
+    only after retries exhaust so one blip does not trip the host.
+    """
+    method_upper = str(method or "GET").strip().upper() or "GET"
+    attempts = _IDEMPOTENT_RETRY_ATTEMPTS if _is_idempotent_method(method_upper) else 1
+    req_headers = dict(headers or {})
     safe_url = sanitize_url(url)
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            body = response.read(max_bytes) if max_bytes is not None else response.read()
-        host_circuits.record_success(url)
-        return body
-    except urllib.error.HTTPError as error:
-        detail = sanitize_log_message(error.read().decode("utf-8", errors="replace"))
-        # Optional routes (Plex Live TV when the path is absent) must not warn on every poll.
-        if quiet_statuses and int(error.code) in quiet_statuses:
-            logger.debug("HTTP %s %s from %s (quiet)", method, error.code, safe_url)
-        else:
-            logger.warning("HTTP %s %s from %s: %s", method, error.code, safe_url, detail[:500])
-        if _http_status_trips_breaker(int(error.code)):
-            host_circuits.record_failure(url, f"HTTP {error.code}")
-        else:
+
+    for attempt in range(attempts):
+        host_circuits.before_request(url)
+        request = urllib.request.Request(
+            url, data=data, method=method_upper, headers=req_headers
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                body = response.read(max_bytes) if max_bytes is not None else response.read()
             host_circuits.record_success(url)
-        raise RuntimeError(f"HTTP {error.code} from {safe_url}: {detail}") from error
-    except urllib.error.URLError as error:
-        reason = error.reason
-        if isinstance(reason, socket.timeout):
-            logger.warning("Timeout %s %s (timeout=%ss)", method, safe_url, timeout)
-        else:
-            logger.warning("Request failed %s %s: %s", method, safe_url, reason)
-        host_circuits.record_failure(url, str(reason))
-        raise RuntimeError(f"Request failed for {safe_url}: {reason}") from error
-    except TimeoutError as error:
-        logger.warning("Timeout %s %s (timeout=%ss)", method, safe_url, timeout)
-        host_circuits.record_failure(url, "timeout")
-        raise RuntimeError(f"Timeout requesting {safe_url}") from error
-    except OSError as error:
-        logger.warning("Request failed %s %s: %s", method, safe_url, error)
-        host_circuits.record_failure(url, str(error))
-        raise RuntimeError(f"Request failed for {safe_url}: {error}") from error
+            return body
+        except urllib.error.HTTPError as error:
+            status = int(error.code)
+            detail = sanitize_log_message(error.read().decode("utf-8", errors="replace"))
+            retryable = (
+                attempt < attempts - 1
+                and _is_idempotent_method(method_upper)
+                and _http_status_trips_breaker(status)
+            )
+            if retryable:
+                delay = _backoff_seconds(attempt, _retry_after_from_error(error))
+                logger.debug(
+                    "HTTP %s %s from %s; retrying in %.2fs (attempt %s/%s)",
+                    method_upper,
+                    status,
+                    safe_url,
+                    delay,
+                    attempt + 1,
+                    attempts,
+                )
+                time.sleep(delay)
+                continue
+            _log_http_error(
+                method_upper, status, safe_url, detail, quiet_statuses=quiet_statuses
+            )
+            if _http_status_trips_breaker(status):
+                host_circuits.record_failure(url, f"HTTP {status}")
+            else:
+                host_circuits.record_success(url)
+            raise RuntimeError(f"HTTP {status} from {safe_url}: {detail}") from error
+        except urllib.error.URLError as error:
+            reason = error.reason
+            if isinstance(reason, socket.timeout):
+                logger.warning("Timeout %s %s (timeout=%ss)", method_upper, safe_url, timeout)
+            else:
+                logger.warning("Request failed %s %s: %s", method_upper, safe_url, reason)
+            host_circuits.record_failure(url, str(reason))
+            raise RuntimeError(f"Request failed for {safe_url}: {reason}") from error
+        except TimeoutError as error:
+            logger.warning("Timeout %s %s (timeout=%ss)", method_upper, safe_url, timeout)
+            host_circuits.record_failure(url, "timeout")
+            raise RuntimeError(f"Timeout requesting {safe_url}") from error
+        except OSError as error:
+            logger.warning("Request failed %s %s: %s", method_upper, safe_url, error)
+            host_circuits.record_failure(url, str(error))
+            raise RuntimeError(f"Request failed for {safe_url}: {error}") from error
+
+    raise RuntimeError(f"Request failed for {safe_url}")  # pragma: no cover
 
 
 def request_json(
