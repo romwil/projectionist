@@ -17,17 +17,35 @@ import json
 import logging
 import time
 from collections import Counter
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Set
 
 from projectionist.config_store import Settings
 from projectionist.library.db import Database
-from projectionist.scheduler.engine import IdleScheduler, TaskDefinition
+from projectionist.scheduler.engine import IdleScheduler
+from projectionist.scheduler.tasks.base_augmentation import register_severity_task
+from projectionist.scheduler.tasks.kinship_augmentation import (
+    KinshipMissAugmentationTask,
+    stage_kinship_demand,
+    with_stage_stats,
+)
+from projectionist.telemetry.kinship_miss import preferred_item_ids
 
 logger = logging.getLogger(__name__)
 
 INTERVAL_SECONDS = 604800  # 168 hours / 1 week
 TOP_DIRECTORS = 10
 MIN_DIRECTOR_TITLES = 2
+TASK_NAME = "gap_analysis"
+
+
+class GapAnalysisAugmentation(KinshipMissAugmentationTask):
+    """Consume kinship-miss demand to prioritize directors; do not stage a flood."""
+
+    action = "analyze_director_gaps"
+    stage_when_needed = False
+
+    def __init__(self, db: Database) -> None:
+        super().__init__(db, task_name=TASK_NAME)
 
 
 def _ensure_table(db: Database) -> None:
@@ -86,16 +104,38 @@ def _get_tmdb_director_filmography(
         return []
 
 
+def _directors_from_row(row: Any) -> List[str]:
+    directors_raw = row["directors"] if "directors" in row.keys() else []
+    try:
+        directors = json.loads(directors_raw) if isinstance(directors_raw, str) else []
+    except (json.JSONDecodeError, TypeError):
+        directors = []
+    if not isinstance(directors, list):
+        return []
+    return [str(name).strip() for name in directors if str(name).strip()]
+
+
 async def run(
     db: Database, settings: Settings, should_stop: Callable[[], bool]
 ) -> Dict[str, Any]:
+    augmenter = GapAnalysisAugmentation(db)
+    stage_stats, interrupted = await stage_kinship_demand(augmenter, should_stop)
+    if interrupted:
+        return with_stage_stats({"status": "interrupted", "directors_analyzed": 0}, stage_stats)
+
     if not settings.tmdb_api_key:
-        return {"status": "skipped", "reason": "TMDB not configured"}
+        return with_stage_stats(
+            {"status": "skipped", "reason": "TMDB not configured"},
+            stage_stats,
+        )
 
     _ensure_table(db)
     rows = list(db.all_library_items())
     if not rows:
-        return {"status": "completed", "directors_analyzed": 0}
+        return with_stage_stats(
+            {"status": "completed", "directors_analyzed": 0},
+            stage_stats,
+        )
 
     # Build director frequency and library TMDB ID sets.
     director_counter: Counter[str] = Counter()
@@ -103,30 +143,45 @@ async def run(
     for row in rows:
         if row["tmdb_id"] is not None:
             library_tmdb_ids.add(int(row["tmdb_id"]))
-        directors_raw = row["directors"]
-        try:
-            directors = json.loads(directors_raw) if isinstance(directors_raw, str) else []
-        except (json.JSONDecodeError, TypeError):
-            directors = []
-        if isinstance(directors, list):
-            for d in directors:
-                name = str(d).strip()
-                if name:
-                    director_counter[name] += 1
+        for name in _directors_from_row(row):
+            director_counter[name] += 1
 
     top_directors = [
         name
         for name, count in director_counter.most_common(TOP_DIRECTORS)
         if count >= MIN_DIRECTOR_TITLES
     ]
+    demand_directors: List[str] = []
+    seen_directors: Set[str] = set()
+    for item_id in preferred_item_ids(db, limit=25):
+        item = db.library_item_by_id(int(item_id))
+        if item is None:
+            continue
+        for name in _directors_from_row(item):
+            if name in seen_directors or name not in director_counter:
+                continue
+            seen_directors.add(name)
+            demand_directors.append(name)
+    ordered_directors: List[str] = []
+    seen_order: Set[str] = set()
+    for name in [*demand_directors, *top_directors]:
+        if name in seen_order:
+            continue
+        seen_order.add(name)
+        ordered_directors.append(name)
+        if len(ordered_directors) >= TOP_DIRECTORS:
+            break
 
     if should_stop():
-        return {"status": "interrupted", "directors_analyzed": 0}
+        return with_stage_stats(
+            {"status": "interrupted", "directors_analyzed": 0},
+            stage_stats,
+        )
 
     gaps: List[Dict[str, Any]] = []
     directors_analyzed = 0
 
-    for director in top_directors:
+    for director in ordered_directors:
         if should_stop():
             break
 
@@ -168,25 +223,29 @@ async def run(
         directors_analyzed,
         len(gaps),
     )
-    return {
-        "status": "completed",
-        "directors_analyzed": directors_analyzed,
-        "gaps_found": len(gaps),
-    }
+    return with_stage_stats(
+        {
+            "status": "completed",
+            "directors_analyzed": directors_analyzed,
+            "gaps_found": len(gaps),
+            "demand_prioritized": len(demand_directors),
+        },
+        stage_stats,
+    )
 
 
 def register(scheduler: IdleScheduler) -> None:
-    scheduler.register(
-        TaskDefinition(
-            name="gap_analysis",
-            run_interval_seconds=INTERVAL_SECONDS,
-            enabled=True,
-            off_loop=True,
-            run_fn=run,
-            description=(
-                "Looks up TMDB filmographies for your most-represented directors and "
-                "caches collection gaps (titles you’re missing). Requires a TMDB API key; "
-                "runs weekly by default."
-            ),
-        )
+    register_severity_task(
+        scheduler,
+        name=TASK_NAME,
+        priority="P2",
+        run_fn=run,
+        run_interval_seconds=INTERVAL_SECONDS,
+        enabled=True,
+        off_loop=True,
+        description=(
+            "Looks up TMDB filmographies for your most-represented directors and "
+            "caches collection gaps (titles you’re missing). Requires a TMDB API key; "
+            "runs weekly by default."
+        ),
     )

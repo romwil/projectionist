@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { getWatchSummary } from "../api/client.js";
 import {
+  completionConfidenceLabel,
+  completionExplanation,
   formatTrackedDate,
   normalizeWatchSummary,
+  sittingsObservedLabel,
   watchedTimesLabel,
 } from "../lib/watchTracker.js";
 
@@ -41,6 +44,10 @@ export default function WatchHistoryTimeline({ ratingKey, plexPlayedEventCount =
 
   if (!ratingKey) return null;
 
+  const watchedLabel = summary ? watchedTimesLabel(summary.tracked_completions) : "";
+  const sittingsLabel = summary ? sittingsObservedLabel(summary.sittings_observed) : "";
+  const summaryParts = [watchedLabel || (summary?.hasCoverage ? "Not watched yet" : ""), sittingsLabel].filter(Boolean);
+
   return (
     <section className="title-detail-section watch-history" data-testid="watch-history">
       <h2 className="title-detail-section-label">Your watch history</h2>
@@ -53,7 +60,7 @@ export default function WatchHistoryTimeline({ ratingKey, plexPlayedEventCount =
       ) : (
         <>
           <p className="watch-history-summary" data-testid="watch-history-summary">
-            {watchedTimesLabel(summary.tracked_completions) || "Not watched yet"}
+            {summaryParts.join(" · ")}
           </p>
           {summary.timeline.length ? (
             <ol className="watch-history-timeline">
@@ -62,6 +69,13 @@ export default function WatchHistoryTimeline({ ratingKey, plexPlayedEventCount =
                   <span className="watch-history-date">
                     {formatTrackedDate(completion.completed_at_ms)}
                   </span>
+                  <span className={`watch-confidence is-${completion.confidence || "unknown"}`}>
+                    {completionConfidenceLabel(completion.confidence)}
+                  </span>
+                  <details>
+                    <summary>Why this count?</summary>
+                    <p>{completionExplanation(completion)}</p>
+                  </details>
                 </li>
               ))}
             </ol>

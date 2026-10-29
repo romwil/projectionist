@@ -9,6 +9,7 @@ import {
   completionExplanation,
   episodeHistorySummary,
   normalizeWatchSummary,
+  sittingsObservedLabel,
   trackedCompletionCardLabel,
 } from "./watchTracker.ts";
 
@@ -51,6 +52,9 @@ describe("watch tracker presentation", () => {
     });
 
     assert.equal(trackedCompletionCardLabel(summary), "Watched 2 times");
+    assert.equal(sittingsObservedLabel(summary.sittings_observed), "4 sittings observed");
+    assert.equal(sittingsObservedLabel(1), "1 sitting observed");
+    assert.equal(sittingsObservedLabel(0), "");
     assert.equal(
       episodeHistorySummary({
         unique_episodes_completed: 4,
@@ -86,7 +90,10 @@ describe("watch tracker presentation", () => {
     assert.doesNotMatch(seasons, /episode-first/);
     assert.match(card, /trackedCompletionCardLabel/);
     assert.doesNotMatch(timeline, /tracked completion/i);
-    assert.doesNotMatch(timeline, /Why this count/);
+    assert.match(timeline, /Why this count/);
+    assert.match(timeline, /completionConfidenceLabel/);
+    assert.match(timeline, /completionExplanation/);
+    assert.match(timeline, /sittingsObservedLabel/);
     assert.match(timeline, /Your watch history/);
   });
 });
