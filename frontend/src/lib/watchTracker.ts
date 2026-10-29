@@ -49,6 +49,13 @@ export function watchedTimesLabel(count: unknown) {
   return `Watched ${n} times`;
 }
 
+/** Sittings are evidence observations, not a second play-count. */
+export function sittingsObservedLabel(count: unknown) {
+  const n = Number(count || 0);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  return n === 1 ? "1 sitting observed" : `${n} sittings observed`;
+}
+
 export function episodeHistorySummary(summary: JsParam = {}) {
   const unique = Number(summary.unique_episodes_completed || 0);
   const repeats = Number(summary.repeat_episode_completions || 0);
