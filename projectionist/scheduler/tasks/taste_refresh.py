@@ -24,7 +24,13 @@ from typing import Any, Callable, Dict, List, Mapping
 from projectionist.config_store import Settings
 from projectionist.library.db import Database
 from projectionist.preferences.tv_taste import show_taste_multiplier
-from projectionist.scheduler.engine import IdleScheduler, TaskDefinition
+from projectionist.scheduler.engine import IdleScheduler
+from projectionist.scheduler.tasks.base_augmentation import register_severity_task
+from projectionist.scheduler.tasks.kinship_augmentation import (
+    KinshipMissAugmentationTask,
+    stage_kinship_demand,
+    with_stage_stats,
+)
 from projectionist.taste.clusters import (
     cluster_tokens_from_text,
     filter_cluster_tags,
@@ -34,6 +40,17 @@ from projectionist.taste.clusters import (
 logger = logging.getLogger(__name__)
 
 INTERVAL_SECONDS = 21600  # 6 hours
+TASK_NAME = "taste_refresh"
+
+
+class TasteRefreshAugmentation(KinshipMissAugmentationTask):
+    """Global taste recompute — consume kinship-miss signals, do not stage per title."""
+
+    action = "refresh_taste_profile"
+    stage_when_needed = False
+
+    def __init__(self, db: Database) -> None:
+        super().__init__(db, task_name=TASK_NAME)
 
 
 def _parse_tags(raw: Any) -> List[str]:
@@ -110,6 +127,12 @@ def _purge_junk_clusters(conn: Any) -> int:
 async def run(
     db: Database, settings: Settings, should_stop: Callable[[], bool]
 ) -> Dict[str, Any]:
+    del settings
+    augmenter = TasteRefreshAugmentation(db)
+    stage_stats, interrupted = await stage_kinship_demand(augmenter, should_stop)
+    if interrupted:
+        return with_stage_stats({"status": "interrupted"}, stage_stats)
+
     cluster_weights: Counter[str] = Counter()
     tv_shows_adjusted = 0
 
@@ -150,7 +173,7 @@ async def run(
                     cluster_weights[token] += multiplier
 
         if should_stop():
-            return {"status": "interrupted"}
+            return with_stage_stats({"status": "interrupted"}, stage_stats)
 
         # Message feedback — positive/negative signals from chat responses.
         fb_rows = conn.execute(
@@ -162,7 +185,7 @@ async def run(
             for token in cluster_tokens_from_text(excerpt)[:20]:
                 cluster_weights[token] += w
         if should_stop():
-            return {"status": "interrupted"}
+            return with_stage_stats({"status": "interrupted"}, stage_stats)
 
         # User reviews — star ratings boost genre affinity for highly-rated titles.
         # Shows apply episode season-decay so abandoned series don't keep forcing
@@ -217,12 +240,15 @@ async def run(
     if not cluster_weights:
         with db.connect() as conn:
             purged = _purge_junk_clusters(conn)
-        return {
-            "status": "completed",
-            "clusters_updated": 0,
-            "tv_shows_adjusted": tv_shows_adjusted,
-            "junk_purged": purged,
-        }
+        return with_stage_stats(
+            {
+                "status": "completed",
+                "clusters_updated": 0,
+                "tv_shows_adjusted": tv_shows_adjusted,
+                "junk_purged": purged,
+            },
+            stage_stats,
+        )
 
     # Normalize to 0..1 range.
     max_abs = max(abs(v) for v in cluster_weights.values()) or 1.0
@@ -261,27 +287,30 @@ async def run(
         tv_shows_adjusted,
         purged,
     )
-    return {
-        "status": "completed",
-        "clusters_updated": len(top),
-        "tv_shows_adjusted": tv_shows_adjusted,
-        "junk_purged": purged,
-    }
+    return with_stage_stats(
+        {
+            "status": "completed",
+            "clusters_updated": len(top),
+            "tv_shows_adjusted": tv_shows_adjusted,
+            "junk_purged": purged,
+        },
+        stage_stats,
+    )
 
 
 def register(scheduler: IdleScheduler) -> None:
-    scheduler.register(
-        TaskDefinition(
-            name="taste_refresh",
-            run_interval_seconds=INTERVAL_SECONDS,
-            enabled=True,
-            off_loop=True,
-            run_fn=run,
-            description=(
-                "Recomputes taste-profile weights from reviews, preference facts, "
-                "feedback, and TV episode/season-decay curves so recommendations "
-                "stay aligned with what you actually like — including shows you "
-                "abandoned mid-series."
-            ),
-        )
+    register_severity_task(
+        scheduler,
+        name=TASK_NAME,
+        priority="P2",
+        run_fn=run,
+        run_interval_seconds=INTERVAL_SECONDS,
+        enabled=True,
+        off_loop=True,
+        description=(
+            "Recomputes taste-profile weights from reviews, preference facts, "
+            "feedback, and TV episode/season-decay curves so recommendations "
+            "stay aligned with what you actually like — including shows you "
+            "abandoned mid-series."
+        ),
     )

@@ -26,9 +26,15 @@ from projectionist.library.db import Database
 from projectionist.library.knowledge_fetch import KIND_METADATA, FetchRunTracker
 from projectionist.library.sync import apply_tmdb_details_to_library_row
 from projectionist.scheduler.autotune import resolve_batch_size
-from projectionist.scheduler.engine import IdleScheduler, TaskDefinition
+from projectionist.scheduler.engine import IdleScheduler
 from projectionist.scheduler.run_log import emit_task_event
+from projectionist.scheduler.tasks.base_augmentation import register_severity_task
 from projectionist.scheduler.tasks.coverage_signals import emit_metadata_backlog_signals
+from projectionist.scheduler.tasks.kinship_augmentation import (
+    KinshipMissAugmentationTask,
+    stage_kinship_demand,
+    with_stage_stats,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +47,18 @@ REQUEST_PAUSE_SECONDS = 1.5
 TASK_NAME = "metadata_enrichment"
 
 
+class MetadataEnrichmentAugmentation(KinshipMissAugmentationTask):
+    """Stage kinship-miss titles that still lack TMDB dates/plot."""
+
+    action = "enrich_tmdb_metadata"
+
+    def __init__(self, db: Database) -> None:
+        super().__init__(db, task_name=TASK_NAME)
+
+    def item_still_needs(self, item_id: int) -> bool:
+        return self.db.item_still_needs_metadata(int(item_id))
+
+
 async def run(
     db: Database, settings: Settings, should_stop: Callable[[], bool]
 ) -> Dict[str, Any]:
@@ -50,6 +68,11 @@ async def run(
     api_key = (settings.tmdb_api_key or "").strip()
     if not api_key:
         return {"status": "skipped", "reason": "no_tmdb_api_key", "enriched": 0}
+
+    augmenter = MetadataEnrichmentAugmentation(db)
+    stage_stats, interrupted = await stage_kinship_demand(augmenter, should_stop)
+    if interrupted:
+        return with_stage_stats({"status": "interrupted", "enriched": 0}, stage_stats)
 
     batch_size = resolve_batch_size(db, TASK_NAME, DEFAULT_BATCH_SIZE)
     # Parked titles (retry backoff / exhausted) are skipped, so ``batch_size``
@@ -69,12 +92,15 @@ async def run(
     )
     if not backlog:
         coverage_signals = emit_metadata_backlog_signals(db, limit=batch_size)
-        return {
-            "status": "completed",
-            "enriched": 0,
-            "remaining": 0,
-            "coverage_signals": coverage_signals,
-        }
+        return with_stage_stats(
+            {
+                "status": "completed",
+                "enriched": 0,
+                "remaining": 0,
+                "coverage_signals": coverage_signals,
+            },
+            stage_stats,
+        )
 
     tmdb = TMDBClient(api_key)
     tracker = FetchRunTracker(db, KIND_METADATA)
@@ -184,35 +210,38 @@ async def run(
         run_stats["misses"],
         remaining,
     )
-    return {
-        "status": "interrupted" if interrupted else "completed",
-        "enriched": enriched,
-        "errors": run_stats["errors"],
-        "misses": run_stats["misses"],
-        "exhausted": run_stats["newly_exhausted"],
-        "breaker_tripped": run_stats["breaker_tripped"],
-        "batch_size": batch_size,
-        "has_more": remaining > 0,
-        "coverage_signals": coverage_signals,
-    }
+    return with_stage_stats(
+        {
+            "status": "interrupted" if interrupted else "completed",
+            "enriched": enriched,
+            "errors": run_stats["errors"],
+            "misses": run_stats["misses"],
+            "exhausted": run_stats["newly_exhausted"],
+            "breaker_tripped": run_stats["breaker_tripped"],
+            "batch_size": batch_size,
+            "has_more": remaining > 0,
+            "coverage_signals": coverage_signals,
+        },
+        stage_stats,
+    )
 
 
 def register(scheduler: IdleScheduler) -> None:
-    scheduler.register(
-        TaskDefinition(
-            name=TASK_NAME,
-            run_interval_seconds=INTERVAL_SECONDS,
-            enabled=True,
-            off_loop=True,
-            run_fn=run,
-            description=(
-                "Trickles through titles that have a TMDB id but still lack release/air "
-                f"dates or plot text. Prefers titles owners hit with empty kinship shelves, "
-                f"then about {DEFAULT_BATCH_SIZE} backlog titles per run with paced TMDB "
-                "requests so free-tier limits stay safe (batch auto-tunes from measured history)."
-            ),
-            items_per_cycle=DEFAULT_BATCH_SIZE,
-            catchup_gap_seconds=CATCHUP_GAP_SECONDS,
-            progress_scope="metadata_backlog",
-        )
+    register_severity_task(
+        scheduler,
+        name=TASK_NAME,
+        priority="P2",
+        run_fn=run,
+        run_interval_seconds=INTERVAL_SECONDS,
+        enabled=True,
+        off_loop=True,
+        description=(
+            "Trickles through titles that have a TMDB id but still lack release/air "
+            f"dates or plot text. Prefers titles owners hit with empty kinship shelves, "
+            f"then about {DEFAULT_BATCH_SIZE} backlog titles per run with paced TMDB "
+            "requests so free-tier limits stay safe (batch auto-tunes from measured history)."
+        ),
+        items_per_cycle=DEFAULT_BATCH_SIZE,
+        catchup_gap_seconds=CATCHUP_GAP_SECONDS,
+        progress_scope="metadata_backlog",
     )
