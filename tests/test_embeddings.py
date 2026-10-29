@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -14,6 +15,7 @@ from projectionist.library.embeddings import (
     embedding_model_label,
     rebuild_embeddings,
     remote_embedding_provider_available,
+    semantic_search,
 )
 from projectionist.library.query import filters_from_mapping, query_library_async
 from projectionist.models.recommendation import sanitize_recommendation_reason
@@ -182,6 +184,74 @@ class RebuildEmbeddingsTests(unittest.IsolatedAsyncioTestCase):
                 third = await rebuild_embeddings(db, Settings(), batch_size=2)
                 self.assertEqual(third, 4)
                 self.assertEqual(sum(embed_calls), 1)
+
+
+class EmbeddingIdLookupTests(unittest.TestCase):
+    """Id-only callers must not full-table ``json.loads`` the TEXT vectors."""
+
+    def test_embedding_item_ids_does_not_json_loads(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            ids = []
+            for index in range(3):
+                item_id = db.upsert_library_item(
+                    {
+                        "rating_key": f"rk-{index}",
+                        "media_type": "movie",
+                        "title": f"Title {index}",
+                        "year": 1980 + index,
+                        "summary": "A film.",
+                    }
+                )
+                ids.append(item_id)
+            db.set_embeddings([(item_id, [0.1, 0.2, 0.3]) for item_id in ids])
+
+            with patch(
+                "projectionist.library.db._library_lookup.json.loads",
+                side_effect=AssertionError("decoded every vector"),
+            ):
+                got = db.embedding_item_ids()
+            self.assertEqual(got, sorted(ids))
+
+    def test_get_embeddings_still_decodes_json_text(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            item_id = db.upsert_library_item(
+                {
+                    "rating_key": "rk-0",
+                    "media_type": "movie",
+                    "title": "Title 0",
+                    "year": 1980,
+                    "summary": "A film.",
+                }
+            )
+            vector = [0.25, 0.5, 0.75]
+            db.set_embeddings([(item_id, vector)])
+            got = db.get_embeddings()
+            self.assertEqual(len(got), 1)
+            self.assertEqual(got[0][0], item_id)
+            for stored, original in zip(got[0][1], vector):
+                self.assertAlmostEqual(stored, original, places=10)
+            # Storage is still JSON TEXT — not BLOBs.
+            with db.connect() as conn:
+                raw = conn.execute(
+                    "SELECT vector FROM embeddings WHERE item_id = ?", (item_id,)
+                ).fetchone()
+            self.assertIsInstance(raw["vector"], str)
+            self.assertEqual(json.loads(raw["vector"]), vector)
+
+    def test_semantic_search_reads_json_text_vectors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            a = db.upsert_library_item(
+                {"rating_key": "a", "media_type": "movie", "title": "Alpha", "year": 2000}
+            )
+            b = db.upsert_library_item(
+                {"rating_key": "b", "media_type": "movie", "title": "Beta", "year": 2001}
+            )
+            db.set_embeddings([(a, [1.0, 0.0, 0.0]), (b, [0.0, 1.0, 0.0])])
+            hits = semantic_search(db, [1.0, 0.0, 0.0], limit=5)
+            self.assertEqual(hits[0][0], a)
 
 
 if __name__ == "__main__":

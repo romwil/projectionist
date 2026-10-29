@@ -734,6 +734,13 @@ class LibraryLookupMixin:
             )
 
     def get_embeddings(self) -> List[Tuple[int, List[float]]]:
+        """Return every stored vector, JSON-decoding the TEXT column.
+
+        Callers that only need item ids must use ``embedding_item_ids()`` —
+        a full-table ``json.loads`` here is reserved for cosine / ANN paths
+        that actually read the floats. Idle cost at ~5.4k / 384-dim is
+        sub-second; BLOB storage waits on a 10k-library measurement.
+        """
         with self.connect() as conn:
             rows = conn.execute(
                 "SELECT item_id, vector FROM embeddings"

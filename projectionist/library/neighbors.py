@@ -275,6 +275,10 @@ def refresh_neighbors_for_items(
     top_k: int = DEFAULT_TOP_K,
 ) -> int:
     """Compute and store neighbors for each seed id. Returns seeds processed."""
+    # Exact cosine still needs the candidate corpus. Measured 2026-10-28 on an
+    # Automat copy: 5426 × 384-dim JSON TEXT, ``get_embeddings`` 0.87s, 15-seed
+    # refresh 4.3s — fine under the 10k gate. Do not switch to BLOBs / sqlite-vec
+    # as a required dep until that measurement says otherwise.
     embeddings = db.get_embeddings()
     if not embeddings:
         return 0
