@@ -22,9 +22,15 @@ from projectionist.connectors.wikipedia import fetch_extract
 from projectionist.library.db import Database
 from projectionist.library.knowledge_fetch import KIND_SYNOPSIS, FetchRunTracker
 from projectionist.scheduler.autotune import resolve_batch_size
-from projectionist.scheduler.engine import IdleScheduler, TaskDefinition
+from projectionist.scheduler.engine import IdleScheduler
 from projectionist.scheduler.run_log import emit_task_event
+from projectionist.scheduler.tasks.base_augmentation import register_severity_task
 from projectionist.scheduler.tasks.coverage_signals import emit_synopsis_backlog_signals
+from projectionist.scheduler.tasks.kinship_augmentation import (
+    KinshipMissAugmentationTask,
+    stage_kinship_demand,
+    with_stage_stats,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +42,24 @@ REQUEST_PAUSE_SECONDS = 1.5
 _MAX_SYNOPSIS_CHARS = 4000
 TASK_NAME = "long_synopsis_enrichment"
 VALID_SOURCES = frozenset({"wikipedia", "omdb", "auto"})
+
+
+class LongSynopsisAugmentation(KinshipMissAugmentationTask):
+    """Stage kinship-miss titles that still lack ``long_synopsis``."""
+
+    action = "fetch_long_synopsis"
+
+    def __init__(self, db: Database) -> None:
+        super().__init__(db, task_name=TASK_NAME)
+
+    def item_still_needs(self, item_id: int) -> bool:
+        row = self.db.library_item_by_id(int(item_id))
+        if row is None:
+            return False
+        keys = row.keys() if hasattr(row, "keys") else row
+        if "long_synopsis" not in keys:
+            return False
+        return not str(row["long_synopsis"] or "").strip()
 # Preferred disable value is ``off``; empty / none / disabled also disable.
 DISABLED_SOURCES = frozenset({"", "off", "none", "disabled"})
 
@@ -154,6 +178,11 @@ async def run(
             ),
         }
 
+    augmenter = LongSynopsisAugmentation(db)
+    stage_stats, interrupted = await stage_kinship_demand(augmenter, should_stop)
+    if interrupted:
+        return with_stage_stats({"status": "interrupted", "enriched": 0}, stage_stats)
+
     batch_size = resolve_batch_size(db, TASK_NAME, DEFAULT_BATCH_SIZE)
     # Parked titles (backoff / exhausted) are skipped, so the batch cap bounds
     # upstream calls per run no matter how large the gap is.
@@ -176,12 +205,15 @@ async def run(
     )
     if not backlog:
         coverage_signals = emit_synopsis_backlog_signals(db, limit=5)
-        return {
-            "status": "completed",
-            "enriched": 0,
-            "remaining": 0,
-            "coverage_signals": coverage_signals,
-        }
+        return with_stage_stats(
+            {
+                "status": "completed",
+                "enriched": 0,
+                "remaining": 0,
+                "coverage_signals": coverage_signals,
+            },
+            stage_stats,
+        )
 
     omdb: Optional[OMDbClient] = None
     omdb_key = str(getattr(settings, "omdb_api_key", "") or "").strip()
@@ -250,36 +282,39 @@ async def run(
         remaining,
         source,
     )
-    return {
-        "status": "interrupted" if interrupted else "completed",
-        "enriched": enriched,
-        "errors": run_stats["errors"],
-        "misses": run_stats["misses"],
-        "exhausted": run_stats["newly_exhausted"],
-        "breaker_tripped": run_stats["breaker_tripped"],
-        "batch_size": batch_size,
-        "source": source,
-        "has_more": remaining > 0,
-        "coverage_signals": coverage_signals,
-    }
+    return with_stage_stats(
+        {
+            "status": "interrupted" if interrupted else "completed",
+            "enriched": enriched,
+            "errors": run_stats["errors"],
+            "misses": run_stats["misses"],
+            "exhausted": run_stats["newly_exhausted"],
+            "breaker_tripped": run_stats["breaker_tripped"],
+            "batch_size": batch_size,
+            "source": source,
+            "has_more": remaining > 0,
+            "coverage_signals": coverage_signals,
+        },
+        stage_stats,
+    )
 
 
 def register(scheduler: IdleScheduler) -> None:
-    scheduler.register(
-        TaskDefinition(
-            name=TASK_NAME,
-            run_interval_seconds=INTERVAL_SECONDS,
-            enabled=True,
-            off_loop=True,
-            run_fn=run,
-            description=(
-                "Longer plot text from Wikipedia (default) or OMDb into long_synopsis "
-                f"(never overwrites Plex/TMDB). Prefers empty-kinship demand titles, then "
-                f"about {DEFAULT_BATCH_SIZE} backlog titles per run; set "
-                "long_synopsis_source=off to disable, or omdb/auto when preferred."
-            ),
-            items_per_cycle=DEFAULT_BATCH_SIZE,
-            catchup_gap_seconds=CATCHUP_GAP_SECONDS,
-            progress_scope="long_synopsis_backlog",
-        )
+    register_severity_task(
+        scheduler,
+        name=TASK_NAME,
+        priority="P2",
+        run_fn=run,
+        run_interval_seconds=INTERVAL_SECONDS,
+        enabled=True,
+        off_loop=True,
+        description=(
+            "Longer plot text from Wikipedia (default) or OMDb into long_synopsis "
+            f"(never overwrites Plex/TMDB). Prefers empty-kinship demand titles, then "
+            f"about {DEFAULT_BATCH_SIZE} backlog titles per run; set "
+            "long_synopsis_source=off to disable, or omdb/auto when preferred."
+        ),
+        items_per_cycle=DEFAULT_BATCH_SIZE,
+        catchup_gap_seconds=CATCHUP_GAP_SECONDS,
+        progress_scope="long_synopsis_backlog",
     )
