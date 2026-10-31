@@ -1,5 +1,8 @@
-import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
+import { useEffect } from "react";
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import App from "./App";
+import { useAuthGate } from "./components/UserMenu";
+import { resolveDefaultHome } from "./lib/defaultHome";
 import TitleDetailPage from "./pages/TitleDetailPage";
 import ConfigPage from "./pages/ConfigPage";
 import LoginPage from "./pages/LoginPage";
@@ -22,7 +25,6 @@ import LibraryWatchPage from "./pages/LibraryWatchPage";
 import EpisodeDetailPage from "./pages/EpisodeDetailPage";
 import ExplorePage from "./pages/ExplorePage";
 import ExploreSectionPage from "./pages/ExploreSectionPage";
-import MyJourneyPage from "./pages/MyJourneyPage";
 import SearchPage from "./pages/SearchPage";
 import InboxPage from "./pages/InboxPage";
 import WhisperInboxPage from "./pages/WhisperInboxPage";
@@ -66,6 +68,23 @@ function RedirectLegacyCollectionDetail() {
   return <Navigate to={`/library/collections/${encodeURIComponent(listId || "")}`} replace />;
 }
 
+/**
+ * BD-5: "/" lands on the signed-in user's default page — Chat unless they
+ * chose Explore, or Explore automatically when no LLM is configured.
+ * `useAuthGate` handles the unauthenticated redirect to /login itself.
+ */
+function HomeRedirect() {
+  const navigate = useNavigate();
+  const { authReady, llmConfigured, defaultPage } = useAuthGate();
+
+  useEffect(() => {
+    if (!authReady) return;
+    navigate(resolveDefaultHome({ defaultPage, llmConfigured }), { replace: true });
+  }, [authReady, llmConfigured, defaultPage, navigate]);
+
+  return null;
+}
+
 function RedirectExploreBrowse() {
   const { search } = useLocation();
   const incoming = new URLSearchParams(search);
@@ -80,13 +99,14 @@ function RedirectExploreBrowse() {
 export default function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/chat" replace />} />
+      <Route path="/" element={<HomeRedirect />} />
       <Route path="/chat" element={<App />} />
       <Route path="/search" element={<SearchPage />} />
       <Route path="/inbox" element={<InboxPage />} />
       <Route path="/whisper" element={<WhisperInboxPage />} />
       <Route path="/year-in-review/:year" element={<YearInReviewPage />} />
-      <Route path="/my-journey" element={<MyJourneyPage />} />
+      {/* BD-2: My Journey is now the badges & achievements section of the profile page. */}
+      <Route path="/my-journey" element={<Navigate to="/settings/profile#badges" replace />} />
       <Route path="/explore" element={<ExplorePage />} />
       <Route path="/explore/tags" element={<TagsPage />} />
       <Route path="/explore/related" element={<RelatedTitlesPage />} />

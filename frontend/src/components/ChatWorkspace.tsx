@@ -50,6 +50,7 @@ type ChatWorkspaceProps = {
   mobileNavOpen?: any;
   setMobileNavOpen?: (...args: any[]) => void;
   setup?: (...args: any[]) => void;
+  llmConfigured?: boolean;
   sidebarCollapsed?: any;
   handleCreateThread?: (...args: any[]) => void;
   toggleSidebarRail?: any;
@@ -177,6 +178,7 @@ authReady,
   mobileNavOpen,
   setMobileNavOpen,
   setup,
+  llmConfigured,
   sidebarCollapsed,
   handleCreateThread,
   toggleSidebarRail,
@@ -331,6 +333,17 @@ authReady,
       {setup && !(setup as any).onboarding_complete ? (
         <div className="banner workspace-banner" data-testid="setup-banner">
           Finish setup in <Link to="/admin">Admin</Link> to connect Plex, TMDB, and your LLM provider.
+        </div>
+      ) : null}
+
+      {/* UX-010: setup can finish Plex-only (BD-5 wizard no longer blocks on
+          every integration), so chat must say so honestly instead of just
+          silently failing to reply once a message is sent. */}
+      {authReady && setup && (setup as any).onboarding_complete && llmConfigured === false ? (
+        <div className="banner workspace-banner" data-testid="chat-no-llm-banner">
+          No chat provider is connected yet, so {curatorName || "your curator"} can’t reply here.
+          Connect one in <Link to="/admin">Admin</Link>, or browse the library in{" "}
+          <Link to="/explore">Explore</Link> instead.
         </div>
       ) : null}
 

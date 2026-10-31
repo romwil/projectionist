@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   formatApiError,
+  getAuthMe,
   getFeatures,
   getSetupHandshake,
   commitSetup,
@@ -10,6 +11,7 @@ import {
 } from "../api/client";
 import GlassDoor from "../components/GlassDoor";
 import InlineAlert from "../components/InlineAlert";
+import { resolveDefaultHome } from "../lib/defaultHome";
 import {
   setupCommitHouseholdDomain,
   setupCommitInviteOnly,
@@ -32,7 +34,8 @@ export default function SetupWizardPage() {
   const [plexCheck, setPlexCheck] = useState<any | null>(null);
   const [tmdbCheck, setTmdbCheck] = useState<any | null>(null);
   const [busy, setBusy] = useState(false);
-  const [recoveryKey, setRecoveryKey] = useState("");
+  const [householdLocked, setHouseholdLocked] = useState(false);
+  const [enterTarget, setEnterTarget] = useState("/chat");
 
   useEffect(() => {
     getFeatures()
@@ -82,7 +85,7 @@ export default function SetupWizardPage() {
     setBusy(true);
     setError("");
     try {
-      const result = await commitSetup({
+      await commitSetup({
         profile,
         username: username.trim(),
         password,
@@ -91,7 +94,18 @@ export default function SetupWizardPage() {
         allow_access_requests: accessRequests,
         invite_only: setupCommitInviteOnly(profile, inviteOnly),
       });
-      setRecoveryKey(result.recovery_key || "");
+      setHouseholdLocked(true);
+      try {
+        const [features, me] = await Promise.all([getFeatures(), getAuthMe()]);
+        setEnterTarget(
+          resolveDefaultHome({
+            defaultPage: me?.user?.default_page,
+            llmConfigured: Boolean(features?.features?.llm_configured),
+          }),
+        );
+      } catch {
+        setEnterTarget("/chat");
+      }
     } catch (err: any) {
       setError(formatApiError(err) || "Could not finish setup.");
     } finally {
@@ -99,23 +113,25 @@ export default function SetupWizardPage() {
     }
   }
 
-  if (recoveryKey) {
+  if (householdLocked) {
     return (
       <GlassDoor
         testId="setup-wizard"
         eyebrow="Projectionist Setup"
         title="Household locked"
-        lede="Save this recovery key. It is shown once."
+        lede="Your owner account is ready. If you forget your password, reset it from the login page or ask another owner to reset it from Admin → Members."
       >
-        <p className="login-help" data-testid="setup-recovery-key">
-          {recoveryKey}
-        </p>
         <p className="login-help">
           {profile === "public"
             ? "Public Household: invite-only join, multi-user on, registration off."
             : "Private Household: you can invite members later from Admin."}
         </p>
-        <button type="button" className="login-primary" data-testid="setup-enter" onClick={() => navigate("/chat")}>
+        <button
+          type="button"
+          className="login-primary"
+          data-testid="setup-enter"
+          onClick={() => navigate(enterTarget)}
+        >
           Enter Projectionist
         </button>
       </GlassDoor>

@@ -1588,6 +1588,10 @@ class SchemaMigrationsMixin:
         if existing:
             return
         name = str(row["curator_name"]) if "curator_name" in row.keys() else "Curator"
+        # GRO-009: member-facing persona copy shows one curator speaking name.
+        # A migration-artifact suffix like "Curator (migrated)" must never
+        # leak into the persona picker — the shared template keeps the exact
+        # name the owner already set for their curator.
         conn.execute(
             """
             INSERT INTO persona_templates (
@@ -1597,7 +1601,7 @@ class SchemaMigrationsMixin:
                 system_prompt_override, is_default
             ) VALUES (?, ?, 'shared', ?, ?, ?, ?, 0.5, 0.5, 0.5, 0.5, ?, 1)
             """,
-            (migrated_id, f"{name} (migrated)", BOOTSTRAP_OWNER_ID, bro, snark, auto, override),
+            (migrated_id, name, BOOTSTRAP_OWNER_ID, bro, snark, auto, override),
         )
 
     def _migrate_acquisition_exclusions(self, conn: sqlite3.Connection) -> None:
@@ -2096,6 +2100,14 @@ class SchemaMigrationsMixin:
         invite_cols = self._table_columns(conn, "invites")
         if "role" in invite_cols:
             conn.execute("UPDATE invites SET role = 'member' WHERE role = 'guest'")
+
+    def _migrate_user_default_page(self, conn: sqlite3.Connection) -> None:
+        """Per-user default landing page preference (BD-5)."""
+        user_cols = self._table_columns(conn, "users")
+        if "default_page" not in user_cols:
+            conn.execute(
+                "ALTER TABLE users ADD COLUMN default_page TEXT NOT NULL DEFAULT 'auto'"
+            )
 
     def _migrate_session_revocation(self, conn: sqlite3.Connection) -> None:
         """Session epoch + jti denylist so logout / password rotate invalidate cookies."""

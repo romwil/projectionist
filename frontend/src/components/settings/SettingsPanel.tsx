@@ -4,12 +4,13 @@ type SettingsPanelProps = {
   children?: React.ReactNode;
   testId?: string;
   footer?: React.ReactNode;
+  id?: string;
 };
 
 /** Card panel for a Settings section (matches Admin config-panel patterns). */
-export default function SettingsPanel({ title, lead, children, testId, footer }: SettingsPanelProps) {
+export default function SettingsPanel({ title, lead, children, testId, footer, id }: SettingsPanelProps) {
   return (
-    <section className="settings-panel config-panel" data-testid={testId}>
+    <section id={id} className="settings-panel config-panel" data-testid={testId}>
       {title || lead ? (
         <header className="config-panel-header settings-panel-header">
           {title ? <h3>{title}</h3> : null}

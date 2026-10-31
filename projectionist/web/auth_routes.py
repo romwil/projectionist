@@ -24,14 +24,18 @@ def register_auth_routes(app):
     LocalRegisterPayload = app_mod.LocalRegisterPayload
     MemoryAccessError = app_mod.MemoryAccessError
     MyAppriseTestPayload = app_mod.MyAppriseTestPayload
+    OwnerPasswordResetPayload = app_mod.OwnerPasswordResetPayload
+    PasswordChangePayload = app_mod.PasswordChangePayload
     PlexLoginPayload = app_mod.PlexLoginPayload
     SESSION_COOKIE_NAME = app_mod.SESSION_COOKIE_NAME
     SeerrSyncPayload = app_mod.SeerrSyncPayload
     UserMemoryService = app_mod.UserMemoryService
     UserUpdatePayload = app_mod.UserUpdatePayload
     _db = app_mod._db
+    _hash_password = app_mod._hash_password
     _safe_error_detail = app_mod._safe_error_detail
     _settings = app_mod._settings
+    _verify_password = app_mod._verify_password
     authenticate_local_user = app_mod.authenticate_local_user
     authenticate_plex_user = app_mod.authenticate_plex_user
     clear_pin_nonce_cookie = app_mod.clear_pin_nonce_cookie
@@ -170,6 +174,8 @@ def register_auth_routes(app):
             updates["notify_channel_apprise"] = payload.notify_channel_apprise
         if "apprise_urls" in fields_set:
             updates["apprise_urls"] = payload.apprise_urls
+        if "default_page" in fields_set:
+            updates["default_page"] = payload.default_page
         if payload.clear_weather_location:
             updates["weather_location"] = None
         elif any(key in fields_set for key in ("weather_place", "weather_lat", "weather_lon")):
@@ -442,6 +448,49 @@ def register_auth_routes(app):
                 )
         clear_session_cookie(response, request)
         return {"logged_out": True}
+
+
+    @router.post("/api/auth/password")
+    def change_password(
+        payload: PasswordChangePayload,
+        request: Request,
+        response: Response,
+        user=Depends(get_current_user_dep),
+    ) -> Dict[str, Any]:
+        """Self-service password change. Requires the current password (SEC-011)."""
+        enforce_rate_limit(request, bucket="auth_password_change", limit=10, window_seconds=60)
+        db = _db()
+        row = db.get_user(user.id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        stored_hash = row["password_hash"] if "password_hash" in row.keys() else None
+        if not stored_hash:
+            raise HTTPException(
+                status_code=400,
+                detail="Password change is only available for local-password accounts",
+            )
+        if not _verify_password(payload.current_password, str(stored_hash)):
+            raise HTTPException(status_code=401, detail="Current password is incorrect")
+        updated = db.update_user_password(user.id, _hash_password(payload.new_password))
+        # Changing the password bumps the session epoch (signs out every other
+        # session). Re-mint this cookie against the fresh epoch so the caller
+        # is not logged out by their own change.
+        set_session_cookie(response, user.id, request, db=db)
+        return {"user": updated, "signed_out_everywhere_else": True}
+
+
+    @router.post("/api/auth/sign-out-everywhere")
+    def sign_out_everywhere(
+        request: Request,
+        response: Response,
+        user=Depends(get_current_user_dep),
+    ) -> Dict[str, Any]:
+        """Invalidate every other session for this account (SEC-011, OPS-016)."""
+        enforce_rate_limit(request, bucket="auth_sign_out_everywhere", limit=10, window_seconds=60)
+        db = _db()
+        db.bump_session_epoch(user.id)
+        set_session_cookie(response, user.id, request, db=db)
+        return {"signed_out_everywhere": True}
 
 
     class AccessRequestCreatePayload(BaseModel):
@@ -740,6 +789,32 @@ def register_auth_routes(app):
                 detail=_safe_error_detail(error, "User not found"),
             ) from error
         return {"deleted": True, "id": user_id}
+
+
+    @router.post("/api/users/{user_id}/reset-password")
+    def reset_user_password(
+        user_id: str,
+        payload: OwnerPasswordResetPayload,
+        user=Depends(require_role("owner")),
+    ) -> Dict[str, Any]:
+        """Owner resets a member's local password without the old one (OPS-016)."""
+        del user  # role gate only; any owner may reset any local member's password
+        db = _db()
+        target = db.get_user(user_id)
+        if target is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        auth_method = (
+            str(target["auth_method"])
+            if "auth_method" in target.keys() and target["auth_method"]
+            else "plex"
+        )
+        if auth_method != "local":
+            raise HTTPException(
+                status_code=400,
+                detail="This account signs in with Plex, not a password — there is nothing to reset here.",
+            )
+        updated = db.update_user_password(user_id, _hash_password(payload.new_password))
+        return {"user": updated}
 
 
     @router.post("/api/users/{user_id}/sync-seerr")

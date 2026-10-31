@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   AUTH_METHOD_ORDER,
+  LOGIN_PRODUCT_STATEMENT,
   loginLede,
   plexAdvancedCopy,
   resolveAuthMethods,
@@ -49,6 +50,13 @@ describe("loginLede", () => {
     const lede = loginLede(["local", "oidc"]);
     assert.doesNotMatch(lede, /Plex/i);
     assert.doesNotMatch(lede, /multi-user/i);
+  });
+
+  it("states what the product is before asking for sign-in (PRD-004)", () => {
+    assert.match(LOGIN_PRODUCT_STATEMENT, /Projectionist is/i);
+    for (const methods of [["plex"], ["local", "plex"], ["local", "oidc"]]) {
+      assert.ok(loginLede(methods).startsWith(LOGIN_PRODUCT_STATEMENT));
+    }
   });
 });
 

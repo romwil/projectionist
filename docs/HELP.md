@@ -1,8 +1,8 @@
 # Help
 
-Projectionist is a private cinema companion for the library you already own. It talks to *your* Plex catalog — not a Netflix top-10 — so every recommendation, comparison, and "what should we watch?" is grounded in titles you actually have. This page is the in-app guide for **Chat**, **Search**, **Explore**, **Live**, **Inbox**, **My Journey**, **Related titles**, and — for owners — idle curation, **Lobby Theater**, and Live Channels craft.
+Projectionist is a private cinema companion for the library you already own. It talks to *your* Plex catalog — not a Netflix top-10 — so every recommendation, comparison, and "what should we watch?" is grounded in titles you actually have. This page is the in-app guide for **Chat**, **Search**, **Explore**, **Live**, **Inbox**, **Related titles**, and — for owners — idle curation, **Lobby Theater**, and Live Channels craft.
 
-New here? Start with **[Chat](/chat)** and just ask for something in plain language. The top bar keeps Search, Chat, Explore, Live (when stations are on the air), Inbox, My Journey, and Settings as peer destinations (owners also see Admin). Prefer names to icons? The hamburger menu lists those same destinations by label under **Navigate**, then **More** for Related titles, Tags, Watchlist, Library, Help, Privacy, and About — so nothing is reachable from only one of the two. Everything below shows you the shortest path to a result, then explains how it works so you can trust it.
+New here? Start with **[Chat](/chat)** and just ask for something in plain language. The top bar keeps Search, Chat, Explore, Live (when stations are on the air), Inbox, and Settings as peer destinations (owners also see Admin). Prefer names to icons? The hamburger menu lists those same destinations by label under **Navigate**, then **More** for Related titles, Tags, Watchlist, Library, Help, Privacy, and About — so nothing is reachable from only one of the two. Badges and achievements (formerly "My Journey") live on **Settings → Profile**, not the top bar. Everything below shows you the shortest path to a result, then explains how it works so you can trust it.
 
 Deep dive: [PRODUCT.md](PRODUCT.md) · [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) · [About](/about) · [Privacy](/privacy)
 
@@ -18,7 +18,7 @@ Deep dive: [PRODUCT.md](PRODUCT.md) · [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.
 | Watch household Live TV | [Live](/live) (when the owner has stations on the air) |
 | Play a library title in Projectionist | Tap **Play** on a poster, card, or title sheet — `/watch` |
 | Recommendations & notices | [Inbox](/inbox) |
-| Achievements & cinema pathways | [My Journey](/my-journey) |
+| Badges & achievements | [Settings → Profile](/settings/profile#badges) |
 | Follow and explain title connections | [Related titles](/explore/related) |
 | Browse by keyword | [Tags](/explore/tags) |
 | Pins | [Watchlist](/watchlist) |
@@ -151,18 +151,15 @@ Tune the underlying weights under **Settings → Taste** — raise a cluster, lo
 
 **TV & mid-series stops.** When you rate or abandon a show partway through, Projectionist weighs earlier seasons more heavily than later ones you never watched. Episode ratings (when Plex has them) also nudge taste — so a beloved Season 1 that you dropped in Season 3 does not keep forcing “more like late-series” neighbors.
 
-### My Journey — achievements, pathways, and secrets
+### Badges & achievements (Settings → Profile)
 
-Open **[My Journey](/my-journey)** from the top bar (the route icon, immediately left of Settings) for your cinema discovery path:
+Open **[Settings → Profile](/settings/profile#badges)** for your badges and achievements — the same ground that used to be a top-bar "My Journey" icon. A link at `/my-journey` still works; it redirects here.
 
-- **List** or **Achievements Tree** — Civ-style pathways toward ultimate category badges
-- **Progress** — earned, in progress, and hidden secrets found
-- **Persona pathways** — branches that encourage trying curator voices
-- **Hidden achievements** — silhouette / "???" awards until you earn them
-- **Cinema courses** and **Explainers** — learning along the way
+- **Badges** — milestones you've earned (rating titles, keeping a chat streak, finishing courses)
+- **Challenges** — in-progress goals with a plain `N / target` count
 - **Chat streak** — consecutive chat days plus your 30-day conversation count
 
-Youth-mode accounts see youth-safe achievements only. Member-facing copy never says “engagement.”
+Youth-mode accounts see youth-safe badges and challenges only. Member-facing copy never says “engagement.”
 
 **Surprise Me with a mood.** Above the dice in chat, tap a mood chip (**Cozy**, **Thrill**, **Laugh**, **Think**, **Escape**) for an instant one-shot pick in that mood — or use the dice for a fully random surprise. The dice stays a random unwatched pick; a named “why” is attached when that random title has a watched-bridge, not used to repeat the same title every click. Mood chips do not overwrite your durable taste profile.
 
@@ -272,7 +269,7 @@ Household door: **Explore → Continue Watching → Play**. Finish, shrink onto 
 
 **Mark as watched — a guided one-tap.** For any title that lives in your Plex library, the grip offers **Mark as watched**. Say you just finished *Heat* on the TV downstairs but forgot to press play in Plex — open the ⋮ menu on its poster and choose **Mark as watched**. Projectionist records the view and tells Plex, using the episode on the card when the poster is an episode, so the poster's watched overlay turns on, the title leaves Continue Watching, and it stops showing up as "unwatched" everywhere it appears. Changed your mind, or marked the wrong one? The same spot now reads **Mark as unwatched** and reverses it. The action only appears on real library titles (the same rule as **Play**) — discovery cards for things you don't own never show it — and, like everything else, it's tied to *your* signed-in Plex context.
 
-**Reporting a title problem — safely.** Anyone who can browse can submit a typed **Report issue** (wrong language, bad video/audio, wrong title, missing subtitles, duplicate, or other) with an optional note. The report captures the title identity and a snapshot of what you saw, then lands in the owner queue at **Admin → Issues**. Members never invoke Radarr or Sonarr commands from a report — this separation protects your files and downloads from accidental changes. An owner decides whether to resolve it or run a supported, logged repair.
+**Reporting a title problem — safely.** Anyone who can browse can submit a typed **Report issue** (wrong language, bad video/audio, wrong title, missing subtitles, duplicate, or other) with an optional note. The report captures the title identity and a snapshot of what you saw, then lands in the owner queue at **Admin → Health** (Issues tab). Members never invoke Radarr or Sonarr commands from a report — this separation protects your files and downloads from accidental changes. An owner decides whether to resolve it or run a supported, logged repair.
 
 ### Title detail — Plot knowledge
 
@@ -289,7 +286,7 @@ The curator keeps two kinds of memory:
 
 ### Youth mode
 
-If your account has **Youth mode** on, Projectionist uses a distinct big-poster layout. The top bar keeps **Ask**, **Browse**, **Inbox**, and **My Journey** (plus Search and Settings). The hamburger lists those same destinations under **Navigate**, plus **My list** under **More**. Explore and Chat only show titles with a content rating at or below the owner's max — **unrated titles stay hidden**. Ask the curator stays friendly and age-aware. Try **Pick for me** on Explore for a quick surprise from safe shelves.
+If your account has **Youth mode** on, Projectionist uses a distinct big-poster layout. The top bar keeps **Ask**, **Browse**, and **Inbox** (plus Search and Settings). The hamburger lists those same destinations under **Navigate**, plus **My list** under **More**. Explore and Chat only show titles with a content rating at or below the owner's max — **unrated titles stay hidden**. Ask the curator stays friendly and age-aware. Try **Pick for me** on Explore for a quick surprise from safe shelves.
 
 ### Joining the household
 
@@ -298,6 +295,18 @@ Households that chose **Public Household** during setup are **invite-only**. Pri
 There is no public guest tour and no self-serve signup. `/tour` sends you back to sign-in.
 
 If you don't have a link yet, use **Need an invite?** on `/login`. The owner sees it in their inbox and in **Admin → Access**.
+
+### Default page, password, and sessions
+
+**Where you land.** Set **Settings → Profile → Default page** to **Chat** or **Explore**, or leave it on **Auto** (Chat when a language model is configured, Explore when it isn't — Explore then explains the missing provider instead of a dead-end Chat). Signing in returns you to whatever page you were trying to open before you had to sign in.
+
+> **You try to open a title while signed out → sign in → you land back on that title**, not on the default page.
+
+**Changing your password.** If you signed in with a username and password (not Plex or SSO), **Settings → Profile → Password** lets you set a new one. Changing it signs out every other device that is signed in as you — a shared tablet or a phone you lost stays logged out.
+
+**Sign out everywhere.** **Settings → Profile → Sessions → Sign out everywhere else** ends every other signed-in session for your account without changing your password. This device stays signed in.
+
+**Forgot your password?** There's no separate recovery key to hunt down — reset it from the login page, or ask another owner to reset it for you from **Admin → Members**.
 
 ---
 
@@ -354,7 +363,7 @@ Identify is usually **show-level** (theme or score). It does **not** pick season
 
 ### Monday pass
 
-Admin Dashboard leads with a **Monday pass** — about 20 minutes, in this order:
+**Admin → Health** leads with a **Monday pass** — about 20 minutes, in this order:
 
 1. **Named kinship on opened titles** (the number to watch — catch-up is the lever; Similar cache % is not useful relatedness)
 2. **Open issues**
@@ -503,13 +512,13 @@ curl -s "http://localhost:32400/:/scrobble?identifier=com.plexapp.plugins.librar
 
 **Where to read coverage in the app**
 
-- **Admin → Dashboard** — full **Knowledge coverage** panel (% with overview, motifs, keywords, neighbors, loglines; themes/synopsis when present). Hash-fallback embeddings are labeled when that is the actual model.
+- **Admin → Health** — full **Knowledge coverage** panel (% with overview, motifs, keywords, neighbors, loglines; themes/synopsis when present). Hash-fallback embeddings are labeled when that is the actual model.
 - **Admin → Scheduled Tasks** and **Explore** — compact honesty strip so sparsity stays visible while you tune cadence. The same hash-fallback line appears on the strip.
 
 Read the same numbers over HTTP when you're scripting a health check:
 
 ```bash
-# Owner host — coverage percentages the Dashboard panel renders
+# Owner host — coverage percentages the Health panel renders
 curl -s http://localhost:8788/api/library/knowledge-coverage | python3 -m json.tool
 # → {"overview_pct": 98, "embeddings_pct": 91, "motifs_pct": 63, "neighbors_pct": 44, "loglines_pct": 7}
 ```
@@ -526,15 +535,15 @@ Admin shows last-run outcome, durable run history, measured items/hour, owner-se
 
 ### Issue queue and repair policy
 
-Open **Admin → Issues** to triage reports by status. Read the member's note and title identity first, then either resolve/reject the report or run a repair **only when the target is clear**. An owner may opt in to automatic repair for explicitly trusted issue codes, but the default is off.
+Open **Admin → Health** (Issues tab) to triage reports by status. Read the member's note and title identity first, then either resolve/reject the report or run a repair **only when the target is clear**. An owner may opt in to automatic repair for explicitly trusted issue codes, but the default is off.
 
 The safety model is deliberately conservative: auto-repair is an owner policy over narrow, logged playbooks — not a rule that every report should redownload or remove something. Supported high-confidence cases may identify a title already managed by the corresponding *arr service, mark a known bad file where the connector supports it, and request a search. Projectionist does **not** guess a title, delete arbitrary files, correct a bad metadata match blindly, or guarantee subtitles merely because a search was requested. If identity is incomplete, the title isn't managed, or the connector can't act safely, the issue records a clear skip/failure reason. Review the repair log after each run.
 
 ### Library-health hero & issue badge
 
-The **Admin → Dashboard** (**Library intelligence**) opens with a **Monday pass** hero: about 20 minutes, in order — **Named kinship on opened titles** → **open issues** → **purge pressure** → **Scheduled Tasks catch-up**. Similar cache % is not useful relatedness. Below coverage, an empty-shelf list names titles someone opened to a blank More Like This. Tiles also include title count, unwatched share, and **rating coverage** (watched titles you’ve rated — with an honest note when ratings aren’t linked to watched titles yet). Each tile links into the page that fixes it. Weekly digest stat cards are drillable the same way. The Admin rail carries the open-issue count as a badge next to **Issues**.
+The **Admin → Health** (**Library intelligence**) opens with a **Monday pass** hero: about 20 minutes, in order — **Named kinship on opened titles** → **open issues** → **purge pressure** → **Scheduled Tasks catch-up**. Similar cache % is not useful relatedness. Below coverage, an empty-shelf list names titles someone opened to a blank More Like This. Tiles also include title count, unwatched share, and **rating coverage** (watched titles you’ve rated — with an honest note when ratings aren’t linked to watched titles yet). Each tile links into the page that fixes it. Weekly digest stat cards are drillable the same way. The Admin rail carries the open-issue count as a badge next to **Health**.
 
-The hero reuses the same aggregations the rest of the Dashboard already loads — nothing new is fetched per tile. The open-issue count comes from the existing queue:
+The hero reuses the same aggregations the rest of Health already loads — nothing new is fetched per tile. The open-issue count comes from the existing queue:
 
 ```bash
 # Owner host — the same open-issue count the badge shows
@@ -568,7 +577,7 @@ curl -s -X POST http://localhost:8788/api/library/items/delete \
 # → {"mode":"full","deleted":1,"results":[...],"errors":[]}
 ```
 
-**How it works / honest limits.** When the title is in Radarr or Sonarr, file deletion goes through those apps (`deleteFiles` / episode-file delete + `addExclusion` for whole-title remove). Plex cleanup then drops library metadata (files are already gone via *arr). When the title is not in either app, Projectionist first unlinks files whose paths are already on the library row, in the *arr snapshot, or on the Plex item (show episode files included) if this container can see them. If those paths are not visible here, it asks Plex to delete the item from disk — Plex can see host paths this container often cannot. It does not search the disk for other copies. After local files were unlinked, a Plex 404 still drops the index. A true no-op (not in *arr, nothing unlinked, and Plex unavailable, missing, or rejected) leaves the index and does not claim the title was Removed. Missing sizes on a successful Plex delete may show **Size unknown** instead of pretending 0 B was measured. Before a managed *arr delete, Projectionist snapshots file paths and sizes from *arr (and infers parent folders from those known paths) so the owner summary and logs can show what was removed — it does not walk the disk outside those paths. When *arr reports a title folder but no episode file list or size, the summary says so (and may show a library-index size estimate) instead of claiming **0 B freed**. Dashboard **Storage Intelligence** purge defaults to this **full remove** path (same *arr + Plex-on-disk fallback + index stack). Choose **Index only** in the purge confirm dialog when you want an undoable Projectionist-index prune without touching disk.
+**How it works / honest limits.** When the title is in Radarr or Sonarr, file deletion goes through those apps (`deleteFiles` / episode-file delete + `addExclusion` for whole-title remove). Plex cleanup then drops library metadata (files are already gone via *arr). When the title is not in either app, Projectionist first unlinks files whose paths are already on the library row, in the *arr snapshot, or on the Plex item (show episode files included) if this container can see them. If those paths are not visible here, it asks Plex to delete the item from disk — Plex can see host paths this container often cannot. It does not search the disk for other copies. After local files were unlinked, a Plex 404 still drops the index. A true no-op (not in *arr, nothing unlinked, and Plex unavailable, missing, or rejected) leaves the index and does not claim the title was Removed. Missing sizes on a successful Plex delete may show **Size unknown** instead of pretending 0 B was measured. Before a managed *arr delete, Projectionist snapshots file paths and sizes from *arr (and infers parent folders from those known paths) so the owner summary and logs can show what was removed — it does not walk the disk outside those paths. When *arr reports a title folder but no episode file list or size, the summary says so (and may show a library-index size estimate) instead of claiming **0 B freed**. Health's **Storage Intelligence** purge defaults to this **full remove** path (same *arr + Plex-on-disk fallback + index stack). Choose **Index only** in the purge confirm dialog when you want an undoable Projectionist-index prune without touching disk.
 
 ```bash
 # Season / episode remove (owner) — files via Sonarr, or Plex on-disk when not in Sonarr
@@ -583,11 +592,11 @@ curl -s -X POST http://localhost:8788/api/library/tv/remove \
 
 ### Purge candidates & index undo
 
-The **Purge candidates & index undo** panel sits **directly under** the Storage Intelligence grid on **Admin → Dashboard**. It does two separate jobs: **Refresh purge candidates** rebuilds the suggestions (stale, unwatched, or low-signal titles) without deleting anything, and **Undo** restores Projectionist index rows from earlier **index-only** deletes.
+The **Purge candidates & index undo** panel sits **directly under** the Storage Intelligence grid on **Admin → Health**. It does two separate jobs: **Refresh purge candidates** rebuilds the suggestions (stale, unwatched, or low-signal titles) without deleting anything, and **Undo** restores Projectionist index rows from earlier **index-only** deletes.
 
 **Storage Intelligence** lists **movies and TV shows** in one grid (Type column) with **All / Movies / TV** filter tabs. Show sizes come from episode rollups in the library index (sum of episode file sizes), refreshed for the visible page when *arr is configured. The panel pages **20** rows at a time over a buffered list of up to **100** candidates; after you purge or keep titles, Projectionist tops the buffer back up in the background when it dips below **80**. **Keep** dismisses a title from future suggestions without deleting anything. Opening a title from the grid and fully removing it shows the same file/folder/freed summary as bulk purge.
 
-**Index-only** purge deletes are reversible: Projectionist records them in an action log with a snapshot of the exact index rows removed, so you can restore those rows. **Full remove** (the Dashboard purge default) deletes files via *arr (or Plex on-disk when the title is not in *arr) and is **not** undoable — it does not appear as a reversible action and cannot put media back on disk. After a successful *arr full remove, titles are also recorded in Projectionist's acquisition exclusions so they are not recommended or re-added through the app. Titles removed only via Plex or local disk are not added to that exclusion list. The owner sees a scrollable summary of files, folders, and storage freed.
+**Index-only** purge deletes are reversible: Projectionist records them in an action log with a snapshot of the exact index rows removed, so you can restore those rows. **Full remove** (the Health purge default) deletes files via *arr (or Plex on-disk when the title is not in *arr) and is **not** undoable — it does not appear as a reversible action and cannot put media back on disk. After a successful *arr full remove, titles are also recorded in Projectionist's acquisition exclusions so they are not recommended or re-added through the app. Titles removed only via Plex or local disk are not added to that exclusion list. The owner sees a scrollable summary of files, folders, and storage freed.
 
 ```bash
 # Index-only purge delete (undoable) — omit mode or use "full" for disk remove
@@ -604,13 +613,13 @@ curl -s http://localhost:8788/api/admin/grooming/actions | python3 -m json.tool
 curl -s -X POST http://localhost:8788/api/admin/grooming/actions/ACTION_ID/undo
 ```
 
-Use the **Purge candidates & index undo** panel on the Dashboard for the same thing without a terminal.
+Use the **Purge candidates & index undo** panel on **Admin → Health** for the same thing without a terminal.
 
 **How it works / honest limits.** Undo restores Projectionist **index rows** from index-only purge deletes (title details, plot knowledge, and similarity links); regenerable derived data such as plot-similarity data is rebuilt by the normal scheduled tasks, so it is not snapshotted. Undo does **not** restore disk files or reverse a full purge — full remove already deleted media through Radarr/Sonarr or Plex. Once an action is undone it is marked `undone_at` and can't be undone twice.
 
 ### Collections & courses (publish a list to members)
 
-Any curated list can become a members-visible **collection**, and an ordered **course** with a short note per step (e.g. a "Kurosawa 101" watch-through). Members can view what you publish; only the owner publishes. Members track course step progress under **Explore → Engagement**.
+Any curated list can become a members-visible **collection**, and an ordered **course** with a short note per step (e.g. a "Kurosawa 101" watch-through). Members can view what you publish; only the owner publishes. Members track course step progress from **[Settings → Profile](/settings/profile#badges)**.
 
 - Create or open a list under **Lists**, set its kind to **course** if you want an ordered sequence, and use the owner **Course authoring** panel to reorder items and add a per-step note.
 - Toggle **Publish** to make it visible to members under **Collections**; toggle it off to make it private again.
@@ -632,7 +641,7 @@ curl -s http://localhost:8788/api/collections | python3 -m json.tool
 
 ### Weekly digest — "This week in your library"
 
-Projectionist assembles an in-app **weekly digest** — new additions, library counts, knowledge coverage, open issues, and purge-candidate pressure — as a snapshot you can read on the Dashboard. A scheduled `weekly_digest` task refreshes it once per weekly bucket; you can also **Generate now**.
+Projectionist assembles an in-app **weekly digest** — new additions, library counts, knowledge coverage, open issues, and purge-candidate pressure — as a snapshot you can read on **Admin → Health**. A scheduled `weekly_digest` task refreshes it once per weekly bucket; you can also **Generate now**.
 
 Members who opt in under **Settings → Notifications** also get a personalized **weekly newsletter** (inbox + email when mail is configured). Owners can push that newsletter early from **Admin → Newsletters → Weekly newsletter** (the owner’s own **weekly household letter** is controlled on the same page) (just me / selected members / everyone opted in), or send a self-only copy from **Settings → Notifications**. A separate **monthly collection-curation** update goes to owners on the same transport. Gap / watchlist **arrival** notifications fire when matching titles land in the library. Opt-in **enthusiast nudges** ride a weekly `enthusiast_nudge` task (same transport; requires `nudge_opt_in`). Opt-in **Year in Review** rides late-December tease / early-January drop tasks (`year_in_review_tease`, `year_in_review_drop`); generate and drop backfill that member’s Plex play history for the calendar year (optional Tautulli when configured — never required). Members turn opt-in on under **Settings → Notifications**, and owners can generate a self-only test reel from **Admin → Newsletters → Year in Review** (or the same generate control under Settings → Notifications). The **member weekly For-you rail** rides the same weekly cadence (`member_weekly_rail`); owners can force a rebuild:
 
@@ -673,7 +682,7 @@ curl -s http://localhost:8788/api/admin/weekly-digest | python3 -m json.tool
 curl -s -X POST http://localhost:8788/api/admin/weekly-digest/generate
 ```
 
-**How it works / honest limits.** The owner Dashboard digest remains an in-app snapshot keyed to a fixed 7-day bucket. Member newsletters and arrival alerts reuse the shared notification inbox; email only sends when **Admin → Mail** is enabled and the member has opted in. On-demand newsletter pushes still respect newsletter opt-in and each member’s inbox/email channel prefs — opted-out people are skipped, not forced.
+**How it works / honest limits.** The owner Health digest remains an in-app snapshot keyed to a fixed 7-day bucket. Member newsletters and arrival alerts reuse the shared notification inbox; email only sends when **Admin → Mail** is enabled and the member has opted in. On-demand newsletter pushes still respect newsletter opt-in and each member’s inbox/email channel prefs — opted-out people are skipped, not forced.
 
 ### Mail (SMTP + Resend)
 
@@ -717,7 +726,7 @@ curl -s -X POST http://localhost:8788/api/auth/me/apprise/test \
 
 ### Youth gate & access requests
 
-Under **Admin → Household**, set **Youth max content rating** (default `PG-13`). Youth-mode members never see empty/`content_rating` titles or anything above that max — browse, feeds, title detail, and chat cards all fail closed. Household accounts are **owner** or **member** (legacy guest rows map to member).
+Under **Admin → Members**, set **Youth max content rating** (default `PG-13`). Youth-mode members never see empty/`content_rating` titles or anything above that max — browse, feeds, title detail, and chat cards all fail closed. Household accounts are **owner** or **member** (legacy guest rows map to member).
 
 ```bash
 # Inspect current youth gate (owner session cookie)
@@ -744,6 +753,19 @@ Household join is **invite-only by default** when multi-user is on. Create invit
 Visitors can still submit **Request access** on `/login` (`POST /api/access-requests`). Approvals notify you via the inbox (`access-request` kind) and email when mail is configured. Denying a request soft-blocks that email (and any known identity) from redeeming later invites. Seerr stays for post-member *media* requests only.
 
 To restore pre-1.26 LAN-open auto-provision (any reachable Plex/SSO identity becomes a member), enable **Open auto-provision** under Admin household settings (`features.open_auto_provision`), or turn off **Require invite** (`features.invite_only`).
+
+### Member accounts — role changes and password resets
+
+The members table on **Admin → Members** confirms before it does anything destructive or hard to undo: changing a member's role (especially promoting to owner) and removing a member both open a confirm dialog first, naming who and what before you commit.
+
+For a member who signed in with a username and password (not Plex or SSO) and is locked out, **Reset password** on that member's row sets a new password for them without needing their old one. They are signed out of every existing session the next time they load the app, the same as if they had changed their own password.
+
+```bash
+# Owner session cookie required; 404s for Plex/SSO accounts (nothing to reset)
+curl -s -X POST http://localhost:8788/api/users/USER_ID/reset-password \
+  -H 'Content-Type: application/json' \
+  -d '{"new_password":"a-new-shared-secret"}'
+```
 
 ### Memory & privacy controls (owner)
 
