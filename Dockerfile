@@ -52,17 +52,15 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates gosu ffmpeg
 
-# Install Python deps from manifests only (stub package). Real sources come next so
-# app edits do not re-download wheels. Version ARG/LABEL intentionally come AFTER
-# this layer — otherwise every release would bust pip. The manifests in
-# .docker-deps/ also drop the patch version and the README badge, which change
-# every release and used to invalidate this layer.
-COPY .docker-deps/pyproject.toml .docker-deps/README.md .docker-deps/LICENSE ./
-RUN mkdir -p projectionist && printf '# build stub\n' > projectionist/__init__.py
+# Install the reviewed, hash-pinned runtime dependency graph before app sources.
+# Version ARG/LABEL intentionally come AFTER this layer — otherwise every release
+# would bust pip. The application itself is installed without dependency
+# resolution after its real source tree is copied below.
+COPY requirements/runtime.lock ./requirements/runtime.lock
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install ".[web,mcp]"
+    pip install --require-hashes -r requirements/runtime.lock
 
-# Real metadata (version badge, license text) after wheels are installed.
+# Real metadata (version badge, license text) after runtime wheels are installed.
 COPY pyproject.toml README.md LICENSE ./
 
 # Real package tree; --no-deps keeps the warm wheel layer when only sources change.

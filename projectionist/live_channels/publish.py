@@ -34,7 +34,6 @@ from projectionist.live_channels.publish_programming import (
     _DEFAULT_FILL_LIMIT,
     _FULL_RUN_FILL_CAP,
     _SOFT_FILL_CAP,
-    _extract_plex_rating_keys,
     apply_queue_padding,
     collect_programs_for_recipe,
     craft_fill_mode,
