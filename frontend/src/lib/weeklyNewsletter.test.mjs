@@ -35,5 +35,9 @@ describe("weeklyNewsletter helpers", () => {
       newsletterResultMessage({ delivered: 2, emailed: 1, skipped_opt_out: 3 }),
       "Delivered to 2 inboxes · 1 emailed · 3 skipped (not opted in).",
     );
+    assert.equal(
+      newsletterResultMessage({ delivered: 0, skipped_empty: 2 }),
+      "Delivered to 0 inboxes · 2 quiet (nothing new for them this week).",
+    );
   });
 });

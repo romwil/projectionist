@@ -100,6 +100,8 @@ type TitleCardProps = {
   userRole?: any;
   multiUserEnabled?: boolean;
   draggableToDock?: boolean;
+  /** Pick that surfaced this card (`chat:<message id>`), carried to Play for on-box attribution. */
+  recId?: string;
 };
 
 export default function TitleCard({
@@ -114,6 +116,7 @@ export default function TitleCard({
   userRole,
   multiUserEnabled = true,
   draggableToDock = false,
+  recId = "",
 }: TitleCardProps) {
   const [hovered, setHovered] = useState(false);
   const [whyOpen, setWhyOpen] = useState(false);
@@ -147,7 +150,7 @@ export default function TitleCard({
   const showAskOwner =
     capability.showGuidedCopy && itemNeedsAddGuidance(item) && addStatus !== "success";
   const showWatchPlex = canWatchOnPlex(item);
-  const playTo = showWatchPlex ? libraryWatchTo(plexPlayRatingKey(item), (location as any)) : null;
+  const playTo = showWatchPlex ? libraryWatchTo(plexPlayRatingKey(item), (location as any), { rec: recId }) : null;
   const backdropUrl = item.backdrop_url || item.art || "";
   const showRing =
     item.media_type === "show" &&

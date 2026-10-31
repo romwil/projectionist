@@ -3,6 +3,7 @@ import { HEALTH_TABS, resolveHealthTab } from "../lib/healthTabs.js";
 import DashboardPage from "./DashboardPage";
 import LlmUsagePage from "./LlmUsagePage";
 import MediaIssuesPanel from "./MediaIssuesPanel";
+import SecurityAuditPanel from "./SecurityAuditPanel";
 
 export default function HealthPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -24,7 +25,7 @@ export default function HealthPage() {
           <p className="eyebrow">Platform</p>
           <h1>Health</h1>
           <p className="muted">
-            Library sync intelligence, LLM spend, and open media issues — one place for ongoing ops.
+            Library sync intelligence, LLM spend, open media issues, and the security log — one place for ongoing ops.
           </p>
         </div>
       </header>
@@ -54,6 +55,7 @@ export default function HealthPage() {
         {tab === "sync" ? <DashboardPage embedded /> : null}
         {tab === "usage" ? <LlmUsagePage embedded /> : null}
         {tab === "issues" ? <MediaIssuesPanel /> : null}
+        {tab === "security" ? <SecurityAuditPanel /> : null}
       </div>
     </div>
   );

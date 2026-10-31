@@ -23,6 +23,9 @@ from ._shared import (
     logger,
 )
 
+# Interaction-stream rows carry the account in their metadata payload, not a column.
+_STREAM_USER_MATCH = "json_extract(payload_json, '$.user_id') = ?"
+
 
 class MemoryMixin:
     def add_preference(self, signal_type: str, text: str, **kwargs: Any) -> None:
@@ -261,6 +264,20 @@ class MemoryMixin:
                 ).fetchall()
             ]
 
+            interaction_events = [
+                {
+                    "id": str(row["id"]),
+                    "event_class": str(row["event_class"]),
+                    "timestamp": row["timestamp"],
+                    "payload": json.loads(row["payload_json"] or "{}"),
+                }
+                for row in conn.execute(
+                    f"SELECT id, event_class, timestamp, payload_json FROM system_telemetry_stream "
+                    f"WHERE {_STREAM_USER_MATCH} ORDER BY timestamp ASC",
+                    (user_id,),
+                ).fetchall()
+            ]
+
             conn.execute(
                 "INSERT INTO user_memory_events (id, user_id, event_type, created_at) VALUES (?, ?, 'export', ?)",
                 (uuid.uuid4().hex, user_id, now),
@@ -277,6 +294,7 @@ class MemoryMixin:
                 "sessions": watch_sessions,
                 "completions": watch_completions,
             },
+            "interaction_events": interaction_events,
         }
 
     def purge_user_memory_and_chats(self, user_id: str) -> Dict[str, int]:
@@ -320,6 +338,10 @@ class MemoryMixin:
                 "SELECT COUNT(*) AS count FROM watch_source_identities WHERE user_id = ?"
             )
 
+            interaction_events = _count(
+                f"SELECT COUNT(*) AS count FROM system_telemetry_stream WHERE {_STREAM_USER_MATCH}"
+            )
+
             # Delete children before parents (cascade is dormant without the pragma).
             conn.execute(
                 """
@@ -351,6 +373,9 @@ class MemoryMixin:
             conn.execute("DELETE FROM chat_sessions WHERE user_id = ?", (user_id,))
             conn.execute("DELETE FROM saved_library_pages WHERE user_id = ?", (user_id,))
             conn.execute("DELETE FROM user_memory_notes WHERE user_id = ?", (user_id,))
+            conn.execute(
+                f"DELETE FROM system_telemetry_stream WHERE {_STREAM_USER_MATCH}", (user_id,)
+            )
             if pref_has_user:
                 conn.execute("DELETE FROM preference_facts WHERE user_id = ?", (user_id,))
             conn.execute(
@@ -367,6 +392,7 @@ class MemoryMixin:
             "watch_sessions_deleted": watch_sessions,
             "watch_completions_deleted": watch_completions,
             "watch_source_identities_deleted": watch_identities,
+            "interaction_events_deleted": interaction_events,
         }
 
     def save_repository_research(

@@ -2193,6 +2193,42 @@ class SchemaMigrationsMixin:
                 "ALTER TABLE holiday_rail_titles ADD COLUMN curator_note TEXT NOT NULL DEFAULT ''"
             )
 
+    def _migrate_owner_ops(self, conn: sqlite3.Connection) -> None:
+        """Owner security audit trail + stewardship checklist marks (Phase 6)."""
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS security_audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at REAL NOT NULL,
+                event TEXT NOT NULL,
+                actor_id TEXT,
+                target_id TEXT,
+                outcome TEXT NOT NULL DEFAULT 'ok',
+                detail_json TEXT NOT NULL DEFAULT '{}'
+            );
+            CREATE INDEX IF NOT EXISTS idx_security_audit_created
+                ON security_audit_log(created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_security_audit_event
+                ON security_audit_log(event, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_security_audit_actor
+                ON security_audit_log(actor_id);
+            CREATE INDEX IF NOT EXISTS idx_security_audit_target
+                ON security_audit_log(target_id);
+
+            CREATE TABLE IF NOT EXISTS owner_checklist_marks (
+                scope TEXT NOT NULL,
+                item_id TEXT NOT NULL,
+                period TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL,
+                updated_at REAL NOT NULL,
+                updated_by TEXT,
+                PRIMARY KEY (scope, item_id, period)
+            );
+            CREATE INDEX IF NOT EXISTS idx_telemetry_stream_class_ts
+                ON system_telemetry_stream(event_class, timestamp);
+            """
+        )
+
     def _migrate_holiday_rail_shelf_mode(self, conn: sqlite3.Connection) -> None:
         """Per-scope flag: a professor curate replaces the keyword dump."""
         conn.execute(

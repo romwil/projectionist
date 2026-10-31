@@ -38,7 +38,7 @@ export function newsletterConfirmOptions(scope: JsParam, selectedCount = 0) {
 }
 
 /**
- * @param {{ delivered?: number, emailed?: number, skipped_opt_out?: number, targeted?: number }} result
+ * @param {{ delivered?: number, emailed?: number, skipped_opt_out?: number, skipped_empty?: number, targeted?: number }} result
  * @returns {string}
  */
 export function newsletterResultMessage(result: JsParam = {}) {
@@ -48,5 +48,7 @@ export function newsletterResultMessage(result: JsParam = {}) {
   const parts = [`Delivered to ${delivered} inbox${delivered === 1 ? "" : "es"}`];
   if (emailed > 0) parts.push(`${emailed} emailed`);
   if (skipped > 0) parts.push(`${skipped} skipped (not opted in)`);
+  const quiet = Number(result.skipped_empty) || 0;
+  if (quiet > 0) parts.push(`${quiet} quiet (nothing new for them this week)`);
   return `${parts.join(" · ")}.`;
 }

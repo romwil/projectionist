@@ -24,6 +24,7 @@ describe("healthTabs", () => {
     assert.equal(healthTabHref("sync"), "/admin/health");
     assert.equal(healthTabHref("usage"), "/admin/health?tab=usage");
     assert.equal(healthTabHref("issues"), "/admin/health?tab=issues");
+    assert.equal(healthTabHref("security"), "/admin/health?tab=security");
   });
 
   it("maps legacy admin paths to tab ids", () => {

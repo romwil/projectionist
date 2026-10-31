@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+Owner operations for a household with invited members: one Needs attention list, a Monday pass you can tick off, and on-box counts that never leave the server.
+
+### Highlights
+- **Only the weekly notes worth opening.** If nothing new connects to what you've watched, you don't get a note that week. Every note ends with how to change or stop it.
+- **One list for what needs you.** Admin → Overview opens with Needs attention, then a Monday pass you tick off once a week, a setup checklist, and a card that tells you which saved keys still work.
+- **A security log for owners.** Sign-ins, invites, password and role changes, and settings saves — names only, never secrets — under Admin → Health.
+- **Counts that stay home.** Chat turns and plays from a curator pick are counted on your server for the Monday pass. Nothing is sent anywhere, and your export and purge include your own rows.
+
+### Added
+- **OPS-030 Monday pass.** `GET /api/admin/ops/overview` plus checklist marks in `owner_checklist_marks` (per ISO week). Steps auto-complete from kinship ≥ 50%, zero open issues, or zero purge candidates; **Run catch-up** queues Warm Explore and related idle tasks sequentially; **Mark this week done** stamps the week, and reopening keeps last week's stamp.
+- **UX-036 stewardship checklist** on Overview replaces **Re-run setup**. Steps are server-verified; optional steps can be skipped and restored. The first-run wizard is still one click away.
+- **OPS-031 Secrets & connections.** "Connected" means the saved key decrypts and the service is certified; shows the last test time from `service_integrations.last_tested_at`. No new network probe.
+- **Needs attention** rolls up undecryptable keys, certified-without-key services, failed or quarantined tasks, pending setup steps, and an unfinished Monday pass.
+- **SEC-012 security log** (`security_audit_log`, newest 20,000 rows). Owner-only `GET /api/admin/security-audit`; members and Youth get 403. Detail is scrubbed of anything named like a password, token, secret, or key.
+- **GRO-007 `chat_turn`** on both `/api/chat` and `/api/chat/stream` (outcome, card and tool counts, duration — no text). **GRO-014 `play_start`** on in-app Play, with `rec_source`/`rec_id` only when the server verifies the claim (an assistant chat card owned by the viewer that carried the title, or a household recommendation addressed to the viewer).
+
+### Changed
+- **OPS-012 Tasks** opens on a Catch-up shortlist; the full console is **All tasks (Advanced)** (`/admin/tasks?view=all`).
+- **GRO-011** weekly newsletters skip members with no linked picks (`skipped_empty`); the "Quiet week" line shows only in the owner preview. Newsletter body adds a way back in and a way out.
+- **GRO-020** Year in Review 404 shows the designed empty state, role-aware.
+- Member copy on Settings → Notifications no longer names Admin pages or install extras.
+- Account export and purge now include the account's own `system_telemetry_stream` rows.
+
 ## [1.37.72] — 2026-10-28
 
 One patch on 1.37.71: the pad between Live titles stays filler or Between programs, so the next movie actually attaches.
