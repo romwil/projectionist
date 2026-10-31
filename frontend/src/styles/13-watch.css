@@ -565,7 +565,7 @@ html:has([data-theater-mode="true"]) #root {
   font-size: var(--text-xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .theater-end-note {
@@ -586,6 +586,24 @@ html:has([data-theater-mode="true"]) #root {
   color: var(--ink-on-media);
   background: color-mix(in srgb, var(--ink-on-media) 12%, transparent);
   border-color: color-mix(in srgb, var(--ink-on-media) 35%, transparent);
+}
+
+/* UX-012/PRD-007: end-card rating — ask once, not on every pause. */
+.theater-end-rating {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.theater-end-rating .review-star-picker {
+  color: var(--ink-on-media);
+}
+
+.theater-end-rating-saved {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--ink-on-media);
 }
 
 .theater-resume-title {

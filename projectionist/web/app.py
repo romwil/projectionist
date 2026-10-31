@@ -480,8 +480,10 @@ _SECURITY_HEADERS = {
         "default-src 'self'; "
         "img-src 'self' https://image.tmdb.org https://artworks.thetvdb.com "
         "https://assets.fanart.tv data:; "
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-        "font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; "
+        # VIS-014 / PRIV-009: fonts are self-hosted — no fonts.googleapis.com /
+        # fonts.gstatic.com origin needed in style-src or font-src anymore.
+        "style-src 'self' 'unsafe-inline'; "
+        "font-src 'self'; "
         "connect-src 'self'; "
         # hls.js MSE attaches a blob: Object URL to <video src>; without media-src,
         # default-src 'self' blocks it → /live black screen despite healthy .ts fetches.

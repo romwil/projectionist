@@ -8,9 +8,21 @@ import js from "@eslint/js";
 import react from "eslint-plugin-react";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
+import jsxA11y from "eslint-plugin-jsx-a11y";
 import prettier from "eslint-config-prettier";
 import globals from "globals";
 import tseslint from "typescript-eslint";
+
+// A11Y-005: jsx-a11y's recommended set catches real a11y regressions
+// (missing alt text, bad aria-*, non-interactive elements with click
+// handlers, etc.) — downgraded to warnings, same as everything else in
+// this baseline config, so `npm run lint` stays at 0 errors while still
+// surfacing the problem.
+const jsxA11yWarnRules = Object.fromEntries(
+  Object.keys(jsxA11y.flatConfigs.recommended.rules)
+    .filter((name) => name.startsWith("jsx-a11y/"))
+    .map((name) => [name, "warn"]),
+);
 
 export default [
   {
@@ -42,11 +54,13 @@ export default [
       react,
       "react-hooks": reactHooks,
       "react-refresh": reactRefresh,
+      "jsx-a11y": jsxA11y,
     },
     rules: {
       ...react.configs.recommended.rules,
       ...react.configs["jsx-runtime"].rules,
       ...reactHooks.configs.recommended.rules,
+      ...jsxA11yWarnRules,
       // React 18 + the new JSX transform: prop-types and in-scope React are noise.
       "react/prop-types": "off",
       "react/react-in-jsx-scope": "off",
@@ -84,11 +98,13 @@ export default [
       "react-hooks": reactHooks,
       "react-refresh": reactRefresh,
       "@typescript-eslint": tseslint.plugin,
+      "jsx-a11y": jsxA11y,
     },
     rules: {
       ...react.configs.recommended.rules,
       ...react.configs["jsx-runtime"].rules,
       ...reactHooks.configs.recommended.rules,
+      ...jsxA11yWarnRules,
       "react/prop-types": "off",
       "react/react-in-jsx-scope": "off",
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],

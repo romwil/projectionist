@@ -4,6 +4,8 @@ import { buildAppNavItems } from "../lib/appNavItems.js";
 import { ROUTES, watchlistBrowseHref } from "../lib/backNav.js";
 import { isPrimaryNavActive } from "../lib/primaryNav.js";
 import { useAnchoredPopover } from "../hooks/useAnchoredPopover";
+import { useFocusTrap } from "../hooks/useFocusTrap";
+import { mergeRefs } from "../lib/mergeRefs";
 
 function isAdminGroupHeading(item: any) {
   return item?.kind === "heading" && String(item.id || "").startsWith("admin-heading-");
@@ -53,8 +55,13 @@ export default function AppNav({
     onOpenChange: (next) => {
       if (!next) onClose?.();
     },
-    closeOnEscape: true,
+    // A11Y-007: the focus trap below owns Escape (so it can also restore
+    // focus to the toggle); don't double-handle it here.
+    closeOnEscape: false,
   });
+  // A11Y-007: first Tab after open lands inside the drawer; Escape returns
+  // focus to the hamburger toggle that opened it.
+  const trapRef = useFocusTrap<HTMLElement>({ open: Boolean(open), onClose });
 
   if (!open) return null;
 
@@ -183,7 +190,8 @@ export default function AppNav({
         onClick={onClose}
       />
       <nav
-        ref={panelRef}
+        ref={mergeRefs(panelRef, trapRef)}
+        tabIndex={-1}
         className="app-nav-drawer"
         data-testid="app-nav-drawer"
         aria-label="Primary"

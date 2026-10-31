@@ -4,10 +4,12 @@ import { ROUTES } from "./backNav.ts";
 import { initialLiveChannelsReady, LIVE_NAV_READY_KEY } from "./liveNavReady.ts";
 import {
   PRIMARY_NAV_ITEMS,
+  buildPrimaryBottomNavItems,
   buildPrimaryDrawerItems,
   buildPrimaryNavItems,
   isPrimaryNavActive,
   primaryNavVisibleIds,
+  shouldHidePrimaryBottomNav,
 } from "./primaryNav.ts";
 
 describe("primaryNav", () => {
@@ -181,6 +183,63 @@ describe("primaryNav", () => {
     assert.equal(
       isPrimaryNavActive({ id: "search", to: ROUTES.search }, ROUTES.search),
       true,
+    );
+  });
+});
+
+describe("buildPrimaryBottomNavItems (UX-014)", () => {
+  it("passes through the base 5-item member set unchanged", () => {
+    const items = buildPrimaryBottomNavItems({ role: "member", isOwner: false });
+    assert.deepEqual(items.map((item) => item.id), [
+      "search",
+      "chat",
+      "explore",
+      "inbox",
+      "settings",
+    ]);
+  });
+
+  it("drops Live and Admin first to stay at 5 for an owner with live channels", () => {
+    const items = buildPrimaryBottomNavItems({
+      role: "owner",
+      isOwner: true,
+      liveChannelsReady: true,
+    });
+    assert.equal(items.length, 5);
+    assert.deepEqual(items.map((item) => item.id), [
+      "search",
+      "chat",
+      "explore",
+      "inbox",
+      "settings",
+    ]);
+  });
+});
+
+describe("shouldHidePrimaryBottomNav (UX-014)", () => {
+  it("hides over the player routes", () => {
+    assert.equal(shouldHidePrimaryBottomNav({ pathname: "/watch/123" }), true);
+    assert.equal(shouldHidePrimaryBottomNav({ pathname: "/watch/123/popout" }), true);
+    assert.equal(shouldHidePrimaryBottomNav({ pathname: "/live/watch" }), true);
+  });
+
+  it("stays visible on ordinary routes", () => {
+    assert.equal(shouldHidePrimaryBottomNav({ pathname: "/explore" }), false);
+    assert.equal(shouldHidePrimaryBottomNav({ pathname: "/live" }), false);
+  });
+
+  it("hides only when the composer is focused on iOS, not elsewhere", () => {
+    assert.equal(
+      shouldHidePrimaryBottomNav({ pathname: "/chat", composerFocused: true, isIos: true }),
+      true,
+    );
+    assert.equal(
+      shouldHidePrimaryBottomNav({ pathname: "/chat", composerFocused: true, isIos: false }),
+      false,
+    );
+    assert.equal(
+      shouldHidePrimaryBottomNav({ pathname: "/chat", composerFocused: false, isIos: true }),
+      false,
     );
   });
 });

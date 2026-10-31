@@ -62,6 +62,7 @@ import {
 } from "../lib/addActions.js";
 import { materializeAgentResultList } from "../lib/agentResultLists.js";
 import { createId } from "../lib/id.js";
+import { extractSpeakableText } from "../lib/voiceSpeech";
 import { mergeStreamedBlocks } from "../lib/mergeStreamedBlocks.js";
 import {
   hasPendingPersonaConsult,
@@ -152,6 +153,7 @@ export type ChatSession = {
   setInput: Dispatch<SetStateAction<string>>;
   loading: boolean;
   chatError: string;
+  chatAnnouncement: string;
   activeContext: ChatContext | null;
   typingLabel: string;
   agentActivityLog: JsParam[];
@@ -237,6 +239,10 @@ export default function useChatSession({
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [chatError, setChatError] = useState("");
+  // A11Y-008: one polite SR announcement per *completed* reply (never per
+  // streamed token) — set alongside each assistant message that finishes,
+  // read by a live region in ChatWorkspace/App.
+  const [chatAnnouncement, setChatAnnouncement] = useState("");
   const [activeContext, setActiveContext] = useState<ChatContext | null>(null);
   const [typingLabel, setTypingLabel] = useState("");
   const [agentActivityLog, setAgentActivityLog] = useState<JsParam[]>([]);
@@ -799,6 +805,7 @@ export default function useChatSession({
       };
       setMessages((prev) => [...prev, eggMessage]);
       speakAssistantMessageRef.current?.(eggMessage);
+      setChatAnnouncement(extractSpeakableText(eggMessage) || "Reply received.");
       setAgentActivityLog([]);
       setLoading(false);
       return;
@@ -815,6 +822,7 @@ export default function useChatSession({
         });
         setMessages((prev) => [...prev, assistantMessage]);
         speakAssistantMessageRef.current?.(assistantMessage);
+        setChatAnnouncement(extractSpeakableText(assistantMessage) || "Reply received.");
         if (slash.command === "sync" && !features?.features?.multi_user_enabled) {
           refreshJobs();
         }
@@ -884,6 +892,8 @@ export default function useChatSession({
             prev.map((msg) => (msg.id === streamPlaceholderId ? assistantMessage : msg)),
           );
           speakAssistantMessageRef.current?.(assistantMessage);
+          // A11Y-008: announce once the full reply lands, not per token.
+          setChatAnnouncement(extractSpeakableText(assistantMessage) || "Reply received.");
           setPendingTokens(normalizePendingTokens(data.pending_tokens));
           if (Array.isArray(data.pending_tokens) && data.pending_tokens.length >= 1) {
             setPendingBulk(null);
@@ -1275,6 +1285,7 @@ export default function useChatSession({
     setInput,
     loading,
     chatError,
+    chatAnnouncement,
     activeContext,
     typingLabel,
     agentActivityLog,

@@ -42,6 +42,31 @@ export default function LoginPage() {
   const [requestBusy, setRequestBusy] = useState(false);
   const [showRequest, setShowRequest] = useState(false);
 
+  // A11Y-001: after a failed sign-in, focus goes to Username or Password
+  // rather than being dropped (or staying on a now-disabled Sign in button).
+  const usernameRef = useRef<HTMLInputElement | null>(null);
+  const passwordRef = useRef<HTMLInputElement | null>(null);
+  // A11Y-001: after "Need an invite?" reveals the request form, focus moves
+  // inside it instead of staying on the toggle button's old position.
+  const requestNameRef = useRef<HTMLInputElement | null>(null);
+  // Which local-login field to focus once the failed-login render (loading
+  // back to false, inputs re-enabled) actually commits — see effect below.
+  const [focusFieldOnError, setFocusFieldOnError] = useState<"username" | "password" | null>(null);
+
+  useEffect(() => {
+    if (showRequest) {
+      requestNameRef.current?.focus();
+    }
+  }, [showRequest]);
+
+  useEffect(() => {
+    if (!focusFieldOnError || loading) return;
+    // Inputs are disabled while `loading`; wait for that render to commit
+    // (inputs re-enabled) before moving focus, or `.focus()` is a no-op.
+    (focusFieldOnError === "username" ? usernameRef : passwordRef).current?.focus();
+    setFocusFieldOnError(null);
+  }, [focusFieldOnError, loading]);
+
   /**
    * UX-011: return to the page the user was trying to open before a
    * BD-5-resolved default page. `from` only ever comes from this app's own
@@ -178,6 +203,7 @@ export default function LoginPage() {
     event.preventDefault();
     if (!localUsername.trim() || !localPassword) {
       setError("Enter your username and password.");
+      setFocusFieldOnError(localUsername.trim() ? "password" : "username");
       return;
     }
     setLoading(true);
@@ -188,6 +214,12 @@ export default function LoginPage() {
       navigate(to, { replace: true });
     } catch (signInError: unknown) {
       setError(formatApiError(signInError));
+      // A11Y-001: land focus on whichever field most likely needs fixing,
+      // instead of leaving it on the submit button (which may now be
+      // disabled mid-render) or dropping it to <body>. The fields are still
+      // `disabled` until `loading` flips back to false below, so the actual
+      // `.focus()` call is deferred to the effect above.
+      setFocusFieldOnError(localUsername.trim() ? "password" : "username");
     } finally {
       setLoading(false);
     }
@@ -350,11 +382,11 @@ export default function LoginPage() {
             <label className="login-field">
               <span>Username</span>
               <input
+                ref={usernameRef}
                 type="text"
                 data-testid="local-username"
                 value={localUsername}
                 onChange={(e) => setLocalUsername(e.target.value)}
-                placeholder="Username"
                 autoComplete="username"
                 disabled={loading || waitingForPlex || featuresLoading}
               />
@@ -362,6 +394,7 @@ export default function LoginPage() {
             <label className="login-field">
               <span>Password</span>
               <input
+                ref={passwordRef}
                 type="password"
                 data-testid="local-password"
                 value={localPassword}
@@ -442,6 +475,7 @@ export default function LoginPage() {
                 <label className="login-field">
                   <span>Your name</span>
                   <input
+                    ref={requestNameRef}
                     type="text"
                     data-testid="access-request-name"
                     value={requestName}

@@ -573,18 +573,62 @@
 
 .login-form {
   display: grid;
-  gap: var(--space-3);
+  /* VIS-002: 16px between field groups (the primary/submit button never
+     touches a field — this gap is also what separates it from the field
+     above it). */
+  gap: var(--space-4);
 }
 
 .login-field,
 .login-token-field {
   display: grid;
+  /* VIS-002: 8px between a field's label and its input. */
   gap: var(--space-2);
 }
 
+.login-field > span:first-child,
+.login-token-field > span:first-child {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+/* VIS-002 / VIS-003: the local sign-in field primitive. Shared by /login,
+   /join, and /setup — all three reuse `.login-field` / `.login-token-field`,
+   so styling it once here covers every public-route form. */
 .login-field input,
+.login-field textarea,
 .login-token-field input {
   width: 100%;
+  min-height: var(--tap-min);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-field);
+  background: var(--surface-raised);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--font-size-input);
+  box-sizing: border-box;
+}
+
+.login-field textarea {
+  min-height: calc(var(--tap-min) * 1.4);
+  padding-top: var(--space-2);
+  padding-bottom: var(--space-2);
+  resize: vertical;
+}
+
+.login-field input:focus-visible,
+.login-field textarea:focus-visible,
+.login-token-field input:focus-visible {
+  border-color: var(--accent-ink);
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 1px;
+}
+
+.login-field input:disabled,
+.login-field textarea:disabled,
+.login-token-field input:disabled {
+  opacity: 0.6;
 }
 
 .login-primary {
@@ -644,7 +688,7 @@
   background: none;
   border: none;
   padding: 0;
-  color: var(--accent);
+  color: var(--accent-ink);
   font: inherit;
   text-align: left;
   cursor: pointer;
@@ -711,7 +755,7 @@
 }
 
 .not-found-home {
-  color: var(--accent);
+  color: var(--accent-ink);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -743,7 +787,7 @@
   display: inline-grid;
   place-items: center;
   background: color-mix(in srgb, var(--accent) 35%, transparent);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 700;
 }
 

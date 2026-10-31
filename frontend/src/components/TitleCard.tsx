@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { getPlexMachineId } from "../api/client";
+import PosterArt from "./PosterArt";
 import {
   isAddableToRadarr,
   isAddableToSonarr,
@@ -331,10 +332,8 @@ export default function TitleCard({
     </>
   );
 
-  const posterMedia = item.poster_url ? (
-    <img src={item.poster_url} alt="" loading="lazy" />
-  ) : (
-    <div className="poster-fallback">{item.title?.slice(0, 1) || "?"}</div>
+  const posterMedia = (
+    <PosterArt posterUrl={item.poster_url} title={item.title} year={item.year} />
   );
 
   const showCompactOverlay = Boolean(

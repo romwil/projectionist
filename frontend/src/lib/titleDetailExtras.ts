@@ -108,7 +108,9 @@ export function reviewsCtaForDetail(detail: LibraryItem | null | undefined) {
   }
   return {
     kind: "rate",
-    label: "Review",
+    // UX-012/PRD-007: the Title CTA for an unrated title reads "Rate" (not
+    // "Review") to match the one-tap-stars end-card flow it opens.
+    label: "Rate",
     tooltip: "Leave a review",
     href: null,
     action: "inline",

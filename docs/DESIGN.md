@@ -168,7 +168,7 @@ Shared implementation: `TitleCtaBar` + `frontend/src/lib/titleCta.js`. Mini shee
 |----------|-----|
 | **One gold primary** | In-library → **Play**. Not-in-library → **Add** / **Request** (or guest lock copy). Never two competing primaries. |
 | **Secondary (icon-forward)** | Compact ghost actions with **tooltip + aria-label**. Short visible label on desktop; icon-only (≥44px) on 390 and in the mini sheet. |
-| **Secondary order** | Trailer → Review → Watched → Chat → Together → Add (Add only when Play already owns primary). |
+| **Secondary order** | Trailer → Rate → Watched → Chat → Together → Add (Add only when Play already owns primary). |
 | **Overflow / More** | **Portaled popover** anchored to the More button (`useAnchoredPopover` + `createPortal` → `document.body`) — never a `<details>` that expands the sheet. Contents: Open in Plex, phone-collapsed Chat/Together/Add, Mark as bad media, Delete (owner, last). Stack **above** the title drawer scrim/panel (portal `z-index: 1000`; drawer panel is `90`) or the menu opens invisibly under the sheet. Escape closes More before the sheet. |
 | **Sheet vs full page** | Drawer (`TitleDetailDrawer`) is the same CTA grammar at compact density; full page adds backdrop hero + seasons. |
 
@@ -179,7 +179,7 @@ Shared implementation: `TitleCtaBar` + `frontend/src/lib/titleCta.js`. Mini shee
 | Play | Play | Play in Projectionist |
 | Add / Request | Add to Radarr / Add to Sonarr / Request in Seerr | same as visible |
 | Trailer | Trailer | Watch trailer |
-| Review | Review | Leave a review |
+| Review | Rate | Leave a review |
 | Watched toggle | Watched / Unwatched | Mark as watched / Mark as unwatched |
 | Chat | Chat | Chat about this |
 | Watch together | Together | Watch together |
@@ -431,6 +431,48 @@ Theme tokens in `frontend/src/styles.css` (`html[data-theme="lights-down|lights-
 Typography and accent colors follow persona presets where configured; avoid treating persona flavor as operational status.
 
 ---
+
+## Button & field primitives (VIS-002 / VIS-003)
+
+`frontend/src/components/Button.tsx` + `.btn` in `styles/01-tokens.css`:
+
+- **Variants (5):** `neutral` (the default — a plain surface button, never
+  gold), `primary` (the one gold action per action group), `secondary`
+  (outlined, no fill), `ghost` (icon-forward / low-emphasis, no border or
+  fill), `danger` (destructive).
+- **Sizes (3):** `sm` (34px), `md` (44px — the tap-target floor), `lg` (52px).
+- **Known migration gap:** a bare `<button>` with no class still inherits a
+  legacy gold-fill default from `styles/02-nav-chrome.css` (`button, .btn-link
+  { background: var(--accent); … }`), predating this primitive. That default
+  was left in place rather than inverted blind, because dozens of existing
+  screens rely on it without an explicit class and a global flip could not be
+  visually verified across all of them in one pass. New UI should use
+  `<Button>` (or an explicit `.btn-*` class) rather than a bare `<button>`;
+  inverting the legacy default (and auditing/re-classing every bare-button
+  call site) is tracked as follow-up work, not done in this pass.
+
+The local sign-in field primitive (`.login-field input/textarea`,
+`.login-token-field input` in `styles/05-chat-responsive.css`) is shared by
+`/login`, `/join`, and `/setup` — all three already reuse the same
+`.login-field` markup, so one CSS rule styles every public-route form: ≥44px
+tall, 6px radius, a `--border-field` boundary (≥3:1 on every surface in both
+themes — stronger than the decorative `--border`), 8px label→input gap, 16px
+between field groups, and a visible `:focus-visible` ring using `--accent-ink`.
+
+## Focus contract (A11Y-003 / A11Y-007 / A11Y-009)
+
+- Every focusable element gets a ≥2px `outline` with ≥3:1 contrast via a
+  global `:focus-visible { outline: 2px solid var(--accent-ink); }` in
+  `styles/01-tokens.css`. Components may override with their own
+  `:focus-visible` rule, but must keep a real `outline` — never
+  `outline: none` with no replacement indicator.
+- Dialogs/drawers (`AppNav`, `ConfirmModal`, `KeyboardHelpModal`, …) move
+  focus in on open, trap Tab inside, close on Escape (unless a destructive
+  operation is running), and restore focus to the trigger on close. The
+  shared logic lives in `src/lib/focusContract.ts`
+  (`getFocusableElements`, `trapTabKey`, `isDialogDismissKey`) plus the
+  `useFocusTrap` hook in `src/hooks/useFocusTrap.ts` — wire new dialogs
+  through those rather than re-deriving the behavior.
 
 ## Agent tools
 

@@ -39,7 +39,8 @@ export const TITLE_CTA_COPY = Object.freeze({
   play: { label: "Play", tooltip: "Play in Projectionist" },
   add: { label: "Add", tooltip: "Add or request this title" },
   trailer: { label: "Trailer", tooltip: "Watch trailer" },
-  review: { label: "Review", tooltip: "Leave a review" },
+  // UX-012/PRD-007: "Rate" (not "Review") — matches the one-tap-stars flow.
+  review: { label: "Rate", tooltip: "Leave a review" },
   chat: { label: "Chat", tooltip: "Chat about this" },
   watchTogether: { label: "Together", tooltip: "Watch together" },
   openInPlex: { label: "Open in Plex", tooltip: "Open in Plex" },
