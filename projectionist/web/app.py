@@ -21,6 +21,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
+from starlette.middleware.gzip import GZipMiddleware
 
 from projectionist import __version__
 from projectionist.agent.providers import LLMProviderError
@@ -257,6 +258,7 @@ def _safe_error_detail(error: Exception, context: str = "") -> str:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    _app.state.ready = False
     build_info = "unknown"
     try:
         with open("/app/.build-info") as f:
@@ -420,7 +422,12 @@ async def lifespan(_app: FastAPI):
     except Exception:  # noqa: BLE001
         logger.exception("Startup: closed-loop facet telemetry bind failed (continuing)")
 
+    # This flips only after synchronous startup work is complete. Background
+    # library warm-ups intentionally continue after readiness so they never
+    # hold the probe hostage to a Movies query.
+    _app.state.ready = True
     yield
+    _app.state.ready = False
     try:
         from projectionist.facets.closed_loop import bind_closed_loop_database
 
@@ -462,6 +469,7 @@ app = FastAPI(
     docs_url=_docs_url,
     redoc_url=_redoc_url,
 )
+app.add_middleware(GZipMiddleware, minimum_size=500)
 app.middleware("http")(multi_user_api_auth_middleware)
 
 
@@ -621,7 +629,13 @@ def _resolve_lens_id(lens_id: Optional[str]) -> str:
 
 
 if FRONTEND_DIST.exists():
-    app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
+    from projectionist.web.static_assets import ImmutableAssetStaticFiles
+
+    app.mount(
+        "/assets",
+        ImmutableAssetStaticFiles(directory=FRONTEND_DIST / "assets"),
+        name="assets",
+    )
 elif STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
@@ -1277,6 +1291,14 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
 @app.get("/api/health")
 def health() -> Dict[str, str]:
     return {"status": "ok", "version": __version__}
+
+
+@app.get("/api/ready")
+def ready() -> Dict[str, str]:
+    """Fast process-readiness probe that never reads the movie library."""
+    if not bool(getattr(app.state, "ready", False)):
+        raise HTTPException(status_code=503, detail="Starting")
+    return {"status": "ready", "version": __version__}
 
 
 @app.get("/api/features")
