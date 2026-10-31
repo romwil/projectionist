@@ -6,7 +6,7 @@ import ReleaseNotesPanel from "../components/ReleaseNotesPanel";
 import AppShell from "../layouts/AppShell";
 import { scrollAboutHashIntoView } from "../lib/aboutHashScroll.js";
 import { ROUTES } from "../lib/backNav.js";
-import { fetchReleaseNotes, normalizeReleaseNotes } from "../lib/releaseNotes.js";
+import { fetchReleaseNotes, releaseNotesForAbout } from "../lib/releaseNotes.js";
 
 const GITHUB_URL = "https://github.com/romwil/projectionist";
 const DOCKER_HUB_URL = "https://hub.docker.com/r/romwil/projectionist";
@@ -50,7 +50,7 @@ export default function AboutPage() {
     fetchReleaseNotes()
       .then((payload) => {
         if (cancelled) return;
-        setReleases(normalizeReleaseNotes(payload));
+        setReleases(releaseNotesForAbout(payload));
         setNotesError("");
         setNotesLoading(false);
       })
@@ -116,7 +116,7 @@ export default function AboutPage() {
             <h2 id="about-release-notes-heading">Release notes</h2>
           </div>
           <p className="status status-secondary about-section-meta">
-            Full history from CHANGELOG — newest first.
+            Latest release from CHANGELOG. Full history is available on GitHub.
           </p>
           {notesError ? (
             <p className="error" data-testid="about-release-notes-error">

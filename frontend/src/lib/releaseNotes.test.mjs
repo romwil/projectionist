@@ -11,6 +11,7 @@ import {
   normalizeReleaseNotes,
   pickLatestRelease,
   plainChangelogText,
+  releaseNotesForAbout,
   setLastSeenVersion,
   shouldShowWhatsNew,
 } from "./releaseNotes.ts";
@@ -68,6 +69,13 @@ test("pickLatestRelease and findReleaseByVersion", () => {
   assert.equal(pickLatestRelease(releases).version, "1.8.3");
   assert.equal(findReleaseByVersion(releases, "1.8.2").version, "1.8.2");
   assert.equal(findReleaseByVersion(releases, "9.9.9"), null);
+});
+
+test("About keeps only the latest release note mounted", () => {
+  const releases = Array.from({ length: 40 }, (_, i) => ({ version: `1.0.${i}` }));
+  const mounted = releaseNotesForAbout(releases);
+  assert.equal(mounted.length, 1);
+  assert.equal(mounted[0].version, "1.0.39");
 });
 
 test("plainChangelogText strips light markdown", () => {
