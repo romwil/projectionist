@@ -8,7 +8,7 @@ import re
 import time
 import uuid
 from datetime import datetime as _datetime
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, Sequence
 
 from projectionist.config_store import (
     Settings,
@@ -85,6 +85,9 @@ from projectionist.preferences.store import preference_context, remember_prefere
 from projectionist.research.title_research import compare_filmographies, research_company, research_person, research_title
 from projectionist.reviews.store import get_reviews, list_pending_prompts, list_titles_to_rate, mark_prompts_surfaced, save_review
 from projectionist.reviews.plex_sync import sync_review_rating_to_plex
+
+if TYPE_CHECKING:
+    from projectionist.agent.tools import ToolRegistry
 
 
 logger = logging.getLogger(__name__)

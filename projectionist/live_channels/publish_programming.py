@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 import uuid
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from projectionist.facets import motif_search_expansions
 from projectionist.live_channels.recipes import (
