@@ -72,8 +72,9 @@ export default function YouthReviewPage() {
       <p className="youth-review-guard" data-testid="youth-review-guard">
         Review is limited to accounts flagged as <strong>Youth</strong>. Projectionist keeps
         younger members&rsquo; long-term memory fail-closed — you can read what the curator
-        remembers for a Youth account here, but adult members&rsquo; private memory is never
-        exposed. Set an account to Youth mode from <strong>Household</strong>.
+        remembers for a Youth account here. In the app, adult members&rsquo; private memory is
+        not shown to owners. A full household backup, or access to the server itself, does contain
+        everyone&rsquo;s data. Set an account to Youth mode from <strong>Household</strong>.
       </p>
 
       {loading ? (

@@ -155,8 +155,8 @@ UNTRUSTED_DATA_CLOSE = "<<<END_UNTRUSTED_MEMORY_DATA>>>"
 
 # Appended to propose-tool messages so the model redeems tokens on user assent.
 _PENDING_CONFIRM_HINT = (
-    "When the user affirms (yes / go ahead / confirm), call confirm_pending_action "
-    "with this confirmation_token — do not ask again or claim you cannot redeem it."
+    "The user confirms this with the Confirm button on the proposal card in the app. "
+    "You cannot confirm it for them; tell them to press Confirm."
 )
 
 # Tool results whose payloads embed stored/retrieved content that another user

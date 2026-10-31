@@ -368,7 +368,6 @@ def register_auth_routes(app):
     def auth_local_register(
         payload: LocalRegisterPayload,
         request: Request,
-        response: Response,
     ) -> Dict[str, Any]:
         """Owner-authenticated local account create. Anonymous always 403."""
         enforce_rate_limit(request, bucket="auth_local_register", limit=5, window_seconds=60)
@@ -385,8 +384,8 @@ def register_auth_routes(app):
             db=db,
             requesting_user=requesting_user,
         )
-        set_session_cookie(response, user.id, request, db=_db())
-        return {"user": user.to_dict(), "authenticated": True}
+        # The caller is the owner; their session must not switch to the new account.
+        return {"user": user.to_dict(), "created": True}
 
 
     @router.post("/api/auth/local/login")

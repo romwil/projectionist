@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   getAuthMe,
   getFeatures,
   linkPlexAccount,
-  logout,
   patchAuthMe,
   pollPlexPinLogin,
   startPlexPinLogin,
@@ -15,6 +13,7 @@ import SettingsPanel from "../../components/settings/SettingsPanel";
 import WeatherLocationPicker from "../../components/weather/WeatherLocationPicker";
 import UserAvatar from "../../components/UserAvatar";
 import { startPlexPinPoll } from "../../lib/plexPinPoll";
+import { signOut } from "../../lib/signOut.js";
 import {
   applyUiFontSize,
   applyUiTheme,
@@ -37,7 +36,6 @@ const THEME_OPTIONS = [
 ];
 
 export default function ProfilePage() {
-  const navigate = useNavigate();
   const [user, setUser] = useState<any | null>(null);
   const [preferredName, setPreferredName] = useState("");
   const [fontSize, setFontSize] = useState("medium");
@@ -195,12 +193,7 @@ export default function ProfilePage() {
   }
 
   async function handleSignOut() {
-    try {
-      await logout();
-    } catch {
-      // continue to login
-    }
-    navigate("/login", { replace: true });
+    await signOut();
   }
 
   async function handleAvatarChange(event: any) {

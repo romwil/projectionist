@@ -1,19 +1,17 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { logout } from "../api/client";
 import {
   applyAuthSnapshot,
-  clearAuthSnapshot,
   loadAuthSessionUser,
   loadAuthSnapshot,
   peekAuthSnapshot,
 } from "../lib/authGate.js";
 import { applyLiveChannelsFeature, initialLiveChannelsReady } from "../lib/liveNavReady.js";
+import { signOut } from "../lib/signOut.js";
 import UserAvatar from "./UserAvatar";
 import { useAnchoredPopover } from "../hooks/useAnchoredPopover";
 
 export default function UserMenu() {
-  const navigate = useNavigate();
   const [user, setUser] = useState<any | null>(null);
   const { open, setOpen, rootRef: menuRef } = useAnchoredPopover();
 
@@ -33,13 +31,7 @@ export default function UserMenu() {
   }, []);
 
   async function handleLogout() {
-    try {
-      await logout();
-    } catch {
-      // Still redirect after clearing cookie attempt.
-    }
-    clearAuthSnapshot();
-    navigate("/login", { replace: true });
+    await signOut();
   }
 
   if (!user) return null;

@@ -57,7 +57,7 @@ Other household members cannot open your chats or confirm your pending actions t
 
 ### Memory, Youth mode, export, and purge
 
-Your private memory stays tied to your account. **An owner cannot read an adult member's memory.** If the owner explicitly flags an account **Youth mode**, that account's profile shows a Youth badge and the owner may review or export that account's memory for moderation. This is not a consent toggle and does not apply to adult accounts.
+Your private memory stays tied to your account. **In the app, an owner can read only Youth accounts' memory.** An owner who downloads a full household backup (Admin → Overview → **Full household backup**) or has access to the server can read everything, including adult members' chats and memory. Each backup download is logged. If the owner explicitly flags an account **Youth mode**, that account's profile shows a Youth badge and the owner may review or export that account's memory for moderation. This is not a consent toggle and does not apply to adult accounts.
 
 #### What export and purge cover
 

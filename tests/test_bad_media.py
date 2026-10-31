@@ -271,9 +271,18 @@ class MarkBadMediaAgentToolTests(unittest.IsolatedAsyncioTestCase):
                 "mark_bad_media",
                 {"rating_key": "rk-agent", "media_type": "movie", "tmdb_id": 555},
             )
-        payload = json.loads(raw)
-        self.assertTrue(payload.get("ok"))
-        self.assertFalse(payload.get("add_exclusion"))
+            payload = json.loads(raw)
+            self.assertIn("confirmation_token", payload)
+            self.assertFalse(payload.get("add_exclusion"))
+            radarr.delete_movie_file.assert_not_called()
+            radarr.search_movie.assert_not_called()
+
+            from projectionist.agent.tools import execute_confirmed_action
+
+            confirmed = await execute_confirmed_action(db, settings, payload["confirmation_token"])
+        self.assertEqual(confirmed["action"], "mark_bad_media")
+        self.assertFalse(confirmed["result"]["add_exclusion"])
+        radarr.search_movie.assert_called()
         tmpdir.cleanup()
 
 

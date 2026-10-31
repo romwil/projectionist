@@ -329,9 +329,12 @@ def _slow_rail_builders(
     *,
     capped: int,
     plex: Optional[PlexClient],
+    is_youth: bool = False,
 ) -> tuple[tuple[str, Callable[[], Any]], ...]:
+    # Plex on-deck is the server account's viewing, not the youth member's.
+    on_deck = None if is_youth else plex
     return (
-        ("continue_watching", lambda: feed_continue_watching(db, limit=capped, plex_client=plex)),
+        ("continue_watching", lambda: feed_continue_watching(db, limit=capped, plex_client=on_deck)),
         ("on_this_day", lambda: feed_on_this_day(db, limit=capped)),
         ("director_spotlight", lambda: feed_director_spotlight(db, limit=capped)),
         ("genre_spotlight", lambda: feed_genre_spotlight(db, limit=capped)),
@@ -408,7 +411,7 @@ def build_explore_hub(
     payload["generated_at"] = int(time.time())
     _emit_partial(payload, on_partial)
 
-    for key, builder in _slow_rail_builders(db, capped=capped, plex=plex):
+    for key, builder in _slow_rail_builders(db, capped=capped, plex=plex, is_youth=is_youth):
         rails[key] = _coerce_rail(rails[key], builder, key=key)
         payload["generated_at"] = int(time.time())
         _emit_partial(payload, on_partial)
@@ -425,6 +428,7 @@ def _public_copy(
     stale: bool,
     warming: bool = False,
     db: Optional[Database] = None,
+    youth_settings: Optional[Settings] = None,
 ) -> Dict[str, Any]:
     out = copy.deepcopy(payload)
     out["cached"] = cached
@@ -438,8 +442,25 @@ def _public_copy(
         if isinstance(rail, dict):
             # In-app progress wins over a fresh hub snapshot so Continue Watching
             # does not sit on the on-deck row from before this play.
-            rails["continue_watching"] = apply_known_continue_watching(db, rail)
+            rail = apply_known_continue_watching(db, rail)
+            if youth_settings is not None:
+                rail = _youth_gate_rail(rail, youth_settings)
+            rails["continue_watching"] = rail
     return out
+
+
+def _youth_gate_rail(rail: Dict[str, Any], settings: Settings) -> Dict[str, Any]:
+    """Apply the shared youth rating gate to one rail's items (Play uses the same ceiling)."""
+    from projectionist.youth.rating_gate import youth_visible_rows
+
+    items = rail.get("items") or []
+    kept = youth_visible_rows(items, user={"is_youth": True}, settings=settings)
+    if len(kept) == len(items):
+        return rail
+    gated = dict(rail)
+    gated["items"] = kept
+    gated["total"] = len(kept)
+    return gated
 
 
 def _schedule_refresh(
@@ -496,8 +517,12 @@ def _refresh_continue_watching_cache(cache_key: str, db: Database, ctx: Mapping[
     if not isinstance(settings, Settings):
         return
     rail_limit = _cap_rail_limit(int(ctx.get("rail_limit") or EXPLORE_RAIL_LIMIT))
-    rail = feed_continue_watching(db, limit=rail_limit, plex_client=_plex_client(settings))
+    is_youth = cache_key.startswith("youth=1|")
+    plex = None if is_youth else _plex_client(settings)
+    rail = feed_continue_watching(db, limit=rail_limit, plex_client=plex)
     rail = apply_known_continue_watching(db, rail)
+    if is_youth:
+        rail = _youth_gate_rail(rail, settings)
     with _LOCK:
         hit = _CACHE.get(cache_key)
         if not hit:
@@ -553,6 +578,7 @@ def get_explore_hub(
 ) -> Dict[str, Any]:
     """Return Explore hub via stale-while-revalidate (never block on soft-expired)."""
     cache_key = f"youth={int(bool(is_youth))}|uid={user_id or ''}|limit={rail_limit}"
+    youth_settings = settings if is_youth else None
     _remember_hub_context(cache_key, db, settings, rail_limit=rail_limit)
 
     if bypass_cache:
@@ -565,13 +591,13 @@ def get_explore_hub(
         )
         _cache_set(cache_key, payload)
         _disk_store(db, cache_key, payload)
-        return _public_copy(payload, cached=False, stale=False, warming=False, db=db)
+        return _public_copy(payload, cached=False, stale=False, warming=False, db=db, youth_settings=youth_settings)
 
     entry = _cache_get_entry(cache_key)
     if entry is not None:
         fresh, _within_hard, payload = entry
         if fresh and not payload.get("warming"):
-            return _public_copy(payload, cached=True, stale=False, warming=False, db=db)
+            return _public_copy(payload, cached=True, stale=False, warming=False, db=db, youth_settings=youth_settings)
         _schedule_refresh(
             cache_key,
             db,
@@ -586,6 +612,7 @@ def get_explore_hub(
             stale=True,
             warming=bool(payload.get("warming")),
             db=db,
+            youth_settings=youth_settings,
         )
 
     disk = _disk_load(db, cache_key)
@@ -599,7 +626,7 @@ def get_explore_hub(
             user_id=user_id,
             rail_limit=rail_limit,
         )
-        return _public_copy(disk, cached=True, stale=True, warming=False, db=db)
+        return _public_copy(disk, cached=True, stale=True, warming=False, db=db, youth_settings=youth_settings)
 
     # Cold miss — local shelves go out on this response. Plex, spotlights, and
     # the seasonal scan fill the same cache entry in the background.
@@ -627,7 +654,7 @@ def get_explore_hub(
         user_id=user_id,
         rail_limit=rail_limit,
     )
-    return _public_copy(partial, cached=False, stale=True, warming=True, db=db)
+    return _public_copy(partial, cached=False, stale=True, warming=True, db=db, youth_settings=youth_settings)
 
 
 def explore_hub_cache_stats() -> Mapping[str, Any]:

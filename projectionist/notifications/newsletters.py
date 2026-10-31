@@ -19,6 +19,7 @@ from projectionist.notifications.recommendation_reasons import (
     watched_library_rows,
 )
 from projectionist.notifications.service import deliver_notification
+from projectionist.youth.rating_gate import youth_visible_rows
 
 logger = logging.getLogger(__name__)
 
@@ -157,8 +158,10 @@ def build_member_newsletter(
     voice = _persona_voice_line(db, for_guest=for_guest)
     new_block = digest.get("new_this_week") or {}
     titles = list(new_block.get("titles") or [])
-    watched = watched_library_rows(
-        db, user_id=member_id, multi_user_enabled=multi_user
+    watched = youth_visible_rows(
+        watched_library_rows(db, user_id=member_id, multi_user_enabled=multi_user),
+        user=user,
+        settings=settings,
     )
     tracker_watched = tracker_watched_item_ids(db)
     linked: List[Dict[str, Any]] = []
@@ -167,6 +170,8 @@ def build_member_newsletter(
             continue
         row = library_row_for_ref(db, item)
         if row is None:
+            continue
+        if not youth_visible_rows([row], user=user, settings=settings):
             continue
         try:
             if int(row.get("view_count") or 0) > 0:

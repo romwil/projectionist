@@ -85,20 +85,15 @@ class ConfirmedPlexCollectionTests(unittest.IsolatedAsyncioTestCase):
                 "projectionist.connectors.plex_collections.create_collection",
                 side_effect=RuntimeError("HTTP 500 from plex"),
             ):
-                failed = json.loads(
-                    await registry.execute("confirm_pending_action", {"confirmation_token": token})
-                )
-            self.assertFalse(failed["ok"])
-            self.assertIn("HTTP 500", failed["error"])
-            self.assertIn("still pending", failed["error"])
+                with self.assertRaises(RuntimeError) as failed:
+                    await execute_confirmed_action(db, settings, token, user_id="owner-1")
+            self.assertIn("HTTP 500", str(failed.exception))
+            self.assertIn("still pending", str(failed.exception))
             fake = PlexCollection("c1", "[CuratorX] Noir", "1", "movie")
             with patch(
                 "projectionist.connectors.plex_collections.create_collection", return_value=fake
             ):
-                retried = json.loads(
-                    await registry.execute("confirm_pending_action", {"confirmation_token": token})
-                )
-            self.assertTrue(retried["ok"])
+                retried = await execute_confirmed_action(db, settings, token, user_id="owner-1")
             self.assertEqual(retried["result"]["scope"], "plex_only")
             self.assertFalse(retried["result"]["projectionist_collection"])
 

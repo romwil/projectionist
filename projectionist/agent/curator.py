@@ -492,7 +492,11 @@ class CuratorAgent:
 
         registry = self._registry(persona_id=thread_persona_id, session_id=session_id)
         use_tools = bool(self.settings.llm_api_key or self.settings.llm_provider == "ollama")
-        tool_defs = build_tool_definitions(self.settings) if use_tools else None
+        tool_defs = (
+            build_tool_definitions(self.settings, role=self.user_role, is_youth=self.is_youth)
+            if use_tools
+            else None
+        )
         response = await tracked_chat(
             self.db,
             self.provider,
@@ -766,7 +770,11 @@ async def stream_agent(
             messages.append({"role": entry["role"], "content": text})
     messages.append({"role": "user", "content": user_message})
 
-    tool_defs = build_tool_definitions(settings) if (settings.llm_api_key or settings.llm_provider == "ollama") else None
+    tool_defs = (
+        build_tool_definitions(settings, role=user_role, is_youth=is_youth)
+        if (settings.llm_api_key or settings.llm_provider == "ollama")
+        else None
+    )
     text_segments: List[str] = []
     pending_segment_sep = False
     stream_round = 0

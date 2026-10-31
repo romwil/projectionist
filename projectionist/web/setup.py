@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import datetime, timezone
-from typing import Any, Dict, Mapping
+from pathlib import Path
+from typing import Any, Dict, Mapping, Optional
 
 from projectionist.agent.providers import get_chat_provider
 from projectionist.config_store import (
@@ -25,6 +27,7 @@ from projectionist.connectors.sonarr import SonarrClient
 from projectionist.connectors.tautulli import TautulliClient
 from projectionist.connectors.tmdb import TMDBClient
 from projectionist.library.db import Database
+from projectionist.secrets_crypto import decrypt_secret, is_encrypted_secret
 
 CheckResult = Dict[str, Any]
 
@@ -346,15 +349,58 @@ def _integration_certified(db: Database, service_name: str) -> bool:
     return str(row["connection_status"]) == "verified"
 
 
-def build_certifications_status(db: Database) -> Dict[str, Any]:
+def _saved_secret_value(raw: Mapping[str, Any], service_name: str) -> Any:
+    if service_name == "seerr":
+        seerr = raw.get("seerr")
+        return seerr.get("api_key") if isinstance(seerr, Mapping) else None
+    field = "plex_token" if service_name == "plex" else f"{service_name}_api_key"
+    return raw.get(field)
+
+
+def unreadable_secret_services(data_dir: Optional[Path]) -> set[str]:
+    """Services whose saved secret is ciphertext that no longer decrypts.
+
+    Decrypt failures (swapped key, MAC mismatch) load as an empty string, which is
+    indistinguishable from "never saved" once settings are merged.
+    """
+    if data_dir is None:
+        return set()
+    path = Path(data_dir) / "settings.json"
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    if not isinstance(raw, Mapping):
+        return set()
+    unreadable: set[str] = set()
+    for service_name in CERTIFIED_SERVICES:
+        value = _saved_secret_value(raw, service_name)
+        if isinstance(value, str) and is_encrypted_secret(value):
+            if not decrypt_secret(value, data_dir=Path(data_dir)).strip():
+                unreadable.add(service_name)
+    return unreadable
+
+
+SECRET_UNREADABLE_MESSAGE = "The saved key can't be read. Re-enter it and press Test."
+
+
+def build_certifications_status(db: Database, data_dir: Optional[Path] = None) -> Dict[str, Any]:
     services: Dict[str, Any] = {}
+    unreadable = unreadable_secret_services(data_dir)
     for service_name in CERTIFIED_SERVICES:
         row = db.get_service_integration(service_name)
         if row:
+            certified = _integration_certified(db, service_name)
+            status = str(row["connection_status"] or "unverified")
+            message = ""
+            if certified and service_name in unreadable:
+                certified = False
+                status = "needs_key"
+                message = SECRET_UNREADABLE_MESSAGE
             services[service_name] = {
-                "certified": _integration_certified(db, service_name),
-                "connection_status": str(row["connection_status"] or "unverified"),
-                "message": "",
+                "certified": certified,
+                "connection_status": status,
+                "message": message,
                 "last_tested_at": row["last_tested_at"],
             }
         else:

@@ -49,13 +49,14 @@ export default function OverviewSection({
   sections,
   featureFlags,
   setShowWizard,
-  handleExportTrainingCorpus,
-  exportingCorpus,
+  handleExportMyTaste,
+  exportingTaste,
   handleDownloadAdminSnapshot,
   exportingSnapshot,
   actionAlert,
 }: OverviewSectionProps) {
   const liveOn = Boolean(settings?.features?.live_channels_enabled);
+  const [backupAcknowledged, setBackupAcknowledged] = useState(false);
   const [liveChannelsStatus, setLiveChannelsStatus] = useState<any | null>(null);
   useEffect(() => {
     if (!liveOn) {
@@ -151,44 +152,53 @@ export default function OverviewSection({
         </section>
       ) : null}
 
-      <section className="config-section" data-testid="training-corpus-export">
-        <h2>Export taste data</h2>
+      <section className="config-section" data-testid="my-taste-export">
+        <h2>Export your taste data</h2>
         <p className="wizard-note">
-          Download your chat reactions, saved preferences, and personal reviews as JSON — useful for
-          backup or offline experiments.
+          Download your own chat reactions, saved preferences, and reviews as JSON. Other members&apos;
+          data is not included.
         </p>
         <div className="config-actions">
           <button
             type="button"
-            data-testid="training-corpus-export-button"
+            data-testid="my-taste-export-button"
             className="primary"
-            onClick={handleExportTrainingCorpus}
-            disabled={exportingCorpus}
+            onClick={handleExportMyTaste}
+            disabled={exportingTaste}
           >
-            {exportingCorpus ? "Preparing export…" : "Download taste data"}
+            {exportingTaste ? "Preparing export…" : "Download taste data"}
           </button>
         </div>
         <InlineAlert
-          type={actionAlert?.area === "training-export" ? actionAlert.type : null}
-          message={actionAlert?.area === "training-export" ? actionAlert.message : null}
+          type={actionAlert?.area === "taste-export" ? actionAlert.type : null}
+          message={actionAlert?.area === "taste-export" ? actionAlert.message : null}
         />
       </section>
 
       <section className="config-section" data-testid="admin-backup-snapshot">
-        <h2>Settings + database snapshot</h2>
+        <h2>Full household backup</h2>
         <p className="wizard-note">
-          Download a WAL-safe zip of <code>settings.json</code> and the library database for off-box
-          backup. Keep your secrets key with the zip if fields are encrypted at rest.
+          This zip contains everyone&apos;s chats, memory, and watch history, plus your settings and
+          the library database. Anyone holding it can read every member&apos;s data. Keep your
+          secrets key with the zip if fields are encrypted at rest. Each download is logged.
         </p>
+        <label className="wizard-note" data-testid="admin-backup-snapshot-ack">
+          <input
+            type="checkbox"
+            checked={backupAcknowledged}
+            onChange={(event) => setBackupAcknowledged(event.target.checked)}
+          />{" "}
+          I&apos;ll store this like a password vault.
+        </label>
         <div className="config-actions">
           <button
             type="button"
             className="primary"
             data-testid="admin-backup-snapshot-button"
             onClick={handleDownloadAdminSnapshot}
-            disabled={exportingSnapshot}
+            disabled={exportingSnapshot || !backupAcknowledged}
           >
-            {exportingSnapshot ? "Preparing snapshot…" : "Download snapshot zip"}
+            {exportingSnapshot ? "Preparing backup…" : "Download household backup"}
           </button>
         </div>
         <InlineAlert

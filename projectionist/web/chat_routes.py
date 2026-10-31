@@ -72,6 +72,18 @@ def _include_orphan_threads(user) -> bool:
     return _settings().features.multi_user_enabled and getattr(user, "role", None) == "owner"
 
 
+def _assert_thread_access(db, session_id: Optional[str], user) -> None:
+    """404 when ``session_id`` names an existing thread the caller may not use."""
+    scoped = _scoped_user_id(user)
+    if not scoped or not session_id:
+        return
+    existing = db.get_chat_thread(
+        session_id, user_id=scoped, include_orphans=_include_orphan_threads(user)
+    )
+    if existing is None and db.get_chat_thread(session_id) is not None:
+        raise HTTPException(status_code=404, detail="Thread not found")
+
+
 def _resolve_lens_id(lens_id: Optional[str]) -> str:
     db = _db()
     resolved = (lens_id or db.get_active_lens_id() or DEFAULT_LENS_ID).strip() or DEFAULT_LENS_ID
@@ -113,12 +125,7 @@ async def chat(request: Request, payload: ChatRequest, user=Depends(get_current_
     lens_id = _resolve_lens_id(payload.lens_id)
     db = _db()
     scoped = _scoped_user_id(user)
-    if scoped and payload.session_id:
-        existing = db.get_chat_thread(
-            session_id, user_id=scoped, include_orphans=_include_orphan_threads(user)
-        )
-        if existing is None and db.get_chat_thread(session_id) is not None:
-            raise HTTPException(status_code=404, detail="Thread not found")
+    _assert_thread_access(db, payload.session_id, user)
     persona_id = payload.persona_id
     db.ensure_chat_session(session_id, lens_id, user_id=scoped, persona_id=persona_id)
     if persona_id:
@@ -363,6 +370,7 @@ async def chat_stream(
     sid = payload.session_id or uuid.uuid4().hex
     resolved_lens = _resolve_lens_id(payload.lens_id)
     scoped = _scoped_user_id(user)
+    _assert_thread_access(_db(), payload.session_id, user)
 
     async def event_generator():
         completed = False
