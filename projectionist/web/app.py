@@ -24,6 +24,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from projectionist import __version__
 from projectionist.agent.providers import LLMProviderError
+from projectionist.agent.tools._definitions import agent_acts_as_owner
 from projectionist.agent.tools import (
     check_radarr_already_exists,
     check_sonarr_already_exists,
@@ -37,6 +38,7 @@ from projectionist.config_store import (
     LLM_MODEL_DEFAULTS,
     LLM_PROVIDER_DEFAULTS,
     Settings,
+    SettingsCorruptError,
     load_dotenv_file,
     load_merged_settings,
     normalize_path_settings,
@@ -133,6 +135,7 @@ from projectionist.reviews.store import (
 )
 from projectionist.reviews.plex_sync import sync_review_rating_to_plex
 from projectionist.web.auth import (
+    SETTINGS_CORRUPT_DETAIL,
     authenticate_local_user,
     authenticate_plex_user,
     available_auth_methods,
@@ -460,6 +463,11 @@ app = FastAPI(
     redoc_url=_redoc_url,
 )
 app.middleware("http")(multi_user_api_auth_middleware)
+
+
+@app.exception_handler(SettingsCorruptError)
+async def _settings_corrupt_handler(_request: Request, _error: SettingsCorruptError) -> JSONResponse:
+    return JSONResponse({"detail": SETTINGS_CORRUPT_DETAIL}, status_code=503)
 
 
 _SECURITY_HEADERS = {
@@ -1527,11 +1535,13 @@ def admin_weekly_digest_cancel(user=Depends(require_role("owner"))) -> Dict[str,
     return cancel_job(DIGEST_KIND)
 
 
-@app.get("/api/admin/export/training-corpus")
-def export_training_corpus(user=Depends(require_role("owner"))) -> JSONResponse:
-    del user
-    payload = _db().export_training_corpus()
-    filename = f"projectionist-training-corpus-{int(payload['exported_at'])}.json"
+@app.get("/api/me/taste-export")
+def export_my_taste(user=Depends(get_current_user_dep)) -> JSONResponse:
+    settings = _settings()
+    is_owner = not settings.features.multi_user_enabled or user.role == "owner"
+    payload = _db().export_user_taste(user.id, include_unowned=is_owner)
+    stamp = time.strftime("%Y-%m-%d", time.gmtime(payload["exported_at"]))
+    filename = f"projectionist-my-taste-{stamp}.json"
     return JSONResponse(
         content=payload,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
@@ -2644,11 +2654,18 @@ async def confirm_action(
         logger.info("Action cancelled token=%s", payload.token[:8])
         return {"cancelled": True}
     try:
+        settings = _settings()
         result = await execute_confirmed_action(
-            _db(), _settings(), payload.token, user_id=scoped
+            _db(),
+            settings,
+            payload.token,
+            user_id=scoped,
+            actor_is_owner=agent_acts_as_owner(settings, user.role),
         )
         logger.info("Action confirmed token=%s action=%s", payload.token[:8], result.get("action"))
         return {"ok": True, **result}
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
     except Exception as error:  # noqa: BLE001
         raise HTTPException(
             status_code=400,
@@ -2852,11 +2869,11 @@ def anniversary_live_starter_endpoint(
 def admin_backup_snapshot_endpoint(
     user=Depends(require_role("owner")),
 ) -> Response:
-    """WAL-safe settings.json + SQLite snapshot zip (arch M10 residual)."""
-    del user
-    from projectionist.web.backup import build_admin_snapshot_zip
+    """WAL-safe settings.json + SQLite snapshot zip: every member's personal data."""
+    from projectionist.web.backup import build_admin_snapshot_zip, record_household_backup
 
     body, filename, _meta = build_admin_snapshot_zip(DATA_DIR)
+    record_household_backup(_db(), actor_id=str(user.id))
     return Response(
         content=body,
         media_type="application/zip",

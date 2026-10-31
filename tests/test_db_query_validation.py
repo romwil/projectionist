@@ -121,12 +121,12 @@ class TestTelemetrySummary(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# export_training_corpus — multi-table join, field mapping
+# export_user_taste — multi-table join, field mapping
 # ---------------------------------------------------------------------------
 
 
-class TestExportTrainingCorpus(unittest.TestCase):
-    """Verify export_training_corpus collects all three tables correctly."""
+class TestExportUserTaste(unittest.TestCase):
+    """Verify export_user_taste collects all three tables correctly."""
 
     def test_export_includes_all_seeded_data(self):
         """Seed feedback, preferences, reviews and verify exact export content."""
@@ -160,7 +160,7 @@ class TestExportTrainingCorpus(unittest.TestCase):
                 ("rev-1", "rk-100", "movie", "Inception", 5, "Mind-bending", now, now),
             )
 
-        result = db.export_training_corpus()
+        result = db.export_user_taste(None, include_unowned=True)
 
         self.assertIn("exported_at", result)
         self.assertIsInstance(result["exported_at"], float)
@@ -180,7 +180,7 @@ class TestExportTrainingCorpus(unittest.TestCase):
     def test_export_empty_tables_returns_empty_lists(self):
         """All three tables empty should return empty lists."""
         _, db = _make_db()
-        result = db.export_training_corpus()
+        result = db.export_user_taste(None, include_unowned=True)
         self.assertEqual(result["message_feedback"], [])
         self.assertEqual(result["preference_facts"], [])
         self.assertEqual(result["user_title_reviews"], [])
@@ -194,7 +194,7 @@ class TestExportTrainingCorpus(unittest.TestCase):
         time.sleep(0.01)
         db.add_preference("genre_like", "Third pref")
 
-        result = db.export_training_corpus()
+        result = db.export_user_taste(None, include_unowned=True)
         texts = [p["text"] for p in result["preference_facts"]]
         self.assertEqual(texts, ["First pref", "Second pref", "Third pref"])
 

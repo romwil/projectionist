@@ -127,7 +127,7 @@ def register_setup_routes(app):
 
     @router.get("/api/setup/certifications")
     def setup_certifications() -> Dict[str, Any]:
-        return build_certifications_status(_db())
+        return build_certifications_status(_db(), DATA_DIR)
 
 
     @router.get("/api/setup/llm-providers")

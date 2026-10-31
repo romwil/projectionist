@@ -10,6 +10,7 @@ from projectionist.config_store import Settings
 from projectionist.library.db import Database
 from projectionist.notifications.recommendation_reasons import pick_linked_unwatched
 from projectionist.notifications.service import deliver_notification
+from projectionist.youth.rating_gate import youth_gate_active
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +153,9 @@ def deliver_enthusiast_nudges(
         if user.get("disabled"):
             continue
         if not user.get("nudge_opt_in"):
+            continue
+        # Nudges quote household-wide recent viewing; there is no youth-safe variant yet.
+        if youth_gate_active(user):
             continue
         considered += 1
         related = f"enthusiast-nudge-{week_bucket}-{user['id']}"

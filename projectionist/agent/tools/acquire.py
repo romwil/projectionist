@@ -26,7 +26,6 @@ from projectionist.agent.tools._helpers import (
 from projectionist.agent.tools.confirmed import (
     check_radarr_already_exists,
     check_sonarr_already_exists,
-    execute_confirmed_action,
     mark_in_radarr,
     mark_in_sonarr,
     resolve_arr_removal_target,
@@ -274,43 +273,37 @@ class AcquireToolsMixin:
         )
 
     async def _tool_mark_bad_media(self, args: Mapping[str, Any]) -> str:
-        from projectionist.library.bad_media import BadMediaError, mark_bad_media
-
-        try:
-            result = mark_bad_media(
-                self.db,
-                self.settings,
-                rating_key=str(args.get("rating_key") or "") or None,
-                tmdb_id=int(args["tmdb_id"]) if args.get("tmdb_id") is not None else None,
-                tvdb_id=int(args["tvdb_id"]) if args.get("tvdb_id") is not None else None,
-                media_type=str(args.get("media_type") or "") or None,
-                episode_rating_key=str(args.get("episode_rating_key") or "") or None,
-                season_number=int(args["season_number"]) if args.get("season_number") is not None else None,
-                episode_number=int(args["episode_number"]) if args.get("episode_number") is not None else None,
-                note=str(args.get("note") or ""),
-            )
-        except BadMediaError as error:
-            return json.dumps({"error": str(error)})
-        except RuntimeError as error:
-            from projectionist.connectors.arr_errors import format_arr_http_error
-
-            return json.dumps({"error": format_arr_http_error(error)})
+        """Propose a bad-file replacement; the owner confirms it in the UI."""
+        payload: Dict[str, Any] = {
+            "action": "mark_bad_media",
+            "rating_key": str(args.get("rating_key") or "") or None,
+            "tmdb_id": int(args["tmdb_id"]) if args.get("tmdb_id") is not None else None,
+            "tvdb_id": int(args["tvdb_id"]) if args.get("tvdb_id") is not None else None,
+            "media_type": str(args.get("media_type") or "") or None,
+            "episode_rating_key": str(args.get("episode_rating_key") or "") or None,
+            "season_number": int(args["season_number"]) if args.get("season_number") is not None else None,
+            "episode_number": int(args["episode_number"]) if args.get("episode_number") is not None else None,
+            "note": str(args.get("note") or ""),
+            "title": str(args.get("title") or ""),
+        }
+        if not any(payload.get(key) for key in ("rating_key", "tmdb_id", "tvdb_id", "episode_rating_key")):
+            return json.dumps({"error": "rating_key, tmdb_id, or tvdb_id is required"})
+        token = uuid.uuid4().hex
+        self.db.save_pending_action(token, "mark_bad_media", payload, user_id=self.user_id)
+        self._register_pending_token(token, "mark_bad_media")
         return json.dumps(
             {
-                "ok": True,
-                "title": result.get("title"),
-                "action": result.get("action"),
-                "files_removed": result.get("files_removed", 0),
+                "confirmation_token": token,
                 "add_exclusion": False,
                 "message": (
-                    "Asked Radarr/Sonarr to replace the bad file. "
-                    "No import exclusion was added — the title stays wanted."
+                    "Awaiting confirmation to ask Radarr/Sonarr to replace the bad file. "
+                    f"{_PENDING_CONFIRM_HINT}"
                 ),
             }
         )
 
     async def _tool_confirm_pending_action(self, args: Mapping[str, Any]) -> str:
-        """Redeem or cancel a pending confirmation token after the user affirms."""
+        """Cancel a pending token. Redeeming is a user action (POST /api/actions/confirm)."""
         token = str(
             args.get("confirmation_token") or args.get("token") or args.get("pending_token") or ""
         ).strip()
@@ -334,11 +327,13 @@ class AcquireToolsMixin:
             except Exception as error:  # noqa: BLE001
                 return json.dumps({"error": str(error)})
             return json.dumps({"cancelled": True, "found": popped is not None})
-        try:
-            result = await execute_confirmed_action(
-                self.db, self.settings, token, user_id=self.user_id
-            )
-            return json.dumps({"ok": True, **result})
-        except Exception as error:  # noqa: BLE001
-            return json.dumps({"error": str(error), "ok": False})
-
+        return json.dumps(
+            {
+                "ok": False,
+                "code": "confirm_requires_user",
+                "error": (
+                    "Confirmation happens in the app, not in chat. Ask the user to press "
+                    "Confirm on the proposal card."
+                ),
+            }
+        )

@@ -184,7 +184,7 @@ export function normalizePendingTokens(pendingTokens: JsParam) {
 
 const TOKEN_ACTION_GROUPS = {
   add: new Set(["add_radarr", "add_sonarr", "request_seerr"]),
-  remove: new Set(["remove_arr"]),
+  remove: new Set(["remove_arr", "mark_bad_media"]),
   plex: new Set(["create_plex_collection", "add_to_plex_collection"]),
 };
 

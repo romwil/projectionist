@@ -28,7 +28,7 @@ import httpx
 from fastapi import Depends, HTTPException, Request, Response
 from starlette.responses import JSONResponse
 
-from projectionist.config_store import Settings, load_merged_settings
+from projectionist.config_store import Settings, SettingsCorruptError, load_merged_settings
 from projectionist.connectors.plex_account import (
     PLEX_PIN_CONFIRM_TIMEOUT_SECONDS,
     PLEX_PIN_POLL_TIMEOUT_SECONDS,
@@ -79,6 +79,8 @@ _pin_bindings: Dict[str, Dict[str, Any]] = {}
 logger = logging.getLogger(__name__)
 
 UserRole = Literal["owner", "member"]
+
+SETTINGS_CORRUPT_DETAIL = "Settings unreadable; restore settings.json from a backup"
 
 
 def _data_dir() -> Path:
@@ -494,7 +496,10 @@ async def multi_user_api_auth_middleware(request: Request, call_next):
     if not path.startswith("/api/"):
         return await call_next(request)
 
-    settings = _settings()
+    try:
+        settings = await run_in_threadpool(_settings)
+    except SettingsCorruptError:
+        return JSONResponse({"detail": SETTINGS_CORRUPT_DETAIL}, status_code=503)
     if not settings.features.multi_user_enabled:
         if wan_interlock_blocks(request, multi_user_enabled=False):
             if path in {"/api/health", "/api/features"}:

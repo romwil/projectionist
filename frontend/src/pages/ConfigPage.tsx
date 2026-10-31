@@ -416,7 +416,7 @@ export default function ConfigPage() {
   const [revealingSecret, setRevealingSecret] = useState<string | null>(null);
   const [libraryStats, setLibraryStats] = useState<JsParam>(null);
   const [libraryHealth, setLibraryHealth] = useState<JsParam>(null);
-  const [exportingCorpus, setExportingCorpus] = useState(false);
+  const [exportingTaste, setExportingTaste] = useState(false);
   const [exportingSnapshot, setExportingSnapshot] = useState(false);
   const [registeringRadarr, setRegisteringRadarr] = useState(false);
   const [radarrGapStats, setRadarrGapStats] = useState<JsParam>(null);
@@ -1712,34 +1712,34 @@ export default function ConfigPage() {
     }
   }
 
-  async function handleExportTrainingCorpus() {
-    setExportingCorpus(true);
+  async function handleExportMyTaste() {
+    setExportingTaste(true);
     try {
-      const response = await fetch("/api/admin/export/training-corpus", { credentials: "include" });
+      const response = await fetch("/api/me/taste-export", { credentials: "include" });
       if (!response.ok) {
         throw new Error(`Export failed (${response.status})`);
       }
       const blob = await response.blob();
       const disposition = response.headers.get("Content-Disposition") || "";
       const match = disposition.match(/filename="([^"]+)"/);
-      const filename = match?.[1] || "projectionist-training-corpus.json";
+      const filename = match?.[1] || "projectionist-my-taste.json";
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
       link.download = filename;
       link.click();
       URL.revokeObjectURL(url);
-      setActionFeedback("training-export", {
+      setActionFeedback("taste-export", {
         type: "success",
         message: "Taste data downloaded.",
       });
     } catch (error) {
-      setActionFeedback("training-export", {
+      setActionFeedback("taste-export", {
         type: "error",
         message: (error as ApiError).message || "Taste data export failed.",
       });
     } finally {
-      setExportingCorpus(false);
+      setExportingTaste(false);
     }
   }
 
@@ -1756,7 +1756,7 @@ export default function ConfigPage() {
       URL.revokeObjectURL(url);
       setActionFeedback("admin-snapshot", {
         type: "success",
-        message: "Settings + database snapshot downloaded.",
+        message: "Household backup downloaded.",
       });
     } catch (error) {
       setActionFeedback("admin-snapshot", {
@@ -1780,8 +1780,8 @@ export default function ConfigPage() {
             sections={sections}
             featureFlags={featureFlags}
             setShowWizard={setShowWizard}
-            handleExportTrainingCorpus={handleExportTrainingCorpus}
-            exportingCorpus={exportingCorpus}
+            handleExportMyTaste={handleExportMyTaste}
+            exportingTaste={exportingTaste}
             handleDownloadAdminSnapshot={handleDownloadAdminSnapshot}
             exportingSnapshot={exportingSnapshot}
             actionAlert={actionAlert}

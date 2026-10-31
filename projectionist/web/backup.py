@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import io
+import json
+import logging
 import sqlite3
 import time
 import zipfile
 from pathlib import Path
 from typing import Any, Dict, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 def resolve_db_path(data_dir: Path) -> Path:
@@ -74,3 +78,30 @@ def build_admin_snapshot_zip(data_dir: Path) -> Tuple[bytes, str, Dict[str, Any]
         )
         zf.writestr("README.txt", readme)
     return buf.getvalue(), filename, meta
+
+
+HOUSEHOLD_BACKUP_LOG_KEY = "household_backup_log"
+HOUSEHOLD_BACKUP_LOG_LIMIT = 50
+
+
+def record_household_backup(db: Any, *, actor_id: str, now: float | None = None) -> Dict[str, Any]:
+    """Append one audit entry (who, when) for a full household backup download."""
+    entry = {"actor_id": actor_id, "ts": time.time() if now is None else float(now)}
+    try:
+        existing = json.loads(db.get_sync_state(HOUSEHOLD_BACKUP_LOG_KEY) or "[]")
+    except (TypeError, ValueError):
+        existing = []
+    if not isinstance(existing, list):
+        existing = []
+    log = (existing + [entry])[-HOUSEHOLD_BACKUP_LOG_LIMIT:]
+    db.set_sync_state(HOUSEHOLD_BACKUP_LOG_KEY, json.dumps(log))
+    logger.info("Household backup downloaded by actor=%s", actor_id)
+    return entry
+
+
+def household_backup_log(db: Any) -> list:
+    try:
+        log = json.loads(db.get_sync_state(HOUSEHOLD_BACKUP_LOG_KEY) or "[]")
+    except (TypeError, ValueError):
+        return []
+    return log if isinstance(log, list) else []

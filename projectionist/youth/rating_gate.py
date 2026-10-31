@@ -158,10 +158,41 @@ def resolve_youth_max_rating(settings: Any) -> str:
 
 
 def youth_gate_active(user: Any) -> bool:
-    """Youth gate applies when the signed-in account is flagged Youth."""
+    """Youth gate applies when the account (object or user-row dict) is flagged Youth."""
     if user is None:
         return False
+    if isinstance(user, Mapping):
+        return bool(user.get("is_youth"))
     return bool(getattr(user, "is_youth", False))
+
+
+def youth_ceiling_for(user: Any, settings: Any) -> Optional[str]:
+    """Max content rating for this viewer, or None when no youth gate applies."""
+    if not youth_gate_active(user):
+        return None
+    return resolve_youth_max_rating(settings)
+
+
+def youth_visible_rows(
+    rows: Sequence[Mapping[str, Any]] | Iterable[Mapping[str, Any]],
+    *,
+    user: Any,
+    settings: Any,
+    rating_key: str = "content_rating",
+) -> List[Any]:
+    """The one rating gate for feeds and outbound letters.
+
+    Non-youth viewers get ``rows`` back unchanged. Youth viewers get only rows
+    whose rating is at or under the ceiling; unrated rows are dropped.
+    """
+    ceiling = youth_ceiling_for(user, settings)
+    if ceiling is None:
+        return list(rows)
+    return [
+        row
+        for row in rows
+        if isinstance(row, Mapping) and content_rating_allowed(row.get(rating_key), max_rating=ceiling)
+    ]
 
 
 def filter_items_for_youth(
