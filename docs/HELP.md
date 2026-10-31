@@ -181,7 +181,7 @@ Under **Settings → Notifications** you can:
 - Turn the **in-app inbox** on or off (always self-serve)
 - Opt into **email alerts** when the owner has mail configured (**Needs owner setup**)
 - Opt into **Apprise alerts** and add your own Discord / Telegram / push destinations with the destination builder (**Self-serve**; optional household URLs can also be configured by the owner)
-- Subscribe to the **weekly newsletter** — a short, personalized note in your default curator’s voice (youth-safe when the member is in Youth mode). Each title names a subject, creator, or franchise it shares with something you have watched. If nothing qualifies, the note says so instead of listing new arrivals. It usually arrives on the weekly schedule; the owner can also push one early from Admin.
+- Subscribe to the **weekly newsletter** — a short, personalized note in your default curator’s voice (youth-safe when the member is in Youth mode). Each title names a subject, creator, or franchise it shares with something you have watched. If nothing qualifies that week, you don't get a note — no "nothing for you" mail. It usually arrives on the weekly schedule; the owner can also push one early from Admin. Every note ends with how to change or stop it.
 - Opt into **curator nudges** — occasional “you have to see this” picks that name a shared subject, creator, or franchise with something you have watched. A recent watch by itself is not enough. These are never live Plex session alerts.
 - Opt into **Year in Review** — a private year-end recap of **your Plex plays this year (this account)**, not the household and not only titles played inside Projectionist. Plex marks a title played (`viewedAt`); that is not credits-roll proof. You get a short reel, then a linger sheet: totals, top movie genre vs top TV genre, catalog hours, and the titles that defined the year. Live-observed progress vs Plex-played confidence stays on the reel. Late December may tease the reel; early January drops the full link to your inbox (and email if you’ve enabled it).
 
@@ -361,22 +361,64 @@ Identify is usually **show-level** (theme or score). It does **not** pick season
 3. Open **Admin → Scheduled Tasks** (`/admin/tasks`) — confirm knowledge tasks are enabled; adjust cadence after large imports.
 4. Open **Admin → Library knowledge** (`/admin/taxonomy`) — start with **name mappings**; a title appears under **Couldn't fill in** only after automatic lookup failed.
 
+### Needs attention
+
+**Admin → Overview** opens with one **Needs attention** list. It rolls up everything that wants you this week: a saved key the server can no longer read, a connection that was verified but whose key is now missing, scheduled tasks that failed or were quarantined, setup steps you haven't done or skipped, and an unfinished Monday pass. Each row links to the page that fixes it. When the list is empty, it says so — there is no separate panel to check.
+
 ### Monday pass
 
-**Admin → Health** leads with a **Monday pass** — about 20 minutes, in this order:
+**Admin → Overview → Monday pass** is a checklist you work through once a week — about 20 minutes, in this order:
 
 1. **Named kinship on opened titles** (the number to watch — catch-up is the lever; Similar cache % is not useful relatedness)
 2. **Open issues**
 3. **Purge pressure**
-4. **Scheduled Tasks catch-up**
+4. **Tasks catch-up**
 
-Each tile links to that page. Similar-cache % can look full while Named kinship stays low; empty More Like This shelves queue idle catch-up. After overnight idle, re-read coverage:
+A step ticks itself when the number already says you're fine (kinship at 50% or better, no open issues, nothing to purge). Otherwise open the linked page, then mark the step **Reviewed**. **Run catch-up** queues Warm Explore and the related idle tasks one after another. When every step is done, **Mark this week done** stamps the week. The marks are saved on this server per ISO week (Monday to Sunday), so a new week starts fresh and **Undo** reopens a step without losing last week's stamp. **Admin → Health** links to the same pass.
+
+Similar-cache % can look full while Named kinship stays low; empty More Like This shelves queue idle catch-up. After overnight idle, re-read coverage:
 
 ```bash
 # Automat LAN (authoritative). Quote with_explainable_neighbors_opened_pct.
 # Global Similar cache / Named kinship can look full while opened titles stay sparse.
 curl -s http://10.10.1.202:8788/api/library/knowledge-coverage | python3 -m json.tool
 curl -s http://10.10.1.202:8788/api/library/kinship-miss | python3 -m json.tool
+```
+
+### Setup checklist
+
+**Admin → Overview → Setup & stewardship** replaces the old **Re-run setup** button. It lists what a well-kept server has: Plex connected, libraries chosen, a curator connection (optional), a dedicated secrets key, a household invite (optional), a recent backup, and mail (optional). Each step is checked against the server, not ticked by hand — connecting Plex is what marks Plex done. You can **Skip** an optional step (and **Restore** it later); the choice is saved on this server. **Open the first-run wizard** is still at the bottom if you want the guided flow again.
+
+### Secrets & connections
+
+The **Secrets & connections** card on Overview shows, for each service, whether its saved key can actually be read with this server's secrets key. **Connected** means the key decrypts and the service passed its last test. **Key can't be read** means a key is saved but this server can't decrypt it — usually the secrets key changed (a restore onto a new box, or `PROJECTIONIST_SECRETS_KEY` removed). Re-enter that key under **Admin → Connections**. **Marked connected, no key** means the service was verified before but no key is saved now. **Key saved, not tested** means run **Test** once. The card shows the last test time when there is one. It never contacts the services itself; use **Test** on Connections for that. It also tells you whether the server uses a dedicated secrets key or one derived from the session secret — set `PROJECTIONIST_SECRETS_KEY` so a restore keeps your keys readable.
+
+### Tasks catch-up
+
+**Admin → Tasks** opens on **Catch-up**: a short list of what needs a look — anything running, failed or quarantined tasks, Warm Explore, overdue tasks, and tasks skipped for a reason. Healthy, disabled, and on-schedule tasks live under **All tasks (Advanced)**, which is the full console with sorting and cadence controls. **Warm Explore** stays in the page header. Link straight to the full list with `/admin/tasks?view=all`.
+
+### Security log
+
+**Admin → Health → Security log** is the household's security trail: sign-ins (and failed sign-ins), password changes and resets, sign-out-everywhere, invites created, redeemed, and revoked, access requests approved or denied, role, Youth, disable, and delete changes, settings saves, secret reveals, MCP key changes, and backup downloads. Filter by event or by person. Only owners can open it — members and Youth accounts get a 403.
+
+**How this works:** each row records who did it, who it was for, when, and whether it succeeded. A settings save lists the **names** of the settings that changed, never their values. Passwords, tokens, and keys are never written to the log. The log keeps the most recent 20,000 rows on this server.
+
+```bash
+# Owner session cookie required — last 20 failed sign-ins
+curl -s -b cookies.txt "http://localhost:8788/api/admin/security-audit?event=sign_in_failed&limit=20" | python3 -m json.tool
+# → {"items": [{"event": "sign_in_failed", "actor_id": null, "outcome": "denied", "detail": {"method": "local", "username": "...", "status": 401}}], "total": 3, ...}
+```
+
+### On-box activity
+
+The Monday pass ends with a line like *"On this server, last 7 days: 42 chat turns · 9 plays · 3 from a pick."* Those counts come from the interaction stream on this server. A chat turn records the outcome, how many cards and tools it used, and how long it took — never the words. A play counts as **from a pick** only when you pressed Play on a card the curator showed you in chat, or on a title someone in the household recommended to you. A play is never credited to a pick based on Plex history alone. Nothing is sent to us or to any analytics service. Rows are kept 90 days, and a member's export and purge include their own rows.
+
+There is no in-app switch for this yet. To stop recording on the host, set the `telemetry_enabled` flag to `false` (the app reads it on every event, so no restart is needed):
+
+```bash
+# On the host, with the container's /config mounted at ./config
+sqlite3 ./config/projectionist.db \
+  "INSERT OR REPLACE INTO curator_system_config (config_key, config_value) VALUES ('telemetry_enabled', 'false');"
 ```
 
 ### Library knowledge

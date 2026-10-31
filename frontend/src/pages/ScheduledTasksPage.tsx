@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   getAllScheduledTaskHistory,
   getScheduledTaskHistory,
@@ -38,6 +39,7 @@ import {
   taskDisplayName,
   taskRowTone,
 } from "../lib/scheduledTasks.js";
+import { TASK_VIEWS, resolveTaskView, taskCatchupShortlist } from "../lib/ownerOps.js";
 import { useConfirmModal } from "../hooks/useConfirmModal";
 
 const POLL_IDLE_MS = 5000;
@@ -103,8 +105,24 @@ export default function ScheduledTasksPage() {
     [items, sortMode, nowTick],
   );
 
-  const sortHint =
-    sortMode === TASK_SORT_MODES.heaviest
+  const [searchParams, setSearchParams] = useSearchParams();
+  const taskView = resolveTaskView(searchParams.get("view"));
+  const showAllTasks = taskView === TASK_VIEWS.all;
+  const visibleItems = useMemo(
+    () => (showAllTasks ? sortedItems : taskCatchupShortlist(sortedItems)),
+    [showAllTasks, sortedItems],
+  );
+
+  function selectTaskView(next: string) {
+    const params = new URLSearchParams(searchParams);
+    if (next === TASK_VIEWS.all) params.set("view", TASK_VIEWS.all);
+    else params.delete("view");
+    setSearchParams(params, { replace: true });
+  }
+
+  const sortHint = !showAllTasks
+    ? "Failed or quarantined tasks first, then Warm Explore, then anything overdue. Disabled and healthy tasks live under All tasks."
+    : sortMode === TASK_SORT_MODES.heaviest
       ? "Sorted by duty cycle: last duration ÷ cadence (heaviest first). Disabled tasks sort last."
       : "Ordered by next run (soonest first). Disabled tasks sort last.";
 
@@ -621,11 +639,36 @@ export default function ScheduledTasksPage() {
         <div className="scheduled-tasks-layout">
           <section className="dash-panel scheduled-tasks-list-panel">
             <div className="scheduled-tasks-list-header">
-              <h3 className="dash-panel-title">All tasks</h3>
+              <div
+                className="scheduled-tasks-sort-control"
+                role="group"
+                aria-label="Task view"
+                data-testid="tasks-view-control"
+              >
+                <button
+                  type="button"
+                  className={`ghost scheduled-tasks-sort-option${showAllTasks ? "" : " is-active"}`}
+                  data-testid="tasks-view-catchup"
+                  aria-pressed={!showAllTasks}
+                  onClick={() => selectTaskView(TASK_VIEWS.catchup)}
+                >
+                  Catch-up
+                </button>
+                <button
+                  type="button"
+                  className={`ghost scheduled-tasks-sort-option${showAllTasks ? " is-active" : ""}`}
+                  data-testid="tasks-view-all"
+                  aria-pressed={showAllTasks}
+                  onClick={() => selectTaskView(TASK_VIEWS.all)}
+                >
+                  All tasks (Advanced)
+                </button>
+              </div>
               <div
                 className="scheduled-tasks-sort-control"
                 role="group"
                 aria-label="Sort tasks"
+                hidden={!showAllTasks}
               >
                 <button
                   type="button"
@@ -682,7 +725,14 @@ export default function ScheduledTasksPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedItems.map((task) => {
+                  {!visibleItems.length ? (
+                    <tr data-testid="tasks-catchup-empty">
+                      <td colSpan={7} className="scheduled-task-meta">
+                        Nothing to catch up on. Every task ran cleanly — open All tasks for the full schedule.
+                      </td>
+                    </tr>
+                  ) : null}
+                  {visibleItems.map((task) => {
                     const tone = taskRowTone(task);
                     const selectedRow = task.name === selectedName;
                     const busy = busyNames.has(task.name);

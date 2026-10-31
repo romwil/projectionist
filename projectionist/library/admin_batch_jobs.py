@@ -85,7 +85,7 @@ def start_newsletter_job(
         return snap
 
     def _run(job_store, cancel) -> Mapping[str, Any]:
-        delivered = emailed = skipped_opt_out = skipped_disabled = 0
+        delivered = emailed = skipped_opt_out = skipped_disabled = skipped_empty = 0
         job_store.update("sending", "Sending weekly newsletter…")
         for user in candidates:
             uid = str(user.get("id"))
@@ -99,6 +99,7 @@ def start_newsletter_job(
                 emailed += int(result.get("emailed") or 0)
                 skipped_opt_out += int(result.get("skipped_opt_out") or 0)
                 skipped_disabled += int(result.get("skipped_disabled") or 0)
+                skipped_empty += int(result.get("skipped_empty") or 0)
                 if result.get("delivered"):
                     job_store.set_item(uid, "completed", outcome="delivered")
                 elif result.get("skipped_opt_out"):
@@ -116,6 +117,7 @@ def start_newsletter_job(
             "skipped_opt_out": skipped_opt_out,
             "skipped_disabled": skipped_disabled,
             "skipped_missing": 0,
+            "skipped_empty": skipped_empty,
         }
         snap = job_store.snapshot()
         phase = "cancelled" if cancel.is_set() else "done"

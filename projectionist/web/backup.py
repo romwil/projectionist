@@ -95,6 +95,9 @@ def record_household_backup(db: Any, *, actor_id: str, now: float | None = None)
         existing = []
     log = (existing + [entry])[-HOUSEHOLD_BACKUP_LOG_LIMIT:]
     db.set_sync_state(HOUSEHOLD_BACKUP_LOG_KEY, json.dumps(log))
+    from projectionist.security_audit import HOUSEHOLD_BACKUP, audit
+
+    audit(db, HOUSEHOLD_BACKUP, actor_id=actor_id)
     logger.info("Household backup downloaded by actor=%s", actor_id)
     return entry
 

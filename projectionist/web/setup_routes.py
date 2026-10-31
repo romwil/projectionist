@@ -12,6 +12,7 @@ def register_setup_routes(app):
     from pydantic import BaseModel, Field
 
     import projectionist.web.app as app_mod
+    from projectionist import security_audit as sa
 
     ANTHROPIC_MODEL_OPTIONS = app_mod.ANTHROPIC_MODEL_OPTIONS
     DATA_DIR = app_mod.DATA_DIR
@@ -153,7 +154,6 @@ def register_setup_routes(app):
         payload: RevealSecretPayload, user=Depends(require_role("owner"))
     ) -> Dict[str, Any]:
         """Owner-only plaintext for one connection secret. Never logged."""
-        del user
         field = str(payload.field or "").strip()
         if field not in REVEALABLE_SECRET_FIELDS:
             raise HTTPException(status_code=400, detail="Unknown or non-revealable secret field")
@@ -164,13 +164,13 @@ def register_setup_routes(app):
             value = str(getattr(settings, field, "") or "").strip()
         if not value:
             raise HTTPException(status_code=404, detail="Secret is not configured")
-        # Intentionally no logger call with *value* — trust-plane only if needed later.
+        # Intentionally no logger call with *value* — the audit row names the field only.
+        sa.audit(_db(), sa.SECRET_REVEAL, actor_id=user.id, field=field)
         return {"field": field, "value": value}
 
 
     @router.put("/api/settings")
     def put_settings(payload: SettingsPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
-        del user
         settings_path = DATA_DIR / "settings.json"
         before = Settings.load(settings_path)
         existing = _settings()
@@ -197,6 +197,9 @@ def register_setup_routes(app):
         invalidate_certifications_on_settings_change(_db(), before, settings, payload.model_dump())
         save_settings(DATA_DIR, settings)
         sync_settings_to_db(_db(), settings)
+        changed = sa.changed_setting_names(asdict(existing), asdict(settings))
+        if changed:
+            sa.audit(_db(), sa.SETTINGS_SAVE, actor_id=user.id, fields=changed)
         try:
             from projectionist.theater.hub import get_theater_hub
 
@@ -268,7 +271,6 @@ def register_setup_routes(app):
     @router.post("/api/settings/mcp-keys/rotate")
     def rotate_mcp_key(payload: McpKeyWhichPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
         """Generate a new MCP key, persist to settings.json, return plaintext once."""
-        del user
         field = _mcp_key_field(payload.which)
         settings_path = DATA_DIR / "settings.json"
         before = Settings.load(settings_path) if settings_path.exists() else Settings()
@@ -287,6 +289,7 @@ def register_setup_routes(app):
         invalidate_certifications_on_settings_change(_db(), before, updated, overrides)
         save_settings(DATA_DIR, updated)
         sync_settings_to_db(_db(), updated)
+        sa.audit(_db(), sa.MCP_KEY_ROTATE, actor_id=user.id, which=payload.which)
         return {
             "which": payload.which,
             "field": field,
@@ -299,7 +302,6 @@ def register_setup_routes(app):
     @router.post("/api/settings/mcp-keys/clear")
     def clear_mcp_key(payload: McpKeyWhichPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
         """Clear a file-persisted MCP key. Env/Unraid-sourced keys must be removed from the template."""
-        del user
         field = _mcp_key_field(payload.which)
         sources = secret_field_sources(DATA_DIR)
         if sources.get(field) == "env":
@@ -328,6 +330,7 @@ def register_setup_routes(app):
         invalidate_certifications_on_settings_change(_db(), before, updated, overrides)
         save_settings(DATA_DIR, updated)
         sync_settings_to_db(_db(), updated)
+        sa.audit(_db(), sa.MCP_KEY_CLEAR, actor_id=user.id, which=payload.which)
         return {"which": payload.which, "field": field, "settings": _mask_settings(updated)}
 
 

@@ -57,6 +57,7 @@ from ._invites import InviteConflict, InvitesMixin
 from ._curated_lists import CuratedListsMixin
 from ._holidays import HolidaysMixin
 from ._media_issues import MediaIssuesMixin
+from ._owner_ops import OwnerOpsMixin
 from ._ephemeral_collections import (
     DEFAULT_EPHEMERAL_TTL_HOURS,
     EPHEMERAL_COLLECTION_PREFIX,
@@ -87,6 +88,7 @@ class Database(
     EphemeralCollectionsMixin,
     CuratedListsMixin,
     MediaIssuesMixin,
+    OwnerOpsMixin,
 ):
     """Composed database facade — identical public API to the pre-split class."""
 

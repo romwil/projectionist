@@ -1055,12 +1055,13 @@ export async function tuneLiveChannel(channelId: string) {
 }
 
 /** Household: start an in-app library HLS session (movie / episode / show key). */
-export async function startLibraryPlayback(ratingKey: string, { startOver = false }: JsonObject = {}) {
+export async function startLibraryPlayback(ratingKey: string, { startOver = false, rec = "" }: JsonObject = {}) {
   return api("/library/playback/start", {
     method: "POST",
     body: JSON.stringify({
       rating_key: String(ratingKey || ""),
       start_over: Boolean(startOver),
+      ...(rec ? { rec: String(rec) } : {}),
     }),
   });
 }
@@ -2194,6 +2195,36 @@ export async function confirmAction(token: string, confirmed = true) {
 
 export async function listScheduledTasks() {
   return api("/admin/scheduled-tasks");
+}
+
+/** Owner: Overview rollup — stewardship + Monday checklists, secrets card, needs attention. */
+export async function getOwnerOpsOverview() {
+  return api("/admin/ops/overview");
+}
+
+/** Owner: skip/restore a setup row, or review/reopen a Monday pass step. */
+export async function setOwnerChecklistMark(scope: string, itemId: string, status: string) {
+  return api(`/admin/ops/checklist/${encodeURIComponent(scope)}/${encodeURIComponent(itemId)}`, {
+    method: "PUT",
+    body: JSON.stringify({ status }),
+  });
+}
+
+/** Owner: queue Warm Explore tasks one after another and tick the catch-up step. */
+export async function runMondayCatchUp() {
+  return api("/admin/ops/monday-pass/catch-up", { method: "POST" });
+}
+
+export async function completeMondayPass() {
+  return api("/admin/ops/monday-pass/complete", { method: "POST" });
+}
+
+/** Owner: security audit trail (sign-ins, passwords, invites, roles, settings). */
+export async function getSecurityAudit({ event = "", userId = "", limit = 50, offset = 0 }: JsonObject = {}) {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (event) params.set("event", String(event));
+  if (userId) params.set("user_id", String(userId));
+  return api(`/admin/security-audit?${params}`);
 }
 
 export async function optimizeScheduledTaskRates({ dry_run = false }: JsonObject = {}) {

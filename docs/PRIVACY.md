@@ -71,6 +71,7 @@ Projectionist can hand you a full **export** of your account data, or permanentl
 | **Saved library pages** — your saved curator responses | Yes | Yes | `saved_library_pages` |
 | **Preference / taste facts** | Yes | Yes | `preference_facts` |
 | **Personal watch evidence and derivations** — normalized events, logical sessions, and completion confidence | Yes | Yes | `watch_events`, `watch_sessions`, `watch_completions` |
+| **Your on-box activity events** — chat turns (outcome, card and tool counts, timing; never the words), plays started in Projectionist and which pick they came from | Yes | Yes | `system_telemetry_stream` rows tagged with your account |
 | Shared, sanitized media research (titles/people/companies) | No | No | Repository knowledge — not tied to any account |
 
 The export is a single JSON (or Markdown) document containing your notes, chat threads with their full message transcripts, saved pages, preference facts, and privacy-minimized watch events plus their derived sessions/completions. Provider account keys, payload hashes, server ids, tokens, and raw Plex payloads are excluded. **Purge is permanent — export first if you want a copy.** Removing a household account runs the same purge before deleting its profile. Both export and purge record a small audit event.
@@ -237,6 +238,13 @@ Details and exposure: [MCP](#mcp). Rotate keys in **Admin → Advanced** (last-4
 
 For privacy-safe and member-facing library JSON, Projectionist prefers **TMDB CDN** poster/backdrop URLs (`image.tmdb.org`). Those URLs carry no Plex token and no LAN hostname. Plex thumbnail URLs that embed `X-Plex-Token` must not leave via privacy MCP or member public schemas.
 
+### Activity counts and the security log
+
+Two small records stay on this server so the owner can run it well. Neither is sent anywhere — Projectionist has no third-party analytics and does not phone home.
+
+- **Activity counts** (`system_telemetry_stream`). A chat turn records its outcome, how many cards and tools it used, and how long it took — never what was typed or answered. A play started in Projectionist records the title and, only when you pressed Play on a card the curator showed you or on a title a household member recommended to you, which pick it came from. A pick is never inferred from Plex history. Rows are kept 90 days, and they're in your export and removed by your purge. The owner sees only household totals on **Admin → Overview**.
+- **Security log** (`security_audit_log`). Sign-ins, failed sign-ins, password changes and resets, invites, role and Youth changes, settings saves, secret reveals, MCP key changes, and backup downloads. Each row says who acted, for whom, when, and the outcome. Settings saves list setting **names**, never values; passwords, tokens, and keys are never written. Only owners can read it (**Admin → Health → Security log**). It is the household's audit trail, so it is **not** removed by an account purge; it keeps the most recent 20,000 rows.
+
 ### Webhooks, logging, backups
 
 - Plex webhooks (if enabled) require a configured webhook secret.
@@ -300,6 +308,8 @@ Legend: **Y** = may see / receive · **—** = not exposed by design · **P** = 
 | File size / paths | SQLite | — | Y | — | Y (size; not secrets) | Sometimes (internal tools) |
 | `in_radarr` / `in_sonarr` | SQLite | — | Y | — | Y | Y (agent) |
 | Watch telemetry (detailed) | SQLite | Own signals in UI | Y | — | Y | Y (agent tools) |
+| On-box activity counts (chat turns, plays, pick attribution) | SQLite | Own (export) | Household totals | — | — | — |
+| Security log | SQLite | — | Y | — | — | — |
 | Chat messages | SQLite | Own | Own + admin host access | — | — | Y\* (provider) |
 | Private user memory | SQLite | Own | Youth accounts only | — | — | Current user's agent context |
 | Chat transcripts (messages) | SQLite | Own | Own + admin host access | — | — | Y\* (provider) |

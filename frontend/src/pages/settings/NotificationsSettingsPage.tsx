@@ -275,8 +275,8 @@ export default function NotificationsSettingsPage() {
               label="Email alerts"
               help={
                 emailAvailable
-                  ? "Also send matching alerts by email when Admin → Mail is configured."
-                  : "Email needs the owner to configure Admin → Mail (SMTP or Resend) first."
+                  ? "Also send matching alerts by email."
+                  : "Email isn’t set up on this server yet. The owner can turn it on."
               }
               testId="notifications-email-toggle"
             />
@@ -292,8 +292,8 @@ export default function NotificationsSettingsPage() {
               label="Apprise alerts"
               help={
                 appriseAvailable
-                  ? "Send matching alerts to your Apprise destinations (Discord, Telegram, push, and more). Optional household URLs come from the owner under Admin → Mail."
-                  : "Apprise package is not installed on this server yet — ask the owner to reinstall with web extras."
+                  ? "Send alerts to Discord, Telegram, or your phone. The owner may also add household-wide destinations."
+                  : "Push alerts (Discord, Telegram, phone) aren’t available on this server yet. The owner can turn them on."
               }
               testId="notifications-apprise-toggle"
             />
