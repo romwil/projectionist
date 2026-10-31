@@ -33,6 +33,33 @@ Keyboard cheat sheet: press `?` (outside a text field). Slash commands in chat: 
 
 ---
 
+## For invited members
+
+**You joined from an owner's invite — here's what's yours.** You get your own account on the household's server: your own chat history, taste, watchlist, badges, and Inbox. The owner runs the server and its settings; you never need to touch them.
+
+**What you can do**
+
+- Ask your curator in **[Chat](/chat)** for something to watch, in plain language.
+- Browse **[Explore](/explore)** and **[Search](/search)**, and press **Play** on a poster to watch in Projectionist.
+- Send a title to someone else in the household — it lands in their **[Inbox](/inbox)**.
+- Save a curator reply to your **[Library](/library)** and pin titles to your **Watchlist**.
+
+> **You ask:** "Something funny under 90 minutes that I haven't seen."
+>
+> **Your curator replies** with a few picks from this household's library, each with a short reason and a **Play** button when the title is in Plex.
+
+**Where your badges live.** **[Settings → Profile](/settings/profile#badges)**, in the badges and achievements section. They are not in the top bar.
+
+**How to sign out.** Open the menu under your name in the top bar and choose **Sign out**, or use **Sign out** at the bottom of **Settings → Profile**. To sign out a lost phone or a shared TV, use **Settings → Profile → Sessions → Sign out everywhere else** — this device stays signed in.
+
+**When no chat provider is connected.** Chat needs a language model, and only the owner can connect one. Until they do, Projectionist opens on **Explore** instead of Chat, with a note that says why. Search, Explore, Library, Inbox, and Play keep working; Chat shows the same note and can't reply. If you changed **Settings → Profile → Default page** to **Chat**, you still land on Chat — it just can't answer yet.
+
+**What stays private.** Your chat transcripts and private memory belong to your account and are never shown to other members. The activity counts on the owner's **Admin → Overview** are household totals and never include what you typed. Someone with direct access to the server's files can still read its database, so [Privacy](/privacy) spells out exactly what is stored and how to export or delete it.
+
+See also: [Joining the household](#joining-the-household) · [Default page, password, and sessions](#default-page-password-and-sessions)
+
+---
+
 ## For everyone — browse & chat
 
 ### Chat

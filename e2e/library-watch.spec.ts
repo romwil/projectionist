@@ -152,6 +152,8 @@ test.describe("In-app library Play", () => {
   test("phone 390 keeps theater inside the viewport", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/watch/plex-949");
+    // /watch is a lazy route chunk; measure only once the player has mounted.
+    await page.getByTestId("library-player-video").waitFor({ state: "attached" });
     const metrics = await page.evaluate(() => {
       const el = document.querySelector("[data-testid='watch-theater-shell']");
       const video = document.querySelector("[data-testid='library-player-video']");

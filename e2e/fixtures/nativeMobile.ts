@@ -27,13 +27,22 @@ export async function assertNoHorizontalPageOverflow(page: Page) {
   );
 }
 
-/** Composer / sticky chrome should sit on the last slice of the visual viewport. */
+/**
+ * Composer / sticky chrome should sit on the last slice of the visual viewport —
+ * directly above the phone bottom nav when that bar is showing, never under it.
+ */
 export async function assertPinnedNearViewportBottom(
   locator: Locator,
   viewportHeight?: number,
   slack = 32,
 ) {
-  const height = viewportHeight ?? (await locator.page().viewportSize())?.height ?? NATIVE_VIEWPORT.height;
+  const page = locator.page();
+  let height = viewportHeight ?? (await page.viewportSize())?.height ?? NATIVE_VIEWPORT.height;
+  const bottomNav = page.getByTestId("primary-bottom-nav");
+  if (await bottomNav.isVisible()) {
+    const navBox = await bottomNav.boundingBox();
+    if (navBox) height = navBox.y;
+  }
   const box = await locator.boundingBox();
   expect(box).not.toBeNull();
   expect(box!.y + box!.height).toBeGreaterThan(height - slack);

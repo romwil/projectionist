@@ -297,6 +297,8 @@
     right: 0;
     bottom: 0;
     z-index: 80;
+    box-sizing: border-box;
+    height: calc(56px + env(safe-area-inset-bottom, 0px));
     justify-content: space-around;
     align-items: stretch;
     background: var(--surface-raised);
@@ -307,6 +309,13 @@
   /* Give the page room so content isn't hidden behind the fixed bar. */
   body:has(.primary-bottom-nav) {
     padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* The chat shell is position: fixed, so body padding can't lift it. End it
+     at the bar so the composer and Send stay above the nav, not under it. */
+  body:has(.primary-bottom-nav) .app-root.workspace {
+    bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+    height: auto;
   }
 }
 

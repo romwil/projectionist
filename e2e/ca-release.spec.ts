@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   mockCuratorApis,
+  mockFeatures,
   mockLibrarySyncJobs,
   resetMockCertifications,
   runningLibrarySyncJob,
@@ -19,9 +20,20 @@ test.describe("CA release mocked flows", () => {
     const body = await health.json();
     expect(body).toMatchObject({ status: "ok" });
 
+    await mockFeatures(page, { llm_configured: true });
     await page.goto("/");
+    await expect(page).toHaveURL(/\/chat$/);
     await page.getByTestId("composer-input").waitFor();
     await expect(page.getByTestId("workspace-main")).toBeVisible();
+  });
+
+  test("without a chat provider the app shell opens Explore and says why", async ({ page }) => {
+    await mockFeatures(page, { llm_configured: false });
+    await page.goto("/");
+    await expect(page).toHaveURL(/\/explore$/);
+    await expect(page.getByTestId("explore-no-llm-banner")).toContainText(
+      "No chat provider is connected yet",
+    );
   });
 
   test("chat shows a sync toast while a library job is running", async ({ page }) => {
