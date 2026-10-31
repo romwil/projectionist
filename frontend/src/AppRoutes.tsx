@@ -49,6 +49,8 @@ import JoinPage from "./pages/JoinPage";
 import SetupWizardPage from "./pages/SetupWizardPage";
 import YearInReviewPage from "./pages/YearInReviewPage";
 import { libraryHubPath } from "./lib/libraryTabs.js";
+import RouteAnnouncer from "./components/RouteAnnouncer";
+import PrimaryBottomNav from "./components/PrimaryBottomNav";
 
 /**
  * SPA route table — extracted from main.jsx (H1 remaining shell carve).
@@ -98,7 +100,13 @@ function RedirectExploreBrowse() {
 
 export default function AppRoutes() {
   return (
-    <Routes>
+    <>
+      {/* A11Y-004: title every route + focus the new page's h1 + announce it. */}
+      <RouteAnnouncer />
+      {/* UX-014: real phone/iPad primary nav, hidden over the player and
+          while an auth gate below would redirect to /login anyway. */}
+      <PrimaryBottomNav />
+      <Routes>
       <Route path="/" element={<HomeRedirect />} />
       <Route path="/chat" element={<App />} />
       <Route path="/search" element={<SearchPage />} />
@@ -171,6 +179,7 @@ export default function AppRoutes() {
       <Route path="/person/:tmdbPersonId" element={<PersonPage />} />
       <Route path="/tag/:tagName" element={<TagPage />} />
       <Route path="*" element={<NotFoundPage />} />
-    </Routes>
+      </Routes>
+    </>
   );
 }

@@ -29,7 +29,7 @@
 }
 
 .live-studio-lede[data-tone="warn"] {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .live-studio-lede[data-tone="ok"] {
@@ -359,7 +359,7 @@
 
 .live-launch-phases li.is-current::before {
   content: "● ";
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .live-launch-phases li.is-failed {

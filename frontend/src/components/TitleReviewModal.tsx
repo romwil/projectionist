@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { saveReview } from "../api/client";
 import { StarRatingPicker, formatStarsLabel } from "./ReviewPromptCard";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 
 /** Props for TitleReviewModal. `any` = API/handler bags until Wave 4 client generics. */
 type TitleReviewModalProps = {
@@ -26,12 +27,11 @@ export default function TitleReviewModal({ detail, open, onClose, onSaved }: Tit
     setError("");
     setPlexConflict(null);
     setSavedStars(null);
-    function onKey(event: any) {
-      if (event.key === "Escape" && !saving) onClose?.();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, detail?.rating_key, detail?.tmdb_id, detail?.user_stars, onClose, saving]);
+  }, [open, detail?.rating_key, detail?.tmdb_id, detail?.user_stars]);
+
+  // A11Y-009: focus moves in on open, Tab cycles inside, Escape closes
+  // (unless a save is in flight), and focus returns to the trigger.
+  const dialogRef = useFocusTrap<HTMLDivElement>({ open: Boolean(open && detail), onClose, busy: saving });
 
   if (!open || !detail) return null;
 
@@ -75,6 +75,8 @@ export default function TitleReviewModal({ detail, open, onClose, onSaved }: Tit
       }}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         className="recommend-modal title-review-modal"
         role="dialog"
         aria-modal="true"

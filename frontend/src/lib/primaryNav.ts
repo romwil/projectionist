@@ -170,6 +170,37 @@ export function buildPrimaryDrawerItems(opts: JsParam = {}) {
   }));
 }
 
+/**
+ * UX-014: phone/iPad bottom nav shows the same role-correct peers as the
+ * topbar/drawer, but a bottom bar only has room for 5 — drop Live and Admin
+ * first (both stay reachable from the hamburger drawer) rather than
+ * cramming or wrapping.
+ */
+export function buildPrimaryBottomNavItems(opts: JsParam = {}) {
+  const items = buildPrimaryNavItems(opts);
+  if (items.length <= 5) return items;
+  const droppable = new Set(["live", "admin"]);
+  const trimmed = items.filter((item) => !droppable.has(item.id));
+  if (trimmed.length <= 5) return trimmed;
+  return trimmed.slice(0, 5);
+}
+
+/**
+ * UX-014: the bottom nav is chrome, not content — hide it over the player
+ * (`/watch/*`, `/live/watch`) and while the on-screen keyboard covers it
+ * on iOS (composer focused), rather than fighting either for space.
+ */
+export function shouldHidePrimaryBottomNav({
+  pathname = "",
+  composerFocused = false,
+  isIos = false,
+}: JsParam = {}) {
+  const path = String(pathname || "");
+  if (path.startsWith("/watch/") || path === ROUTES.liveWatch) return true;
+  if (composerFocused && isIos) return true;
+  return false;
+}
+
 /** True when pathname is the chat workspace (including legacy `/`). */
 export function isChatPath(pathname: JsParam) {
   const path = String(pathname || "");

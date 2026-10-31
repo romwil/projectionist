@@ -80,7 +80,7 @@
 .live-eyebrow {
   text-transform: uppercase;
   font-size: var(--text-xs);
-  color: var(--accent);
+  color: var(--accent-ink);
   margin: 0;
 }
 
@@ -351,7 +351,7 @@
   font-size: 0.75rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .live-flex-slate-title {
@@ -433,7 +433,7 @@
   font-variant-numeric: tabular-nums;
   font-size: clamp(0.95rem, 2vw, 1.15rem);
   letter-spacing: 0.02em;
-  color: var(--accent);
+  color: var(--accent-ink);
   align-self: center;
 }
 
@@ -536,7 +536,7 @@
   font-size: 1.75rem;
   line-height: 1;
   min-width: 2.5rem;
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .live-osd-meta {
@@ -563,7 +563,7 @@
 .live-osd-pool-notice {
   margin: 0.15rem 0 0;
   font-size: var(--text-xs);
-  color: var(--accent);
+  color: var(--accent-ink);
   line-height: 1.3;
 }
 
@@ -727,10 +727,10 @@
 }
 
 .live-guide-rail-label {
-  font-size: 0.65rem;
+  font-size: var(--text-xs);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .live-guide-station {
@@ -766,7 +766,7 @@
 
 .live-guide-station-num {
   font-family: var(--font-display);
-  color: var(--accent);
+  color: var(--accent-ink);
   font-size: 1.05rem;
   line-height: 1.15;
 }
@@ -782,9 +782,9 @@
 }
 
 .live-guide-station-notice {
-  font-size: 0.62rem;
+  font-size: var(--text-xs);
   line-height: 1.2;
-  color: var(--accent);
+  color: var(--accent-ink);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -906,7 +906,7 @@
 
 .live-guide-cell-ep,
 .live-guide-cell-rating {
-  font-size: 0.68rem;
+  font-size: var(--text-xs);
   color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
@@ -939,15 +939,18 @@
 .live-program-hover:hover,
 .live-program-hover:focus-within {
   border-color: color-mix(in srgb, var(--accent) 70%, transparent);
-  outline: none;
+}
+.live-program-hover:focus-within {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
 }
 
 .live-program-hover-eyebrow {
   margin: 0;
-  font-size: 0.65rem;
+  font-size: var(--text-xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .live-program-hover-title {
@@ -985,8 +988,8 @@
 .live-program-hover-hint {
   flex: none;
   padding: 0 0.8rem 0.7rem;
-  color: var(--accent);
-  font-size: 0.72rem;
+  color: var(--accent-ink);
+  font-size: var(--text-xs);
 }
 
 .live-guide-empty {
@@ -1197,7 +1200,7 @@
   width: 100%;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   color: var(--wx-amber);
 }
 .weather-channel-place {
@@ -1229,7 +1232,7 @@
   margin: 0;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   color: var(--wx-amber);
 }
 .weather-board-place {
@@ -1313,7 +1316,7 @@
 .weather-now-bar-kicker {
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   color: var(--wx-amber);
 }
 .weather-now-bar-place {

@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import ReleaseNotesPanel from "./ReleaseNotesPanel";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 
 /** Props for WhatsNewModal. `any` = API/handler bags until Wave 4 client generics. */
 type WhatsNewModalProps = {
@@ -11,6 +12,10 @@ type WhatsNewModalProps = {
 };
 
 export default function WhatsNewModal({ open, version, release, onDismiss, onReadFull }: WhatsNewModalProps) {
+  // A11Y-009: focus moves in on open, Tab cycles inside, Escape closes, and
+  // focus returns to the trigger that opened the modal.
+  const dialogRef = useFocusTrap<HTMLDivElement>({ open: Boolean(open && version), onClose: onDismiss });
+
   if (!open || !version) return null;
 
   return (
@@ -20,6 +25,8 @@ export default function WhatsNewModal({ open, version, release, onDismiss, onRea
       onClick={onDismiss}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         className="whats-new-panel"
         role="dialog"
         aria-modal="true"

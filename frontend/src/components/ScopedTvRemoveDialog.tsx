@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { DeleteConfirmPhrase, useDeleteConfirmationPref } from "./DeleteConfirmPhrase";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 import {
   canConfirmLibraryRemoval,
   libraryRemovalNeedsTypedDelete,
@@ -48,6 +49,11 @@ export default function ScopedTvRemoveDialog({
     setPhrase("");
   }, [open, label, scope]);
 
+  // A11Y-009: focus moves in on open, Tab cycles inside, Escape closes
+  // (unless the removal request is in flight), and focus returns to the
+  // trigger that opened the dialog.
+  const dialogRef = useFocusTrap<HTMLDivElement>({ open: Boolean(open), onClose: onCancel, busy: loading });
+
   if (!open || typeof document === "undefined") return null;
 
   const isSeason = String(scope) === "season";
@@ -73,6 +79,8 @@ export default function ScopedTvRemoveDialog({
       onClick={onCancel}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         className="bulk-delete-modal"
         role="dialog"
         aria-modal="true"

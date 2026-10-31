@@ -146,6 +146,7 @@ export default function App() {
     setInput,
     loading,
     chatError,
+    chatAnnouncement,
     activeContext,
     typingLabel,
     agentActivityLog,
@@ -503,6 +504,7 @@ export default function App() {
       setAppNavOpen={setAppNavOpen}
       agentPulse={agentPulse}
       chatError={chatError}
+      chatAnnouncement={chatAnnouncement}
       inboxUnreadCount={inboxUnreadCount}
       uiTheme={uiTheme}
       setUiTheme={setUiTheme}

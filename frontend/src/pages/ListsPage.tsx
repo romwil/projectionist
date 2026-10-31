@@ -121,14 +121,23 @@ export default function ListsPage({ embedded = false }: ListsPageProps) {
       {state.loading ? <p className="status status-secondary">Loading…</p> : null}
       {state.error ? <p className="error">{state.error}</p> : null}
       {!listId && !state.loading ? (
-        <div className="curated-list-grid">
-          {state.lists.map((list: any) => (
-            <Link key={list.id} to={libraryShelvesDetailPath(list.id)} className="review-prompt-card">
-              <strong>{list.name}</strong>
-              <span>{list.list_kind === "playlist" ? "Playlist" : "List"}</span>
-            </Link>
-          ))}
-        </div>
+        state.lists.length ? (
+          <div className="curated-list-grid">
+            {state.lists.map((list: any) => (
+              <Link key={list.id} to={libraryShelvesDetailPath(list.id)} className="review-prompt-card">
+                <strong>{list.name}</strong>
+                <span>{list.list_kind === "playlist" ? "Playlist" : "List"}</span>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          // UX-040: zero curated lists is a real empty state, not a blank panel.
+          <p className="explore-empty status status-secondary" data-testid="shelves-empty-state">
+            Shelves hold lists and playlists you build on purpose — nothing shows up here until
+            you make one.{" "}
+            <Link to="/settings/lists">Create a shelf</Link>
+          </p>
+        )
       ) : null}
       {listId && !state.loading && isOwner ? (
         <CourseAuthoringPanel list={state.list} onRefresh={reload} />

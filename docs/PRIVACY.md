@@ -247,6 +247,17 @@ For privacy-safe and member-facing library JSON, Projectionist prefers **TMDB CD
 
 Do **not** expose bare port `8788` to the public internet. Keep Projectionist on a trusted LAN or behind an authenticated reverse proxy. See [SECURITY.md](SECURITY.md) for the operator threat model and finding checklist.
 
+### Browser-side third parties (PRIV-009)
+
+Fonts (DM Sans, Fraunces, and the Material Symbols icon set) are **self-hosted** — your browser never asks `fonts.googleapis.com` or `fonts.gstatic.com` for anything. The only origins a signed-in browser can still be told to contact are ones **you** turned on by configuring a provider:
+
+| Origin | When it fires | Why |
+|---|---|---|
+| `image.tmdb.org`, `artworks.thetvdb.com`, `assets.fanart.tv` | A poster/backdrop image loads | TMDB/TheTVDB/Fanart.tv artwork CDNs — no Plex token, no LAN hostname, in the URL |
+| `www.youtube.com` / `www.youtube-nocookie.com` | A member opens a trailer that only has a YouTube source | Embedded trailer playback |
+
+Nothing else loads a third-party origin from the browser. The server's own outbound calls (TMDB/Radarr/Sonarr/Plex/LLM APIs) are a separate, server-side question — see [Fleet credentials](#fleet-credentials) above.
+
 ---
 
 ## MCP (Model Context Protocol)

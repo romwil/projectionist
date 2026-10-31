@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type 
 import Hls from "hls.js";
 import type { ErrorData } from "hls.js";
 import { LIVE_STALL_ESCALATE_MS, LIVE_STALL_NOTICE_MS } from "../../lib/liveChannels.js";
+import { FOCUSABLE_SELECTOR } from "../../lib/focusContract";
 import BufferingIndicator from "./BufferingIndicator";
 import TuningInterstitial from "./TuningInterstitial";
 import {
@@ -139,6 +140,9 @@ export type TheaterPlayerProps = {
   onAttachApi?: (api: TheaterAttachApi | null) => void;
   /** Extra data-* on the stage root (channel, stream-health, weather sky). */
   dataAttrs?: Record<string, string | number | boolean | undefined> | null;
+  /** A11Y-023: name the stage ("Now playing: <title>") — it's a focusable,
+   * keyboard-driven region, not an anonymous `<div tabindex="0">`. */
+  stageLabel?: string;
   children?: ReactNode;
 };
 
@@ -230,9 +234,13 @@ export default function TheaterPlayer({
   onAttachApi,
   /** Extra data-* on the stage root (channel, stream-health, weather sky). */
   dataAttrs = null,
+  stageLabel = "",
   children,
 }: TheaterPlayerProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
+  /** A11Y-023: set by a Tab press while chrome is hidden — consumed once the
+   * chrome becomes visible to move focus to its first/last control. */
+  const pendingTabFocusRef = useRef<"first" | "last" | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -307,6 +315,35 @@ export default function TheaterPlayer({
     if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     idleTimerRef.current = setTimeout(() => hideOsd(), OSD_IDLE_MS);
   }
+
+  // A11Y-023: once the chrome actually renders `visibility: visible` (so its
+  // controls re-enter the tab order), move focus onto the first control a
+  // Tab-while-idle asked for (Shift+Tab asked for the last one).
+  useEffect(() => {
+    if (!osdVisible || !pendingTabFocusRef.current) return;
+    const direction = pendingTabFocusRef.current;
+    pendingTabFocusRef.current = null;
+    const raf = requestAnimationFrame(() => {
+      const osdEl = rootRef.current?.querySelector<HTMLElement>(".theater-osd");
+      if (!osdEl) return;
+      // Prefer Play (forward) or Close (back) over the scrubber — a bare
+      // Tab-in landing on the seek slider is surprising; these two are the
+      // controls A11Y-023 validates against.
+      const preferred = osdEl.querySelector<HTMLElement>(
+        direction === "last"
+          ? "[data-testid='library-close'], [data-testid='library-play-toggle']"
+          : "[data-testid='library-play-toggle'], [data-testid='library-close']",
+      );
+      if (preferred) {
+        preferred.focus();
+        return;
+      }
+      const focusables = Array.from(osdEl.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+      const target = direction === "last" ? focusables[focusables.length - 1] : focusables[0];
+      target?.focus();
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [osdVisible]);
 
   function applyBottomThird() {
     const result = bottomThirdTapResult({
@@ -700,6 +737,16 @@ export default function TheaterPlayer({
       toggleFullscreen();
       return;
     }
+    // A11Y-023: idle chrome is `visibility:hidden` (correctly out of tab
+    // order while hidden) — so Tab from the stage would otherwise skip the
+    // player entirely. Reveal the chrome first and land focus inside it
+    // (Play or Close) instead of leaking focus past the player.
+    if (key === "Tab" && !osdVisible) {
+      event.preventDefault();
+      pendingTabFocusRef.current = event.shiftKey ? "last" : "first";
+      bumpOsd();
+      return;
+    }
     onKeyDown?.(event, { toggleFullscreen, bumpOsd, video: videoRef.current });
     if (key !== "Escape") bumpOsd();
   }
@@ -744,6 +791,7 @@ export default function TheaterPlayer({
       data-play-frame={frame.dataPlayFrame}
       data-media={src ? mediaMode : "none"}
       tabIndex={0}
+      aria-label={stageLabel || undefined}
       {...extraData}
       onMouseMove={handlePointerMove}
       onFocus={bumpOsd}
