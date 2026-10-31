@@ -226,6 +226,19 @@ test.describe("Native mobile — member living-room", () => {
         ),
       });
     });
+    // Explore splices the live Continue Watching feed over the hub rail.
+    await page.route("**/api/library/feeds/continue-watching**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          feed: "continue-watching",
+          total: RAIL_TITLES.length,
+          note: null,
+          items: RAIL_TITLES,
+        }),
+      });
+    });
 
     await page.goto("/explore");
     const rail = page.getByTestId("explore-continue-watching-rail");
@@ -366,7 +379,8 @@ test.describe("Native mobile — member living-room", () => {
     const y = box!.y + box!.height * 0.4;
     await page.touchscreen.tap(x, y);
     await page.touchscreen.tap(x, y);
-    await expect(page.getByRole("status")).toContainText("+15s");
+    await expect(page.getByTestId("library-skip-chip")).toHaveAttribute("role", "status");
+    await expect(page.getByTestId("library-skip-chip")).toContainText("+15s");
 
     await page.getByRole("button", { name: "Close" }).click();
     await page.goto("/chat");

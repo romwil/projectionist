@@ -33,23 +33,30 @@ export function useRouteAnnounce() {
 
     if (typeof document === "undefined") return;
     // Let the new route's DOM commit first, then move focus to its heading.
-    const raf =
-      typeof window !== "undefined" && window.requestAnimationFrame
-        ? window.requestAnimationFrame
-        : (cb: () => void) => setTimeout(cb, 0);
-    const handle = raf(() => {
+    // Lazy route chunks render a Suspense fallback with no <h1> first, so keep
+    // looking for a few seconds instead of giving up after one frame.
+    const useRaf = typeof window !== "undefined" && Boolean(window.requestAnimationFrame);
+    const schedule = (cb: () => void): number =>
+      useRaf ? window.requestAnimationFrame(cb) : (setTimeout(cb, 16) as unknown as number);
+    const cancel = (id: number) => {
+      if (useRaf) window.cancelAnimationFrame(id);
+      else clearTimeout(id);
+    };
+    const deadline = Date.now() + 3000;
+    let handle = 0;
+    const tryFocus = () => {
       const heading = document.querySelector<HTMLElement>("main h1, h1");
-      if (!heading) return;
+      if (!heading) {
+        if (Date.now() < deadline) handle = schedule(tryFocus);
+        return;
+      }
       if (!heading.hasAttribute("tabindex")) {
         heading.setAttribute("tabindex", "-1");
       }
       heading.focus();
-    });
-    return () => {
-      if (typeof window !== "undefined" && window.cancelAnimationFrame) {
-        window.cancelAnimationFrame(handle as number);
-      }
     };
+    handle = schedule(tryFocus);
+    return () => cancel(handle);
   }, [pathname]);
 
   return announcement;

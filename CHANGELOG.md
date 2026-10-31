@@ -24,6 +24,8 @@ Owner operations for a household with invited members: one Needs attention list,
 - **GRO-020** Year in Review 404 shows the designed empty state, role-aware.
 - Member copy on Settings → Notifications no longer names Admin pages or install extras.
 - Account export and purge now include the account's own `system_telemetry_stream` rows.
+- **Polish and accessibility (Phase 4).** Fonts are self-hosted (`styles/00-fonts.css`); the CSP no longer allows `fonts.googleapis.com` or `fonts.gstatic.com`. Every route sets a document title, announces itself, and focuses its `<h1>`. Dialogs trap focus, the chat composer keeps focus while sending, and finished replies are announced once. Phones and iPads get a primary bottom nav with the Inbox badge. Missing posters show title and year (`PosterArt`), movie end cards offer an inline star rating, and Tab from the player stage reaches the on-screen controls.
+- **Faster delivery (Phase 5).** Responses over 500 bytes are gzipped; hashed `/assets/*` files are served `immutable` for a year. Route pages and the admin tree load as separate chunks. About shows only the latest release note. New `GET /api/ready` answers once startup finishes without waiting on the library query.
 
 ## [1.37.72] — 2026-10-28
 
