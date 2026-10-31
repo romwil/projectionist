@@ -83,7 +83,12 @@ export default function YearInReviewPage() {
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err?.message || "Year in Review isn’t ready yet.");
+        if (err?.status === 404) {
+          setReel(null);
+          setError(null);
+        } else {
+          setError(err?.message || "Year in Review isn’t ready yet.");
+        }
         setReelLoading(false);
       });
     return () => {
@@ -156,9 +161,10 @@ export default function YearInReviewPage() {
       <main className="yir-page">
         <div className="yir-empty">
           <h1 className="yir-brand">Projectionist</h1>
-          <p>
-            Your reel isn’t ready yet. Opt in under Settings → Notifications, then ask the owner to
-            generate.
+          <p data-testid="yir-not-ready">
+            {(user?.role || role) === "owner"
+              ? `Your ${year} reel isn’t ready. Turn on Year in Review in Settings → Notifications, then tap Generate & send to me.`
+              : `Your ${year} reel isn’t ready. Turn on Year in Review in Settings → Notifications, then ask the owner to make it.`}
           </p>
           <Link to="/settings/notifications">Notification settings</Link>
         </div>

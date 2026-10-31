@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import uuid
 from typing import Any, Callable, Dict, List, Mapping, Optional
 
@@ -115,6 +116,42 @@ def _message_text_excerpt(blocks: List[Mapping[str, Any]], *, limit: int = 500) 
     return text[: limit - 1] + "…"
 
 
+def _card_count(blocks: Any) -> int:
+    if not isinstance(blocks, list):
+        return 0
+    return sum(
+        len(block.get("items") or [])
+        for block in blocks
+        if isinstance(block, Mapping) and block.get("type") == "title_cards"
+    )
+
+
+def _record_chat_turn(
+    *,
+    session_id: str,
+    surface: str,
+    outcome: str,
+    started: float,
+    blocks: Any = None,
+    tool_count: int = 0,
+    persona_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+) -> None:
+    try:
+        _telemetry().record_chat_turn(
+            session_id=session_id,
+            surface=surface,
+            outcome=outcome,
+            card_count=_card_count(blocks),
+            tool_count=tool_count,
+            duration_ms=int((time.monotonic() - started) * 1000),
+            persona_id=persona_id,
+            user_id=user_id,
+        )
+    except Exception:  # noqa: BLE001
+        logger.debug("chat_turn telemetry skipped", exc_info=True)
+
+
 @router.post("/api/chat")
 async def chat(request: Request, payload: ChatRequest, user=Depends(get_current_user_dep)) -> Dict[str, Any]:
     enforce_rate_limit(request, bucket="chat", limit=30, window_seconds=60)
@@ -143,8 +180,11 @@ async def chat(request: Request, payload: ChatRequest, user=Depends(get_current_
         user_id=scoped,
     )
 
+    started = time.monotonic()
+    turn = {"session_id": session_id, "surface": "post", "started": started,
+            "persona_id": persona_id, "user_id": scoped}
     try:
-        return await CuratorAgent(
+        result = await CuratorAgent(
             db,
             settings,
             lens_id=lens_id,
@@ -153,12 +193,21 @@ async def chat(request: Request, payload: ChatRequest, user=Depends(get_current_
             user_role=user.role,
             is_youth=bool(getattr(user, "is_youth", False)),
         ).run(session_id, payload.message)
+        message = result.get("message") if isinstance(result, dict) else None
+        _record_chat_turn(
+            **turn,
+            outcome="completed",
+            blocks=(message or {}).get("blocks") if isinstance(message, dict) else None,
+        )
+        return result
     except LLMProviderError as error:
+        _record_chat_turn(**turn, outcome="error")
         raise HTTPException(
             status_code=502,
             detail=_safe_error_detail(error, "Chat request failed"),
         ) from error
     except Exception as error:  # noqa: BLE001
+        _record_chat_turn(**turn, outcome="error")
         raise HTTPException(
             status_code=500,
             detail=_safe_error_detail(error, "Chat request failed"),
@@ -374,6 +423,10 @@ async def chat_stream(
 
     async def event_generator():
         completed = False
+        errored = False
+        tool_count = 0
+        final_blocks: Any = None
+        started = time.monotonic()
         try:
             async for chunk in stream_agent(
                 _db(),
@@ -391,6 +444,8 @@ async def chat_stream(
                 event_type = data.get("type", "message")
 
                 if event_type in ("tool_start", "tool_result"):
+                    if event_type == "tool_start":
+                        tool_count += 1
                     status = "start" if event_type == "tool_start" else "complete"
                     event_payload = {"name": data.get("name"), "status": status}
                     if event_type == "tool_start" and data.get("args") is not None:
@@ -404,11 +459,27 @@ async def chat_stream(
                 else:
                     if event_type == "done":
                         completed = True
+                        message = data.get("message")
+                        if isinstance(message, Mapping):
+                            final_blocks = message.get("blocks")
+                    elif event_type == "error":
+                        errored = True
                     yield {"event": event_type, "data": chunk.strip()}
         except Exception as error:  # noqa: BLE001
+            errored = True
             safe_msg = _safe_error_detail(error, "Chat stream failed")
             yield {"event": "error", "data": json.dumps({"error": safe_msg})}
         finally:
+            _record_chat_turn(
+                session_id=sid,
+                surface="stream",
+                outcome="completed" if completed else ("error" if errored else "cancelled"),
+                started=started,
+                blocks=final_blocks,
+                tool_count=tool_count,
+                persona_id=payload.persona_id,
+                user_id=scoped,
+            )
             if not completed:
                 from projectionist.agent.village import (
                     cancel_unpromised_persona_consults,

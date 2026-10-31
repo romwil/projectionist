@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getLiveChannelsStatus } from "../../api/client";
 import InlineAlert from "../../components/InlineAlert";
+import OwnerOpsOverview from "../../components/OwnerOpsOverview";
 import SectionHelp from "../../components/SectionHelp";
 import { buildHouseholdHealthChips } from "../../lib/householdHealth.js";
 import { liveOnboardingTip, liveOverviewLine } from "../../lib/liveChannelsCopy.js";
@@ -83,45 +84,47 @@ export default function OverviewSection({
 
   return (
     <>
-      <section className="config-section owner-health-hero" data-testid="household-health-hero">
-        <div className="dashboard-header owner-health-hero-head">
-          <div>
-            <p className="eyebrow">At a glance</p>
-            <h2 className="dash-title">
-              Household health{" "}
-              <SectionHelp glossaryKey="Setup" testId="household-health-help" />
-            </h2>
-            <p className="wizard-note">
-              Stack readiness for the living room — Plex, library, and Live in one place.
-            </p>
+      <OwnerOpsOverview onOpenWizard={setShowWizard ? () => setShowWizard(true) : undefined}>
+        <section className="config-section owner-health-hero" data-testid="household-health-hero">
+          <div className="dashboard-header owner-health-hero-head">
+            <div>
+              <p className="eyebrow">At a glance</p>
+              <h2 className="dash-title">
+                Household health{" "}
+                <SectionHelp glossaryKey="Setup" testId="household-health-help" />
+              </h2>
+              <p className="wizard-note">
+                Stack readiness for the living room — Plex, library, and Live in one place.
+              </p>
+            </div>
+            <a href="#setup-checklist" className="btn-link" data-testid="stewardship-checklist-link">
+              Setup checklist
+            </a>
           </div>
-          <button type="button" className="ghost" data-testid="rerun-wizard" onClick={() => setShowWizard?.(true)}>
-            Re-run setup
-          </button>
-        </div>
-        <div className="owner-health-grid" data-testid="household-health-grid">
-          {buildHouseholdHealthChips({
-            libraryHealth,
-            libraryStats,
-            plexConnected: Boolean(verification.plex || settings?.plex_token_set),
-            sectionsCount: sections.length,
-            liveEnabled: Boolean(settings?.features?.live_channels_enabled),
-            liveReady: Boolean(featureFlags?.features?.live_channels_ready),
-            stationCount: Number(liveChannelsStatus?.channel_count) || 0,
-          }).map((chip) => (
-            <Link
-              key={chip.id}
-              to={chip.to}
-              className={`owner-health-tile tone-${chip.tone}`}
-              data-testid={`household-health-chip-${chip.id}`}
-            >
-              <span className="owner-health-tile-value">{chip.value}</span>
-              <span className="owner-health-tile-label">{chip.label}</span>
-              <span className="owner-health-tile-detail">{chip.detail}</span>
-            </Link>
-          ))}
-        </div>
-      </section>
+          <div className="owner-health-grid" data-testid="household-health-grid">
+            {buildHouseholdHealthChips({
+              libraryHealth,
+              libraryStats,
+              plexConnected: Boolean(verification.plex || settings?.plex_token_set),
+              sectionsCount: sections.length,
+              liveEnabled: Boolean(settings?.features?.live_channels_enabled),
+              liveReady: Boolean(featureFlags?.features?.live_channels_ready),
+              stationCount: Number(liveChannelsStatus?.channel_count) || 0,
+            }).map((chip) => (
+              <Link
+                key={chip.id}
+                to={chip.to}
+                className={`owner-health-tile tone-${chip.tone}`}
+                data-testid={`household-health-chip-${chip.id}`}
+              >
+                <span className="owner-health-tile-value">{chip.value}</span>
+                <span className="owner-health-tile-label">{chip.label}</span>
+                <span className="owner-health-tile-detail">{chip.detail}</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      </OwnerOpsOverview>
 
       {liveOn || tip ? (
         <section className="config-section" data-testid="live-channels-overview-echo">
@@ -175,7 +178,7 @@ export default function OverviewSection({
         />
       </section>
 
-      <section className="config-section" data-testid="admin-backup-snapshot">
+      <section className="config-section" id="admin-backup-snapshot" data-testid="admin-backup-snapshot">
         <h2>Full household backup</h2>
         <p className="wizard-note">
           This zip contains everyone&apos;s chats, memory, and watch history, plus your settings and
