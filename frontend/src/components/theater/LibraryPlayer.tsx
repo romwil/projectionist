@@ -145,6 +145,8 @@ export default function LibraryPlayer({
   const location = useLocation();
   const autoplayNextRef = useRef(false);
   autoplayNextRef.current = Boolean(location.state?.autoplayNext);
+  const recRef = useRef("");
+  recRef.current = typeof location.state?.rec === "string" ? location.state.rec : "";
   const videoRef = useRef<any>(null);
   const hlsRef = useRef<any>(null);
   const sessionRef = useRef<any>(null);
@@ -545,7 +547,7 @@ export default function LibraryPlayer({
     (async () => {
       if (cancelled) return;
       try {
-        const payload = await startLibraryPlayback(key, { startOver: false });
+        const payload = await startLibraryPlayback(key, { startOver: false, rec: recRef.current });
         if (cancelled) {
           try {
             await stopLibraryPlayback(payload.session_id, {});

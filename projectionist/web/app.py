@@ -182,6 +182,7 @@ from projectionist.web.investigate_routes import register_investigate_routes
 from projectionist.web.rematch_routes import register_rematch_routes
 from projectionist.web.spa_routes import register_spa_routes
 from projectionist.web.auth_routes import register_auth_routes
+from projectionist.web.owner_ops_routes import register_owner_ops_routes
 from projectionist.web.setup_routes import register_setup_routes
 from projectionist.web.whisper_routes import register_whisper_routes
 from projectionist.web.library_routes import register_library_routes
@@ -1325,6 +1326,7 @@ def plex_machine_id(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
 register_spa_routes(app, frontend_dist=FRONTEND_DIST, static_dir=STATIC_DIR)
 register_auth_routes(app)
 register_setup_routes(app)
+register_owner_ops_routes(app)
 
 register_live_channels_routes(
     app,

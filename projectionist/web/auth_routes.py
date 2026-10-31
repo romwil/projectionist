@@ -13,6 +13,7 @@ def register_auth_routes(app):
     from pydantic import BaseModel, Field
 
     import projectionist.web.app as app_mod
+    from projectionist import security_audit as sa
 
     AccessRequestApprovePayload = app_mod.AccessRequestApprovePayload
     AuthMeUpdatePayload = app_mod.AuthMeUpdatePayload
@@ -328,6 +329,7 @@ def register_auth_routes(app):
         user = poll_plex_pin_login(pin_id, request, _db())
         if user is None:
             return {"authenticated": False, "pending": True}
+        sa.audit(_db(), sa.SIGN_IN, actor_id=user.id, method="plex_pin")
         clear_pin_nonce_cookie(response, request)
         set_session_cookie(response, user.id, request, db=_db())
         return {"user": user.to_dict(), "authenticated": True, "pending": False}
@@ -366,6 +368,7 @@ def register_auth_routes(app):
             _db(),
             invite_token=payload.invite_token,
         )
+        sa.audit(_db(), sa.SIGN_IN, actor_id=user.id, method="plex_token")
         set_session_cookie(response, user.id, request, db=_db())
         return {"user": user.to_dict(), "authenticated": True}
 
@@ -390,6 +393,13 @@ def register_auth_routes(app):
             db=db,
             requesting_user=requesting_user,
         )
+        sa.audit(
+            db,
+            sa.ACCOUNT_CREATE,
+            actor_id=getattr(requesting_user, "id", None),
+            target_id=user.id,
+            role=user.role,
+        )
         # The caller is the owner; their session must not switch to the new account.
         return {"user": user.to_dict(), "created": True}
 
@@ -401,12 +411,25 @@ def register_auth_routes(app):
         response: Response,
     ) -> Dict[str, Any]:
         """Authenticate with username/password and set session cookie."""
-        user = authenticate_local_user(
-            username=payload.username,
-            password=payload.password,
-            db=_db(),
-            request=request,
-        )
+        try:
+            user = authenticate_local_user(
+                username=payload.username,
+                password=payload.password,
+                db=_db(),
+                request=request,
+            )
+        except HTTPException as error:
+            if error.status_code in (401, 403):
+                sa.audit(
+                    _db(),
+                    sa.SIGN_IN_FAILED,
+                    outcome="denied",
+                    method="local",
+                    username=str(payload.username or "")[:64],
+                    status=error.status_code,
+                )
+            raise
+        sa.audit(_db(), sa.SIGN_IN, actor_id=user.id, method="local")
         set_session_cookie(response, user.id, request, db=_db())
         return {"user": user.to_dict(), "authenticated": True}
 
@@ -429,6 +452,7 @@ def register_auth_routes(app):
     ) -> Dict[str, Any]:
         """Handle OIDC provider callback — exchange code, create/find user, set session."""
         user = handle_oidc_callback(code=code, state=state, db=_db(), request=request)
+        sa.audit(_db(), sa.SIGN_IN, actor_id=user.id, method="oidc")
         set_session_cookie(response, user.id, request, db=_db())
         return {"user": user.to_dict(), "authenticated": True}
 
@@ -470,8 +494,10 @@ def register_auth_routes(app):
                 detail="Password change is only available for local-password accounts",
             )
         if not _verify_password(payload.current_password, str(stored_hash)):
+            sa.audit(db, sa.PASSWORD_CHANGE, actor_id=user.id, target_id=user.id, outcome="denied")
             raise HTTPException(status_code=401, detail="Current password is incorrect")
         updated = db.update_user_password(user.id, _hash_password(payload.new_password))
+        sa.audit(db, sa.PASSWORD_CHANGE, actor_id=user.id, target_id=user.id)
         # Changing the password bumps the session epoch (signs out every other
         # session). Re-mint this cookie against the fresh epoch so the caller
         # is not logged out by their own change.
@@ -489,6 +515,7 @@ def register_auth_routes(app):
         enforce_rate_limit(request, bucket="auth_sign_out_everywhere", limit=10, window_seconds=60)
         db = _db()
         db.bump_session_epoch(user.id)
+        sa.audit(db, sa.SIGN_OUT_EVERYWHERE, actor_id=user.id, target_id=user.id)
         set_session_cookie(response, user.id, request, db=db)
         return {"signed_out_everywhere": True}
 
@@ -582,7 +609,9 @@ def register_auth_routes(app):
             if "already been used" in detail.lower():
                 raise HTTPException(status_code=409, detail=detail) from error
             raise HTTPException(status_code=400, detail=detail) from error
-        set_session_cookie(response, str(result["user"]["id"]), request, db=_db())
+        new_user_id = str(result["user"]["id"])
+        sa.audit(_db(), sa.INVITE_REDEEM, actor_id=new_user_id, target_id=new_user_id, method="local")
+        set_session_cookie(response, new_user_id, request, db=_db())
         return {"authenticated": True, **result}
 
 
@@ -614,7 +643,7 @@ def register_auth_routes(app):
         body = payload or AccessRequestApprovePayload()
         base_url = str(request.base_url).rstrip("/")
         try:
-            return approve_access_request(
+            result = approve_access_request(
                 _db(),
                 _settings(),
                 request_id=request_id,
@@ -630,6 +659,15 @@ def register_auth_routes(app):
                 status_code=400,
                 detail=_safe_error_detail(error, "Could not approve request"),
             ) from error
+        sa.audit(
+            _db(),
+            sa.ACCESS_REQUEST_APPROVE,
+            actor_id=user.id,
+            target_id=request_id,
+            role=body.role,
+            is_youth=bool(body.is_youth),
+        )
+        return result
 
 
     @router.post("/api/admin/access-requests/{request_id}/deny")
@@ -640,12 +678,14 @@ def register_auth_routes(app):
         from projectionist.access_requests import deny_access_request
 
         try:
-            return {"request": deny_access_request(_db(), request_id=request_id, owner_id=str(user.id))}
+            denied = deny_access_request(_db(), request_id=request_id, owner_id=str(user.id))
         except ValueError as error:
             raise HTTPException(
                 status_code=400,
                 detail=_safe_error_detail(error, "Could not deny request"),
             ) from error
+        sa.audit(_db(), sa.ACCESS_REQUEST_DENY, actor_id=user.id, target_id=request_id)
+        return {"request": denied}
 
 
     @router.get("/api/admin/invites")
@@ -676,7 +716,7 @@ def register_auth_routes(app):
 
         base_url = str(request.base_url).rstrip("/")
         try:
-            return create_household_invite(
+            created = create_household_invite(
                 _db(),
                 _settings(),
                 owner_id=str(user.id),
@@ -695,6 +735,16 @@ def register_auth_routes(app):
                 status_code=400,
                 detail=_safe_error_detail(error, "Could not create invite"),
             ) from error
+        invite_view = created.get("invite") if isinstance(created, dict) else None
+        sa.audit(
+            _db(),
+            sa.INVITE_CREATE,
+            actor_id=user.id,
+            target_id=(invite_view or {}).get("id") if isinstance(invite_view, dict) else None,
+            role=payload.role,
+            is_youth=bool(payload.is_youth),
+        )
+        return created
 
 
     @router.post("/api/admin/invites/{invite_id}/revoke")
@@ -711,6 +761,7 @@ def register_auth_routes(app):
                 status_code=400,
                 detail=_safe_error_detail(error, "Could not revoke invite"),
             ) from error
+        sa.audit(_db(), sa.INVITE_REVOKE, actor_id=user.id, target_id=invite_id)
         return {"invite": public_invite_view(invite)}
 
 
@@ -746,6 +797,15 @@ def register_auth_routes(app):
                     status_code=404,
                     detail=_safe_error_detail(error, "User not found"),
                 ) from error
+            if str(target["role"]) != payload.role:
+                sa.audit(
+                    db,
+                    sa.ROLE_CHANGE,
+                    actor_id=user.id,
+                    target_id=user_id,
+                    before=str(target["role"]),
+                    after=payload.role,
+                )
         if payload.disabled is not None:
             if user_id == user.id and payload.disabled:
                 raise HTTPException(status_code=400, detail="Cannot disable your own account")
@@ -759,11 +819,25 @@ def register_auth_routes(app):
                     status_code=404,
                     detail=_safe_error_detail(error, "User not found"),
                 ) from error
+            sa.audit(
+                db,
+                sa.ACCOUNT_DISABLE,
+                actor_id=user.id,
+                target_id=user_id,
+                disabled=bool(payload.disabled),
+            )
         if payload.is_youth is not None:
             try:
                 updated = db.set_user_youth(user_id, payload.is_youth)
             except ValueError as error:
                 raise HTTPException(status_code=404, detail=_safe_error_detail(error, "User not found")) from error
+            sa.audit(
+                db,
+                sa.YOUTH_CHANGE,
+                actor_id=user.id,
+                target_id=user_id,
+                is_youth=bool(payload.is_youth),
+            )
         assert updated is not None
         return {"user": updated}
 
@@ -788,6 +862,7 @@ def register_auth_routes(app):
                 status_code=404,
                 detail=_safe_error_detail(error, "User not found"),
             ) from error
+        sa.audit(db, sa.ACCOUNT_DELETE, actor_id=user.id, target_id=user_id)
         return {"deleted": True, "id": user_id}
 
 
@@ -798,7 +873,6 @@ def register_auth_routes(app):
         user=Depends(require_role("owner")),
     ) -> Dict[str, Any]:
         """Owner resets a member's local password without the old one (OPS-016)."""
-        del user  # role gate only; any owner may reset any local member's password
         db = _db()
         target = db.get_user(user_id)
         if target is None:
@@ -814,6 +888,7 @@ def register_auth_routes(app):
                 detail="This account signs in with Plex, not a password — there is nothing to reset here.",
             )
         updated = db.update_user_password(user_id, _hash_password(payload.new_password))
+        sa.audit(db, sa.PASSWORD_RESET, actor_id=user.id, target_id=user_id)
         return {"user": updated}
 
 

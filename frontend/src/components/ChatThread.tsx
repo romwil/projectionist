@@ -275,6 +275,7 @@ function renderBlock(block: any, handlers: any, role: any, message: any, blockIn
                 `${item.media_type}:${item.tmdb_id ?? ""}:${item.tvdb_id ?? ""}`
               )}
               draggableToDock={handlers.draggableToDock}
+              recId={role === "assistant" && message?.id ? `chat:${message.id}` : ""}
             />
           ))}
         </div>
