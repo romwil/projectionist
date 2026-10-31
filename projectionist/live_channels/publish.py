@@ -44,6 +44,7 @@ from projectionist.live_channels.publish_programming import (
     plex_collection_children,
     plex_collection_item_hints,
     plex_collection_rating_keys,
+    _extract_plex_rating_keys as _extract_plex_rating_keys,
     programming_body_for_recipe,
     random_slot_schedule_for_programs,
     soft_fill_cap,
