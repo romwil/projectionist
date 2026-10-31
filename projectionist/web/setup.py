@@ -503,9 +503,12 @@ def build_wizard_status(settings: Settings, db: Database) -> Dict[str, Any]:
     persona = db.get_persona()
     identity_complete = bool(persona and str(persona["curator_name"] or "").strip())
 
-    infrastructure_complete = (
-        llm_verified and plex_verified and radarr_verified and sonarr_verified
-    )
+    # Plex is the only required connection to finish first-run (UX-009,
+    # UX-013). LLM, Radarr, and Sonarr are optional integrations — the owner
+    # can verify and connect them later from Admin without being blocked at
+    # setup. A Plex-only household (watch, browse, rate) is a fully
+    # supported shape, not a degraded one.
+    infrastructure_complete = plex_verified
     mapping_complete = plex_verified and sections_set
 
     steps = {

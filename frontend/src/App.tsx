@@ -510,6 +510,7 @@ export default function App() {
       mobileNavOpen={mobileNavOpen}
       setMobileNavOpen={setMobileNavOpen}
       setup={setup}
+      llmConfigured={Boolean(features?.features?.llm_configured)}
       sidebarCollapsed={sidebarCollapsed}
       handleCreateThread={handleCreateThread}
       toggleSidebarRail={toggleSidebarRail}

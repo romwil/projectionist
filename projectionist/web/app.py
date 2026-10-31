@@ -136,6 +136,8 @@ from projectionist.reviews.store import (
 from projectionist.reviews.plex_sync import sync_review_rating_to_plex
 from projectionist.web.auth import (
     SETTINGS_CORRUPT_DETAIL,
+    _hash_password,
+    _verify_password,
     authenticate_local_user,
     authenticate_plex_user,
     available_auth_methods,
@@ -697,6 +699,19 @@ class UserUpdatePayload(BaseModel):
     is_youth: Optional[bool] = None
 
 
+class PasswordChangePayload(BaseModel):
+    """Self-service password change — requires the current password (SEC-011)."""
+
+    current_password: str = Field(min_length=1)
+    new_password: str = Field(min_length=8, max_length=256)
+
+
+class OwnerPasswordResetPayload(BaseModel):
+    """Owner resets a member's local password without knowing the old one (OPS-016)."""
+
+    new_password: str = Field(min_length=8, max_length=256)
+
+
 class AuthMeUpdatePayload(BaseModel):
     preferred_name: Optional[str] = Field(default=None, max_length=80)
     ui_font_size: Optional[str] = Field(default=None, pattern="^(small|medium|large)$")
@@ -713,6 +728,7 @@ class AuthMeUpdatePayload(BaseModel):
     weather_lat: Optional[float] = Field(default=None, ge=-90, le=90)
     weather_lon: Optional[float] = Field(default=None, ge=-180, le=180)
     clear_weather_location: Optional[bool] = None
+    default_page: Optional[str] = Field(default=None, pattern="^(auto|chat|explore)$")
 
 
 class RecommendPayload(BaseModel):
@@ -1209,6 +1225,12 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
             "trust_proxy_headers": bool(
                 getattr(settings.features, "trust_proxy_headers", False)
             ),
+            # BD-5 / UX-010: honest default-page and chat-honesty copy depend
+            # on knowing whether a language model is actually wired up, not
+            # just whether onboarding is "complete" (Plex alone can finish it).
+            "llm_configured": bool(
+                settings.llm_api_key or settings.llm_provider == "ollama"
+            ),
         },
         "setup_state": setup_state,
         "household_domain": str(getattr(settings, "household_domain", "") or ""),
@@ -1254,6 +1276,7 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
             "is_youth": bool(getattr(user, "is_youth", False)),
             "seerr_user_id": user.seerr_user_id,
             "avatar_url": user.avatar_url,
+            "default_page": str(getattr(user, "default_page", "auto") or "auto"),
         }
         payload["youth"] = {
             "max_content_rating": str(

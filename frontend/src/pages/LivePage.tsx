@@ -6,6 +6,7 @@ import LivePlayer from "../components/live/LivePlayer";
 import LiveTuneShare from "../components/live/LiveTuneShare";
 import WeatherChannelPlayer from "../components/live/WeatherChannelPlayer";
 import AppShell from "../layouts/AppShell";
+import { peekAuthSnapshot } from "../lib/authGate.js";
 import { ROUTES } from "../lib/backNav.js";
 import {
   appendWeatherChannel,
@@ -55,6 +56,11 @@ type LivePageProps = {
 
 export default function LivePage({ popout = false }: LivePageProps) {
   const navigate = useNavigate();
+  // Best-effort, synchronous role read from the shared auth cache — never an
+  // extra fetch here (the guide must paint without waiting on auth). Owner
+  // copy only differs once that cache is warm; the universal phrasing is the
+  // safe default before then.
+  const isOwner = Boolean(peekAuthSnapshot()?.isOwner);
   const [searchParams, setSearchParams] = useSearchParams();
   const channelParam = String(searchParams.get("channel") || "").trim();
   const modeParam = String(searchParams.get("mode") || "").trim().toLowerCase();
@@ -275,12 +281,17 @@ export default function LivePage({ popout = false }: LivePageProps) {
     loading,
     gaveUp,
   });
+  // UX-017/UX-045: when Live is off, show the off card unconditionally — a
+  // stale cached guide or a leftover guide-stall message must never keep the
+  // full chrome (including the tune-share "hand off to a phone" button) up
+  // over what is really just "Live is off".
   const empty =
-    !guidePending && !stallMessage && !guide?.ready
+    !featureOn || (!guidePending && !stallMessage && !guide?.ready)
       ? liveUserEmptyCopy({
           featureOn,
           featureReady,
           guideReady: Boolean(guide?.ready),
+          isOwner,
         })
       : null;
   function withPlatformNav(node: any) {

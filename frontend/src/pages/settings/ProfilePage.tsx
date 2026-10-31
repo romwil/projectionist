@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  changePassword,
   getAuthMe,
+  getEngagementSummary,
   getFeatures,
   linkPlexAccount,
   patchAuthMe,
   pollPlexPinLogin,
+  signOutEverywhere,
   startPlexPinLogin,
   uploadAuthAvatar,
 } from "../../api/client";
@@ -57,6 +60,16 @@ export default function ProfilePage() {
   const [linkPassword, setLinkPassword] = useState("");
   const linkPollRef = useRef<any>(null);
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordStatus, setPasswordStatus] = useState<any | null>(null);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [signOutEverywhereStatus, setSignOutEverywhereStatus] = useState<any | null>(null);
+  const [signingOutEverywhere, setSigningOutEverywhere] = useState(false);
+  const [defaultPage, setDefaultPage] = useState("auto");
+  const [llmConfigured, setLlmConfigured] = useState(true);
+  const [engagement, setEngagement] = useState<any>({ loading: true, data: null, error: "" });
 
   useEffect(() => {
     getAuthMe()
@@ -71,14 +84,32 @@ export default function ProfilePage() {
         setUiTheme(nextTheme);
         applyUiTheme(nextTheme);
         setSeerrLinked(Boolean(next?.seerr_user_id));
+        setDefaultPage(String(next?.default_page || "auto"));
       })
       .catch(() => setUser(null));
     getFeatures()
       .then((data) => {
         setRequestPath(data?.request_path || data?.features?.request_path || "direct");
+        setLlmConfigured(Boolean(data?.features?.llm_configured));
       })
       .catch(() => {});
+    getEngagementSummary()
+      .then((data) => setEngagement({ loading: false, data, error: "" }))
+      .catch((err) =>
+        setEngagement({
+          loading: false,
+          data: null,
+          error: (err as { message?: string }).message || "Could not load badges.",
+        }),
+      );
   }, []);
+
+  // BD-2: /my-journey redirects here with #badges — land on the badges panel.
+  useEffect(() => {
+    if (typeof window === "undefined" || window.location.hash !== "#badges") return;
+    const el = document.getElementById("badges");
+    if (el && typeof el.scrollIntoView === "function") el.scrollIntoView();
+  }, [engagement.loading]);
 
   useEffect(() => {
     return () => {
@@ -194,6 +225,65 @@ export default function ProfilePage() {
 
   async function handleSignOut() {
     await signOut();
+  }
+
+  async function handleDefaultPageChange(next: string) {
+    const previous = defaultPage;
+    setDefaultPage(next);
+    try {
+      const result = await patchAuthMe({ default_page: next });
+      setDefaultPage(String(result.user?.default_page || next));
+    } catch (error: unknown) {
+      setDefaultPage(previous);
+      setStatus({ type: "error", message: (error as { message?: string }).message || "Could not save default page." });
+    }
+  }
+
+  async function handleChangePassword(event: any) {
+    event.preventDefault();
+    setPasswordStatus(null);
+    if (newPassword.length < 8) {
+      setPasswordStatus({ type: "error", message: "New password must be at least 8 characters." });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordStatus({ type: "error", message: "New password and confirmation do not match." });
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      await changePassword(currentPassword, newPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setPasswordStatus({
+        type: "success",
+        message: "Password changed. Every other signed-in device was signed out.",
+      });
+    } catch (error: unknown) {
+      setPasswordStatus({ type: "error", message: (error as { message?: string }).message || "Could not change password." });
+    } finally {
+      setChangingPassword(false);
+    }
+  }
+
+  async function handleSignOutEverywhere() {
+    setSignOutEverywhereStatus(null);
+    setSigningOutEverywhere(true);
+    try {
+      await signOutEverywhere();
+      setSignOutEverywhereStatus({
+        type: "success",
+        message: "Every other signed-in device was signed out. This device stays signed in.",
+      });
+    } catch (error: unknown) {
+      setSignOutEverywhereStatus({
+        type: "error",
+        message: (error as { message?: string }).message || "Could not sign out other devices.",
+      });
+    } finally {
+      setSigningOutEverywhere(false);
+    }
   }
 
   async function handleAvatarChange(event: any) {
@@ -338,6 +428,42 @@ export default function ProfilePage() {
         </SettingsPanel>
 
         <SettingsPanel
+          title="Default page"
+          lead={
+            llmConfigured
+              ? "Where Projectionist opens after you sign in."
+              : "No language model is configured yet, so Auto opens Explore instead of Chat until one is connected."
+          }
+          testId="default-page-fieldset"
+        >
+          <div className="settings-default-page-options" role="radiogroup" aria-label="Default page">
+            {[
+              { value: "auto", label: "Auto", help: llmConfigured ? "Chat" : "Explore (no LLM yet)" },
+              { value: "chat", label: "Chat" },
+              { value: "explore", label: "Explore" },
+            ].map((option) => (
+              <label
+                key={option.value}
+                className={`settings-theme-option ${defaultPage === option.value ? "selected" : ""}`}
+              >
+                <input
+                  type="radio"
+                  name="default-page"
+                  value={option.value}
+                  checked={defaultPage === option.value}
+                  data-testid={`default-page-${option.value}`}
+                  onChange={() => handleDefaultPageChange(option.value)}
+                />
+                <span>
+                  {option.label}
+                  {option.help ? <span className="field-help"> · {option.help}</span> : null}
+                </span>
+              </label>
+            ))}
+          </div>
+        </SettingsPanel>
+
+        <SettingsPanel
           title="Text size"
           lead="Scales UI text across Projectionist. Default is medium."
           testId="font-size-fieldset"
@@ -403,6 +529,52 @@ export default function ProfilePage() {
           {status.message}
         </p>
       ) : null}
+
+      <SettingsPanel
+        id="badges"
+        title="Badges &amp; achievements"
+        lead="Milestones from chatting, rating titles, and finishing curated paths — what used to be My Journey."
+        testId="settings-badges"
+      >
+        {engagement.loading ? <p className="status status-secondary">Loading badges…</p> : null}
+        {engagement.error ? <p className="status status-error">{engagement.error}</p> : null}
+        {!engagement.loading && engagement.data ? (
+          <>
+            <p className="status status-secondary" data-testid="badges-streak">
+              Chat days in a row: {engagement.data.streak?.current_count || 0}
+              {engagement.data.streak?.best_count ? ` · best ${engagement.data.streak.best_count}` : ""}
+            </p>
+            {(engagement.data.badges || []).length ? (
+              <ul className="engagement-card-list" data-testid="badges-earned-list">
+                {engagement.data.badges.map((badge: any) => (
+                  <li key={badge.id} className="engagement-card">
+                    <strong>{badge.name}</strong>
+                    <p>{badge.description}</p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="status status-secondary" data-testid="badges-empty">
+                No badges yet — rate a title or keep a chat streak going to start.
+              </p>
+            )}
+            {(engagement.data.challenges || []).length ? (
+              <ul className="engagement-card-list" data-testid="badges-challenges-list">
+                {engagement.data.challenges.map((challenge: any) => (
+                  <li key={challenge.id} className="engagement-card">
+                    <strong>{challenge.title}</strong>
+                    <p>{challenge.description}</p>
+                    <span className="status status-secondary">
+                      {challenge.progress || 0} / {challenge.target_count}
+                      {challenge.completed_at ? " · done" : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </>
+        ) : null}
+      </SettingsPanel>
 
       <SettingsPanel title="Requests" testId="settings-profile-requests">
         <p className="status status-secondary">
@@ -478,6 +650,89 @@ export default function ProfilePage() {
           </p>
         </SettingsPanel>
       )}
+
+      {user.auth_method === "local" ? (
+        <SettingsPanel
+          title="Password"
+          lead="Changing your password signs out every other device that is signed in as you."
+          testId="settings-password"
+        >
+          <form className="settings-form" onSubmit={handleChangePassword}>
+            <label>
+              <span>Current password</span>
+              <input
+                type="password"
+                data-testid="current-password-input"
+                value={currentPassword}
+                autoComplete="current-password"
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                required
+              />
+            </label>
+            <label>
+              <span>New password</span>
+              <input
+                type="password"
+                data-testid="new-password-input"
+                value={newPassword}
+                autoComplete="new-password"
+                minLength={8}
+                onChange={(event) => setNewPassword(event.target.value)}
+                required
+              />
+            </label>
+            <label>
+              <span>Confirm new password</span>
+              <input
+                type="password"
+                data-testid="confirm-password-input"
+                value={confirmPassword}
+                autoComplete="new-password"
+                minLength={8}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                required
+              />
+            </label>
+            <div className="settings-actions">
+              <button type="submit" data-testid="change-password-submit" disabled={changingPassword}>
+                {changingPassword ? "Changing…" : "Change password"}
+              </button>
+            </div>
+          </form>
+          {passwordStatus ? (
+            <p
+              className={`status ${passwordStatus.type === "error" ? "status-error" : ""}`}
+              data-testid="password-status"
+            >
+              {passwordStatus.message}
+            </p>
+          ) : null}
+        </SettingsPanel>
+      ) : null}
+
+      <SettingsPanel
+        title="Sessions"
+        lead="Sign out every other device signed in as you (phones, tablets, shared TVs). This device stays signed in."
+        testId="settings-sessions"
+      >
+        <button
+          type="button"
+          className="ghost"
+          data-testid="sign-out-everywhere"
+          disabled={signingOutEverywhere}
+          onClick={handleSignOutEverywhere}
+        >
+          {signingOutEverywhere ? "Signing out other devices…" : "Sign out everywhere else"}
+        </button>
+        {signOutEverywhereStatus ? (
+          <p
+            className={`status ${signOutEverywhereStatus.type === "error" ? "status-error" : ""}`}
+            data-testid="sign-out-everywhere-status"
+          >
+            {signOutEverywhereStatus.message}
+          </p>
+        ) : null}
+      </SettingsPanel>
 
       <div className="settings-actions">
         <button

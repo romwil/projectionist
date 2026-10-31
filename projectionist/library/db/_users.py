@@ -136,6 +136,25 @@ class UsersAuthMixin:
         assert row is not None
         return self._row_to_user(row)
 
+    def bump_session_epoch(self, user_id: str) -> Dict[str, Any]:
+        """Invalidate every existing session token for a user ("sign out everywhere").
+
+        Does not touch the password hash — distinct from ``update_user_password``,
+        which bumps the epoch as a side effect of a credential change. Call this
+        directly for an explicit "sign out everywhere" action.
+        """
+        with self.connect() as conn:
+            existing = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
+            if existing is None:
+                raise ValueError("User not found")
+            conn.execute(
+                "UPDATE users SET session_epoch = COALESCE(session_epoch, 0) + 1 WHERE id = ?",
+                (user_id,),
+            )
+            row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        assert row is not None
+        return self._row_to_user(row)
+
     def revoke_session_jti(self, jti_hash: str, *, expires_at: float) -> None:
         """Record a hashed session jti so the cookie cannot be replayed."""
         digest = str(jti_hash or "").strip()
@@ -232,6 +251,7 @@ class UsersAuthMixin:
         notify_channel_apprise: Any = ...,
         apprise_urls: Any = ...,
         weather_location: Any = ...,
+        default_page: Any = ...,
     ) -> Dict[str, Any]:
         with self.connect() as conn:
             existing = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
@@ -302,6 +322,12 @@ class UsersAuthMixin:
                         ["weather_place = ?", "weather_lat = ?", "weather_lon = ?"]
                     )
                     params.extend([str(place), float(lat), float(lon)])
+            if default_page is not ... and "default_page" in cols:
+                cleaned_default_page = str(default_page or "auto").strip().lower()
+                if cleaned_default_page not in {"auto", "chat", "explore"}:
+                    cleaned_default_page = "auto"
+                updates.append("default_page = ?")
+                params.append(cleaned_default_page)
             if updates:
                 params.append(user_id)
                 conn.execute(
@@ -595,6 +621,11 @@ class UsersAuthMixin:
             weather_lat = float(row["weather_lat"])
         if "weather_lon" in keys and row["weather_lon"] is not None:
             weather_lon = float(row["weather_lon"])
+        default_page = "auto"
+        if "default_page" in keys and row["default_page"] is not None:
+            cleaned_default_page = str(row["default_page"]).strip().lower()
+            if cleaned_default_page in {"auto", "chat", "explore"}:
+                default_page = cleaned_default_page
         return {
             "id": str(row["id"]),
             "display_name": str(row["display_name"]),
@@ -613,6 +644,7 @@ class UsersAuthMixin:
             "weather_place": weather_place,
             "weather_lat": weather_lat,
             "weather_lon": weather_lon,
+            "default_page": default_page,
             "role": str(row["role"]),
             "disabled": disabled,
             "is_youth": is_youth,

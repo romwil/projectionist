@@ -57,7 +57,8 @@ function secondaryNavItems({ isYouth, role }: JsParam) {
  * Blocks, in order: **Navigate** (the toolbar's peers for this role, labelled),
  * **Admin** (owner section links, only while on `/admin/*` — added alongside
  * Navigate, never instead of it), then **More** (secondary destinations).
- * My Journey lives in Navigate only; it is never repeated under More.
+ * BD-2: My Journey is not a Navigate or More destination — it is the badges
+ * and achievements section of the profile page.
  * @param {{ isOwner?: boolean, showSettings?: boolean, isYouth?: boolean, role?: string, pathname?: string, multiUserEnabled?: boolean, seerrEnabled?: boolean, authReady?: boolean, liveChannelsReady?: boolean }} [opts]
  */
 export function buildAppNavItems(

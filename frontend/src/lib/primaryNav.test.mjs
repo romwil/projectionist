@@ -11,15 +11,15 @@ import {
 } from "./primaryNav.ts";
 
 describe("primaryNav", () => {
-  it("orders peers Search → Chat → Explore → Live → Inbox → Admin → My Journey → Settings", () => {
+  it("orders peers Search → Chat → Explore → Live → Inbox → Admin → Settings", () => {
     assert.deepEqual(
       PRIMARY_NAV_ITEMS.map((item) => item.id),
-      ["search", "chat", "explore", "live", "inbox", "admin", "my-journey", "settings"],
+      ["search", "chat", "explore", "live", "inbox", "admin", "settings"],
     );
     const owner = buildPrimaryNavItems({ role: "owner", isOwner: true });
     assert.deepEqual(
       owner.map((item) => item.id),
-      ["search", "chat", "explore", "inbox", "admin", "my-journey", "settings"],
+      ["search", "chat", "explore", "inbox", "admin", "settings"],
     );
     const withLive = buildPrimaryNavItems({
       role: "owner",
@@ -28,15 +28,16 @@ describe("primaryNav", () => {
     });
     assert.deepEqual(
       withLive.map((item) => item.id),
-      ["search", "chat", "explore", "live", "inbox", "admin", "my-journey", "settings"],
+      ["search", "chat", "explore", "live", "inbox", "admin", "settings"],
     );
-    assert.equal(owner.at(-2).id, "my-journey");
+    assert.equal(owner.at(-2).id, "admin");
     assert.equal(owner.at(-1).id, "settings");
   });
 
-  it("hides Admin for members and places My Journey left of Settings", () => {
+  it("hides Admin for members (BD-2: no My Journey peer)", () => {
     const ids = primaryNavVisibleIds({ role: "member", isOwner: false });
-    assert.deepEqual(ids, ["search", "chat", "explore", "inbox", "my-journey", "settings"]);
+    assert.deepEqual(ids, ["search", "chat", "explore", "inbox", "settings"]);
+    assert.equal(ids.includes("my-journey"), false);
   });
 
   it("paints public peers while auth is unresolved and never includes Admin", () => {
@@ -51,7 +52,6 @@ describe("primaryNav", () => {
       "chat",
       "explore",
       "inbox",
-      "my-journey",
       "settings",
     ]);
     assert.equal(unresolved.includes("admin"), false);
@@ -69,7 +69,6 @@ describe("primaryNav", () => {
       "explore",
       "live",
       "inbox",
-      "my-journey",
       "settings",
     ]);
     assert.equal(unresolvedWithLive.includes("admin"), false);
@@ -86,7 +85,6 @@ describe("primaryNav", () => {
       "chat",
       "explore",
       "inbox",
-      "my-journey",
       "settings",
     ]);
 
@@ -98,7 +96,7 @@ describe("primaryNav", () => {
     assert.equal(itemsUnresolved.some((item) => item.id === "admin"), false);
   });
 
-  it("youth sees Ask/Browse labels and My Journey, never Admin", () => {
+  it("youth sees Ask/Browse labels, never Admin or My Journey", () => {
     const items = buildPrimaryNavItems({
       role: "member",
       isOwner: false,
@@ -107,7 +105,7 @@ describe("primaryNav", () => {
     assert.equal(items.find((i) => i.id === "chat")?.label, "Ask");
     assert.equal(items.find((i) => i.id === "explore")?.label, "Browse");
     assert.equal(items.some((i) => i.id === "admin"), false);
-    assert.equal(items.some((i) => i.id === "my-journey"), true);
+    assert.equal(items.some((i) => i.id === "my-journey"), false);
   });
 
   it("legacy guest role sees the same peers as a member", () => {
@@ -131,7 +129,6 @@ describe("primaryNav", () => {
         "app-nav-explore",
         "app-nav-inbox",
         "app-nav-admin",
-        "app-nav-my-journey",
         "app-nav-settings",
       ],
     );
@@ -139,7 +136,7 @@ describe("primaryNav", () => {
     const beforeAuth = buildPrimaryDrawerItems({ isOwner: true, authReady: false });
     assert.deepEqual(
       beforeAuth.map((item) => item.id),
-      ["search", "chat", "explore", "inbox", "my-journey", "settings"],
+      ["search", "chat", "explore", "inbox", "settings"],
     );
     assert.equal(beforeAuth.some((item) => item.id === "admin"), false);
   });
@@ -168,7 +165,6 @@ describe("primaryNav", () => {
         "explore",
         "live",
         "inbox",
-        "my-journey",
         "settings",
       ]);
       assert.equal(ids.includes("admin"), false);

@@ -419,6 +419,24 @@ export async function logout() {
   return api("/auth/logout", { method: "POST" });
 }
 
+export async function changePassword(currentPassword: string, newPassword: string) {
+  return api("/auth/password", {
+    method: "POST",
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+}
+
+export async function signOutEverywhere() {
+  return api("/auth/sign-out-everywhere", { method: "POST" });
+}
+
+export async function resetUserPassword(userId: string, newPassword: string) {
+  return api(`/users/${encodeURIComponent(userId)}/reset-password`, {
+    method: "POST",
+    body: JSON.stringify({ new_password: newPassword }),
+  });
+}
+
 export async function listUsers() {
   return api("/users");
 }
