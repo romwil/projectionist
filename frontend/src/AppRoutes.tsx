@@ -1,52 +1,43 @@
+import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
-import App from "./App";
-import TitleDetailPage from "./pages/TitleDetailPage";
-import ConfigPage from "./pages/ConfigPage";
-import LoginPage from "./pages/LoginPage";
-import PrivacyPage from "./pages/PrivacyPage";
-import AboutPage from "./pages/AboutPage";
-import HelpPage from "./pages/HelpPage";
-import NotFoundPage from "./pages/NotFoundPage";
-import ScheduledTasksPage from "./pages/ScheduledTasksPage";
-import AdminLayout from "./layouts/AdminLayout";
-import SettingsLayout from "./layouts/SettingsLayout";
-import ProfilePage from "./pages/settings/ProfilePage";
-import VoicePage from "./pages/settings/VoicePage";
-import WatchlistSettingsPage from "./pages/settings/WatchlistSettingsPage";
-import ListsSettingsPage from "./pages/settings/ListsSettingsPage";
-import TasteSettingsPage from "./pages/settings/TasteSettingsPage";
-import NotificationsSettingsPage from "./pages/settings/NotificationsSettingsPage";
-import LivePage from "./pages/LivePage";
-import LiveWatchPage from "./pages/LiveWatchPage";
-import LibraryWatchPage from "./pages/LibraryWatchPage";
-import EpisodeDetailPage from "./pages/EpisodeDetailPage";
-import ExplorePage from "./pages/ExplorePage";
-import ExploreSectionPage from "./pages/ExploreSectionPage";
-import MyJourneyPage from "./pages/MyJourneyPage";
-import SearchPage from "./pages/SearchPage";
-import InboxPage from "./pages/InboxPage";
-import WhisperInboxPage from "./pages/WhisperInboxPage";
-import PersonPage from "./pages/PersonPage";
-import TagPage from "./pages/TagPage";
-import TagsPage from "./pages/TagsPage";
-import RelatedTitlesPage from "./pages/RelatedTitlesPage";
-import ListsPage from "./pages/ListsPage";
-import CollectionsPage from "./pages/CollectionsPage";
-import LibraryPage from "./pages/LibraryPage";
-import HealthPage from "./pages/HealthPage";
-import LibraryHubPage from "./pages/LibraryHubPage";
-import YouthReviewPage from "./pages/YouthReviewPage";
-import MailSettingsPage from "./pages/MailSettingsPage";
-import LobbyDisplayPage from "./pages/LobbyDisplayPage";
-import NewslettersPage from "./pages/NewslettersPage";
-import AccessRequestsPage from "./pages/AccessRequestsPage";
-import LogsPage from "./pages/LogsPage";
-import HolidaysPage from "./pages/HolidaysPage";
-import StagedAugmentationsPage from "./pages/StagedAugmentationsPage";
-import JoinPage from "./pages/JoinPage";
-import SetupWizardPage from "./pages/SetupWizardPage";
-import YearInReviewPage from "./pages/YearInReviewPage";
 import { libraryHubPath } from "./lib/libraryTabs.js";
+
+const App = lazy(() => import("./App"));
+const AdminRoutes = lazy(() => import("./routes/AdminRoutes"));
+const TitleDetailPage = lazy(() => import("./pages/TitleDetailPage"));
+const LoginPage = lazy(() => import("./pages/LoginPage"));
+const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
+const AboutPage = lazy(() => import("./pages/AboutPage"));
+const HelpPage = lazy(() => import("./pages/HelpPage"));
+const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
+const SettingsLayout = lazy(() => import("./layouts/SettingsLayout"));
+const ProfilePage = lazy(() => import("./pages/settings/ProfilePage"));
+const VoicePage = lazy(() => import("./pages/settings/VoicePage"));
+const WatchlistSettingsPage = lazy(() => import("./pages/settings/WatchlistSettingsPage"));
+const ListsSettingsPage = lazy(() => import("./pages/settings/ListsSettingsPage"));
+const TasteSettingsPage = lazy(() => import("./pages/settings/TasteSettingsPage"));
+const NotificationsSettingsPage = lazy(() => import("./pages/settings/NotificationsSettingsPage"));
+const LivePage = lazy(() => import("./pages/LivePage"));
+const LiveWatchPage = lazy(() => import("./pages/LiveWatchPage"));
+const LibraryWatchPage = lazy(() => import("./pages/LibraryWatchPage"));
+const EpisodeDetailPage = lazy(() => import("./pages/EpisodeDetailPage"));
+const ExplorePage = lazy(() => import("./pages/ExplorePage"));
+const ExploreSectionPage = lazy(() => import("./pages/ExploreSectionPage"));
+const MyJourneyPage = lazy(() => import("./pages/MyJourneyPage"));
+const SearchPage = lazy(() => import("./pages/SearchPage"));
+const InboxPage = lazy(() => import("./pages/InboxPage"));
+const WhisperInboxPage = lazy(() => import("./pages/WhisperInboxPage"));
+const PersonPage = lazy(() => import("./pages/PersonPage"));
+const TagPage = lazy(() => import("./pages/TagPage"));
+const TagsPage = lazy(() => import("./pages/TagsPage"));
+const RelatedTitlesPage = lazy(() => import("./pages/RelatedTitlesPage"));
+const ListsPage = lazy(() => import("./pages/ListsPage"));
+const CollectionsPage = lazy(() => import("./pages/CollectionsPage"));
+const LibraryPage = lazy(() => import("./pages/LibraryPage"));
+const LibraryHubPage = lazy(() => import("./pages/LibraryHubPage"));
+const JoinPage = lazy(() => import("./pages/JoinPage"));
+const SetupWizardPage = lazy(() => import("./pages/SetupWizardPage"));
+const YearInReviewPage = lazy(() => import("./pages/YearInReviewPage"));
 
 /**
  * SPA route table — extracted from main.jsx (H1 remaining shell carve).
@@ -79,7 +70,8 @@ function RedirectExploreBrowse() {
 
 export default function AppRoutes() {
   return (
-    <Routes>
+    <Suspense fallback={<main className="app-loading">Loading…</main>}>
+      <Routes>
       <Route path="/" element={<Navigate to="/chat" replace />} />
       <Route path="/chat" element={<App />} />
       <Route path="/search" element={<SearchPage />} />
@@ -119,25 +111,7 @@ export default function AppRoutes() {
       <Route path="/about" element={<AboutPage />} />
       <Route path="/help" element={<HelpPage />} />
       <Route path="/config" element={<Navigate to="/admin" replace />} />
-      <Route path="/admin" element={<AdminLayout />}>
-        <Route index element={<Navigate to="overview" replace />} />
-        <Route path="health" element={<HealthPage />} />
-        <Route path="dashboard" element={<Navigate to="/admin/health?tab=sync" replace />} />
-        <Route path="usage" element={<Navigate to="/admin/health?tab=usage" replace />} />
-        <Route path="issues" element={<Navigate to="/admin/health?tab=issues" replace />} />
-        <Route path="tasks" element={<ScheduledTasksPage />} />
-        <Route path="youth" element={<YouthReviewPage />} />
-        <Route path="holidays" element={<HolidaysPage />} />
-        <Route path="taxonomy" element={<StagedAugmentationsPage />} />
-        <Route path="access" element={<AccessRequestsPage />} />
-        <Route path="mail" element={<MailSettingsPage />} />
-        <Route path="lobby" element={<LobbyDisplayPage />} />
-        <Route path="newsletters" element={<NewslettersPage />} />
-        <Route path="logs" element={<LogsPage />} />
-        <Route path="scheduled-tasks" element={<Navigate to="/admin/tasks" replace />} />
-        <Route path="sync" element={<Navigate to="/admin/libraries" replace />} />
-        <Route path=":section" element={<ConfigPage />} />
-      </Route>
+      <Route path="/admin/*" element={<AdminRoutes />} />
       <Route path="/settings" element={<SettingsLayout />}>
         <Route index element={<Navigate to="profile" replace />} />
         <Route path="profile" element={<ProfilePage />} />
@@ -151,6 +125,7 @@ export default function AppRoutes() {
       <Route path="/person/:tmdbPersonId" element={<PersonPage />} />
       <Route path="/tag/:tagName" element={<TagPage />} />
       <Route path="*" element={<NotFoundPage />} />
-    </Routes>
+      </Routes>
+    </Suspense>
   );
 }
