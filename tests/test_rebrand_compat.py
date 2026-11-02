@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from projectionist.config_store import Settings, load_merged_settings, resolve_guest_tour_enabled, save_settings
+from projectionist.config_store import Settings, load_merged_settings, save_settings
 from projectionist.envcompat import branded_env, resolve_env
 from projectionist.web.jobs import _resolve_db_path
 
@@ -47,11 +47,16 @@ class EnvCompatTests(unittest.TestCase):
         self.assertIsNone(resolve_env("PROJECTIONIST_WEBHOOK_SECRET"))
         self.assertIsNone(branded_env("WEBHOOK_SECRET"))
 
-    def test_guest_tour_env_does_not_enable(self) -> None:
-        os.environ["PROJECTIONIST_GUEST_TOUR_ENABLED"] = "1"
-        self.assertFalse(resolve_guest_tour_enabled(Settings()))
-        os.environ["CURATORX_GUEST_TOUR_ENABLED"] = "1"
-        self.assertFalse(resolve_guest_tour_enabled(Settings()))
+    def test_settings_file_with_retired_guest_tour_flag_still_loads(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "settings.json").write_text(
+                '{"features": {"guest_tour_enabled": true, "multi_user_enabled": true}}',
+                encoding="utf-8",
+            )
+            settings = load_merged_settings(root)
+            self.assertTrue(settings.features.multi_user_enabled)
+            self.assertFalse(hasattr(settings.features, "guest_tour_enabled"))
 
     def test_load_merged_settings_uses_projectionist_webhook(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

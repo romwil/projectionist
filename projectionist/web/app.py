@@ -3611,11 +3611,6 @@ def list_published_collections(
     )
 
 
-@app.get("/api/guest/tour")
-def guest_tour() -> Dict[str, Any]:
-    raise HTTPException(status_code=404, detail="Not found")
-
-
 @app.get("/api/collections/{list_id}", response_model=CuratedList)
 def get_published_collection(
     list_id: str,
