@@ -113,7 +113,7 @@ class MemoryToolsMixin:
         return json.dumps({"saved": True, "id": saved["id"], "entity_id": saved["entity_id"]})
 
     async def _tool_remember_preference(self, args: Mapping[str, Any]) -> str:
-        denied = self._deny_personal_mutation_if_gated()
+        denied = self._deny_personal_mutation_if_gated() or self._deny_if_youth_memory_paused()
         if denied:
             return denied
         from projectionist.models.schemas import PreferenceSignal
@@ -130,7 +130,7 @@ class MemoryToolsMixin:
         return json.dumps({"saved": True})
 
     async def _tool_remember_about_user(self, args: Mapping[str, Any]) -> str:
-        denied = self._deny_personal_mutation_if_gated()
+        denied = self._deny_personal_mutation_if_gated() or self._deny_if_youth_memory_paused()
         if denied:
             return denied
         if not self.user_id:
@@ -164,6 +164,8 @@ class MemoryToolsMixin:
     async def _tool_recall_user_memory(self, args: Mapping[str, Any]) -> str:
         if not self.user_id:
             return json.dumps({"error": "Private memory requires an authenticated household account"})
+        if self._youth_memory_paused():
+            return json.dumps({"notes": [], "memory": "off_for_youth"})
         from projectionist.memory import UserMemoryService
 
         notes = UserMemoryService(self.db).recall(

@@ -113,6 +113,7 @@ def build_system_prompt(
     user_id: Optional[str] = None,
     user_role: Optional[str] = None,
     is_youth: bool = False,
+    memory_paused: bool = False,
 ) -> str:
     """Assemble the full system prompt for the Curator agent.
 
@@ -120,6 +121,7 @@ def build_system_prompt(
     omitted, the global singleton persona is used (backward-compatible).
     ``user_id``/``user_role`` thread the signed-in account so a compact,
     privacy-safe slice of that user's own memory can be injected per turn.
+    ``memory_paused`` (Youth memory off) leaves out that account's memory notes.
     """
     from projectionist.library.db import DEFAULT_LENS_ID
 
@@ -287,8 +289,10 @@ def build_system_prompt(
         f"{_persona_prompt_block(db, persona_id=persona_id)}"
         f"{night_owl_block}"
         f"{lens_block}\n\n"
-        + _user_memory_context_block(db, user_id, user_role)
-        + preference_context(db, lens_id=resolved, user_id=user_id)
+        + ("" if memory_paused else _user_memory_context_block(db, user_id, user_role))
+        + preference_context(
+            db, lens_id=resolved, user_id=user_id, include_personal=not memory_paused
+        )
         + _youth_guardrails_block(db, user_id=user_id, is_youth=is_youth)
     )
 

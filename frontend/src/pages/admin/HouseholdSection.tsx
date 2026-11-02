@@ -384,6 +384,101 @@ export default function HouseholdSection({
                     Youth-mode accounts never see empty ratings or anything above this max (fail-closed).
                   </span>
                 </label>
+                <label className="config-toggle" data-testid="youth-memory-toggle">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(settings?.youth?.memory_enabled)}
+                    onChange={(event) => {
+                      const memory_enabled = event.target.checked;
+                      updateYouthSettings({ memory_enabled });
+                      persistSettings({ youth: { ...(settings.youth || {}), memory_enabled } })
+                        .then(() =>
+                          setActionFeedback?.(
+                            "users",
+                            "success",
+                            memory_enabled
+                              ? "Youth memory is on. New curator notes for Youth accounts can be reviewed in Admin → Youth."
+                              : "Youth memory is off. The curator no longer reads or saves memory for Youth accounts.",
+                          ),
+                        )
+                        .catch((error: any) => setActionFeedback?.("users", "error", (error as { message?: string }).message));
+                    }}
+                  />
+                  <span>Let the curator remember things for Youth accounts</span>
+                </label>
+                <p className="wizard-note field-help">
+                  Off by default. When it is off, the curator does not read or save memory for Youth
+                  accounts. When it is on, you can review notes saved after an account entered Youth mode.
+                  Memory from before Youth mode is never shown.
+                </p>
+                <label className="config-field" data-testid="youth-chat-route-field">
+                  <span>Youth chat model</span>
+                  <select
+                    data-testid="youth-chat-route"
+                    value={settings?.youth?.chat_route === "local" ? "local" : "none"}
+                    onChange={(event) => {
+                      const chat_route = event.target.value;
+                      updateYouthSettings({ chat_route });
+                      persistSettings({ youth: { ...(settings.youth || {}), chat_route } })
+                        .then(() =>
+                          setActionFeedback?.(
+                            "users",
+                            "success",
+                            chat_route === "local"
+                              ? "Youth chat uses your local model once its address and name are filled in."
+                              : "Youth chat is off. Youth accounts see a short explanation instead.",
+                          ),
+                        )
+                        .catch((error: any) => setActionFeedback?.("users", "error", (error as { message?: string }).message));
+                    }}
+                  >
+                    <option value="none">None: no model, chat explains why</option>
+                    <option value="local">A model on my home network</option>
+                  </select>
+                  <span className="wizard-note">
+                    Youth chats never use the household AI model from Admin → Connections.
+                  </span>
+                </label>
+                {settings?.youth?.chat_route === "local" ? (
+                  <div className="service-fields" data-testid="youth-local-model-fields">
+                    <label>
+                      <span>Local model address</span>
+                      <input
+                        type="text"
+                        data-testid="youth-local-base-url"
+                        placeholder="http://ollama:11434/v1"
+                        value={settings?.youth?.local_base_url || ""}
+                        onChange={(event) => updateYouthSettings({ local_base_url: event.target.value })}
+                        onBlur={() =>
+                          persistSettings({ youth: { ...(settings.youth || {}) } }).catch((error: any) =>
+                            setActionFeedback?.("users", "error", (error as { message?: string }).message),
+                          )
+                        }
+                      />
+                    </label>
+                    <label>
+                      <span>Local model name</span>
+                      <input
+                        type="text"
+                        data-testid="youth-local-model"
+                        placeholder="llama3.2"
+                        value={settings?.youth?.local_model || ""}
+                        onChange={(event) => updateYouthSettings({ local_model: event.target.value })}
+                        onBlur={() =>
+                          persistSettings({ youth: { ...(settings.youth || {}) } }).catch((error: any) =>
+                            setActionFeedback?.("users", "error", (error as { message?: string }).message),
+                          )
+                        }
+                      />
+                    </label>
+                    <p className="wizard-note field-help">
+                      Any OpenAI-compatible server works (Ollama, LM Studio, llama.cpp). The address must be
+                      on your home network: a private IP, <code>localhost</code>, a container name, or a
+                      <code>.local</code> / <code>.lan</code> name. Anything else is refused, and Youth chat
+                      explains that it is not set up.
+                    </p>
+                  </div>
+                ) : null}
               </>
             ) : null}
           </section>

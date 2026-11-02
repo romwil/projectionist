@@ -2,6 +2,41 @@
 
 ## [Unreleased]
 
+## [1.39.0] — 2026-11-02
+
+Youth accounts get real privacy guardrails. The curator doesn't remember things for Youth accounts unless the owner turns that on, and Youth chats never go to the household's cloud AI. Turning Youth mode on for someone now asks the owner to confirm, tells that person, and records it in the security log. It also never opens what the curator remembered about them before.
+
+### Highlights
+- **Youth memory is off by default.** The curator doesn't read or save memory for Youth accounts unless the owner turns it on in Admin → Members.
+- **Youth chat stays at home, or stays off.** The owner picks a model that runs on the home network, or none. With none, Youth chat explains that it's off and sends nothing to any AI model. It never falls back to the household's cloud model.
+- **No quiet switches.** Turning Youth mode on for an existing account needs a confirm. The member gets an inbox notice, and the security log records who did it, when, and for which account.
+- **Earlier memory stays private.** Owner review in Admin → Youth only shows notes saved after an account entered Youth mode, so the Youth toggle can't be used to read an adult's memory.
+
+### Added
+- `youth.memory_enabled` (default `false`), `youth.chat_route` (`none` default, or `local`), `youth.local_base_url`, `youth.local_model` in `settings.json`. Existing settings files without these keys load with the safe defaults. A partial `PUT /api/settings` keeps saved Youth fields it did not send.
+- Admin → Members: **Let the curator remember things for Youth accounts** toggle, **Youth chat model** select, and local model address/name fields.
+- `users.youth_since` (schema migration 61). Accounts created from a Youth invite start at creation; every off → on toggle restarts it.
+- Inbox notification kind `account` (same migration widens the `user_notifications` CHECK by rebuilding from the live table definition, so later columns and indexes survive).
+- Confirm dialog before turning Youth mode on for an existing member.
+
+### Changed
+- `PATCH /api/users/{id}` with `{"is_youth": true}` for a non-Youth account returns **409** and changes nothing (including `role` / `disabled` in the same body) unless `"confirm_youth": true` is sent. On confirm the member gets an `account` inbox notice (forced to the inbox; email/Apprise only if they opted in) and the `youth_change` audit row records `was_youth`, `confirmed`, and `member_notified`. Neither the response, the notice, the audit row, nor logs include memory contents.
+- `GET /api/users/{id}/memory` (owner, Youth only) returns only notes created at or after `youth_since`, plus `youth_since` and `memory_enabled`.
+- Youth chat (`POST /api/chat`, `POST /api/chat/stream`, and persona consults inside them) uses only the Youth route. `none`, a missing local address/model, or an address that is not on the home network (private IP, loopback, link-local, single-label host, or `.local` / `.lan` / `.home` / `.home.arpa` / `.internal` / `.localdomain` / `.localhost`) means no provider is built and the reply is a fixed explanation. `local` swaps only the LLM fields to a keyless OpenAI-compatible provider, so semantic search falls back to on-box hash embeddings rather than the household embedding endpoint. The household LLM config check no longer blocks Youth chat.
+- With Youth memory off, Youth turns omit the private-memory and personal-preference prompt blocks, hide `remember_about_user` / `remember_preference` / `recall_user_memory`, refuse them if called, skip memory in persona consults, and ratings or `POST /api/preferences` no longer add personal memory notes or preference facts (the shared lens taste profile still learns).
+- Existing Youth accounts at upgrade: `youth_since` is set to account creation only when the account joined through a Youth invite and has no `youth_change` audit row; every other existing Youth account starts at upgrade time, so earlier notes are no longer shown in owner review.
+- Help, Privacy, Profile badge, and Admin → Youth copy now describe memory-off-by-default, the review window, the confirm/notice/audit flow, and where Youth chats go.
+
+### Not changed
+- Lobby startup, auth defaults, Live guide, unsubscribe, and account deletion are untouched.
+
+### Verification
+- Backend: `pytest tests/` — 2844 passed, 43 skipped; coverage 77.17% (floor 74%). `tests/test_version.py` re-run green after the version bump.
+- `npm run test:release-perf` within budget.
+- `ruff check` clean on touched Python.
+- New: `tests/test_youth_guardrails.py` (29 tests: defaults, legacy settings, local-URL classification, route resolution, review window, migration backfill + notification-kind rebuild, prompt/tool/memory gating, no provider call for `none` on POST and stream, local route provider settings, 409 without confirm, notice + audit on confirm, no memory in response/notice/audit/logs, partial settings PUT).
+- Frontend: `npm run test:unit` (1179 pass), `npm run lint` (0 errors), `npm run build`.
+
 ## [1.38.0] — 2026-11-02
 
 Ready to invite your household. Each member gets their own sign-in, chats, and start page, and only owners can run owner actions. Owners get one list of what needs them and a weekly pass to tick off. Pages load faster and work better on phones and with screen readers, and the Live guide shows when each show starts and ends.

@@ -57,7 +57,9 @@ Other household members cannot open your chats or confirm your pending actions t
 
 ### Memory, Youth mode, export, and purge
 
-Your private memory stays tied to your account. **In the app, an owner can read only Youth accounts' memory.** An owner who downloads a full household backup (Admin → Overview → **Full household backup**) or has access to the server can read everything, including adult members' chats and memory. Each backup download is logged. If the owner explicitly flags an account **Youth mode**, that account's profile shows a Youth badge and the owner may review or export that account's memory for moderation. This is not a consent toggle and does not apply to adult accounts.
+Your private memory stays tied to your account. **In the app, an owner can read only Youth accounts' memory, and only notes saved after that account entered Youth mode.** An owner who downloads a full household backup (Admin → Overview → **Full household backup**) or has access to the server can read everything, including adult members' chats and memory. Each backup download is logged.
+
+If the owner flags an account **Youth mode**, that account's profile shows a Youth badge. Curator memory for Youth accounts is **off by default**: the curator neither reads nor saves memory for them unless the owner turns Youth memory on. When it is on, the owner may review notes saved from then on for moderation. Turning Youth mode on for an existing account never opens what the curator remembered before. The owner has to confirm the change, the member gets an inbox notice, and the change is recorded in the security log.
 
 #### What export and purge cover
 
@@ -97,6 +99,8 @@ Chat uses the **owner's configured LLM** (OpenAI, Anthropic, Ollama, OpenRouter,
 - Tool results the agent needs (title metadata, library matches, watch signals the tools return)
 
 It should **not** receive Plex server tokens, live `X-Plex-Token` media URLs, webhook secrets, or settings dumps. Your chat content goes to whichever provider the owner configured — including a local Ollama if they chose one, in which case nothing leaves the LAN.
+
+**Youth accounts are different.** Youth chats never use the household model. The owner picks one of two options: **none** (the default), where no model is called and the chat explains why, or **a model on the home network**, such as Ollama or LM Studio. If that local model isn't set up, or its address isn't on the home network, Youth chat sends nothing and says so.
 
 ### Investigate episodes (owner Admin)
 
@@ -311,7 +315,7 @@ Legend: **Y** = may see / receive · **—** = not exposed by design · **P** = 
 | On-box activity counts (chat turns, plays, pick attribution) | SQLite | Own (export) | Household totals | — | — | — |
 | Security log | SQLite | — | Y | — | — | — |
 | Chat messages | SQLite | Own | Own + admin host access | — | — | Y\* (provider) |
-| Private user memory | SQLite | Own | Youth accounts only | — | — | Current user's agent context |
+| Private user memory | SQLite | Own | Youth accounts only, notes saved since Youth mode started (Youth memory is off by default) | — | — | Current user's agent context |
 | Chat transcripts (messages) | SQLite | Own | Own + admin host access | — | — | Y\* (provider) |
 | Saved library pages | SQLite | Own | — | — | — | Y (agent tools) |
 | Preference facts | SQLite | Own | — | — | — | Current user's agent context |

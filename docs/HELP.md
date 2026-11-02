@@ -307,13 +307,15 @@ On a library title, the **Plot knowledge** panel shows which plot layers are pre
 The curator keeps two kinds of memory:
 
 - **Shared knowledge** about titles, people, and companies it has researched, with sources cited. This isn't tied to any one account, so a second question about the same subject recalls the earlier cited answer instead of starting over.
-- **Your private memory** — preferences, stated goals, watch intentions, and follow-ups for *your* account only. It's surfaced back to you at the start of a conversation (including a "resume where we left off" nudge) and is never shared with, or applied to, another household member. Youth-mode accounts show a badge in **Profile**; only those accounts can be reviewed by the owner for moderation.
+- **Your private memory** — preferences, stated goals, watch intentions, and follow-ups for *your* account only. It's surfaced back to you at the start of a conversation (including a "resume where we left off" nudge) and is never shared with, or applied to, another household member. Youth-mode accounts show a badge in **Profile**. Curator memory is off for Youth accounts unless the owner turns it on, and the owner can review only notes saved after an account entered Youth mode. Turning Youth mode on never opens what the curator remembered before.
 
 **Your private memory is yours.** Projectionist can hand you a full copy or permanently delete everything it remembers for your account — private notes, chat transcripts, saved library pages, and preference facts. See the [Privacy](/privacy) page for exactly what that export and purge cover, and how to run them.
 
 ### Youth mode
 
-If your account has **Youth mode** on, Projectionist uses a distinct big-poster layout. The top bar keeps **Ask**, **Browse**, and **Inbox** (plus Search and Settings). The hamburger lists those same destinations under **Navigate**, plus **My list** under **More**. Explore and Chat only show titles with a content rating at or below the owner's max — **unrated titles stay hidden**. Ask the curator stays friendly and age-aware. Try **Pick for me** on Explore for a quick surprise from safe shelves.
+If your account has **Youth mode** on, Projectionist uses a distinct big-poster layout. The top bar keeps **Ask**, **Browse**, and **Inbox** (plus Search and Settings). The hamburger lists those same destinations under **Navigate**, plus **My list** under **More**. Explore and Chat only show titles with a content rating at or below the owner's max — **unrated titles stay hidden**. Try **Pick for me** on Explore for a quick surprise from safe shelves.
+
+**Chat in Youth mode.** Youth chats never use the household's AI model. Unless the owner connects a model that runs at home, chat with the curator is off and tells you so; nothing you type is sent to an AI model. When a home model is connected, the curator stays friendly and age-aware. If the owner turns Youth mode on for your account, you get an inbox notice.
 
 ### Joining the household
 
@@ -797,9 +799,21 @@ curl -s -X POST http://localhost:8788/api/auth/me/apprise/test \
 
 Under **Admin → Members**, set **Youth max content rating** (default `PG-13`). Youth-mode members never see empty/`content_rating` titles or anything above that max — browse, feeds, title detail, and chat cards all fail closed. Household accounts are **owner** or **member** (legacy guest rows map to member).
 
+Turning **Set Youth mode** on for an existing account opens a confirm dialog. On confirm, that member gets an inbox notice and the change lands in **Admin → Health → Security log** (who, when, which account). Turning it off needs no confirm. The same rule holds over HTTP: `PATCH /api/users/{id}` with `{"is_youth": true}` returns **409** unless the body also carries `"confirm_youth": true`, and nothing changes.
+
+Two more Youth settings live on the same page:
+
+- **Let the curator remember things for Youth accounts** (`youth.memory_enabled`, default off). Off means the curator neither reads nor saves memory for Youth accounts: no memory notes in the prompt, no memory tools, and ratings or preference signals don't add personal notes. On means **Admin → Youth** can review notes saved after an account entered Youth mode. Memory from before Youth mode is never shown, even after you turn this on.
+- **Youth chat model** (`youth.chat_route`): `none` (default) or `local`. With `none`, Youth chat makes no model call and shows a short explanation. With `local`, set **Local model address** (`youth.local_base_url`, an OpenAI-compatible `/v1` URL such as `http://ollama:11434/v1`) and **Local model name** (`youth.local_model`). The address must be a private IP, `localhost`, a container name, or a `.local` / `.lan` / `.home.arpa` / `.internal` host. Anything else is refused and Youth chat explains that it is not set up. Youth chat never falls back to the household model, and with a local route its library search uses on-box embeddings, not the household embedding endpoint.
+
 ```bash
 # Inspect current youth gate (owner session cookie)
 curl -s http://localhost:8788/api/settings | jq '.youth'
+
+# Turn Youth mode on for an existing account (owner; confirm is required)
+curl -s -X PATCH http://localhost:8788/api/users/USER_ID \
+  -H 'Content-Type: application/json' \
+  -d '{"is_youth":true,"confirm_youth":true}'
 
 # List pending Projectionist access requests (not Seerr)
 curl -s http://localhost:8788/api/admin/access-requests?status=pending
@@ -849,7 +863,7 @@ curl -s http://localhost:8788/api/me/memory > my-projectionist-export.json
 curl -s -X DELETE http://localhost:8788/api/me/memory
 ```
 
-Export and purge cover **exactly the same set**, including normalized watch events and their derived sessions/completions, so a copy taken before a purge is complete. Removing a household account uses the same purge before deleting the profile. Shared, sanitized repository research about media is *not* part of an account purge — it isn't tied to any one account. For **Youth-mode** accounts only, an owner may review that account's memory for moderation from the **Admin → Youth review** dashboard, which lists Youth-flagged accounts and their stored notes. The same data is available over HTTP (`GET /api/users/{id}/memory`, owner-only); adult member memory is not readable in the app, and the endpoint fails closed — it returns memory only for accounts actually flagged Youth. Full data map: [Privacy](/privacy).
+Export and purge cover **exactly the same set**, including normalized watch events and their derived sessions/completions, so a copy taken before a purge is complete. Removing a household account uses the same purge before deleting the profile. Shared, sanitized repository research about media is *not* part of an account purge — it isn't tied to any one account. For **Youth-mode** accounts only, an owner may review that account's memory for moderation from the **Admin → Youth review** dashboard, which lists Youth-flagged accounts and the notes saved since each entered Youth mode (Youth memory is off by default, so this is often empty). The same data is available over HTTP (`GET /api/users/{id}/memory`, owner-only); adult member memory is not readable in the app, and the endpoint fails closed — it returns memory only for accounts actually flagged Youth, and only notes saved since that account's Youth mode started. Full data map: [Privacy](/privacy).
 
 ### LLM vs free sources
 
