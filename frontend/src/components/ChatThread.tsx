@@ -19,6 +19,7 @@ import MessageText from "./MessageText";
 import ShareActionMenu from "./ShareActionMenu";
 import { chatMediaStripClassName } from "../lib/chatCardScroll.js";
 import { titleRefsFromBlocks } from "../lib/titleDigIn.js";
+import { GENERIC_CURATOR_NAME } from "../lib/curatorName";
 
 /** Props for AgentResultListActions. `any` = API/handler bags until Wave 4 client generics. */
 type AgentResultListActionsProps = {
@@ -288,7 +289,7 @@ function renderBlock(block: any, handlers: any, role: any, message: any, blockIn
     );
   }
   if (block.type === "persona_consult" && block.payload?.pending) {
-    const name = String(block.payload.persona || "Curator").trim() || "Curator";
+    const name = String(block.payload.persona || GENERIC_CURATOR_NAME).trim() || GENERIC_CURATOR_NAME;
     return (
       <aside
         className="persona-consult-quote persona-consult-pending"
@@ -304,7 +305,7 @@ function renderBlock(block: any, handlers: any, role: any, message: any, blockIn
     );
   }
   if (block.type === "persona_consult" && block.payload?.answer) {
-    const name = String(block.payload.persona || "Curator").trim() || "Curator";
+    const name = String(block.payload.persona || GENERIC_CURATOR_NAME).trim() || GENERIC_CURATOR_NAME;
     const lead = String(block.payload.lead || `I asked ${name} and they said`).trim();
     const question = String(block.payload.question || "").trim();
     return (
@@ -451,7 +452,7 @@ export default function ChatThread({
   messages,
   chatError,
   sessionId,
-  curatorName = "Curator",
+  curatorName = GENERIC_CURATOR_NAME,
   reviewPromptTemplates,
   reviewLookup = {} as any,
   messageFeedback = {},

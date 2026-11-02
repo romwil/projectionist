@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Optional, Tuple
 
+from projectionist.persona.display import curator_display_name, in_sentence
+
 _FORBIDDEN = ("download complete", "grabbed", "nzb", "torrent complete")
 
 _GAP_HEADLINES = {
@@ -68,7 +70,7 @@ def format_good_news(
     preset_id: Optional[str] = None,
 ) -> Tuple[str, str]:
     """Return (headline, body) in persona voice. Never 'download complete'."""
-    name = str(curator_name or "Curator").strip() or "Curator"
+    name = curator_display_name(curator_name)
     label = str(title or "A title").strip() or "A title"
     year_bit = _year_bit(year)
     band = _band_for_preset(preset_id)
@@ -76,6 +78,8 @@ def format_good_news(
     headlines = _GAP_HEADLINES if is_gap else _WATCH_HEADLINES
     bodies = _GAP_BODY if is_gap else _WATCH_BODY
     headline = headlines[band].format(curator_name=name, title=label, year_bit=year_bit)
+    if not headline.startswith(name):
+        headline = headline.replace(name, in_sentence(name))
     body = bodies[band]
     lowered = f"{headline} {body}".lower()
     for banned in _FORBIDDEN:

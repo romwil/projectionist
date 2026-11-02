@@ -41,7 +41,7 @@ test("arrServiceConnected prefers setup checks then feature flags", () => {
 test("chatErrorMessage scales with diplomat/snark", () => {
   assert.match(chatErrorMessage("timeout", 0.9), /Well, that didn't work/);
   assert.match(chatErrorMessage("timeout", 0.1), /Sorry, I couldn't respond/);
-  assert.match(chatErrorMessage("timeout", 0.5), /Curator couldn't respond/);
+  assert.match(chatErrorMessage("timeout", 0.5), /Your curator couldn't respond/);
 });
 
 test("isNightOwlHour is true at 23:00 and later", () => {

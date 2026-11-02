@@ -18,7 +18,9 @@ from projectionist.notifications.recommendation_reasons import (
     tracker_watched_item_ids,
     watched_library_rows,
 )
+from projectionist.notifications.good_news import persona_from_db
 from projectionist.notifications.service import deliver_notification
+from projectionist.persona.display import curator_display_name
 from projectionist.youth.rating_gate import youth_visible_rows
 
 logger = logging.getLogger(__name__)
@@ -46,7 +48,7 @@ def _persona_voice_line(db: Database, *, for_guest: bool = False) -> str:
     chosen = guest if for_guest and guest else default or (personas[0] if personas else None)
     if not chosen:
         return "Your curator picked a few for you this week."
-    name = str(chosen.get("name") or "Your curator").strip()
+    name = curator_display_name(persona_from_db(db)[0], chosen)
     tagline = str(chosen.get("tagline") or chosen.get("description") or "").strip()
     if tagline:
         return f"{name} here — {tagline}"

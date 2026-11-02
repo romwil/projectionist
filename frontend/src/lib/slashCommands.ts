@@ -6,6 +6,7 @@ import {
   formatRateTitleLead,
   resolveReviewAddressName,
 } from "./reviewIdentity.js";
+import { GENERIC_CURATOR_NAME } from "./curatorName";
 
 function reviewPromptBlock(prompt: unknown, options: JsParam = {}) {
   return {
@@ -41,7 +42,7 @@ export function parseSlashCommand(text: string) {
   };
 }
 
-export function formatHelpMessage(curatorName = "Curator", { plexCollectionsEnabled = false }: JsParam = {}) {
+export function formatHelpMessage(curatorName = GENERIC_CURATOR_NAME, { plexCollectionsEnabled = false }: JsParam = {}) {
   const lines = [
     `**${curatorName} slash commands**`,
     "",
@@ -190,7 +191,7 @@ async function resolveRateTarget(api: JsParam, titleQuery: unknown) {
 }
 
 export async function executeSlashCommand(parsed: JsParam,
-  { api, getFeatures, curatorName = "Curator", user = null }: JsParam = {},
+  { api, getFeatures, curatorName = GENERIC_CURATOR_NAME, user = null }: JsParam = {},
 ) {
   if (!parsed?.command) {
     return assistantBlock("Type `/help` to see available slash commands.");
