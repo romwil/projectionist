@@ -23,6 +23,7 @@ type AppShellProps = {
   showPrimaryNav?: boolean;
   inboxUnreadCount?: number;
   blockUntilAuth?: boolean;
+  mainLandmark?: boolean;
 };
 
 /**
@@ -41,6 +42,10 @@ type AppShellProps = {
  * Children paint immediately. Auth-only chrome (Admin) appears when the
  * shared auth snapshot returns. Opt in with blockUntilAuth only when the
  * page body itself must stay hidden — public pages must not.
+ *
+ * A11Y-002: pages without their own `<main>` set mainLandmark so the body is
+ * the main landmark the skip link lands on. Pages that already render a
+ * `<main>` leave it off so no route has two.
  */
 export default function AppShell({
   children,
@@ -58,6 +63,7 @@ export default function AppShell({
   showPrimaryNav,
   inboxUnreadCount = 0,
   blockUntilAuth = false,
+  mainLandmark = false,
 }: AppShellProps) {
   const {
     authReady,
@@ -225,7 +231,13 @@ export default function AppShell({
           </button>
         </p>
       ) : null}
-      {children}
+      {mainLandmark ? (
+        <main id="main" tabIndex={-1} className="app-shell-main">
+          {children}
+        </main>
+      ) : (
+        children
+      )}
     </div>
   );
 }

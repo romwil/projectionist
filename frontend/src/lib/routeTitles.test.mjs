@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { documentTitleFor, pageTitleFor } from "./routeTitles.ts";
+import {
+  documentTitleFor,
+  episodePageName,
+  pageTitleFor,
+  routeNamesItself,
+  titlePageName,
+  withAppName,
+} from "./routeTitles.ts";
 
 describe("routeTitles", () => {
   it("titles the home, chat, and help routes", () => {
@@ -39,5 +46,29 @@ describe("routeTitles", () => {
   it("falls back to Not Found for unmatched paths", () => {
     assert.equal(pageTitleFor("/this/does/not/exist"), "Not Found");
     assert.equal(documentTitleFor("/this/does/not/exist"), "Not Found · Projectionist");
+  });
+});
+
+describe("item page names (A11Y-003)", () => {
+  it("names a loaded film with its year", () => {
+    assert.equal(titlePageName({ title: "Alien", year: 1979 }), "Alien (1979)");
+    assert.equal(withAppName(titlePageName({ title: "Alien", year: 1979 })), "Alien (1979) · Projectionist");
+  });
+
+  it("drops a missing or junk year and stays empty while loading", () => {
+    assert.equal(titlePageName({ title: "Alien" }), "Alien");
+    assert.equal(titlePageName({ title: "Alien", year: "n/a" }), "Alien");
+    assert.equal(titlePageName(null), "");
+  });
+
+  it("names an episode by show and code", () => {
+    assert.equal(episodePageName({ showTitle: "The Wire", episodeTitle: "The Buys", code: "S01E03" }), "The Wire S01E03");
+    assert.equal(episodePageName({ episodeTitle: "The Buys", code: "S01E03" }), "The Buys");
+  });
+
+  it("only title and episode routes wait to name themselves", () => {
+    assert.equal(routeNamesItself("/title/movie/348"), true);
+    assert.equal(routeNamesItself("/title/episode/abc"), true);
+    assert.equal(routeNamesItself("/explore"), false);
   });
 });
