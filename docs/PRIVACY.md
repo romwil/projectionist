@@ -8,7 +8,7 @@ The short version:
 
 - **What is stored.** The library catalog, your chats and preferences, your notifications, and the owner's connection settings. All of it lives in one database and one settings file on the owner's server, plus the daily backups described below.
 - **What leaves the server.** Your chat goes to the AI provider the owner picked. Search text may go to the owner's embeddings provider. Notifications go to the email or push service the owner set up. Poster images load from public artwork sites. Your Plex token and the owner's settings file do not leave.
-- **What you can't do yet.** There is no **Download my data** or **Delete my data** button. To leave, ask the owner to remove your account. **[Getting a copy or leaving](#getting-a-copy-or-leaving)** lists what removal deletes and what it leaves behind.
+- **What you control.** **Settings → My data** lets you download everything Projectionist keeps about you, delete memory notes one at a time, or delete your data while keeping your account. To remove the account itself, ask the owner. **[Getting a copy or leaving](#getting-a-copy-or-leaving)** lists what each choice deletes and what stays.
 
 Jump to: [Household members](#household-members) · [Server owners](#server-owners) · [MCP](#mcp) · [Exposure matrices](#exposure-matrices) · [We do not](#we-do-not)
 
@@ -87,24 +87,21 @@ The curator keeps two kinds of memory:
 
 ### Getting a copy or leaving
 
-**There is no Download my data or Delete my data button yet.** Projectionist can delete a single chat thread from **Chat**. For anything more:
+Open **Settings → My data**. Everything there acts on your account only. No one else can download or delete your data from that page, and you can't reach anyone else's.
 
-- **To leave**, ask the owner to remove your account in **Admin → Members**.
-- **To get a copy**, ask the owner. They can't export another person's data from the app, but they hold the full backup.
+- **What the curator remembers.** Each private memory note, with a **Delete** button. A deleted note is gone, not hidden.
+- **Download my data.** One file with everything Projectionist keeps about you: profile, chats with every message, memory, watchlist, lists, ratings and reviews, inbox, Plex viewing, badges, Year in Review, and the rest. Passwords and sign-in tokens are left out. A readable version includes your chat messages too.
+- **Delete my data.** Removes all of that except your account, so you can keep signing in and start fresh. You type a short phrase to confirm.
+- **To leave the household**, ask the owner to remove your account in **Admin → Members**. That deletes your profile and picture too.
 
-**What removal deletes:** your profile, private memory, chats and messages, saved library pages, preference notes, your Plex viewing record, activity counts, watchlist, lists, inbox, taste profile, badges, streaks, courses, and Year in Review.
+**What stays after removal:**
 
-**What removal leaves behind:**
-
-- Your ratings and written reviews, and any pending rating prompts
-- Actions you started that were never confirmed
-- AI usage records (deleted after 90 days)
-- Problems you reported about a title (your name is removed, the text stays)
-- Your request to join, and the email on any invite you received
-- Your uploaded profile picture
-- Shared knowledge the curator saved
-- Security log entries about your account
-- Copies in backups made before removal. The daily backups roll off after seven days. Backups the owner downloaded last as long as they keep them.
+- Problems you reported about a title, your request to join, and the invite you joined with. Your name, email, and account link are removed; the rest stays as the household's record.
+- Curator voices you shared with the household, without your name.
+- Security log entries about your account, such as sign-ins and the removal itself. They hold an account number, not your chats.
+- Shared knowledge the curator saved about titles and people.
+- **Backups.** The daily backups made before you left still hold your data until they roll off after seven days. If the owner restores one of them, Projectionist removes your data again before the app starts, so you don't come back. Backups the owner downloaded and keeps somewhere else are out of Projectionist's reach.
+- Copies the AI provider kept under its own terms.
 
 ### What the AI provider receives
 
@@ -199,44 +196,81 @@ docker run --rm -v /mnt/user/appdata/projectionist/config:/config \
 docker start projectionist
 ```
 
-Restore checks the snapshot before touching anything. It moves the current database and `settings.json` to `backups/pre-restore-<timestamp>/` rather than deleting them. Those set-aside folders are not pruned, so remove them yourself once the restore looks right. **Admin → Overview → Needs attention** warns when the backup task is off or the newest snapshot is more than three days old.
+Restore checks the snapshot before touching anything. **It never brings back an account you removed, or data a member deleted.** Every removal and **Delete my data** is recorded in `DATA_DIR/privacy-erasures.json` (the account id and a time, nothing else). Restore re-applies that list to the snapshot copy, then compacts it, before the copy goes live. If that file can't be read, restore refuses. Restore from the same data folder; a snapshot restored into an empty folder has no list to apply. It moves the current database and `settings.json` to `backups/pre-restore-<timestamp>/` rather than deleting them. Those set-aside folders are not pruned, so remove them yourself once the restore looks right. **Admin → Overview → Needs attention** warns when the backup task is off or the newest snapshot is more than three days old.
 
 **Honest limit:** the snapshot lives on the same disk as the data. Copy `DATA_DIR/backups` somewhere else if you need protection from a failed disk.
 
 ### Export and removal, exactly
 
-Each signed-in account can export or purge its own data with the API. There is no member button for this yet, and an owner can't run it for someone else.
+Members do this from **Settings → My data**. The same routes work with a session cookie. Every route acts on the signed-in account only; there is no parameter that names another account, and an owner can't export or purge someone else from the app.
 
 ```bash
-# Export the signed-in account (JSON) — use that account's session cookie
+# Export the signed-in account (JSON; add ?format=markdown for a readable copy with messages)
 curl -s -b 'curatorx_session=YOUR_SESSION' \
   http://localhost:8788/api/me/memory > my-projectionist-export.json
 
-# Purge the same set for the signed-in account (permanent)
+# Delete my data: everything below marked "Delete my data", keeping the account
+curl -s -b 'curatorx_session=YOUR_SESSION' -X POST \
+  -H 'Content-Type: application/json' -d '{"confirm": "delete my data"}' \
+  http://localhost:8788/api/me/data/erase
+
+# Older, narrower purge: memory, chats, saved pages, preferences, Plex viewing, activity counts
 curl -s -b 'curatorx_session=YOUR_SESSION' -X DELETE \
   http://localhost:8788/api/me/memory
 ```
 
-Export and purge cover the same tables. The export leaves out the profile, watchlist, lists, reviews, inbox, and taste profile, so it is not a full copy. The Markdown export lists chat thread titles and message counts, not the messages.
+**How it works.** One list in `projectionist/privacy/registry.py` names every table that holds data about an account, and says whether it is exported, removed by **Delete my data**, and deleted, stripped of the name, or kept when the account is removed. Export, both purges, account removal, restore, and the table below all read that list. A test fails when a new column that looks like an account link (`user_id`, `email`, and similar) is not on it, and another fails if this table drifts from it.
 
-| Data | Exported | Purged | Removed with the account | Table |
-|------|:--------:|:------:|:------------------------:|-------|
-| Private memory notes | Yes | Yes | Yes | `user_memory_notes` |
-| Chat threads and messages | Yes | Yes | Yes | `chat_sessions`, `chat_messages` |
-| Saved library pages | Yes | Yes | Yes | `saved_library_pages` |
-| Preference facts | Yes | Yes | Yes | `preference_facts` |
-| Mapped watch evidence | Yes | Yes | Yes | `watch_events`, `watch_sessions`, `watch_completions` |
-| Activity counts | Yes | Yes | Yes | `system_telemetry_stream` |
-| Watchlist, lists, inbox, taste profile, badges, streaks, courses, Year in Review | No | No | Yes | foreign keys to `users` |
-| Ratings and reviews, rating prompts | No | No | **No** | `user_title_reviews`, `rating_prompt_queue` |
-| Pending confirmations | No | No | **No** | `pending_actions` |
-| LLM usage | No | No | After 90 days | `llm_usage` |
-| Memory audit events | No | No | **No** | `user_memory_events` |
-| Reported issues (reporter cleared) | No | No | Text stays | `media_issues` |
-| Access requests, invite emails | No | No | **No** | `access_requests`, `invites` |
-| Uploaded avatar file | No | No | **No** | `DATA_DIR` avatars |
-| Shared repository insights | No | No | **No** | `memory_insights` |
-| Security log | No | No | **No** | `security_audit_log` |
+Account removal runs as one database transaction, so a failure part-way leaves the account whole rather than half-deleted. Deletes use SQLite's `secure_delete`, and the write-ahead log is truncated afterwards, so deleted chat text isn't left readable in the database files. The uploaded profile picture is deleted from disk.
+
+<!-- privacy-registry:begin (generated by python -m projectionist.privacy.registry) -->
+| Data | In your download | Delete my data | Removing the account | Table |
+|------|:----------------:|:--------------:|:--------------------:|-------|
+| Your request to join (name, email, message) | Yes | No | Name removed | `access_requests` |
+| Join requests you approved or declined (who decided) | No | No | Name removed | `access_requests` |
+| The invite you joined with (email, expected Plex or SSO account) | Yes | No | Name removed | `invites` |
+| Invites you sent (who sent them) | No | No | Name removed | `invites` |
+| Problems you reported about a title (your name is removed, the note stays) | Yes | No | Name removed | `media_issues` |
+| Notes other members got from you (your name is removed) | No | No | Name removed | `user_notifications` |
+| Curator voices you shared with the household (your name is removed) | Yes | No | Name removed | `persona_templates` |
+| Library clean-up actions you ran (who ran them) | No | No | Name removed | `grooming_action_log` |
+| Temporary Plex collections you made (who made them) | No | No | Name removed | `ephemeral_plex_collections` |
+| Owner checklist ticks (who ticked them) | No | No | Name removed | `owner_checklist_marks` |
+| Security log entries about your account | No | No | **Kept** | `security_audit_log` |
+| Plex viewing: finished titles | Yes | Yes | Deleted | `watch_completions` |
+| Plex viewing: session links | No | Yes | Deleted | `watch_session_events` |
+| Plex viewing: sessions | Yes | Yes | Deleted | `watch_sessions` |
+| Plex viewing: play, pause, and stop events | Yes | Yes | Deleted | `watch_events` |
+| Your linked Plex account on the Plex server | Yes | Yes | Deleted | `watch_source_identities` |
+| Thumbs up or down on curator replies | Yes | Yes | Deleted | `message_feedback` |
+| Chat messages | Yes | Yes | Deleted | `chat_messages` |
+| Chat threads | Yes | Yes | Deleted | `chat_sessions` |
+| Saved library pages | Yes | Yes | Deleted | `saved_library_pages` |
+| Private memory notes | Yes | Yes | Deleted | `user_memory_notes` |
+| Preference notes | Yes | Yes | Deleted | `preference_facts` |
+| Activity counts (chat turns and plays, never your words) | Yes | Yes | Deleted | `system_telemetry_stream` |
+| Memory audit trail (when notes were added, exported, or purged) | Yes | Yes | Deleted | `user_memory_events` |
+| Watchlist | Yes | Yes | Deleted | `watchlist_pins` |
+| Titles on your lists | Yes | Yes | Deleted | `curated_list_items` |
+| Lists you made, private or published | Yes | Yes | Deleted | `curated_lists` |
+| Course progress | Yes | Yes | Deleted | `user_course_progress` |
+| Course sessions | Yes | Yes | Deleted | `user_syllabus_sessions` |
+| Ratings and written reviews | Yes | Yes | Deleted | `user_title_reviews` |
+| Pending rating prompts | Yes | Yes | Deleted | `rating_prompt_queue` |
+| Actions you started that were never confirmed | Yes | Yes | Deleted | `pending_actions` |
+| Inbox: newsletters, nudges, whispers, and alerts | Yes | Yes | Deleted | `user_notifications` |
+| Titles someone recommended to you, and ones you recommended | Yes | Yes | Deleted | `user_recommendations` |
+| Taste profile | Yes | Yes | Deleted | `user_taste_profile` |
+| Weekly picks rail | Yes | Yes | Deleted | `user_weekly_rails` |
+| Badges | Yes | Yes | Deleted | `user_badges` |
+| Streaks | Yes | Yes | Deleted | `user_streaks` |
+| Challenge progress | Yes | Yes | Deleted | `user_challenge_progress` |
+| Year in Review | Yes | Yes | Deleted | `year_in_review_snapshots` |
+| AI usage records (token counts, no words) | Yes | Yes | Deleted | `llm_usage` |
+| Private curator voices you made | Yes | Yes | Deleted | `persona_templates` |
+| Your profile: name, email, sign-in links, and settings | Yes | No | Deleted | `users` |
+| Uploaded profile picture | No | No | Deleted | `DATA_DIR/avatars/<account>.*` |
+<!-- privacy-registry:end -->
 
 **Youth review.** `GET /api/users/{id}/memory` returns memory only for accounts flagged Youth, and **Admin → Youth review** shows the same.
 
@@ -284,9 +318,10 @@ Stills and clips are cached under the data directory for the current job so you 
 
 ### Activity counts and the security log
 
-Two records stay on this server so you can run it well. Neither is sent anywhere.
+These records stay on this server so you can run it well. None is sent anywhere.
 
-- **Activity counts** (`system_telemetry_stream`). A chat turn records its outcome, card and tool counts, and timing, never the words. A play started in Projectionist records the title and, only when the member pressed Play on a curator card or a household recommendation, which pick it came from. Rows are kept 90 days. **Admin → Overview** shows totals. `GET /api/admin/telemetry/events` returns the raw rows, including the account id.
+- **Activity counts** (`system_telemetry_stream`). A chat turn records its outcome, card and tool counts, and timing, never the words. A play started in Projectionist records the title and, only when the member pressed Play on a curator card or a household recommendation, which pick it came from. Opening the Household pulse records that an owner looked, with the account id and nothing else. Rows are kept 90 days. **Admin → Overview → Household pulse** shows weekly household totals: plays from a pick, failed and slow chat replies, AI spend, and how many members have been quiet for four weeks. It never shows who did what. `GET /api/admin/telemetry/events` returns the raw rows, including the account id.
+- **Server timings** (in memory only). How long recent requests took and how many database writes are waiting. They are never written to the database or sent anywhere, and they reset when the server restarts. Owners read them at `GET /api/admin/runtime`; the server also logs one line a minute with the same numbers.
 - **Security log** (`security_audit_log`). Sign-ins, failed sign-ins, password changes and resets, invites, role and Youth changes, settings saves, secret reveals, MCP key changes, and backup downloads. Settings saves list setting **names**, never values. Only owners can read it (**Admin → Health → Security log**). It keeps the newest 20,000 rows and is not removed with an account.
 
 ### Images
@@ -376,12 +411,13 @@ Legend: **Y** = may see or receive · **—** = not exposed · **\*** = the prov
 - Let members add Apprise destinations, or confirm Radarr/Sonarr adds
 - Use someone else's viewing to write your "You watched" lines
 - Pretend a Plex list publish worked when Plex refused it
+- Bring back a removed account, or data a member deleted, when the owner restores a backup
 
 ---
 
 ## Your choices
 
-- **Members:** turn email, Apprise, nudges, and newsletters on or off in **Settings → Notifications**. Delete a chat thread from **Chat**. Ask the owner to remove your account.
+- **Members:** turn email, Apprise, nudges, and newsletters on or off in **Settings → Notifications**. Delete a chat thread from **Chat**. Download or delete your data in **Settings → My data**. Ask the owner to remove your account.
 - **Owners:** keep sign-in off for a single trusted operator, or turn it on so each person's data is kept apart.
 - Pick an AI provider you trust. A local model such as Ollama keeps chat on your network.
 - Leave `PROJECTIONIST_MCP_FULL_API_KEY` unset if you only want the privacy MCP schema. Rotate MCP keys if one leaks.

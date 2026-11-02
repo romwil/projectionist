@@ -10,14 +10,17 @@ Restore is offline. Stop Projectionist, then run::
     python -m projectionist.backups restore --data-dir /config --from /config/backups/<zip> --yes
 
 Restore checks the zip, runs ``PRAGMA integrity_check`` on the database copy,
-moves the current files into ``DATA_DIR/backups/pre-restore-<stamp>/`` (nothing
-is deleted), and only then puts the snapshot in place. Nothing is uploaded
+re-applies every erasure in ``DATA_DIR/privacy-erasures.json`` to the staged
+copy (so a removed account or a "Delete my data" does not come back), moves
+the current files into ``DATA_DIR/backups/pre-restore-<stamp>/`` (nothing is
+deleted), and only then puts the snapshot in place. Nothing is uploaded
 anywhere; backups stay on the same disk as the data unless you copy them off.
 """
 
 from __future__ import annotations
 
 import argparse
+import calendar
 import json
 import logging
 import os
@@ -213,6 +216,7 @@ def restore_snapshot(zip_path: Path, data_dir: Path, *, now: Optional[float] = N
             except ValueError as error:
                 raise RestoreError("settings.json in this snapshot is not valid JSON.") from error
         _check_sqlite(staging / db_name)
+        reapplied = _reapply_erasures(data_dir, staging / db_name, _snapshot_time(archive, names))
 
         aside = backup_dir(data_dir) / f"pre-restore-{_stamp(now)}"
         aside.mkdir(parents=True, exist_ok=False)
@@ -235,7 +239,44 @@ def restore_snapshot(zip_path: Path, data_dir: Path, *, now: Optional[float] = N
         "restored_settings": has_settings,
         "previous_files_dir": str(aside),
         "previous_files": moved,
+        **reapplied,
     }
+
+
+def _snapshot_time(archive: zipfile.ZipFile, names: Sequence[str]) -> Optional[float]:
+    """When the snapshot was taken (UTC), from its manifest; None if unknown."""
+    if "manifest.json" not in names:
+        return None
+    try:
+        meta = json.loads(archive.read("manifest.json").decode("utf-8"))
+        return float(calendar.timegm(time.strptime(str(meta["generated_at"]), "%Y%m%d-%H%M%S")))
+    except (KeyError, ValueError, TypeError):
+        return None
+
+
+def _reapply_erasures(data_dir: Path, staged_db: Path, snapshot_at: Optional[float]) -> Dict[str, Any]:
+    """Strip accounts and data erased since the snapshot from the staged copy.
+
+    A removed account never comes back through restore. Refuses when the
+    ledger cannot be read, rather than restoring rows that may be erased.
+    """
+    from projectionist.privacy import erasures
+
+    if list(Path(data_dir).glob("privacy-erasures.unreadable-*.json")):
+        raise RestoreError(
+            "An erasure ledger in the data folder could not be read. Fix or merge it "
+            "into privacy-erasures.json before restoring, so erased accounts stay erased."
+        )
+    try:
+        entries = erasures.load_erasures(data_dir)
+    except (OSError, ValueError) as error:
+        raise RestoreError(f"privacy-erasures.json is unreadable: {error}") from error
+    if not entries:
+        return {"erasures_applied": 0, "rows_removed": 0}
+    try:
+        return erasures.apply_erasures(staged_db, entries, snapshot_at=snapshot_at)
+    except sqlite3.Error as error:
+        raise RestoreError(f"Could not re-apply erasures to this snapshot: {error}") from error
 
 
 def _main(argv: Optional[Sequence[str]] = None) -> int:
@@ -277,6 +318,8 @@ def _main(argv: Optional[Sequence[str]] = None) -> int:
         print(f"Restore refused: {error}", file=sys.stderr)
         return 1
     print(f"Restored {result['restored_db']}. Previous files: {result['previous_files_dir']}")
+    if result.get("erasures_applied"):
+        print(f"Re-applied {result['erasures_applied']} erasure(s) recorded since accounts were removed or purged.")
     return 0
 
 

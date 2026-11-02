@@ -202,14 +202,14 @@ class UsersAuthMixin:
         assert row is not None
         return self._row_to_user(row)
 
-    def delete_user(self, user_id: str) -> None:
-        with self.connect() as conn:
-            existing = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
-            if existing is None:
-                raise ValueError("User not found")
-        self.purge_user_memory_and_chats(user_id)
-        with self.connect() as conn:
-            conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    def delete_user(self, user_id: str) -> Dict[str, int]:
+        """Remove the account and every registry store in one transaction.
+
+        Rows are deleted or anonymized per ``projectionist.privacy.registry``;
+        a failure part-way rolls back, so a retry never meets half an account.
+        The avatar file is the caller's to remove (it lives outside the DB).
+        """
+        return self._erase_account_rows(user_id, account=True)
 
     def update_user_seerr(
         self,

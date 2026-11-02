@@ -19,12 +19,39 @@ from typing import (
     Optional,
 )
 
+from projectionist.privacy import erasures, registry
+
 from ._shared import (
     logger,
 )
 
 # Interaction-stream rows carry the account in their metadata payload, not a column.
 _STREAM_USER_MATCH = "json_extract(payload_json, '$.user_id') = ?"
+
+# Export sections shaped by hand below; every other registry store is exported raw.
+_SHAPED_EXPORT_TABLES = (
+    "chat_sessions",
+    "chat_messages",
+    "saved_library_pages",
+    "preference_facts",
+    "watch_events",
+    "watch_sessions",
+    "watch_completions",
+    "system_telemetry_stream",
+)
+
+_PURGE_COUNT_KEYS = {
+    "notes_deleted": "user_memory_notes",
+    "chat_sessions_deleted": "chat_sessions",
+    "chat_messages_deleted": "chat_messages",
+    "saved_library_pages_deleted": "saved_library_pages",
+    "preference_facts_deleted": "preference_facts",
+    "watch_events_deleted": "watch_events",
+    "watch_sessions_deleted": "watch_sessions",
+    "watch_completions_deleted": "watch_completions",
+    "watch_source_identities_deleted": "watch_source_identities",
+    "interaction_events_deleted": "system_telemetry_stream",
+}
 
 
 class MemoryMixin:
@@ -163,10 +190,29 @@ class MemoryMixin:
             )
         return self.get_user_memory_note(note_id, user_id=user_id)
 
+    def delete_user_memory_note(self, note_id: str, *, user_id: str) -> bool:
+        """Hard-delete one of the caller's notes (not archive)."""
+        with self.connect() as conn:
+            conn.execute("PRAGMA secure_delete=ON")
+            cur = conn.execute(
+                "DELETE FROM user_memory_notes WHERE id = ? AND user_id = ?", (note_id, user_id)
+            )
+            if cur.rowcount:
+                conn.execute(
+                    "INSERT INTO user_memory_events (id, user_id, event_type, target_id, created_at) "
+                    "VALUES (?, ?, 'delete', ?, ?)",
+                    (uuid.uuid4().hex, user_id, note_id, time.time()),
+                )
+        return bool(cur.rowcount)
+
     def export_user_memory(self, user_id: str) -> Dict[str, Any]:
-        """Full data export mirroring exactly what ``purge_user_memory_and_chats``
-        deletes: private notes, chat threads + message transcripts, saved library
-        pages, and preference facts attributed to this account."""
+        """Everything this account owns, per the personal-data registry.
+
+        Chats, saved pages, preference facts, watch evidence, and activity counts
+        are shaped for reading; every other ``export=True`` registry store is in
+        ``stores`` as rows (secrets such as password hashes and tokens removed).
+        Only rows matching ``user_id`` are read.
+        """
         notes = self.list_user_memory_notes(user_id, limit=500)
         now = time.time()
         with self.connect() as conn:
@@ -278,13 +324,16 @@ class MemoryMixin:
                 ).fetchall()
             ]
 
+            stores = registry.export_rows(conn, user_id, skip_tables=_SHAPED_EXPORT_TABLES)
             conn.execute(
                 "INSERT INTO user_memory_events (id, user_id, event_type, created_at) VALUES (?, ?, 'export', ?)",
                 (uuid.uuid4().hex, user_id, now),
             )
         return {
+            "format_version": 2,
             "user_id": user_id,
             "exported_at": now,
+            "stores": stores,
             "notes": notes,
             "chat_threads": chat_threads,
             "saved_library_pages": saved_library_pages,
@@ -297,103 +346,65 @@ class MemoryMixin:
             "interaction_events": interaction_events,
         }
 
-    def purge_user_memory_and_chats(self, user_id: str) -> Dict[str, int]:
-        """Delete every per-user store that PRIVACY.md promises a purge removes.
+    def _erase_account_rows(
+        self, user_id: str, *, groups: tuple = registry.ERASE_ALL, account: bool = False
+    ) -> Dict[str, int]:
+        """One write transaction over the registry, then scrub freed pages.
 
-        ``PRAGMA foreign_keys`` is not enabled, so ``ON DELETE CASCADE`` is
-        dormant; each child store is deleted explicitly (children before
-        parents) so no chat transcript text, saved library page, or preference
-        fact is left orphaned. Export mirrors exactly this set.
+        ``secure_delete`` zeroes freed content on this connection, and the WAL
+        checkpoint afterwards truncates the log, so deleted chat text is not left
+        readable in the database file or its WAL. The erasure is then recorded
+        in the ledger so a backup restore re-applies it.
         """
         now = time.time()
         with self.connect() as conn:
-
-            def _count(sql: str) -> int:
-                row = conn.execute(sql, (user_id,)).fetchone()
-                return int(row["count"]) if row else 0
-
-            notes = _count("SELECT COUNT(*) AS count FROM user_memory_notes WHERE user_id = ?")
-            chats = _count("SELECT COUNT(*) AS count FROM chat_sessions WHERE user_id = ?")
-            messages = _count(
-                "SELECT COUNT(*) AS count FROM chat_messages "
-                "WHERE session_id IN (SELECT id FROM chat_sessions WHERE user_id = ?)"
-            )
-            saved = _count("SELECT COUNT(*) AS count FROM saved_library_pages WHERE user_id = ?")
-            pref_has_user = "user_id" in self._table_columns(conn, "preference_facts")
-            prefs = (
-                _count("SELECT COUNT(*) AS count FROM preference_facts WHERE user_id = ?")
-                if pref_has_user
-                else 0
-            )
-            watch_events = _count(
-                "SELECT COUNT(*) AS count FROM watch_events WHERE user_id = ?"
-            )
-            watch_sessions = _count(
-                "SELECT COUNT(*) AS count FROM watch_sessions WHERE user_id = ?"
-            )
-            watch_completions = _count(
-                "SELECT COUNT(*) AS count FROM watch_completions WHERE user_id = ?"
-            )
-            watch_identities = _count(
-                "SELECT COUNT(*) AS count FROM watch_source_identities WHERE user_id = ?"
-            )
-
-            interaction_events = _count(
-                f"SELECT COUNT(*) AS count FROM system_telemetry_stream WHERE {_STREAM_USER_MATCH}"
-            )
-
-            # Delete children before parents (cascade is dormant without the pragma).
-            conn.execute(
-                """
-                DELETE FROM watch_completions
-                WHERE user_id = ?
-                """,
-                (user_id,),
-            )
-            conn.execute(
-                """
-                DELETE FROM watch_session_events
-                WHERE session_id IN (
-                    SELECT id FROM watch_sessions WHERE user_id = ?
+            conn.execute("PRAGMA secure_delete=ON")
+            conn.execute("BEGIN IMMEDIATE")
+            if account and conn.execute("SELECT 1 FROM users WHERE id = ?", (user_id,)).fetchone() is None:
+                raise ValueError("User not found")
+            counts = registry.erase_user(conn, user_id, groups=groups, account=account)
+            if not account:
+                conn.execute(
+                    "INSERT INTO user_memory_events (id, user_id, event_type, created_at) "
+                    "VALUES (?, ?, 'purge', ?)",
+                    (uuid.uuid4().hex, user_id, now),
                 )
-                """,
-                (user_id,),
-            )
-            conn.execute("DELETE FROM watch_sessions WHERE user_id = ?", (user_id,))
-            conn.execute("DELETE FROM watch_events WHERE user_id = ?", (user_id,))
-            conn.execute(
-                "DELETE FROM watch_source_identities WHERE user_id = ?",
-                (user_id,),
-            )
-            conn.execute(
-                "DELETE FROM chat_messages "
-                "WHERE session_id IN (SELECT id FROM chat_sessions WHERE user_id = ?)",
-                (user_id,),
-            )
-            conn.execute("DELETE FROM chat_sessions WHERE user_id = ?", (user_id,))
-            conn.execute("DELETE FROM saved_library_pages WHERE user_id = ?", (user_id,))
-            conn.execute("DELETE FROM user_memory_notes WHERE user_id = ?", (user_id,))
-            conn.execute(
-                f"DELETE FROM system_telemetry_stream WHERE {_STREAM_USER_MATCH}", (user_id,)
-            )
-            if pref_has_user:
-                conn.execute("DELETE FROM preference_facts WHERE user_id = ?", (user_id,))
-            conn.execute(
-                "INSERT INTO user_memory_events (id, user_id, event_type, created_at) VALUES (?, ?, 'purge', ?)",
-                (uuid.uuid4().hex, user_id, now),
-            )
-        return {
-            "notes_deleted": notes,
-            "chat_sessions_deleted": chats,
-            "chat_messages_deleted": messages,
-            "saved_library_pages_deleted": saved,
-            "preference_facts_deleted": prefs,
-            "watch_events_deleted": watch_events,
-            "watch_sessions_deleted": watch_sessions,
-            "watch_completions_deleted": watch_completions,
-            "watch_source_identities_deleted": watch_identities,
-            "interaction_events_deleted": interaction_events,
-        }
+        try:
+            with self.connect() as conn:
+                conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except sqlite3.Error:
+            logger.warning("WAL checkpoint after erasure did not complete", exc_info=True)
+        erasures.record_erasure(
+            self._erasure_ledger_dir(),
+            user_id,
+            kind=erasures.KIND_ACCOUNT if account else erasures.KIND_DATA,
+            groups=() if account else groups,
+            at=now,
+        )
+        return counts
+
+    def _erasure_ledger_dir(self):
+        from pathlib import Path
+
+        return Path(str(self.path)).resolve().parent
+
+    def purge_user_memory_and_chats(self, user_id: str) -> Dict[str, int]:
+        """Delete private memory, chats, saved pages, preference facts, Plex
+        viewing evidence, and activity counts (the registry's ``memory`` group).
+
+        Foreign keys are on, but every store is deleted explicitly (children
+        before parents) so tables without a foreign key are not left orphaned.
+        """
+        counts = self._erase_account_rows(user_id, groups=registry.ERASE_MEMORY)
+        return {key: int(counts.get(table, 0)) for key, table in _PURGE_COUNT_KEYS.items()}
+
+    def erase_user_data(self, user_id: str) -> Dict[str, int]:
+        """Delete my data: every registry store in ``memory`` and ``activity``.
+
+        The account row, sign-in, and notification settings stay so the member
+        can keep using the app. Returns rows removed per table.
+        """
+        return self._erase_account_rows(user_id, groups=registry.ERASE_ALL)
 
     def save_repository_research(
         self, *, entity_type: str, name: str, payload: Mapping[str, Any],

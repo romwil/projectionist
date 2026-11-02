@@ -19,16 +19,25 @@ The trust release. Only the owner adds to Radarr or Sonarr, nobody else's viewin
 ### Privacy
 - **PRIV-001 / PRIV-009** With sign-in on, "You watched" seeds are the reader's own mapped evidence only: no household fallback, no unmapped accounts, no server-wide Plex view counts. Nudge payloads no longer carry `recently_watched`, and older stored ones are stripped on read. Anniversary copy says "played on this server" instead of "watched".
 - **PRIV-002** `docs/PRIVACY.md` (and `/privacy`) rewritten against the code; Help, FAQ, and MCP docs follow.
+- **PRIV-005 / PRIV-023** **Settings → My data**: list and delete your notes, download your data (JSON or Markdown with message text), or Delete my data (keeps the account). `GET /api/me/memory` now carries every registered store, the caller's rows only.
+- **PRIV-006 / ARCH-009** One registry (`projectionist/privacy/registry.py`) names every personal table and what export and removal do with it. Account removal is one transaction with secure delete, and leaves no orphan rows. Restoring a backup re-applies removals and data deletions from `privacy-erasures.json`, and refuses if that file can't be read.
+- **PRIV-024** `tests/test_privacy_contract.py` fails when the Privacy page claims something no test backs, or uses a retired promise.
 
 ### Added
 - **PERF-002 / OPS-009** `household_backup` scheduled task (daily, keeps 7) and `python -m projectionist.backups {create,list,restore}`. Restore validates the snapshot and sets the previous files aside.
 - **OPS-006** Needs attention lists people waiting to join, expiring or expired invites, stale or disabled backups, and an owner password from the container that didn't apply.
 - **GRO-006** `docs/DOCKERHUB.md` listing; `docs/RELEASE.md` adds "Hub description pushed".
+- **PERF-001** Owner-only `GET /api/admin/runtime`: write-queue depth and wait, request p50/p95 per group since restart, and the latency SLO check. In memory only; one log line a minute.
+- **GRO-018** **Household pulse** on Admin → Overview (`GET /api/admin/pulse`): plays from a pick per week with a 4-week sparkline, chat failure rate, p95 reply time, AI spend, and quiet members. Household totals only, read from this server.
+- **A11Y-012** `e2e/a11y-axe.spec.ts` runs axe on ten routes in Lights Up and Lights Down and fails on serious or critical violations.
 
 ### Changed
 - **OPS-007** Help's password recovery matches the product: ask the owner, or use the container owner password (new **Owner recovery** section).
 - **VIS-003** Text that used the gold fill now uses `--accent-ink` (`#735c00` in Lights Up); the gold search button pairs its fill with `--accent-text`.
 - **GRO-007** One positioning sentence across README, `pyproject`, About, and the Unraid template; "zero-telemetry" and "multi-tenant" claims removed.
+- **PERF-007** `/api/ready` returns 503 unless the database opens and answers within 100 ms (a missing or unreadable file fails ready, not health). CI smoke checks both.
+- **A11Y-007** jsx-a11y rules are errors in the files cleaned so far (My data, Privacy, Overview, routes). Footer links no longer fade below contrast, and the watch badge is a labelled image.
+- **ARCH-006** mypy now covers auth, backups, the write queue, rate limits, session tokens, and the runtime modules.
 
 ## [1.38.0] — 2026-11-02
 
