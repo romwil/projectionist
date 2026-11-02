@@ -7,4 +7,5 @@ export const SETTINGS_NAV = [
   { to: "/settings/notifications", id: "notifications", label: "Notifications" },
   { to: "/settings/watchlist", id: "watchlist", label: "Watchlist" },
   { to: "/settings/lists", id: "lists", label: "Lists" },
+  { to: "/settings/privacy", id: "privacy", label: "My data" },
 ];
