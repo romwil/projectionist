@@ -899,10 +899,6 @@ export async function repairMediaIssue(issueId: string) {
   return api(`/media-issues/${encodeURIComponent(issueId)}/repair`, { method: "POST" });
 }
 
-export async function getEngagementStreak() {
-  return api("/engagement/streak");
-}
-
 export async function getEngagementSummary() {
   return api("/engagement/summary");
 }

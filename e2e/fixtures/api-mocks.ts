@@ -766,14 +766,6 @@ export async function mockCuratorApis(page: Page) {
     await route.continue();
   });
 
-  await page.route("**/api/engagement/streak", async (route: Route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ session_count_30d: 1, streak_visible: false }),
-    });
-  });
-
   await page.route("**/api/persona/typing-phrases", async (route: Route) => {
     await route.fulfill({
       status: 200,
