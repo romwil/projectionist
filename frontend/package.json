@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "check:entry": "node scripts/check-entry-size.mjs",
     "test:unit": "node --import tsx --test src/lib/*.test.mjs",
     "test:coverage": "c8 node --import tsx --test src/lib/*.test.mjs",
     "preview": "vite preview",

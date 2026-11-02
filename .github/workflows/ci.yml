@@ -57,6 +57,9 @@ jobs:
           npm ci
           npm run build
 
+      - name: Entry chunk budget
+        run: cd frontend && npm run check:entry
+
       - name: Frontend unit tests
         run: cd frontend && npm run test:unit
 
