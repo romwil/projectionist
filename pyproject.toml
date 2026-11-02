@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "projectionist"
 version = "1.38.0"
-description = "Agentic Plex collection curator with BYOP LLM, RAG, and Radarr/Sonarr integration."
+description = "Projectionist is a private movie-and-TV companion for your Plex household: ask for something to watch, browse your library by mood and connection, and keep everyone's picks their own."
 readme = "README.md"
 license = { text = "AGPL-3.0-only" }
 requires-python = ">=3.10"
