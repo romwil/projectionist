@@ -533,17 +533,13 @@ export default function ProfilePage() {
       <SettingsPanel
         id="badges"
         title="Badges &amp; achievements"
-        lead="Milestones from chatting, rating titles, and finishing curated paths — what used to be My Journey."
+        lead="Milestones from rating what you watch and finishing curated paths."
         testId="settings-badges"
       >
         {engagement.loading ? <p className="status status-secondary">Loading badges…</p> : null}
         {engagement.error ? <p className="status status-error">{engagement.error}</p> : null}
         {!engagement.loading && engagement.data ? (
           <>
-            <p className="status status-secondary" data-testid="badges-streak">
-              Chat days in a row: {engagement.data.streak?.current_count || 0}
-              {engagement.data.streak?.best_count ? ` · best ${engagement.data.streak.best_count}` : ""}
-            </p>
             {(engagement.data.badges || []).length ? (
               <ul className="engagement-card-list" data-testid="badges-earned-list">
                 {engagement.data.badges.map((badge: any) => (
@@ -555,7 +551,7 @@ export default function ProfilePage() {
               </ul>
             ) : (
               <p className="status status-secondary" data-testid="badges-empty">
-                No badges yet — rate a title or keep a chat streak going to start.
+                No badges yet — rate something you watched to start.
               </p>
             )}
             {(engagement.data.challenges || []).length ? (

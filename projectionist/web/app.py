@@ -87,7 +87,6 @@ from projectionist.models.schemas import (
     CuratedListItemCreate,
     CuratedListItemUpdate,
     CuratedListUpdate,
-    EngagementStreakResponse,
     CourseProgressUpdate,
     Lens,
     LensCreate,
@@ -2751,30 +2750,6 @@ def get_persona_ui_copy() -> PersonaUiCopy:
     curator_name = str(data.get("curator_name") or "Curator")
     preset_id = str(data["persona_preset_id"]) if data.get("persona_preset_id") else None
     return PersonaUiCopy(**persona_ui_for(preset_id, curator_name))
-
-
-@app.get("/api/engagement/streak", response_model=EngagementStreakResponse)
-def get_engagement_streak(user=Depends(get_current_user_dep)) -> EngagementStreakResponse:
-    db = _db()
-    count = db.count_chat_sessions_last_days(30)
-    streak = {"current_count": 0, "best_count": 0}
-    user_id = getattr(user, "id", None)
-    if user_id:
-        try:
-            from projectionist.engagement import sync_chat_streak
-
-            sync_chat_streak(db, str(user_id))
-            streak = db.get_user_streak(str(user_id), "chat")
-        except Exception:  # noqa: BLE001
-            streak = db.get_user_streak(str(user_id), "chat")
-    current = int(streak.get("current_count") or 0)
-    best = int(streak.get("best_count") or 0)
-    return EngagementStreakResponse(
-        session_count_30d=count,
-        streak_visible=count >= 3 or current >= 3,
-        current_count=current,
-        best_count=best,
-    )
 
 
 @app.get("/api/engagement/summary")
