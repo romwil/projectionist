@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any, List, Mapping, Optional
 
+from projectionist import authz
 from projectionist.config_store import Settings
 
 
@@ -1623,39 +1624,17 @@ SEERR_TOOL_NAMES = frozenset(
 )
 
 
-# Agent tools whose REST equivalent requires the owner role, or that change
-# *arr / Seerr / Plex state on the owner's credentials. Hidden from non-owners
-# and re-checked in ``ToolRegistry.execute``.
-OWNER_ONLY_TOOL_NAMES = frozenset(
-    {
-        "approve_seerr_request",
-        "remove_from_arr",
-        "mark_bad_media",
-        "create_plex_collection",
-        "add_to_plex_collection",
-        "suggest_purge_candidates",
-    }
-)
-
-# Youth accounts never see owner tools (owner-only implies youth-blocked).
-YOUTH_BLOCKED_TOOL_NAMES = OWNER_ONLY_TOOL_NAMES
-
-# Pending-action kinds that only an owner may redeem through POST /api/actions/confirm.
-OWNER_ONLY_PENDING_ACTIONS = frozenset(
-    {
-        "remove_arr",
-        "mark_bad_media",
-        "create_plex_collection",
-        "add_to_plex_collection",
-    }
-)
+# Owner-only and youth-blocked sets live in ``projectionist.authz`` so REST,
+# agent tools, and confirmation tokens share one policy. Re-exported here for
+# existing imports; hidden from callers and re-checked in ``ToolRegistry.execute``.
+OWNER_ONLY_TOOL_NAMES = authz.OWNER_ONLY_TOOL_NAMES
+YOUTH_BLOCKED_TOOL_NAMES = authz.YOUTH_BLOCKED_TOOL_NAMES
+OWNER_ONLY_PENDING_ACTIONS = authz.OWNER_ONLY_PENDING_ACTIONS
 
 
 def agent_acts_as_owner(settings: Settings, role: Optional[str]) -> bool:
     """Single-owner mode treats every caller as owner, matching ``require_role``."""
-    if not settings.features.multi_user_enabled:
-        return True
-    return str(role or "").strip().lower() == "owner"
+    return authz.acts_as_owner(settings, role)
 
 
 def tool_policy_denial(
@@ -1666,11 +1645,9 @@ def tool_policy_denial(
     is_youth: bool,
 ) -> Optional[str]:
     """Return a refusal reason when the caller may not use ``name``, else None."""
-    if is_youth and name in YOUTH_BLOCKED_TOOL_NAMES:
-        return "This action is not available on Youth accounts."
-    if name in OWNER_ONLY_TOOL_NAMES and not agent_acts_as_owner(settings, role):
-        return "Only the household owner can do that."
-    return None
+    return authz.tool_denial(
+        name, is_owner=authz.acts_as_owner(settings, role), is_youth=is_youth
+    )
 
 
 def build_tool_definitions(
@@ -1684,11 +1661,11 @@ def build_tool_definitions(
     Feature-gated tools are omitted when disabled; owner-only and youth-blocked
     tools are omitted per ``tool_policy_denial``.
     """
-    omitted: set[str] = set()
-    if is_youth:
-        omitted |= YOUTH_BLOCKED_TOOL_NAMES
-    if not agent_acts_as_owner(settings, role):
-        omitted |= OWNER_ONLY_TOOL_NAMES
+    omitted: set[str] = set(
+        authz.hidden_tool_names(
+            is_owner=authz.acts_as_owner(settings, role), is_youth=is_youth
+        )
+    )
     if not settings.features.plex_collections_enabled:
         omitted |= PLEX_COLLECTION_TOOL_NAMES
     if not settings.features.seerr_enabled:

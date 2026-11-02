@@ -22,7 +22,7 @@ from projectionist.agent.tools._helpers import (
     seerr_configuration_error,
     sonarr_add_configuration_error,
 )
-from projectionist.agent.tools._definitions import OWNER_ONLY_PENDING_ACTIONS
+from projectionist import authz
 
 def mark_in_radarr(db: Database, tmdb_id: int, *, title: str = "", session_id: Optional[str] = None) -> None:
     db.set_arr_presence(tmdb_id=tmdb_id, in_radarr=True)
@@ -182,13 +182,25 @@ async def execute_confirmed_action(
     *,
     user_id: Optional[str] = None,
     actor_is_owner: bool = True,
+    actor_is_youth: bool = False,
 ) -> dict:
-    if not actor_is_owner and db.peek_pending_action_kind(token) in OWNER_ONLY_PENDING_ACTIONS:
-        raise PermissionError("Only the household owner can confirm this action")
+    denial = authz.pending_action_denial(
+        db.peek_pending_action_kind(token),
+        is_owner=actor_is_owner,
+        is_youth=actor_is_youth,
+    )
+    if denial:
+        raise PermissionError(denial)
     payload = db.pop_pending_action(token, user_id=user_id)
     if not payload:
         raise RuntimeError("Invalid or expired confirmation token")
     action = payload.get("action")
+    denial = authz.pending_action_denial(
+        str(action or ""), is_owner=actor_is_owner, is_youth=actor_is_youth
+    )
+    if denial:
+        _restore_pending_action(db, token, payload, user_id=user_id)
+        raise PermissionError(denial)
     logger.info("Executing confirmed action=%s", action)
     if action == "mark_bad_media":
         from projectionist.library.bad_media import BadMediaError, mark_bad_media

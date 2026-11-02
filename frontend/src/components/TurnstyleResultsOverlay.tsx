@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { groupAddableItems } from "../lib/addActions";
+import { peekViewerIsYouth } from "../lib/authGate.js";
 import { filterDisplayableCards } from "../lib/turnstyleItems.js";
 import ConfirmAllButton from "./ConfirmAllButton";
 import TitleCard from "./TitleCard";
@@ -43,6 +44,7 @@ export default function TurnstyleResultsOverlay({
     requestPath,
     role: userRole,
     multiUserEnabled,
+    isYouth: peekViewerIsYouth(),
   });
 
   return (

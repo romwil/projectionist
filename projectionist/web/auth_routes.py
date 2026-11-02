@@ -13,7 +13,13 @@ def register_auth_routes(app):
     from pydantic import BaseModel, Field
 
     import projectionist.web.app as app_mod
+    from projectionist import authz
     from projectionist import security_audit as sa
+
+    _APPRISE_OWNER_ONLY = (
+        "Only the household owner can set Apprise destinations. "
+        "Inbox and email still work for your account."
+    )
 
     AccessRequestApprovePayload = app_mod.AccessRequestApprovePayload
     AuthMeUpdatePayload = app_mod.AuthMeUpdatePayload
@@ -174,6 +180,10 @@ def register_auth_routes(app):
         if "notify_channel_apprise" in fields_set:
             updates["notify_channel_apprise"] = payload.notify_channel_apprise
         if "apprise_urls" in fields_set:
+            if str(payload.apprise_urls or "").strip() and not authz.acts_as_owner(
+                _settings(), user.role
+            ):
+                raise HTTPException(status_code=403, detail=_APPRISE_OWNER_ONLY)
             updates["apprise_urls"] = payload.apprise_urls
         if "default_page" in fields_set:
             updates["default_page"] = payload.default_page
@@ -256,7 +266,8 @@ def register_auth_routes(app):
         user=Depends(get_current_user_dep),
     ) -> Dict[str, Any]:
         """Send a short test notification to one self-serve Apprise URL."""
-        del user
+        if not authz.acts_as_owner(_settings(), user.role):
+            raise HTTPException(status_code=403, detail=_APPRISE_OWNER_ONLY)
         from projectionist.notifications.apprise_transport import (
             AppriseSendError,
             apprise_available,
