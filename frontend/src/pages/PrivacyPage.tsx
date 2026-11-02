@@ -1,11 +1,12 @@
-import type { ReactElement, ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, type ReactElement, type ReactNode } from "react";
+import { Link, useLocation } from "react-router-dom";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import privacyMarkdown from "@docs/PRIVACY.md?raw";
 import BackLink from "../components/BackLink";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/backNav.js";
+import { slugify, targetIdFromHash } from "../lib/helpAnchors.js";
 
 const GITHUB_DOCS_BASE = "https://github.com/romwil/projectionist/tree/main/docs";
 
@@ -65,7 +66,8 @@ function MarkdownLink({ href, children }: MarkdownLinkProps) {
     );
   }
 
-  if (IN_APP_ROUTES.has(href) || IN_APP_ROUTES.has(href.replace(/\/$/, ""))) {
+  const pathOnly = href.split("#")[0].replace(/\/$/, "") || href;
+  if (IN_APP_ROUTES.has(href) || IN_APP_ROUTES.has(pathOnly)) {
     return <Link to={href}>{children}</Link>;
   }
 
@@ -106,6 +108,11 @@ const markdownComponents: Components = {
       </h2>
     );
   },
+  h3: ({ children, ...props }) => (
+    <h3 id={slugify(headingText(children)) || undefined} {...props}>
+      {children}
+    </h3>
+  ),
   table: ({ children }) => (
     <div className="privacy-table-wrap">
       <table>{children}</table>
@@ -119,6 +126,16 @@ const markdownComponents: Components = {
  */
 export default function PrivacyPage() {
   const markdown = typeof privacyMarkdown === "string" && privacyMarkdown.trim() ? privacyMarkdown : "";
+  const { hash } = useLocation();
+
+  useEffect(() => {
+    const id = targetIdFromHash(hash);
+    if (!id) return undefined;
+    const timer = setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ block: "start" });
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [hash]);
 
   return (
     <AppShell

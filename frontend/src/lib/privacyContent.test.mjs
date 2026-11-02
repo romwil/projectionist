@@ -26,3 +26,32 @@ test("docs/PRIVACY.md ships required disclosure anchors and matrices", () => {
   assert.match(markdown, /image\.tmdb\.org|TMDB/);
   assert.match(markdown, /X-Plex-Token/);
 });
+
+test("docs/PRIVACY.md drops claims the code does not keep (PRIV-002)", () => {
+  const markdown = readFileSync(privacyPath, "utf8");
+  assert.doesNotMatch(markdown, /full copy of its own data/i);
+  assert.doesNotMatch(markdown, /Leave anything behind/i);
+  assert.doesNotMatch(markdown, /Email household invites/i);
+  assert.doesNotMatch(markdown, /verified in `projectionist/);
+  assert.doesNotMatch(markdown, /link-based/i);
+  assert.doesNotMatch(markdown, /sanitized media research/i);
+  assert.doesNotMatch(markdown, /who can run it for your account/i);
+  assert.match(markdown, /newsletter/i);
+  assert.match(markdown, /Resend/);
+  assert.match(markdown, /embeddings provider/i);
+  assert.match(markdown, /never joined/i);
+  assert.match(markdown, /Youth accounts use the same provider/);
+  assert.match(markdown, /Asking to join/);
+  assert.match(markdown, /What removal leaves behind/);
+});
+
+test("member half of docs/PRIVACY.md has no API paths or config keys", () => {
+  const markdown = readFileSync(privacyPath, "utf8");
+  const start = markdown.indexOf("## From the household member");
+  const end = markdown.indexOf("## From the server owner");
+  assert.ok(start >= 0 && end > start);
+  const memberHalf = markdown.slice(start, end);
+  assert.doesNotMatch(memberHalf, /\/api\//);
+  assert.doesNotMatch(memberHalf, /PROJECTIONIST_[A-Z_]+/);
+  assert.doesNotMatch(memberHalf, /settings\.json/);
+});
