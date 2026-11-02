@@ -24,6 +24,7 @@ import { shouldSubmitComposerOnEnter } from "../lib/composerKeyboard.js";
 import { createId } from "../lib/id.js";
 import { createKonamiTracker, easterEggResponse } from "../lib/easterEggs.js";
 import { SURPRISE_MOOD_CHIPS } from "../lib/quickPick.js";
+import { composerStatus } from "../lib/composerStatus";
 
 /**
  * Chat workspace chrome — topbar, sidebar, transcript, composer, overlays.
@@ -323,6 +324,12 @@ authReady,
     />
   );
 
+  const composerState = composerStatus({
+    ready: Boolean(threadsReady),
+    listening: Boolean(voiceListening),
+    placeholder: composerPlaceholder,
+  });
+
   return (
     <div
       className={`app-root workspace${authReady && isYouth ? " app-root--youth youth-shell" : ""}`}
@@ -565,6 +572,15 @@ authReady,
               >
                 {chatAnnouncement}
               </div>
+              <p
+                id="composer-status"
+                role="status"
+                aria-live="polite"
+                data-testid="composer-status"
+                className="sr-only"
+              >
+                {composerState.statusLine}
+              </p>
               <div className="composer-chrome" data-testid="composer-chrome">
                 {showSlashPalette ? (
                   <SlashCommandPalette
@@ -632,11 +648,8 @@ authReady,
                       event.preventDefault();
                     }
                   }}
-                  placeholder={
-                    voiceListening
-                      ? "Listening…"
-                      : composerPlaceholder || "Describe what you're hunting for…"
-                  }
+                  placeholder={composerState.placeholder}
+                  aria-describedby={composerState.statusLine ? "composer-status" : undefined}
                   rows={2}
                   // A11Y-001: `disabled` would force a focus blur to <body> the
                   // instant a send starts (the most common path: type, press
