@@ -448,15 +448,14 @@ class NotificationPlatformTests(unittest.TestCase):
         self.assertNotIn("New in the library this week", content["body"])
         self.assertNotIn("Open CuratorX", content["body"])
         self.assertNotIn("• Heat", content["body"])
+        self.assertTrue(content.get("quiet"))
+        self.assertIn("Quiet week", content["body"])
+        self.assertIn("Settings → Notifications", content["body"])
+        # A member with nothing linked this week gets no note at all.
         result = deliver_weekly_newsletters(self.db, settings)
-        self.assertGreaterEqual(result["delivered"], 1)
-        notes = self.db.list_notifications_for_user(user["id"], kinds=["digest"])
-        self.assertTrue(notes)
-        payload = notes[0].get("payload") or {}
-        self.assertEqual(payload.get("newsletter"), "weekly")
-        self.assertEqual(payload.get("picks"), [])
-        self.assertNotIn("Open CuratorX", notes[0].get("body") or "")
-        self.assertTrue(payload.get("blurb"))
+        self.assertEqual(result["delivered"], 0)
+        self.assertGreaterEqual(result["skipped_empty"], 1)
+        self.assertEqual(self.db.list_notifications_for_user(user["id"], kinds=["digest"]), [])
 
     def test_weekly_newsletter_scoped_skips_opt_out(self) -> None:
         self._enable_multi_user()
@@ -490,11 +489,16 @@ class NotificationPlatformTests(unittest.TestCase):
             settings,
             user_ids=[opted["id"], quiet["id"]],
         )
-        self.assertEqual(result["delivered"], 1)
+        self.assertEqual(result["delivered"], 0)
+        self.assertEqual(result["skipped_empty"], 1)
         self.assertEqual(result["skipped_opt_out"], 1)
         self.assertEqual(result["targeted"], 2)
 
     def test_admin_weekly_newsletter_generate_scopes(self) -> None:
+        def _sent_or_quiet(done):
+            result = done.get("result") or done
+            return int(result.get("delivered") or 0) + int(result.get("skipped_empty") or 0)
+
         self._enable_multi_user()
         owner = self._login(plex_id=30, title="Owner", email="owner30@example.com")
         member = self.db.create_local_user(
@@ -535,7 +539,7 @@ class NotificationPlatformTests(unittest.TestCase):
         self.assertTrue(self_resp.json().get("accepted") or not self_resp.json().get("busy"))
         self_done = wait_admin_job(self.client, "/api/admin/weekly-newsletter/status")
         self.assertEqual((self_done.get("result") or self_done).get("scope") or "self", "self")
-        self.assertGreaterEqual((self_done.get("result") or self_done).get("delivered") or 0, 1)
+        self.assertGreaterEqual(_sent_or_quiet(self_done), 1)
 
         users_resp = self.client.post(
             "/api/admin/weekly-newsletter/generate",
@@ -543,7 +547,7 @@ class NotificationPlatformTests(unittest.TestCase):
         )
         self.assertEqual(users_resp.status_code, 200, users_resp.text)
         users_done = wait_admin_job(self.client, "/api/admin/weekly-newsletter/status")
-        self.assertGreaterEqual((users_done.get("result") or users_done).get("delivered") or 0, 1)
+        self.assertGreaterEqual(_sent_or_quiet(users_done), 1)
 
         all_resp = self.client.post(
             "/api/admin/weekly-newsletter/generate",
@@ -551,7 +555,7 @@ class NotificationPlatformTests(unittest.TestCase):
         )
         self.assertEqual(all_resp.status_code, 200, all_resp.text)
         all_done = wait_admin_job(self.client, "/api/admin/weekly-newsletter/status")
-        self.assertGreaterEqual((all_done.get("result") or all_done).get("delivered") or 0, 1)
+        self.assertGreaterEqual(_sent_or_quiet(all_done), 1)
 
     def test_arrival_notifications_for_gap_title(self) -> None:
         self._enable_multi_user()

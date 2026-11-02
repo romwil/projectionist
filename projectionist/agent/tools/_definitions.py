@@ -8,7 +8,7 @@ tool-name sets are re-exported from the package so existing imports resolve.
 
 from __future__ import annotations
 
-from typing import Any, List, Mapping
+from typing import Any, List, Mapping, Optional
 
 from projectionist.config_store import Settings
 
@@ -386,7 +386,7 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
             "name": "add_to_radarr",
             "description": (
                 "Propose adding a movie to Radarr. Returns a confirmation_token. "
-                "After the user affirms, call confirm_pending_action with that token. "
+                "The user confirms it with the Confirm button in the app. "
                 "For titles already in the Plex library but missing from Radarr "
                 "(in_library / Owned not in Radarr), set search_for_movie=false to register "
                 "the existing file without starting a download search. True gaps (not on disk) "
@@ -416,7 +416,7 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
             "name": "add_to_sonarr",
             "description": (
                 "Propose adding a TV show to Sonarr. Returns a confirmation_token. "
-                "After the user affirms, call confirm_pending_action with that token."
+                "The user confirms it with the Confirm button in the app."
             ),
             "parameters": {
                 "type": "object",
@@ -431,8 +431,8 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
             "name": "request_via_seerr",
             "description": (
                 "Queue a movie or TV show request in Seerr for household members. "
-                "Always returns a confirmation_token; after the user affirms, call "
-                "confirm_pending_action with that token before anything is submitted."
+                "Always returns a confirmation_token; nothing is submitted until the user "
+                "presses Confirm in the app."
             ),
             "parameters": {
                 "type": "object",
@@ -515,7 +515,7 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
             "name": "remove_from_arr",
             "description": (
                 "Propose removing a title from Radarr/Sonarr. Returns a confirmation_token. "
-                "After the user affirms, call confirm_pending_action with that token. "
+                "The user confirms it with the Confirm button in the app. "
                 "Prefer tmdb_id for movies and tvdb_id for shows so the correct Radarr/Sonarr id is resolved. "
                 "Use when the owner does not want the title again (adds import exclusion when confirmed). "
                 "Do NOT use for corrupted or wrong files — use mark_bad_media instead."
@@ -539,8 +539,8 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
         "function": {
             "name": "mark_bad_media",
             "description": (
-                "Ask Radarr/Sonarr to delete a corrupted or wrong on-disk file and search for a "
-                "replacement. Does NOT add import or acquisition exclusions — the title stays wanted. "
+                "Propose asking Radarr/Sonarr to delete a corrupted or wrong on-disk file and search for a "
+                "replacement (owner only; the owner confirms in the app). Does NOT add import or acquisition exclusions — the title stays wanted. "
                 "Use for bad video/audio/wrong download/platform replace. Do NOT use when the owner "
                 "wants the title gone forever (use remove_from_arr or full library delete instead). "
                 "Prefer rating_key from library tools; otherwise tmdb_id (movies) or tvdb_id (shows). "
@@ -1361,8 +1361,7 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
                 "This never creates a Projectionist collection or course — for those call "
                 "create_list. Use only when the user explicitly asks for Plex. "
                 "Returns a confirmation_token before any Plex write. "
-                "After the user affirms (yes / go for it / confirm), call "
-                "confirm_pending_action with that exact token — do not ask again."
+                "The user confirms it with the Confirm button in the app."
             ),
             "parameters": {
                 "type": "object",
@@ -1386,7 +1385,7 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
             "description": (
                 "Propose adding owned titles to an existing Plex collection. "
                 "Returns a confirmation_token before any Plex write. "
-                "After the user affirms, call confirm_pending_action with that token."
+                "The user confirms it with the Confirm button in the app."
             ),
             "parameters": {
                 "type": "object",
@@ -1415,12 +1414,11 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
         "function": {
             "name": "confirm_pending_action",
             "description": (
-                "Confirm (execute) or cancel a pending confirmation_token from a prior "
-                "propose tool (add_to_radarr, add_to_sonarr, request_via_seerr, "
-                "remove_from_arr, create_plex_collection, add_to_plex_collection). "
-                "REQUIRED when the user affirms a pending proposal — pass the exact "
-                "confirmation_token from that tool result. Set confirmed=false to cancel. "
-                "Never invent a token; never ask for another verbal yes without calling this."
+                "Cancel a pending confirmation_token from a prior propose tool "
+                "(add_to_radarr, add_to_sonarr, request_via_seerr, remove_from_arr, "
+                "mark_bad_media, create_plex_collection, add_to_plex_collection) when the "
+                "user declines. Pass confirmed=false. You cannot execute a proposal: the "
+                "user confirms it with the Confirm button in the app. Never invent a token."
             ),
             "parameters": {
                 "type": "object",
@@ -1431,7 +1429,7 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
                     },
                     "confirmed": {
                         "type": "boolean",
-                        "description": "True to execute (default); false to cancel",
+                        "description": "Pass false to cancel the proposal",
                     },
                 },
                 "required": ["confirmation_token"],
@@ -1625,9 +1623,72 @@ SEERR_TOOL_NAMES = frozenset(
 )
 
 
-def build_tool_definitions(settings: Settings) -> List[Mapping[str, Any]]:
-    """Return LLM tool schemas with feature-gated tools omitted when disabled."""
+# Agent tools whose REST equivalent requires the owner role, or that change
+# *arr / Seerr / Plex state on the owner's credentials. Hidden from non-owners
+# and re-checked in ``ToolRegistry.execute``.
+OWNER_ONLY_TOOL_NAMES = frozenset(
+    {
+        "approve_seerr_request",
+        "remove_from_arr",
+        "mark_bad_media",
+        "create_plex_collection",
+        "add_to_plex_collection",
+        "suggest_purge_candidates",
+    }
+)
+
+# Youth accounts never see owner tools (owner-only implies youth-blocked).
+YOUTH_BLOCKED_TOOL_NAMES = OWNER_ONLY_TOOL_NAMES
+
+# Pending-action kinds that only an owner may redeem through POST /api/actions/confirm.
+OWNER_ONLY_PENDING_ACTIONS = frozenset(
+    {
+        "remove_arr",
+        "mark_bad_media",
+        "create_plex_collection",
+        "add_to_plex_collection",
+    }
+)
+
+
+def agent_acts_as_owner(settings: Settings, role: Optional[str]) -> bool:
+    """Single-owner mode treats every caller as owner, matching ``require_role``."""
+    if not settings.features.multi_user_enabled:
+        return True
+    return str(role or "").strip().lower() == "owner"
+
+
+def tool_policy_denial(
+    name: str,
+    settings: Settings,
+    *,
+    role: Optional[str],
+    is_youth: bool,
+) -> Optional[str]:
+    """Return a refusal reason when the caller may not use ``name``, else None."""
+    if is_youth and name in YOUTH_BLOCKED_TOOL_NAMES:
+        return "This action is not available on Youth accounts."
+    if name in OWNER_ONLY_TOOL_NAMES and not agent_acts_as_owner(settings, role):
+        return "Only the household owner can do that."
+    return None
+
+
+def build_tool_definitions(
+    settings: Settings,
+    *,
+    role: Optional[str] = None,
+    is_youth: bool = False,
+) -> List[Mapping[str, Any]]:
+    """Return LLM tool schemas the caller may use.
+
+    Feature-gated tools are omitted when disabled; owner-only and youth-blocked
+    tools are omitted per ``tool_policy_denial``.
+    """
     omitted: set[str] = set()
+    if is_youth:
+        omitted |= YOUTH_BLOCKED_TOOL_NAMES
+    if not agent_acts_as_owner(settings, role):
+        omitted |= OWNER_ONLY_TOOL_NAMES
     if not settings.features.plex_collections_enabled:
         omitted |= PLEX_COLLECTION_TOOL_NAMES
     if not settings.features.seerr_enabled:

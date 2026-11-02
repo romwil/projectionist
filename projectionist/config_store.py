@@ -840,17 +840,41 @@ class Settings:
     def save(self, path: Path) -> None:
         from projectionist.secrets_crypto import encrypt_settings_mapping
 
-        path.parent.mkdir(parents=True, exist_ok=True)
         payload = encrypt_settings_mapping(asdict(self), data_dir=path.parent)
-        path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        # settings.json holds secrets (llm_api_key, plex_token, *_api_key,
-        # webhook_secret) — now encrypted at rest when a secrets key is available.
-        # Restrict it to owner read/write so other local accounts / volume readers
-        # can't lift credentials. Mirrors the session-secret file (session_tokens.py).
+        _atomic_write_json(path, payload)
+
+
+class SettingsCorruptError(RuntimeError):
+    """settings.json exists but cannot be parsed. Callers must not fall back to defaults."""
+
+
+def _atomic_write_json(path: Path, payload: Any) -> None:
+    """Write JSON via temp file + fsync + ``os.replace`` so readers never see a partial file.
+
+    settings.json holds secrets (encrypted at rest when a secrets key is
+    available), so the file is owner read/write only, like the session secret.
+    """
+    import tempfile
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
         try:
-            os.chmod(path, 0o600)
+            os.chmod(tmp_name, 0o600)
         except OSError:
-            logger.debug("Could not chmod %s to 0600 (unsupported filesystem?)", path)
+            logger.debug("Could not chmod %s to 0600 (unsupported filesystem?)", tmp_name)
+        os.replace(tmp_name, path)
+    except BaseException:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
 
 
 def _load_settings_file_data(data_dir: Path) -> Dict[str, Any]:
@@ -858,14 +882,17 @@ def _load_settings_file_data(data_dir: Path) -> Dict[str, Any]:
     if not settings_path.exists():
         logger.debug("No settings.json at %s; using defaults and env", data_dir)
         return {}
-    try:
-        from projectionist.secrets_crypto import decrypt_settings_mapping
+    from projectionist.secrets_crypto import decrypt_settings_mapping
 
+    try:
         raw = json.loads(settings_path.read_text(encoding="utf-8"))
-        return decrypt_settings_mapping(raw, data_dir=data_dir)
-    except json.JSONDecodeError as error:
-        logger.warning("Invalid settings.json at %s: %s", settings_path, error)
-        return {}
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+        logger.error("Unreadable settings.json at %s: %s", settings_path, error)
+        raise SettingsCorruptError(f"settings.json at {settings_path} is unreadable") from error
+    if not isinstance(raw, dict):
+        logger.error("settings.json at %s is not a JSON object", settings_path)
+        raise SettingsCorruptError(f"settings.json at {settings_path} is not a JSON object")
+    return decrypt_settings_mapping(raw, data_dir=data_dir)
 
 
 def _file_field_explicitly_set(file_data: Mapping[str, Any], field_name: str) -> bool:
@@ -1032,11 +1059,7 @@ def migrate_plaintext_settings_secrets(data_dir: Path) -> bool:
     if not isinstance(raw, dict) or not mapping_needs_secret_migration(raw):
         return False
     encrypted = encrypt_settings_mapping(raw, data_dir=data_dir)
-    path.write_text(json.dumps(encrypted, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    try:
-        os.chmod(path, 0o600)
-    except OSError:
-        pass
+    _atomic_write_json(path, encrypted)
     logger.info("Migrated plaintext settings secrets to encrypted-at-rest form in %s", path)
     return True
 

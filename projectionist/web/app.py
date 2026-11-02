@@ -21,9 +21,11 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
+from starlette.middleware.gzip import GZipMiddleware
 
 from projectionist import __version__
 from projectionist.agent.providers import LLMProviderError
+from projectionist.agent.tools._definitions import agent_acts_as_owner
 from projectionist.agent.tools import (
     check_radarr_already_exists,
     check_sonarr_already_exists,
@@ -37,6 +39,7 @@ from projectionist.config_store import (
     LLM_MODEL_DEFAULTS,
     LLM_PROVIDER_DEFAULTS,
     Settings,
+    SettingsCorruptError,
     load_dotenv_file,
     load_merged_settings,
     normalize_path_settings,
@@ -133,6 +136,9 @@ from projectionist.reviews.store import (
 )
 from projectionist.reviews.plex_sync import sync_review_rating_to_plex
 from projectionist.web.auth import (
+    SETTINGS_CORRUPT_DETAIL,
+    _hash_password,
+    _verify_password,
     authenticate_local_user,
     authenticate_plex_user,
     available_auth_methods,
@@ -177,6 +183,7 @@ from projectionist.web.investigate_routes import register_investigate_routes
 from projectionist.web.rematch_routes import register_rematch_routes
 from projectionist.web.spa_routes import register_spa_routes
 from projectionist.web.auth_routes import register_auth_routes
+from projectionist.web.owner_ops_routes import register_owner_ops_routes
 from projectionist.web.setup_routes import register_setup_routes
 from projectionist.web.whisper_routes import register_whisper_routes
 from projectionist.web.library_routes import register_library_routes
@@ -254,6 +261,7 @@ def _safe_error_detail(error: Exception, context: str = "") -> str:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    _app.state.ready = False
     build_info = "unknown"
     try:
         with open("/app/.build-info") as f:
@@ -417,7 +425,12 @@ async def lifespan(_app: FastAPI):
     except Exception:  # noqa: BLE001
         logger.exception("Startup: closed-loop facet telemetry bind failed (continuing)")
 
+    # This flips only after synchronous startup work is complete. Background
+    # library warm-ups intentionally continue after readiness so they never
+    # hold the probe hostage to a Movies query.
+    _app.state.ready = True
     yield
+    _app.state.ready = False
     try:
         from projectionist.facets.closed_loop import bind_closed_loop_database
 
@@ -459,7 +472,13 @@ app = FastAPI(
     docs_url=_docs_url,
     redoc_url=_redoc_url,
 )
+app.add_middleware(GZipMiddleware, minimum_size=500)
 app.middleware("http")(multi_user_api_auth_middleware)
+
+
+@app.exception_handler(SettingsCorruptError)
+async def _settings_corrupt_handler(_request: Request, _error: SettingsCorruptError) -> JSONResponse:
+    return JSONResponse({"detail": SETTINGS_CORRUPT_DETAIL}, status_code=503)
 
 
 _SECURITY_HEADERS = {
@@ -470,8 +489,10 @@ _SECURITY_HEADERS = {
         "default-src 'self'; "
         "img-src 'self' https://image.tmdb.org https://artworks.thetvdb.com "
         "https://assets.fanart.tv data:; "
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-        "font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; "
+        # VIS-014 / PRIV-009: fonts are self-hosted — no fonts.googleapis.com /
+        # fonts.gstatic.com origin needed in style-src or font-src anymore.
+        "style-src 'self' 'unsafe-inline'; "
+        "font-src 'self'; "
         "connect-src 'self'; "
         # hls.js MSE attaches a blob: Object URL to <video src>; without media-src,
         # default-src 'self' blocks it → /live black screen despite healthy .ts fetches.
@@ -613,7 +634,13 @@ def _resolve_lens_id(lens_id: Optional[str]) -> str:
 
 
 if FRONTEND_DIST.exists():
-    app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
+    from projectionist.web.static_assets import ImmutableAssetStaticFiles
+
+    app.mount(
+        "/assets",
+        ImmutableAssetStaticFiles(directory=FRONTEND_DIST / "assets"),
+        name="assets",
+    )
 elif STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
@@ -689,6 +716,19 @@ class UserUpdatePayload(BaseModel):
     is_youth: Optional[bool] = None
 
 
+class PasswordChangePayload(BaseModel):
+    """Self-service password change — requires the current password (SEC-011)."""
+
+    current_password: str = Field(min_length=1)
+    new_password: str = Field(min_length=8, max_length=256)
+
+
+class OwnerPasswordResetPayload(BaseModel):
+    """Owner resets a member's local password without knowing the old one (OPS-016)."""
+
+    new_password: str = Field(min_length=8, max_length=256)
+
+
 class AuthMeUpdatePayload(BaseModel):
     preferred_name: Optional[str] = Field(default=None, max_length=80)
     ui_font_size: Optional[str] = Field(default=None, pattern="^(small|medium|large)$")
@@ -705,6 +745,7 @@ class AuthMeUpdatePayload(BaseModel):
     weather_lat: Optional[float] = Field(default=None, ge=-90, le=90)
     weather_lon: Optional[float] = Field(default=None, ge=-180, le=180)
     clear_weather_location: Optional[bool] = None
+    default_page: Optional[str] = Field(default=None, pattern="^(auto|chat|explore)$")
 
 
 class RecommendPayload(BaseModel):
@@ -1201,6 +1242,12 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
             "trust_proxy_headers": bool(
                 getattr(settings.features, "trust_proxy_headers", False)
             ),
+            # BD-5 / UX-010: honest default-page and chat-honesty copy depend
+            # on knowing whether a language model is actually wired up, not
+            # just whether onboarding is "complete" (Plex alone can finish it).
+            "llm_configured": bool(
+                settings.llm_api_key or settings.llm_provider == "ollama"
+            ),
         },
         "setup_state": setup_state,
         "household_domain": str(getattr(settings, "household_domain", "") or ""),
@@ -1246,6 +1293,7 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
             "is_youth": bool(getattr(user, "is_youth", False)),
             "seerr_user_id": user.seerr_user_id,
             "avatar_url": user.avatar_url,
+            "default_page": str(getattr(user, "default_page", "auto") or "auto"),
         }
         payload["youth"] = {
             "max_content_rating": str(
@@ -1271,6 +1319,14 @@ def health() -> Dict[str, str]:
     return {"status": "ok", "version": __version__}
 
 
+@app.get("/api/ready")
+def ready() -> Dict[str, str]:
+    """Fast process-readiness probe that never reads the movie library."""
+    if not bool(getattr(app.state, "ready", False)):
+        raise HTTPException(status_code=503, detail="Starting")
+    return {"status": "ready", "version": __version__}
+
+
 @app.get("/api/features")
 def get_features(request: Request) -> Dict[str, Any]:
     settings = _settings()
@@ -1294,6 +1350,7 @@ def plex_machine_id(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
 register_spa_routes(app, frontend_dist=FRONTEND_DIST, static_dir=STATIC_DIR)
 register_auth_routes(app)
 register_setup_routes(app)
+register_owner_ops_routes(app)
 
 register_live_channels_routes(
     app,
@@ -1527,11 +1584,13 @@ def admin_weekly_digest_cancel(user=Depends(require_role("owner"))) -> Dict[str,
     return cancel_job(DIGEST_KIND)
 
 
-@app.get("/api/admin/export/training-corpus")
-def export_training_corpus(user=Depends(require_role("owner"))) -> JSONResponse:
-    del user
-    payload = _db().export_training_corpus()
-    filename = f"projectionist-training-corpus-{int(payload['exported_at'])}.json"
+@app.get("/api/me/taste-export")
+def export_my_taste(user=Depends(get_current_user_dep)) -> JSONResponse:
+    settings = _settings()
+    is_owner = not settings.features.multi_user_enabled or user.role == "owner"
+    payload = _db().export_user_taste(user.id, include_unowned=is_owner)
+    stamp = time.strftime("%Y-%m-%d", time.gmtime(payload["exported_at"]))
+    filename = f"projectionist-my-taste-{stamp}.json"
     return JSONResponse(
         content=payload,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
@@ -2644,11 +2703,18 @@ async def confirm_action(
         logger.info("Action cancelled token=%s", payload.token[:8])
         return {"cancelled": True}
     try:
+        settings = _settings()
         result = await execute_confirmed_action(
-            _db(), _settings(), payload.token, user_id=scoped
+            _db(),
+            settings,
+            payload.token,
+            user_id=scoped,
+            actor_is_owner=agent_acts_as_owner(settings, user.role),
         )
         logger.info("Action confirmed token=%s action=%s", payload.token[:8], result.get("action"))
         return {"ok": True, **result}
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
     except Exception as error:  # noqa: BLE001
         raise HTTPException(
             status_code=400,
@@ -2852,11 +2918,11 @@ def anniversary_live_starter_endpoint(
 def admin_backup_snapshot_endpoint(
     user=Depends(require_role("owner")),
 ) -> Response:
-    """WAL-safe settings.json + SQLite snapshot zip (arch M10 residual)."""
-    del user
-    from projectionist.web.backup import build_admin_snapshot_zip
+    """WAL-safe settings.json + SQLite snapshot zip: every member's personal data."""
+    from projectionist.web.backup import build_admin_snapshot_zip, record_household_backup
 
     body, filename, _meta = build_admin_snapshot_zip(DATA_DIR)
+    record_household_backup(_db(), actor_id=str(user.id))
     return Response(
         content=body,
         media_type="application/zip",

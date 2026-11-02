@@ -984,9 +984,12 @@ def library_feed_continue_watching(
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
     """Explore Continue Watching rail — Plex on-deck / in-progress (not live sessions)."""
+    from projectionist.youth.rating_gate import youth_gate_active
+
     settings = _settings()
     plex_client = None
-    if settings.plex_url and settings.plex_token:
+    # Plex on-deck is the server account's viewing; Youth never gets it.
+    if settings.plex_url and settings.plex_token and not youth_gate_active(user):
         plex_client = PlexClient(
             settings.plex_url,
             settings.plex_token,
@@ -1429,12 +1432,16 @@ async def library_query_endpoint(
             "limit": limit,
         }
     )
-    filters = _apply_youth_filters(filters, user)
+    from projectionist.library.db_io import run_db
+
+    # Main and theater servers share one event loop: sync SQLite and settings
+    # reads here would stall every other request.
+    filters = await run_db(_apply_youth_filters, filters, user)
     if filters.semantic_query:
-        result = await query_library_async(_db(), filters, _settings())
+        result = await query_library_async(_db(), filters, await run_db(_settings))
     else:
-        result = query_library(_db(), filters)
-    return _sanitize_library_payload(result, user)
+        result = await run_db(query_library, _db(), filters)
+    return await run_db(_sanitize_library_payload, result, user)
 
 
 @router.get("/api/search/external")

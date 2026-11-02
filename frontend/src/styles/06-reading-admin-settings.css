@@ -88,7 +88,7 @@
 }
 
 .keyboard-help-privacy a {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 /* Breakpoints — phone / tablet / desktop / wide */
@@ -273,7 +273,7 @@
 .admin-rail-group-note {
   margin: 0;
   padding: 0 0.35rem 0.15rem;
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   line-height: 1.35;
   color: var(--muted);
 }
@@ -541,7 +541,7 @@
 
 .admin-rail-meta-link:hover,
 .settings-rail-meta-link:hover {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .admin-main,
@@ -1032,7 +1032,7 @@
   font-size: var(--text-xs, 0.75rem);
   font-weight: 600;
   letter-spacing: 0.01em;
-  color: var(--accent);
+  color: var(--accent-ink);
   background: var(--accent-soft);
 }
 
@@ -1099,7 +1099,11 @@
 .apprise-scheme-card:hover,
 .apprise-scheme-card:focus-visible {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
-  outline: none;
+}
+
+.apprise-scheme-card:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
 }
 
 .apprise-scheme-card-label {
@@ -1139,7 +1143,7 @@
 }
 
 .settings-inline-link {
-  color: var(--accent);
+  color: var(--accent-ink);
   font-size: var(--text-sm);
 }
 
@@ -1239,7 +1243,7 @@
 }
 
 .watchlist-sync-inline-link {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .watchlist-card-wrap {
@@ -1283,7 +1287,7 @@
 }
 
 .watchlist-empty-actions a {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .lists-layout {
@@ -1385,7 +1389,7 @@
 }
 
 .help-page .help-jump-nav a:hover {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .help-page .help-article.privacy-prose {
@@ -1412,7 +1416,7 @@
 
 .help-hint:hover,
 .help-hint:focus-visible {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .help-hint-icon {
@@ -1472,7 +1476,7 @@
 }
 
 .about-links a {
-  color: var(--accent);
+  color: var(--accent-ink);
   text-decoration: none;
   font-family: var(--font-body);
   font-size: var(--text-md);
@@ -1485,7 +1489,7 @@
 }
 
 .about-whats-new-link {
-  color: var(--accent);
+  color: var(--accent-ink);
   text-decoration: none;
 }
 
@@ -1663,7 +1667,7 @@
 }
 
 .log-level-info .logs-line-level {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .log-level-warning {

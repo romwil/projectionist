@@ -1,6 +1,81 @@
 {
-  "generated_at": "2026-10-28T17:57:51Z",
+  "generated_at": "2026-11-02T05:50:14Z",
   "releases": [
+    {
+      "version": "1.38.0",
+      "date": "2026-11-02",
+      "summary": "Ready to invite your household. Each member gets their own sign-in, chats, and start page, and only owners can run owner actions. Owners get one list of what needs them and a weekly pass to tick off. Pages load faster and work better on phones and with screen readers, and the Live guide shows when each show starts and ends.",
+      "highlights": [
+        "**Invite your household with confidence.** Members only see their own chats, can't run owner-only actions, can change their password or sign out everywhere, and land on the page they pick. Setup can finish with just Plex.",
+        "**One list for what needs you.** Admin → Overview opens with Needs attention, a Monday pass you tick off once a week, a setup checklist, and which saved keys still work. A security log under Admin → Health records sign-ins, invites, and role changes — never secrets.",
+        "**Faster, and easier on every screen.** Pages load in smaller pieces, phones and iPads get a bottom nav, and screen readers hear each new page and each finished reply. Weekly notes only arrive when there's something worth opening.",
+        "**See when each show starts and ends.** Every Live guide cell now shows its from–to time."
+      ],
+      "sections": [
+        {
+          "title": "Security",
+          "bullets": [
+            "**SEC-001** `/api/chat/stream` refuses threads the caller does not own (404 before SSE).",
+            "**SEC-002** Owner-only destructive agent tools are hidden from and dispatch-denied for members and Youth. The model can only cancel; confirmation is a UI action. `mark_bad_media` is tokenized, and `/api/actions/confirm` rejects owner-only kinds for non-owners.",
+            "**SEC-016** Creating a local account no longer swaps the owner's session cookie.",
+            "**ARCH-008** `settings.json` writes are atomic; a corrupt or unparseable file fails closed (503).",
+            "**PRIV-002/003** Caller-scoped `/api/me/taste-export` replaces the training-corpus export. Household backup is labelled, acknowledged, and audit-logged.",
+            "**UX-039 / SEC-015 / PRIV-016** One `signOut()` clears the auth snapshot and per-user client state.",
+            "**Youth gate.** One shared `youth_visible_rows` gate covers newsletter seeds and picks, skip nudges, and Continue Watching (no Plex on-deck for Youth)."
+          ]
+        },
+        {
+          "title": "Added",
+          "bullets": [
+            "**BD-5 default page** setting (auto / chat / explore). `resolveDefaultHome` lands on Explore when no chat provider is connected; `/` and post-login / post-wizard redirects use it. **UX-011** sign-in returns you to the page you were opening.",
+            "**SEC-011 / OPS-016** Password change, owner password reset for members, and sign out everywhere.",
+            "**Live guide times.** Guide cells show the programme's scheduled from–to time (`formatGuideProgramTimeRange`), locale-aware, collapsing a shared AM/PM. The cell's accessible name includes it. No time is shown when start or stop is missing.",
+            "**OPS-030 Monday pass.** `GET /api/admin/ops/overview` plus checklist marks in `owner_checklist_marks` (per ISO week). Steps auto-complete from kinship ≥ 50%, zero open issues, or zero purge candidates; **Run catch-up** queues Warm Explore and related idle tasks sequentially; **Mark this week done** stamps the week, and reopening keeps last week's stamp.",
+            "**UX-036 stewardship checklist** on Overview replaces **Re-run setup**. Steps are server-verified; optional steps can be skipped and restored. The first-run wizard is still one click away.",
+            "**OPS-031 Secrets & connections.** \"Connected\" means the saved key decrypts and the service is certified; shows the last test time from `service_integrations.last_tested_at`. No new network probe.",
+            "**Needs attention** rolls up undecryptable keys, certified-without-key services, failed or quarantined tasks, pending setup steps, and an unfinished Monday pass.",
+            "**SEC-012 security log** (`security_audit_log`, newest 20,000 rows). Owner-only `GET /api/admin/security-audit`; members and Youth get 403. Detail is scrubbed of anything named like a password, token, secret, or key.",
+            "**GRO-007 `chat_turn`** on both `/api/chat` and `/api/chat/stream` (outcome, card and tool counts, duration — no text). **GRO-014 `play_start`** on in-app Play, with `rec_source`/`rec_id` only when the server verifies the claim (an assistant chat card owned by the viewer that carried the title, or a household recommendation addressed to the viewer)."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "**OPS-012 Tasks** opens on a Catch-up shortlist; the full console is **All tasks (Advanced)** (`/admin/tasks?view=all`).",
+            "**GRO-011** weekly newsletters skip members with no linked picks (`skipped_empty`); the \"Quiet week\" line shows only in the owner preview. Newsletter body adds a way back in and a way out.",
+            "**GRO-020** Year in Review 404 shows the designed empty state, role-aware.",
+            "Member copy on Settings → Notifications no longer names Admin pages or install extras.",
+            "Account export and purge now include the account's own `system_telemetry_stream` rows.",
+            "**Polish and accessibility (Phase 4).** Fonts are self-hosted (`styles/00-fonts.css`); the CSP no longer allows `fonts.googleapis.com` or `fonts.gstatic.com`. Every route sets a document title, announces itself, and focuses its `<h1>`. Dialogs trap focus, the chat composer keeps focus while sending, and finished replies are announced once. Phones and iPads get a primary bottom nav with the Inbox badge. Missing posters show title and year (`PosterArt`), movie end cards offer an inline star rating, and Tab from the player stage reaches the on-screen controls.",
+            "**Faster delivery (Phase 5).** Responses over 500 bytes are gzipped; hashed `/assets/*` files are served `immutable` for a year. Route pages and the admin tree load as separate chunks. About shows only the latest release note. New `GET /api/ready` answers once startup finishes without waiting on the library query. **PERF-008** the Movies library query runs off the event loop.",
+            "**UX-009 / UX-013** The setup wizard can finish Plex-only. **UX-010** Chat and Explore say plainly when no chat provider is connected.",
+            "**BD-2** My Journey leaves the primary nav; `/my-journey` and `/explore/engagement` redirect to `/settings/profile#badges`, where streak, badges, and challenges now live.",
+            "**UX-017 / UX-045** Live-off copy is role-aware (owners are told to turn Live on themselves), and the tune-share chrome no longer lingers over a stale guide once Live is off.",
+            "**PRD-004** The login page says what the product is; the unredeemable \"shown once\" recovery-key promise is gone.",
+            "**OPS-011** A certified service whose saved secret no longer decrypts reports `needs_key`.",
+            "Docs: `docs/HELP.md` adds **For invited members**, **Default page / password / sessions**, **Member accounts**, and **Badges & achievements**, and matches the current admin rail names."
+          ]
+        },
+        {
+          "title": "Fixed",
+          "bullets": [
+            "**GRO-009** A \"Curator (migrated)\" storage name no longer leaks through the legacy persona-template migration.",
+            "Phone bottom nav no longer covers the chat composer and Send; the chat workspace ends at the fixed-height bar.",
+            "Route announcements wait up to 3s for a lazy page's `<h1>` instead of announcing the Suspense fallback."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "pytest: 2815 passed, 43 skipped, coverage 77.00% (floor 74%).",
+            "Frontend unit: 1178 passed (`npm run test:unit`), including Live guide from–to times. ESLint 0 errors (866 pre-existing warnings). Production build succeeded.",
+            "ruff clean. mypy clean (41 source files). `tests/test_version.py` lockstep 1.38.0.",
+            "Page speed: `npm run test:release-perf` passed (About, Explore, Movies, Inbox, and Live within budget).",
+            "Known leftover, not a release gate: `e2e/explore.spec.ts` \"loads feed rails, pulse, and Related titles hub\" fails because a click in the middle of the first card hits Play. The same spec failed on `launch/phase-6-ops` before this merge. It was not rewritten for this ship."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.37.72",
       "date": "2026-10-28",

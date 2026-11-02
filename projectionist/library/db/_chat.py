@@ -25,6 +25,10 @@ from ._shared import (
 )
 
 
+class ChatThreadOwnershipError(PermissionError):
+    """Raised when a caller tries to reuse a chat thread owned by another user."""
+
+
 class ChatThreadsMixin:
     def _preview_from_blocks(self, blocks_json: Optional[str]) -> str:
         if not blocks_json:
@@ -267,6 +271,12 @@ class ChatThreadsMixin:
         resolved = lens_id or DEFAULT_LENS_ID
         resolved_context = context_hash or DEFAULT_CONTEXT_HASH
         with self.connect() as conn:
+            if user_id is not None:
+                owner_row = conn.execute(
+                    "SELECT user_id FROM chat_sessions WHERE id = ?", (session_id,)
+                ).fetchone()
+                if owner_row is not None and owner_row[0] is not None and str(owner_row[0]) != str(user_id):
+                    raise ChatThreadOwnershipError("Thread not found")
             conn.execute(
                 """
                 INSERT OR IGNORE INTO chat_sessions (

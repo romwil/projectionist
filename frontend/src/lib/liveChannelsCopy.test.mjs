@@ -29,6 +29,33 @@ describe("liveChannelsCopy", () => {
     assert.match(guide.body, /Admin/);
   });
 
+  it("UX-017: never tells the owner to ask the owner when Live is off", () => {
+    const memberCopy = liveUserEmptyCopy({ featureOn: false, isOwner: false });
+    assert.match(memberCopy.body, /ask the household owner/i);
+
+    const ownerCopy = liveUserEmptyCopy({ featureOn: false, isOwner: true });
+    assert.doesNotMatch(ownerCopy.body, /ask the (household )?owner/i);
+    assert.match(ownerCopy.body, /turn on live channels/i);
+    assert.equal(ownerCopy.ctaTo, "admin");
+
+    const memberWarming = liveUserEmptyCopy({
+      featureOn: true,
+      featureReady: false,
+      guideReady: false,
+      isOwner: false,
+    });
+    assert.match(memberWarming.body, /household owner finishes setup/i);
+
+    const ownerWarming = liveUserEmptyCopy({
+      featureOn: true,
+      featureReady: false,
+      guideReady: false,
+      isOwner: true,
+    });
+    assert.doesNotMatch(ownerWarming.body, /household owner/i);
+    assert.match(ownerWarming.body, /finish setup/i);
+  });
+
   it("maps Admin glossary labels", () => {
     assert.equal(liveAdminLabel("Broadcast engine"), "Broadcast");
     assert.equal(liveAdminLabel("Filler programming paths"), "Between-show breaks");

@@ -713,6 +713,7 @@ export async function mockCuratorApis(page: Page) {
           open_auto_provision: false,
           live_channels_enabled: false,
           live_channels_ready: false,
+          llm_configured: true,
         },
         auth_methods: [],
         auth: {
@@ -897,6 +898,8 @@ export type FeatureFlags = {
   open_auto_provision?: boolean;
   live_channels_enabled?: boolean;
   live_channels_ready?: boolean;
+  /** Mocks default to true so `/` lands on Chat; pass false for the Explore landing (BD-5). */
+  llm_configured?: boolean;
 };
 
 type MockFeaturesOptions = FeatureFlags & {
@@ -943,6 +946,7 @@ export async function mockFeatures(page: Page, features: MockFeaturesOptions = {
           open_auto_provision: false,
           live_channels_enabled: false,
           live_channels_ready: false,
+          llm_configured: true,
           ...featureFlags,
         },
         auth_methods: authMethods,

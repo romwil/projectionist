@@ -42,7 +42,7 @@
 }
 
 .editorial-links a {
-  color: var(--accent);
+  color: var(--accent-ink);
   text-decoration: none;
   font-size: var(--text-md);
 }
@@ -132,7 +132,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-ink);
   text-decoration: none;
   font-family: var(--font-mono);
   font-size: var(--text-sm);
@@ -209,7 +209,7 @@
 }
 
 .release-notes-highlights h4 {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .whats-new-backdrop {
@@ -550,7 +550,7 @@
 }
 
 .persona-dropdown-item.active {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .persona-item-name {
@@ -561,7 +561,7 @@
 }
 
 .persona-default-badge {
-  color: var(--accent);
+  color: var(--accent-ink);
   font-size: var(--text-xs);
 }
 
@@ -580,7 +580,7 @@
 }
 
 .persona-create {
-  color: var(--accent);
+  color: var(--accent-ink);
   font-style: italic;
 }
 

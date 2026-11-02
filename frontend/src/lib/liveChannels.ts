@@ -615,16 +615,117 @@ export function formatClock(seconds: unknown) {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+const WALL_TIME_FORMAT: Intl.DateTimeFormatOptions = {
+  hour: "numeric",
+  minute: "2-digit",
+};
+
 export function formatWallTime(epochSeconds: JsParam) {
   if (epochSeconds == null || !Number.isFinite(Number(epochSeconds))) return "";
   try {
-    return new Date(Number(epochSeconds) * 1000).toLocaleTimeString([], {
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    return new Date(Number(epochSeconds) * 1000).toLocaleTimeString([], WALL_TIME_FORMAT);
   } catch {
     return "";
   }
+}
+
+type ClockFace = {
+  clock: string;
+  dayPeriod: string;
+  periodFirst: boolean;
+};
+
+function finiteEpoch(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const seconds = Number(value);
+  return Number.isFinite(seconds) ? seconds : null;
+}
+
+/** Local clock face for one instant. Empty when the instant is not a real time. */
+function clockFace(epoch: unknown, locales?: Intl.LocalesArgument): ClockFace | null {
+  const seconds = finiteEpoch(epoch);
+  if (seconds == null) return null;
+  const date = new Date(seconds * 1000);
+  if (Number.isNaN(date.getTime())) return null;
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = new Intl.DateTimeFormat(locales, WALL_TIME_FORMAT).formatToParts(date);
+  } catch {
+    return null;
+  }
+  const clockParts: string[] = [];
+  let dayPeriod = "";
+  for (const part of parts) {
+    if (part.type === "dayPeriod") {
+      dayPeriod = part.value.trim();
+      continue;
+    }
+    if (part.type === "literal" && !part.value.trim()) continue;
+    if (part.type === "hour" || part.type === "minute" || part.type === "literal") {
+      clockParts.push(part.value);
+    }
+  }
+  const clock = clockParts.join("").trim();
+  if (!clock) return null;
+  const hourIndex = parts.findIndex((part) => part.type === "hour");
+  const periodIndex = parts.findIndex((part) => part.type === "dayPeriod");
+  return {
+    clock,
+    dayPeriod,
+    periodFirst: periodIndex >= 0 && (hourIndex < 0 || periodIndex < hourIndex),
+  };
+}
+
+function clockFaceLabel(face: ClockFace): string {
+  if (!face.dayPeriod) return face.clock;
+  return face.periodFirst ? `${face.dayPeriod} ${face.clock}` : `${face.clock} ${face.dayPeriod}`;
+}
+
+/**
+ * Local from–to label. Same meridiem collapses (`8:00–9:30 PM`); a change
+ * keeps both (`11:30 PM–1:00 AM`). Empty when either bound is missing.
+ */
+export function formatProgramTimeRange(
+  startEpoch: unknown,
+  stopEpoch: unknown,
+  locales?: Intl.LocalesArgument,
+): string {
+  const startSeconds = finiteEpoch(startEpoch);
+  const stopSeconds = finiteEpoch(stopEpoch);
+  if (startSeconds == null || stopSeconds == null || stopSeconds <= startSeconds) return "";
+  const start = clockFace(startSeconds, locales);
+  const stop = clockFace(stopSeconds, locales);
+  if (!start || !stop) return "";
+  if (start.dayPeriod && start.dayPeriod === stop.dayPeriod) {
+    return start.periodFirst
+      ? `${start.dayPeriod} ${start.clock}–${stop.clock}`
+      : `${start.clock}–${stop.clock} ${stop.dayPeriod}`;
+  }
+  return `${clockFaceLabel(start)}–${clockFaceLabel(stop)}`;
+}
+
+/**
+ * Guide-cell from–to label from the programme's schedule start and stop.
+ * Does not invent a time when either bound is missing.
+ */
+export function formatGuideProgramTimeRange(
+  program: JsParam,
+  locales?: Intl.LocalesArgument,
+): string {
+  if (!program || typeof program !== "object") return "";
+  return formatProgramTimeRange(
+    program.start ?? program.started_at,
+    program.stop ?? program.ends_at,
+    locales,
+  );
+}
+
+/** Accessible name pieces, in order, skipping blanks. */
+export function guideProgramAccessibleName(...parts: unknown[]): string {
+  return parts
+    .map((part) => String(part ?? "").trim())
+    .filter(Boolean)
+    .join(", ");
 }
 
 /**

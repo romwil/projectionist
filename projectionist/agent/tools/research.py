@@ -2,7 +2,20 @@
 
 from __future__ import annotations
 
-from projectionist.agent.tools._helpers import *  # noqa: F401, F403
+from projectionist.agent.tools._helpers import (
+    Any,
+    List,
+    Mapping,
+    Optional,
+    TitleCard,
+    _append_recommendation_cards,
+    compare_filmographies,
+    json,
+    logger,
+    research_company,
+    research_person,
+    research_title,
+)
 
 class ResearchToolsMixin:
     async def _tool_research_title(self, args: Mapping[str, Any]) -> str:

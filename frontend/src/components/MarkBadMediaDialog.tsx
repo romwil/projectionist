@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 
 function stopBubble(event: React.MouseEvent) {
   event.stopPropagation();
@@ -35,6 +36,11 @@ export default function MarkBadMediaDialog({
     setAcknowledged(false);
   }, [open, title]);
 
+  // A11Y-009: focus moves in on open, Tab cycles inside, Escape closes
+  // (unless the destructive request is in flight), and focus returns to
+  // the trigger that opened the dialog.
+  const dialogRef = useFocusTrap<HTMLDivElement>({ open: Boolean(open), onClose: onCancel, busy: loading });
+
   if (!open || typeof document === "undefined") return null;
 
   const label = String(title || "this title").trim() || "this title";
@@ -49,6 +55,8 @@ export default function MarkBadMediaDialog({
       onClick={onCancel}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         className="bulk-delete-modal"
         role="dialog"
         aria-modal="true"

@@ -37,14 +37,15 @@ export function libraryWatchPopoutPath(ratingKey: string) {
   return path ? `${path}/popout` : "";
 }
 
-export function libraryWatchTo(ratingKey: string, fromLocation: JsParam = null) {
+/** `rec` names the pick that surfaced this title (e.g. `chat:<message id>`); the server verifies it. */
+export function libraryWatchTo(ratingKey: string, fromLocation: JsParam = null, { rec = "" }: JsParam = {}) {
   const pathname = libraryWatchPath(ratingKey);
   if (!pathname) return null;
   const from =
     typeof fromLocation?.state?.from === "string" && fromLocation.state.from.startsWith("/")
       ? fromLocation.state.from
       : `${fromLocation?.pathname || ""}${fromLocation?.search || ""}` || "/";
-  return { pathname, state: { from } };
+  return { pathname, state: rec ? { from, rec: String(rec) } : { from } };
 }
 
 /** Left / right thirds skip; center is play/pause or fullscreen on double-activate. */

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { queryLibrary, walkTitleRelations } from "../api/client";
 import BackLink from "../components/BackLink";
+import PosterArt from "../components/PosterArt";
 import TitleYearText from "../components/TitleYearText";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/backNav.js";
@@ -38,11 +39,7 @@ function RelationCard({ edge, onHop }: RelationCardProps) {
         aria-label={`Explore connections from ${item.title}`}
       >
         <span className="relation-card-poster">
-          {item.poster_url ? (
-            <img src={item.poster_url} alt="" loading="lazy" />
-          ) : (
-            <span className="poster-fallback">{item.title?.slice(0, 1) || "?"}</span>
-          )}
+          <PosterArt as="span" posterUrl={item.poster_url} title={item.title} year={item.year} />
           <span className="relation-card-hop-label">Explore from here</span>
         </span>
       </button>

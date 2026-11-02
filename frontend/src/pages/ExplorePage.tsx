@@ -403,7 +403,7 @@ function useFeed(loader: any, deps: any[] = []) {
 }
 
 function ExploreHubPage() {
-  const { authReady, isOwner, multiUserEnabled, isYouth } = useAuthGate();
+  const { authReady, isOwner, multiUserEnabled, isYouth, llmConfigured } = useAuthGate();
   const ownerChrome = authReady && isOwner;
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -595,6 +595,25 @@ function ExploreHubPage() {
             </Link>
           </nav>
         </div>
+
+        {/* UX-010/BD-5: Explore is the default landing page when no chat
+            provider is configured — say so honestly instead of just quietly
+            never mentioning chat. */}
+        {authReady && llmConfigured === false ? (
+          <div className="banner" data-testid="explore-no-llm-banner">
+            {ownerChrome ? (
+              <>
+                No chat provider is connected yet, so chat can’t reply — browse the library here, or
+                connect one in <Link to="/admin">Admin</Link>.
+              </>
+            ) : (
+              <>
+                No chat provider is connected yet, so chat can’t reply — browse the library here
+                instead.
+              </>
+            )}
+          </div>
+        ) : null}
 
         {hub.error ? (
           <p className="status status-error" data-testid="explore-hub-status">

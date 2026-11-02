@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { formatMatchLayers } from "../lib/plotKnowledge.js";
 import { shouldOpenTitleOverlayClick } from "../lib/titleDetailDrawer.js";
 import { titleDetailPath } from "../lib/titleLinks.js";
+import PosterArt from "./PosterArt";
 import PosterOverlayControls from "./PosterOverlayControls";
 import TitleDetailLink from "./TitleDetailLink";
 import TitleYearText from "./TitleYearText";
@@ -54,10 +55,8 @@ export default function LibraryMediaCard({
     setWhyOpen(false);
   }, [item?.id, item?.rating_key, motifWhy?.summary]);
 
-  const media = item.poster_url ? (
-    <img src={item.poster_url} alt="" loading="lazy" />
-  ) : (
-    <div className="poster-fallback">{libraryItem.title?.slice(0, 1) || "?"}</div>
+  const media = (
+    <PosterArt posterUrl={item.poster_url} title={libraryItem.title} year={item.year} />
   );
 
   const titleBlock = (

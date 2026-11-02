@@ -27,10 +27,14 @@ from projectionist.library.external_search import (
 from projectionist.library.search import search_library
 
 from projectionist.agent.tools._definitions import (
+    OWNER_ONLY_PENDING_ACTIONS,
+    OWNER_ONLY_TOOL_NAMES,
     PLEX_COLLECTION_TOOL_NAMES,
     SEERR_TOOL_NAMES,
     TOOL_DEFINITIONS,
+    YOUTH_BLOCKED_TOOL_NAMES,
     build_tool_definitions,
+    tool_policy_denial,
 )
 from projectionist.agent.tools._helpers import (
     UNTRUSTED_DATA_CLOSE,
@@ -57,6 +61,8 @@ from projectionist.agent.tools.prompt import _persona_prompt_block, build_system
 from projectionist.agent.tools.registry import ToolRegistry
 
 __all__ = [
+    "OWNER_ONLY_PENDING_ACTIONS",
+    "OWNER_ONLY_TOOL_NAMES",
     "PLEX_COLLECTION_TOOL_NAMES",
     "RadarrClient",
     "SEERR_TOOL_NAMES",
@@ -68,6 +74,7 @@ __all__ = [
     "UNTRUSTED_DATA_CLOSE",
     "UNTRUSTED_DATA_OPEN",
     "UNTRUSTED_MEMORY_TOOLS",
+    "YOUTH_BLOCKED_TOOL_NAMES",
     "_append_recommendation_cards",
     "_apply_queue_flags",
     "_callback_title_metadata",
@@ -95,5 +102,6 @@ __all__ = [
     "resolve_arr_removal_target",
     "resolve_radarr_search_for_movie",
     "search_library",
+    "tool_policy_denial",
     "wrap_untrusted_data",
 ]

@@ -12,6 +12,8 @@ import {
   stopLibraryPlayback,
 } from "../../api/client";
 import { isCompactPlayViewport, isPhonePlayViewport } from "../../lib/chatLayout.js";
+import { useTitleDetail } from "../../hooks/useTitleDetail";
+import EndCardRatingPrompt from "./EndCardRatingPrompt";
 import { rememberContinueWatchingProgress } from "../../lib/exploreHubCache.js";
 import {
   playerBarActions,
@@ -145,6 +147,8 @@ export default function LibraryPlayer({
   const location = useLocation();
   const autoplayNextRef = useRef(false);
   autoplayNextRef.current = Boolean(location.state?.autoplayNext);
+  const recRef = useRef("");
+  recRef.current = typeof location.state?.rec === "string" ? location.state.rec : "";
   const videoRef = useRef<any>(null);
   const hlsRef = useRef<any>(null);
   const sessionRef = useRef<any>(null);
@@ -189,6 +193,18 @@ export default function LibraryPlayer({
   const [resumeOpen, setResumeOpen] = useState(false);
   const [ended, setEnded] = useState(false);
   const [endNote, setEndNote] = useState("");
+  // UX-012/PRD-007: ask for a rating on the movie end card (never on pause).
+  const [ratingSkipped, setRatingSkipped] = useState(false);
+  useEffect(() => {
+    if (!ended) setRatingSkipped(false);
+  }, [ended]);
+  const isEndedMovie = ended && session?.media_type === "movie";
+  const { detail: endedMovieDetail } = useTitleDetail({
+    mediaType: "movie",
+    itemId: session?.rating_key,
+    idType: "rating_key",
+    enabled: isEndedMovie,
+  });
   const [playerKey, setPlayerKey] = useState(() => String(ratingKey || "").trim());
   const [skipChip, setSkipChip] = useState("");
   const [ccOpen, setCcOpen] = useState(false);
@@ -545,7 +561,7 @@ export default function LibraryPlayer({
     (async () => {
       if (cancelled) return;
       try {
-        const payload = await startLibraryPlayback(key, { startOver: false });
+        const payload = await startLibraryPlayback(key, { startOver: false, rec: recRef.current });
         if (cancelled) {
           try {
             await stopLibraryPlayback(payload.session_id, {});
@@ -1312,6 +1328,7 @@ export default function LibraryPlayer({
             : playbackSrcForSeek(session.stream_url, seekEpoch)
         }
         poster={session?.poster_url || ""}
+        stageLabel={session ? `Now playing: ${displayTitle(session)}` : "Now playing"}
         className="library-player"
         blackFrame={blackFrame}
         testId="library-player"
@@ -1437,6 +1454,12 @@ export default function LibraryPlayer({
               >
                 {endCardMessage}
               </p>
+            ) : null}
+            {isEndedMovie && endedMovieDetail && !ratingSkipped ? (
+              <EndCardRatingPrompt
+                detail={endedMovieDetail}
+                onSkip={() => setRatingSkipped(true)}
+              />
             ) : null}
             <div className="theater-resume-actions">
               {endNote && error ? (

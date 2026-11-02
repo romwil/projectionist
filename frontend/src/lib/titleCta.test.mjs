@@ -37,7 +37,7 @@ describe("titleCta catalog", () => {
   });
 
   it("keeps short visible labels with longer tooltips", () => {
-    assert.equal(TITLE_CTA_COPY.review.label, "Review");
+    assert.equal(TITLE_CTA_COPY.review.label, "Rate");
     assert.equal(TITLE_CTA_COPY.review.tooltip, "Leave a review");
     assert.equal(TITLE_CTA_COPY.chat.label, "Chat");
     assert.equal(TITLE_CTA_COPY.chat.tooltip, "Chat about this");

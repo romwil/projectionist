@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { DeleteConfirmPhrase, useDeleteConfirmationPref } from "./DeleteConfirmPhrase";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 import {
   LIBRARY_DELETE_MODE_FULL,
   LIBRARY_DELETE_MODE_INDEX,
@@ -67,6 +68,11 @@ export default function BulkLibraryDeleteDialog({
     setMode(normalizeLibraryDeleteMode(defaultMode));
   }, [open, defaultMode]);
 
+  // A11Y-009: focus moves in on open, Tab cycles inside, Escape closes
+  // (unless the delete request is in flight), and focus returns to the
+  // trigger that opened the dialog.
+  const dialogRef = useFocusTrap<HTMLDivElement>({ open: Boolean(open), onClose: onCancel, busy: loading });
+
   if (!open || typeof document === "undefined") return null;
 
   const preview = formatBulkDeletePreviewTitles(titles, 5);
@@ -100,6 +106,8 @@ export default function BulkLibraryDeleteDialog({
       onClick={onCancel}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         className="bulk-delete-modal"
         role="dialog"
         aria-modal="true"

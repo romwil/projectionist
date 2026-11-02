@@ -19,6 +19,7 @@ from projectionist.notifications.recommendation_reasons import (
     watched_library_rows,
 )
 from projectionist.notifications.service import deliver_notification
+from projectionist.youth.rating_gate import youth_visible_rows
 
 logger = logging.getLogger(__name__)
 
@@ -44,12 +45,24 @@ def _persona_voice_line(db: Database, *, for_guest: bool = False) -> str:
             guest = persona
     chosen = guest if for_guest and guest else default or (personas[0] if personas else None)
     if not chosen:
-        return "Your curator checked in on the collection this week."
+        return "Your curator picked a few for you this week."
     name = str(chosen.get("name") or "Your curator").strip()
     tagline = str(chosen.get("tagline") or chosen.get("description") or "").strip()
     if tagline:
         return f"{name} here — {tagline}"
-    return f"{name} put together a few notes for you."
+    return f"{name} picked a few for you this week."
+
+
+QUIET_WEEK_LINE = (
+    "Quiet week — nothing new connects to what you've watched yet. "
+    "We'll write when something does."
+)
+
+# Plain-text footer: members need a way back in and a way out of every lifecycle note.
+NEWSLETTER_FOOTER = (
+    "Open Projectionist to see these picks in your inbox. "
+    "To change or stop these notes, go to Settings → Notifications."
+)
 
 
 def _format_title_lines(titles: List[Dict[str, Any]], *, limit: int = 6) -> str:
@@ -157,8 +170,10 @@ def build_member_newsletter(
     voice = _persona_voice_line(db, for_guest=for_guest)
     new_block = digest.get("new_this_week") or {}
     titles = list(new_block.get("titles") or [])
-    watched = watched_library_rows(
-        db, user_id=member_id, multi_user_enabled=multi_user
+    watched = youth_visible_rows(
+        watched_library_rows(db, user_id=member_id, multi_user_enabled=multi_user),
+        user=user,
+        settings=settings,
     )
     tracker_watched = tracker_watched_item_ids(db)
     linked: List[Dict[str, Any]] = []
@@ -167,6 +182,8 @@ def build_member_newsletter(
             continue
         row = library_row_for_ref(db, item)
         if row is None:
+            continue
+        if not youth_visible_rows([row], user=user, settings=settings):
             continue
         try:
             if int(row.get("view_count") or 0) > 0:
@@ -190,13 +207,11 @@ def build_member_newsletter(
     if linked:
         reason_block = "\n".join(str(item["why"]) for item in linked)
     else:
-        reason_block = (
-            "Nothing new this week shares a subject, a creator, or a franchise "
-            "with what you have watched."
-        )
+        reason_block = QUIET_WEEK_LINE
     subject = f"This week for you, {preferred}"
-    body = f"Hi {preferred},\n\n{voice}\n\n{reason_block}\n"
+    body = f"Hi {preferred},\n\n{voice}\n\n{reason_block}\n\n{NEWSLETTER_FOOTER}\n"
     return {
+        "quiet": not linked,
         "subject": subject,
         "body": body,
         "title": subject,
@@ -216,11 +231,13 @@ def deliver_weekly_newsletters(
 
     When ``user_ids`` is provided, only those accounts are considered; otherwise
     every non-disabled user is eligible. Opt-in and channel prefs still apply —
-    opted-out users are skipped (counted in ``skipped_opt_out``).
+    opted-out users are skipped (counted in ``skipped_opt_out``), and members with
+    no linked picks this week get nothing (counted in ``skipped_empty``).
     """
     skipped_disabled = 0
     skipped_opt_out = 0
     skipped_missing = 0
+    skipped_empty = 0
     candidates: List[Dict[str, Any]] = []
 
     if user_ids is None:
@@ -250,6 +267,10 @@ def deliver_weekly_newsletters(
             skipped_opt_out += 1
             continue
         content = build_member_newsletter(db, settings, user=user, now=now)
+        if content.get("quiet"):
+            # The quiet-week line is for the owner preview; a "nothing for you" note teaches members to ignore the inbox.
+            skipped_empty += 1
+            continue
         result = deliver_notification(
             db,
             settings,
@@ -276,6 +297,7 @@ def deliver_weekly_newsletters(
         "skipped_opt_out": skipped_opt_out,
         "skipped_disabled": skipped_disabled,
         "skipped_missing": skipped_missing,
+        "skipped_empty": skipped_empty,
     }
 
 

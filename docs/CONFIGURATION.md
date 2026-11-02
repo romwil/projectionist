@@ -217,15 +217,23 @@ Settings includes a **Library health** section with three at-a-glance metrics fr
 
 Use these to spot backlog, forgotten imports, and gaps in your review log before asking the curator for purge or rating suggestions.
 
-### Export taste data
+### Export your taste data
 
-Owners can download a JSON backup of taste-training data from **Settings → Export taste data** (`GET /api/admin/export/training-corpus`). The file includes:
+Any signed-in account can download its own taste data as JSON from **Admin → Overview → Export your taste data** (`GET /api/me/taste-export`, file `projectionist-my-taste-YYYY-MM-DD.json`). The file includes only the caller's rows (an owner also gets legacy rows that predate multi-user and have no account):
 
 - `message_feedback` — helpful / not-helpful reactions on curator replies
 - `preference_facts` — explicit and inferred taste signals
 - `user_title_reviews` — your personal star ratings and notes
 
-Use this for offline analysis, backup, or feeding external training pipelines. Nothing is uploaded automatically.
+Other members' data is never in this file. Nothing is uploaded automatically.
+
+```bash
+curl -sS -b cookies.txt -o my-taste.json http://localhost:8788/api/me/taste-export
+```
+
+### Full household backup
+
+**Admin → Overview → Full household backup** (`GET /api/admin/backup/snapshot`, owner only) downloads a zip of `settings.json` and the whole SQLite database. That includes every member's chats, memory, and watch history. Store it like a password vault. Each download records who took it and when.
 
 ---
 

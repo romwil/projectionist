@@ -77,6 +77,12 @@ export function pickLatestRelease(releases: JsParam) {
   return [...list].sort((a, b) => compareSemver(b.version, a.version))[0] || null;
 }
 
+/** Keep About's release-history DOM bounded to the current release. */
+export function releaseNotesForAbout(releases: JsParam) {
+  const latest = pickLatestRelease(releases);
+  return latest ? [latest] : [];
+}
+
 export function findReleaseByVersion(releases: JsParam, version: JsParam) {
   const target = String(version || "").trim();
   if (!target) return null;

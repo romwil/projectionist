@@ -7,6 +7,7 @@ import {
   recommendModalCopy,
 } from "../lib/householdSocial.js";
 import { useBulkActionProgress } from "./BulkActionProgress";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 
 /** Props for RecommendModal. `any` = API/handler bags until Wave 4 client generics. */
 type RecommendModalProps = {
@@ -52,6 +53,10 @@ export default function RecommendModal({ item, open, onClose, onSent, defaultInt
       cancelled = true;
     };
   }, [open, item?.tmdb_id, item?.title, defaultIntent]);
+
+  // A11Y-009: focus moves in on open, Tab cycles inside, Escape closes, and
+  // focus returns to the trigger that opened the modal.
+  const dialogRef = useFocusTrap<HTMLDivElement>({ open: Boolean(open && item), onClose });
 
   if (!open || !item) return null;
 
@@ -122,6 +127,8 @@ export default function RecommendModal({ item, open, onClose, onSent, defaultInt
   return (
     <div className="recommend-modal-backdrop" data-testid="recommend-modal" onClick={onClose}>
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         className="recommend-modal"
         role="dialog"
         aria-modal="true"

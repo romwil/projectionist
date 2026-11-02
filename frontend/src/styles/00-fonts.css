@@ -1,0 +1,24 @@
+/* VIS-014 / PRIV-009: self-hosted fonts.
+ *
+ * Every typeface this app uses ships from this origin — no requests to
+ * fonts.googleapis.com or fonts.gstatic.com on any route. Body and display
+ * fonts are the upstream variable webfonts (same families/axes the old
+ * Google Fonts request served, so no visual change); the icon font is a
+ * hand-built *subset* (see `scripts/subset_material_symbols.py`) containing
+ * only the glyphs this app actually renders, which keeps the icon payload a
+ * small fraction of Google's full ~2,500-icon Material Symbols file.
+ */
+@import "@fontsource-variable/dm-sans/wght.css";
+@import "@fontsource-variable/dm-sans/wght-italic.css";
+@import "@fontsource-variable/fraunces/wght.css";
+
+/* Material Symbols Outlined — subset to the ~55 ligatures this app uses.
+ * Regenerate with `scripts/subset_material_symbols.py` whenever a new icon
+ * name is introduced (see that script's header for the exact list it keeps). */
+@font-face {
+  font-family: "Material Symbols Outlined";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("../assets/fonts/material-symbols-outlined-subset.woff2") format("woff2");
+}

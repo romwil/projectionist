@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 
 const SHORTCUTS = [
   { keys: "/", description: "Focus the composer" },
@@ -20,11 +21,17 @@ export default function KeyboardHelpModal({
   onClose,
   plexCollectionsEnabled = false,
 }: KeyboardHelpModalProps) {
+  // A11Y-009: focus moves in on open, Tab cycles inside, Escape closes, and
+  // focus returns to whatever opened it (the `?` shortcut / help trigger).
+  const dialogRef = useFocusTrap<HTMLDivElement>({ open: Boolean(open), onClose });
+
   if (!open) return null;
 
   return (
     <div className="keyboard-help-backdrop" data-testid="keyboard-help-modal" onClick={onClose}>
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         className="keyboard-help-panel"
         role="dialog"
         aria-modal="true"
