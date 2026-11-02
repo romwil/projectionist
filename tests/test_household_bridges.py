@@ -299,7 +299,7 @@ class HouseholdBridgeTests(unittest.TestCase):
         self.assertTrue(str(pick["why"]).lower().startswith("you pinned"))
         self.assertIn("Heat", pick["why"])
 
-    def test_multi_user_prefers_member_completion_then_household(self) -> None:
+    def test_multi_user_uses_only_the_members_own_completion(self) -> None:
         seed_a = _title(
             self.db,
             rating_key="rk-heat",
@@ -335,10 +335,8 @@ class HouseholdBridgeTests(unittest.TestCase):
         stranger_pick = pick_linked_unwatched(
             self.db, user_id="bob", multi_user_enabled=True
         )
-        # Bob has no personal evidence; household completion still bridges.
-        self.assertIsNotNone(stranger_pick)
-        assert stranger_pick is not None
-        self.assertIn("Heat", stranger_pick["why"])
+        # Bob has no personal evidence; Alice's viewing never becomes his "You watched" (PRIV-001).
+        self.assertIsNone(stranger_pick)
 
     def test_list_and_feed_for_you_reuse_watched_bridge_refusal(self) -> None:
         seed = _title(

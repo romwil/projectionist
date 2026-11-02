@@ -397,6 +397,8 @@ class NotificationsMixin:
                     payload = parsed
             except (TypeError, ValueError, json.JSONDecodeError):
                 payload = {}
+        # Older nudges stored household-wide recent viewing here (PRIV-001).
+        payload.pop("recently_watched", None)
         return {
             "id": str(row["id"]),
             "user_id": str(row["user_id"]),

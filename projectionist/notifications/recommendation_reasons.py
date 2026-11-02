@@ -1,7 +1,9 @@
 """Reasons a person would recognize for an inbox recommendation.
 
-Seeds come from real household evidence (completions, sessions, terminal watch
-events, watchlist pins) — not raw view_count alone. TV episode watches overlay
+Seeds come from real watch evidence (completions, sessions, terminal watch
+events, watchlist pins) — not raw view_count alone. With household accounts on,
+seeds are the reader's own; sentences say "You watched", so nobody else's
+viewing may stand in. TV episode watches overlay
 that episode's plot onto the show seed so For you / inbox / newsletter peers
 match what actually finished. Empty episode plots stay off the search blob —
 the episode title is never plot text. Display sentences name the show (and
@@ -505,6 +507,7 @@ def _collect_seeds_for_scope(
     user_id: Optional[str],
     household: bool,
     limit: int,
+    include_library_views: bool = True,
 ) -> Dict[int, Dict[str, Any]]:
     by_id: Dict[int, Dict[str, Any]] = {}
     capped = max(1, min(int(limit or 24), 40))
@@ -529,7 +532,7 @@ def _collect_seeds_for_scope(
             ):
                 _merge_seed(by_id, item, seed_source="watchlist", seed_at=at)
             # Legacy library views only when no stronger watch evidence exists.
-            if not any(
+            if include_library_views and not any(
                 row.get("seed_source") in _SEED_SOURCES_WATCH for row in by_id.values()
             ):
                 for item, at in _load_library_view_seeds(conn, limit=capped):
@@ -550,23 +553,29 @@ def watched_library_rows(
 
     Prefer ``watch_completions``, then recent ``watch_sessions``, then terminal
     ``watch_events``, plus ``watchlist_pins``. Fall back to library view_count
-    only when no ledger evidence exists. When ``multi_user_enabled``, prefer the
-    acting member's evidence, then fall back to the whole household.
+    only when no ledger evidence exists.
+
+    When ``multi_user_enabled``, return only the reader's own evidence. These
+    seeds become "You watched …" sentences, so another member's (or an
+    unmapped Plex account's) viewing must never fill in a thin history
+    (PRIV-001, PRIV-009). The library-wide Plex view counter is the server
+    token's history, not the reader's, so it is skipped too. A household
+    caller without a reader gets nothing.
     """
     capped = max(1, min(int(limit or 24), 40))
     by_id: Dict[int, Dict[str, Any]] = {}
-    if multi_user_enabled and user_id:
+    if multi_user_enabled:
+        if not user_id:
+            return []
         by_id.update(
             _collect_seeds_for_scope(
-                db, user_id=str(user_id), household=False, limit=capped
+                db,
+                user_id=str(user_id),
+                household=False,
+                limit=capped,
+                include_library_views=False,
             )
         )
-        if len(by_id) < capped:
-            for item_id, row in _collect_seeds_for_scope(
-                db, user_id=None, household=True, limit=capped
-            ).items():
-                if item_id not in by_id:
-                    by_id[item_id] = row
     else:
         by_id.update(
             _collect_seeds_for_scope(db, user_id=None, household=True, limit=capped)
@@ -1253,7 +1262,7 @@ def pick_linked_unwatched(
     multi_user_enabled: bool = False,
     youth_max_rating: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
-    """First unwatched title with a named ``watched_bridge`` to household evidence."""
+    """First unwatched title with a named ``watched_bridge`` to the reader's evidence."""
     picks = list_linked_unwatched(
         db,
         limit=1,
