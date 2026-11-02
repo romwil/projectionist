@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from projectionist.web.auth import clear_pin_bindings
 from projectionist.web.rate_limit import clear_rate_limits
 from projectionist.web.session_tokens import clear_session_secret_cache
+from tests.owner_claim_helpers import grant_owner_claim
 
 
 def _movie_page():
@@ -64,6 +65,7 @@ class ExternalSearchApiTests(unittest.TestCase):
         importlib.reload(app_mod)
         app_mod.DATA_DIR = Path(self._tmpdir.name)
         self.client = TestClient(app_mod.app)
+        grant_owner_claim(self.client)
         self._jobs = jobs
         self._app_mod = app_mod
 

@@ -378,6 +378,7 @@ def register_auth_routes(app):
             payload.auth_token,
             _db(),
             invite_token=payload.invite_token,
+            request=request,
         )
         sa.audit(_db(), sa.SIGN_IN, actor_id=user.id, method="plex_token")
         set_session_cookie(response, user.id, request, db=_db())

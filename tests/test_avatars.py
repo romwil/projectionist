@@ -22,6 +22,7 @@ from projectionist.web.avatars import (
 )
 from projectionist.web.rate_limit import clear_rate_limits
 from projectionist.web.session_tokens import clear_session_secret_cache
+from tests.owner_claim_helpers import grant_owner_claim
 
 
 # Minimal valid PNG (1x1)
@@ -86,6 +87,7 @@ class AvatarUploadApiTests(unittest.TestCase):
 
         importlib.reload(app_mod)
         self.client = TestClient(app_mod.app)
+        grant_owner_claim(self.client)
         path = Path(self._tmpdir.name) / "settings.json"
         path.write_text(
             json.dumps(
