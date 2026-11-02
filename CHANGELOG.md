@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+The trust release. Only the owner adds to Radarr or Sonarr, nobody else's viewing shows up as yours, the Privacy page says only what the code does, and the server now keeps a daily backup you can restore.
+
+### Highlights
+- **Only the owner adds titles.** Members see "Ask the owner to add this" instead of an add button, and Youth accounts never see a confirm.
+- **Your picks are yours.** Newsletters, nudges, and whispers only use what you finished. Someone else's viewing never becomes your "You watched".
+- **An honest Privacy page.** It lists what is stored, what the owner can see, and what removing an account leaves behind. Claims the app couldn't back up are gone.
+- **A daily backup, and a way back.** The server writes a snapshot every day, keeps a week, and Needs attention tells you when backups stop or people are waiting to join.
+
+### Security
+- **SEC-006** One policy (`projectionist/authz.py`) decides propose, confirm, and agent tool access. `add_radarr` / `add_sonarr` are owner-only at propose, confirm, and agent dispatch; Youth are also refused `request_seerr`. Owner delete stays owner-only.
+- **SEC-007** Members can't set or test Apprise URLs (403), and delivery ignores any stored member URL. Owners keep per-account and household destinations.
+- **SEC-008** With sign-in on and no owner, the first Plex or SSO sign-in needs proof: the owner password from the container, the setup wizard, or the one-time claim cookie issued to the owner session that turned sign-in on. The new-install default is unchanged.
+- **SEC-009** The agent's review lookup is scoped to the caller, like `GET /api/reviews`.
+
+### Privacy
+- **PRIV-001 / PRIV-009** With sign-in on, "You watched" seeds are the reader's own mapped evidence only: no household fallback, no unmapped accounts, no server-wide Plex view counts. Nudge payloads no longer carry `recently_watched`, and older stored ones are stripped on read. Anniversary copy says "played on this server" instead of "watched".
+- **PRIV-002** `docs/PRIVACY.md` (and `/privacy`) rewritten against the code; Help, FAQ, and MCP docs follow.
+
+### Added
+- **PERF-002 / OPS-009** `household_backup` scheduled task (daily, keeps 7) and `python -m projectionist.backups {create,list,restore}`. Restore validates the snapshot and sets the previous files aside.
+- **OPS-006** Needs attention lists people waiting to join, expiring or expired invites, stale or disabled backups, and an owner password from the container that didn't apply.
+- **GRO-006** `docs/DOCKERHUB.md` listing; `docs/RELEASE.md` adds "Hub description pushed".
+
+### Changed
+- **OPS-007** Help's password recovery matches the product: ask the owner, or use the container owner password (new **Owner recovery** section).
+- **VIS-003** Text that used the gold fill now uses `--accent-ink` (`#735c00` in Lights Up); the gold search button pairs its fill with `--accent-text`.
+- **GRO-007** One positioning sentence across README, `pyproject`, About, and the Unraid template; "zero-telemetry" and "multi-tenant" claims removed.
+
 ## [1.38.0] — 2026-11-02
 
 Ready to invite your household. Each member gets their own sign-in, chats, and start page, and only owners can run owner actions. Owners get one list of what needs them and a weekly pass to tick off. Pages load faster and work better on phones and with screen readers, and the Live guide shows when each show starts and ends.
