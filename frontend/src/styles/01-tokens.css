@@ -173,6 +173,7 @@ body {
   background:
     radial-gradient(ellipse 90% 60% at 50% -10%, var(--workspace-wash-a) 0%, transparent 55%),
     radial-gradient(circle at 80% 0%, var(--workspace-wash-b) 0%, var(--bg) 50%);
+  background-color: var(--bg);
   color: var(--text);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
