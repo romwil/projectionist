@@ -2,7 +2,8 @@
 
 Finds library items whose **actual** release/air month+day matches today, producing
 "On This Day" entries like "Released 10 years ago today."  Also detects
-"You watched X exactly N months ago today."
+"Played on this server N months ago today." (server-wide Plex view state, so
+the copy never says "you").
 
 Year-only rows (no ``release_date`` / ``first_air_date``) cannot be release
 anniversaries — inventing today's month/day from the year alone falsely marks
@@ -138,7 +139,8 @@ async def run(
                 for m in WATCHED_LOOKBACK_MONTHS:
                     target = _months_ago(today, m)
                     if viewed_dt == target:
-                        label = f"Watched {m} month{'s' if m != 1 else ''} ago today"
+                        # Server-wide Plex view state, not the reader's own history (PRIV-001).
+                        label = f"Played on this server {m} month{'s' if m != 1 else ''} ago today"
                         anniversaries.append(
                             {
                                 "item_id": item_id,
