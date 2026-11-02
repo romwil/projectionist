@@ -186,7 +186,7 @@ def get_craft_options(settings: Any, db: Any, *, owner_user_id: str) -> Dict[str
 
     def _build() -> Dict[str, Any]:
         existing_numbers: list[int] = []
-        if settings.features.live_channels_enabled and str(settings.tunarr.url or "").strip():
+        if settings.features.live_channels_enabled:
             try:
                 client = tunarr_client_from_settings(settings)
                 for ch in client.list_channels():

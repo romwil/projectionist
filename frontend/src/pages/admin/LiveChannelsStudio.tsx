@@ -145,7 +145,6 @@ export default function LiveChannelsStudio({
   handleLiveChannelsEnabled,
   renderLiveBlockAlert,
   renderPublishProgress,
-  startBroadcastEngine,
   runPublishJob,
   formatPublishFeedback,
   openStationSettings,
@@ -156,7 +155,6 @@ export default function LiveChannelsStudio({
   void liveChannelsTab;
   void updateTunarrSettings;
   const enabled = Boolean(settings?.features?.live_channels_enabled);
-  const dockerOrchestration = Boolean(settings?.tunarr?.docker_orchestration);
   const liveJob = liveChannelsStatus?.job;
   const liveLocked = isLiveMutatingDisabled(liveJob, liveBusy);
   const channelCount = Number(liveChannelsStatus?.channel_count ?? 0);
@@ -318,21 +316,6 @@ export default function LiveChannelsStudio({
           setLaunch({ phase: "check", error: `${blockers[0].label}: ${blockers[0].message}` });
           setSetupOpen(true);
           return;
-        }
-        const engineUp = Boolean(liveChannelsStatus?.broadcast?.sidecar_up || liveEngineProgress?.ready);
-        if (dockerOrchestration && !engineUp) {
-          setLaunch({ phase: "engine" });
-          await startBroadcastEngine();
-          const next = await getLiveChannelsStatus();
-          setLiveChannelsStatus?.(next);
-          if (!next?.broadcast?.sidecar_up) {
-            setLaunch({
-              phase: "engine",
-              error: "The broadcast didn’t come up. Check Setup, then try again.",
-            });
-            setSetupOpen(true);
-            return;
-          }
         }
       }
 
