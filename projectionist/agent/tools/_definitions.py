@@ -1640,6 +1640,11 @@ OWNER_ONLY_TOOL_NAMES = frozenset(
 # Youth accounts never see owner tools (owner-only implies youth-blocked).
 YOUTH_BLOCKED_TOOL_NAMES = OWNER_ONLY_TOOL_NAMES
 
+# Hidden from Youth accounts while Youth memory is off (handlers also refuse).
+YOUTH_MEMORY_TOOL_NAMES = frozenset(
+    {"remember_about_user", "remember_preference", "recall_user_memory"}
+)
+
 # Pending-action kinds that only an owner may redeem through POST /api/actions/confirm.
 OWNER_ONLY_PENDING_ACTIONS = frozenset(
     {
@@ -1684,9 +1689,13 @@ def build_tool_definitions(
     Feature-gated tools are omitted when disabled; owner-only and youth-blocked
     tools are omitted per ``tool_policy_denial``.
     """
+    from projectionist.youth.memory_policy import curator_memory_paused
+
     omitted: set[str] = set()
     if is_youth:
         omitted |= YOUTH_BLOCKED_TOOL_NAMES
+    if curator_memory_paused(settings, is_youth=is_youth):
+        omitted |= YOUTH_MEMORY_TOOL_NAMES
     if not agent_acts_as_owner(settings, role):
         omitted |= OWNER_ONLY_TOOL_NAMES
     if not settings.features.plex_collections_enabled:

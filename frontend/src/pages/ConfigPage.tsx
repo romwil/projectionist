@@ -801,10 +801,25 @@ export default function ConfigPage() {
   }
 
   async function handleYouthModeToggle(entry: JsParam) {
+    const turningOn = !entry.is_youth;
+    if (turningOn) {
+      const label = entry.display_name || entry.email || entry.id;
+      const rating = settings?.youth?.max_content_rating || "PG-13";
+      const confirmed = await confirm({
+        title: "Turn on Youth mode",
+        body: `Turn on Youth mode for ${label}? They will only see titles rated ${rating} or lower, and unrated titles are hidden. ${label} gets an inbox notice, and the change is recorded in the security log. What the curator already remembers about ${label} stays private. Youth mode does not open it.`,
+        confirmLabel: "Turn on Youth mode",
+      });
+      if (!confirmed) return;
+    }
     try {
-      await patchUserYouthMode(entry.id, !entry.is_youth);
+      await patchUserYouthMode(entry.id, turningOn, turningOn);
       await refreshManagedUsers();
-      setActionFeedback("users", "success", entry.is_youth ? "Youth mode removed." : "Youth mode enabled.");
+      setActionFeedback(
+        "users",
+        "success",
+        entry.is_youth ? "Youth mode removed." : "Youth mode enabled. They have been notified.",
+      );
     } catch (error) {
       setActionFeedback("users", "error", (error as ApiError).message);
     }

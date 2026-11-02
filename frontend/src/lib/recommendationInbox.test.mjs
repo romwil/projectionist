@@ -178,3 +178,16 @@ test("isHouseLetter recognises only the weekly household letter digest", () => {
   assert.equal(isHouseLetter({ kind: "nudge", payload: { newsletter: "house-letter" } }), false);
   assert.equal(isHouseLetter(null), false);
 });
+
+test("account notices (Youth mode turned on) render their own title and full body", () => {
+  const item = {
+    kind: "account",
+    title: "Youth mode is on for your account",
+    body: "Owner turned on Youth mode for your account. What the curator remembered about you before this change stays private.",
+  };
+  assert.equal(inboxHeadline([item]), "Youth mode is on for your account");
+  const copy = inboxCardCopy(item);
+  assert.equal(copy.eyebrow, "Account");
+  assert.equal(copy.lead, "Youth mode is on for your account");
+  assert.match(copy.note, /stays private/);
+});

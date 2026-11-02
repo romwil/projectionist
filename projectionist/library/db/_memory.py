@@ -88,13 +88,49 @@ class MemoryMixin:
     # --- Curator memory (v1.8.29) ---
 
     def set_user_youth(self, user_id: str, is_youth: bool) -> Dict[str, Any]:
+        """Flip Youth mode. ``youth_since`` restarts on every off → on change.
+
+        Owner memory review only covers notes written at or after
+        ``youth_since``, so turning Youth on never exposes earlier memory.
+        """
         with self.connect() as conn:
-            if conn.execute("SELECT 1 FROM users WHERE id = ?", (user_id,)).fetchone() is None:
+            current = conn.execute("SELECT is_youth FROM users WHERE id = ?", (user_id,)).fetchone()
+            if current is None:
                 raise ValueError("User not found")
-            conn.execute("UPDATE users SET is_youth = ? WHERE id = ?", (int(is_youth), user_id))
+            if not is_youth:
+                conn.execute(
+                    "UPDATE users SET is_youth = 0, youth_since = NULL WHERE id = ?", (user_id,)
+                )
+            elif not int(current["is_youth"] or 0):
+                conn.execute(
+                    "UPDATE users SET is_youth = 1, youth_since = ? WHERE id = ?",
+                    (time.time(), user_id),
+                )
             row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         assert row is not None
         return self._row_to_user(row)
+
+    def youth_since(self, user_id: str) -> Optional[float]:
+        """When this account last entered Youth mode, or None if it is not Youth."""
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT is_youth, youth_since FROM users WHERE id = ?", (user_id,)
+            ).fetchone()
+        if row is None or not int(row["is_youth"] or 0) or row["youth_since"] is None:
+            return None
+        return float(row["youth_since"])
+
+    def list_user_memory_notes_since(
+        self, user_id: str, *, since: float, limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """SELECT * FROM user_memory_notes
+                   WHERE user_id = ? AND archived_at IS NULL AND created_at >= ?
+                   ORDER BY updated_at DESC LIMIT ?""",
+                (user_id, float(since), min(max(limit, 1), 500)),
+            ).fetchall()
+        return [self._memory_note_dict(row) for row in rows]
 
     def add_user_memory_note(
         self, user_id: str, *, kind: str, text: str, metadata: Optional[Mapping[str, Any]] = None
