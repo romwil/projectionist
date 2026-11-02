@@ -436,7 +436,7 @@
 .library-search input { width: 100%; min-width: 0; border: 0; outline: 0; color: var(--text); background: transparent; font: inherit; font-size: var(--text-base); }
 .library-row { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3); }
 .library-row-main { display: grid; flex: 1; min-width: 0; gap: var(--space-1); padding: 0; border: 0; color: inherit; background: transparent; text-align: left; cursor: pointer; }
-.library-row-main:hover strong { color: var(--accent); }
+.library-row-main:hover strong { color: var(--accent-ink); }
 .library-row-title { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .library-row em { overflow: hidden; color: var(--muted); font-size: var(--text-sm); line-height: 1.45; text-overflow: ellipsis; }
 .library-persona-badge { margin: 0; color: var(--muted); font-size: var(--text-xs); }
