@@ -158,7 +158,6 @@ class DatabaseTests(unittest.TestCase):
                 "curator_persona_metrics",
                 "curation_lenses",
                 "lens_taste_profile",
-                "interaction_telemetry",
                 "schema_version",
             }
             with db.connect() as conn:
@@ -168,6 +167,27 @@ class DatabaseTests(unittest.TestCase):
                 names = {str(r["name"]) for r in rows}
             self.assertTrue(expected.issubset(names))
             self.assertNotIn("agent_blueprints", names)
+            self.assertNotIn("interaction_telemetry", names)
+
+    def test_upgrade_drops_unwritten_interaction_telemetry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "test.db"
+            db = Database(path)
+            with db.connect() as conn:
+                conn.execute(
+                    "CREATE TABLE interaction_telemetry (id TEXT PRIMARY KEY, title_id TEXT)"
+                )
+                conn.execute("DELETE FROM schema_version WHERE version = 61")
+            reopened = Database(path)
+            with reopened.connect() as conn:
+                names = {
+                    str(r["name"])
+                    for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                }
+                self.assertNotIn("interaction_telemetry", names)
+                self.assertTrue(
+                    conn.execute("SELECT 1 FROM schema_version WHERE version = 61").fetchone()
+                )
 
     def test_service_integrations_certified_column(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

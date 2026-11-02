@@ -228,18 +228,6 @@ CREATE TABLE IF NOT EXISTS lens_taste_profile (
     FOREIGN KEY (lens_id) REFERENCES curation_lenses(lens_id)
 );
 
-CREATE TABLE IF NOT EXISTS interaction_telemetry (
-    id TEXT PRIMARY KEY,
-    title_id TEXT NOT NULL,
-    lens_id TEXT NOT NULL,
-    source TEXT NOT NULL,
-    event_type TEXT NOT NULL,
-    watch_duration_seconds INTEGER DEFAULT 0,
-    completion_percentage REAL DEFAULT 0.0,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (lens_id) REFERENCES curation_lenses(lens_id)
-);
-
 CREATE TABLE IF NOT EXISTS derived_contexts (
     context_hash TEXT PRIMARY KEY,
     inferred_label TEXT DEFAULT 'General Exploration',
