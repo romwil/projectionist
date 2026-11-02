@@ -30,7 +30,7 @@
 }
 
 .chat-footnote-sheet[data-walk-kind] .chat-footnote-sheet-label {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .chat-footnote-sheet-body {
@@ -55,7 +55,7 @@
   padding: 0;
   border: none;
   background: none;
-  color: var(--accent);
+  color: var(--accent-ink);
   font-size: 0.75em;
   font-weight: 600;
   line-height: inherit;
