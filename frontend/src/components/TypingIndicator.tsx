@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
+import { GENERIC_CURATOR_NAME } from "../lib/curatorName";
 
 type ActivityEntry = {
   t?: string | number;
@@ -30,7 +31,7 @@ function kindIcon(kind?: string) {
 }
 
 export default function TypingIndicator({
-  label = "Curator",
+  label = GENERIC_CURATOR_NAME,
   activityLog = [],
   expanded = false,
   onToggle,

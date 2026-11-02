@@ -21,6 +21,7 @@ import {
   tonightOneLiner,
   tonightReadySpotlight,
 } from "../lib/whatsOnTonight.js";
+import { curatorDisplayName } from "../lib/curatorName";
 
 /**
  * Adult / Youth habit surface: persona one-liner + On now dig-in → Watch / Plex.
@@ -100,7 +101,7 @@ export default function WhatsOnTonightHabit({
   const digIn =
     channels.find((c) => c.id === digInId) || (channels.length === 1 ? channels[0] : null);
   const oneLiner = tonightOneLiner({
-    curatorName: persona?.curator_name || "Curator",
+    curatorName: curatorDisplayName(persona),
     presetId: persona?.persona_preset_id,
     channels,
     isYouth,
@@ -111,7 +112,7 @@ export default function WhatsOnTonightHabit({
       ? tonightReadySpotlight({
           isYouth,
           channelCount: totalChannels,
-          curatorName: persona?.curator_name || "Curator",
+          curatorName: curatorDisplayName(persona),
         })
       : null;
 

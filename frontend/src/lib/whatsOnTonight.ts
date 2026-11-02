@@ -1,4 +1,5 @@
 import type {JsonObject, JsParam} from "../api/types";
+import { GENERIC_CURATOR_NAME } from "./curatorName";
 /** Persona-voiced “What’s on tonight” habit copy (no extra LLM round). */
 
 /**
@@ -13,14 +14,14 @@ import type {JsonObject, JsParam} from "../api/types";
  */
 export function tonightOneLiner(
   {
-  curatorName = "Curator",
+  curatorName = GENERIC_CURATOR_NAME,
   presetId = null,
   channels = [],
   isYouth = false,
   ready = false,
 }: JsParam = {},
 ) {
-  const name = String(curatorName || "Curator").trim() || "Curator";
+  const name = String(curatorName || GENERIC_CURATOR_NAME).trim() || GENERIC_CURATOR_NAME;
   const preset = String(presetId || "").trim().toLowerCase();
   const airing = (Array.isArray(channels) ? channels : []).filter((c) =>
     String(c?.nowTitle || "").trim(),
@@ -103,10 +104,10 @@ export function tonightReadySpotlight(
   {
   isYouth = false,
   channelCount = 0,
-  curatorName = "Curator",
+  curatorName = GENERIC_CURATOR_NAME,
 }: JsParam = {},
 ) {
-  const name = String(curatorName || "Curator").trim() || "Curator";
+  const name = String(curatorName || GENERIC_CURATOR_NAME).trim() || GENERIC_CURATOR_NAME;
   const n = Number(channelCount) || 0;
   if (isYouth) {
     return {
