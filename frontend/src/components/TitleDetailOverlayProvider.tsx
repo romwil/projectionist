@@ -1,7 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, createContext, lazy, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
-import TitleDetailDrawer from "./TitleDetailDrawer";
 import { titleDetailTargetFromItem } from "../lib/titleDetailDrawer.js";
+
+// Lazy so the drawer and its dialogs stay out of the entry chunk until the first poster click.
+const TitleDetailDrawer = lazy(() => import("./TitleDetailDrawer"));
 
 type TitleDetailTarget = {
   mediaType: "movie" | "show";
@@ -37,6 +39,8 @@ export function TitleDetailOverlayProvider({ children }: TitleDetailOverlayProvi
   const [target, setTarget] = useState<TitleDetailTarget | null>(null);
   const [drawerOptions, setDrawerOptions] = useState<OpenTitleDetailOptions>({});
   const returnFocusRef = useRef<any>(null);
+  const [drawerMounted, setDrawerMounted] = useState(false);
+  if (target && !drawerMounted) setDrawerMounted(true);
 
   const closeTitleDetail = useCallback(() => {
     setTarget(null);
@@ -87,15 +91,19 @@ export function TitleDetailOverlayProvider({ children }: TitleDetailOverlayProvi
   return (
     <TitleDetailOverlayContext.Provider value={value}>
       {children}
-      <TitleDetailDrawer
-        open={Boolean(target)}
-        target={target}
-        returnFocusRef={returnFocusRef}
-        onClose={closeTitleDetail}
-        onDeleted={drawerOptions.onDeleted}
-        deleteDefaultMode={drawerOptions.deleteDefaultMode}
-        deleteSurface={drawerOptions.deleteSurface || ""}
-      />
+      {drawerMounted ? (
+        <Suspense fallback={null}>
+          <TitleDetailDrawer
+            open={Boolean(target)}
+            target={target}
+            returnFocusRef={returnFocusRef}
+            onClose={closeTitleDetail}
+            onDeleted={drawerOptions.onDeleted}
+            deleteDefaultMode={drawerOptions.deleteDefaultMode}
+            deleteSurface={drawerOptions.deleteSurface || ""}
+          />
+        </Suspense>
+      ) : null}
     </TitleDetailOverlayContext.Provider>
   );
 }
