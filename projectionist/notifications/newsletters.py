@@ -209,11 +209,14 @@ def build_member_newsletter(
     else:
         reason_block = QUIET_WEEK_LINE
     subject = f"This week for you, {preferred}"
-    body = f"Hi {preferred},\n\n{voice}\n\n{reason_block}\n\n{NEWSLETTER_FOOTER}\n"
+    message = f"Hi {preferred},\n\n{voice}\n\n{reason_block}"
+    body = f"{message}\n\n{NEWSLETTER_FOOTER}\n"
     return {
         "quiet": not linked,
         "subject": subject,
         "body": body,
+        # Email and Apprise get the linked footer from deliver_notification instead.
+        "outbound_body": message,
         "title": subject,
         "blurb": reason_block.split("\n", 1)[0],
         "picks": picks,
@@ -285,6 +288,7 @@ def deliver_weekly_newsletters(
             },
             related_id=f"weekly-{int((now or time.time()) // (7 * 86400))}",
             email_subject=content["subject"],
+            outbound_body=content["outbound_body"],
         )
         if result.get("notification"):
             delivered += 1

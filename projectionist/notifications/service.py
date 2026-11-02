@@ -11,6 +11,7 @@ from projectionist.config_store import Settings
 from projectionist.library.db import Database
 from projectionist.library.db._notifications import NOTIFICATION_KINDS
 from projectionist.mail import MailSendError, mail_configured, send_mail
+from projectionist.mail.links import lifecycle_footer, text_to_html
 from projectionist.notifications.apprise_transport import (
     AppriseSendError,
     apprise_install_configured,
@@ -85,11 +86,16 @@ def deliver_notification(
     from_user_id: Optional[str] = None,
     related_id: Optional[str] = None,
     email_subject: Optional[str] = None,
+    outbound_body: Optional[str] = None,
     force_email: bool = False,
     force_apprise: bool = False,
     force_inbox: bool = False,
 ) -> Dict[str, Any]:
-    """Create an inbox notification and optionally email / Apprise the member."""
+    """Create an inbox notification and optionally email / Apprise the member.
+
+    Email and Apprise use ``outbound_body`` when given (else ``body``) and always
+    end with a link back to the inbox and a way to stop these messages.
+    """
     user = _user_dict(db, user_id)
     if user is None:
         raise ValueError(f"User not found: {user_id}")
@@ -119,6 +125,10 @@ def deliver_notification(
             related_id=related_id,
         )
 
+    footer = lifecycle_footer(settings)
+    message = str(outbound_body or body or title).strip()
+    outbound_text = f"{message}\n\n{footer.text}"
+
     should_email = force_email or user_wants_channel(user, kind=kind, channel="email")
     if should_email and mail_configured(settings):
         to_email = resolve_notification_email(user)
@@ -128,7 +138,9 @@ def deliver_notification(
                     settings,
                     to_email=to_email,
                     subject=email_subject or title,
-                    body_text=body or title,
+                    body_text=outbound_text,
+                    body_html=text_to_html(message) + footer.html,
+                    list_unsubscribe=footer.list_unsubscribe,
                 )
                 result["emailed"] = True
             except MailSendError as exc:
@@ -155,7 +167,7 @@ def deliver_notification(
                 send_apprise(
                     settings,
                     title=email_subject or title,
-                    body=body or title,
+                    body=f"{message}\n\n{lifecycle_footer(settings, noun='alerts').text}",
                     urls=targets,
                     config_body=install_config or None,
                 )
