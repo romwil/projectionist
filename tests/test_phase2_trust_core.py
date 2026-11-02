@@ -237,6 +237,77 @@ class AgentToolPolicyTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(redeemed.get("code"), "confirm_requires_user")
             self.assertEqual(db.peek_pending_action_kind(token), "mark_bad_media")
 
+    async def test_member_and_youth_remove_from_arr_is_refused_before_any_lookup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "t.db")
+            settings = Settings(
+                radarr_url="http://radarr",
+                radarr_api_key="secret",
+                sonarr_url="http://sonarr",
+                sonarr_api_key="secret",
+                features=FeatureFlags(multi_user_enabled=True),
+            )
+            cases = (
+                ("member", False, "Only the household owner can do that."),
+                ("member", True, "This action is not available on Youth accounts."),
+                (None, False, "Only the household owner can do that."),
+            )
+            for role, youth, expected in cases:
+                registry = ToolRegistry(
+                    db, settings, DEFAULT_LENS_ID, user_id="m1", user_role=role, is_youth=youth
+                )
+                for media_type in ("movie", "show"):
+                    with patch(
+                        "projectionist.agent.tools.acquire.resolve_arr_removal_target"
+                    ) as resolve:
+                        raw = await registry.execute(
+                            "remove_from_arr",
+                            {"media_type": media_type, "tmdb_id": 555, "delete_files": True},
+                        )
+                    payload = json.loads(raw)
+                    self.assertEqual(payload.get("code"), "agent_tool_not_permitted")
+                    self.assertEqual(payload.get("error"), expected)
+                    self.assertNotIn("confirmation_token", payload)
+                    resolve.assert_not_called()
+                self.assertEqual(registry.pending_tokens, [])
+            with db.connect() as conn:
+                count = conn.execute("SELECT COUNT(*) AS c FROM pending_actions").fetchone()["c"]
+            self.assertEqual(count, 0)
+
+    async def test_owner_remove_from_arr_proposes_and_model_cannot_redeem(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "t.db")
+            settings = Settings(
+                radarr_url="http://radarr",
+                radarr_api_key="secret",
+                features=FeatureFlags(multi_user_enabled=True),
+            )
+            registry = ToolRegistry(db, settings, DEFAULT_LENS_ID, user_id="o1", user_role="owner")
+            resolved = {"arr_id": 42, "title": "Doomed", "tmdb_id": 555}
+            with patch(
+                "projectionist.agent.tools.acquire.resolve_arr_removal_target",
+                return_value=resolved,
+            ), patch("projectionist.agent.tools.confirmed.RadarrClient") as radarr_cls:
+                proposal = json.loads(
+                    await registry.execute(
+                        "remove_from_arr",
+                        {"media_type": "movie", "tmdb_id": 555, "delete_files": True},
+                    )
+                )
+                token = proposal["confirmation_token"]
+                for args in (
+                    {"confirmation_token": token},
+                    {"confirmation_token": token, "confirmed": True},
+                    {"token": token, "confirmed": "yes"},
+                ):
+                    redeemed = json.loads(await registry.execute("confirm_pending_action", args))
+                    self.assertEqual(redeemed.get("code"), "confirm_requires_user")
+                radarr_cls.assert_not_called()
+            self.assertEqual(db.peek_pending_action_kind(token), "remove_arr")
+            stored = db.pop_pending_action(token, user_id="o1")
+            self.assertTrue(stored["delete_files"])
+            self.assertTrue(stored["add_exclusion"])
+
     async def test_model_can_still_cancel_a_proposal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "t.db")
@@ -265,6 +336,62 @@ class ConfirmRouteTests(_HouseholdApp):
         resp = member.post("/api/actions/confirm", json={"token": "tok-remove", "confirmed": True})
         self.assertEqual(resp.status_code, 403, resp.text)
         self.assertEqual(self.db.peek_pending_action_kind("tok-remove"), "remove_arr")
+
+    def _save_remove_token(self, token: str, *, user_id, media_type: str = "movie") -> None:
+        payload = {
+            "action": "remove_arr",
+            "media_type": media_type,
+            "arr_id": 42,
+            "title": "Doomed",
+            "delete_files": True,
+            "add_exclusion": True,
+        }
+        payload["tmdb_id" if media_type == "movie" else "tvdb_id"] = 555
+        self.db.save_pending_action(token, "remove_arr", payload, user_id=user_id)
+
+    def test_youth_and_member_crafted_remove_tokens_never_reach_arr(self) -> None:
+        cases = (
+            ("member", "local-member", "movie"),
+            ("member", "local-owner", "show"),
+            ("member", None, "show"),
+            ("youth", "local-youth", "movie"),
+            ("youth", "local-owner", "movie"),
+        )
+        with patch("projectionist.agent.tools.confirmed.RadarrClient") as radarr_cls, patch(
+            "projectionist.agent.tools.confirmed.SonarrClient"
+        ) as sonarr_cls, patch(
+            "projectionist.agent.tools.confirmed.resolve_arr_removal_target"
+        ) as resolve:
+            for index, (username, token_owner, media_type) in enumerate(cases):
+                token = f"tok-crafted-{index}"
+                self._save_remove_token(token, user_id=token_owner, media_type=media_type)
+                client = self._client_for(username)
+                resp = client.post("/api/actions/confirm", json={"token": token, "confirmed": True})
+                self.assertEqual(resp.status_code, 403, (username, resp.text))
+                self.assertEqual(
+                    resp.json()["detail"], "Only the household owner can confirm this action"
+                )
+                self.assertEqual(self.db.peek_pending_action_kind(token), "remove_arr")
+            radarr_cls.assert_not_called()
+            sonarr_cls.assert_not_called()
+            resolve.assert_not_called()
+
+    def test_owner_confirm_removes_with_files_and_exclusion(self) -> None:
+        self._save_remove_token("tok-owner", user_id="local-owner")
+        owner = self._client_for("owner")
+        resolved = {"arr_id": 42, "title": "Doomed", "tmdb_id": 555}
+        with patch("projectionist.agent.tools.confirmed.RadarrClient") as radarr_cls, patch(
+            "projectionist.agent.tools.confirmed.resolve_arr_removal_target",
+            return_value=resolved,
+        ):
+            resp = owner.post("/api/actions/confirm", json={"token": "tok-owner", "confirmed": True})
+        self.assertEqual(resp.status_code, 200, resp.text)
+        self.assertEqual(resp.json()["action"], "remove_arr")
+        radarr_cls.return_value.delete_movie.assert_called_once_with(
+            42, delete_files=True, add_exclusion=True
+        )
+        self.assertTrue(self.db.is_acquisition_excluded(media_type="movie", tmdb_id=555))
+        self.assertIsNone(self.db.peek_pending_action_kind("tok-owner"))
 
 
 class YouthSurfaceTests(unittest.TestCase):
