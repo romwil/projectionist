@@ -18,6 +18,7 @@ from projectionist.web.session_tokens import (
     clear_session_secret_cache,
     ensure_session_secret,
 )
+from tests.owner_claim_helpers import grant_owner_claim
 
 
 class ApiAuthzTests(unittest.TestCase):
@@ -39,6 +40,7 @@ class ApiAuthzTests(unittest.TestCase):
         importlib.reload(app_mod)
         self.app_mod = app_mod
         self.client = TestClient(app_mod.app)
+        grant_owner_claim(self.client)
 
     def tearDown(self) -> None:
         import projectionist.web.jobs as jobs
@@ -80,6 +82,11 @@ class ApiAuthzTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200, resp.text)
 
     def _login_as(self, plex_id: int, title: str) -> None:
+        from projectionist.web.auth import has_real_owner
+        from projectionist.web.jobs import get_job_manager
+
+        if not has_real_owner(get_job_manager().db):
+            grant_owner_claim(self.client)
         with patch(
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": plex_id, "title": title, "email": f"{title}@example.com"},

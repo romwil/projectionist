@@ -19,6 +19,7 @@ from fastapi.testclient import TestClient
 from projectionist.web.auth import clear_oidc_states, clear_pin_bindings
 from projectionist.web.rate_limit import clear_rate_limits
 from projectionist.web.session_tokens import SESSION_COOKIE_NAME, clear_session_secret_cache
+from tests.owner_claim_helpers import grant_owner_claim
 
 
 def _mock_discovery():
@@ -68,6 +69,7 @@ class OIDCAuthTests(unittest.TestCase):
 
         importlib.reload(app_mod)
         self.client = TestClient(app_mod.app)
+        grant_owner_claim(self.client)
 
     def tearDown(self) -> None:
         import projectionist.web.jobs as jobs

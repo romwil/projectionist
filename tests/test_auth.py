@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from projectionist.web.auth import clear_pin_bindings, join_plex_login_followups
 from projectionist.web.rate_limit import clear_rate_limits
 from projectionist.web.session_tokens import clear_session_secret_cache
+from tests.owner_claim_helpers import grant_owner_claim
 
 
 class AuthTests(unittest.TestCase):
@@ -36,6 +37,7 @@ class AuthTests(unittest.TestCase):
 
         importlib.reload(app_mod)
         self.client = TestClient(app_mod.app)
+        grant_owner_claim(self.client)
 
     def tearDown(self) -> None:
         import projectionist.web.jobs as jobs
@@ -468,6 +470,7 @@ class AuthTests(unittest.TestCase):
         from projectionist.web.session_tokens import create_session_token
         from projectionist.web.auth import SESSION_COOKIE_NAME
 
+        self.client.cookies.clear()
         self.client.cookies.set(SESSION_COOKIE_NAME, create_session_token(member_id))
         me = self.client.get("/api/auth/me")
         self.assertEqual(me.status_code, 401)

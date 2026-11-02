@@ -57,7 +57,8 @@ export default function HouseholdSection({
             <h2>Household login (optional)</h2>
             <p className="wizard-note">
               When enabled, people open Projectionist via <strong>Sign in with Plex</strong> (plex.tv PIN / link
-              on the login page). The first account becomes owner; later accounts join via an invite link
+              on the login page). Sign in from this browser right after you save: only this browser can
+              claim the owner account, so a neighbor on your network can't. Later accounts join via an invite link
               from <strong>Admin → Access</strong> (invite-only by default). This is separate from the Plex{" "}
               <em>server</em> token above used for library sync.
             </p>
