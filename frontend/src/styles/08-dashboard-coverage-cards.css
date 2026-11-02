@@ -1549,7 +1549,7 @@ a.on-this-day-item:focus-visible {
 }
 
 .llm-usage-filters span {
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
   color: color-mix(in srgb, var(--text) 72%, var(--muted));
 }
 

@@ -756,7 +756,7 @@
   display: inline-block;
   padding: 0.15rem 0.45rem;
   border-radius: 999px;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   border: 1px solid var(--border);
 }
 
@@ -826,7 +826,7 @@
 
 .scheduled-tasks-sort-option {
   padding: 0.25rem 0.55rem;
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
 }
 
 .scheduled-tasks-sort-option.is-active {
@@ -974,7 +974,7 @@
   background: color-mix(in srgb, var(--bg, #121418) 88%, #000);
   border: 1px solid var(--border);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
   line-height: 1.45;
 }
 
@@ -1296,7 +1296,7 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
 
 .bulk-delete-modal-modes-legend {
   margin: 0 0 var(--space-2);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--muted);
@@ -1438,7 +1438,7 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
 }
 
 .removal-summary-totals span {
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -1508,7 +1508,7 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
 }
 
 .removal-summary-paths code {
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
   word-break: break-all;
   color: var(--text);
 }
@@ -1522,7 +1522,7 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
 
 .removal-summary-status {
   color: var(--text);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 650;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1580,7 +1580,7 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
   background: var(--surface-2, rgba(255, 255, 255, 0.04));
   color: var(--muted);
   font: inherit;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 700;
   line-height: 1;
   cursor: pointer;
@@ -2145,7 +2145,7 @@ a.weekly-digest-stat:focus-visible {
 .owner-now-playing-why {
   display: block;
   margin-top: 0.2rem;
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
   color: var(--muted);
   font-style: italic;
 }
@@ -2988,7 +2988,7 @@ a.weekly-digest-stat:focus-visible {
 }
 .journey-tree-node-tier {
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   text-transform: capitalize;
 }
 .journey-callout {

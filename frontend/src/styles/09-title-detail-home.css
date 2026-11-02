@@ -1293,7 +1293,7 @@ a.explore-cinema-card-link:focus-visible h3 {
 }
 
 .explore-motif-why-detail {
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
   line-height: 1.4;
   color: var(--muted, #9aa3ad);
 }

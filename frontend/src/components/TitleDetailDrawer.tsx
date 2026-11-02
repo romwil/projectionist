@@ -15,6 +15,7 @@ import {
 } from "../lib/bulkLibraryDelete.js";
 import { titleDetailHrefFromTarget } from "../lib/titleDetailDrawer.js";
 import { focusTrailerFrame, trailerEmbedUrl } from "../lib/trailerEmbed";
+import Button from "./Button";
 
 function getFocusableElements(root: any) {
   if (!root) return [];
@@ -318,14 +319,14 @@ export default function TitleDetailDrawer({
                 >
                   Open on YouTube
                 </a>
-                <button
-                  type="button"
-                  className="ghost"
+                <Button
+                  variant="secondary"
+                  size="sm"
                   data-testid="close-trailer-modal"
                   onClick={() => setTrailerOpen(false)}
                 >
                   Close
-                </button>
+                </Button>
               </div>
             </div>
             <div className="trailer-modal-frame">
