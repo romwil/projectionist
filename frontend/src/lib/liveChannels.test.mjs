@@ -6,7 +6,10 @@ import {
   WEATHER_CHANNEL_ID,
   buildFlexLowerThird,
   buildOsdModel,
+  formatGuideProgramTimeRange,
+  formatProgramTimeRange,
   formatWallTime,
+  guideProgramAccessibleName,
   separateOverlappingGuidePrograms,
   classifyLiveStreamHealth,
   formatClock,
@@ -1045,5 +1048,68 @@ describe("liveChannels helpers", () => {
       assert.deepEqual(programCellStyle({ start: "x", stop: 5 }, 0, 100, PX), { display: "none" });
       assert.deepEqual(programCellStyle({ start: 10, stop: 10 }, 0, 100, PX), { display: "none" });
     });
+  });
+});
+
+function localEpoch(year, month, day, hour, minute) {
+  return new Date(year, month - 1, day, hour, minute, 0, 0).getTime() / 1000;
+}
+
+describe("guide programme from–to labels", () => {
+  const eightPm = localEpoch(2026, 11, 1, 20, 0);
+  const eightThirtyPm = localEpoch(2026, 11, 1, 20, 30);
+  const nineThirtyPm = localEpoch(2026, 11, 1, 21, 30);
+  const eightAm = localEpoch(2026, 11, 1, 8, 0);
+  const eightThirtyAm = localEpoch(2026, 11, 1, 8, 30);
+  const elevenThirtyPm = localEpoch(2026, 11, 1, 23, 30);
+  const oneAm = localEpoch(2026, 11, 2, 1, 0);
+
+  it("collapses a shared meridiem in the viewer's local clock", () => {
+    assert.equal(formatProgramTimeRange(eightPm, nineThirtyPm, "en-US"), "8:00–9:30 PM");
+    assert.equal(formatProgramTimeRange(eightThirtyPm, nineThirtyPm, "en-US"), "8:30–9:30 PM");
+    assert.equal(formatProgramTimeRange(eightAm, eightThirtyAm, "en-US"), "8:00–8:30 AM");
+  });
+
+  it("keeps both meridiems when the range crosses them", () => {
+    assert.equal(formatProgramTimeRange(elevenThirtyPm, oneAm, "en-US"), "11:30 PM–1:00 AM");
+  });
+
+  it("uses a 24-hour clock when the locale has no meridiem", () => {
+    assert.equal(formatProgramTimeRange(eightPm, nineThirtyPm, "en-GB"), "20:00–21:30");
+  });
+
+  it("puts a leading day period once when the locale prints it first", () => {
+    assert.equal(formatProgramTimeRange(eightPm, nineThirtyPm, "ko-KR"), "오후 8:00–9:30");
+    assert.equal(formatProgramTimeRange(elevenThirtyPm, oneAm, "ko-KR"), "오후 11:30–오전 1:00");
+  });
+
+  it("reads schedule start and stop and does not invent a missing end", () => {
+    assert.equal(
+      formatGuideProgramTimeRange({ title: "Heat", start: eightPm, stop: nineThirtyPm }, "en-US"),
+      "8:00–9:30 PM",
+    );
+    assert.equal(
+      formatGuideProgramTimeRange({ title: "Heat", started_at: eightPm, ends_at: nineThirtyPm }, "en-US"),
+      "8:00–9:30 PM",
+    );
+    assert.equal(formatGuideProgramTimeRange({ title: "Heat", start: eightPm }, "en-US"), "");
+    assert.equal(
+      formatGuideProgramTimeRange({ title: "Heat", start: eightPm, durationSeconds: 5400 }, "en-US"),
+      "",
+    );
+    assert.equal(formatGuideProgramTimeRange({ title: "Heat", start: eightPm, stop: eightPm }, "en-US"), "");
+    assert.equal(formatProgramTimeRange(null, nineThirtyPm, "en-US"), "");
+    assert.equal(formatProgramTimeRange(eightPm, undefined, "en-US"), "");
+    assert.equal(formatGuideProgramTimeRange(null, "en-US"), "");
+    const label = formatProgramTimeRange(eightPm, nineThirtyPm, "en-US");
+    assert.doesNotMatch(label, /2026|T\d{2}:/);
+  });
+
+  it("includes the title and the from–to time in the accessible name", () => {
+    assert.equal(
+      guideProgramAccessibleName("Heat", "8:00–9:30 PM", "The heist", "R"),
+      "Heat, 8:00–9:30 PM, The heist, R",
+    );
+    assert.equal(guideProgramAccessibleName("Heat", "", "  "), "Heat");
   });
 });

@@ -687,7 +687,7 @@
 .live-guide-scroll {
   /* Shared vertical metrics: rail stations and grid rows MUST use the same height. */
   --guide-head-h: 2.5rem;
-  --guide-row-h: 4.5rem;
+  --guide-row-h: 5.25rem;
   flex: 1;
   min-height: 0;
   display: grid;
@@ -902,6 +902,18 @@
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+}
+
+.live-guide-cell-time {
+  align-self: stretch;
+  min-width: 0;
+  max-width: 100%;
+  font-size: var(--text-xs);
+  line-height: 1.2;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .live-guide-cell-ep,
