@@ -2,6 +2,7 @@
    is the cascade order; Vite inlines these so the built CSS is identical
    to the former single styles.css. Edit the partials, not this file. */
 
+@import "./styles/00-fonts.css";
 @import "./styles/01-tokens.css";
 @import "./styles/02-nav-chrome.css";
 @import "./styles/03-browse-controls.css";

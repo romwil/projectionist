@@ -61,6 +61,8 @@ EVENT_PREFERENCE_SIGNAL = "preference_signal"
 EVENT_REVIEW_SAVED = "review_saved"
 EVENT_PLAYBACK_EVENT = "playback_event"
 EVENT_TOOL_INVOCATION = "tool_invocation"
+EVENT_CHAT_TURN = "chat_turn"
+EVENT_PLAY_START = "play_start"
 
 
 class TelemetryIngester:
@@ -207,6 +209,59 @@ class TelemetryIngester:
                 "rating_key": rating_key,
                 "completion_pct": completion_pct,
                 "media_type": media_type,
+            },
+            media_node_id=rating_key,
+        )
+
+    def record_chat_turn(
+        self,
+        *,
+        session_id: str,
+        surface: str,
+        outcome: str,
+        card_count: int = 0,
+        tool_count: int = 0,
+        duration_ms: Optional[int] = None,
+        persona_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> None:
+        """One row per completed (or failed) user turn. Counts only — no message text."""
+        from projectionist import __version__
+
+        self._emit(
+            EVENT_CHAT_TURN,
+            {
+                "session_id": session_id,
+                "surface": surface,
+                "outcome": outcome,
+                "card_count": int(card_count),
+                "tool_count": int(tool_count),
+                "duration_ms": duration_ms,
+                "persona_id": persona_id,
+                "user_id": user_id,
+                "app_version": __version__,
+            },
+        )
+
+    def record_play_start(
+        self,
+        *,
+        rating_key: str,
+        user_id: Optional[str] = None,
+        rec_source: Optional[str] = None,
+        rec_id: Optional[str] = None,
+    ) -> None:
+        """In-app Play started. ``rec_id`` is set only when a verified pick led here."""
+        from projectionist import __version__
+
+        self._emit(
+            EVENT_PLAY_START,
+            {
+                "rating_key": rating_key,
+                "user_id": user_id,
+                "rec_source": rec_source,
+                "rec_id": rec_id,
+                "app_version": __version__,
             },
             media_node_id=rating_key,
         )

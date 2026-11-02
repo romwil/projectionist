@@ -1083,7 +1083,7 @@ class ApiContractTests(unittest.TestCase):
         self.assertTrue(body["items"][0]["title"])
         self.assertFalse(body.get("stale"))
 
-    def test_training_corpus_export(self) -> None:
+    def test_my_taste_export_single_owner(self) -> None:
         import projectionist.web.jobs as jobs
 
         db = jobs.get_job_manager().db
@@ -1104,8 +1104,10 @@ class ApiContractTests(unittest.TestCase):
             excerpt="Try Chinatown.",
         )
 
-        resp = self.client.get("/api/admin/export/training-corpus")
+        resp = self.client.get("/api/me/taste-export")
         self.assertEqual(resp.status_code, 200)
+        self.assertIn("projectionist-my-taste-", resp.headers["content-disposition"])
+        self.assertEqual(self.client.get("/api/admin/export/training-corpus").status_code, 404)
         body = resp.json()
         self.assertIn("message_feedback", body)
         self.assertIn("preference_facts", body)

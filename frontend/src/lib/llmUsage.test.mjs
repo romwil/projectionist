@@ -34,7 +34,9 @@ describe("llm usage UI smoke", () => {
   });
 
   it("registers Health page with usage tab redirect", () => {
-    const src = readFileSync(join(__dirname, "../AppRoutes.tsx"), "utf8");
+    const appRoutes = readFileSync(join(__dirname, "../AppRoutes.tsx"), "utf8");
+    assert.match(appRoutes, /path="\/admin\/\*" element=\{<AdminRoutes \/>\}/);
+    const src = readFileSync(join(__dirname, "../routes/AdminRoutes.tsx"), "utf8");
     assert.match(src, /HealthPage/);
     assert.match(src, /path="health"/);
     assert.match(src, /path="usage"/);

@@ -36,6 +36,7 @@ import {
   searchSonarrMissing,
   cancelSonarrMissing,
   resolveModelForProvider,
+  resetUserPassword,
   revealSettingsSecret,
   rotateMcpKey,
   saveSettings,
@@ -352,24 +353,21 @@ function stepUnlocked(stepIndex: number, verification: JsParam) {
   return false;
 }
 
+// Plex is the only required connection to finish first-run (UX-009,
+// UX-013). LLM, Radarr, and Sonarr are shown on the Connections step for
+// the owner to wire up, but a Plex-only household can advance and finish —
+// those services stay available to connect later from Admin.
 function canAdvance(stepIndex: number, verification: JsParam) {
   if (stepIndex === 0) return verification.identity;
   if (stepIndex === 1) {
-    return verification.llm && verification.plex && verification.radarr && verification.sonarr;
+    return verification.plex;
   }
   if (stepIndex === 2) return verification.sections;
   return false;
 }
 
 function onboardingReady(verification: JsParam) {
-  return (
-    verification.identity &&
-    verification.llm &&
-    verification.plex &&
-    verification.sections &&
-    verification.radarr &&
-    verification.sonarr
-  );
+  return verification.identity && verification.plex && verification.sections;
 }
 
 function firstIncompleteWizardStep(wizardData: JsParam) {
@@ -416,7 +414,7 @@ export default function ConfigPage() {
   const [revealingSecret, setRevealingSecret] = useState<string | null>(null);
   const [libraryStats, setLibraryStats] = useState<JsParam>(null);
   const [libraryHealth, setLibraryHealth] = useState<JsParam>(null);
-  const [exportingCorpus, setExportingCorpus] = useState(false);
+  const [exportingTaste, setExportingTaste] = useState(false);
   const [exportingSnapshot, setExportingSnapshot] = useState(false);
   const [registeringRadarr, setRegisteringRadarr] = useState(false);
   const [radarrGapStats, setRadarrGapStats] = useState<JsParam>(null);
@@ -725,10 +723,51 @@ export default function ConfigPage() {
   }
 
   async function handleUserRoleChange(userId: string, role: string) {
+    const entry = managedUsers.find((item: JsParam) => item?.id === userId);
+    const label = entry?.display_name || entry?.email || userId;
+    const roleLabel = role === "owner" ? "Owner" : "Member";
+    const ok = await confirm({
+      title: "Change role",
+      body: `Change ${label}'s role to ${roleLabel}? ${
+        role === "owner"
+          ? "Owners can manage every member, integration, and secret."
+          : "They will lose owner-only access immediately."
+      }`,
+      confirmLabel: "Change role",
+      danger: role === "owner",
+    });
+    if (!ok) return;
     try {
       await updateUserRole(userId, role);
       await refreshManagedUsers();
       setActionFeedback("users", "success", "User role updated.");
+    } catch (error) {
+      setActionFeedback("users", "error", (error as ApiError).message);
+    }
+  }
+
+  async function handleUserResetPassword(entry: JsParam) {
+    const label = entry?.display_name || entry?.email || entry?.id;
+    const entered = await confirm({
+      title: "Reset password",
+      body: `Set a new password for ${label}. This signs them out everywhere until they sign in again with it.`,
+      confirmLabel: "Reset password",
+      danger: true,
+      prompt: {
+        label: "New password",
+        placeholder: "At least 8 characters",
+        type: "password",
+      },
+    });
+    if (!entered || typeof entered !== "string") return;
+    const newPassword = entered.trim();
+    if (newPassword.length < 8) {
+      setActionFeedback("users", "error", "New password must be at least 8 characters.");
+      return;
+    }
+    try {
+      await resetUserPassword(entry.id, newPassword);
+      setActionFeedback("users", "success", `Password reset for ${label}.`);
     } catch (error) {
       setActionFeedback("users", "error", (error as ApiError).message);
     }
@@ -1397,8 +1436,9 @@ export default function ConfigPage() {
         <section className="wizard-panel wizard-card">
           <h2>Step 2 — Connect your stack</h2>
           <p className="wizard-note">
-            Point Projectionist at your language model, Plex server, Radarr, and Sonarr. Hit Verify on each
-            card so we know they respond before you pick libraries.
+            Plex is required — Projectionist reads your library from it. A language model, Radarr, and
+            Sonarr are optional here; connect them now or finish setup with Plex only and add them later
+            from Admin → Connections.
           </p>
 
           <div className="service-cards">
@@ -1420,6 +1460,9 @@ export default function ConfigPage() {
                     <div className="service-card-header">
                       <div className="service-card-title">
                         <h3>{label}</h3>
+                        <span className="service-optional-badge" data-testid="llm-optional-badge">
+                          Optional
+                        </span>
                         <CertifiedBadge
                           certified={certifications.llm?.certified}
                           testing={testing === "llm"}
@@ -1488,6 +1531,11 @@ export default function ConfigPage() {
                   <div className="service-card-header">
                     <div className="service-card-title">
                       <h3>{label}</h3>
+                      {id !== "plex" ? (
+                        <span className="service-optional-badge" data-testid={`${id}-optional-badge`}>
+                          Optional
+                        </span>
+                      ) : null}
                       <CertifiedBadge
                         certified={certifications[id]?.certified}
                         testing={testing === id}
@@ -1712,34 +1760,34 @@ export default function ConfigPage() {
     }
   }
 
-  async function handleExportTrainingCorpus() {
-    setExportingCorpus(true);
+  async function handleExportMyTaste() {
+    setExportingTaste(true);
     try {
-      const response = await fetch("/api/admin/export/training-corpus", { credentials: "include" });
+      const response = await fetch("/api/me/taste-export", { credentials: "include" });
       if (!response.ok) {
         throw new Error(`Export failed (${response.status})`);
       }
       const blob = await response.blob();
       const disposition = response.headers.get("Content-Disposition") || "";
       const match = disposition.match(/filename="([^"]+)"/);
-      const filename = match?.[1] || "projectionist-training-corpus.json";
+      const filename = match?.[1] || "projectionist-my-taste.json";
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
       link.download = filename;
       link.click();
       URL.revokeObjectURL(url);
-      setActionFeedback("training-export", {
+      setActionFeedback("taste-export", {
         type: "success",
         message: "Taste data downloaded.",
       });
     } catch (error) {
-      setActionFeedback("training-export", {
+      setActionFeedback("taste-export", {
         type: "error",
         message: (error as ApiError).message || "Taste data export failed.",
       });
     } finally {
-      setExportingCorpus(false);
+      setExportingTaste(false);
     }
   }
 
@@ -1756,7 +1804,7 @@ export default function ConfigPage() {
       URL.revokeObjectURL(url);
       setActionFeedback("admin-snapshot", {
         type: "success",
-        message: "Settings + database snapshot downloaded.",
+        message: "Household backup downloaded.",
       });
     } catch (error) {
       setActionFeedback("admin-snapshot", {
@@ -1780,8 +1828,8 @@ export default function ConfigPage() {
             sections={sections}
             featureFlags={featureFlags}
             setShowWizard={setShowWizard}
-            handleExportTrainingCorpus={handleExportTrainingCorpus}
-            exportingCorpus={exportingCorpus}
+            handleExportMyTaste={handleExportMyTaste}
+            exportingTaste={exportingTaste}
             handleDownloadAdminSnapshot={handleDownloadAdminSnapshot}
             exportingSnapshot={exportingSnapshot}
             actionAlert={actionAlert}
@@ -1850,6 +1898,7 @@ export default function ConfigPage() {
             handleYouthModeToggle={handleYouthModeToggle}
             handleUserRemove={handleUserRemove}
             handleUserSyncSeerr={handleUserSyncSeerr}
+            handleUserResetPassword={handleUserResetPassword}
           />
         ) : null}
 
@@ -1983,11 +2032,7 @@ export default function ConfigPage() {
               const complete =
                 (wizard.steps[step]?.complete ?? false) ||
                 (index === 0 && verification.identity) ||
-                (index === 1 &&
-                  verification.llm &&
-                  verification.plex &&
-                  verification.radarr &&
-                  verification.sonarr) ||
+                (index === 1 && verification.plex) ||
                 (index === 2 && verification.sections);
               return (
                 <button

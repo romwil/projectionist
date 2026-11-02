@@ -310,6 +310,8 @@ def _build_migrations() -> List[Migration]:
         (56, "notification_read_at", _notification_read_at),
         (57, "item_neighbors_explainable", _item_neighbors_explainable),
         (58, "library_episodes_summary", _library_episodes_summary),
+        (59, "user_default_page", wrap("_migrate_user_default_page")),
+        (60, "owner_ops", wrap("_migrate_owner_ops")),
     ]
 
 

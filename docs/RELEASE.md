@@ -22,9 +22,61 @@ A version is **not released** until Docker Hub has `romwil/projectionist:X.Y.Z` 
 
 Order notes:
 
+- **Per-PR delivery gate:** merge only after the required `main` CI checks are
+  green; publish with `./scripts/docker-release.sh X.Y.Z`; prove that exact Hub
+  tag on QA `:8792` through Path B; run prod `rollout.sh` only when the user
+  explicitly asks. One release uses one PR and one Hub tag.
 - Prepare (version files + CHANGELOG) **before** Hub publish — `docker-release.sh` embeds `PROJECTIONIST_VERSION` and requires the CHANGELOG heading for `X.Y.Z`.
 - Hub may be published from the release PR branch **before** merge when the tree is release-ready; do not merge and claim “shipped” if Hub still lacks `:X.Y.Z`.
 - Skip step 4 until the user asks to promote Automat prod. Never stop prod while iterating on QA.
+
+### GitHub required checks (maintainer action)
+
+Repository code cannot enable branch protection. A repository administrator must
+protect `main` before the next release PR:
+
+1. Open **Settings → Branches → Add branch protection rule** for `main`.
+2. Enable **Require a pull request before merging** and **Require status checks
+   to pass before merging**; enable **Require branches to be up to date before
+   merging**.
+3. Select these exact check names: `CI / Runtime dependency lock`, `CI / test`,
+   `CI / docker-smoke`, `Lint / Backend (ruff + mypy)`, and `Lint / Frontend
+   (eslint + prettier)`.
+4. Leave administrators subject to the rule; do not allow force pushes or
+   deletions.
+
+Equivalent API call (run by that administrator with a `repo`-scoped `gh`
+login) is:
+
+```bash
+gh api --method PUT repos/romwil/projectionist/branches/main/protection \
+  --input - <<'JSON'
+{
+  "required_status_checks": {
+    "strict": true,
+    "contexts": [
+      "CI / Runtime dependency lock",
+      "CI / test",
+      "CI / docker-smoke",
+      "Lint / Backend (ruff + mypy)",
+      "Lint / Frontend (eslint + prettier)"
+    ]
+  },
+  "enforce_admins": true,
+  "required_pull_request_reviews": {
+    "required_approving_review_count": 1
+  },
+  "restrictions": null,
+  "required_linear_history": false,
+  "allow_force_pushes": false,
+  "allow_deletions": false,
+  "block_creations": false,
+  "required_conversation_resolution": true,
+  "lock_branch": false,
+  "allow_fork_syncing": false
+}
+JSON
+```
 
 ### Anti-patterns (do not do)
 

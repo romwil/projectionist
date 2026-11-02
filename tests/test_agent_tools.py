@@ -18,6 +18,7 @@ from projectionist.agent.tools import (
     _rank_tmdb_search_results,
     build_system_prompt,
     build_tool_definitions,
+    execute_confirmed_action,
 )
 from projectionist.config_store import FeatureFlags, Settings
 from projectionist.connectors.arr_errors import ArrTitleNotFoundError
@@ -1519,8 +1520,8 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(ArrTitleNotFoundError):
                     await execute_confirmed_action(db, settings, token)
 
-    async def test_create_plex_collection_propose_then_confirm_pending_action(self) -> None:
-        """NL assent path: propose returns a token; confirm_pending_action redeems it."""
+    async def test_create_plex_collection_propose_then_ui_confirm(self) -> None:
+        """Propose returns a token; the model cannot redeem it, the UI confirm route can."""
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
             settings = Settings(
@@ -1541,7 +1542,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
             self.assertIn("confirmation_token", propose)
-            self.assertIn("confirm_pending_action", propose["message"])
+            self.assertIn("Confirm button", propose["message"])
             token = propose["confirmation_token"]
             self.assertEqual(
                 registry.pending_tokens,
@@ -1560,25 +1561,21 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
                 "projectionist.connectors.plex_collections.create_collection",
                 return_value=fake,
             ) as mock_create:
-                confirmed = json.loads(
+                refused = json.loads(
                     await registry.execute(
                         "confirm_pending_action",
                         {"confirmation_token": token, "confirmed": True},
                     )
                 )
-            self.assertTrue(confirmed.get("ok"))
+                self.assertFalse(refused.get("ok", True))
+                self.assertEqual(refused.get("code"), "confirm_requires_user")
+                mock_create.assert_not_called()
+                confirmed = await execute_confirmed_action(db, settings, token, user_id="owner-1")
             self.assertEqual(confirmed.get("action"), "create_plex_collection")
             self.assertEqual(confirmed["result"]["rating_key"], "col-1")
             mock_create.assert_called_once()
-            # Token is consumed — second confirm fails cleanly.
-            again = json.loads(
-                await registry.execute(
-                    "confirm_pending_action",
-                    {"confirmation_token": token},
-                )
-            )
-            self.assertIn("error", again)
-            self.assertFalse(again.get("ok", True))
+            with self.assertRaises(RuntimeError):
+                await execute_confirmed_action(db, settings, token, user_id="owner-1")
 
     async def test_confirm_pending_action_can_cancel(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

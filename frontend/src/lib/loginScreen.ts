@@ -20,6 +20,15 @@ export function resolveAuthMethods(authMethods: JsParam) {
 }
 
 /**
+ * One-line statement of what this product is (PRD-004). A member landing on
+ * a custom household domain has no guarantee the "Projectionist" brand name
+ * ever appeared, so the door states the product plainly before asking them
+ * to sign in.
+ */
+export const LOGIN_PRODUCT_STATEMENT =
+  "Projectionist is your household's private movie and TV companion — chat for recommendations, browse the library, and watch together.";
+
+/**
  * Member-facing lede under the Sign in heading.
  *
  * @param {Iterable<string> | null | undefined} authMethods
@@ -27,13 +36,16 @@ export function resolveAuthMethods(authMethods: JsParam) {
  */
 export function loginLede(authMethods: JsParam) {
   const methods = resolveAuthMethods(authMethods);
-  if (methods.length === 1 && methods[0] === "plex") {
-    return "Sign in with your Plex account to open your conversations and watchlist.";
-  }
-  if (methods.includes("plex")) {
-    return "Sign in to open your conversations and watchlist. Most households use Plex.";
-  }
-  return "Sign in to open your conversations and watchlist.";
+  const action = (() => {
+    if (methods.length === 1 && methods[0] === "plex") {
+      return "Sign in with your Plex account to open your conversations and watchlist.";
+    }
+    if (methods.includes("plex")) {
+      return "Sign in to open your conversations and watchlist. Most households use Plex.";
+    }
+    return "Sign in to open your conversations and watchlist.";
+  })();
+  return `${LOGIN_PRODUCT_STATEMENT} ${action}`;
 }
 
 /**

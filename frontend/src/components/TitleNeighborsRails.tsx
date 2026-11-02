@@ -8,6 +8,7 @@ import {
   surprisingPlotNeighbors,
 } from "../lib/relationUx.js";
 import { titleDetailPath } from "../lib/titleLinks.js";
+import PosterArt from "./PosterArt";
 import PosterOverlayControls from "./PosterOverlayControls";
 import TitleDetailLink from "./TitleDetailLink";
 import TitleYearText from "./TitleYearText";
@@ -22,10 +23,8 @@ type TitleNeighborCardProps = {
 function TitleNeighborCard({ item, testId, why = null }: TitleNeighborCardProps) {
   const libraryItem = { ...item, in_library: true };
   const path = titleDetailPath(libraryItem);
-  const poster = libraryItem.poster_url ? (
-    <img src={libraryItem.poster_url} alt="" loading="lazy" />
-  ) : (
-    <div className="poster-fallback">{libraryItem.title?.slice(0, 1) || "?"}</div>
+  const poster = (
+    <PosterArt posterUrl={libraryItem.poster_url} title={libraryItem.title} year={libraryItem.year} />
   );
 
   return (

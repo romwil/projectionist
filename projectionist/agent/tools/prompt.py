@@ -2,7 +2,21 @@
 
 from __future__ import annotations
 
-from projectionist.agent.tools._helpers import *  # noqa: F401, F403
+from projectionist.agent.tools._helpers import (
+    Database,
+    List,
+    Mapping,
+    Optional,
+    UNTRUSTED_DATA_CLOSE,
+    UNTRUSTED_DATA_OPEN,
+    _dt,
+    _enrich_memory_note_deep_link,
+    format_overview_for_prompt,
+    library_overview,
+    logger,
+    preference_context,
+    wrap_untrusted_data,
+)
 
 def _persona_prompt_block(db: Database, *, persona_id: Optional[str] = None) -> str:
     """Build the persona section of the system prompt.
@@ -171,11 +185,10 @@ def build_system_prompt(
         "Projectionist collection or course; use it only when the user explicitly asks for Plex "
         "(and also call create_list when they want both). Always tell the user which kind you made, "
         "and relay any error text from a tool result verbatim instead of going silent. "
-        "When a propose tool returns confirmation_token and the user affirms "
-        "(yes, go for it, confirm, do it, etc.), immediately call confirm_pending_action "
-        "with that exact confirmation_token. Do not ask for another verbal confirmation, "
-        "do not claim you cannot redeem a backend token, and do not tell the user to "
-        "finish the write manually in Plex/*arr unless confirm_pending_action returns an error. "
+        "When a propose tool returns confirmation_token, the app shows the user a Confirm "
+        "button for it. Only the user can confirm; you cannot redeem the token. When the "
+        "user affirms in chat, tell them to press Confirm on the proposal card. Use "
+        "confirm_pending_action with confirmed=false only to cancel a proposal the user declines. "
         "When proposing adds, always use the exact tmdb_id or tvdb_id from tool item responses — never guess or invent external IDs. "
         "For titles to add, use find_collection_gaps, recommend_hidden_gems, search_tmdb, or explore_genre(include_missing=true) — "
         "never query_library or search_library (those only return owned titles). "

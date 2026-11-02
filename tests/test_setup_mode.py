@@ -15,7 +15,6 @@ from projectionist.web.rate_limit import clear_rate_limits
 from projectionist.web.session_tokens import clear_session_secret_cache
 from projectionist.web.auth import has_real_owner
 from projectionist.web.setup_mode import (
-    RECOVERY_KEY_HASH_KEY,
     SETUP_SNAPSHOT_KEY,
     SETUP_STATE_KEY,
     WAN_COMMIT_OWNER_PASSWORD_DETAIL,
@@ -93,7 +92,6 @@ class SetupModeApiTests(unittest.TestCase):
         db = get_job_manager().db
         self.assertFalse(has_real_owner(db))
         self.assertNotEqual(db.get_config(SETUP_STATE_KEY), "active")
-        self.assertIsNone(db.get_config(RECOVERY_KEY_HASH_KEY))
         features = self.client.get("/api/features")
         self.assertEqual(features.status_code, 200, features.text)
         self.assertEqual(features.json()["setup_state"], "setup")
@@ -246,7 +244,7 @@ class SetupModeApiTests(unittest.TestCase):
         body = commit.json()
         self.assertEqual(body["setup_state"], "active")
         self.assertEqual(body["profile"], "public")
-        self.assertTrue(body["recovery_key"])
+        self.assertNotIn("recovery_key", body)
         self.assertTrue(body["posture"]["multi_user_enabled"])
         self.assertTrue(body["posture"]["invite_only"])
         self.assertTrue(body["posture"]["trust_proxy_headers"])

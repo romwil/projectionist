@@ -8,7 +8,7 @@ import re
 import time
 import uuid
 from datetime import datetime as _datetime
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, Sequence
 
 from projectionist.config_store import (
     Settings,
@@ -86,6 +86,9 @@ from projectionist.research.title_research import compare_filmographies, researc
 from projectionist.reviews.store import get_reviews, list_pending_prompts, list_titles_to_rate, mark_prompts_surfaced, save_review
 from projectionist.reviews.plex_sync import sync_review_rating_to_plex
 
+if TYPE_CHECKING:
+    from projectionist.agent.tools import ToolRegistry
+
 
 logger = logging.getLogger(__name__)
 
@@ -152,8 +155,8 @@ UNTRUSTED_DATA_CLOSE = "<<<END_UNTRUSTED_MEMORY_DATA>>>"
 
 # Appended to propose-tool messages so the model redeems tokens on user assent.
 _PENDING_CONFIRM_HINT = (
-    "When the user affirms (yes / go ahead / confirm), call confirm_pending_action "
-    "with this confirmation_token — do not ask again or claim you cannot redeem it."
+    "The user confirms this with the Confirm button on the proposal card in the app. "
+    "You cannot confirm it for them; tell them to press Confirm."
 )
 
 # Tool results whose payloads embed stored/retrieved content that another user

@@ -66,8 +66,11 @@ export default function OwnerHealthHero({ health }: OwnerHealthHeroProps) {
             <h2 className="owner-health-story-headline">{story.headline}</h2>
             <p className={`owner-health-story-body tone-${story.tone}`}>{story.body}</p>
           </div>
-          <Link to="/admin/scheduled-tasks" className="app-topbar-link" data-testid="owner-health-catchup">
-            Scheduled Tasks catch-up
+          <Link to="/admin/overview#monday-pass" className="app-topbar-link" data-testid="owner-health-monday-pass">
+            Work through the Monday pass
+          </Link>
+          <Link to="/admin/tasks" className="app-topbar-link" data-testid="owner-health-catchup">
+            Tasks catch-up
           </Link>
         </div>
       ) : null}

@@ -1,5 +1,6 @@
 import { createPortal } from "react-dom";
 import SectionHelp from "./SectionHelp";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 import {
   formatRemovalFreedLabel,
   hasRemovalSummary,
@@ -147,6 +148,10 @@ function RemovalSummaryPanel({
     onClose?.();
   }
 
+  // A11Y-009: focus moves in on open, Tab cycles inside, Escape closes
+  // (unless a removal is still running), and focus returns to the trigger.
+  const dialogRef = useFocusTrap<HTMLDivElement>({ open: true, onClose: handleBackdrop, busy: running });
+
   return (
     <div
       className="bulk-delete-modal-backdrop removal-summary-backdrop"
@@ -155,6 +160,8 @@ function RemovalSummaryPanel({
       onClick={handleBackdrop}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         className="bulk-delete-modal removal-summary-modal"
         role="dialog"
         aria-modal="true"

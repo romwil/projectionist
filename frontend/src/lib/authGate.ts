@@ -18,6 +18,7 @@ export async function fetchAuthSnapshot(getFeaturesFn: () => Promise<Features | 
     const features = await getFeaturesFn();
     enabled = Boolean(features?.features?.multi_user_enabled);
     const seerrEnabled = Boolean(features?.features?.seerr_enabled);
+    const llmConfigured = Boolean(features?.features?.llm_configured);
     if (features?.setup_state === "setup") {
       return {
         ok: true,
@@ -27,6 +28,7 @@ export async function fetchAuthSnapshot(getFeaturesFn: () => Promise<Features | 
         features,
         multiUserEnabled: enabled,
         seerrEnabled,
+        llmConfigured,
         authenticated: false,
         role: "",
         isOwner: false,
@@ -43,11 +45,12 @@ export async function fetchAuthSnapshot(getFeaturesFn: () => Promise<Features | 
         features,
         multiUserEnabled: false,
         seerrEnabled,
+        llmConfigured,
         authenticated: true,
         role: "owner",
         isOwner: true,
         isYouth: false,
-        user: null,
+        user: features?.user || null,
       };
     }
     const me = await getAuthMeFn();
@@ -60,6 +63,7 @@ export async function fetchAuthSnapshot(getFeaturesFn: () => Promise<Features | 
         features,
         multiUserEnabled: true,
         seerrEnabled,
+        llmConfigured,
         authenticated: false,
         role: "",
         isOwner: false,
@@ -77,6 +81,7 @@ export async function fetchAuthSnapshot(getFeaturesFn: () => Promise<Features | 
       features,
       multiUserEnabled: true,
       seerrEnabled,
+      llmConfigured,
       authenticated: true,
       role,
       isOwner: role === "owner",
@@ -93,6 +98,7 @@ export async function fetchAuthSnapshot(getFeaturesFn: () => Promise<Features | 
         features: null,
         multiUserEnabled: true,
         seerrEnabled: false,
+        llmConfigured: false,
         authenticated: false,
         role: "",
         isOwner: false,
@@ -108,6 +114,7 @@ export async function fetchAuthSnapshot(getFeaturesFn: () => Promise<Features | 
       features: null,
       multiUserEnabled: false,
       seerrEnabled: false,
+      llmConfigured: false,
       authenticated: true,
       role: "owner",
       isOwner: true,
@@ -127,6 +134,8 @@ export function applyAuthSnapshot(snap: JsParam, { redirect = true }: JsParam = 
       authReady: false,
       multiUserEnabled: Boolean(snap.multiUserEnabled),
       seerrEnabled: Boolean(snap.seerrEnabled),
+      llmConfigured: Boolean(snap.llmConfigured),
+      defaultPage: "auto",
       isOwner: false,
       role: "",
       isYouth: false,
@@ -140,6 +149,8 @@ export function applyAuthSnapshot(snap: JsParam, { redirect = true }: JsParam = 
         authReady: false,
         multiUserEnabled: true,
         seerrEnabled: Boolean(snap.seerrEnabled),
+        llmConfigured: Boolean(snap.llmConfigured),
+        defaultPage: "auto",
         isOwner: false,
         role: "",
         isYouth: false,
@@ -151,6 +162,8 @@ export function applyAuthSnapshot(snap: JsParam, { redirect = true }: JsParam = 
       authReady: true,
       multiUserEnabled: true,
       seerrEnabled: Boolean(snap.seerrEnabled),
+      llmConfigured: Boolean(snap.llmConfigured),
+      defaultPage: "auto",
       isOwner: false,
       role: "",
       isYouth: false,
@@ -162,6 +175,8 @@ export function applyAuthSnapshot(snap: JsParam, { redirect = true }: JsParam = 
     authReady: Boolean(snap),
     multiUserEnabled: Boolean(snap?.multiUserEnabled),
     seerrEnabled: Boolean(snap?.seerrEnabled),
+    llmConfigured: Boolean(snap?.llmConfigured),
+    defaultPage: String(snap?.user?.default_page || "auto"),
     isOwner: snap?.isOwner !== false,
     role: snap?.role || "owner",
     isYouth: Boolean(snap?.isYouth),

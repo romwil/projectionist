@@ -794,16 +794,31 @@ class TelemetryConfigMixin:
         finally:
             conn.close()
 
-    def export_training_corpus(self) -> Dict[str, Any]:
+    def export_user_taste(
+        self,
+        user_id: Optional[str],
+        *,
+        include_unowned: bool = False,
+    ) -> Dict[str, Any]:
+        """One account's reactions, preference facts, and reviews.
+
+        ``include_unowned`` adds legacy rows with no ``user_id`` (single-owner
+        installs and pre-multi-user data, which belong to the owner).
+        """
+        if include_unowned:
+            where = "(user_id = ? OR user_id IS NULL)"
+        else:
+            where = "user_id = ?"
+        params = (str(user_id or ""),)
         with self.connect() as conn:
             feedback_rows = conn.execute(
-                "SELECT * FROM message_feedback ORDER BY created_at ASC"
+                f"SELECT * FROM message_feedback WHERE {where} ORDER BY created_at ASC", params
             ).fetchall()
             fact_rows = conn.execute(
-                "SELECT * FROM preference_facts ORDER BY created_at ASC"
+                f"SELECT * FROM preference_facts WHERE {where} ORDER BY created_at ASC", params
             ).fetchall()
             review_rows = conn.execute(
-                "SELECT * FROM user_title_reviews ORDER BY created_at ASC"
+                f"SELECT * FROM user_title_reviews WHERE {where} ORDER BY created_at ASC", params
             ).fetchall()
         return {
             "exported_at": time.time(),
@@ -831,6 +846,21 @@ class TelemetryConfigMixin:
                 """,
                 (token, action_type, json.dumps(dict(payload)), now, now + ttl_seconds, user_id),
             )
+
+    def peek_pending_action_kind(self, token: str) -> Optional[str]:
+        """Return the stored action kind for a live token without consuming it."""
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT payload_json FROM pending_actions WHERE token = ? AND expires_at > ?",
+                (token, time.time()),
+            ).fetchone()
+        if not row:
+            return None
+        try:
+            payload = json.loads(row["payload_json"])
+        except (TypeError, ValueError):
+            return None
+        return str(payload.get("action") or "") if isinstance(payload, Mapping) else None
 
     def pop_pending_action(
         self,

@@ -28,7 +28,6 @@ logger = logging.getLogger(__name__)
 
 SETUP_STATE_KEY = "setup_state"
 SETUP_SNAPSHOT_KEY = "ingress_detection_snapshot"
-RECOVERY_KEY_HASH_KEY = "recovery_key_hash"
 SETUP_STATE_SETUP = "setup"
 SETUP_STATE_ACTIVE = "active"
 
@@ -213,10 +212,6 @@ def resolve_commit_household_domain(profile: str, household_domain: str) -> str:
     return str(household_domain or "").strip()
 
 
-def _generate_recovery_key() -> str:
-    return secrets.token_urlsafe(32)
-
-
 def commit_setup(
     request: Request,
     db: Database,
@@ -279,9 +274,6 @@ def commit_setup(
         True if allow_access_requests is None else bool(allow_access_requests)
     )
 
-    recovery = _generate_recovery_key()
-    db.set_config(RECOVERY_KEY_HASH_KEY, _hash_password(recovery))
-
     user_id = f"local-{secrets.token_hex(12)}"
     user_row = db.create_local_user(
         user_id=user_id,
@@ -316,7 +308,6 @@ def commit_setup(
     return {
         "setup_state": SETUP_STATE_ACTIVE,
         "profile": cleaned_profile,
-        "recovery_key": recovery,
         "user": row_to_current_user_from_dict(user_row).to_dict(),
         "posture": {
             "multi_user_enabled": multi_user,

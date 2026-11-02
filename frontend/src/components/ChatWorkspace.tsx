@@ -43,6 +43,7 @@ type ChatWorkspaceProps = {
   setAppNavOpen?: (...args: any[]) => void;
   agentPulse?: any;
   chatError?: string;
+  chatAnnouncement?: string;
   inboxUnreadCount?: number;
   uiTheme?: any;
   setUiTheme?: (...args: any[]) => void;
@@ -50,6 +51,7 @@ type ChatWorkspaceProps = {
   mobileNavOpen?: any;
   setMobileNavOpen?: (...args: any[]) => void;
   setup?: (...args: any[]) => void;
+  llmConfigured?: boolean;
   sidebarCollapsed?: any;
   handleCreateThread?: (...args: any[]) => void;
   toggleSidebarRail?: any;
@@ -170,6 +172,7 @@ authReady,
   setAppNavOpen,
   agentPulse,
   chatError,
+  chatAnnouncement,
   inboxUnreadCount,
   uiTheme,
   setUiTheme,
@@ -177,6 +180,7 @@ authReady,
   mobileNavOpen,
   setMobileNavOpen,
   setup,
+  llmConfigured,
   sidebarCollapsed,
   handleCreateThread,
   toggleSidebarRail,
@@ -331,6 +335,17 @@ authReady,
       {setup && !(setup as any).onboarding_complete ? (
         <div className="banner workspace-banner" data-testid="setup-banner">
           Finish setup in <Link to="/admin">Admin</Link> to connect Plex, TMDB, and your LLM provider.
+        </div>
+      ) : null}
+
+      {/* UX-010: setup can finish Plex-only (BD-5 wizard no longer blocks on
+          every integration), so chat must say so honestly instead of just
+          silently failing to reply once a message is sent. */}
+      {authReady && setup && (setup as any).onboarding_complete && llmConfigured === false ? (
+        <div className="banner workspace-banner" data-testid="chat-no-llm-banner">
+          No chat provider is connected yet, so {curatorName || "your curator"} can’t reply here.
+          Connect one in <Link to="/admin">Admin</Link>, or browse the library in{" "}
+          <Link to="/explore">Explore</Link> instead.
         </div>
       ) : null}
 
@@ -523,7 +538,16 @@ authReady,
             className="composer composer-raised"
             onSubmit={(event) => {
               event.preventDefault();
+              // A11Y-001: never let a duplicate submit fire while one send is
+              // already in flight — the composer stays enabled/focusable
+              // during the send, so this guard replaces the old `disabled`
+              // short-circuit instead of a browser-forced blur.
+              if (loading || !threadsReady) return;
               sendMessage(input);
+              // The Send button disables as soon as input clears, which would
+              // blur a mouse-clicked button to <body>. Move focus back onto
+              // the composer so it survives the whole async round trip.
+              (composerRef as React.RefObject<HTMLElement> | undefined)?.current?.focus?.();
             }}
           >
             <div className="composer-shell">
@@ -531,6 +555,16 @@ authReady,
                 ⧉ {contextLabel}
               </span>
               <InlineAlert type="error" message={chatError} />
+              {/* A11Y-008: one polite announcement per completed reply, not
+                  per token — errors still go through InlineAlert's role="alert". */}
+              <div
+                role="status"
+                aria-live="polite"
+                data-testid="chat-reply-announcer"
+                className="sr-only"
+              >
+                {chatAnnouncement}
+              </div>
               <div className="composer-chrome" data-testid="composer-chrome">
                 {showSlashPalette ? (
                   <SlashCommandPalette
@@ -604,7 +638,15 @@ authReady,
                       : composerPlaceholder || "Describe what you're hunting for…"
                   }
                   rows={2}
-                  disabled={loading || !threadsReady}
+                  // A11Y-001: `disabled` would force a focus blur to <body> the
+                  // instant a send starts (the most common path: type, press
+                  // Enter, focus never left the composer). Use `readOnly` for
+                  // the mid-send case so the control keeps focus; `threadsReady`
+                  // gates the genuinely-not-interactive-yet state before any
+                  // send has happened, where there is nothing to keep focus on.
+                  readOnly={loading}
+                  aria-busy={loading}
+                  disabled={!threadsReady}
                 />
                 <div className="composer-toolbar">
                   <div className="composer-toolbar-left">

@@ -1015,3 +1015,11 @@ test("long skip is ±30 only in wide landscape", () => {
   assert.equal(longSkipFits({ width: 390, height: 844 }), false);
   assert.equal(longSkipFits({ width: 0, height: 0 }), false);
 });
+
+test("libraryWatchTo carries a pick id only when given", () => {
+  assert.deepEqual(libraryWatchTo("99", { pathname: "/chat", search: "" }, { rec: "chat:m1" }), {
+    pathname: "/watch/99",
+    state: { from: "/chat", rec: "chat:m1" },
+  });
+  assert.equal("rec" in libraryWatchTo("99", { pathname: "/chat", search: "" }, {}).state, false);
+});

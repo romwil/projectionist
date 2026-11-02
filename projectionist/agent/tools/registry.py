@@ -2,7 +2,22 @@
 
 from __future__ import annotations
 
-from projectionist.agent.tools._helpers import *  # noqa: F401, F403
+from projectionist.agent.tools._helpers import (
+    Any,
+    Callable,
+    Database,
+    Dict,
+    LibraryFilters,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Settings,
+    TitleCard,
+    json,
+    logger,
+)
+from projectionist.agent.tools._definitions import tool_policy_denial
 from projectionist.agent.tools.library import LibraryToolsMixin
 from projectionist.agent.tools.research import ResearchToolsMixin
 from projectionist.agent.tools.memory import MemoryToolsMixin
@@ -228,6 +243,12 @@ class ToolRegistry(
         if handler is None:
             logger.warning("Unknown agent tool requested: %s", name)
             return json.dumps({"error": f"Unknown tool {name}"})
+        denial = tool_policy_denial(
+            name, self.settings, role=self.user_role, is_youth=self.is_youth
+        )
+        if denial:
+            logger.warning("Agent tool %s refused by policy (role=%s)", name, self.user_role)
+            return json.dumps({"error": denial, "code": "agent_tool_not_permitted"})
         logger.debug("Executing tool %s", name)
         try:
             result = await handler(arguments)

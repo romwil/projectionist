@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   formatApiError,
+  getAuthMe,
   getFeatures,
   createAccessRequest,
   loginWithLocal,
@@ -12,6 +13,7 @@ import {
 } from "../api/client";
 import GlassDoor from "../components/GlassDoor";
 import InlineAlert from "../components/InlineAlert";
+import { resolveDefaultHome } from "../lib/defaultHome";
 import { loginLede, plexAdvancedCopy, resolveAuthMethods } from "../lib/loginScreen";
 import { startPlexPinPoll } from "../lib/plexPinPoll";
 
@@ -19,6 +21,7 @@ const PIN_TIMEOUT_MS = 15 * 60 * 1000;
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [features, setFeatures] = useState<any | null>(null);
   const [authToken, setAuthToken] = useState("");
   const [showTokenInput, setShowTokenInput] = useState(false);
@@ -39,6 +42,50 @@ export default function LoginPage() {
   const [requestBusy, setRequestBusy] = useState(false);
   const [showRequest, setShowRequest] = useState(false);
 
+  // A11Y-001: after a failed sign-in, focus goes to Username or Password
+  // rather than being dropped (or staying on a now-disabled Sign in button).
+  const usernameRef = useRef<HTMLInputElement | null>(null);
+  const passwordRef = useRef<HTMLInputElement | null>(null);
+  // A11Y-001: after "Need an invite?" reveals the request form, focus moves
+  // inside it instead of staying on the toggle button's old position.
+  const requestNameRef = useRef<HTMLInputElement | null>(null);
+  // Which local-login field to focus once the failed-login render (loading
+  // back to false, inputs re-enabled) actually commits — see effect below.
+  const [focusFieldOnError, setFocusFieldOnError] = useState<"username" | "password" | null>(null);
+
+  useEffect(() => {
+    if (showRequest) {
+      requestNameRef.current?.focus();
+    }
+  }, [showRequest]);
+
+  useEffect(() => {
+    if (!focusFieldOnError || loading) return;
+    // Inputs are disabled while `loading`; wait for that render to commit
+    // (inputs re-enabled) before moving focus, or `.focus()` is a no-op.
+    (focusFieldOnError === "username" ? usernameRef : passwordRef).current?.focus();
+    setFocusFieldOnError(null);
+  }, [focusFieldOnError, loading]);
+
+  /**
+   * UX-011: return to the page the user was trying to open before a
+   * BD-5-resolved default page. `from` only ever comes from this app's own
+   * redirect-to-login (useAuthGate) and is checked for an internal path.
+   */
+  async function postLoginDestination(featuresData: any = features): Promise<string> {
+    const from = (location.state as { from?: string } | null)?.from;
+    if (typeof from === "string" && from.startsWith("/") && !from.startsWith("//") && from !== "/login") {
+      return from;
+    }
+    const llmConfigured = Boolean(featuresData?.features?.llm_configured);
+    try {
+      const me = await getAuthMe();
+      return resolveDefaultHome({ defaultPage: me?.user?.default_page, llmConfigured });
+    } catch {
+      return resolveDefaultHome({ llmConfigured });
+    }
+  }
+
   useEffect(() => {
     getFeatures()
       .then((data) => {
@@ -48,10 +95,12 @@ export default function LoginPage() {
           return;
         }
         if (!data?.features?.multi_user_enabled) {
-          navigate("/chat", { replace: true });
+          postLoginDestination(data).then((to) => navigate(to, { replace: true }));
         }
       })
       .catch((fetchError) => setError(formatApiError(fetchError)));
+    // Mount-only: postLoginDestination reads `location`/`features` by closure at call time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
   useEffect(() => {
@@ -94,7 +143,7 @@ export default function LoginPage() {
         pollRef.current = null;
         setWaitingForPlex(false);
         setLoading(false);
-        navigate("/chat", { replace: true });
+        postLoginDestination().then((to) => navigate(to, { replace: true }));
       },
       onTimeout: () => {
         stopPinWait();
@@ -141,7 +190,8 @@ export default function LoginPage() {
     setError("");
     try {
       await loginWithPlex(token);
-      navigate("/chat", { replace: true });
+      const to = await postLoginDestination();
+      navigate(to, { replace: true });
     } catch (signInError: unknown) {
       setError(formatApiError(signInError));
     } finally {
@@ -153,15 +203,23 @@ export default function LoginPage() {
     event.preventDefault();
     if (!localUsername.trim() || !localPassword) {
       setError("Enter your username and password.");
+      setFocusFieldOnError(localUsername.trim() ? "password" : "username");
       return;
     }
     setLoading(true);
     setError("");
     try {
       await loginWithLocal(localUsername.trim(), localPassword);
-      navigate("/chat", { replace: true });
+      const to = await postLoginDestination();
+      navigate(to, { replace: true });
     } catch (signInError: unknown) {
       setError(formatApiError(signInError));
+      // A11Y-001: land focus on whichever field most likely needs fixing,
+      // instead of leaving it on the submit button (which may now be
+      // disabled mid-render) or dropping it to <body>. The fields are still
+      // `disabled` until `loading` flips back to false below, so the actual
+      // `.focus()` call is deferred to the effect above.
+      setFocusFieldOnError(localUsername.trim() ? "password" : "username");
     } finally {
       setLoading(false);
     }
@@ -324,11 +382,11 @@ export default function LoginPage() {
             <label className="login-field">
               <span>Username</span>
               <input
+                ref={usernameRef}
                 type="text"
                 data-testid="local-username"
                 value={localUsername}
                 onChange={(e) => setLocalUsername(e.target.value)}
-                placeholder="Username"
                 autoComplete="username"
                 disabled={loading || waitingForPlex || featuresLoading}
               />
@@ -336,6 +394,7 @@ export default function LoginPage() {
             <label className="login-field">
               <span>Password</span>
               <input
+                ref={passwordRef}
                 type="password"
                 data-testid="local-password"
                 value={localPassword}
@@ -416,6 +475,7 @@ export default function LoginPage() {
                 <label className="login-field">
                   <span>Your name</span>
                   <input
+                    ref={requestNameRef}
                     type="text"
                     data-testid="access-request-name"
                     value={requestName}

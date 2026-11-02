@@ -7,27 +7,51 @@
 import { pickLiveSoftStallPhrase } from "./liveStreamSoftStallCopy.js";
 import type {JsonObject, JsParam} from "../api/types";
 
-/** User-facing empty / warming states for `/live`. */
-export function liveUserEmptyCopy({ featureOn, featureReady, guideReady }: JsParam = {}) {
+/**
+ * User-facing empty / warming states for `/live`.
+ *
+ * UX-017: an owner looking at their own household must never be told to
+ * "ask the owner" — that's them. Pass `isOwner` so the copy and CTA match
+ * who is actually reading it.
+ */
+export function liveUserEmptyCopy({ featureOn, featureReady, guideReady, isOwner = false }: JsParam = {}) {
   if (!featureOn) {
-    return {
-      eyebrow: "Live Channels",
-      title: "Not on the air yet",
-      body: "Ask the household owner to enable Live Channels in Admin.",
-      ctaLabel: "Back to chat",
-      ctaTo: "chat",
-      testId: "live-empty-disabled",
-    };
+    return isOwner
+      ? {
+          eyebrow: "Live Channels",
+          title: "Not on the air yet",
+          body: "Turn on Live Channels from Admin to start building stations.",
+          ctaLabel: "Open Admin",
+          ctaTo: "admin",
+          testId: "live-empty-disabled",
+        }
+      : {
+          eyebrow: "Live Channels",
+          title: "Not on the air yet",
+          body: "Ask the household owner to enable Live Channels in Admin.",
+          ctaLabel: "Back to chat",
+          ctaTo: "chat",
+          testId: "live-empty-disabled",
+        };
   }
   if (!featureReady && !guideReady) {
-    return {
-      eyebrow: "Live Channels",
-      title: "Channels are warming up",
-      body: "TV isn’t ready yet. Stations appear here once the household owner finishes Setup in Admin.",
-      ctaLabel: "Open Admin",
-      ctaTo: "admin",
-      testId: "live-empty-warming",
-    };
+    return isOwner
+      ? {
+          eyebrow: "Live Channels",
+          title: "Channels are warming up",
+          body: "TV isn’t ready yet. Finish Setup under Live Channels in Admin.",
+          ctaLabel: "Open Admin",
+          ctaTo: "admin",
+          testId: "live-empty-warming",
+        }
+      : {
+          eyebrow: "Live Channels",
+          title: "Channels are warming up",
+          body: "TV isn’t ready yet. Stations appear here once the household owner finishes Setup in Admin.",
+          ctaLabel: "Open Admin",
+          ctaTo: "admin",
+          testId: "live-empty-warming",
+        };
   }
   return null;
 }

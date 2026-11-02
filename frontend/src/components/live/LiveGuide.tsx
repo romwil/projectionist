@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
-import { formatWallTime, guideTimeScale, programCellStyle } from "../../lib/liveChannels.js";
+import {
+  formatGuideProgramTimeRange,
+  formatWallTime,
+  guideProgramAccessibleName,
+  guideTimeScale,
+  programCellStyle,
+} from "../../lib/liveChannels.js";
 import { liveGuideEmptyCopy } from "../../lib/liveChannelsCopy.js";
 import {
   formatProgramEpisodeLabel,
@@ -257,6 +263,13 @@ export default function LiveGuide({
                     formatProgramEpisodeLabel(program) || program.episode || "";
                   const key = `${channel.id}:${program.start}:${title}`;
                   const focused = row === focusRow && col === focusCol;
+                  const timeRange = formatGuideProgramTimeRange(program);
+                  const accessibleName = guideProgramAccessibleName(
+                    title,
+                    timeRange,
+                    episodeLabel,
+                    program.rating,
+                  );
                   return (
                     <button
                       key={key}
@@ -280,9 +293,15 @@ export default function LiveGuide({
                       }}
                       onBlur={scheduleHoverLeave}
                       data-testid="live-guide-cell"
+                      aria-label={accessibleName || undefined}
                       title={episodeLabel ? `${title} — ${episodeLabel}` : title}
                     >
                       <span className="live-guide-cell-title">{title}</span>
+                      {timeRange ? (
+                        <span className="live-guide-cell-time" data-testid="live-guide-cell-time">
+                          {timeRange}
+                        </span>
+                      ) : null}
                       {episodeLabel ? (
                         <span className="live-guide-cell-ep">{episodeLabel}</span>
                       ) : null}

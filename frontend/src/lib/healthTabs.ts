@@ -5,6 +5,7 @@ export const HEALTH_TABS = [
   { id: "sync", label: "Sync health", testId: "health-tab-sync" },
   { id: "usage", label: "Usage / LLM spend", testId: "health-tab-usage" },
   { id: "issues", label: "Issues / media", testId: "health-tab-issues" },
+  { id: "security", label: "Security log", testId: "health-tab-security" },
 ];
 
 const LEGACY_HEALTH_PATHS: Record<string, string> = {

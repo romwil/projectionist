@@ -1588,6 +1588,10 @@ class SchemaMigrationsMixin:
         if existing:
             return
         name = str(row["curator_name"]) if "curator_name" in row.keys() else "Curator"
+        # GRO-009: member-facing persona copy shows one curator speaking name.
+        # A migration-artifact suffix like "Curator (migrated)" must never
+        # leak into the persona picker — the shared template keeps the exact
+        # name the owner already set for their curator.
         conn.execute(
             """
             INSERT INTO persona_templates (
@@ -1597,7 +1601,7 @@ class SchemaMigrationsMixin:
                 system_prompt_override, is_default
             ) VALUES (?, ?, 'shared', ?, ?, ?, ?, 0.5, 0.5, 0.5, 0.5, ?, 1)
             """,
-            (migrated_id, f"{name} (migrated)", BOOTSTRAP_OWNER_ID, bro, snark, auto, override),
+            (migrated_id, name, BOOTSTRAP_OWNER_ID, bro, snark, auto, override),
         )
 
     def _migrate_acquisition_exclusions(self, conn: sqlite3.Connection) -> None:
@@ -2097,6 +2101,14 @@ class SchemaMigrationsMixin:
         if "role" in invite_cols:
             conn.execute("UPDATE invites SET role = 'member' WHERE role = 'guest'")
 
+    def _migrate_user_default_page(self, conn: sqlite3.Connection) -> None:
+        """Per-user default landing page preference (BD-5)."""
+        user_cols = self._table_columns(conn, "users")
+        if "default_page" not in user_cols:
+            conn.execute(
+                "ALTER TABLE users ADD COLUMN default_page TEXT NOT NULL DEFAULT 'auto'"
+            )
+
     def _migrate_session_revocation(self, conn: sqlite3.Connection) -> None:
         """Session epoch + jti denylist so logout / password rotate invalidate cookies."""
         user_cols = self._table_columns(conn, "users")
@@ -2180,6 +2192,42 @@ class SchemaMigrationsMixin:
             conn.execute(
                 "ALTER TABLE holiday_rail_titles ADD COLUMN curator_note TEXT NOT NULL DEFAULT ''"
             )
+
+    def _migrate_owner_ops(self, conn: sqlite3.Connection) -> None:
+        """Owner security audit trail + stewardship checklist marks (Phase 6)."""
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS security_audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at REAL NOT NULL,
+                event TEXT NOT NULL,
+                actor_id TEXT,
+                target_id TEXT,
+                outcome TEXT NOT NULL DEFAULT 'ok',
+                detail_json TEXT NOT NULL DEFAULT '{}'
+            );
+            CREATE INDEX IF NOT EXISTS idx_security_audit_created
+                ON security_audit_log(created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_security_audit_event
+                ON security_audit_log(event, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_security_audit_actor
+                ON security_audit_log(actor_id);
+            CREATE INDEX IF NOT EXISTS idx_security_audit_target
+                ON security_audit_log(target_id);
+
+            CREATE TABLE IF NOT EXISTS owner_checklist_marks (
+                scope TEXT NOT NULL,
+                item_id TEXT NOT NULL,
+                period TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL,
+                updated_at REAL NOT NULL,
+                updated_by TEXT,
+                PRIMARY KEY (scope, item_id, period)
+            );
+            CREATE INDEX IF NOT EXISTS idx_telemetry_stream_class_ts
+                ON system_telemetry_stream(event_class, timestamp);
+            """
+        )
 
     def _migrate_holiday_rail_shelf_mode(self, conn: sqlite3.Connection) -> None:
         """Per-scope flag: a professor curate replaces the keyword dump."""

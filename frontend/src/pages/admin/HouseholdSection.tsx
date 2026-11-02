@@ -50,6 +50,7 @@ export default function HouseholdSection({
   handleYouthModeToggle,
   handleUserRemove,
   handleUserSyncSeerr,
+  handleUserResetPassword,
 }: HouseholdSectionProps) {
   return (
           <section className="config-section" data-testid="multi-user-settings">
@@ -313,6 +314,16 @@ export default function HouseholdSection({
                                       >
                                         Sync Seerr
                                       </button>
+                                      {entry.auth_method === "local" ? (
+                                        <button
+                                          type="button"
+                                          className="ghost"
+                                          data-testid={`user-reset-password-${entry.id}`}
+                                          onClick={() => handleUserResetPassword?.(entry)}
+                                        >
+                                          Reset password
+                                        </button>
+                                      ) : null}
                                       <button
                                         type="button"
                                         className="ghost danger"

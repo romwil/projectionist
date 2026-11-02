@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Callable, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -23,6 +24,8 @@ from projectionist.library.playback import (
     validate_session_id,
 )
 from projectionist.web.auth import get_current_user_dep
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["library-playback"])
 
@@ -62,6 +65,26 @@ def _raise_playback(error: Exception, context: str) -> None:
 class PlaybackStartPayload(BaseModel):
     rating_key: str = ""
     start_over: bool = False
+    # ``chat:<assistant message id>`` or ``share:<recommendation id>``; verified server-side.
+    rec: Optional[str] = Field(default=None, max_length=160)
+
+
+def _record_play_start(rating_key: str, rec: Optional[str], user: Any) -> None:
+    from projectionist.telemetry import TelemetryIngester
+    from projectionist.telemetry.attribution import resolve_play_attribution
+
+    try:
+        db = _db()
+        user_id = _user_id(user) or None
+        scoped = user_id if _settings().features.multi_user_enabled else None
+        source, rec_id = resolve_play_attribution(
+            db, rating_key=rating_key, rec=rec, user_id=user_id, scoped_user_id=scoped
+        )
+        TelemetryIngester(db).record_play_start(
+            rating_key=rating_key, user_id=user_id, rec_source=source, rec_id=rec_id
+        )
+    except Exception:  # noqa: BLE001
+        logger.debug("play_start telemetry skipped", exc_info=True)
 
 
 class PlaybackSeekPayload(BaseModel):
@@ -92,13 +115,15 @@ def library_playback_start(
     """Start a Plex universal HLS session for a movie or episode (show keys resolve)."""
     try:
         key = validate_rating_key(payload.rating_key)
-        return start_playback(
+        session = start_playback(
             _db(),
             _settings(),
             rating_key=key,
             user=user,
             start_over=bool(payload.start_over),
         )
+        _record_play_start(key, payload.rec, user)
+        return session
     except (PlaybackError, YouthBlockedError) as error:
         _raise_playback(error, "Could not start playback")
         raise

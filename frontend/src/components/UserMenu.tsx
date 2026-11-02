@@ -1,19 +1,17 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { logout } from "../api/client";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   applyAuthSnapshot,
-  clearAuthSnapshot,
   loadAuthSessionUser,
   loadAuthSnapshot,
   peekAuthSnapshot,
 } from "../lib/authGate.js";
 import { applyLiveChannelsFeature, initialLiveChannelsReady } from "../lib/liveNavReady.js";
+import { signOut } from "../lib/signOut.js";
 import UserAvatar from "./UserAvatar";
 import { useAnchoredPopover } from "../hooks/useAnchoredPopover";
 
 export default function UserMenu() {
-  const navigate = useNavigate();
   const [user, setUser] = useState<any | null>(null);
   const { open, setOpen, rootRef: menuRef } = useAnchoredPopover();
 
@@ -33,13 +31,7 @@ export default function UserMenu() {
   }, []);
 
   async function handleLogout() {
-    try {
-      await logout();
-    } catch {
-      // Still redirect after clearing cookie attempt.
-    }
-    clearAuthSnapshot();
-    navigate("/login", { replace: true });
+    await signOut();
   }
 
   if (!user) return null;
@@ -94,6 +86,7 @@ export default function UserMenu() {
  */
 export function useAuthGate({ redirect = true } = {}) {
   const navigate = useNavigate();
+  const location = useLocation();
   const seeded = peekAuthSnapshot();
   const seededView = seeded ? applyAuthSnapshot(seeded, { redirect }) : null;
   const [authReady, setAuthReady] = useState(Boolean(seededView?.authReady));
@@ -104,6 +97,8 @@ export function useAuthGate({ redirect = true } = {}) {
   const [authenticated, setAuthenticated] = useState(Boolean(seededView?.authenticated));
   const [liveChannelsReady, setLiveChannelsReady] = useState(initialLiveChannelsReady);
   const [seerrEnabled, setSeerrEnabled] = useState(Boolean(seededView?.seerrEnabled));
+  const [llmConfigured, setLlmConfigured] = useState(Boolean(seededView?.llmConfigured));
+  const [defaultPage, setDefaultPage] = useState(seededView?.defaultPage || "auto");
 
   useEffect(() => {
     let cancelled = false;
@@ -113,11 +108,18 @@ export function useAuthGate({ redirect = true } = {}) {
       applyLiveChannelsFeature(snap.features, setLiveChannelsReady);
       const view = applyAuthSnapshot(snap, { redirect });
       if (view.navigateTo) {
-        navigate(view.navigateTo, { replace: true });
+        // UX-011: remember where the user was headed so a successful sign-in
+        // can return them there instead of always landing on the default page.
+        const from = `${location.pathname || ""}${location.search || ""}`;
+        const state =
+          view.navigateTo === "/login" && from && from !== "/login" ? { from } : undefined;
+        navigate(view.navigateTo, { replace: true, state });
         return;
       }
       setMultiUserEnabled(view.multiUserEnabled);
       setSeerrEnabled(view.seerrEnabled);
+      setLlmConfigured(view.llmConfigured);
+      setDefaultPage(view.defaultPage || "auto");
       setIsOwner(view.isOwner);
       setRole(view.role);
       setIsYouth(view.isYouth);
@@ -145,5 +147,7 @@ export function useAuthGate({ redirect = true } = {}) {
     authenticated,
     liveChannelsReady,
     seerrEnabled,
+    llmConfigured,
+    defaultPage,
   };
 }

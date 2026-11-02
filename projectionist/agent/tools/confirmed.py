@@ -2,7 +2,27 @@
 
 from __future__ import annotations
 
-from projectionist.agent.tools._helpers import *  # noqa: F401, F403
+from projectionist.agent.tools._helpers import (
+    Any,
+    ArrTitleExistsError,
+    ArrTitleNotFoundError,
+    Database,
+    Dict,
+    Mapping,
+    Optional,
+    RadarrClient,
+    SeerrClient,
+    Settings,
+    SonarrClient,
+    logger,
+    plex_collections_configuration_error,
+    radarr_add_configuration_error,
+    resolve_radarr_root_folder,
+    resolve_sonarr_root_folder,
+    seerr_configuration_error,
+    sonarr_add_configuration_error,
+)
+from projectionist.agent.tools._definitions import OWNER_ONLY_PENDING_ACTIONS
 
 def mark_in_radarr(db: Database, tmdb_id: int, *, title: str = "", session_id: Optional[str] = None) -> None:
     db.set_arr_presence(tmdb_id=tmdb_id, in_radarr=True)
@@ -161,12 +181,46 @@ async def execute_confirmed_action(
     token: str,
     *,
     user_id: Optional[str] = None,
+    actor_is_owner: bool = True,
 ) -> dict:
+    if not actor_is_owner and db.peek_pending_action_kind(token) in OWNER_ONLY_PENDING_ACTIONS:
+        raise PermissionError("Only the household owner can confirm this action")
     payload = db.pop_pending_action(token, user_id=user_id)
     if not payload:
         raise RuntimeError("Invalid or expired confirmation token")
     action = payload.get("action")
     logger.info("Executing confirmed action=%s", action)
+    if action == "mark_bad_media":
+        from projectionist.library.bad_media import BadMediaError, mark_bad_media
+
+        try:
+            result = mark_bad_media(
+                db,
+                settings,
+                rating_key=payload.get("rating_key") or None,
+                tmdb_id=payload.get("tmdb_id"),
+                tvdb_id=payload.get("tvdb_id"),
+                media_type=payload.get("media_type") or None,
+                episode_rating_key=payload.get("episode_rating_key") or None,
+                season_number=payload.get("season_number"),
+                episode_number=payload.get("episode_number"),
+                note=str(payload.get("note") or ""),
+            )
+        except BadMediaError as error:
+            raise RuntimeError(str(error)) from error
+        except RuntimeError as error:
+            from projectionist.connectors.arr_errors import format_arr_http_error
+
+            raise RuntimeError(format_arr_http_error(error)) from error
+        return {
+            "action": action,
+            "result": {
+                "title": result.get("title"),
+                "action": result.get("action"),
+                "files_removed": result.get("files_removed", 0),
+                "add_exclusion": False,
+            },
+        }
     if action == "add_radarr":
         config_error = radarr_add_configuration_error(settings)
         if config_error:

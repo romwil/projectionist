@@ -39,7 +39,6 @@ describe("buildAppNavItems", () => {
       "explore",
       "inbox",
       "admin",
-      "my-journey",
       "settings",
     ]);
     assert.deepEqual(moreBlock(items), [
@@ -70,7 +69,6 @@ describe("buildAppNavItems", () => {
 
   it("carries drawer labels (and youth wording) for the primary peers", () => {
     const member = buildAppNavItems({ role: "member" });
-    assert.equal(member.find((item) => item.id === "my-journey")?.label, "My Journey");
     assert.equal(member.find((item) => item.id === "settings")?.testId, "app-nav-settings");
 
     const youth = buildAppNavItems({ role: "member", isYouth: true });
@@ -78,14 +76,14 @@ describe("buildAppNavItems", () => {
     assert.equal(youth.find((item) => item.id === "explore")?.label, "Browse");
   });
 
-  it("lists My Journey once — Navigate only, never repeated under More", () => {
+  it("drops My Journey entirely — not in Navigate, not under More (BD-2)", () => {
     for (const opts of [
       { role: "owner", isOwner: true },
       { role: "member" },
       { role: "member", isYouth: true },
     ]) {
       const items = buildAppNavItems(opts);
-      assert.equal(items.filter((item) => item.id === "my-journey").length, 1);
+      assert.equal(items.some((item) => item.id === "my-journey"), false);
       assert.equal(moreBlock(items).includes("my-journey"), false);
     }
     assert.equal(
@@ -127,7 +125,6 @@ describe("buildAppNavItems", () => {
       "explore",
       "inbox",
       "admin",
-      "my-journey",
       "settings",
     ]);
     const adminIdx = ids.indexOf("heading-admin");
@@ -182,7 +179,6 @@ describe("buildAppNavItems", () => {
       "chat",
       "explore",
       "inbox",
-      "my-journey",
       "settings",
     ]);
     assert.equal(ids.includes("admin"), false);
@@ -207,7 +203,7 @@ describe("buildAppNavItems", () => {
     assert.equal(items.find((item) => item.id === "watchlist")?.label, "My list");
     assert.equal(items.find((item) => item.id === "watchlist")?.to, libraryHubPath("watchlist"));
     assert.equal(navigateBlock(items).includes("admin"), false);
-    assert.equal(navigateBlock(items).includes("my-journey"), true);
+    assert.equal(navigateBlock(items).includes("my-journey"), false);
   });
 
   it("legacy guest role uses the member drawer, not a tour nav", () => {
@@ -217,7 +213,7 @@ describe("buildAppNavItems", () => {
     const ids = items.map((item) => item.id);
     assert.equal(ids.includes("tour"), false);
     assert.equal(ids.includes("inbox"), true);
-    assert.equal(ids.includes("my-journey"), true);
+    assert.equal(ids.includes("my-journey"), false);
   });
 });
 

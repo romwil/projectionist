@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { createMediaIssue } from "../api/client";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 
 const ISSUE_CODES = [
   ["wrong_language", "Wrong language / subtitles"],
@@ -25,6 +26,9 @@ export default function ReportMediaIssueModal({ item, open, onClose, onReported 
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // A11Y-009: focus moves in on open, Tab cycles inside, Escape closes, and
+  // focus returns to the trigger that opened the modal.
+  const dialogRef = useFocusTrap<HTMLFormElement>({ open: Boolean(open), onClose });
   if (!open) return null;
 
   async function submit(event: any) {
@@ -51,7 +55,7 @@ export default function ReportMediaIssueModal({ item, open, onClose, onReported 
   }
 
   return <div className="media-issue-backdrop" role="presentation" onClick={onClose}>
-    <form className="media-issue-modal" role="dialog" aria-modal="true" aria-label="Report a media issue" onSubmit={submit} onClick={(event) => event.stopPropagation()}>
+    <form ref={dialogRef} tabIndex={-1} className="media-issue-modal" role="dialog" aria-modal="true" aria-label="Report a media issue" onSubmit={submit} onClick={(event) => event.stopPropagation()}>
       <h2>Report an issue</h2>
       <p>Reports go to the owner queue. They do not delete files or start a repair by themselves.</p>
       <label>Problem

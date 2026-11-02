@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { getPlexMachineId } from "../api/client";
+import PosterArt from "./PosterArt";
 import {
   isAddableToRadarr,
   isAddableToSonarr,
@@ -100,6 +101,8 @@ type TitleCardProps = {
   userRole?: any;
   multiUserEnabled?: boolean;
   draggableToDock?: boolean;
+  /** Pick that surfaced this card (`chat:<message id>`), carried to Play for on-box attribution. */
+  recId?: string;
 };
 
 export default function TitleCard({
@@ -114,6 +117,7 @@ export default function TitleCard({
   userRole,
   multiUserEnabled = true,
   draggableToDock = false,
+  recId = "",
 }: TitleCardProps) {
   const [hovered, setHovered] = useState(false);
   const [whyOpen, setWhyOpen] = useState(false);
@@ -147,7 +151,7 @@ export default function TitleCard({
   const showAskOwner =
     capability.showGuidedCopy && itemNeedsAddGuidance(item) && addStatus !== "success";
   const showWatchPlex = canWatchOnPlex(item);
-  const playTo = showWatchPlex ? libraryWatchTo(plexPlayRatingKey(item), (location as any)) : null;
+  const playTo = showWatchPlex ? libraryWatchTo(plexPlayRatingKey(item), (location as any), { rec: recId }) : null;
   const backdropUrl = item.backdrop_url || item.art || "";
   const showRing =
     item.media_type === "show" &&
@@ -331,10 +335,8 @@ export default function TitleCard({
     </>
   );
 
-  const posterMedia = item.poster_url ? (
-    <img src={item.poster_url} alt="" loading="lazy" />
-  ) : (
-    <div className="poster-fallback">{item.title?.slice(0, 1) || "?"}</div>
+  const posterMedia = (
+    <PosterArt posterUrl={item.poster_url} title={item.title} year={item.year} />
   );
 
   const showCompactOverlay = Boolean(

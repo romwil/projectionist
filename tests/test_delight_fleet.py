@@ -196,7 +196,7 @@ class NewsletterPreviewTests(unittest.TestCase):
         self.assertEqual(payload.get("body"), expected["body"])
         self.assertEqual(payload.get("subject"), expected["subject"])
         self.assertEqual(payload.get("picks"), expected.get("picks") or [])
-        self.assertIn("Nothing new this week", payload["body"])
+        self.assertIn("Quiet week", payload["body"])
         deliver.assert_not_called()
         fanout.assert_not_called()
 

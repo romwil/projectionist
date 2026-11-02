@@ -28,7 +28,7 @@ import httpx
 from fastapi import Depends, HTTPException, Request, Response
 from starlette.responses import JSONResponse
 
-from projectionist.config_store import Settings, load_merged_settings
+from projectionist.config_store import Settings, SettingsCorruptError, load_merged_settings
 from projectionist.connectors.plex_account import (
     PLEX_PIN_CONFIRM_TIMEOUT_SECONDS,
     PLEX_PIN_POLL_TIMEOUT_SECONDS,
@@ -80,6 +80,8 @@ logger = logging.getLogger(__name__)
 
 UserRole = Literal["owner", "member"]
 
+SETTINGS_CORRUPT_DETAIL = "Settings unreadable; restore settings.json from a backup"
+
 
 def _data_dir() -> Path:
     return Path(os.environ.get("DATA_DIR", "/config"))
@@ -112,6 +114,8 @@ class CurrentUser:
     weather_place: Optional[str] = None
     weather_lat: Optional[float] = None
     weather_lon: Optional[float] = None
+    auth_method: str = "plex"
+    default_page: str = "auto"
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -136,6 +140,8 @@ class CurrentUser:
             "weather_place": self.weather_place,
             "weather_lat": self.weather_lat,
             "weather_lon": self.weather_lon,
+            "auth_method": self.auth_method,
+            "default_page": self.default_page,
         }
 
 
@@ -193,6 +199,14 @@ def row_to_current_user(row) -> CurrentUser:
         weather_lat = float(row["weather_lat"])
     if "weather_lon" in keys and row["weather_lon"] is not None:
         weather_lon = float(row["weather_lon"])
+    auth_method = "plex"
+    if "auth_method" in keys and row["auth_method"] is not None:
+        auth_method = str(row["auth_method"])
+    default_page = "auto"
+    if "default_page" in keys and row["default_page"] is not None:
+        cleaned_default_page = str(row["default_page"]).strip().lower()
+        if cleaned_default_page in {"auto", "chat", "explore"}:
+            default_page = cleaned_default_page
     user_id = str(row["id"])
     return CurrentUser(
         id=user_id,
@@ -200,6 +214,8 @@ def row_to_current_user(row) -> CurrentUser:
         role=str(row["role"]),  # type: ignore[arg-type]
         email=str(row["email"]) if row["email"] is not None else None,
         plex_user_id=str(row["plex_user_id"]) if row["plex_user_id"] is not None else None,
+        auth_method=auth_method,
+        default_page=default_page,
         seerr_user_id=int(row["seerr_user_id"]) if row["seerr_user_id"] is not None else None,
         avatar_url=resolve_avatar_url(user_id, avatar_url),
         preferred_name=preferred_name,
@@ -494,7 +510,10 @@ async def multi_user_api_auth_middleware(request: Request, call_next):
     if not path.startswith("/api/"):
         return await call_next(request)
 
-    settings = _settings()
+    try:
+        settings = await run_in_threadpool(_settings)
+    except SettingsCorruptError:
+        return JSONResponse({"detail": SETTINGS_CORRUPT_DETAIL}, status_code=503)
     if not settings.features.multi_user_enabled:
         if wan_interlock_blocks(request, multi_user_enabled=False):
             if path in {"/api/health", "/api/features"}:
@@ -1228,6 +1247,8 @@ def row_to_current_user_from_dict(d: dict) -> CurrentUser:
         weather_place=d.get("weather_place"),
         weather_lat=d.get("weather_lat"),
         weather_lon=d.get("weather_lon"),
+        auth_method=str(d.get("auth_method") or "plex"),
+        default_page=str(d.get("default_page") or "auto"),
     )
 
 

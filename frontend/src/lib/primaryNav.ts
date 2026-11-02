@@ -7,8 +7,11 @@
  * between the two surfaces.
  *
  * Icon order (L→R after hamburger + brand):
- * Search → Chat → Explore → Inbox → Admin → My Journey → Settings
- * (My Journey sits immediately left of Settings.)
+ * Search → Chat → Explore → Inbox → Admin → Settings
+ *
+ * BD-2: My Journey is not a primary peer — it is now the badges and
+ * achievements section of the profile page (Settings → Profile). Legacy
+ * `/my-journey` links redirect there rather than 404ing.
  */
 
 import { ROUTES } from "./backNav.js";
@@ -64,13 +67,6 @@ export const PRIMARY_NAV_ITEMS = [
     ownerOnly: true,
   },
   {
-    id: "my-journey",
-    to: ROUTES.myJourney,
-    label: "My Journey",
-    icon: "route",
-    testId: "topbar-my-journey-link",
-  },
-  {
     id: "settings",
     to: ROUTES.settings,
     label: "Settings",
@@ -83,7 +79,7 @@ export const PRIMARY_NAV_ITEMS = [
  * Public peers painted on first load. They are route links, not session data.
  * Admin is omitted until auth settles: useAuthGate defaults isOwner=true.
  */
-const PUBLIC_PRIMARY_IDS = ["search", "chat", "explore", "inbox", "my-journey", "settings"];
+const PUBLIC_PRIMARY_IDS = ["search", "chat", "explore", "inbox", "settings"];
 
 /**
  * Which primary toolbar peers a role may see.
@@ -118,9 +114,9 @@ export function primaryNavVisibleIds(
   const normalized = String(role || "owner").toLowerCase();
   const showAdmin = isOwner || (!multiUserEnabled && normalized === "owner");
   if (showAdmin && !isYouth) {
-    // Insert Admin immediately before My Journey (left of Settings cluster).
-    const journeyIdx = ids.indexOf("my-journey");
-    ids.splice(journeyIdx, 0, "admin");
+    // Insert Admin immediately before Settings.
+    const settingsIdx = ids.indexOf("settings");
+    ids.splice(settingsIdx, 0, "admin");
   }
   return ids;
 }
@@ -174,6 +170,37 @@ export function buildPrimaryDrawerItems(opts: JsParam = {}) {
   }));
 }
 
+/**
+ * UX-014: phone/iPad bottom nav shows the same role-correct peers as the
+ * topbar/drawer, but a bottom bar only has room for 5 — drop Live and Admin
+ * first (both stay reachable from the hamburger drawer) rather than
+ * cramming or wrapping.
+ */
+export function buildPrimaryBottomNavItems(opts: JsParam = {}) {
+  const items = buildPrimaryNavItems(opts);
+  if (items.length <= 5) return items;
+  const droppable = new Set(["live", "admin"]);
+  const trimmed = items.filter((item) => !droppable.has(item.id));
+  if (trimmed.length <= 5) return trimmed;
+  return trimmed.slice(0, 5);
+}
+
+/**
+ * UX-014: the bottom nav is chrome, not content — hide it over the player
+ * (`/watch/*`, `/live/watch`) and while the on-screen keyboard covers it
+ * on iOS (composer focused), rather than fighting either for space.
+ */
+export function shouldHidePrimaryBottomNav({
+  pathname = "",
+  composerFocused = false,
+  isIos = false,
+}: JsParam = {}) {
+  const path = String(pathname || "");
+  if (path.startsWith("/watch/") || path === ROUTES.liveWatch) return true;
+  if (composerFocused && isIos) return true;
+  return false;
+}
+
 /** True when pathname is the chat workspace (including legacy `/`). */
 export function isChatPath(pathname: JsParam) {
   const path = String(pathname || "");
@@ -192,9 +219,6 @@ export function isPrimaryNavActive(item: LibraryItem | null | undefined, pathnam
   }
   if (item!.id === "search") {
     return path === ROUTES.search || path.startsWith(`${ROUTES.search}?`);
-  }
-  if (item!.id === "my-journey") {
-    return path === ROUTES.myJourney || path.startsWith(`${ROUTES.myJourney}/`);
   }
   if (item!.id === "inbox") return path === ROUTES.inbox;
   if (item!.id === "admin") return path === ROUTES.admin || path.startsWith(`${ROUTES.admin}/`);

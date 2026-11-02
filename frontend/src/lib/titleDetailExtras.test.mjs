@@ -72,7 +72,7 @@ describe("titleDetailExtras", () => {
     assert.equal(reviewsCtaForDetail({ in_library: true, user_stars: 4 })?.kind, "rated");
     const rate = reviewsCtaForDetail({ in_library: true });
     assert.equal(rate?.kind, "rate");
-    assert.equal(rate?.label, "Review");
+    assert.equal(rate?.label, "Rate");
     assert.equal(rate?.tooltip, "Leave a review");
     assert.equal(rate?.action, "inline");
     assert.equal(rate?.href, null);

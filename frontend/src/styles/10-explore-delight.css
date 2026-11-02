@@ -29,7 +29,10 @@
 .explore-hub-guide:focus-visible {
   border-color: color-mix(in srgb, var(--accent, #c4a35a) 75%, transparent);
   background: color-mix(in srgb, var(--accent, #c4a35a) 14%, var(--surface, #14181f));
-  outline: none;
+}
+.explore-hub-guide:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
 }
 .explore-hub-guide-label {
   font-size: 1rem;
@@ -107,7 +110,7 @@
 
 .relation-breadcrumbs button:hover,
 .relation-breadcrumbs button:focus-visible {
-  color: var(--accent);
+  color: var(--accent-ink);
   text-decoration: underline;
   text-underline-offset: 0.18em;
 }
@@ -236,7 +239,7 @@
 
 .relation-card-copy h2 a:hover,
 .relation-card-copy h2 a:focus-visible {
-  color: var(--accent);
+  color: var(--accent-ink);
   text-decoration: underline;
 }
 
@@ -488,7 +491,10 @@
 .explore-hover-icon:hover,
 .explore-hover-icon:focus-visible {
   background: rgba(10, 12, 16, 0.62);
-  outline: none;
+}
+.explore-hover-icon:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
 }
 
 /* Touch: poster actions cannot live behind hover. Keep Play/trailer/recommend
@@ -714,7 +720,6 @@
   color: var(--accent, #c4a35a);
   border-color: color-mix(in srgb, var(--accent, #c4a35a) 45%, transparent);
   background: color-mix(in srgb, var(--accent, #c4a35a) 10%, transparent);
-  outline: none;
 }
 
 .scheduled-task-icon-btn:focus-visible {
@@ -1488,7 +1493,7 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
 
 .removal-summary-paths-label {
   margin: 0 0 0.35rem;
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--muted);
@@ -1585,7 +1590,10 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
 .section-help-trigger:focus-visible {
   color: var(--text);
   border-color: var(--accent, var(--border));
-  outline: none;
+}
+.section-help-trigger:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
 }
 
 .section-help-popover {
@@ -1821,7 +1829,7 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
   padding: 0;
   margin: 0;
   font: inherit;
-  color: var(--accent);
+  color: var(--accent-ink);
   text-align: left;
   cursor: pointer;
   text-decoration: underline;
@@ -1944,7 +1952,7 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
   border-color: var(--accent);
 }
 .owner-health-tile.tone-warn .owner-health-tile-value {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 .owner-health-tile.tone-good .owner-health-tile-value {
   color: var(--success);
@@ -2057,7 +2065,7 @@ a.weekly-digest-stat:focus-visible {
 }
 .recommendation-title-link,
 .review-prompt-title-link {
-  color: var(--accent);
+  color: var(--accent-ink);
   text-decoration: underline;
   text-underline-offset: 0.12em;
 }
@@ -2105,7 +2113,7 @@ a.weekly-digest-stat:focus-visible {
   text-decoration: none;
 }
 .on-now-row-link:hover .on-now-channel {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 .on-now-list {
   list-style: none;
@@ -2159,7 +2167,7 @@ a.weekly-digest-stat:focus-visible {
 
 .live-sticky-osd-label {
   margin: 0;
-  font-size: 0.68rem;
+  font-size: var(--text-xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
@@ -2195,7 +2203,7 @@ a.weekly-digest-stat:focus-visible {
 .live-tune-share-url {
   display: block;
   margin: 0.5rem 0;
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   word-break: break-all;
 }
 
@@ -2416,7 +2424,7 @@ a.weekly-digest-stat:focus-visible {
   .owner-now-playing-table td::before {
     content: attr(data-label);
     display: block;
-    font-size: 0.68rem;
+    font-size: var(--text-xs);
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--muted);
@@ -2555,7 +2563,7 @@ a.weekly-digest-stat:focus-visible {
 }
 .youth-review-note-kind {
   font-size: var(--text-xs);
-  color: var(--accent);
+  color: var(--accent-ink);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -2610,7 +2618,7 @@ a.weekly-digest-stat:focus-visible {
 }
 .explore-rail-chat-link {
   font-size: var(--text-sm);
-  color: var(--accent);
+  color: var(--accent-ink);
   text-decoration: none;
 }
 .explore-rail-chat-link:hover {
