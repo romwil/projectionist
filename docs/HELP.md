@@ -924,7 +924,9 @@ Generate/rotate both in **Admin → Advanced** (or set the env vars); the keys m
 
 **Lobby Theater** is a second HTTP listener for wall-mounted kiosks — not part of the main SPA on `:8788`. It shows live Plex **now playing** when sessions exist; otherwise an idle **now available** poster carousel sourced from your indexed library.
 
-**Enable and tune (Admin → Lobby):** orientation, audience filter, idle mode (`empty` vs `now_available`), multi-poster layout, header mode (dynamic feed labels vs static text), and rotate interval. Save persists to `settings.json`; the theater watcher picks up changes on the next tick.
+**Off until you turn it on.** A fresh install does not listen on the theater port. Turn on **Enable lobby display** under Admin → Lobby, save, and restart the container; the theater port opens on the next start. `PROJECTIONIST_THEATER_DISABLE=1` keeps it closed regardless.
+
+**Tune (Admin → Lobby):** orientation, audience filter, idle mode (`empty` vs `now_available`), multi-poster layout, header mode (dynamic feed labels vs static text), and rotate interval. Save persists to `settings.json`; once the theater is listening, the watcher picks up changes on the next tick.
 
 **Open the kiosk:** `http://<host>:8791/` (default theater port — map it LAN-only in Docker/Unraid). Add a feed for the idle deck:
 
