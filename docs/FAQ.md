@@ -135,16 +135,20 @@ Projectionist is a **taste-aware curator** (RAG, persona, ratings, purge advice,
 
 ## Can I export or delete everything Projectionist knows about me?
 
-Yes. Every account can export a full copy of its own data or permanently purge it — **the same set either way**: your private notes, chat threads + message transcripts, saved library pages, and preference facts.
+Not completely, and not from a button yet. You can delete a conversation from the thread list in **Chat**. To leave, ask the owner to remove your account in **Admin → Members**. That deletes your profile, chats, memory, watchlist, lists, inbox, and viewing record, but leaves your ratings and reviews, your join request, your avatar file, shared knowledge the curator saved, and copies in existing backups.
+
+Owners and comfortable terminal users can export or purge part of their own account with the API (signed in as that account):
 
 ```bash
-# Export your account data (as the signed-in user)
-curl -s http://localhost:8788/api/me/memory > my-projectionist-export.json
-# Permanently delete the same set (export first — this is irreversible)
-curl -s -X DELETE http://localhost:8788/api/me/memory
+# Export notes, chats, saved pages, preference facts, mapped watch evidence, activity counts
+curl -s -b 'curatorx_session=YOUR_SESSION' \
+  http://localhost:8788/api/me/memory > my-projectionist-export.json
+# Permanently delete that same set
+curl -s -b 'curatorx_session=YOUR_SESSION' -X DELETE \
+  http://localhost:8788/api/me/memory
 ```
 
-Shared, sanitized media research isn't tied to your account and isn't part of a purge. The exact map is on the [Privacy](/privacy) page.
+The full map of what removal deletes and keeps is on the [Privacy](/privacy#getting-a-copy-or-leaving) page.
 
 ## Where is the privacy policy?
 
