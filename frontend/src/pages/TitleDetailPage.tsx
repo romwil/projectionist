@@ -19,6 +19,7 @@ import {
   canOwnerDeleteLibraryTitle,
   LIBRARY_DELETE_NOTICE_KEY,
 } from "../lib/bulkLibraryDelete.js";
+import Button from "../components/Button";
 
 export default function TitleDetailPage() {
   const { mediaType, itemId } = useParams();
@@ -166,14 +167,14 @@ export default function TitleDetailPage() {
                 >
                   Open on YouTube
                 </a>
-                <button
-                  type="button"
-                  className="ghost"
+                <Button
+                  variant="secondary"
+                  size="sm"
                   data-testid="close-trailer-modal"
                   onClick={() => setTrailerOpen(false)}
                 >
                   Close
-                </button>
+                </Button>
               </div>
             </div>
             <div className="trailer-modal-frame">

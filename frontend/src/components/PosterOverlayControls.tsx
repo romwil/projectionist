@@ -15,6 +15,7 @@ import { watchProgressState } from "../lib/watchProgress.js";
 import PosterActionMenu from "./PosterActionMenu";
 import WatchProgressBadge from "./WatchProgressBadge";
 import { focusTrailerFrame, trailerEmbedUrl } from "../lib/trailerEmbed";
+import Button from "./Button";
 
 /**
  * Shared interactive title-poster controls. Play deliberately requires a
@@ -181,7 +182,7 @@ export default function PosterOverlayControls({
               <h2>{item.title || "Trailer"}</h2>
               <div className="trailer-modal-actions">
                 <a className="btn-link ghost" href={`https://www.youtube.com/watch?v=${encodeURIComponent(trailerKey)}`} target="_blank" rel="noopener noreferrer">Open on YouTube</a>
-                <button type="button" className="ghost" onClick={() => setTrailerOpen(false)}>Close</button>
+                <Button variant="secondary" size="sm" onClick={() => setTrailerOpen(false)}>Close</Button>
               </div>
             </div>
             <div className="trailer-modal-frame">

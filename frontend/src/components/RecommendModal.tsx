@@ -8,6 +8,7 @@ import {
 } from "../lib/householdSocial.js";
 import { useBulkActionProgress } from "./BulkActionProgress";
 import { useFocusTrap } from "../hooks/useFocusTrap";
+import Button from "./Button";
 
 /** Props for RecommendModal. `any` = API/handler bags until Wave 4 client generics. */
 type RecommendModalProps = {
@@ -145,9 +146,9 @@ export default function RecommendModal({ item, open, onClose, onSent, defaultInt
               {item.year ? ` (${item.year})` : ""}
             </h2>
           </div>
-          <button type="button" className="ghost" onClick={onClose} data-testid="recommend-modal-close">
+          <Button variant="secondary" size="sm" onClick={onClose} data-testid="recommend-modal-close">
             Close
-          </button>
+          </Button>
         </header>
 
         <form className="recommend-modal-form" onSubmit={handleSend}>
@@ -238,16 +239,17 @@ export default function RecommendModal({ item, open, onClose, onSent, defaultInt
           ) : null}
 
           <div className="recommend-modal-actions">
-            <button type="button" className="ghost" onClick={onClose}>
+            <Button variant="secondary" onClick={onClose}>
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="primary"
               type="submit"
               data-testid="recommend-send"
               disabled={sending || !peers.length || !selected.size}
             >
               {sending ? copy.sendingLabel : copy.sendLabel}
-            </button>
+            </Button>
           </div>
         </form>
       </div>
