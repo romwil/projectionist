@@ -506,7 +506,8 @@ class FeatureFlags:
     # reviews, memory) for the acting user without a confirm token. Single-owner
     # mode ignores this flag and always allows immediate personal writes (H5).
     agent_may_mutate_personal_data: bool = False
-    # Tunarr-backed Live Channels (Plex Live TV). Off until owner enables.
+    # Projectionist Live Channels. Off until the owner enables them.
+    # Nav readiness is "enabled and at least one station", not a Tunarr URL.
     live_channels_enabled: bool = False
 
 

@@ -1508,7 +1508,6 @@ export const AUTO_CERTIFY_SERVICES = [
   "fanart",
   "tautulli",
   "seerr",
-  "tunarr",
 ];
 
 export async function getWizardStatus() {
@@ -2001,7 +2000,6 @@ export async function testService(service: string, settings: JsonObject) {
     ...settings,
     seerr_url: settings?.seerr?.url ?? settings?.seerr_url ?? "",
     seerr_api_key: settings?.seerr?.api_key ?? settings?.seerr_api_key ?? "",
-    tunarr_url: settings?.tunarr?.url ?? settings?.tunarr_url ?? "",
   };
   return api(`/setup/test/${service}`, {
     method: "POST",

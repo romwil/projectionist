@@ -1231,6 +1231,8 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
     request_path = "seerr" if uses_seerr_request_path(settings, role=user.role) else "arr"
     from projectionist.config_store import household_profile_name
     from projectionist.notifications.service import notification_channel_offerings
+    from projectionist.web.nav_bootstrap import live_channels_nav_ready
+
     profile = household_profile_name(settings)
     payload: Dict[str, Any] = {
         "features": {
@@ -1244,11 +1246,9 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
             "live_channels_enabled": bool(
                 getattr(settings.features, "live_channels_enabled", False)
             ),
-            # Ready for /live nav: feature on + Tunarr URL configured (page probes guide).
-            "live_channels_ready": bool(
-                getattr(settings.features, "live_channels_enabled", False)
-                and str(getattr(settings.tunarr, "url", "") or "").strip()
-            ),
+            # Ready for /live nav: feature on and at least one native station.
+            # A Tunarr URL is not part of this.
+            "live_channels_ready": live_channels_nav_ready(settings),
             "household_profile": profile,
             "access_requests_enabled": bool(
                 getattr(settings.features, "access_requests_enabled", True)

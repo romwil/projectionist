@@ -8,7 +8,6 @@ import {
   getLiveChannelsPublishStatus,
   getLiveChannelsStatus,
   getLiveChannelsTunarrLogs,
-  getSettings,
   postLiveChannelsContinuityRepair,
   postLiveChannelsLifecycle,
 } from "../api/client";
@@ -816,9 +815,6 @@ export default function useLiveChannelsAdmin({
 
     try {
       const result = await postLiveChannelsLifecycle("ensure_running");
-      if (result.tunarr_url) {
-        updateTunarrSettings?.({ url: result.tunarr_url });
-      }
       if (!result.ok) {
         const message = result.message || "TV engine failed to start.";
         setLiveEngineError(message);
@@ -884,9 +880,6 @@ export default function useLiveChannelsAdmin({
       }
       const status = await getLiveChannelsStatus();
       setLiveChannelsStatus(status);
-      if (result.tunarr_url) {
-        await getSettings().then((next) => setSettings?.(next)).catch(() => {});
-      }
     } catch (error) {
       stopEngineProgressPoll();
       const message = (error as ApiError).message || "TV engine failed to start.";
