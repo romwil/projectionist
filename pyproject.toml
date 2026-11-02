@@ -167,6 +167,16 @@ files = [
     "projectionist/privacy",
     "projectionist/reviews",
     "projectionist/telemetry",
+    # ARCH-006: auth, backup/restore, and the write queue can break a release.
+    "projectionist/backups.py",
+    "projectionist/library/db/_write_serializer.py",
+    "projectionist/web/auth.py",
+    "projectionist/web/household_pulse.py",
+    "projectionist/web/owner_ops_routes.py",
+    "projectionist/web/rate_limit.py",
+    "projectionist/web/runtime_metrics.py",
+    "projectionist/web/runtime_routes.py",
+    "projectionist/web/session_tokens.py",
 ]
 
 # numpy ships py.typed stubs that use 3.12+ `type` statement syntax, which the
