@@ -79,6 +79,10 @@ class ReviewsToolsMixin:
         return json.dumps(summary)
 
     async def _tool_get_user_reviews(self, args: Mapping[str, Any]) -> str:
+        # Same scope as GET /api/reviews: household mode never reads unscoped (SEC-009).
+        scoped_user_id = self.user_id if self.settings.features.multi_user_enabled else None
+        if self.settings.features.multi_user_enabled and not scoped_user_id:
+            return json.dumps({"items": [], "count": 0})
         items = get_reviews(
             self.db,
             rating_key=str(args["rating_key"]) if args.get("rating_key") else None,
@@ -87,6 +91,7 @@ class ReviewsToolsMixin:
             title=str(args["title"]) if args.get("title") else None,
             min_stars=int(args["min_stars"]) if args.get("min_stars") is not None else None,
             limit=int(args.get("limit") or 25),
+            user_id=scoped_user_id,
         )
         return json.dumps({"items": items, "count": len(items)})
 

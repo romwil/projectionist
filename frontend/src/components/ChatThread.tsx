@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { collectAddableFromMessage } from "../lib/addActions";
+import { peekViewerIsYouth } from "../lib/authGate.js";
 import {
   buildAgentRailPrompt,
   harvestResultListItems,
@@ -102,6 +103,7 @@ function renderBulkConfirmActions(message: any, handlers: any, showTokenConfirm:
     requestPath: handlers.requestPath,
     role: handlers.userRole,
     multiUserEnabled: handlers.multiUserEnabled,
+    isYouth: peekViewerIsYouth(),
   });
   const actions = [];
 

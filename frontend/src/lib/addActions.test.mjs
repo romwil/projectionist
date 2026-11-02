@@ -10,6 +10,7 @@ import {
   normalizePendingTokens,
   normalizeUserRole,
   resolveAddCapability,
+  ASK_OWNER_COPY,
   summarizePendingTokenActions,
   tokenConfirmButtonLabel,
   tokenConfirmFailureMessage,
@@ -194,6 +195,29 @@ test("resolveAddCapability maps legacy guest to member capability", () => {
   assert.equal(ownerArr.canRequest, false);
 });
 
+test("only the owner adds to Radarr/Sonarr; members see Ask the owner (SEC-006)", () => {
+  const memberArr = resolveAddCapability({ role: "member", requestPath: "arr" });
+  assert.equal(memberArr.canAdd, false);
+  assert.equal(memberArr.canRequest, false);
+  assert.equal(memberArr.showGuidedCopy, true);
+  assert.equal(memberArr.guidedCopy, ASK_OWNER_COPY);
+
+  const singleUser = resolveAddCapability({ role: "member", requestPath: "arr", multiUserEnabled: false });
+  assert.equal(singleUser.canAdd, true);
+});
+
+test("youth never get an acquisition control on either path", () => {
+  for (const requestPath of ["arr", "seerr"]) {
+    const youth = resolveAddCapability({ role: "member", requestPath, isYouth: true });
+    assert.equal(youth.canAdd, false);
+    assert.equal(youth.canRequest, false);
+    assert.equal(youth.showGuidedCopy, false);
+  }
+  const items = [{ title: "Dune", media_type: "movie", tmdb_id: 1 }];
+  const youthSeerr = groupAddableItems(items, { requestPath: "seerr", role: "member", isYouth: true });
+  assert.deepEqual(youthSeerr, { radarr: [], sonarr: [], seerr: [] });
+});
+
 test("groupAddableItems treats legacy guest as member", () => {
   const items = [
     { title: "Dune", media_type: "movie", tmdb_id: 1 },
@@ -202,6 +226,7 @@ test("groupAddableItems treats legacy guest as member", () => {
   const guest = groupAddableItems(items, { requestPath: "arr", role: "guest" });
   const memberArr = groupAddableItems(items, { requestPath: "arr", role: "member" });
   assert.deepEqual(guest, memberArr);
+  assert.deepEqual(memberArr, { radarr: [], sonarr: [], seerr: [] });
   const member = groupAddableItems(items, { requestPath: "seerr", role: "member" });
   assert.equal(member.seerr.length, 2);
   assert.equal(member.radarr.length, 0);
