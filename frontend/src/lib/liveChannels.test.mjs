@@ -1055,6 +1055,19 @@ function localEpoch(year, month, day, hour, minute) {
   return new Date(year, month - 1, day, hour, minute, 0, 0).getTime() / 1000;
 }
 
+function dayPeriod(epoch, locale) {
+  const parts = new Intl.DateTimeFormat(locale, {
+    hour: "numeric",
+    minute: "2-digit",
+  }).formatToParts(new Date(epoch * 1000));
+  const periodIndex = parts.findIndex((part) => part.type === "dayPeriod");
+  const hourIndex = parts.findIndex((part) => part.type === "hour");
+  return {
+    period: periodIndex >= 0 ? parts[periodIndex].value.trim() : "",
+    periodFirst: periodIndex >= 0 && (hourIndex < 0 || periodIndex < hourIndex),
+  };
+}
+
 describe("guide programme from–to labels", () => {
   const eightPm = localEpoch(2026, 11, 1, 20, 0);
   const eightThirtyPm = localEpoch(2026, 11, 1, 20, 30);
@@ -1079,8 +1092,25 @@ describe("guide programme from–to labels", () => {
   });
 
   it("puts a leading day period once when the locale prints it first", () => {
-    assert.equal(formatProgramTimeRange(eightPm, nineThirtyPm, "ko-KR"), "오후 8:00–9:30");
-    assert.equal(formatProgramTimeRange(elevenThirtyPm, oneAm, "ko-KR"), "오후 11:30–오전 1:00");
+    // Day-period words depend on the runtime's ICU data (오후 on a full ICU,
+    // PM on GitHub's Node). Read them from Intl and check the shape.
+    const start = dayPeriod(eightPm, "ko-KR");
+    const stop = dayPeriod(nineThirtyPm, "ko-KR");
+    assert.ok(start.period);
+    assert.equal(start.periodFirst, true);
+    assert.equal(start.period, stop.period);
+    const same = formatProgramTimeRange(eightPm, nineThirtyPm, "ko-KR");
+    assert.equal(same, `${start.period} 8:00–9:30`);
+    assert.equal(same.split(start.period).length - 1, 1);
+
+    const late = dayPeriod(elevenThirtyPm, "ko-KR");
+    const early = dayPeriod(oneAm, "ko-KR");
+    assert.notEqual(late.period, early.period);
+    const crossed = formatProgramTimeRange(elevenThirtyPm, oneAm, "ko-KR");
+    const expected = late.periodFirst
+      ? `${late.period} 11:30–${early.period} 1:00`
+      : `11:30 ${late.period}–1:00 ${early.period}`;
+    assert.equal(crossed, expected);
   });
 
   it("reads schedule start and stop and does not invent a missing end", () => {
