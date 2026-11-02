@@ -14,7 +14,7 @@ import {
 import GlassDoor from "../components/GlassDoor";
 import InlineAlert from "../components/InlineAlert";
 import { resolveDefaultHome } from "../lib/defaultHome";
-import { loginLede, plexAdvancedCopy, resolveAuthMethods } from "../lib/loginScreen";
+import { loginDoorDecision, loginLede, plexAdvancedCopy, resolveAuthMethods } from "../lib/loginScreen";
 import { startPlexPinPoll } from "../lib/plexPinPoll";
 
 const PIN_TIMEOUT_MS = 15 * 60 * 1000;
@@ -88,15 +88,20 @@ export default function LoginPage() {
 
   useEffect(() => {
     getFeatures()
-      .then((data) => {
-        setFeatures(data);
-        if (data?.setup_state === "setup") {
+      .then(async (data) => {
+        const me = data?.features?.multi_user_enabled && data?.setup_state !== "setup"
+          ? await getAuthMe().catch(() => null)
+          : null;
+        const decision = loginDoorDecision({ features: data, me });
+        if (decision === "setup") {
           navigate("/setup", { replace: true });
           return;
         }
-        if (!data?.features?.multi_user_enabled) {
+        if (decision === "redirect") {
           postLoginDestination(data).then((to) => navigate(to, { replace: true }));
+          return;
         }
+        setFeatures(data);
       })
       .catch((fetchError) => setError(formatApiError(fetchError)));
     // Mount-only: postLoginDestination reads `location`/`features` by closure at call time.
@@ -244,12 +249,14 @@ export default function LoginPage() {
 
   const methods = resolveAuthMethods(features?.auth_methods);
   const featuresLoading = features == null && !error;
+  // UX-011: `features` is set only once we know nobody is signed in, so no
+  // form paints for a session that is about to be redirected.
   const plexEnabled = methods.includes("plex");
-  const localEnabled = methods.includes("local") || featuresLoading;
+  const localEnabled = methods.includes("local");
   const oidcEnabled = methods.includes("oidc");
   const oidcProviderName = features?.oidc_provider_name || features?.auth?.oidc_provider_name || "SSO";
   const noMethods = features != null && methods.length === 0;
-  const accessRequestsOn = features?.features?.access_requests_enabled !== false;
+  const accessRequestsOn = features != null && features?.features?.access_requests_enabled !== false;
   const lede = featuresLoading ? "Loading sign-in options…" : loginLede(methods);
   const householdName = features?.household_domain || "Projectionist";
   const advanced = plexAdvancedCopy({ open: showTokenInput });
