@@ -708,7 +708,6 @@ export async function mockCuratorApis(page: Page) {
           multi_user_enabled: false,
           seerr_enabled: false,
           plex_collections_enabled: false,
-          guest_tour_enabled: true,
           invite_only: true,
           open_auto_provision: false,
           live_channels_enabled: false,
@@ -885,7 +884,6 @@ export type FeatureFlags = {
   multi_user_enabled?: boolean;
   seerr_enabled?: boolean;
   plex_collections_enabled?: boolean;
-  guest_tour_enabled?: boolean;
   invite_only?: boolean;
   open_auto_provision?: boolean;
   live_channels_enabled?: boolean;
@@ -933,7 +931,6 @@ export async function mockFeatures(page: Page, features: MockFeaturesOptions = {
           multi_user_enabled: false,
           seerr_enabled: false,
           plex_collections_enabled: false,
-          guest_tour_enabled: true,
           invite_only: true,
           open_auto_provision: false,
           live_channels_enabled: false,
