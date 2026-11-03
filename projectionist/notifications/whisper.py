@@ -125,7 +125,7 @@ def pick_whisper_title(
     """Pick one unwatched title with a named link to something already watched.
 
     A taste tag, a shared genre, or the highest-rated shelf title is not a pick.
-    When multi-user is on, prefer this member's watch evidence, then household.
+    When multi-user is on, only this member's own watch evidence counts.
     """
     return pick_linked_unwatched(
         db, user_id=str(user_id), multi_user_enabled=multi_user_enabled

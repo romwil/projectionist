@@ -10,6 +10,7 @@ import {
   itemNeedsAddGuidance,
   resolveAddCapability,
 } from "../lib/addActions.js";
+import { peekViewerIsYouth } from "../lib/authGate.js";
 import { setTitleCardDragData } from "../lib/easterEggs.js";
 import { formatMatchPercent } from "../lib/matchScore.js";
 import { displayRecommendationReason } from "../lib/recommendationReason.js";
@@ -133,7 +134,12 @@ export default function TitleCard({
         : availability.shortLabel;
   const matchLabel = formatMatchPercent(item);
   const userStars = item.user_stars;
-  const capability = resolveAddCapability({ role: userRole, requestPath, multiUserEnabled });
+  const capability = resolveAddCapability({
+    role: userRole,
+    requestPath,
+    multiUserEnabled,
+    isYouth: peekViewerIsYouth(),
+  });
   const canRequestSeerr =
     capability.canRequest && isRequestableInSeerr(item) && addStatus !== "success";
   const canAddRadarr =

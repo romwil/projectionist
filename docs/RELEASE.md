@@ -15,7 +15,7 @@ A version is **not released** until Docker Hub has `romwil/projectionist:X.Y.Z` 
 | Step | What | Gate |
 |------|------|------|
 | **0. Prepare** | Semver bump + CHANGELOG + tests on a **PR branch** (branch protection → no direct push to `main`) | CI green; versions lockstep |
-| **1. Hub** | `./scripts/docker-release.sh X.Y.Z` → `romwil/projectionist:{X.Y.Z,X.Y,latest}` | `docker buildx imagetools inspect romwil/projectionist:X.Y.Z` succeeds |
+| **1. Hub** | `./scripts/docker-release.sh X.Y.Z` → `romwil/projectionist:{X.Y.Z,X.Y,latest}`; then push the listing: `docker pushrm romwil/projectionist --file docs/DOCKERHUB.md` | `docker buildx imagetools inspect romwil/projectionist:X.Y.Z` succeeds; **Hub description pushed** (Hub page matches `docs/DOCKERHUB.md`, no `curatorx` link) |
 | **2. GitHub** | Merge PR → `main`, annotated tag `vX.Y.Z`, `gh release create` | Tag + release match Hub version |
 | **3. CA proof** | On Automat (or equivalent), **pull** that Hub tag onto QA / a disposable container — same path Unraid CA will use | Running image digest matches Hub; **not** a Path A host `docker build` |
 | **4. Prod** | `ssh automat 'cd /mnt/user/appdata/projectionist && ./rollout.sh X.Y.Z'` (pull-only; not Mac mount) | LAN `http://10.10.1.202:8788/api/health` + `/app/.build-info` show `X.Y.Z` |

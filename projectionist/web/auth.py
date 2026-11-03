@@ -255,8 +255,8 @@ def bootstrap_owner(db: Optional[Database] = None) -> CurrentUser:
 # the owner credential be injected into the container via environment variables —
 # a natural fit for an Unraid CA template field. When set, the owner account is
 # seeded up front, so ownership is never up for grabs and the operator always
-# holds the credential (no lockout). When unset, the legacy trusted-LAN behavior
-# is preserved (first login claims owner).
+# holds the credential (no lockout). When unset, the first sign-in becomes owner
+# only with the one-time claim in ``projectionist.web.owner_claim`` (SEC-008).
 
 DEFAULT_OWNER_USERNAME = "owner"
 MIN_OWNER_PASSWORD_LENGTH = 8
@@ -287,15 +287,6 @@ def has_real_owner(db: Database) -> bool:
     return _has_real_owner(db)
 
 
-def resolve_new_user_role(db: Database) -> str:
-    """Role for a brand-new account.
-
-    ``member`` when a real owner already exists (e.g. an env-seeded owner);
-    otherwise ``owner`` (legacy trusted-LAN first-login behavior).
-    """
-    return "member" if has_real_owner(db) else "owner"
-
-
 def seed_env_owner(db: Database) -> Optional[str]:
     """Ensure the env-injected owner account exists; return its user id or None.
 
@@ -314,6 +305,7 @@ def seed_env_owner(db: Database) -> Optional[str]:
             "refusing to seed a weak owner.",
             MIN_OWNER_PASSWORD_LENGTH,
         )
+        _record_env_owner_status(db, ENV_OWNER_STATUS_WEAK)
         return None
 
     existing = db.get_user_by_display_name(username)
@@ -328,6 +320,7 @@ def seed_env_owner(db: Database) -> Optional[str]:
                 "skipping promote of '%s'.",
                 username,
             )
+            _record_env_owner_status(db, ENV_OWNER_STATUS_SKIPPED)
             return None
         changed = False
         if not is_owner:
@@ -337,8 +330,12 @@ def seed_env_owner(db: Database) -> Optional[str]:
         if not _verify_password(password, str(stored_hash or "")):
             db.update_user_password(user_id, _hash_password(password))
             changed = True
+            from projectionist import security_audit as sa
+
+            sa.audit(db, sa.PASSWORD_RESET, actor_id=user_id, target_id=user_id, method="env")
         if changed:
             logger.info("Owner account '%s' updated from PROJECTIONIST_OWNER_PASSWORD.", username)
+        _record_env_owner_status(db, "")
         return user_id
 
     if has_real_owner(db):
@@ -347,6 +344,7 @@ def seed_env_owner(db: Database) -> Optional[str]:
             "skipping seed of '%s'.",
             username,
         )
+        _record_env_owner_status(db, ENV_OWNER_STATUS_SKIPPED)
         return None
 
     user_id = f"local-{secrets.token_hex(12)}"
@@ -357,7 +355,32 @@ def seed_env_owner(db: Database) -> Optional[str]:
         role="owner",
     )
     logger.info("Seeded owner account '%s' from PROJECTIONIST_OWNER_PASSWORD.", username)
+    _record_env_owner_status(db, "")
     return user_id
+
+
+ENV_OWNER_STATUS_KEY = "env_owner_status"
+ENV_OWNER_STATUS_SKIPPED = "skipped"
+ENV_OWNER_STATUS_WEAK = "weak"
+
+
+def _record_env_owner_status(db: Database, status: str) -> None:
+    """Remember why the env owner was not applied, for Admin → Needs attention."""
+    try:
+        if str(db.get_config(ENV_OWNER_STATUS_KEY) or "") != status:
+            db.set_config(ENV_OWNER_STATUS_KEY, status)
+    except Exception:  # noqa: BLE001
+        logger.debug("Could not record env owner status", exc_info=True)
+
+
+def env_owner_status(db: Database) -> str:
+    """``skipped`` / ``weak`` when the env owner password was set but not applied, else ""."""
+    if not env_owner_password_configured():
+        return ""
+    try:
+        return str(db.get_config(ENV_OWNER_STATUS_KEY) or "")
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def _cookie_should_be_secure(request: Optional[Request]) -> bool:
@@ -812,6 +835,7 @@ def poll_plex_pin_login(pin_id: int, request: Request, db: Database) -> Optional
         db,
         invite_token=invite_token,
         defer_followups=True,
+        request=request,
     )
     schedule_plex_login_followups(db, user.id)
     return user
@@ -918,12 +942,27 @@ def _has_real_owner(db: Database) -> bool:
     return False
 
 
+def _require_owner_claim(db: Database, request: Optional[Request]) -> None:
+    """Fail closed unless ``request`` holds the one-time owner claim; consume it."""
+    from projectionist.web.owner_claim import (
+        NO_OWNER_DETAIL,
+        consume_owner_claim,
+        request_holds_owner_claim,
+    )
+
+    if not request_holds_owner_claim(db, request):
+        logger.warning("First sign-in refused: no owner exists and no owner claim was presented.")
+        raise HTTPException(status_code=403, detail=NO_OWNER_DETAIL)
+    consume_owner_claim(db)
+
+
 def authenticate_plex_user(
     auth_token: str,
     db: Database,
     *,
     invite_token: Optional[str] = None,
     defer_followups: bool = False,
+    request: Optional[Request] = None,
 ) -> CurrentUser:
     settings = _ensure_plex_login_enabled()
 
@@ -946,9 +985,10 @@ def authenticate_plex_user(
         role = str(existing["role"])
     else:
         user_id = f"plex-{plex_user_id}"
-        # First real household owner bootstraps regardless of invite-only
-        # (bootstrap-owner alone does not count).
+        # No real owner yet (bootstrap-owner alone does not count): only a
+        # holder of the one-time owner claim may take the role (SEC-008).
         if not _has_real_owner(db):
+            _require_owner_claim(db, request)
             role = "owner"
             invite_for_new = None
         else:
@@ -1423,6 +1463,7 @@ def handle_oidc_callback(
     )
 
     if db.count_users_with_role("owner") == 0 or not _has_real_owner(db):
+        _require_owner_claim(db, request)
         user_row = db.upsert_oidc_user(
             oidc_sub=sub,
             display_name=display_name,

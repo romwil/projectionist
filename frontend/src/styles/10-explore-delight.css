@@ -22,13 +22,13 @@
   text-decoration: none;
   color: inherit;
   background: var(--surface, #14181f);
-  border: 1px solid color-mix(in srgb, var(--accent, #c4a35a) 42%, var(--border, rgba(255,255,255,0.16)));
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border, rgba(255,255,255,0.16)));
   transition: border-color 140ms ease, background 140ms ease;
 }
 .explore-hub-guide:hover,
 .explore-hub-guide:focus-visible {
-  border-color: color-mix(in srgb, var(--accent, #c4a35a) 75%, transparent);
-  background: color-mix(in srgb, var(--accent, #c4a35a) 14%, var(--surface, #14181f));
+  border-color: color-mix(in srgb, var(--accent) 75%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface, #14181f));
 }
 .explore-hub-guide:focus-visible {
   outline: 2px solid var(--accent-ink);
@@ -307,9 +307,9 @@
   flex: 0 0 auto;
   padding: 0 var(--space-5);
   border-radius: var(--radius-lg, 14px);
-  border: 1px solid color-mix(in srgb, var(--accent, #c4a35a) 45%, transparent);
-  color: var(--bg, #10141b);
-  background: var(--accent, #c4a35a);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent-text);
+  background: var(--accent);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
@@ -674,7 +674,7 @@
 }
 
 .scheduled-task-row.is-selected td {
-  background: color-mix(in srgb, var(--accent, #c4a35a) 12%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .scheduled-task-row-actions {
@@ -717,13 +717,13 @@
 .scheduled-task-icon-btn:hover:not(:disabled),
 .scheduled-task-icon-btn:focus-visible:not(:disabled) {
   opacity: 1;
-  color: var(--accent, #c4a35a);
-  border-color: color-mix(in srgb, var(--accent, #c4a35a) 45%, transparent);
-  background: color-mix(in srgb, var(--accent, #c4a35a) 10%, transparent);
+  color: var(--accent-ink);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .scheduled-task-icon-btn:focus-visible {
-  outline: 2px solid var(--accent, #c4a35a);
+  outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
 
@@ -762,7 +762,7 @@
 
 .scheduled-task-pill.tone-running,
 .scheduled-task-row.tone-running td:first-child {
-  color: var(--accent, #c4a35a);
+  color: var(--accent-ink);
 }
 
 .scheduled-task-pill.tone-error,
@@ -830,8 +830,8 @@
 }
 
 .scheduled-tasks-sort-option.is-active {
-  border-color: var(--accent, #c4a35a);
-  color: var(--accent, #c4a35a);
+  border-color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .scheduled-task-description {
@@ -878,8 +878,8 @@
 }
 
 .scheduled-task-cadence-preset.is-active {
-  border-color: var(--accent, #c4a35a);
-  color: var(--accent, #c4a35a);
+  border-color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .scheduled-task-cadence-custom {
@@ -989,7 +989,7 @@
 }
 
 .scheduled-tasks-log-line.level-status {
-  color: var(--accent, #c4a35a);
+  color: var(--accent-ink);
 }
 
 .scheduled-tasks-log-line.is-optimistic {
@@ -1024,7 +1024,7 @@
 }
 
 .scheduled-tasks-execution-log-toggle:hover {
-  background: color-mix(in srgb, var(--accent, #c4a35a) 8%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .scheduled-tasks-execution-log-title {
@@ -1064,7 +1064,7 @@
 }
 
 .scheduled-tasks-execution-log-row.status-running {
-  color: var(--accent, #c4a35a);
+  color: var(--accent-ink);
 }
 
 .scheduled-tasks-execution-log-row.status-error {
@@ -1155,7 +1155,7 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
 
 .explore-motif-chip.is-typeahead-active,
 .explore-motif-chip.is-and-selected {
-  outline: 2px solid var(--accent, #c4a35a);
+  outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
 
@@ -1195,7 +1195,7 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
 }
 
 .explore-section-card-wrap.is-selected {
-  outline: 2px solid color-mix(in srgb, var(--accent, #c4a35a) 70%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
   outline-offset: 2px;
   border-radius: 8px;
 }
@@ -2395,7 +2395,7 @@ a.weekly-digest-stat:focus-visible {
 }
 .owner-now-playing-health.health-streaming,
 .owner-now-playing-health.health-airing {
-  color: var(--accent, #6aa3ff);
+  color: var(--accent-ink);
 }
 .owner-now-playing-keepalive {
   display: block;

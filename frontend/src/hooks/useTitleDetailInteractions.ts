@@ -18,6 +18,7 @@ import {
   resolveAddCapability,
   serviceLabelForTarget,
 } from "../lib/addActions.js";
+import { peekViewerIsYouth } from "../lib/authGate.js";
 import {
   canOwnerDeleteLibraryTitle,
   formatLibraryDeleteSuccessMessage,
@@ -119,6 +120,7 @@ export function useTitleDetailInteractions({
       role: userRole,
       requestPath,
       multiUserEnabled,
+      isYouth: peekViewerIsYouth(),
     });
     if (!capability.canAdd && !capability.canRequest) return;
     if (!detail || addStatus === "loading" || addStatus === "success") return;
