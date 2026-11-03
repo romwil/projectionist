@@ -1648,10 +1648,14 @@ def tool_policy_denial(
     *,
     role: Optional[str],
     is_youth: bool,
+    autoconfirm_adds: bool = False,
 ) -> Optional[str]:
     """Return a refusal reason when the caller may not use ``name``, else None."""
     return authz.tool_denial(
-        name, is_owner=authz.acts_as_owner(settings, role), is_youth=is_youth
+        name,
+        is_owner=authz.acts_as_owner(settings, role),
+        is_youth=is_youth,
+        autoconfirm_adds=autoconfirm_adds,
     )
 
 
@@ -1660,6 +1664,7 @@ def build_tool_definitions(
     *,
     role: Optional[str] = None,
     is_youth: bool = False,
+    autoconfirm_adds: bool = False,
 ) -> List[Mapping[str, Any]]:
     """Return LLM tool schemas the caller may use.
 
@@ -1670,7 +1675,9 @@ def build_tool_definitions(
 
     omitted: set[str] = set(
         authz.hidden_tool_names(
-            is_owner=authz.acts_as_owner(settings, role), is_youth=is_youth
+            is_owner=authz.acts_as_owner(settings, role),
+            is_youth=is_youth,
+            autoconfirm_adds=autoconfirm_adds,
         )
     )
     if curator_memory_paused(settings, is_youth=is_youth):

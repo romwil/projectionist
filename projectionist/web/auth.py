@@ -104,6 +104,7 @@ class CurrentUser:
     ui_font_size: str = "medium"
     ui_theme: str = "system"
     is_youth: bool = False
+    autoconfirm_adds: bool = False
     notification_email: Optional[str] = None
     notify_channel_inbox: bool = True
     notify_channel_email: bool = False
@@ -130,6 +131,7 @@ class CurrentUser:
             "ui_font_size": self.ui_font_size or "medium",
             "ui_theme": self.ui_theme or "system",
             "is_youth": self.is_youth,
+            "autoconfirm_adds": self.autoconfirm_adds,
             "notification_email": self.notification_email,
             "notify_channel_inbox": self.notify_channel_inbox,
             "notify_channel_email": self.notify_channel_email,
@@ -169,6 +171,9 @@ def row_to_current_user(row) -> CurrentUser:
         if cleaned_theme in {"lights_up", "lights_down", "system"}:
             ui_theme = cleaned_theme
     is_youth = bool(int(row["is_youth"])) if "is_youth" in keys and row["is_youth"] is not None else False
+    autoconfirm_adds = (
+        not is_youth and "autoconfirm_adds" in keys and bool(int(row["autoconfirm_adds"] or 0))
+    )
     notification_email = None
     if "notification_email" in keys and row["notification_email"] is not None:
         notification_email = str(row["notification_email"]).strip() or None
@@ -222,6 +227,7 @@ def row_to_current_user(row) -> CurrentUser:
         ui_font_size=ui_font_size,
         ui_theme=ui_theme,
         is_youth=is_youth,
+        autoconfirm_adds=autoconfirm_adds,
         notification_email=notification_email,
         notify_channel_inbox=notify_channel_inbox,
         notify_channel_email=notify_channel_email,
@@ -1284,6 +1290,7 @@ def row_to_current_user_from_dict(d: dict) -> CurrentUser:
         ui_font_size=font,
         ui_theme=theme,
         is_youth=bool(d.get("is_youth", False)),
+        autoconfirm_adds=bool(d.get("autoconfirm_adds", False)) and not bool(d.get("is_youth", False)),
         weather_place=d.get("weather_place"),
         weather_lat=d.get("weather_lat"),
         weather_lon=d.get("weather_lon"),

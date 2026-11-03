@@ -26,6 +26,7 @@ from projectionist.agent.tools._helpers import (
 from projectionist.agent.tools.confirmed import (
     check_radarr_already_exists,
     check_sonarr_already_exists,
+    execute_confirmed_action,
     mark_in_radarr,
     mark_in_sonarr,
     resolve_arr_removal_target,
@@ -33,6 +34,34 @@ from projectionist.agent.tools.confirmed import (
 )
 
 class AcquireToolsMixin:
+    async def _autoconfirm_member_add(self, token: str, service: str) -> str:
+        """Run a member's add now; the owner turned on add-without-confirm for them."""
+        try:
+            outcome = await execute_confirmed_action(
+                self.db,
+                self.settings,
+                token,
+                user_id=self.user_id,
+                actor_is_owner=False,
+                actor_is_youth=False,
+                actor_autoconfirms_adds=True,
+            )
+        except PermissionError as error:
+            return json.dumps({"error": str(error), "code": "agent_tool_not_permitted"})
+        except Exception as error:  # noqa: BLE001
+            return json.dumps({"error": f"{service} add failed: {error}"})
+        if outcome.get("already_exists"):
+            return json.dumps(outcome)
+        return json.dumps(
+            {
+                **outcome,
+                "message": (
+                    f"Added to {service}. The owner lets this account add without their "
+                    "confirm, so there is nothing to confirm."
+                ),
+            }
+        )
+
     async def _tool_add_to_radarr(self, args: Mapping[str, Any]) -> str:
         config_error = radarr_add_configuration_error(self.settings)
         if config_error:
@@ -70,6 +99,8 @@ class AcquireToolsMixin:
             "search_for_movie": search_for_movie,
         }
         self.db.save_pending_action(token, "add_radarr", payload, user_id=self.user_id)
+        if self._autoconfirms_adds():
+            return await self._autoconfirm_member_add(token, "Radarr")
         self._register_pending_token(token, "add_radarr")
         mode = "register existing on disk" if not search_for_movie else "search for download"
         return json.dumps(
@@ -111,6 +142,8 @@ class AcquireToolsMixin:
             "title": str(args.get("title") or ""),
         }
         self.db.save_pending_action(token, "add_sonarr", payload, user_id=self.user_id)
+        if self._autoconfirms_adds():
+            return await self._autoconfirm_member_add(token, "Sonarr")
         self._register_pending_token(token, "add_sonarr")
         return json.dumps(
             {

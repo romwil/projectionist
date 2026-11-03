@@ -40,7 +40,8 @@ test("docs/PRIVACY.md drops claims the code does not keep (PRIV-002)", () => {
   assert.match(markdown, /Resend/);
   assert.match(markdown, /embeddings provider/i);
   assert.match(markdown, /never joined/i);
-  assert.match(markdown, /Youth accounts use the same provider/);
+  assert.doesNotMatch(markdown, /Youth accounts use the same provider/);
+  assert.match(markdown, /Youth chats never use the household model/);
   assert.match(markdown, /Asking to join/);
   assert.match(markdown, /What removal leaves behind/);
 });

@@ -86,6 +86,7 @@ export async function fetchAuthSnapshot(getFeaturesFn: () => Promise<Features | 
       role,
       isOwner: role === "owner",
       isYouth: Boolean(me.user?.is_youth),
+      autoconfirmAdds: role === "member" && !me.user?.is_youth && Boolean(me.user?.autoconfirm_adds),
       user: me.user,
     };
   } catch {
@@ -251,6 +252,11 @@ export function peekAuthSnapshot() {
 /** True when the cached signed-in viewer is a Youth account (false before auth loads). */
 export function peekViewerIsYouth(): boolean {
   return Boolean((sharedAuth.peek() as JsParam)?.isYouth);
+}
+
+/** True when the owner lets this adult member add to Radarr/Sonarr without their confirm. */
+export function peekViewerAutoconfirmsAdds(): boolean {
+  return Boolean((sharedAuth.peek() as JsParam)?.autoconfirmAdds);
 }
 
 export function clearAuthSnapshot() {

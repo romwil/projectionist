@@ -235,7 +235,9 @@ Sometimes the thing you want isn't in the library yet. Whenever you've searched,
 What the button on each beyond result does depends on your role, and Projectionist never double-adds something you already have:
 
 - **Owners** get **Add to Radarr** (movies) or **Add to Sonarr** (shows), which queues the title for download.
-- **Members** get **Request in Seerr**, sending it to the household request queue for approval.
+- **Members** see **Ask the owner to add this** when the household adds through Radarr and Sonarr. Only the owner confirms those adds. When the household uses Seerr, members get **Request in Seerr** instead, sending it to the request queue for approval.
+- **Members the owner trusts to add** get the same **Add to Radarr** / **Add to Sonarr** button as the owner. Their add starts right away with no owner confirm, because the owner turned on **Without my confirm** for their account in **Admin → Members**. Each add is recorded in the owner's security log. Removing titles stays with the owner.
+- **Youth accounts** never get an add or request button. The owner can't turn on adding without a confirm for a Youth account, and turning Youth mode on turns it off.
 - Signed-out visitors see a gentle *"Ask owner"* note instead of a button — browsing and discovery stay open on the LAN, but only owners and members can bring titles in.
 
 Anything already in your library (or already queued to download) is shown with an **In library** or **In queue** badge and no add button, so you can see it exists without accidentally requesting a duplicate. If external search isn't available, the button steps aside with a short note rather than failing loudly.
@@ -550,6 +552,7 @@ curl -s "http://localhost:8788/api/search/external?q=arrival&media_type=movie&li
 The add/request buttons on beyond results reuse the same **propose → confirm** acquisition flow as the rest of the app, so it's role-aware without new plumbing:
 
 - **Owners** propose `add_radarr` (by `tmdb_id`) or `add_sonarr` (by `tvdb_id`, which shows results carry via TMDB enrichment). Requires Radarr/Sonarr configured with a valid root folder.
+- **Members** are refused `add_radarr` / `add_sonarr` (403, "Only the household owner can add titles…") at propose, at confirm, and in chat, unless you turned on **Without my confirm** for them in **Admin → Members** (`PATCH /api/users/{id}` with `{"autoconfirm_adds": true}`, owner-only, adult members only, off by default). With it on, their own click proposes and confirms in one step, and in chat the curator's `add_to_radarr` / `add_to_sonarr` adds right away with no confirm card. Every such add writes an `autoconfirm_add` row to the security log with the member, the service, and the title. It never records their chat or memory. `remove_from_arr`, collections, and the other owner tools stay owner-only. Youth accounts are refused the setting (409), and turning Youth mode on clears it; the Youth rating ceiling still applies.
 - **Members** propose `request_seerr` — routed to Seerr for approval. With `seerr.require_linked_user_for_requests` on, the member must have a linked Seerr account.
 - Signed-out callers get no write path at all; the API rejects acquisition just as it does elsewhere.
 

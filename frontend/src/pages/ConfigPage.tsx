@@ -23,6 +23,7 @@ import {
   getPlexSections,
   deleteUser,
   listUsers,
+  patchUserAutoconfirmAdds,
   patchUserDisabled,
   patchUserYouthMode,
   putPersona,
@@ -807,7 +808,7 @@ export default function ConfigPage() {
       const rating = settings?.youth?.max_content_rating || "PG-13";
       const confirmed = await confirm({
         title: "Turn on Youth mode",
-        body: `Turn on Youth mode for ${label}? They will only see titles rated ${rating} or lower, and unrated titles are hidden. ${label} gets an inbox notice, and the change is recorded in the security log. What the curator already remembers about ${label} stays private. Youth mode does not open it.`,
+        body: `Turn on Youth mode for ${label}? They will only see titles rated ${rating} or lower, and unrated titles are hidden. ${label} gets an inbox notice, and the change is recorded in the security log. What the curator already remembers about ${label} stays private. Youth mode does not open it.${entry.autoconfirm_adds ? ` ${label} also stops adding to Radarr or Sonarr without your confirm.` : ""}`,
         confirmLabel: "Turn on Youth mode",
       });
       if (!confirmed) return;
@@ -819,6 +820,34 @@ export default function ConfigPage() {
         "users",
         "success",
         entry.is_youth ? "Youth mode removed." : "Youth mode enabled. They have been notified.",
+      );
+    } catch (error) {
+      setActionFeedback("users", "error", (error as ApiError).message);
+    }
+  }
+
+  async function handleAutoconfirmAddsToggle(entry: JsParam) {
+    const turningOn = !entry.autoconfirm_adds;
+    const label = entry.display_name || entry.email || entry.id;
+    if (
+      turningOn &&
+      !(await confirm({
+        title: "Add without your confirm",
+        body: `Let ${label} add movies to Radarr and shows to Sonarr without your confirm? Their adds start right away, and each one is recorded in the security log. Removing titles stays yours.`,
+        confirmLabel: "Turn on",
+      }))
+    ) {
+      return;
+    }
+    try {
+      await patchUserAutoconfirmAdds(entry.id, turningOn);
+      await refreshManagedUsers();
+      setActionFeedback(
+        "users",
+        "success",
+        turningOn
+          ? `${label} can now add to Radarr and Sonarr without your confirm.`
+          : `${label}'s adds need your confirm again.`,
       );
     } catch (error) {
       setActionFeedback("users", "error", (error as ApiError).message);
@@ -1911,6 +1940,7 @@ export default function ConfigPage() {
             handleUserRoleChange={handleUserRoleChange}
             handleUserDisableToggle={handleUserDisableToggle}
             handleYouthModeToggle={handleYouthModeToggle}
+            handleAutoconfirmAddsToggle={handleAutoconfirmAddsToggle}
             handleUserRemove={handleUserRemove}
             handleUserSyncSeerr={handleUserSyncSeerr}
             handleUserResetPassword={handleUserResetPassword}

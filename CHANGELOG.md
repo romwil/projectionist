@@ -5,13 +5,14 @@
 The trust release. Only the owner adds to Radarr or Sonarr, nobody else's viewing shows up as yours, the Privacy page says only what the code does, and the server now keeps a daily backup you can restore.
 
 ### Highlights
-- **Only the owner adds titles.** Members see "Ask the owner to add this" instead of an add button, and Youth accounts never see a confirm.
+- **The owner decides who adds titles.** By default members see "Ask the owner to add this" instead of an add button, and only the owner confirms Radarr and Sonarr adds. The owner can let a trusted adult member add without a confirm, and every one of those adds lands in the security log. Youth accounts never see a confirm.
 - **Your picks are yours.** Newsletters, nudges, and whispers only use what you finished. Someone else's viewing never becomes your "You watched".
 - **An honest Privacy page.** It lists what is stored, what the owner can see, and what removing an account leaves behind. Claims the app couldn't back up are gone.
 - **A daily backup, and a way back.** The server writes a snapshot every day, keeps a week, and Needs attention tells you when backups stop or people are waiting to join.
 
 ### Security
 - **SEC-006** One policy (`projectionist/authz.py`) decides propose, confirm, and agent tool access. `add_radarr` / `add_sonarr` are owner-only at propose, confirm, and agent dispatch; Youth are also refused `request_seerr`. Owner delete stays owner-only.
+- **BD-3 / SEC-006** Admin → Members → **Without my confirm** (`users.autoconfirm_adds`, schema migration 62, off by default, `PATCH /api/users/{id}` owner-only). With it on, that adult member may propose and redeem their own `add_radarr` / `add_sonarr` in one step, and the agent's `add_to_radarr` / `add_to_sonarr` add without a confirm card. Each such add writes an `autoconfirm_add` security-log row with the member, service, and title (no chat or memory text); toggling it writes `autoconfirm_change`. Youth accounts are refused the setting (409) and turning Youth on clears it. `remove_from_arr` and every other owner-only tool stay owner-only.
 - **SEC-007** Members can't set or test Apprise URLs (403), and delivery ignores any stored member URL. Owners keep per-account and household destinations.
 - **SEC-008** With sign-in on and no owner, the first Plex or SSO sign-in needs proof: the owner password from the container, the setup wizard, or the one-time claim cookie issued to the owner session that turned sign-in on. The new-install default is unchanged.
 - **SEC-009** The agent's review lookup is scoped to the caller, like `GET /api/reviews`.

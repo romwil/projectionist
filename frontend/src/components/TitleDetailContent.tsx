@@ -7,7 +7,7 @@ import {
   itemNeedsAddGuidance,
   resolveAddCapability,
 } from "../lib/addActions.js";
-import { peekViewerIsYouth } from "../lib/authGate.js";
+import { peekViewerAutoconfirmsAdds, peekViewerIsYouth } from "../lib/authGate.js";
 import {
   exploreCastPath,
   exploreDirectorsPath,
@@ -262,6 +262,7 @@ export default function TitleDetailContent({
     requestPath,
     multiUserEnabled,
     isYouth: peekViewerIsYouth(),
+    autoconfirmAdds: peekViewerAutoconfirmsAdds(),
   } as Parameters<typeof resolveAddCapability>[0]);
   const canRequestSeerr = addCapability.canRequest && isRequestableInSeerr(detail);
   const canAddRadarr = addCapability.canAdd && isAddableToRadarr(detail);

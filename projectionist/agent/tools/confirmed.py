@@ -183,11 +183,13 @@ async def execute_confirmed_action(
     user_id: Optional[str] = None,
     actor_is_owner: bool = True,
     actor_is_youth: bool = False,
+    actor_autoconfirms_adds: bool = False,
 ) -> dict:
     denial = authz.pending_action_denial(
         db.peek_pending_action_kind(token),
         is_owner=actor_is_owner,
         is_youth=actor_is_youth,
+        autoconfirm_adds=actor_autoconfirms_adds,
     )
     if denial:
         raise PermissionError(denial)
@@ -196,11 +198,80 @@ async def execute_confirmed_action(
         raise RuntimeError("Invalid or expired confirmation token")
     action = payload.get("action")
     denial = authz.pending_action_denial(
-        str(action or ""), is_owner=actor_is_owner, is_youth=actor_is_youth
+        str(action or ""),
+        is_owner=actor_is_owner,
+        is_youth=actor_is_youth,
+        autoconfirm_adds=actor_autoconfirms_adds,
     )
     if denial:
         _restore_pending_action(db, token, payload, user_id=user_id)
         raise PermissionError(denial)
+    if not actor_is_owner and action in authz.ARR_ACQUIRE_ACTIONS:
+        return await _execute_member_autoconfirmed_add(
+            db, settings, token, payload, user_id=user_id
+        )
+    return await _execute_payload(db, settings, token, payload, user_id=user_id)
+
+
+async def _execute_member_autoconfirmed_add(
+    db: Database,
+    settings: Settings,
+    token: str,
+    payload: Mapping[str, Any],
+    *,
+    user_id: Optional[str],
+) -> dict:
+    """Run a member's add with no owner click, and record who added what.
+
+    The audit row carries the member, service, and title only, never memory or
+    chat text.
+    """
+    from projectionist import security_audit as sa
+
+    action = str(payload.get("action") or "")
+    service = "Radarr" if action == "add_radarr" else "Sonarr"
+    ids: Dict[str, Any] = {}
+    if payload.get("tmdb_id") is not None:
+        ids["tmdb_id"] = int(payload["tmdb_id"])
+    if payload.get("tvdb_id") is not None:
+        ids["tvdb_id"] = int(payload["tvdb_id"])
+    title = str(payload.get("title") or "")
+    try:
+        result = await _execute_payload(db, settings, token, payload, user_id=user_id)
+    except Exception:
+        sa.audit(
+            db,
+            sa.AUTOCONFIRM_ADD,
+            actor_id=user_id,
+            target_id=user_id,
+            outcome="failed",
+            service=service,
+            title=title,
+            **ids,
+        )
+        raise
+    sa.audit(
+        db,
+        sa.AUTOCONFIRM_ADD,
+        actor_id=user_id,
+        target_id=user_id,
+        outcome="exists" if result.get("already_exists") else "ok",
+        service=service,
+        title=title,
+        **ids,
+    )
+    return {**result, "autoconfirmed": True}
+
+
+async def _execute_payload(
+    db: Database,
+    settings: Settings,
+    token: str,
+    payload: Mapping[str, Any],
+    *,
+    user_id: Optional[str],
+) -> dict:
+    action = payload.get("action")
     logger.info("Executing confirmed action=%s", action)
     if action == "mark_bad_media":
         from projectionist.library.bad_media import BadMediaError, mark_bad_media

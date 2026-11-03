@@ -373,7 +373,7 @@ Legend: **Y** = may see or receive · **—** = not exposed · **\*** = the prov
 - Let a privacy MCP key, or a mode flag, unlock full MCP
 - Hand MCP clients the Plex server token, AI provider key, or `settings.json`
 - Store raw microphone audio
-- Let members add Apprise destinations, or confirm Radarr/Sonarr adds
+- Let members add Apprise destinations, or confirm Radarr/Sonarr adds unless the owner turned on **Without my confirm** for that adult member (each such add is in the security log with the member and title, never their chat or memory)
 - Use someone else's viewing to write your "You watched" lines
 - Pretend a Plex list publish worked when Plex refused it
 

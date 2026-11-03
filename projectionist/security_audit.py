@@ -26,6 +26,8 @@ ACCOUNT_CREATE = "account_create"
 ROLE_CHANGE = "role_change"
 ACCOUNT_DISABLE = "account_disable"
 YOUTH_CHANGE = "youth_change"
+AUTOCONFIRM_CHANGE = "autoconfirm_change"
+AUTOCONFIRM_ADD = "autoconfirm_add"
 ACCOUNT_DELETE = "account_delete"
 SETTINGS_SAVE = "settings_save"
 SECRET_REVEAL = "secret_reveal"
@@ -48,6 +50,8 @@ AUDIT_EVENTS = (
     ROLE_CHANGE,
     ACCOUNT_DISABLE,
     YOUTH_CHANGE,
+    AUTOCONFIRM_CHANGE,
+    AUTOCONFIRM_ADD,
     ACCOUNT_DELETE,
     SETTINGS_SAVE,
     SECRET_REVEAL,

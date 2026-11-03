@@ -715,6 +715,8 @@ class UserUpdatePayload(BaseModel):
     is_youth: Optional[bool] = None
     # Required to turn Youth mode on for an account that is not Youth yet.
     confirm_youth: bool = False
+    # Owner-only: this adult member's Radarr/Sonarr adds skip the owner's confirm.
+    autoconfirm_adds: Optional[bool] = None
 
 
 class PasswordChangePayload(BaseModel):
@@ -2529,6 +2531,16 @@ def title_neighbors(
     return _sanitize_library_payload({"items": items, "total": len(items)}, user)
 
 
+def _caller_autoconfirms_adds(user: Any) -> bool:
+    return authz.caller_autoconfirms_adds(
+        _db(),
+        _settings(),
+        user_id=getattr(user, "id", None),
+        role=getattr(user, "role", None),
+        is_youth=bool(getattr(user, "is_youth", False)),
+    )
+
+
 @app.post("/api/actions/propose")
 def propose_action(payload: Dict[str, Any], user=Depends(get_current_user_dep)) -> Dict[str, Any]:
     import uuid as uuid_mod
@@ -2539,6 +2551,7 @@ def propose_action(payload: Dict[str, Any], user=Depends(get_current_user_dep)) 
         str(action or ""),
         is_owner=authz.acts_as_owner(_settings(), user.role),
         is_youth=bool(getattr(user, "is_youth", False)),
+        autoconfirm_adds=_caller_autoconfirms_adds(user),
     )
     if denial:
         raise HTTPException(status_code=403, detail=denial)
@@ -2729,6 +2742,7 @@ async def confirm_action(
             user_id=scoped,
             actor_is_owner=authz.acts_as_owner(settings, user.role),
             actor_is_youth=bool(getattr(user, "is_youth", False)),
+            actor_autoconfirms_adds=_caller_autoconfirms_adds(user),
         )
         logger.info("Action confirmed token=%s action=%s", payload.token[:8], result.get("action"))
         return {"ok": True, **result}

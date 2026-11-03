@@ -253,3 +253,24 @@ test("groupAddableItems skips owned and queued movies", () => {
   assert.equal(owner.radarr.length, 1);
   assert.equal(owner.radarr[0].title, "Gap");
 });
+
+test("an autoconfirm member gets the add button; Youth and the Seerr path do not (BD-3)", () => {
+  const on = resolveAddCapability({ role: "member", requestPath: "arr", autoconfirmAdds: true });
+  assert.equal(on.canAdd, true);
+  assert.equal(on.showGuidedCopy, false);
+  const off = resolveAddCapability({ role: "member", requestPath: "arr" });
+  assert.equal(off.canAdd, false);
+  assert.equal(off.guidedCopy, ASK_OWNER_COPY);
+  const youth = resolveAddCapability({
+    role: "member",
+    requestPath: "arr",
+    isYouth: true,
+    autoconfirmAdds: true,
+  });
+  assert.equal(youth.canAdd, false);
+  const seerr = resolveAddCapability({ role: "member", requestPath: "seerr", autoconfirmAdds: true });
+  assert.equal(seerr.canAdd, false);
+  const items = [{ title: "Gap", media_type: "movie", tmdb_id: 4 }];
+  const grouped = groupAddableItems(items, { requestPath: "arr", role: "member", autoconfirmAdds: true });
+  assert.equal(grouped.radarr.length, 1);
+});
