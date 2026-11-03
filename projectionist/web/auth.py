@@ -948,16 +948,30 @@ def _has_real_owner(db: Database) -> bool:
     return False
 
 
-def _require_owner_claim(db: Database, request: Optional[Request]) -> None:
-    """Fail closed unless ``request`` holds the one-time owner claim; consume it."""
+def _require_owner_claim(
+    db: Database, request: Optional[Request], *, bound_claim_digest: Optional[str] = None
+) -> None:
+    """Fail closed unless ``request`` holds the one-time owner claim; consume it.
+
+    ``bound_claim_digest`` is set for flows that arrive by a cross-site GET (the
+    OIDC callback): the claim must also have been presented when that login
+    started, so another person's IdP login can't spend this browser's claim.
+    """
     from projectionist.web.owner_claim import (
         NO_OWNER_DETAIL,
         consume_owner_claim,
+        presented_claim_digest,
         request_holds_owner_claim,
     )
 
     if not request_holds_owner_claim(db, request):
         logger.warning("First sign-in refused: no owner exists and no owner claim was presented.")
+        raise HTTPException(status_code=403, detail=NO_OWNER_DETAIL)
+    if bound_claim_digest is not None and not (
+        bound_claim_digest
+        and _hmac.compare_digest(bound_claim_digest, presented_claim_digest(request))
+    ):
+        logger.warning("First sign-in refused: the owner claim was not bound to this login.")
         raise HTTPException(status_code=403, detail=NO_OWNER_DETAIL)
     consume_owner_claim(db)
 
@@ -1369,6 +1383,9 @@ def start_oidc_authorize(
     cleaned_invite = str(invite_token or "").strip()
     if cleaned_invite:
         state_payload["invite_token"] = cleaned_invite
+    from projectionist.web.owner_claim import presented_claim_digest
+
+    state_payload["owner_claim_digest"] = presented_claim_digest(request)
     with _oidc_state_lock:
         _oidc_states[state] = state_payload
 
@@ -1470,7 +1487,9 @@ def handle_oidc_callback(
     )
 
     if db.count_users_with_role("owner") == 0 or not _has_real_owner(db):
-        _require_owner_claim(db, request)
+        _require_owner_claim(
+            db, request, bound_claim_digest=str(state_data.get("owner_claim_digest") or "")
+        )
         user_row = db.upsert_oidc_user(
             oidc_sub=sub,
             display_name=display_name,
