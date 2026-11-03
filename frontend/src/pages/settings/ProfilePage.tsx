@@ -333,7 +333,8 @@ export default function ProfilePage() {
             <p className="settings-identity-meta">Role · {user.role}</p>
             {user.is_youth ? (
               <p className="settings-identity-meta" data-testid="youth-mode-badge">
-                Youth mode · memory may be reviewed by the owner for moderation.
+                Youth mode · the owner can review curator notes saved since Youth mode started. Older
+                memory stays private.
               </p>
             ) : null}
             <div className="settings-avatar-actions">

@@ -387,6 +387,7 @@ def save_review(
     lens_id: Optional[str] = None,
     prompt_id: Optional[str] = None,
     user_id: Optional[str] = None,
+    memory_paused: bool = False,
 ) -> Dict[str, Any]:
     stars = normalize_stars(stars)
 
@@ -546,6 +547,7 @@ def save_review(
                 lens_id=lens_id,
             ),
             user_id=user_id,
+            memory_paused=memory_paused,
         )
 
     return saved

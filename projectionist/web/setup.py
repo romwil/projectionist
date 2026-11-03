@@ -637,6 +637,38 @@ def merge_theater_settings_payload(
     }
 
 
+def merge_youth_settings_payload(
+    payload: Any,
+    existing: Settings,
+    merged: Dict[str, Any],
+) -> None:
+    """Keep saved Youth fields a partial PUT /api/settings did not send.
+
+    Older clients send only ``youth.max_content_rating``; without this merge the
+    payload defaults would silently reset the owner's memory and model choices.
+    """
+    from dataclasses import asdict
+
+    from projectionist.youth.chat_route import normalize_chat_route
+
+    base = asdict(existing.youth)
+    fields_set = getattr(payload, "model_fields_set", set())
+    incoming = merged.get("youth")
+    if "youth" not in fields_set or not isinstance(incoming, Mapping):
+        merged["youth"] = base
+        return
+    nested = getattr(payload, "youth", None)
+    nested_set = getattr(nested, "model_fields_set", set()) if nested is not None else set()
+    youth_in = dict(base)
+    for key in nested_set:
+        if key in incoming:
+            youth_in[key] = incoming[key]
+    youth_in["chat_route"] = normalize_chat_route(youth_in.get("chat_route"))
+    youth_in["local_base_url"] = str(youth_in.get("local_base_url") or "").strip()
+    youth_in["local_model"] = str(youth_in.get("local_model") or "").strip()
+    merged["youth"] = youth_in
+
+
 def merge_secret_fields(incoming: Mapping[str, Any], existing: Settings) -> Dict[str, Any]:
     merged = dict(incoming)
     defaults = Settings()

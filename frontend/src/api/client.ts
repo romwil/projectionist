@@ -455,10 +455,11 @@ export async function patchUserDisabled(userId: string, disabled: boolean) {
   });
 }
 
-export async function patchUserYouthMode(userId: string, isYouth: boolean) {
+/** Turning Youth on for an existing account is refused unless `confirmed` is true. */
+export async function patchUserYouthMode(userId: string, isYouth: boolean, confirmed = false) {
   return api(`/users/${encodeURIComponent(userId)}`, {
     method: "PATCH",
-    body: JSON.stringify({ is_youth: Boolean(isYouth) }),
+    body: JSON.stringify({ is_youth: Boolean(isYouth), confirm_youth: Boolean(confirmed) }),
   });
 }
 

@@ -19,6 +19,7 @@ const KIND_LABELS: Record<string, any> = {
   nudge: "Curator notes",
   "library-share": "Shared pages",
   "year-in-review": "Year in Review",
+  account: "Account",
 };
 
 export function inboxKindLabel(kind: string) {

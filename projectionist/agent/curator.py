@@ -27,6 +27,7 @@ from projectionist.telemetry import (
     PURPOSE_WRAP_UP,
 )
 from projectionist.telemetry.llm_track import tracked_chat, tracked_stream
+from projectionist.youth.memory_policy import curator_memory_paused
 
 logger = logging.getLogger(__name__)
 
@@ -374,13 +375,31 @@ class CuratorAgent:
         is_youth: bool = False,
     ) -> None:
         self.db = db
-        self.settings = settings
         self.lens_id = lens_id or db.get_active_lens_id() or DEFAULT_LENS_ID
         self.user_id = user_id
         self.seerr_user_id = seerr_user_id
         self.user_role = user_role
         self.is_youth = bool(is_youth)
-        self.provider = get_chat_provider(settings) if settings.llm_api_key or settings.llm_provider == "ollama" else None
+        # Youth chats never fall through to the household model: either the
+        # owner's local route replaces the LLM settings, or no model is called.
+        self.youth_chat_notice: Optional[str] = None
+        if self.is_youth:
+            from projectionist.youth.chat_route import resolve_youth_chat_route
+
+            route = resolve_youth_chat_route(settings)
+            if route.settings is not None:
+                settings = route.settings
+            else:
+                self.youth_chat_notice = route.notice
+        self.settings = settings
+        if self.youth_chat_notice is not None:
+            self.provider = None
+        else:
+            self.provider = (
+                get_chat_provider(settings)
+                if settings.llm_api_key or settings.llm_provider == "ollama"
+                else None
+            )
 
     async def _fallback_run(self, registry: ToolRegistry, user_message: str) -> str:
         lowered = user_message.lower()
@@ -437,7 +456,10 @@ class CuratorAgent:
         registry = self._registry(persona_id=thread_persona_id, session_id=session_id)
 
         if not self.provider:
-            text = await self._fallback_run(registry, user_message)
+            if self.youth_chat_notice is not None:
+                text = self.youth_chat_notice
+            else:
+                text = await self._fallback_run(registry, user_message)
             blocks: List[Dict[str, Any]] = [{"type": "text", "content": text}]
             if registry.cards:
                 _append_title_card_response_blocks(blocks, registry)
@@ -477,6 +499,7 @@ class CuratorAgent:
                     user_id=self.user_id,
                     user_role=self.user_role,
                     is_youth=self.is_youth,
+                    memory_paused=curator_memory_paused(self.settings, is_youth=self.is_youth),
                 ),
             }
         ]
@@ -720,6 +743,8 @@ async def stream_agent(
         user_role=user_role,
         is_youth=is_youth,
     )
+    # A Youth route may have swapped the model config; use the agent's copy.
+    settings = agent.settings
     resolved_lens = agent.lens_id
 
     def _prepare_session() -> None:
@@ -741,7 +766,10 @@ async def stream_agent(
 
     # --- No LLM configured: keyword fallback with simulated streaming ---
     if not agent.provider:
-        text = await agent._fallback_run(registry, user_message)
+        if agent.youth_chat_notice is not None:
+            text = agent.youth_chat_notice
+        else:
+            text = await agent._fallback_run(registry, user_message)
         async for event in _emit_buffered(
             db, registry, agent, session_id, user_message, text, resolved_lens,
         ):
@@ -757,6 +785,7 @@ async def stream_agent(
                 user_id=user_id,
                 user_role=user_role,
                 is_youth=is_youth,
+                memory_paused=curator_memory_paused(settings, is_youth=is_youth),
             ),
         },
     ]

@@ -193,8 +193,8 @@ class InvitesMixin:
                     """
                     INSERT INTO users (
                         id, display_name, email, role, password_hash, auth_method,
-                        created_at, last_login_at, is_youth
-                    ) VALUES (?, ?, ?, ?, ?, 'local', ?, ?, ?)
+                        created_at, last_login_at, is_youth, youth_since
+                    ) VALUES (?, ?, ?, ?, ?, 'local', ?, ?, ?, ?)
                     """,
                     (
                         user_id,
@@ -205,6 +205,7 @@ class InvitesMixin:
                         now,
                         now,
                         1 if is_youth else 0,
+                        now if is_youth else None,
                     ),
                 )
                 cursor = conn.execute(
@@ -253,8 +254,8 @@ class InvitesMixin:
                         INSERT INTO users (
                             id, display_name, email, role, plex_user_id, avatar_url,
                             seerr_user_id, seerr_permissions, created_at, last_login_at,
-                            is_youth
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            is_youth, youth_since
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(plex_user_id) DO UPDATE SET
                             display_name = excluded.display_name,
                             email = excluded.email,
@@ -275,6 +276,7 @@ class InvitesMixin:
                             now,
                             now,
                             1 if is_youth else 0,
+                            now if is_youth else None,
                         ),
                     )
                     bound = conn.execute(
@@ -287,8 +289,8 @@ class InvitesMixin:
                         """
                         INSERT INTO users (
                             id, display_name, email, role, oidc_sub, auth_method,
-                            created_at, last_login_at, is_youth
-                        ) VALUES (?, ?, ?, ?, ?, 'oidc', ?, ?, ?)
+                            created_at, last_login_at, is_youth, youth_since
+                        ) VALUES (?, ?, ?, ?, ?, 'oidc', ?, ?, ?, ?)
                         ON CONFLICT(oidc_sub) DO UPDATE SET
                             display_name = excluded.display_name,
                             email = excluded.email,
@@ -303,6 +305,7 @@ class InvitesMixin:
                             now,
                             now,
                             1 if is_youth else 0,
+                            now if is_youth else None,
                         ),
                     )
                     bound = conn.execute(

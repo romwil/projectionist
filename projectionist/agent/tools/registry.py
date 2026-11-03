@@ -98,6 +98,18 @@ class ToolRegistry(
             }
         )
 
+    def _youth_memory_paused(self) -> bool:
+        from projectionist.youth.memory_policy import curator_memory_paused
+
+        return curator_memory_paused(self.settings, is_youth=self.is_youth)
+
+    def _deny_if_youth_memory_paused(self) -> Optional[str]:
+        if not self._youth_memory_paused():
+            return None
+        from projectionist.youth.memory_policy import YOUTH_MEMORY_OFF_ERROR
+
+        return json.dumps({"error": YOUTH_MEMORY_OFF_ERROR, "code": "youth_memory_off"})
+
     def _apply_youth_filters(self, filters: LibraryFilters) -> LibraryFilters:
         if not self.is_youth:
             return filters

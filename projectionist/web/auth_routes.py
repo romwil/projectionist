@@ -140,7 +140,14 @@ def register_auth_routes(app):
             )
         except MemoryAccessError as error:
             raise HTTPException(status_code=403, detail=str(error)) from error
-        return {"user_id": user_id, "notes": notes}
+        from projectionist.youth.memory_policy import youth_memory_enabled
+
+        return {
+            "user_id": user_id,
+            "notes": notes,
+            "youth_since": _db().youth_since(user_id),
+            "memory_enabled": youth_memory_enabled(_settings()),
+        }
 
 
     @router.patch("/api/auth/me")
@@ -783,6 +790,17 @@ def register_auth_routes(app):
         target = db.get_user(user_id)
         if target is None:
             raise HTTPException(status_code=404, detail="User not found")
+        was_youth = bool(target["is_youth"])
+        turning_youth_on = payload.is_youth is True and not was_youth
+        # Checked before any field changes so an unconfirmed request changes nothing.
+        if turning_youth_on and not payload.confirm_youth:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Turning on Youth mode for an existing account needs confirmation. "
+                    "They will be notified, and the change is recorded in the security log."
+                ),
+            )
         updated: Optional[Dict[str, Any]] = None
         if payload.role is not None:
             if user_id == user.id and payload.role != "owner":
@@ -831,12 +849,22 @@ def register_auth_routes(app):
                 updated = db.set_user_youth(user_id, payload.is_youth)
             except ValueError as error:
                 raise HTTPException(status_code=404, detail=_safe_error_detail(error, "User not found")) from error
+            notified = False
+            if turning_youth_on:
+                from projectionist.youth.notice import notify_youth_mode_on
+
+                notified = notify_youth_mode_on(
+                    db, _settings(), target_id=user_id, actor_id=str(user.id)
+                )
             sa.audit(
                 db,
                 sa.YOUTH_CHANGE,
                 actor_id=user.id,
                 target_id=user_id,
                 is_youth=bool(payload.is_youth),
+                was_youth=was_youth,
+                confirmed=bool(payload.confirm_youth),
+                member_notified=notified,
             )
         assert updated is not None
         return {"user": updated}

@@ -29,7 +29,14 @@ class UserMemoryService:
     ) -> List[Dict[str, Any]]:
         target = target_id or caller_id
         self._authorize(caller_id=caller_id, caller_role=caller_role, target_id=target)
-        return self.db.list_user_memory_notes(target, limit=limit)
+        if target == caller_id:
+            return self.db.list_user_memory_notes(target, limit=limit)
+        # Owner review sees only notes written since the account entered Youth
+        # mode; turning Youth on never opens memory from before the switch.
+        since = self.db.youth_since(target)
+        if since is None:
+            raise MemoryAccessError("Private memory is not available for this account")
+        return self.db.list_user_memory_notes_since(target, since=since, limit=limit)
 
     def remember(self, *, caller_id: str, kind: str, text: str, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         return self.db.add_user_memory_note(caller_id, kind=kind, text=text, metadata=metadata)

@@ -108,6 +108,7 @@ class ReviewsToolsMixin:
             prompted_by="curator_suggestion",
             lens_id=self.lens_id,
             user_id=self.user_id,
+            memory_paused=self._youth_memory_paused(),
         )
         review = sync_review_rating_to_plex(
             self.db,
