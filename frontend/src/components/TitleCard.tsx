@@ -10,7 +10,7 @@ import {
   itemNeedsAddGuidance,
   resolveAddCapability,
 } from "../lib/addActions.js";
-import { peekViewerIsYouth } from "../lib/authGate.js";
+import { peekViewerAutoconfirmsAdds, peekViewerIsYouth } from "../lib/authGate.js";
 import { setTitleCardDragData } from "../lib/easterEggs.js";
 import { formatMatchPercent } from "../lib/matchScore.js";
 import { displayRecommendationReason } from "../lib/recommendationReason.js";
@@ -139,6 +139,7 @@ export default function TitleCard({
     requestPath,
     multiUserEnabled,
     isYouth: peekViewerIsYouth(),
+    autoconfirmAdds: peekViewerAutoconfirmsAdds(),
   });
   const canRequestSeerr =
     capability.canRequest && isRequestableInSeerr(item) && addStatus !== "success";

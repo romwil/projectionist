@@ -98,6 +98,18 @@ class ToolRegistry(
             }
         )
 
+    def _autoconfirms_adds(self) -> bool:
+        """Owner let this adult member's Radarr/Sonarr adds skip the confirm."""
+        from projectionist import authz
+
+        return authz.caller_autoconfirms_adds(
+            self.db,
+            self.settings,
+            user_id=self.user_id,
+            role=self.user_role,
+            is_youth=self.is_youth,
+        )
+
     def _youth_memory_paused(self) -> bool:
         from projectionist.youth.memory_policy import curator_memory_paused
 
@@ -256,7 +268,11 @@ class ToolRegistry(
             logger.warning("Unknown agent tool requested: %s", name)
             return json.dumps({"error": f"Unknown tool {name}"})
         denial = tool_policy_denial(
-            name, self.settings, role=self.user_role, is_youth=self.is_youth
+            name,
+            self.settings,
+            role=self.user_role,
+            is_youth=self.is_youth,
+            autoconfirm_adds=self._autoconfirms_adds(),
         )
         if denial:
             logger.warning("Agent tool %s refused by policy (role=%s)", name, self.user_role)

@@ -325,6 +325,16 @@ def _youth_guardrails(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> 
     _widen_notification_kind(conn, "account")
 
 
+def _member_autoconfirm_adds(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
+    """Owner-set flag letting an adult member's Radarr/Sonarr adds skip the owner confirm."""
+    del db
+    columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(users)")}
+    if "autoconfirm_adds" not in columns:
+        conn.execute(
+            "ALTER TABLE users ADD COLUMN autoconfirm_adds INTEGER NOT NULL DEFAULT 0"
+        )
+
+
 def _build_migrations() -> List[Migration]:
     def wrap(method_name: str) -> MigrationFn:
         def _run(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
@@ -394,6 +404,7 @@ def _build_migrations() -> List[Migration]:
         (59, "user_default_page", wrap("_migrate_user_default_page")),
         (60, "owner_ops", wrap("_migrate_owner_ops")),
         (61, "youth_guardrails", _youth_guardrails),
+        (62, "member_autoconfirm_adds", _member_autoconfirm_adds),
     ]
 
 

@@ -587,6 +587,11 @@ class UsersAuthMixin:
         if "disabled" in keys and row["disabled"] is not None:
             disabled = bool(int(row["disabled"]))
         is_youth = bool(int(row["is_youth"])) if "is_youth" in keys and row["is_youth"] is not None else False
+        autoconfirm_adds = (
+            not is_youth
+            and "autoconfirm_adds" in keys
+            and bool(int(row["autoconfirm_adds"] or 0))
+        )
         seerr_user_id = int(row["seerr_user_id"]) if row["seerr_user_id"] is not None else None
         notification_email = None
         if "notification_email" in keys and row["notification_email"] is not None:
@@ -648,6 +653,7 @@ class UsersAuthMixin:
             "role": str(row["role"]),
             "disabled": disabled,
             "is_youth": is_youth,
+            "autoconfirm_adds": autoconfirm_adds,
             "plex_user_id": str(row["plex_user_id"]) if row["plex_user_id"] is not None else None,
             "seerr_user_id": seerr_user_id,
             "seerr_linked": seerr_user_id is not None,

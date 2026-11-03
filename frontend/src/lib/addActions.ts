@@ -53,10 +53,11 @@ export const ASK_OWNER_COPY = "Ask the owner to add this";
 
 /**
  * Capability for Add / Request CTAs given role + requestPathFromFeatures.
- * Only the owner adds to Radarr/Sonarr; members on that path see "Ask the owner".
- * Members on the Seerr path may request. Youth never get an acquisition CTA.
- * The server enforces the same rule in projectionist/authz.py.
- * @param {{ role?: string, requestPath?: string, multiUserEnabled?: boolean, isYouth?: boolean }} [opts]
+ * The owner adds to Radarr/Sonarr. A member adds too when the owner turned on
+ * add-without-confirm for them (`autoconfirmAdds`); other members on that path
+ * see "Ask the owner". Members on the Seerr path may request. Youth never get
+ * an acquisition CTA. The server enforces the same rule in projectionist/authz.py.
+ * @param {{ role?: string, requestPath?: string, multiUserEnabled?: boolean, isYouth?: boolean, autoconfirmAdds?: boolean }} [opts]
  */
 export function resolveAddCapability(
   {
@@ -64,6 +65,7 @@ export function resolveAddCapability(
   requestPath = "arr",
   multiUserEnabled = true,
   isYouth = false,
+  autoconfirmAdds = false,
 }: JsParam = {},
 ) {
   const normalized = normalizeUserRole(role, { multiUserEnabled });
@@ -71,11 +73,12 @@ export function resolveAddCapability(
   const useSeerr = path === "seerr";
   const isOwner = normalized === "owner";
   const youth = Boolean(isYouth) && multiUserEnabled;
-  const memberOnArr = !useSeerr && !isOwner && !youth;
+  const memberAdds = !isOwner && !youth && Boolean(autoconfirmAdds);
+  const memberOnArr = !useSeerr && !isOwner && !youth && !memberAdds;
   return {
     role: normalized,
     requestPath: path,
-    canAdd: !useSeerr && isOwner && !youth,
+    canAdd: !useSeerr && (isOwner || memberAdds) && !youth,
     canRequest: useSeerr && !youth,
     showGuidedCopy: memberOnArr,
     guidedCopy: memberOnArr ? ASK_OWNER_COPY : null,
@@ -132,9 +135,21 @@ export function alreadyInArrMessage(response: JsParam, { label, service }: JsPar
  */
 export function groupAddableItems(
   items: LibraryItem[] | null | undefined = [],
-  { requestPath = "arr", role, multiUserEnabled = true, isYouth = false }: JsParam = {},
+  {
+    requestPath = "arr",
+    role,
+    multiUserEnabled = true,
+    isYouth = false,
+    autoconfirmAdds = false,
+  }: JsParam = {},
 ) {
-  const capability = resolveAddCapability({ role, requestPath, multiUserEnabled, isYouth });
+  const capability = resolveAddCapability({
+    role,
+    requestPath,
+    multiUserEnabled,
+    isYouth,
+    autoconfirmAdds,
+  });
   if (!canProposeMediaActions(role, { multiUserEnabled })) {
     return { radarr: [], sonarr: [], seerr: [] };
   }

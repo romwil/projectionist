@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { groupAddableItems } from "../lib/addActions";
-import { peekViewerIsYouth } from "../lib/authGate.js";
+import { peekViewerAutoconfirmsAdds, peekViewerIsYouth } from "../lib/authGate.js";
 import { filterDisplayableCards } from "../lib/turnstyleItems.js";
 import ConfirmAllButton from "./ConfirmAllButton";
 import TitleCard from "./TitleCard";
@@ -45,6 +45,7 @@ export default function TurnstyleResultsOverlay({
     role: userRole,
     multiUserEnabled,
     isYouth: peekViewerIsYouth(),
+    autoconfirmAdds: peekViewerAutoconfirmsAdds(),
   });
 
   return (
