@@ -9,6 +9,7 @@ numbered migrations rather than more ad-hoc boot calls.
 from __future__ import annotations
 
 import logging
+import re
 import sqlite3
 import time
 from typing import TYPE_CHECKING, Callable, List, Sequence, Tuple
@@ -244,6 +245,86 @@ def _library_episodes_summary(db: "SchemaMigrationsMixin", conn: sqlite3.Connect
         )
 
 
+def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
+    return (
+        conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?", (name,)
+        ).fetchone()
+        is not None
+    )
+
+
+def _widen_notification_kind(conn: sqlite3.Connection, kind: str) -> None:
+    """Add ``kind`` to the user_notifications CHECK list (SQLite table rebuild).
+
+    Rebuilds from the live DDL so every column added by later ALTERs survives.
+    """
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='user_notifications'"
+    ).fetchone()
+    ddl = str(row[0] or "") if row else ""
+    anchor = "'recommendation',"
+    if not ddl or f"'{kind}'" in ddl or anchor not in ddl:
+        return
+    widened = ddl.replace(anchor, f"{anchor} '{kind}',", 1)
+    widened = re.sub(
+        r'^CREATE TABLE\s+"?user_notifications"?',
+        "CREATE TABLE user_notifications_widened",
+        widened,
+        count=1,
+    )
+    index_sql = [
+        str(r[0])
+        for r in conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='index' "
+            "AND tbl_name='user_notifications' AND sql IS NOT NULL"
+        ).fetchall()
+    ]
+    conn.execute("DROP TABLE IF EXISTS user_notifications_widened")
+    conn.execute(widened)
+    conn.execute("INSERT INTO user_notifications_widened SELECT * FROM user_notifications")
+    conn.execute("DROP TABLE user_notifications")
+    conn.execute("ALTER TABLE user_notifications_widened RENAME TO user_notifications")
+    for sql in index_sql:
+        conn.execute(sql)
+
+
+def _youth_guardrails(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
+    """Record when each account entered Youth mode; allow ``account`` inbox notices."""
+    del db
+    columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(users)")}
+    if "youth_since" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN youth_since REAL")
+    # Owner memory review only covers notes written since youth_since. An account
+    # that joined through a Youth invite and was never toggled has been Youth since
+    # it was created. Every other existing Youth account fails closed to "now", so
+    # notes from a possible adult period are never opened by this upgrade.
+    joined_youth = "0"
+    if _table_exists(conn, "invites"):
+        joined_youth = (
+            "EXISTS (SELECT 1 FROM invites i WHERE i.redeemed_user_id = users.id "
+            "AND i.is_youth = 1)"
+        )
+    never_toggled = "1"
+    if _table_exists(conn, "security_audit_log"):
+        never_toggled = (
+            "NOT EXISTS (SELECT 1 FROM security_audit_log s WHERE s.target_id = users.id "
+            "AND s.event = 'youth_change')"
+        )
+    conn.execute(
+        f"""
+        UPDATE users
+        SET youth_since = CASE
+            WHEN {joined_youth} AND {never_toggled} THEN created_at
+            ELSE ?
+        END
+        WHERE is_youth = 1 AND youth_since IS NULL
+        """,
+        (time.time(),),
+    )
+    _widen_notification_kind(conn, "account")
+
+
 def _build_migrations() -> List[Migration]:
     def wrap(method_name: str) -> MigrationFn:
         def _run(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
@@ -312,6 +393,7 @@ def _build_migrations() -> List[Migration]:
         (58, "library_episodes_summary", _library_episodes_summary),
         (59, "user_default_page", wrap("_migrate_user_default_page")),
         (60, "owner_ops", wrap("_migrate_owner_ops")),
+        (61, "youth_guardrails", _youth_guardrails),
     ]
 
 

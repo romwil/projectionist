@@ -1,6 +1,6 @@
 /**
  * Pure helpers for the generalized notifications inbox.
- * Kinds: recommendation | arrival | access-request | digest | nudge | library-share | year-in-review
+ * Kinds: recommendation | arrival | access-request | digest | nudge | library-share | year-in-review | account
  */
 
 import { isWatchPartyRecommendation, recommendationIntent } from "./householdSocial.js";
@@ -14,6 +14,7 @@ export const NOTIFICATION_KINDS = [
   "nudge",
   "library-share",
   "year-in-review",
+  "account",
 ];
 
 /**
@@ -145,6 +146,7 @@ export function inboxHeadline(items: LibraryItem[] | null | undefined = []) {
     if (kind === "nudge") return "A curator note for you";
     if (kind === "library-share") return "Someone shared a saved page";
     if (kind === "year-in-review") return "Your Year in Review is ready";
+    if (kind === "account") return String(list[0]?.title || "A change to your account");
     if (kind === "recommendation" && isWatchPartyRecommendation(list[0])) {
       return "Someone invited you to watch together";
     }
@@ -337,6 +339,13 @@ export function inboxCardCopy(item: LibraryItem | null | undefined) {
       lead: title,
       note: firstSentence(item?.body || item?.message || "") || null,
       path: item?.payload?.path || (item?.year ? `/year-in-review/${item.year}` : null),
+    };
+  }
+  if (kind === "account") {
+    return {
+      eyebrow: "Account",
+      lead: title,
+      note: item?.body || item?.message || null,
     };
   }
   const watchParty = isWatchPartyRecommendation(item);

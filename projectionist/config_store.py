@@ -657,6 +657,14 @@ class YouthSettings:
 
     # US movie/TV ladder; empty resolves to PG-13 at runtime.
     max_content_rating: str = "PG-13"
+    # Curator memory for Youth accounts (read into prompts and written by chat,
+    # ratings, and preference signals). Off unless the owner opts in.
+    memory_enabled: bool = False
+    # Which model Youth chats may use: "none" (no model call) or "local" (an
+    # OpenAI-compatible server on the home network). Never the household model.
+    chat_route: str = "none"
+    local_base_url: str = ""
+    local_model: str = ""
 
 
 @dataclass

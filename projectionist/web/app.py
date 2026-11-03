@@ -714,6 +714,8 @@ class UserUpdatePayload(BaseModel):
     role: Optional[str] = Field(default=None, pattern="^(owner|member)$")
     disabled: Optional[bool] = None
     is_youth: Optional[bool] = None
+    # Required to turn Youth mode on for an account that is not Youth yet.
+    confirm_youth: bool = False
 
 
 class PasswordChangePayload(BaseModel):
@@ -866,6 +868,10 @@ class AppriseSettingsPayload(BaseModel):
 
 class YouthSettingsPayload(BaseModel):
     max_content_rating: str = "PG-13"
+    memory_enabled: bool = False
+    chat_route: Literal["none", "local"] = "none"
+    local_base_url: str = Field(default="", max_length=500)
+    local_model: str = Field(default="", max_length=200)
 
 
 class TheaterSettingsPayload(BaseModel):
@@ -993,6 +999,12 @@ def _scoped_user_id(user) -> Optional[str]:
     if _settings().features.multi_user_enabled:
         return user.id
     return None
+
+
+def _youth_memory_paused(user) -> bool:
+    from projectionist.youth.memory_policy import curator_memory_paused
+
+    return curator_memory_paused(_settings(), is_youth=bool(getattr(user, "is_youth", False)))
 
 
 def _include_orphan_threads(user) -> bool:
@@ -3799,7 +3811,12 @@ def add_preference(
     payload: PreferenceSignal,
     user=Depends(get_current_user_dep),
 ) -> Dict[str, bool]:
-    remember_preference(_db(), payload, user_id=_scoped_user_id(user))
+    remember_preference(
+        _db(),
+        payload,
+        user_id=_scoped_user_id(user),
+        memory_paused=_youth_memory_paused(user),
+    )
     _telemetry().record_preference_signal(
         signal_type=payload.signal_type,
         user_id=_scoped_user_id(user),
@@ -4182,6 +4199,7 @@ def create_review(
             lens_id=payload.lens_id,
             prompt_id=payload.prompt_id,
             user_id=_scoped_user_id(user),
+            memory_paused=_youth_memory_paused(user),
         )
     except ValueError as error:
         raise HTTPException(

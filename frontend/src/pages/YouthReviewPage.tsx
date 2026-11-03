@@ -5,7 +5,7 @@ import { getUserMemory, listUsers } from "../api/client";
  * Owner Youth moderation dashboard. Reviews the private memory notes Projectionist
  * keeps for a Youth-flagged account. The server (`GET /api/users/{id}/memory`)
  * is fail-closed: it only returns notes for accounts explicitly in Youth mode,
- * so non-youth accounts cannot be reviewed here by design.
+ * and only notes saved since that account entered Youth mode.
  */
 type YouthUser = {
   id: string;
@@ -28,6 +28,7 @@ export default function YouthReviewPage() {
   const [notes, setNotes] = useState<MemoryNote[]>([]);
   const [notesLoading, setNotesLoading] = useState(false);
   const [notesError, setNotesError] = useState("");
+  const [memoryEnabled, setMemoryEnabled] = useState<boolean | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,6 +54,7 @@ export default function YouthReviewPage() {
     try {
       const data = await getUserMemory(user.id);
       setNotes((data?.notes || []) as MemoryNote[]);
+      setMemoryEnabled(typeof data?.memory_enabled === "boolean" ? data.memory_enabled : null);
     } catch (err: any) {
       setNotesError(err instanceof Error ? err.message : "Could not load memory for this account.");
     } finally {
@@ -70,11 +72,13 @@ export default function YouthReviewPage() {
       </header>
 
       <p className="youth-review-guard" data-testid="youth-review-guard">
-        Review is limited to accounts flagged as <strong>Youth</strong>. Projectionist keeps
-        younger members&rsquo; long-term memory fail-closed — you can read what the curator
-        remembers for a Youth account here. In the app, adult members&rsquo; private memory is
-        not shown to owners. A full household backup, or access to the server itself, does contain
-        everyone&rsquo;s data. Set an account to Youth mode from <strong>Household</strong>.
+        Review is limited to accounts flagged as <strong>Youth</strong>, and only shows curator
+        notes saved after the account entered Youth mode. Turning Youth mode on never opens memory
+        from before. Curator memory for Youth accounts is off unless you turn it on in{" "}
+        <strong>Members</strong>, so this list is usually empty. In the app, adult members&rsquo;
+        private memory is not shown to owners. A full household backup, or access to the server
+        itself, does contain everyone&rsquo;s data. Set an account to Youth mode from{" "}
+        <strong>Members</strong>.
       </p>
 
       {loading ? (
@@ -108,8 +112,10 @@ export default function YouthReviewPage() {
             ) : notesError ? (
               <p className="dash-panel-error">{notesError}</p>
             ) : !notes.length ? (
-              <p className="dash-empty">
-                No memory notes recorded for {selected.display_name || "this account"} yet.
+              <p className="dash-empty" data-testid="youth-review-notes-empty">
+                No memory notes saved for {selected.display_name || "this account"} since Youth mode
+                started.
+                {memoryEnabled === false ? " Curator memory is off for Youth accounts." : ""}
               </p>
             ) : (
               notes.map((note) => (

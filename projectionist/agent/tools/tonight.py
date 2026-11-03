@@ -104,6 +104,7 @@ class TonightToolsMixin:
         shared = build_shared_consult_context(
             self.db,
             user_id=self.user_id,
+            include_memory=not self._youth_memory_paused(),
             user_role=self.user_role,
             discussed_cards=self._discussed_cards,
             cards=self._cards,

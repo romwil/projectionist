@@ -299,10 +299,11 @@ def build_shared_consult_context(
     discussed_cards: Sequence[Any] = (),
     cards: Sequence[Any] = (),
     question: str = "",
+    include_memory: bool = True,
 ) -> Dict[str, Any]:
     """Household-scoped context for a sibling consult (fail-soft on memory errors)."""
     memory_excerpts: List[str] = []
-    if user_id:
+    if user_id and include_memory:
         try:
             from projectionist.memory import UserMemoryService
 
@@ -448,7 +449,8 @@ async def gather_specialty_context(
                     logger.debug("scholar walk gather failed", exc_info=True)
 
         elif specialty == "mood":
-            if registry.user_id:
+            memory_paused = getattr(registry, "_youth_memory_paused", None)
+            if registry.user_id and not (callable(memory_paused) and memory_paused()):
                 from projectionist.memory import UserMemoryService
 
                 notes = UserMemoryService(registry.db).recall(

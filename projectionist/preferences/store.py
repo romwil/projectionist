@@ -19,7 +19,13 @@ def remember_preference(
     signal: PreferenceSignal,
     *,
     user_id: Optional[str] = None,
+    memory_paused: bool = False,
 ) -> None:
+    """Fold a signal into the lens taste profile and (unless paused) the account's memory.
+
+    ``memory_paused`` is set for Youth accounts while Youth memory is off: the
+    shared lens profile still learns, but no per-account note or fact is stored.
+    """
     weight = signal.weight
     if weight is None:
         weight = {
@@ -55,6 +61,8 @@ def remember_preference(
             respect_lock=signal.explicit_lock is None,
         )
 
+    if memory_paused:
+        return
     db.add_preference(
         signal.signal_type,
         signal.text,
@@ -72,6 +80,7 @@ def preference_context(
     lens_id: Optional[str] = None,
     *,
     user_id: Optional[str] = None,
+    include_personal: bool = True,
 ) -> str:
     from projectionist.taste.clusters import is_valid_cluster_tag
 
@@ -86,6 +95,9 @@ def preference_context(
                 lock = " [locked]" if int(row["explicit_lock"]) else ""
                 lines.append(f"- {row['cluster_tag']} (weight={row['weight']}){lock}")
             return "\n".join(lines)
+
+    if not include_personal:
+        return "No personal preferences are used for this account."
 
     # v1.8.29 unified memory is the source of truth for account-scoped
     # preferences.  Legacy facts remain only for pre-migration installations.

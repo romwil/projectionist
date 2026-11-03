@@ -168,7 +168,10 @@ async def chat(request: Request, payload: ChatRequest, user=Depends(get_current_
     if persona_id:
         db.set_thread_persona(session_id, persona_id)
     settings = _settings()
-    config_error = validate_llm_settings(settings)
+    is_youth = bool(getattr(user, "is_youth", False))
+    # Youth never uses the household model, so its config errors don't apply;
+    # CuratorAgent resolves the Youth route (local model or an explanation).
+    config_error = None if is_youth else validate_llm_settings(settings)
     if config_error:
         raise HTTPException(status_code=400, detail=config_error)
 
@@ -191,7 +194,7 @@ async def chat(request: Request, payload: ChatRequest, user=Depends(get_current_
             user_id=scoped,
             seerr_user_id=user.seerr_user_id,
             user_role=user.role,
-            is_youth=bool(getattr(user, "is_youth", False)),
+            is_youth=is_youth,
         ).run(session_id, payload.message)
         message = result.get("message") if isinstance(result, dict) else None
         _record_chat_turn(
