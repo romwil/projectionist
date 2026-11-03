@@ -145,7 +145,7 @@ export default function NotificationsSettingsPage() {
         notify_channel_inbox: inboxOn,
         notify_channel_email: emailOn,
         notify_channel_apprise: appriseOn,
-        apprise_urls: serializeAppriseDestinationRows(appriseRows) || null,
+        ...(isOwner ? { apprise_urls: serializeAppriseDestinationRows(appriseRows) || null } : {}),
         newsletter_opt_in: newsletterOn,
         nudge_opt_in: nudgeOn,
         year_in_review_opt_in: yirOn,
@@ -228,7 +228,19 @@ export default function NotificationsSettingsPage() {
   const emailMeta = channelMeta("email");
   const appriseMeta = channelMeta("apprise");
   const emailAvailable = emailMeta ? Boolean(emailMeta.available) : mailConfigured;
-  const appriseAvailable = appriseMeta ? Boolean(appriseMeta.available) : true;
+  const appriseHouseholdOn = Boolean(appriseMeta?.owner_configured);
+  const appriseAvailable = isOwner
+    ? appriseMeta
+      ? Boolean(appriseMeta.available)
+      : true
+    : appriseHouseholdOn;
+  const appriseHelp = isOwner
+    ? appriseAvailable
+      ? "Send alerts to Discord, Telegram, or your phone. The owner may also add household-wide destinations."
+      : "Push alerts (Discord, Telegram, phone) aren’t available on this server yet. The owner can turn them on."
+    : appriseAvailable
+      ? "Also send alerts to the household destinations the owner set up (Discord, Telegram, phone)."
+      : "The owner hasn’t set up household push alerts yet. Only the owner can add Apprise destinations.";
 
   return (
     <div className="settings-stack" data-testid="settings-notifications">
@@ -290,25 +302,23 @@ export default function NotificationsSettingsPage() {
               onChange={setAppriseOn}
               disabled={!appriseAvailable && !appriseOn}
               label="Apprise alerts"
-              help={
-                appriseAvailable
-                  ? "Send alerts to Discord, Telegram, or your phone. The owner may also add household-wide destinations."
-                  : "Push alerts (Discord, Telegram, phone) aren’t available on this server yet. The owner can turn them on."
-              }
+              help={appriseHelp}
               testId="notifications-apprise-toggle"
             />
             <ChannelRequirementBadge
-              requiresOwner={false}
+              requiresOwner={!isOwner}
               available={appriseAvailable}
-              ownerConfigured={Boolean(appriseMeta?.owner_configured)}
+              ownerConfigured={appriseHouseholdOn}
             />
           </div>
 
-          <AppriseDestinationsEditor
-            rows={appriseRows}
-            onChange={setAppriseRows}
-            ownerConfigured={Boolean(appriseMeta?.owner_configured)}
-          />
+          {isOwner ? (
+            <AppriseDestinationsEditor
+              rows={appriseRows}
+              onChange={setAppriseRows}
+              ownerConfigured={appriseHouseholdOn}
+            />
+          ) : null}
 
           <SettingsToggle
             id="notify-newsletter"

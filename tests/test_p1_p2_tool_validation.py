@@ -1257,7 +1257,7 @@ class TestAnniversariesExpandedValues(unittest.IsolatedAsyncioTestCase):
             self.assertIn("50 years ago", result["items"][0]["anniversary_context"])
 
     async def test_last_viewed_context_included(self):
-        """Items with last_viewed_at should include 'Last watched X months ago'."""
+        """Items with last_viewed_at should include 'Last played on this server X months ago'."""
         current_year = date.today().year
         three_months_ago = int(time.time()) - (90 * 86400)
         with tempfile.TemporaryDirectory() as tmp:
@@ -1278,7 +1278,7 @@ class TestAnniversariesExpandedValues(unittest.IsolatedAsyncioTestCase):
 
             context = result["items"][0]["anniversary_context"]
             self.assertIn("25 years ago", context)
-            self.assertIn("Last watched", context)
+            self.assertIn("Last played on this server", context)
             self.assertIn("month", context)
 
     async def test_limit_parameter(self):

@@ -49,28 +49,36 @@ export function canProposeMediaActions(role: string, options: JsParam = {}) {
   return normalizeUserRole(role, options) !== "guest";
 }
 
+export const ASK_OWNER_COPY = "Ask the owner to add this";
+
 /**
  * Capability for Add / Request CTAs given role + requestPathFromFeatures.
- * Members on the Seerr path may request.
- * @param {{ role?: string, requestPath?: string, multiUserEnabled?: boolean }} [opts]
+ * Only the owner adds to Radarr/Sonarr; members on that path see "Ask the owner".
+ * Members on the Seerr path may request. Youth never get an acquisition CTA.
+ * The server enforces the same rule in projectionist/authz.py.
+ * @param {{ role?: string, requestPath?: string, multiUserEnabled?: boolean, isYouth?: boolean }} [opts]
  */
 export function resolveAddCapability(
   {
   role,
   requestPath = "arr",
   multiUserEnabled = true,
+  isYouth = false,
 }: JsParam = {},
 ) {
   const normalized = normalizeUserRole(role, { multiUserEnabled });
   const path = requestPath === "seerr" ? "seerr" : "arr";
   const useSeerr = path === "seerr";
+  const isOwner = normalized === "owner";
+  const youth = Boolean(isYouth) && multiUserEnabled;
+  const memberOnArr = !useSeerr && !isOwner && !youth;
   return {
     role: normalized,
     requestPath: path,
-    canAdd: !useSeerr,
-    canRequest: useSeerr,
-    showGuidedCopy: false,
-    guidedCopy: null,
+    canAdd: !useSeerr && isOwner && !youth,
+    canRequest: useSeerr && !youth,
+    showGuidedCopy: memberOnArr,
+    guidedCopy: memberOnArr ? ASK_OWNER_COPY : null,
   };
 }
 
@@ -124,14 +132,18 @@ export function alreadyInArrMessage(response: JsParam, { label, service }: JsPar
  */
 export function groupAddableItems(
   items: LibraryItem[] | null | undefined = [],
-  { requestPath = "arr", role, multiUserEnabled = true }: JsParam = {},
+  { requestPath = "arr", role, multiUserEnabled = true, isYouth = false }: JsParam = {},
 ) {
+  const capability = resolveAddCapability({ role, requestPath, multiUserEnabled, isYouth });
   if (!canProposeMediaActions(role, { multiUserEnabled })) {
     return { radarr: [], sonarr: [], seerr: [] };
   }
   if (requestPath === "seerr") {
-    const seerr = items!.filter(isRequestableInSeerr);
+    const seerr = capability.canRequest ? items!.filter(isRequestableInSeerr) : [];
     return { radarr: [], sonarr: [], seerr };
+  }
+  if (!capability.canAdd) {
+    return { radarr: [], sonarr: [], seerr: [] };
   }
   return {
     radarr: items!.filter(isAddableToRadarr),

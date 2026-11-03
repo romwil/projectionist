@@ -6,6 +6,7 @@ import logging
 import uuid
 from typing import Any, Dict, List, Optional, Sequence
 
+from projectionist import authz
 from projectionist.config_store import Settings
 from projectionist.library.db import Database
 from projectionist.library.db._notifications import NOTIFICATION_KINDS
@@ -137,6 +138,9 @@ def deliver_notification(
     should_apprise = force_apprise or user_wants_channel(user, kind=kind, channel="apprise")
     if should_apprise:
         user_urls = str(user.get("apprise_urls") or "").strip()
+        if not authz.acts_as_owner(settings, user.get("role")):
+            # Raw Apprise URLs make the server connect anywhere; members never pick them (SEC-007).
+            user_urls = ""
         include_install = apprise_install_configured(settings)
         targets = resolve_apprise_targets(
             settings,
@@ -228,8 +232,8 @@ def notification_channel_offerings(settings: Settings) -> List[Dict[str, Any]]:
             "available": apprise_available(),
             "owner_configured": install_apprise,
             "help": (
-                "Add your own Apprise destinations anytime (builder or paste). "
-                "Optional household destinations need owner configuration under Admin → Mail."
+                "Members receive the household destinations the owner sets up under Admin → Mail. "
+                "Only the owner can add Apprise URLs."
             ),
         },
     ]

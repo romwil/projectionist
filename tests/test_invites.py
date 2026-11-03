@@ -442,7 +442,8 @@ class AuthenticatePlexUnitTests(unittest.TestCase):
             features=FeatureFlags(multi_user_enabled=True, invite_only=True),
         )
         settings.auth.plex_login_enabled = True
-        # Only bootstrap-owner exists — first Plex identity becomes real owner.
+        # Only bootstrap-owner exists: the first Plex identity becomes owner only
+        # with the one-time owner claim (SEC-008).
         self.assertFalse(
             any(
                 u["id"] != "bootstrap-owner" and u["role"] == "owner"
@@ -462,7 +463,17 @@ class AuthenticatePlexUnitTests(unittest.TestCase):
             "projectionist.web.avatars.resolve_avatar_url",
             return_value=None,
         ):
-            user = authenticate_plex_user("tok", self.db)
+            from types import SimpleNamespace
+
+            from fastapi import HTTPException
+
+            from projectionist.web.owner_claim import OWNER_CLAIM_COOKIE, issue_owner_claim
+
+            with self.assertRaises(HTTPException) as refused:
+                authenticate_plex_user("tok", self.db)
+            self.assertEqual(refused.exception.status_code, 403)
+            claim = SimpleNamespace(cookies={OWNER_CLAIM_COOKIE: issue_owner_claim(self.db)})
+            user = authenticate_plex_user("tok", self.db, request=claim)
         self.assertEqual(user.role, "owner")
         self.assertTrue(
             any(

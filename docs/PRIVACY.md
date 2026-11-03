@@ -1,14 +1,14 @@
 # Privacy & data use
 
-This page explains what Projectionist stores, who can see it, and what leaves your machine. It's written for the people who use the app — not only for operators reading the [security assessment](SECURITY.md).
+This page explains what Projectionist stores, who can see it, and what leaves the server. It's written for the people who use the app, not only for the owner reading the [security assessment](SECURITY.md). Where the app falls short of what you might expect, this page says so.
 
-Projectionist is a **self-hosted** app. The server owner chooses where it runs, which LLM provider to use, and whether to enable household login or MCP. **There is no Projectionist cloud account that receives your library by default.**
+Projectionist is **self-hosted**. The household owner chooses where it runs, which AI provider answers chat, and whether people sign in. **There is no Projectionist cloud account, and Projectionist does not phone home.**
 
 The short version:
 
-- **What we store** — your indexed library, your chats and preferences, and (for the owner) the connection credentials. All in one local SQLite database and `settings.json` on the owner's disk.
-- **What leaves the box** — only what you send to the LLM provider the owner configured (your prompts + the tool results needed to answer), TMDB image URLs, and — when the owner uses **Investigate** — optional vision stills, Identify audio clips, and OpenSubtitles hash lookups. Not your Plex token, not your `settings.json`.
-- **How to export or purge** — every account can download a full copy of its own data or permanently delete it. Exactly what that covers is mapped below, under **What export and purge cover**.
+- **What is stored.** The library catalog, your chats and preferences, your notifications, and the owner's connection settings. All of it lives in one database and one settings file on the owner's server, plus the daily backups described below.
+- **What leaves the server.** Your chat goes to the AI provider the owner picked. Search text may go to the owner's embeddings provider. Notifications go to the email or push service the owner set up. Poster images load from public artwork sites. Your Plex token and the owner's settings file do not leave.
+- **What you can't do yet.** There is no **Download my data** or **Delete my data** button. To leave, ask the owner to remove your account. **[Getting a copy or leaving](#getting-a-copy-or-leaving)** lists what removal deletes and what it leaves behind.
 
 Jump to: [Household members](#household-members) · [Server owners](#server-owners) · [MCP](#mcp) · [Exposure matrices](#exposure-matrices) · [We do not](#we-do-not)
 
@@ -16,153 +16,154 @@ Jump to: [Household members](#household-members) · [Server owners](#server-owne
 
 ## Who this is for
 
-| Role | How you arrive | What you administer |
-|------|----------------|---------------------|
-| **Server owner** | First Plex sign-in when multi-user is on, or the single operator when multi-user is off | Connections, libraries, sync, persona, household users, MCP keys, fleet credentials |
-| **Household member** | Later **Sign in with Plex** after multi-user is enabled | Your own profile preferences, chats, watchlist, ratings — not the server |
+| Role | How you arrive | What you control |
+|------|----------------|------------------|
+| **Owner** | Runs the server. With sign-in on, the first owner is made by the owner password in the container settings, by the setup wizard, or by signing in from the browser that turned sign-in on. | Connections, libraries, AI provider, household accounts, mail, backups, MCP keys |
+| **Member** | Joins by invite link or by asking to join on the sign-in page | Your own profile, chats, watchlist, lists, ratings, and notification choices |
+| **Youth** | A member account the owner marked **Youth mode** | Same as a member, with content limits |
 
-Default install is **single-owner with no login**: anyone on the trusted network who can reach the UI is effectively an admin. Multi-user adds Sign in with Plex and separates personal data; it's still a household product on a LAN, not a multi-tenant SaaS.
+The default install has **no sign-in**. Anyone who can reach the app on the network acts as the owner. With sign-in on, each person's chats and preferences are kept apart. It is still one household on one server, not a public service.
 
 ---
 
 ## From the household member's perspective
 
-### What you share when you sign in
+### How you sign in
 
-When you use **Sign in with Plex**, Projectionist asks Plex who you are and stores a household user profile:
+The owner decides which sign-in methods the household uses. Each stores a little about you:
 
-- Plex display name
-- Optional email and avatar URL (if Plex provides them)
-- Plex user id (for identity, not shown as a "shareable" library field)
-- Role (`owner` or `member`)
-- Optional Seerr link (user id / permissions) when the owner has Seerr enabled and linking succeeds
+- **Sign in with Plex.** Your Plex display name, Plex account number, and, when Plex shares them, your email and avatar link. Projectionist also keeps an encrypted copy of your Plex account token so it can sync your Plex watchlist. That token is never shown in the app or handed to other tools.
+- **Single sign-on (SSO).** Your account number at the SSO provider, plus the name and email the provider shares.
+- **Username and password.** Your username and a one-way scrambled form of your password. Projectionist can't read your password back.
 
-There is no open self-serve signup for new identities when invite-only is on (the default with multi-user). The owner sends a one-time **/join** link from **Admin → Access**, or you request access on the login page and wait for approval.
+Every account also stores a role (owner, member, or guest), whether **Youth mode** is on, your **preferred name** (what the curator calls you), and an optional uploaded profile picture.
 
-### What is yours alone (multi-user on)
+### Asking to join
 
-When multi-user is enabled, these stay scoped to your user:
+If you ask to join from the sign-in page, Projectionist keeps the name, email, and message you typed so the owner can approve or decline. The request stays on the server after the owner decides.
+
+If the owner invites you by email, Projectionist sends the invite through the household's mail service and keeps your email address on the invite.
+
+### What is yours alone
+
+With sign-in on, these belong to your account. Other members can't open them:
 
 - Chat threads and messages
-- Pending confirm tokens for *arr / Seerr actions you started
-- Watchlist pins
-- Ratings and review prompts tied to you
-- Preference / taste facts the curator keeps for you
-- Private memory notes (for example stated goals, watch intentions, callbacks/in-jokes, and external watches)
-- Normalized Plex played-history, live-progress, webhook, and manual watched-state evidence that Plex attributed to your exact account id
-- **Preferred conversation name** — how the curator addresses you in chat (may differ from your Plex display name)
-- Voice toggles (listen / speak replies), when voice mode is available
+- Private memory notes: goals, things you plan to watch, follow-ups
+- Taste and preference notes the curator keeps for you
+- Your watchlist, lists, ratings, and reviews
+- Your inbox: newsletters, nudges, whispers, Year in Review, and titles someone recommended to you
+- Plex viewing that Plex recorded under your own Plex account
+- Actions you started that still need confirming
 
-Other household members cannot open your chats or confirm your pending actions through the normal multi-user API boundary.
+A list stays private until you **publish** it to the household.
 
-### Memory, Youth mode, export, and purge
+### What the owner can see
 
-Your private memory stays tied to your account. **In the app, an owner can read only Youth accounts' memory, and only notes saved after that account entered Youth mode.** An owner who downloads a full household backup (Admin → Overview → **Full household backup**) or has access to the server can read everything, including adult members' chats and memory. Each backup download is logged.
+Your chats are private from other members. They are **not** private from the server itself:
 
-If the owner flags an account **Youth mode**, that account's profile shows a Youth badge. Curator memory for Youth accounts is **off by default**: the curator neither reads nor saves memory for them unless the owner turns Youth memory on. When it is on, the owner may review notes saved from then on for moderation. Turning Youth mode on for an existing account never opens what the curator remembered before. The owner has to confirm the change, the member gets an inbox notice, and the change is recorded in the security log.
+- **Anyone with the server's files can read everything**, including your chats and memory. That includes the owner's backups.
+- **Youth accounts.** Curator memory is **off by default** for Youth accounts: the curator neither reads nor saves it unless the owner turns Youth memory on. When it is on, the owner can read notes saved since that account entered Youth mode in **Admin → Youth review**. Turning **Youth mode** on for an existing account needs the owner to confirm, sends that person an inbox notice, and is written to the security log. It never opens what the curator remembered before. Your profile shows a **Youth** badge while it is on.
+- **The household list** the owner sees includes your notification email, your saved weather place, your Plex account number, and when you last signed in.
+- **Activity.** **Admin → Overview** shows household totals. The owner's tools can also list individual chat turns and plays with the account that made them. Those rows never include what you typed.
 
-#### What export and purge cover
+### Inbox, newsletters, and alerts
 
-Projectionist can hand you a full **export** of your account data, or permanently **purge** it. The two operate on **exactly the same set** — verified in `projectionist/library/db.py` (`export_user_memory` mirrors `purge_user_memory_and_chats`), so a copy taken before a purge is complete and nothing is left orphaned.
+Projectionist can write to you: a weekly newsletter, the occasional "you have to see this" nudge, a whisper about something new, and a Year in Review. Each lands in your **Inbox**.
 
-| Data | In the export? | Removed by purge? | Where it lives |
-|------|:--------------:|:-----------------:|----------------|
-| **Private memory notes** — goals, watch intentions, follow-ups, callbacks | Yes | Yes | `user_memory_notes` |
-| **Chat threads** — titles, personas, context, timestamps | Yes | Yes | `chat_sessions` |
-| **Message transcripts** — every message in your threads | Yes | Yes | `chat_messages` |
-| **Saved library pages** — your saved curator responses | Yes | Yes | `saved_library_pages` |
-| **Preference / taste facts** | Yes | Yes | `preference_facts` |
-| **Personal watch evidence and derivations** — normalized events, logical sessions, and completion confidence | Yes | Yes | `watch_events`, `watch_sessions`, `watch_completions` |
-| **Your on-box activity events** — chat turns (outcome, card and tool counts, timing; never the words), plays started in Projectionist and which pick they came from | Yes | Yes | `system_telemetry_stream` rows tagged with your account |
-| Shared, sanitized media research (titles/people/companies) | No | No | Repository knowledge — not tied to any account |
+**How it works.** A newsletter, nudge, or whisper names a title and one reason it connects to something **you** finished. Only your own viewing counts. If you haven't watched enough yet, you get a quieter note or none. Someone else's viewing never stands in.
 
-The export is a single JSON (or Markdown) document containing your notes, chat threads with their full message transcripts, saved pages, preference facts, and privacy-minimized watch events plus their derived sessions/completions. Provider account keys, payload hashes, server ids, tokens, and raw Plex payloads are excluded. **Purge is permanent — export first if you want a copy.** Removing a household account runs the same purge before deleting its profile. Both export and purge record a small audit event.
+Choose what reaches you in **Settings → Notifications**:
 
-Curator research about titles, people, and production companies is **shared repository knowledge** drawn from configured official media APIs. It's kept separate from account memory, and the idle refresh task never reads private notes or chats — so purging your account never erases (and never leaks) that shared media knowledge.
+- **Email.** Sent through the mail service the owner set up. Depending on their choice, that is their own mail server or Resend, an email delivery company.
+- **Apprise** (push to apps like Discord or Telegram). Only the owner adds destinations. If you turn it on, your notes go to the household destinations the owner chose, and other people may read those.
 
-> **How to run it:** each account can export or purge its own data through the Projectionist API (`GET /api/me/memory` returns the export; `DELETE /api/me/memory` purges the same set). If your build doesn't surface a button for this yet, ask your server owner, who can run it for your account. Owners: the exact commands are in the owner half of [Help](/help).
+### What the curator remembers
 
-### What is shared household
+The curator keeps two kinds of memory:
 
-Everyone on the same Projectionist instance shares:
+- **Your private memory.** Preferences, stated goals, watch intentions, and follow-ups for your account only.
+- **Shared knowledge** about titles, people, and companies it looked up. This isn't tied to any account, so everyone's curator can reuse it. It is saved as the AI wrote it. If you mention something personal while it researches a title, that detail could end up in shared knowledge.
 
-- The indexed library catalog (titles, metadata, facets, embeddings)
-- Sync jobs and library health
-- Curator persona voice (name, tone, presets) configured by the owner
-- In-app browsing of what the household owns (members may see a **public content** view of titles — more on posters and identifiers below)
+### Getting a copy or leaving
 
-### What the LLM provider receives
+**There is no Download my data or Delete my data button yet.** Projectionist can delete a single chat thread from **Chat**. For anything more:
 
-Chat uses the **owner's configured LLM** (OpenAI, Anthropic, Ollama, OpenRouter, etc.). The model receives:
+- **To leave**, ask the owner to remove your account in **Admin → Members**.
+- **To get a copy**, ask the owner. They can't export another person's data from the app, but they hold the full backup.
 
-- Your prompts and conversation context
-- Tool results the agent needs (title metadata, library matches, watch signals the tools return)
+**What removal deletes:** your profile, private memory, chats and messages, saved library pages, preference notes, your Plex viewing record, activity counts, watchlist, lists, inbox, taste profile, badges, streaks, courses, and Year in Review.
 
-It should **not** receive Plex server tokens, live `X-Plex-Token` media URLs, webhook secrets, or settings dumps. Your chat content goes to whichever provider the owner configured — including a local Ollama if they chose one, in which case nothing leaves the LAN.
+**What removal leaves behind:**
+
+- Your ratings and written reviews, and any pending rating prompts
+- Actions you started that were never confirmed
+- AI usage records (deleted after 90 days)
+- Problems you reported about a title (your name is removed, the text stays)
+- Your request to join, and the email on any invite you received
+- Your uploaded profile picture
+- Shared knowledge the curator saved
+- Security log entries about your account
+- Copies in backups made before removal. The daily backups roll off after seven days. Backups the owner downloaded last as long as they keep them.
+
+### What the AI provider receives
+
+Chat uses the AI provider the owner connected: OpenAI, Anthropic, OpenRouter, or a model on the owner's own machine such as Ollama. It receives:
+
+- Your messages and the conversation so far
+- Your private memory and preference notes, so the curator knows you
+- What the curator looks up to answer: titles, library matches, and your watch signals
 
 **Youth accounts are different.** Youth chats never use the household model. The owner picks one of two options: **none** (the default), where no model is called and the chat explains why, or **a model on the home network**, such as Ollama or LM Studio. If that local model isn't set up, or its address isn't on the home network, Youth chat sends nothing and says so.
 
-### Investigate episodes (owner Admin)
+**Search.** When you search by meaning ("lonely space movies"), your search words may go to the owner's embeddings provider, which can be a different company from the chat provider.
 
-When the owner runs **Admin → Libraries → Investigate episodes**, Projectionist may send the following **only for that job** — not your chats, not the whole library:
-
-| Signal | What leaves the LAN | When |
-|--------|---------------------|------|
-| **Vision stills** | Up to **five** JPEG frames from the episode file to the configured chat LLM (when vision is on and the model accepts images) | Owner starts Investigate with vision |
-| **Identify (ACRCloud)** | A short (~12 s) audio clip to ACRCloud Identify (`identify-*.acrcloud.com`) | Identify keys are configured and the lane runs |
-| **OpenSubtitles hash** | An OpenSubtitles **file hash** (not the video bytes) to look up a subtitle match | `PROJECTIONIST_OPENSUBTITLES_API_KEY` (or UI key) is set |
-
-Stills and Identify clips are cached under the app data directory for the **current** job so the owner can review them; older Investigate job folders are purged when a new job starts. A miss does not rename files.
+It does not receive the Plex server token, the owner's settings file, or other members' chats. If the owner runs a local model, chat stays on the home network.
 
 ### Voice mode
 
-If you enable voice input:
+If you turn on voice input:
 
-- The **browser / OS speech service** may process microphone audio (some browsers use a cloud speech-to-text service).
-- Projectionist does **not** upload raw audio to its own servers and does **not** store raw audio on disk.
-- Transcripts become normal chat text and then follow the usual chat → LLM path.
-- Optional "speak replies" uses the browser's `speechSynthesis` for assistant text.
+- Your **browser or device** handles the microphone. Some browsers send speech to a cloud service to turn it into text.
+- Projectionist never receives or stores raw audio. It gets the text, which then follows the normal chat path.
+- **Speak replies** uses your browser's built-in voice.
 
 ### Weather Channel (Live)
 
 When someone opens the **Weather Channel** from Live:
 
-| Signal | What leaves the LAN | When |
-|--------|---------------------|------|
-| **Place search** | The text you type (ZIP, city and state, or city and country) to **Open-Meteo geocoding** (`geocoding-api.open-meteo.com`) | You search for a weather place |
-| **Forecast** | Latitude/longitude — your saved profile place, or the household default — to **Open-Meteo** (`api.open-meteo.com`) for current + daily conditions | Weather Channel is opened |
-| **Voiceover** | Spoken in-browser via `speechSynthesis` — does not leave Projectionist’s server | Weather Channel is opened |
-| **Music** | Stays on LAN — streamed from the owner-chosen music folder when one is set | That folder contains audio |
+| Signal | What leaves the server | When |
+|--------|------------------------|------|
+| **Place search** | The text you type (ZIP, city and state, or city and country) to Open-Meteo, a free weather service | You search for a place |
+| **Forecast** | The latitude and longitude of your saved place, or the household default, to Open-Meteo | The channel opens |
+| **Voiceover** | Nothing. Your browser speaks it. | The channel opens |
+| **Music** | Nothing. It plays from the owner's music folder. | A music folder is set |
 
-No API key is sent to Open-Meteo. The household default is `PROJECTIONIST_WEATHER_LAT` / `PROJECTIONIST_WEATHER_LON` / `PROJECTIONIST_WEATHER_PLACE`. A saved profile place stores the label and coordinates in the user record and is reused on later forecasts — Projectionist does not geocode again while those coordinates are saved.
+A place you save is stored on your profile and reused, so it isn't looked up again.
 
-### Preferred name
+### Watchlist and your Plex account
 
-You can set a **preferred conversation name** on your profile. Projectionist stores it on your user record and uses it when addressing you. Fallback: Plex display name, then a neutral greeting.
+Watchlist pins are yours. When watchlist sync with Plex is on, Projectionist uses the encrypted Plex account token from your sign-in to read and update your Plex watchlist. If that token is missing, it asks you to sign in again. It never uses the household's server token in its place.
 
-### Watchlist and Plex account token
+### Lists
 
-Local watchlist pins are yours. When watchlist ↔ Plex Discover sync is enabled:
+Lists you make are stored on the server under your account. A list is **private** until you **publish** it to the household. Publishing to Plex uses your own Plex account. If Plex doesn't accept it, Projectionist says so instead of pretending.
 
-- Projectionist may store an **encrypted** copy of your Plex account token from Sign in with Plex (`plex_token_enc`) solely to pull/push your Discover watchlist (and related account features such as Seerr linking).
-- That token is **not** returned by API responses, MCP tools, or the UI.
-- If the token is missing, sync asks you to re-sign in — it does not fall back to exposing the server library token as "your" account token.
+### People on the Plex server who never joined
 
-### Curated lists
-
-Named lists you create in Projectionist (for example "Friday picks") are stored locally and owned by your user. Visibility may be private, household, or link-based inside Projectionist. Publishing to **Plex Lists** (when supported) uses your encrypted account token; Projectionist will not pretend a Plex publish succeeded if the API is unavailable.
+Plex tells Projectionist about plays from every account on the Plex server, including friends and family who never joined Projectionist. Projectionist keeps those plays apart, under that Plex account's name. With sign-in on, they never become anyone's "You watched" line or newsletter reason. They are not deleted automatically yet.
 
 ### What other members cannot see
 
-- Your chat history and message feedback
-- Your pending *arr / Seerr confirmation tokens
-- Your watchlist and personal ratings (as personal records)
-- Your mapped Plex played-history evidence
-- Owner-only Admin: fleet URLs, API keys, MCP keys, household user management
+- Your chats, memory, and message feedback
+- Actions you started that still need confirming
+- Your watchlist, ratings, and reviews as your personal record
+- Your Plex viewing
+- Owner-only Admin: connection settings, keys, household accounts
 
 ### MCP and members
 
-Household members do **not** control MCP API keys. The owner may expose library *content* to external apps via MCP; see [MCP](#mcp). That path is about titles and inventory — not your private chats.
+Members don't control MCP keys. MCP lets the owner connect other AI apps to Projectionist. The owner's choices about that are described under [MCP](#mcp).
 
 ---
 
@@ -170,200 +171,221 @@ Household members do **not** control MCP API keys. The owner may expose library 
 
 ### Fleet credentials
 
-Stored under the app data directory (typically `/config` → `settings.json` and related files):
+Stored under the data directory (typically `/config`, in `settings.json` and the SQLite database):
 
 - Plex server URL and **server** token
-- Radarr / Sonarr / Seerr / TMDB / TVDB / Fanart / Tautulli keys as configured
-- LLM provider base URL, model, and API key
-- Webhook secret, session secret material, feature flags
+- Radarr, Sonarr, Seerr, TMDB, TVDB, Fanart, Tautulli, OpenSubtitles, and ACRCloud keys as configured
+- LLM and embeddings provider URLs, models, and API keys
+- Mail settings (SMTP or Resend) and household Apprise destinations
+- Webhook secret, session secret, feature flags
 
-**Who can view them in the UI:** owner Admin / Configuration only (not household members). Treat the Docker `/config` volume and backups as secret material. UI-saved keys in `settings.json` are encrypted at rest when a secrets key is available; still protect the volume and back up `PROJECTIONIST_SECRETS_KEY` with `/config`.
+Only the owner sees these, in **Admin → Configuration**. UI-saved keys in `settings.json` are encrypted at rest when `PROJECTIONIST_SECRETS_KEY` (or the generated key file) is present. Back that key up with `/config`, or the encrypted values can't be read after a restore.
+
+### Backups
+
+**How it works.** The **Household backup** scheduled task writes `DATA_DIR/backups/projectionist-auto-<timestamp>.zip` once a day. Each file holds `settings.json` and a consistent copy of the database, and only the newest seven are kept. Nothing is uploaded. **Admin → Overview → Full household backup** downloads the same kind of file on demand, and each download is written to the security log.
+
+A backup holds **everyone's** chats, memory, and viewing, plus your encrypted keys. Store it like a password vault.
+
+```bash
+# List on-box snapshots (Docker)
+docker exec projectionist python -m projectionist.backups list
+
+# Restore: stop the app first, then run the restore in a one-off container
+docker stop projectionist
+docker run --rm -v /mnt/user/appdata/projectionist/config:/config \
+  romwil/projectionist:latest python -m projectionist.backups restore \
+  --from /config/backups/projectionist-auto-YYYYMMDDTHHMMSSZ.zip --yes
+docker start projectionist
+```
+
+Restore checks the snapshot before touching anything. It moves the current database and `settings.json` to `backups/pre-restore-<timestamp>/` rather than deleting them. Those set-aside folders are not pruned, so remove them yourself once the restore looks right. **Admin → Overview → Needs attention** warns when the backup task is off or the newest snapshot is more than three days old.
+
+**Honest limit:** the snapshot lives on the same disk as the data. Copy `DATA_DIR/backups` somewhere else if you need protection from a failed disk.
+
+### Export and removal, exactly
+
+Each signed-in account can export or purge its own data with the API. There is no member button for this yet, and an owner can't run it for someone else.
+
+```bash
+# Export the signed-in account (JSON) — use that account's session cookie
+curl -s -b 'curatorx_session=YOUR_SESSION' \
+  http://localhost:8788/api/me/memory > my-projectionist-export.json
+
+# Purge the same set for the signed-in account (permanent)
+curl -s -b 'curatorx_session=YOUR_SESSION' -X DELETE \
+  http://localhost:8788/api/me/memory
+```
+
+Export and purge cover the same tables. The export leaves out the profile, watchlist, lists, reviews, inbox, and taste profile, so it is not a full copy. The Markdown export lists chat thread titles and message counts, not the messages.
+
+| Data | Exported | Purged | Removed with the account | Table |
+|------|:--------:|:------:|:------------------------:|-------|
+| Private memory notes | Yes | Yes | Yes | `user_memory_notes` |
+| Chat threads and messages | Yes | Yes | Yes | `chat_sessions`, `chat_messages` |
+| Saved library pages | Yes | Yes | Yes | `saved_library_pages` |
+| Preference facts | Yes | Yes | Yes | `preference_facts` |
+| Mapped watch evidence | Yes | Yes | Yes | `watch_events`, `watch_sessions`, `watch_completions` |
+| Activity counts | Yes | Yes | Yes | `system_telemetry_stream` |
+| Watchlist, lists, inbox, taste profile, badges, streaks, courses, Year in Review | No | No | Yes | foreign keys to `users` |
+| Ratings and reviews, rating prompts | No | No | **No** | `user_title_reviews`, `rating_prompt_queue` |
+| Pending confirmations | No | No | **No** | `pending_actions` |
+| LLM usage | No | No | After 90 days | `llm_usage` |
+| Memory audit events | No | No | **No** | `user_memory_events` |
+| Reported issues (reporter cleared) | No | No | Text stays | `media_issues` |
+| Access requests, invite emails | No | No | **No** | `access_requests`, `invites` |
+| Uploaded avatar file | No | No | **No** | `DATA_DIR` avatars |
+| Shared repository insights | No | No | **No** | `memory_insights` |
+| Security log | No | No | **No** | `security_audit_log` |
+
+**Youth review.** `GET /api/users/{id}/memory` returns memory only for accounts flagged Youth, and only notes saved since that account's Youth mode started. **Admin → Youth review** shows the same.
 
 ### Plex watch evidence health
 
-Every 15 minutes, the **Plex Watch History** scheduled task asks Plex for a
-bounded page of played-history evidence. Projectionist keeps normalized
-movie/episode identifiers, the stable Plex account id, event time, optional
-progress/duration, and a deterministic fingerprint. It does **not** keep the
-raw response, Plex token, client IP, or transcode details.
+Every 15 minutes, the **Plex Watch History** scheduled task asks Plex for a bounded page of played history. Projectionist keeps normalized movie and episode identifiers, the stable Plex account id, event time, optional progress and duration, and a fingerprint. It does **not** keep the raw response, Plex token, client IP, or transcode details.
 
-Webhooks add pause, stop, and played signals immediately, including progress
-below the separate rating-prompt threshold. Active playback is sampled once per
-minute while sessions exist and every five minutes while idle; an unavailable
-Plex server makes the poller back off rather than blocking startup. Projectionist
-keeps only a one-way client hash for those samples—not the device name, address,
-bandwidth, or raw session payload. Marking a title watched or unwatched records
-an append-only manual correction only for an exactly linked Plex account.
+Webhooks add pause, stop, and played signals as they happen. Active playback is sampled once a minute while sessions exist and every five minutes while idle. For those samples Projectionist keeps a one-way client hash, not the device name, address, or raw payload. Marking a title watched or unwatched records a manual correction only for an exactly linked Plex account.
 
-Exact account mapping matters: an event maps to a household user only when
-Plex's stable account id exactly matches that user's linked Plex id. Unmapped
-events remain separate evidence. Display names are never used to guess
-ownership, and one history event does not prove an uninterrupted viewing.
-The tracker conservatively correlates mapped observations into logical movie or
-episode viewings. A completion is `certain` when progress directly crosses the
-90% boundary, `likely` when strong terminal evidence reconstructs the crossing,
-or `plex_event_only` when Plex reported played without enough progress detail.
-These are evidence-confidence labels, not proof of uninterrupted playback,
-attention, or who was in front of the screen. Member summaries always use the
-current signed-in user; show totals roll up episodes rather than inventing a
-show-level viewing count.
+**Exact account mapping.** An event belongs to a household member only when Plex's stable account id matches that member's linked Plex id. Display names are never used to guess. Events from accounts that never joined stay **unmapped**, stored with the Plex account's display name in `watch_source_identities`. Unmapped events never feed a member's newsletter, nudge, whisper, or "You watched" line. They are not pruned yet.
 
-On a trusted single-owner installation, inspect freshness and mapping coverage:
+A completion is `certain` when progress crosses 90%, `likely` when strong terminal evidence reconstructs that, or `plex_event_only` when Plex reported played without progress detail. These are evidence labels, not proof of who was watching.
 
 ```bash
-# Run an ingest immediately (otherwise it runs every 15 minutes while idle)
+# Run an ingest now (otherwise every 15 minutes while idle)
 curl -s -X POST \
   'http://localhost:8788/api/admin/scheduled-tasks/watch_history_ingest/run?wait=true' \
   | python3 -m json.tool
 
-# Inspect the privacy-safe source health summary
-curl -s http://localhost:8788/api/admin/watch-tracker/status \
-  | python3 -m json.tool
+# Source health: capability, cursor age, mapped/unmapped counts, last error category
+curl -s http://localhost:8788/api/admin/watch-tracker/status | python3 -m json.tool
 ```
 
-The owner-only response contains source capability, cursor age, aggregate
-mapped/unmapped counts, and a sanitized last-error category. It returns no
-titles, rating keys, Plex account ids, server machine ids, tokens, or event
-rows. With household login enabled, use the signed-in owner Admin session;
-members receive `403 Forbidden`.
+The status response returns no titles, rating keys, account ids, or event rows. With sign-in on, use the owner session; members get `403 Forbidden`.
 
-### MCP keys
+### Notifications and mail
 
-Projectionist supports two trust planes (selected by which secret is presented — never by a client "mode" flag alone):
+Newsletters, nudges, whispers, and Year in Review are built per member from that member's own mapped evidence. A member who wants email or Apprise also needs it on in **Settings → Notifications**.
 
-| Key | Typical env | Purpose |
-|-----|-------------|---------|
-| Privacy MCP key | `PROJECTIONIST_MCP_API_KEY` | Read-oriented library intelligence with a **public content** schema |
-| Full / in-stack MCP key | `PROJECTIONIST_MCP_FULL_API_KEY` | Deeper internal library fields + confirm-gated *arr propose tools for trusted automation on your LAN |
+- **Email** goes through SMTP or Resend as set in **Admin → Mail**. Invites with an email address are mailed the same way.
+- **Apprise** goes to the household destinations set in **Admin → Mail**. Only the owner can add per-account destinations; members can't, so a member can't make the server call an address they chose.
+- **Full MCP** includes a newsletter preview tool that can show any member's letter. See [MCP](#mcp).
 
-Details and exposure: [MCP](#mcp). Rotate keys in **Admin → Advanced** (last-4 hint on status; full value shown once after regenerate). Do not reuse the same string for both keys.
+### Investigate episodes
 
-### Images (TMDB posters)
+When the owner runs **Admin → Libraries → Investigate episodes**, Projectionist may send the following **only for that job**:
 
-For privacy-safe and member-facing library JSON, Projectionist prefers **TMDB CDN** poster/backdrop URLs (`image.tmdb.org`). Those URLs carry no Plex token and no LAN hostname. Plex thumbnail URLs that embed `X-Plex-Token` must not leave via privacy MCP or member public schemas.
+| Signal | What leaves the LAN | When |
+|--------|---------------------|------|
+| **Vision stills** | Up to five JPEG frames from the episode file to the chat LLM | Vision is on and the model accepts images |
+| **Identify (ACRCloud)** | A short (~12 s) audio clip to `identify-*.acrcloud.com` | Identify keys are configured |
+| **OpenSubtitles hash** | A file hash, not the video, to look up a subtitle match | `PROJECTIONIST_OPENSUBTITLES_API_KEY` (or the UI key) is set |
+
+Stills and clips are cached under the data directory for the current job so you can review them. Older job folders are removed when a new job starts.
 
 ### Activity counts and the security log
 
-Two small records stay on this server so the owner can run it well. Neither is sent anywhere — Projectionist has no third-party analytics and does not phone home.
+Two records stay on this server so you can run it well. Neither is sent anywhere.
 
-- **Activity counts** (`system_telemetry_stream`). A chat turn records its outcome, how many cards and tools it used, and how long it took — never what was typed or answered. A play started in Projectionist records the title and, only when you pressed Play on a card the curator showed you or on a title a household member recommended to you, which pick it came from. A pick is never inferred from Plex history. Rows are kept 90 days, and they're in your export and removed by your purge. The owner sees only household totals on **Admin → Overview**.
-- **Security log** (`security_audit_log`). Sign-ins, failed sign-ins, password changes and resets, invites, role and Youth changes, settings saves, secret reveals, MCP key changes, and backup downloads. Each row says who acted, for whom, when, and the outcome. Settings saves list setting **names**, never values; passwords, tokens, and keys are never written. Only owners can read it (**Admin → Health → Security log**). It is the household's audit trail, so it is **not** removed by an account purge; it keeps the most recent 20,000 rows.
+- **Activity counts** (`system_telemetry_stream`). A chat turn records its outcome, card and tool counts, and timing, never the words. A play started in Projectionist records the title and, only when the member pressed Play on a curator card or a household recommendation, which pick it came from. Rows are kept 90 days. **Admin → Overview** shows totals. `GET /api/admin/telemetry/events` returns the raw rows, including the account id.
+- **Security log** (`security_audit_log`). Sign-ins, failed sign-ins, password changes and resets, invites, role and Youth changes, settings saves, secret reveals, MCP key changes, and backup downloads. Settings saves list setting **names**, never values. Only owners can read it (**Admin → Health → Security log**). It keeps the newest 20,000 rows and is not removed with an account.
 
-### Webhooks, logging, backups
+### Images
 
-- Plex webhooks (if enabled) require a configured webhook secret.
-- Application logs may include titles, job phases, and user ids — not raw API keys by design — but still treat log-volume access as sensitive.
-- Backups of `/config` include credentials; store them like password vaults.
+Member-facing library JSON and privacy MCP prefer TMDB poster and backdrop URLs (`image.tmdb.org`), which carry no Plex token or LAN hostname. Plex thumbnail URLs that embed `X-Plex-Token` stay inside the owner's in-app views.
 
-### Network expectations
+### Browser-side third parties
 
-Do **not** expose bare port `8788` to the public internet. Keep Projectionist on a trusted LAN or behind an authenticated reverse proxy. See [SECURITY.md](SECURITY.md) for the operator threat model and finding checklist.
+Fonts and icons are self-hosted. A signed-in browser contacts only the origins you turned on by configuring a provider:
 
-### Browser-side third parties (PRIV-009)
-
-Fonts (DM Sans, Fraunces, and the Material Symbols icon set) are **self-hosted** — your browser never asks `fonts.googleapis.com` or `fonts.gstatic.com` for anything. The only origins a signed-in browser can still be told to contact are ones **you** turned on by configuring a provider:
-
-| Origin | When it fires | Why |
+| Origin | When | Why |
 |---|---|---|
-| `image.tmdb.org`, `artworks.thetvdb.com`, `assets.fanart.tv` | A poster/backdrop image loads | TMDB/TheTVDB/Fanart.tv artwork CDNs — no Plex token, no LAN hostname, in the URL |
-| `www.youtube.com` / `www.youtube-nocookie.com` | A member opens a trailer that only has a YouTube source | Embedded trailer playback |
+| `image.tmdb.org`, `artworks.thetvdb.com`, `assets.fanart.tv` | A poster or backdrop loads | Artwork CDNs; no Plex token or LAN hostname in the URL |
+| `www.youtube.com` / `www.youtube-nocookie.com` | Someone opens a trailer that only has a YouTube source | Trailer playback |
 
-Nothing else loads a third-party origin from the browser. The server's own outbound calls (TMDB/Radarr/Sonarr/Plex/LLM APIs) are a separate, server-side question — see [Fleet credentials](#fleet-credentials) above.
+### Webhooks, logs, and network
+
+- Plex webhooks require the configured webhook secret.
+- Application logs can include titles, job phases, and user ids, but not API keys. Treat log access as sensitive.
+- Don't expose port `8788` to the internet. Keep Projectionist on a trusted network or behind an authenticated reverse proxy. See [SECURITY.md](SECURITY.md).
 
 ---
 
 ## MCP (Model Context Protocol)
 
-MCP lets external tools query your **indexed library**. Mode is determined by the API key (HTTP) or explicit stdio mode settings — not by the client asserting a privilege level.
+MCP lets external AI apps query your library. The key a client presents decides what it gets, not a mode the client claims.
 
 ### Privacy mode (default for sharing)
 
-- **Tools:** sanitized catalog/search browse — library query, facets, aggregate counts, TV progress filters, TMDB discovery. Progress filters (e.g. unwatched / in-progress) may still narrow *owned catalog* results; they do **not** expose household affinity tools.
-- **Affinity-biased tools are full-only:** `analyze_watch_patterns`, `recommend_hidden_gems`, purge candidates, watchlist pins, and “tonight”-style bias helpers require the full MCP key (even though raw Plex fields stay stripped in privacy mode, those answers encode household taste).
-- **Schema:** public content — titles, years, genres, cast, truncated overviews, `tmdb_id` / `tvdb_id`, optional coarse watch state, **TMDB** image URLs when available.
-- **Must not include:** Plex/LAN/`X-Plex-Token` media URLs, `rating_key`, machine identifiers, household user identity, email/avatar, file sizes in bytes, raw view timestamps, `in_radarr` / `in_sonarr`, absolute paths, secrets, or *arr write tools.
+- **Tools:** catalog search and browse, facets, counts, TV progress filters, and TMDB discovery.
+- **Schema:** titles, years, genres, cast, short overviews, `tmdb_id` / `tvdb_id`, coarse watch state, and TMDB image URLs.
+- **Never includes:** Plex or LAN media URLs, `rating_key`, machine identifiers, household identities, email or avatars, file sizes, raw view times, `in_radarr` / `in_sonarr`, paths, secrets, or write tools.
 
-### Full / in-stack mode (trusted LAN automation)
+### Full mode (trusted LAN automation)
 
-- **Tools:** privacy catalog tools with richer **internal** fields, affinity/watch-biased helpers, plus confirm-gated propose tools for Radarr/Sonarr (and optional Seerr) that return a pending token — no silent writes.
-- **Still must not include:** live `X-Plex-Token` in any URL or field; webhook / session / LLM / *arr API keys; dumps of `settings.json`.
-- Prefer TMDB CDN images even in full mode.
+- **Tools:** the privacy tools with internal fields, taste and watch-based helpers (`analyze_watch_patterns`, `recommend_hidden_gems`, purge candidates, watchlist pins), confirm-gated Radarr/Sonarr/Seerr proposals, and a **weekly newsletter preview for any member**. That preview includes the member's name and watch-based reasons, and it reaches whatever AI provider the client uses.
+- **Never includes:** live `X-Plex-Token` URLs, webhook, session, LLM, or *arr keys, or `settings.json`.
 
-Stdio transport for full mode is intentionally guarded so a shared laptop cannot accidentally speak full mode without the full key present in the environment.
+| Key | Env | Purpose |
+|-----|-----|---------|
+| Privacy MCP key | `PROJECTIONIST_MCP_API_KEY` | Public-content catalog |
+| Full MCP key | `PROJECTIONIST_MCP_FULL_API_KEY` | Internal fields, household taste, confirm-gated proposals |
 
-Operator guide: [MCP.md](MCP.md). Threat-model notes: [SECURITY.md](SECURITY.md).
+Rotate keys in **Admin → Advanced**; the full value shows once after you regenerate. Don't reuse one string for both. Stdio full mode requires the full key in the environment. Operator guide: [MCP.md](MCP.md).
 
 ---
 
 ## Exposure matrices
 
-Legend: **Y** = may see / receive · **—** = not exposed by design · **P** = planned / when feature enabled · **\*** = owner-configured destination
+Legend: **Y** = may see or receive · **—** = not exposed · **\*** = the provider the owner chose
 
-### By audience
-
-| Data class | Stored where | Member | Owner | Privacy MCP | Full MCP | LLM (chat tools) |
-|------------|--------------|--------|-------|-------------|----------|------------------|
-| Title metadata (name, year, genres, cast) | SQLite library index | Y | Y | Y | Y | Y |
-| Truncated overview / public facets | SQLite | Y | Y | Y | Y | Y |
-| TMDB poster / backdrop CDN URLs | Derived / TMDB | Y | Y | Y | Y | Y |
-| Plex tokenized poster URLs | May exist in DB | — | In-app only | — | — | — |
-| `tmdb_id` / `tvdb_id` | SQLite | Y | Y | Y | Y | Y |
-| Plex `rating_key` | SQLite | — | Y | — | Y | Y (agent/internal) |
-| File size / paths | SQLite | — | Y | — | Y (size; not secrets) | Sometimes (internal tools) |
-| `in_radarr` / `in_sonarr` | SQLite | — | Y | — | Y | Y (agent) |
-| Watch telemetry (detailed) | SQLite | Own signals in UI | Y | — | Y | Y (agent tools) |
-| On-box activity counts (chat turns, plays, pick attribution) | SQLite | Own (export) | Household totals | — | — | — |
-| Security log | SQLite | — | Y | — | — | — |
-| Chat messages | SQLite | Own | Own + admin host access | — | — | Y\* (provider) |
-| Private user memory | SQLite | Own | Youth accounts only, notes saved since Youth mode started (Youth memory is off by default) | — | — | Current user's agent context |
-| Chat transcripts (messages) | SQLite | Own | Own + admin host access | — | — | Y\* (provider) |
-| Saved library pages | SQLite | Own | — | — | — | Y (agent tools) |
-| Preference facts | SQLite | Own | — | — | — | Current user's agent context |
-| Watchlist pins | SQLite | Own | Own | Snapshot tool may list pins (no account token) | Same | Y (agent tools) |
-| Ratings / reviews | SQLite | Own | Own | — | — | Y (agent tools) |
-| Preferred name | User row | Own | Household user admin | — | — | Y (addressing) |
-| Plex display name / avatar | User row | Own (profile) | Household table | — | — | Minimal (addressing) |
-| Encrypted Plex account token | User row (`plex_token_enc`) | — (P) | — (not via API) | — | — | — |
-| Curated lists | SQLite | Own / household per visibility | Same + host | — | — | Y (agent tools) |
-| Plex server URL + server token | `settings.json` | — | Admin | — | — | — |
-| *arr / Seerr / LLM API keys | `settings.json` | — | Admin | — | — | — (key itself) |
-| MCP privacy / full keys | Env / settings | — | Admin | Auth only | Auth only | — |
-| Persona configuration | SQLite / settings | Shared voice in chat | Admin edit | — | — | Y (system prompt) |
-
-### Voice path (members)
-
-| Step | Who processes it | Stored by Projectionist |
-|------|------------------|--------------------|
-| Microphone audio | Browser / OS speech service | No raw audio |
-| Transcript text | Projectionist chat + LLM\* | As chat messages |
-| Spoken replies | Browser `speechSynthesis` | Not stored as audio |
+| Data | Stored where | Member | Owner | Privacy MCP | Full MCP | AI provider |
+|------|--------------|--------|-------|-------------|----------|-------------|
+| Title metadata, facets, short overviews | Library index | Y | Y | Y | Y | Y\* |
+| TMDB poster / backdrop URLs | Library index | Y | Y | Y | Y | Y\* |
+| Plex tokenized poster URLs | Library index | — | In-app only | — | — | — |
+| `tmdb_id` / `tvdb_id` | Library index | Y | Y | Y | Y | Y\* |
+| Plex `rating_key`, file size, `in_radarr` / `in_sonarr` | Library index | — | Y | — | Y | Y\* (tools) |
+| Chats and messages | Database | Own | Server files and backups | — | — | Own chat\* |
+| Private memory and preference facts | Database | Own | Youth accounts since Youth mode started; server files and backups | — | — | Own chat\* (Youth: local model or none) |
+| Mapped watch evidence | Database | Own | Server files; aggregate health | — | Household taste tools | Own chat\* |
+| Unmapped Plex viewing | Database | — | Server files; aggregate counts | — | — | — |
+| Newsletter, nudge, whisper text | Database | Own | Server files | — | Newsletter preview | — |
+| Activity counts | Database | — | Totals, plus raw rows by API | — | — | — |
+| Security log | Database | — | Y | — | — | — |
+| Watchlist pins | Database | Own | Own | — | Pins tool | Own chat\* |
+| Ratings and reviews | Database | Own | Server files | — | — | Own chat\* |
+| Published lists | Database | Household | Household | — | — | Own chat\* |
+| Profile (name, email, weather place, last sign-in) | Database | Own | Household list | — | — | Name only |
+| Encrypted Plex account token | Database | — | — | — | — | — |
+| Access requests and invite emails | Database | — | Y | — | — | — |
+| Plex server token, *arr / LLM / mail keys | `settings.json` | — | Admin | — | — | — |
+| MCP keys | Env / settings | — | Admin | Auth only | Auth only | — |
+| Search-by-meaning text | Sent, not stored | Own | — | — | — | Embeddings provider\* |
+| Backups | `DATA_DIR/backups` and downloads | — | Everything above | — | — | — |
 
 ---
 
 ## We do not
 
-- Sell your household data or train a Projectionist-hosted foundation model on your chats
-- Require a Projectionist cloud account for core library curation
-- Expose live `X-Plex-Token` media URLs through privacy MCP or member public library JSON
-- Let privacy MCP (or a mode flag) escalate into full / write-capable MCP
-- Hand MCP clients your Plex server token, LLM key, or `settings.json`
-- Store raw microphone audio on the Projectionist data volume (voice transcripts only)
-- Email household invites or scrape contacts from Plex beyond the signed-in profile fields above
-- Pretend Plex Lists publish succeeded when the Discover API path is unavailable
-- Leave anything behind after a purge — an account purge removes every store listed under **What export and purge cover**
+- Sell household data, or train a Projectionist-hosted model on your chats
+- Require a Projectionist cloud account, or send analytics anywhere
+- Expose live `X-Plex-Token` media URLs through privacy MCP or member library views
+- Let a privacy MCP key, or a mode flag, unlock full MCP
+- Hand MCP clients the Plex server token, AI provider key, or `settings.json`
+- Store raw microphone audio
+- Let members add Apprise destinations, or confirm Radarr/Sonarr adds
+- Use someone else's viewing to write your "You watched" lines
+- Pretend a Plex list publish worked when Plex refused it
 
 ---
 
 ## Your choices
 
-- Keep **multi-user off** for a single trusted operator on a private network
-- Turn **multi-user on** so chats, watchlists, and ratings partition per Plex identity
-- **Export or purge** your account data at any time — same set either way (see **What export and purge cover**)
-- **Do not enable** full MCP (or leave `PROJECTIONIST_MCP_FULL_API_KEY` unset) if you only want the privacy schema
-- **Rotate** MCP keys if a client or paste leaked
-- Choose an **LLM provider** you trust (including fully local Ollama)
-- Leave the household by asking the owner to disable or remove your user (when user management is available)
-- Read the technical checklist: [SECURITY.md](SECURITY.md)
+- **Members:** turn email, Apprise, nudges, and newsletters on or off in **Settings → Notifications**. Delete a chat thread from **Chat**. Ask the owner to remove your account.
+- **Owners:** keep sign-in off for a single trusted operator, or turn it on so each person's data is kept apart.
+- Pick an AI provider you trust. A local model such as Ollama keeps chat on your network.
+- Leave `PROJECTIONIST_MCP_FULL_API_KEY` unset if you only want the privacy MCP schema. Rotate MCP keys if one leaks.
+- Copy `DATA_DIR/backups` off the server if you need protection from a failed disk, and store those copies like secrets.
 
 ---
 
@@ -371,6 +393,6 @@ Legend: **Y** = may see / receive · **—** = not exposed by design · **P** = 
 
 - [SECURITY.md](SECURITY.md) — operator threat model and findings
 - [MCP.md](MCP.md) — MCP tools, keys, and transport
-- [wiki/Multi-User.md](wiki/Multi-User.md) — Sign in with Plex
-- [HELP.md](HELP.md) — in-app Help (`/help`); owner half has the export/purge commands
-- In-app copy of this page: **`/privacy`** (no login required)
+- [wiki/Multi-User.md](wiki/Multi-User.md) — household sign-in
+- [HELP.md](HELP.md) — in-app Help (`/help`)
+- In-app copy of this page: **`/privacy`** (no sign-in required)

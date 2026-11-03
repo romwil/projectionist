@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -194,7 +195,9 @@ class OwnerSeedingTests(unittest.TestCase):
         self.assertEqual(len(owners), 1)
 
 
-class NewUserRoleTests(unittest.TestCase):
+class OwnerClaimUnitTests(unittest.TestCase):
+    """SEC-008: the first owner needs proof; a bare first sign-in no longer wins."""
+
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.db = Database(Path(self._tmp.name) / "test.db")
@@ -203,13 +206,45 @@ class NewUserRoleTests(unittest.TestCase):
     def tearDown(self) -> None:
         self._tmp.cleanup()
 
-    def test_first_real_user_claims_owner_legacy(self) -> None:
-        self.assertEqual(auth.resolve_new_user_role(self.db), "owner")
+    def _request(self, cookie: str = ""):
+        from types import SimpleNamespace
 
-    def test_subsequent_users_are_members_after_seed(self) -> None:
+        from projectionist.web.owner_claim import OWNER_CLAIM_COOKIE
+
+        return SimpleNamespace(cookies={OWNER_CLAIM_COOKIE: cookie} if cookie else {})
+
+    def test_no_claim_fails_closed(self) -> None:
+        from fastapi import HTTPException
+
+        with self.assertRaises(HTTPException) as caught:
+            auth._require_owner_claim(self.db, self._request())
+        self.assertEqual(caught.exception.status_code, 403)
+
+    def test_claim_is_single_use(self) -> None:
+        from fastapi import HTTPException
+
+        from projectionist.web.owner_claim import issue_owner_claim
+
+        raw = issue_owner_claim(self.db)
+        auth._require_owner_claim(self.db, self._request(raw))
+        with self.assertRaises(HTTPException):
+            auth._require_owner_claim(self.db, self._request(raw))
+
+    def test_wrong_or_expired_claim_is_refused(self) -> None:
+        from projectionist.web.owner_claim import (
+            issue_owner_claim,
+            request_holds_owner_claim,
+        )
+
+        raw = issue_owner_claim(self.db)
+        self.assertFalse(request_holds_owner_claim(self.db, self._request(raw + "x")))
+        with patch("projectionist.web.owner_claim.time.time", return_value=time.time() + 2 * 86400):
+            self.assertFalse(request_holds_owner_claim(self.db, self._request(raw)))
+
+    def test_env_owner_counts_as_real_owner(self) -> None:
         with patch.dict(os.environ, {"PROJECTIONIST_OWNER_PASSWORD": "supersecretpw"}, clear=False):
             auth.seed_env_owner(self.db)
-        self.assertEqual(auth.resolve_new_user_role(self.db), "member")
+        self.assertTrue(auth.has_real_owner(self.db))
 
 
 class OwnerSeedingIntegrationTests(unittest.TestCase):

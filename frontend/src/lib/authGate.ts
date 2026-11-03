@@ -248,6 +248,11 @@ export function peekAuthSnapshot() {
   return sharedAuth.peek();
 }
 
+/** True when the cached signed-in viewer is a Youth account (false before auth loads). */
+export function peekViewerIsYouth(): boolean {
+  return Boolean((sharedAuth.peek() as JsParam)?.isYouth);
+}
+
 export function clearAuthSnapshot() {
   sharedAuth.clear();
 }

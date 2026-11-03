@@ -9,7 +9,7 @@ Living pen-test brief for operators on the current Projectionist product surface
 | Web UI + FastAPI control plane (`projectionist/web/`) | Third-party Plex / *arr / Seerr / LLM hosts |
 | Optional multi-user auth (Plex PIN, local password, OIDC) + session cookies | Host OS / Unraid / Docker daemon hardening |
 | Setup connection tests, chat, jobs, sync, *arr confirm tokens | Supply-chain / dependency CVE hunting |
-| Plex webhook ingress | Multi-tenant SaaS isolation |
+| Plex webhook ingress | Isolating several households on one server |
 | Dual-mode MCP + library privacy sanitizers | |
 | Default Docker / Unraid packaging assumptions (non-root `curatorx`) | |
 
@@ -135,7 +135,7 @@ See [MCP.md](MCP.md) and [PRIVACY.md](PRIVACY.md).
 6. Public Household is **invite-only**; mint join links from Admin Access. Private Household invite-only stays off unless you opt in.
 7. Restrict who can mount/read the `/config` volume (encrypted secrets + session secret + recovery-key hash).
 8. Keep **`PROJECTIONIST_EXPOSE_OPENAPI` unset** in production.
-9. After ACTIVE_MODE, setup endpoints **404**. Recovery is owner login + Admin, or `PROJECTIONIST_OWNER_PASSWORD` on LAN — not the wizard.
+9. After ACTIVE_MODE, setup endpoints **404**. Recovery is owner login + Admin, or `PROJECTIONIST_OWNER_USERNAME` + `PROJECTIONIST_OWNER_PASSWORD` and a restart (the username must match the existing owner) — not the wizard. See [Owner recovery](HELP.md#owner-recovery).
 10. Automat LAN hosts and QA vs prod: [ops/AUTOMAT.md](ops/AUTOMAT.md).
 
 ## Rotating secrets & keys

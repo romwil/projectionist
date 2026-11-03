@@ -35,7 +35,7 @@ To restore pre-1.26 LAN-open auto-provision, set `features.open_auto_provision` 
 
 | Method | Flags | Notes |
 |--------|-------|-------|
-| **Plex PIN** | `plex_login_enabled` | Overseerr-style plex.tv link flow; first *real* owner (beyond synthetic `bootstrap-owner`) becomes owner without an invite |
+| **Plex PIN** | `plex_login_enabled` | Overseerr-style plex.tv link flow. While no real owner exists, a first sign-in becomes owner only from the browser that turned household login on (one-time, 24-hour claim cookie) or via `PROJECTIONIST_OWNER_PASSWORD`; any other first sign-in is refused |
 | **Local password** | `local_login_enabled` | Owner registration with PBKDF2-HMAC-SHA256; also available on `/join` redeem |
 | **OIDC** | `oidc_enabled` + issuer / client id / secret / redirect | Authelia, Authentik, Keycloak, etc. |
 

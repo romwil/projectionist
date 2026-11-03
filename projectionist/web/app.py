@@ -23,9 +23,8 @@ from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 from starlette.middleware.gzip import GZipMiddleware
 
-from projectionist import __version__
+from projectionist import __version__, authz
 from projectionist.agent.providers import LLMProviderError
-from projectionist.agent.tools._definitions import agent_acts_as_owner
 from projectionist.agent.tools import (
     check_radarr_already_exists,
     check_sonarr_already_exists,
@@ -2536,6 +2535,13 @@ def propose_action(payload: Dict[str, Any], user=Depends(get_current_user_dep)) 
 
     scoped = _scoped_user_id(user)
     action = payload.get("action")
+    denial = authz.pending_action_denial(
+        str(action or ""),
+        is_owner=authz.acts_as_owner(_settings(), user.role),
+        is_youth=bool(getattr(user, "is_youth", False)),
+    )
+    if denial:
+        raise HTTPException(status_code=403, detail=denial)
     if action == "add_radarr":
         settings = _settings()
         config_error = radarr_add_configuration_error(settings)
@@ -2721,7 +2727,8 @@ async def confirm_action(
             settings,
             payload.token,
             user_id=scoped,
-            actor_is_owner=agent_acts_as_owner(settings, user.role),
+            actor_is_owner=authz.acts_as_owner(settings, user.role),
+            actor_is_youth=bool(getattr(user, "is_youth", False)),
         )
         logger.info("Action confirmed token=%s action=%s", payload.token[:8], result.get("action"))
         return {"ok": True, **result}
