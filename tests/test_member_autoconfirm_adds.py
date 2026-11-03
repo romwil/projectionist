@@ -182,6 +182,20 @@ class AutoconfirmToggleRouteTests(_HouseholdApp):
         self.assertEqual(len(cleared), 1)
 
 
+class AutoconfirmRoleChangeTests(_HouseholdApp):
+    def test_promotion_clears_autoconfirm_so_demotion_cannot_restore_it(self) -> None:
+        owner = self._client_for("owner")
+        owner.patch("/api/users/local-member", json={"autoconfirm_adds": True})
+        resp = owner.patch("/api/users/local-member", json={"role": "owner"})
+        self.assertEqual(resp.status_code, 200, resp.text)
+        self.assertEqual(int(self.db.get_user("local-member")["autoconfirm_adds"]), 0)
+        resp = owner.patch("/api/users/local-member", json={"role": "member"})
+        self.assertEqual(resp.status_code, 200, resp.text)
+        self.assertFalse(resp.json()["user"]["autoconfirm_adds"])
+        reasons = [row["detail"].get("reason") for row in _audit_rows(self.db, sa.AUTOCONFIRM_CHANGE)]
+        self.assertIn("role_change", reasons)
+
+
 class AutoconfirmAddRouteTests(_HouseholdApp):
     def _enable(self) -> None:
         self.db.set_user_autoconfirm_adds("local-member", True)

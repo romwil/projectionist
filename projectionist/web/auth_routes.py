@@ -857,6 +857,16 @@ def register_auth_routes(app):
                     before=str(target["role"]),
                     after=payload.role,
                 )
+                if was_autoconfirm and payload.autoconfirm_adds is None:
+                    sa.audit(
+                        db,
+                        sa.AUTOCONFIRM_CHANGE,
+                        actor_id=user.id,
+                        target_id=user_id,
+                        autoconfirm_adds=False,
+                        reason="role_change",
+                    )
+                    was_autoconfirm = False
         if payload.disabled is not None:
             if user_id == user.id and payload.disabled:
                 raise HTTPException(status_code=400, detail="Cannot disable your own account")

@@ -117,7 +117,12 @@ class UsersAuthMixin:
             existing = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
             if existing is None:
                 raise ValueError("User not found")
-            conn.execute("UPDATE users SET role = ? WHERE id = ?", (cleaned, user_id))
+            # A member's add-without-confirm never survives a role change, so a
+            # later demotion can't quietly bring it back.
+            conn.execute(
+                "UPDATE users SET role = ?, autoconfirm_adds = 0 WHERE id = ? AND role != ?",
+                (cleaned, user_id, cleaned),
+            )
             row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         assert row is not None
         return self._row_to_user(row)

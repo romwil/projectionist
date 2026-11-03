@@ -83,6 +83,14 @@ def _load(db: Database) -> Optional[dict]:
     return record if isinstance(record, dict) else None
 
 
+def presented_claim_digest(request: Optional[Request]) -> str:
+    """Digest of the claim cookie on ``request``, or "" when there is none."""
+    if request is None:
+        return ""
+    presented = str(request.cookies.get(OWNER_CLAIM_COOKIE) or "").strip()
+    return _digest(presented) if presented else ""
+
+
 def request_holds_owner_claim(db: Database, request: Optional[Request]) -> bool:
     """True when ``request`` carries the live, unexpired claim cookie."""
     if request is None:

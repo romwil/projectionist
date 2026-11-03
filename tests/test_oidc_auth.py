@@ -216,5 +216,35 @@ class OIDCAuthTests(unittest.TestCase):
         self.assertEqual(body["oidc_provider_name"], "TestIDP")
 
 
+
+class OIDCOwnerClaimBindingTests(unittest.TestCase):
+    """SEC-008: a cross-site OIDC callback can't spend this browser's owner claim."""
+
+    setUp = OIDCAuthTests.setUp
+    tearDown = OIDCAuthTests.tearDown
+    _enable_oidc = OIDCAuthTests._enable_oidc
+
+    @patch("projectionist.web.auth.httpx")
+    def test_callback_from_a_login_started_elsewhere_cannot_claim_owner(self, mock_httpx) -> None:
+        import projectionist.web.app as app_mod
+
+        self._enable_oidc()
+        mock_disc_resp = MagicMock()
+        mock_disc_resp.json.return_value = _mock_discovery()
+        mock_httpx.get.return_value = mock_disc_resp
+        attacker = TestClient(app_mod.app)
+        state = attacker.get("/api/auth/oidc/authorize").json()["state"]
+
+        mock_httpx.post.return_value = _mock_token_response()
+        mock_httpx.get.return_value = _mock_userinfo_response(sub="attacker-sub")
+        resp = self.client.get(f"/api/auth/oidc/callback?code=attacker&state={state}")
+        self.assertEqual(resp.status_code, 403, resp.text)
+
+        import projectionist.web.jobs as jobs
+
+        db = jobs.get_job_manager().db
+        self.assertIsNone(db.get_user_by_oidc_sub("attacker-sub"))
+
+
 if __name__ == "__main__":
     unittest.main()
