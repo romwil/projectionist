@@ -114,6 +114,43 @@ export function pageTitleFor(pathname: string): string {
 
 /** Full `document.title` for a pathname, e.g. "Help · Projectionist". */
 export function documentTitleFor(pathname: string): string {
-  const page = pageTitleFor(pathname);
-  return page === APP_NAME ? APP_NAME : `${page} · ${APP_NAME}`;
+  return withAppName(pageTitleFor(pathname));
+}
+
+export function withAppName(page: string): string {
+  const label = String(page || "").trim();
+  return !label || label === APP_NAME ? APP_NAME : `${label} · ${APP_NAME}`;
+}
+
+/**
+ * A11Y-003: routes whose real name is only known after the item loads.
+ * The route announcer waits for the page to name itself instead of
+ * reading "Title" for every film.
+ */
+const ITEM_NAMED_PATTERNS = ["/title/episode/:ratingKey", "/title/:mediaType/:itemId"];
+
+export function routeNamesItself(pathname: string): boolean {
+  const path = String(pathname || "/");
+  return ITEM_NAMED_PATTERNS.some((pattern) => matchPath({ path: pattern, end: true }, path));
+}
+
+/** "Alien (1979)" — or "" until the item has a title. */
+export function titlePageName(detail: { title?: unknown; year?: unknown } | null | undefined): string {
+  const title = String(detail?.title || "").trim();
+  if (!title) return "";
+  const year = String(detail?.year || "").trim();
+  return /^\d{4}$/.test(year) ? `${title} (${year})` : title;
+}
+
+/** "The Wire S01E03" — show name plus code, falling back to the episode title. */
+export function episodePageName({
+  showTitle,
+  episodeTitle,
+  code,
+}: { showTitle?: unknown; episodeTitle?: unknown; code?: unknown } = {}): string {
+  const show = String(showTitle || "").trim();
+  const episode = String(episodeTitle || "").trim();
+  const sxe = String(code || "").trim();
+  if (show && sxe) return `${show} ${sxe}`;
+  return show || episode;
 }

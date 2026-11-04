@@ -15,6 +15,7 @@ import {
 import { taskDisplayName } from "../lib/scheduledTasks.js";
 import HouseholdPulseCard from "./HouseholdPulseCard";
 import "./OwnerOpsOverview.css";
+import Button from "./Button";
 
 type OwnerOpsOverviewProps = {
   onOpenWizard?: () => void;
@@ -175,9 +176,9 @@ export default function OwnerOpsOverview({ onOpenWizard, children }: OwnerOpsOve
                   </span>
                   <div className="owner-ops-row-actions">
                     {step.id === "catchup" && step.status === "pending" ? (
-                      <button
-                        type="button"
-                        className="primary"
+                      <Button
+                        variant="secondary"
+                        size="sm"
                         data-testid="monday-catchup-run"
                         disabled={Boolean(busy)}
                         onClick={() =>
@@ -192,28 +193,28 @@ export default function OwnerOpsOverview({ onOpenWizard, children }: OwnerOpsOve
                         }
                       >
                         {busy === "catchup" ? "Queueing…" : "Run catch-up"}
-                      </button>
+                      </Button>
                     ) : null}
                     {step.status === "pending" ? (
-                      <button
-                        type="button"
-                        className="ghost"
+                      <Button
+                        variant="secondary"
+                        size="sm"
                         data-testid={`monday-step-review-${step.id}`}
                         disabled={Boolean(busy)}
                         onClick={() => act(step.id, () => setOwnerChecklistMark("monday", step.id, "reviewed"))}
                       >
                         Mark reviewed
-                      </button>
+                      </Button>
                     ) : step.status === "reviewed" || (step.status === "done" && step.marked_at) ? (
-                      <button
-                        type="button"
-                        className="ghost"
+                      <Button
+                        variant="secondary"
+                        size="sm"
                         data-testid={`monday-step-undo-${step.id}`}
                         disabled={Boolean(busy)}
                         onClick={() => act(step.id, () => setOwnerChecklistMark("monday", step.id, "pending"))}
                       >
                         Undo
-                      </button>
+                      </Button>
                     ) : null}
                   </div>
                 </li>
@@ -221,15 +222,14 @@ export default function OwnerOpsOverview({ onOpenWizard, children }: OwnerOpsOve
             })}
           </ol>
           <div className="config-actions">
-            <button
-              type="button"
-              className="primary"
+            <Button
+              variant="primary"
               data-testid="monday-pass-complete"
               disabled={Boolean(busy) || !monday.ready || Boolean(monday.completed_at)}
               onClick={() => act("complete", () => completeMondayPass(), "Monday pass done. See you next week.")}
             >
               {monday.completed_at ? "Pass done" : "Mark pass done"}
-            </button>
+            </Button>
           </div>
           {notice ? (
             <p className="wizard-note" role="status" data-testid="owner-ops-notice">
@@ -279,25 +279,25 @@ export default function OwnerOpsOverview({ onOpenWizard, children }: OwnerOpsOve
                 </span>
                 <div className="owner-ops-row-actions">
                   {item.status === "pending" ? (
-                    <button
-                      type="button"
-                      className="ghost"
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       data-testid={`setup-item-skip-${item.id}`}
                       disabled={Boolean(busy)}
                       onClick={() => act(item.id, () => setOwnerChecklistMark("setup", item.id, "skipped"))}
                     >
                       Skip
-                    </button>
+                    </Button>
                   ) : item.status === "skipped" ? (
-                    <button
-                      type="button"
-                      className="ghost"
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       data-testid={`setup-item-restore-${item.id}`}
                       disabled={Boolean(busy)}
                       onClick={() => act(item.id, () => setOwnerChecklistMark("setup", item.id, "pending"))}
                     >
                       Restore
-                    </button>
+                    </Button>
                   ) : null}
                 </div>
               </li>
@@ -305,9 +305,9 @@ export default function OwnerOpsOverview({ onOpenWizard, children }: OwnerOpsOve
           </ul>
           {onOpenWizard ? (
             <div className="config-actions">
-              <button type="button" className="ghost" data-testid="rerun-wizard" onClick={onOpenWizard}>
+              <Button variant="secondary" data-testid="rerun-wizard" onClick={onOpenWizard}>
                 Open the first-run wizard
-              </button>
+              </Button>
             </div>
           ) : null}
         </section>

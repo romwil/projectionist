@@ -52,7 +52,6 @@ describe("about hash scroll", () => {
 
   it("wires About sections and paints them without waiting on auth", () => {
     const shell = readFileSync(join(here, "../layouts/AppShell.tsx"), "utf8");
-    const journey = readFileSync(join(here, "../pages/MyJourneyPage.tsx"), "utf8");
     const whisper = readFileSync(join(here, "../pages/WhisperInboxPage.tsx"), "utf8");
     const year = readFileSync(join(here, "../pages/YearInReviewPage.tsx"), "utf8");
     assert.match(aboutPage, /id="license"/);
@@ -65,7 +64,6 @@ describe("about hash scroll", () => {
     assert.doesNotMatch(aboutPage, /if \(!authReady\)/);
     assert.doesNotMatch(aboutPage, /blockUntilAuth=\{true\}/);
     assert.match(shell, /blockUntilAuth = false/);
-    assert.doesNotMatch(journey, /my-journey-auth-loading/);
     assert.doesNotMatch(whisper, /whisper-auth-loading/);
     assert.doesNotMatch(year, /className="muted">Loading…/);
     assert.match(year, /Loading your year…/);

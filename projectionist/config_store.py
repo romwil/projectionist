@@ -487,7 +487,6 @@ class FeatureFlags:
     multi_user_enabled: bool = False
     seerr_enabled: bool = False
     plex_collections_enabled: bool = False
-    guest_tour_enabled: bool = False
     # When multi-user is on, new Plex/OIDC identities require a valid invite by default.
     invite_only: bool = True
     # Opt-in LAN-open behavior: auto-provision new sign-ins as members (pre-1.26).
@@ -1086,12 +1085,6 @@ def _env_bool(name: str) -> bool | None:
     from projectionist.envcompat import env_bool
 
     return env_bool(name)
-
-
-def resolve_guest_tour_enabled(settings: Settings | None = None) -> bool:
-    """Guest tour is removed. Always False (env kept only so old .env files boot)."""
-    del settings
-    return False
 
 
 def household_profile_name(settings: Settings | None = None) -> str:

@@ -438,13 +438,6 @@ class MediaIssue(BaseModel):
     resolved_at: Optional[float] = None
 
 
-class EngagementStreakResponse(BaseModel):
-    session_count_30d: int = 0
-    streak_visible: bool = False
-    current_count: int = 0
-    best_count: int = 0
-
-
 class TasteClusterUpdate(BaseModel):
     cluster_tag: str = Field(min_length=1, max_length=80)
     weight: float = Field(ge=0.0, le=1.0)

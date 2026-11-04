@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { saveReview } from "../api/client";
 import { StarRatingPicker, formatStarsLabel } from "./ReviewPromptCard";
 import { useFocusTrap } from "../hooks/useFocusTrap";
+import Button from "./Button";
 
 /** Props for TitleReviewModal. `any` = API/handler bags until Wave 4 client generics. */
 type TitleReviewModalProps = {
@@ -91,15 +92,15 @@ export default function TitleReviewModal({ detail, open, onClose, onSaved }: Tit
               {(detail as any).year ? ` (${(detail as any).year})` : ""}
             </h2>
           </div>
-          <button
-            type="button"
-            className="ghost"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => onClose?.()}
             disabled={saving}
             data-testid="title-review-modal-close"
           >
             Close
-          </button>
+          </Button>
         </header>
 
         {savedStars ? (
@@ -132,23 +133,21 @@ export default function TitleReviewModal({ detail, open, onClose, onSaved }: Tit
                   Plex has {formatStarsLabel(plexConflict.plex_stars)}★ — keep or replace?
                 </p>
                 <div className="recommend-modal-actions">
-                  <button
-                    type="button"
-                    className="ghost"
+                  <Button
+                    variant="secondary"
                     disabled={saving}
                     onClick={() => setPlexConflict(null)}
                   >
                     Keep Plex rating
-                  </button>
-                  <button
-                    type="button"
-                    className="primary"
+                  </Button>
+                  <Button
+                    variant="primary"
                     disabled={saving}
                     data-testid="title-review-replace-plex"
                     onClick={() => handleSave(true)}
                   >
                     Replace on Plex
-                  </button>
+                  </Button>
                 </div>
               </div>
             ) : null}
@@ -159,18 +158,17 @@ export default function TitleReviewModal({ detail, open, onClose, onSaved }: Tit
             ) : null}
             {!plexConflict ? (
               <div className="recommend-modal-actions">
-                <button type="button" className="ghost" disabled={saving} onClick={() => onClose?.()}>
+                <Button variant="secondary" disabled={saving} onClick={() => onClose?.()}>
                   Cancel
-                </button>
-                <button
-                  type="button"
-                  className="primary"
+                </Button>
+                <Button
+                  variant="primary"
                   data-testid="title-review-save"
                   disabled={!stars || saving}
                   onClick={() => handleSave(false)}
                 >
                   {saving ? "Saving…" : "Save review"}
-                </button>
+                </Button>
               </div>
             ) : null}
           </>

@@ -1482,7 +1482,7 @@ button.ghost.inline-link {
   background: color-mix(in srgb, var(--gold, #c6a15b) 14%, transparent);
 }
 .media-browser-badge {
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -1758,7 +1758,7 @@ button.ghost.inline-link {
   background: color-mix(in srgb, #0b1020 92%, var(--bg));
   color: #d7e0f0;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;

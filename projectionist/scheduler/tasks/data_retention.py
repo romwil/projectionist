@@ -6,7 +6,6 @@ were removed.
 
 Tables pruned:
     - ``system_telemetry_stream`` — default 90-day retention
-    - ``interaction_telemetry``   — default 90-day retention
     - ``llm_usage``               — default 90-day retention
     - ``daily_anniversaries``     — default 30-day retention (rebuilt daily)
     - ``scheduled_task_runs``     — default 60-day retention (scheduler history)
@@ -34,7 +33,6 @@ INTERVAL_SECONDS = 86400  # 24 hours
 VACUUM_THRESHOLD = 1000
 
 DEFAULT_TELEMETRY_RETENTION_DAYS = 90
-DEFAULT_INTERACTION_RETENTION_DAYS = 90
 DEFAULT_LLM_USAGE_RETENTION_DAYS = 90
 DEFAULT_ANNIVERSARY_RETENTION_DAYS = 30
 
@@ -56,9 +54,6 @@ async def run(
     telemetry_days = _get_retention_setting(
         settings, "telemetry_retention_days", DEFAULT_TELEMETRY_RETENTION_DAYS
     )
-    interaction_days = _get_retention_setting(
-        settings, "interaction_retention_days", DEFAULT_INTERACTION_RETENTION_DAYS
-    )
     llm_usage_days = _get_retention_setting(
         settings, "llm_usage_retention_days", DEFAULT_LLM_USAGE_RETENTION_DAYS
     )
@@ -77,13 +72,6 @@ async def run(
 
     count = db.prune_telemetry(telemetry_days)
     pruned_details["system_telemetry_stream"] = count
-    total_pruned += count
-
-    if should_stop():
-        return {"status": "interrupted", "pruned": pruned_details, "total_pruned": total_pruned}
-
-    count = db.prune_interaction_telemetry(interaction_days)
-    pruned_details["interaction_telemetry"] = count
     total_pruned += count
 
     if should_stop():

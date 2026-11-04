@@ -49,6 +49,24 @@ export function loginLede(authMethods: JsParam) {
 }
 
 /**
+ * UX-011: what /login does once features and the session are known.
+ * A signed-in person never sees the sign-in form; they go to their page.
+ *
+ * - `setup`    — first-run install, send to /setup
+ * - `redirect` — single-owner mode or an existing session, leave the door
+ * - `form`     — signed out in household mode, show sign-in
+ */
+export function loginDoorDecision({
+  features,
+  me,
+}: { features?: JsonObject | null; me?: JsonObject | null } = {}): "setup" | "redirect" | "form" {
+  if (features?.setup_state === "setup") return "setup";
+  if (!features?.features?.multi_user_enabled) return "redirect";
+  if (me?.user) return "redirect";
+  return "form";
+}
+
+/**
  * Copy + control labels for the tucked-away Plex token recovery path.
  *
  * @param {{ open?: boolean }} [options]

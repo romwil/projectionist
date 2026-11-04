@@ -1,4 +1,4 @@
-"""Uvicorn entry point — main app + lobby theater on a second port."""
+"""Uvicorn entry point — main app, plus the Lobby theater on a second port when enabled."""
 
 from __future__ import annotations
 
@@ -76,6 +76,29 @@ def _multi_user_enabled() -> bool:
         return bool(load_merged_settings(data_dir).features.multi_user_enabled)
     except Exception:  # pragma: no cover - defensive; warning is advisory only
         logger.debug("Could not resolve auth posture for exposure check", exc_info=True)
+        return False
+
+
+def _env_flag(name: str) -> bool:
+    return (os.environ.get(name) or "").strip().lower() in {"1", "true", "yes"}
+
+
+def lobby_theater_enabled() -> bool:
+    """True when the owner turned on Admin → Lobby (``theater.enabled``).
+
+    The theater port is unauthenticated, so a fresh install does not listen on
+    it. ``PROJECTIONIST_THEATER_DISABLE=1`` forces it off. A config problem
+    keeps it off rather than stopping the main server from booting.
+    """
+    if _env_flag("PROJECTIONIST_THEATER_DISABLE"):
+        return False
+    try:
+        from projectionist.config_store import load_merged_settings
+
+        data_dir = Path(os.environ.get("DATA_DIR", "/config"))
+        return bool(load_merged_settings(data_dir).theater.enabled)
+    except Exception:  # pragma: no cover - defensive
+        logger.debug("Could not read Lobby setting; theater stays off", exc_info=True)
         return False
 
 
@@ -169,15 +192,11 @@ def main() -> None:
     log_level = logging.getLevelName(level).lower()
     warn_if_exposed_without_auth(host, port)
 
-    # Dual servers share one process. Tests that patch uvicorn.run still work
-    # when PROJECTIONIST_THEATER_DISABLE=1 (single-port fallback).
-    if (os.environ.get("PROJECTIONIST_THEATER_DISABLE") or "").strip() in {
-        "1",
-        "true",
-        "TRUE",
-        "yes",
-        "YES",
-    }:
+    if not lobby_theater_enabled():
+        logger.info(
+            "Lobby theater is off; turn it on under Admin → Lobby and restart to listen on :%s",
+            theater_port,
+        )
         uvicorn.run(
             "projectionist.web.app:app",
             host=host,

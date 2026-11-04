@@ -5,6 +5,7 @@ import { resolveDefaultHome } from "./lib/defaultHome";
 import { libraryHubPath } from "./lib/libraryTabs.js";
 import RouteAnnouncer from "./components/RouteAnnouncer";
 import PrimaryBottomNav from "./components/PrimaryBottomNav";
+import SkipLink from "./components/SkipLink";
 
 const App = lazy(() => import("./App"));
 const AdminRoutes = lazy(() => import("./routes/AdminRoutes"));
@@ -92,6 +93,7 @@ function RedirectExploreBrowse() {
 export default function AppRoutes() {
   return (
     <>
+      <SkipLink />
       {/* A11Y-004: title every route + focus the new page's h1 + announce it. */}
       <RouteAnnouncer />
       {/* UX-014: real phone/iPad primary nav, hidden over the player and

@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   AUTH_METHOD_ORDER,
   LOGIN_PRODUCT_STATEMENT,
+  loginDoorDecision,
   loginLede,
   plexAdvancedCopy,
   resolveAuthMethods,
@@ -73,5 +74,26 @@ describe("plexAdvancedCopy", () => {
     assert.match(copy.tokenHelp, /Recovery only/i);
     assert.match(copy.tokenHelp, /Sign in with Plex/i);
     assert.equal(copy.emptyError, "Paste a Plex token to continue.");
+  });
+});
+
+describe("loginDoorDecision (UX-011)", () => {
+  const household = { features: { multi_user_enabled: true } };
+
+  it("sends a signed-in person to their page instead of the form", () => {
+    assert.equal(loginDoorDecision({ features: household, me: { user: { id: "u1" } } }), "redirect");
+  });
+
+  it("shows the form only when household mode has no session", () => {
+    assert.equal(loginDoorDecision({ features: household, me: null }), "form");
+    assert.equal(loginDoorDecision({ features: household, me: {} }), "form");
+  });
+
+  it("leaves the door in single-owner mode and goes to setup on first run", () => {
+    assert.equal(loginDoorDecision({ features: { features: { multi_user_enabled: false } } }), "redirect");
+    assert.equal(
+      loginDoorDecision({ features: { ...household, setup_state: "setup" }, me: { user: { id: "u1" } } }),
+      "setup",
+    );
   });
 });

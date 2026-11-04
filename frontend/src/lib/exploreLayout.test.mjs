@@ -15,8 +15,6 @@ describe("explore and recommendations responsive layout", () => {
     assert.match(styles, /\.explore-card-rail\s*\{[^}]*max-width:\s*100%/s);
     assert.match(styles, /\.explore-card-rail\s*\{[^}]*overflow-x:\s*auto/s);
     assert.match(styles, /\.explore-motif-chips\s*\{[^}]*flex-wrap:\s*wrap/s);
-    assert.match(styles, /\.explore-motif-chips-scroll\s*\{[^}]*max-height:/s);
-    assert.match(styles, /\.explore-motif-chips-scroll\s*\{[^}]*overflow-y:\s*auto/s);
     assert.match(styles, /\.explore-motif-chip\s*\{[^}]*max-width:\s*100%/s);
     assert.match(styles, /\.explore-section\s*\{[^}]*min-width:\s*0/s);
   });

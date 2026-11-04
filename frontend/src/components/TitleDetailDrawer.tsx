@@ -14,6 +14,8 @@ import {
   LIBRARY_DELETE_MODE_INDEX,
 } from "../lib/bulkLibraryDelete.js";
 import { titleDetailHrefFromTarget } from "../lib/titleDetailDrawer.js";
+import { focusTrailerFrame, trailerEmbedUrl } from "../lib/trailerEmbed";
+import Button from "./Button";
 
 function getFocusableElements(root: any) {
   if (!root) return [];
@@ -317,20 +319,21 @@ export default function TitleDetailDrawer({
                 >
                   Open on YouTube
                 </a>
-                <button
-                  type="button"
-                  className="ghost"
+                <Button
+                  variant="secondary"
+                  size="sm"
                   data-testid="close-trailer-modal"
                   onClick={() => setTrailerOpen(false)}
                 >
                   Close
-                </button>
+                </Button>
               </div>
             </div>
             <div className="trailer-modal-frame">
               <iframe
                 title={`${(detail as any).title} trailer`}
-                src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(trailerKey)}?autoplay=1&rel=0`}
+                ref={focusTrailerFrame}
+                src={trailerEmbedUrl(trailerKey)}
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
                 referrerPolicy="strict-origin-when-cross-origin"
                 allowFullScreen
