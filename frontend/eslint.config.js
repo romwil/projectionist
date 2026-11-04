@@ -122,6 +122,18 @@ export default [
     },
   },
   {
+    // A11Y-007: files cleaned to zero jsx-a11y hits fail lint on any new one.
+    // Add a file here once it is clean; never remove one.
+    files: [
+      "src/AppRoutes.tsx",
+      "src/components/HouseholdPulseCard.tsx",
+      "src/components/OwnerOpsOverview.tsx",
+      "src/pages/PrivacyPage.tsx",
+      "src/pages/settings/MyDataPage.tsx",
+    ],
+    rules: Object.fromEntries(Object.keys(jsxA11yWarnRules).map((name) => [name, "error"])),
+  },
+  {
     // Node-based unit tests (node:test runner).
     files: ["**/*.test.{js,mjs,jsx}"],
     languageOptions: {

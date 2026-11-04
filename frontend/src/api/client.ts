@@ -471,6 +471,25 @@ export async function patchUserAutoconfirmAdds(userId: string, enabled: boolean)
   });
 }
 
+/** Settings → My data: the signed-in account's memory notes only. */
+export async function listMyMemoryNotes() {
+  return api<{ notes: Array<{ id: string; kind?: string; text?: string; updated_at?: number }> }>(
+    "/me/memory/notes",
+  );
+}
+
+export async function deleteMyMemoryNote(noteId: string) {
+  return api(`/me/memory/notes/${encodeURIComponent(noteId)}`, { method: "DELETE" });
+}
+
+/** Delete my data: everything except the account row. Needs the typed phrase. */
+export async function eraseMyData(confirm: string) {
+  return api<{ total: number; erased: Record<string, number> }>("/me/data/erase", {
+    method: "POST",
+    body: JSON.stringify({ confirm }),
+  });
+}
+
 export async function deleteUser(userId: string) {
   return api(`/users/${encodeURIComponent(userId)}`, {
     method: "DELETE",
@@ -2209,6 +2228,11 @@ export async function listScheduledTasks() {
 /** Owner: Overview rollup — stewardship + Monday checklists, secrets card, needs attention. */
 export async function getOwnerOpsOverview() {
   return api("/admin/ops/overview");
+}
+
+/** Owner: Household pulse — weekly on-box totals, north-star and guardrails. */
+export async function getHouseholdPulse() {
+  return api("/admin/pulse");
 }
 
 /** Owner: skip/restore a setup row, or review/reopen a Monday pass step. */

@@ -13,6 +13,7 @@ import {
   summarizeNeedsAttention,
 } from "../lib/ownerOps.js";
 import { taskDisplayName } from "../lib/scheduledTasks.js";
+import HouseholdPulseCard from "./HouseholdPulseCard";
 import "./OwnerOpsOverview.css";
 
 type OwnerOpsOverviewProps = {
@@ -133,6 +134,8 @@ export default function OwnerOpsOverview({ onOpenWizard, children }: OwnerOpsOve
       </section>
 
       {children}
+
+      <HouseholdPulseCard />
 
       {monday ? (
         <section className="config-section owner-ops-monday" id="monday-pass" data-testid="monday-pass-checklist">
