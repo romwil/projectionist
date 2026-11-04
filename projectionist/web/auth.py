@@ -491,10 +491,11 @@ async def multi_user_api_auth_middleware(request: Request, call_next):
     if path.startswith("/mcp"):
         return await call_next(request)
 
-    # Documents, assets, and the health probe do not consult SQLite. A contended
-    # library file waits up to SQLITE_BUSY_TIMEOUT_MS (30s) and was stalling
-    # first paint on every page, including About.
-    if (method == "GET" and path == "/api/health") or not path.startswith("/api/"):
+    # Documents, assets, and the health/ready probes do not take the perimeter's
+    # database connection. A contended library file waits up to
+    # SQLITE_BUSY_TIMEOUT_MS (30s). Health stays a liveness answer. Ready does
+    # its own 100 ms read-only probe in the handler.
+    if (method == "GET" and path in {"/api/health", "/api/ready"}) or not path.startswith("/api/"):
         return await call_next(request)
 
     from starlette.concurrency import run_in_threadpool
@@ -523,7 +524,7 @@ async def multi_user_api_auth_middleware(request: Request, call_next):
         if not path.startswith("/api/"):
             return await call_next(request)
         if wan_interlock_blocks(request, multi_user_enabled=False):
-            if path in {"/api/health", "/api/features"}:
+            if path in {"/api/health", "/api/ready", "/api/features"}:
                 return await call_next(request)
             return JSONResponse({"detail": WAN_INTERLOCK_DETAIL}, status_code=403)
         if is_setup_public_path(method, path, request):
@@ -545,7 +546,7 @@ async def multi_user_api_auth_middleware(request: Request, call_next):
         return JSONResponse({"detail": SETTINGS_CORRUPT_DETAIL}, status_code=503)
     if not settings.features.multi_user_enabled:
         if wan_interlock_blocks(request, multi_user_enabled=False):
-            if path in {"/api/health", "/api/features"}:
+            if path in {"/api/health", "/api/ready", "/api/features"}:
                 return await call_next(request)
             return JSONResponse({"detail": WAN_INTERLOCK_DETAIL}, status_code=403)
         return await call_next(request)
