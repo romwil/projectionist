@@ -112,6 +112,14 @@ class SetupModeApiTests(unittest.TestCase):
         self.assertEqual(commit.status_code, 403, commit.text)
         self._assert_setup_uncommitted()
 
+    def test_ready_answers_during_setup_including_from_docker_nat(self) -> None:
+        """A fresh container is in setup. Ready must not 404 there (PERF-007)."""
+        self.app_mod.app.state.ready = True
+        for host in ("192.168.1.20", "172.17.0.1", "8.8.8.8"):
+            resp = self._client_at(host).get("/api/ready")
+            self.assertEqual(resp.status_code, 200, f"{host}: {resp.text}")
+            self.assertEqual(resp.json()["status"], "ready")
+
     def test_wan_peer_blocks_setup_tests_health_stays_open(self) -> None:
         wan = self._client_at("8.8.8.8")
         self.assertEqual(wan.get("/api/health").status_code, 200)
@@ -358,6 +366,7 @@ class SetupModeApiTests(unittest.TestCase):
 class SetupPublicPathTests(unittest.TestCase):
     def test_exact_allowlist_ignores_classification(self) -> None:
         self.assertTrue(is_setup_public_path("GET", "/api/health"))
+        self.assertTrue(is_setup_public_path("GET", "/api/ready"))
         self.assertTrue(is_setup_public_path("POST", "/api/setup/commit", classification="halt_wan"))
         self.assertTrue(is_setup_public_path("POST", "/api/setup/handshake", classification="public_failsafe"))
 
