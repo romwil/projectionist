@@ -63,6 +63,7 @@ EVENT_PLAYBACK_EVENT = "playback_event"
 EVENT_TOOL_INVOCATION = "tool_invocation"
 EVENT_CHAT_TURN = "chat_turn"
 EVENT_PLAY_START = "play_start"
+EVENT_OWNER_PULSE_VIEW = "owner_pulse_view"
 
 
 class TelemetryIngester:
@@ -265,6 +266,12 @@ class TelemetryIngester:
             },
             media_node_id=rating_key,
         )
+
+    def record_owner_pulse_view(self, *, user_id: Optional[str] = None) -> None:
+        """Owner opened the Household pulse. ``user_id`` only (tracking plan B3)."""
+        from projectionist import __version__
+
+        self._emit(EVENT_OWNER_PULSE_VIEW, {"user_id": user_id, "app_version": __version__})
 
     def record_tool_invocation(
         self,

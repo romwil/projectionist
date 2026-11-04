@@ -54,7 +54,7 @@ type MarkdownLinkProps = {
 };
 
 function MarkdownLink({ href, children }: MarkdownLinkProps) {
-  if (!href) return <a>{children}</a>;
+  if (!href) return <span>{children}</span>;
 
   if (href.startsWith("#")) return <a href={href}>{children}</a>;
 
@@ -157,7 +157,7 @@ export default function PrivacyPage() {
         </nav>
         <article className="privacy-article privacy-prose" data-testid="privacy-content" data-source="docs">
           {markdown ? (
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents} skipHtml>
               {markdown}
             </ReactMarkdown>
           ) : (

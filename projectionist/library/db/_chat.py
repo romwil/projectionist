@@ -251,9 +251,10 @@ class ChatThreadsMixin:
                 ).fetchone()
             if not row:
                 return False
-            # PRAGMA foreign_keys is not enabled, so ON DELETE CASCADE is dormant.
-            # Delete the transcript rows explicitly before the session so no
-            # chat_messages content is left orphaned.
+            # Foreign keys are on and chat_messages cascades, but databases from
+            # before that pragma may carry rows without the constraint; delete the
+            # transcript explicitly so none is left orphaned.
+            conn.execute("PRAGMA secure_delete=ON")
             conn.execute("DELETE FROM chat_messages WHERE session_id = ?", (session_id,))
             conn.execute("DELETE FROM chat_sessions WHERE id = ?", (session_id,))
             return True

@@ -21,6 +21,7 @@ export default function WatchProgressBadge({ item, className = "" }: WatchProgre
       className={`watch-progress-badge is-${state}${className ? ` ${className}` : ""}`}
       data-testid="watch-progress-badge"
       data-state={state}
+      role="img"
       aria-label={label}
       title={label}
     >

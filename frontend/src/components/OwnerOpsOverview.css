@@ -94,3 +94,31 @@
 .owner-ops-activity {
   margin-top: 0.75rem;
 }
+.household-pulse-star {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0 0.75rem;
+}
+.household-pulse-value {
+  font-size: var(--text-2xl, 1.75rem);
+  font-weight: 700;
+  color: var(--text);
+  min-width: 2ch;
+}
+.household-pulse-star-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+.household-pulse-spark {
+  color: var(--accent-ink);
+  flex-shrink: 0;
+}
+.owner-ops-row.pulse-watch {
+  border-color: var(--accent);
+  border-width: 2px;
+}
+.owner-ops-row.pulse-ok .owner-ops-chip {
+  color: var(--success);
+}
