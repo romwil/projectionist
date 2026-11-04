@@ -34,6 +34,7 @@ SETUP_STATE_ACTIVE = "active"
 SETUP_API_ALLOWLIST_EXACT = frozenset(
     {
         ("GET", "/api/health"),
+        ("GET", "/api/ready"),
         ("GET", "/api/features"),
         ("GET", "/api/setup/handshake"),
         ("POST", "/api/setup/handshake"),

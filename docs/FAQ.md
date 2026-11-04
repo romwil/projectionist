@@ -135,17 +135,23 @@ Projectionist is a **taste-aware curator** (RAG, persona, ratings, purge advice,
 
 ## Can I export or delete everything Projectionist knows about me?
 
-Not completely, and not from a button yet. You can delete a conversation from the thread list in **Chat**. To leave, ask the owner to remove your account in **Admin → Members**. That deletes your profile, chats, memory, watchlist, lists, inbox, and viewing record, but leaves your ratings and reviews, your join request, your avatar file, shared knowledge the curator saved, and copies in existing backups.
+Yes, from **Settings → My data**:
 
-Owners and comfortable terminal users can export or purge part of their own account with the API (signed in as that account):
+- **Download my data** gives you one file with everything stored for your account (JSON, or a readable Markdown version with your chat messages). It holds your rows only.
+- **Delete a note** removes one thing the curator remembered.
+- **Delete my data** removes your chats, memory, viewing record, watchlist, lists, ratings, inbox, and activity counts, and keeps your account so you can start fresh.
+
+To leave entirely, ask the owner to remove your account in **Admin → Members**. A few records stay, without your name: problems you reported, your join request and invite, curator voices you shared, and knowledge the curator saved for the household. Security log entries keep an account number. Daily backups hold older copies for up to a week, but restoring one never brings back a removed account or data you deleted; backups the owner downloaded elsewhere are out of reach, as are copies the AI provider kept.
+
+The same actions work from a terminal (signed in as that account):
 
 ```bash
-# Export notes, chats, saved pages, preference facts, mapped watch evidence, activity counts
+# Everything stored for your account
 curl -s -b 'curatorx_session=YOUR_SESSION' \
   http://localhost:8788/api/me/memory > my-projectionist-export.json
-# Permanently delete that same set
-curl -s -b 'curatorx_session=YOUR_SESSION' -X DELETE \
-  http://localhost:8788/api/me/memory
+# Delete my data (keeps the account)
+curl -s -b 'curatorx_session=YOUR_SESSION' -X POST -H 'Content-Type: application/json' \
+  -d '{"confirm": "delete my data"}' http://localhost:8788/api/me/data/erase
 ```
 
 The full map of what removal deletes and keeps is on the [Privacy](/privacy#getting-a-copy-or-leaving) page.

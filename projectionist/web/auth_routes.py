@@ -72,6 +72,21 @@ def register_auth_routes(app):
     def _memory_service() -> UserMemoryService:
         return UserMemoryService(_db())
 
+    ERASE_CONFIRM_PHRASE = "delete my data"
+
+    def _blocks_text(blocks: Any) -> str:
+        """Readable text from stored chat blocks (text/content fields only)."""
+        parts = []
+        for block in blocks if isinstance(blocks, list) else []:
+            if not isinstance(block, dict):
+                continue
+            for key in ("content", "text"):
+                value = block.get(key)
+                if isinstance(value, str) and value.strip():
+                    parts.append(value.strip())
+                    break
+        return "\n\n".join(parts)
+
 
     @router.get("/api/me/memory")
     def export_my_memory(
@@ -111,8 +126,11 @@ def register_auth_routes(app):
             for thread in chat_threads:
                 messages = thread.get("messages") or []
                 lines.append(f"### {thread.get('thread_title') or 'Conversation'}")
-                lines.append(f"_{len(messages)} message(s)._")
                 lines.append("")
+                for message in messages:
+                    speaker = "You" if message.get("role") == "user" else "Curator"
+                    text = _blocks_text(message.get("blocks")) or "_(no text)_"
+                    lines.extend([f"**{speaker}:** {text}", ""])
         else:
             lines.extend(["_No chat threads._", ""])
 
@@ -125,6 +143,13 @@ def register_auth_routes(app):
         else:
             lines.extend(["_No preference facts._", ""])
 
+        lines.append("## Everything else")
+        lines.append("Row counts per store. The JSON download has every row.")
+        lines.append("")
+        for table, rows in sorted((payload.get("stores") or {}).items()):
+            lines.append(f"- `{table}`: {len(rows)}")
+        lines.append("")
+
         return Response(
             content="\n".join(lines),
             media_type="text/markdown",
@@ -136,6 +161,29 @@ def register_auth_routes(app):
     def purge_my_memory(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
         """Hard-delete private notes and every private chat transcript together."""
         return {"purged": _db().purge_user_memory_and_chats(user.id)}
+
+    @router.get("/api/me/memory/notes")
+    def list_my_memory_notes(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
+        return {"notes": _db().list_user_memory_notes(user.id, limit=500)}
+
+    @router.delete("/api/me/memory/notes/{note_id}")
+    def delete_my_memory_note(note_id: str, user=Depends(get_current_user_dep)) -> Dict[str, Any]:
+        if not _db().delete_user_memory_note(note_id, user_id=user.id):
+            raise HTTPException(status_code=404, detail="Note not found")
+        return {"deleted": True, "id": note_id}
+
+    class EraseMyDataPayload(BaseModel):
+        confirm: str = Field(default="", max_length=64)
+
+    @router.post("/api/me/data/erase")
+    def erase_my_data(payload: EraseMyDataPayload, user=Depends(get_current_user_dep)) -> Dict[str, Any]:
+        """Delete my data: every registry store except the account row itself."""
+        if payload.confirm.strip().lower() != ERASE_CONFIRM_PHRASE:
+            raise HTTPException(
+                status_code=400, detail=f'Type "{ERASE_CONFIRM_PHRASE}" to confirm.'
+            )
+        counts = _db().erase_user_data(user.id)
+        return {"erased": counts, "total": sum(counts.values())}
 
 
     @router.get("/api/users/{user_id}/memory")
@@ -959,6 +1007,12 @@ def register_auth_routes(app):
                 status_code=404,
                 detail=_safe_error_detail(error, "User not found"),
             ) from error
+        from projectionist.web.avatars import clear_local_avatar
+
+        try:
+            clear_local_avatar(user_id)
+        except ValueError:
+            pass
         sa.audit(db, sa.ACCOUNT_DELETE, actor_id=user.id, target_id=user_id)
         return {"deleted": True, "id": user_id}
 

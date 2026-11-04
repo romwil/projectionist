@@ -43,7 +43,9 @@ test("docs/PRIVACY.md drops claims the code does not keep (PRIV-002)", () => {
   assert.doesNotMatch(markdown, /Youth accounts use the same provider/);
   assert.match(markdown, /Youth chats never use the household model/);
   assert.match(markdown, /Asking to join/);
-  assert.match(markdown, /What removal leaves behind/);
+  assert.match(markdown, /What stays after removal/);
+  assert.match(markdown, /Settings → My data/);
+  assert.doesNotMatch(markdown, /nothing (is )?left behind/i);
 });
 
 test("member half of docs/PRIVACY.md has no API paths or config keys", () => {

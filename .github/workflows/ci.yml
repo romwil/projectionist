@@ -101,7 +101,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Run container and smoke /api/health
+      - name: Run container and smoke /api/health + /api/ready
         run: |
           cfg="$(mktemp -d)"
           docker run -d --name projectionist-ci-smoke \
@@ -114,12 +114,26 @@ jobs:
             docker rm -f projectionist-ci-smoke >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
+          healthy=""
           for _ in $(seq 1 45); do
-            if curl -fsS "http://127.0.0.1:8788/api/health" | grep -q '"status"'; then
-              echo "health ok"
-              exit 0
+            if curl -fsS "http://127.0.0.1:8788/api/health" | grep -q '"status"' \
+              && curl -fsS "http://127.0.0.1:8788/api/ready" | grep -q '"ready"'; then
+              healthy=1
+              break
             fi
             sleep 2
           done
-          echo "health check failed"
-          exit 1
+          if [ -z "$healthy" ]; then
+            echo "health/ready check failed"
+            exit 1
+          fi
+          echo "health ok, ready ok"
+          # A missing database must fail ready (503) while health stays a liveness answer.
+          docker exec projectionist-ci-smoke sh -c 'mv /config/projectionist.db /config/projectionist.db.moved'
+          curl -fsS "http://127.0.0.1:8788/api/health" | grep -q '"status"' || echo "health is informational only"
+          code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8788/api/ready)"
+          if [ "$code" != "503" ]; then
+            echo "ready returned ${code} with the database moved away (want 503)"
+            exit 1
+          fi
+          echo "ready reports the missing database"
