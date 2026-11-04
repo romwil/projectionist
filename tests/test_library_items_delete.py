@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from projectionist.web.auth import SESSION_COOKIE_NAME, clear_pin_bindings
 from projectionist.web.rate_limit import clear_rate_limits
 from projectionist.web.session_tokens import clear_session_secret_cache, create_session_token
+from tests.owner_claim_helpers import grant_owner_claim
 
 
 # Env keys that load_merged_settings may inherit from a prior test's dotenv load
@@ -49,6 +50,7 @@ class LibraryItemsDeleteApiTests(unittest.TestCase):
         importlib.reload(app_mod)
         self.app_mod = app_mod
         self.client = TestClient(app_mod.app)
+        grant_owner_claim(self.client)
 
     def tearDown(self) -> None:
         import projectionist.web.jobs as jobs

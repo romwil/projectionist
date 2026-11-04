@@ -96,8 +96,7 @@ def pick_nudge_title(
 
     Embedding neighbors and a random unwatched shelf title are not picks.
     ``recent`` is accepted for callers; the link itself is read from the graph.
-    When multi-user is on, prefer the acting member's watch evidence, then
-    fall back to the household.
+    When multi-user is on, only the acting member's own watch evidence counts.
     """
     del recent
     return pick_linked_unwatched(
@@ -113,10 +112,9 @@ def build_nudge_copy(
 ) -> Dict[str, str]:
     """Build nudge subject/body. Inbox lead uses media title; no comma-dump of watches.
 
-    ``recent`` is accepted for callers/tests but kept out of the visible body — the
-    structured ``recently_watched`` payload carries context for future chips.
+    ``recent`` is accepted for callers/tests but never shown or stored.
     """
-    del recent  # payload keeps recently_watched; inbox must not dump a title list
+    del recent
     voice = _persona_nudge_voice(db)
     title = str(pick.get("title") or "this title")
     year = pick.get("year")
@@ -142,7 +140,6 @@ def deliver_enthusiast_nudges(
     ts = time.time() if now is None else float(now)
     week_bucket = int(ts // (7 * 86400))
     multi_user = bool(getattr(getattr(settings, "features", None), "multi_user_enabled", False))
-    recent = recently_watched_context(db, limit=3, now=ts)
     delivered = 0
     emailed = 0
     considered = 0
@@ -154,7 +151,7 @@ def deliver_enthusiast_nudges(
             continue
         if not user.get("nudge_opt_in"):
             continue
-        # Nudges quote household-wide recent viewing; there is no youth-safe variant yet.
+        # No youth-safe nudge variant yet.
         if youth_gate_active(user):
             continue
         considered += 1
@@ -166,14 +163,13 @@ def deliver_enthusiast_nudges(
             continue
         pick = pick_nudge_title(
             db,
-            recent=recent,
             user_id=str(user["id"]),
             multi_user_enabled=multi_user,
         )
         if pick is None:
             continue
         last_pick_title = str(pick.get("title") or "") or last_pick_title
-        content = build_nudge_copy(db, pick=pick, recent=recent)
+        content = build_nudge_copy(db, pick=pick)
         result = deliver_notification(
             db,
             settings,
@@ -183,7 +179,6 @@ def deliver_enthusiast_nudges(
             body=content["body"],
             payload={
                 "enthusiast": True,
-                "recently_watched": recent,
                 "pick_why": pick.get("why"),
                 "explanation": pick.get("explanation"),
                 "seed_title": pick.get("seed_title"),
@@ -208,5 +203,4 @@ def deliver_enthusiast_nudges(
         "emailed": emailed,
         "considered": considered,
         "pick": last_pick_title,
-        "recent_count": len(recent),
     }

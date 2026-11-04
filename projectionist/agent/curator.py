@@ -516,7 +516,12 @@ class CuratorAgent:
         registry = self._registry(persona_id=thread_persona_id, session_id=session_id)
         use_tools = bool(self.settings.llm_api_key or self.settings.llm_provider == "ollama")
         tool_defs = (
-            build_tool_definitions(self.settings, role=self.user_role, is_youth=self.is_youth)
+            build_tool_definitions(
+                self.settings,
+                role=self.user_role,
+                is_youth=self.is_youth,
+                autoconfirm_adds=registry._autoconfirms_adds(),
+            )
             if use_tools
             else None
         )
@@ -800,7 +805,12 @@ async def stream_agent(
     messages.append({"role": "user", "content": user_message})
 
     tool_defs = (
-        build_tool_definitions(settings, role=user_role, is_youth=is_youth)
+        build_tool_definitions(
+            settings,
+            role=user_role,
+            is_youth=is_youth,
+            autoconfirm_adds=registry._autoconfirms_adds(),
+        )
         if (settings.llm_api_key or settings.llm_provider == "ollama")
         else None
     )

@@ -463,6 +463,14 @@ export async function patchUserYouthMode(userId: string, isYouth: boolean, confi
   });
 }
 
+/** Owner-only: let an adult member's Radarr/Sonarr adds skip the owner's confirm. */
+export async function patchUserAutoconfirmAdds(userId: string, enabled: boolean) {
+  return api(`/users/${encodeURIComponent(userId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ autoconfirm_adds: Boolean(enabled) }),
+  });
+}
+
 export async function deleteUser(userId: string) {
   return api(`/users/${encodeURIComponent(userId)}`, {
     method: "DELETE",

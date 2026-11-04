@@ -5,9 +5,9 @@
 [![Docker Hub](https://img.shields.io/badge/docker-romwil%2Fprojectionist-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/romwil/projectionist)
 [![Version](https://img.shields.io/badge/version-1.39.0-green.svg)](CHANGELOG.md)
 
-**Cinema intelligence for your personal archive.**
+**Projectionist is a private movie-and-TV companion for your Plex household: ask for something to watch, browse your library by mood and connection, and keep everyone's picks their own.**
 
-Projectionist is an open-source, self-hosted cinema intelligence engine and agentic companion for personal media libraries — local-first, zero-telemetry, with vector mapping, multi-signal taste modeling, MCP access, and hardened multi-tenant roles (Owner / Member / Youth).
+Open source and self-hosted: local-first, no phone-home, with taste modeling, MCP access, and owner, member, and Youth accounts for one household.
 
 It sits between Plex and your *arr stack: talk about taste, browse Explore rails, find gaps and purge candidates, rate what you watched, and add titles to Radarr or Sonarr only after you confirm. Bring your own LLM (cloud or local). Built for Unraid and Docker.
 
@@ -201,9 +201,9 @@ See [CONFIGURATION.md](docs/CONFIGURATION.md) and [Wiki → Configuration](docs/
 
 ---
 
-## Privacy & zero telemetry
+## Privacy & no phone-home
 
-Projectionist is self-hosted and **zero-telemetry by design** — no phone-home analytics, no cloud account required for the product itself. See [PRIVACY.md](docs/PRIVACY.md) (also the in-app **`/privacy`** page) for what is stored, what household members vs owners see, and what MCP / the LLM receive. Operators: [SECURITY.md](docs/SECURITY.md).
+**No phone-home.** Activity (chat turn counts, plays started here) is counted on your server, kept 90 days, and never sent anywhere. No cloud account is required. See [PRIVACY.md](docs/PRIVACY.md) (also the in-app **`/privacy`** page) for what is stored, what household members vs owners see, and what MCP / the LLM receive. Operators: [SECURITY.md](docs/SECURITY.md).
 
 ---
 

@@ -1232,7 +1232,7 @@ def _milestone_fallback(
         if last_viewed:
             try:
                 months_ago = max(1, int((time.time() - int(last_viewed)) / (30 * 86400)))
-                context += f" · Last watched {months_ago} month{'s' if months_ago != 1 else ''} ago"
+                context += f" · Last played on this server {months_ago} month{'s' if months_ago != 1 else ''} ago"
             except (TypeError, ValueError, OSError):
                 pass
         items.append(

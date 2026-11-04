@@ -30,7 +30,9 @@ from projectionist.notifications.whisper import (
 from projectionist.web.auth import clear_pin_bindings
 from projectionist.web.rate_limit import clear_rate_limits
 from projectionist.web.session_tokens import clear_session_secret_cache
+from tests.test_household_bridges import _insert_completion
 from tests.admin_job_helpers import reset_admin_jobs
+from tests.owner_claim_helpers import grant_owner_claim
 
 
 BAKE_PLOT = "Amateur bakers compete around a signature bake inside a failing colony."
@@ -363,6 +365,7 @@ class WhisperApiTests(unittest.TestCase):
         importlib.reload(app_mod)
         self.app_mod = app_mod
         self.client = TestClient(app_mod.app)
+        grant_owner_claim(self.client)
         self.db = Database(Path(self._tmpdir.name) / "projectionist.db")
 
     def tearDown(self) -> None:
@@ -427,6 +430,11 @@ class WhisperApiTests(unittest.TestCase):
             ]
         )
         _neighbor(self.db, ids[0], ids[1])
+        # The member's own finished viewing; the server-wide view count is not theirs (PRIV-001).
+        with patch("tests.test_household_bridges._ensure_user"):
+            _insert_completion(self.db, user_id=member["id"], rating_key="rk-heat",
+                               completed_at_ms=1_700_000_000_000)
+        self.db.update_user_profile(member["id"], preferred_name="Will")
         deliver_notification(
             self.db,
             Settings.load(Path(self._tmpdir.name) / "settings.json"),
