@@ -9,6 +9,7 @@ export const TASK_LABELS: Record<string, any> = {
   coverage_deficit_audit: "Find missing plot knowledge",
   entity_memory_enrichment: "Research missing title details",
   gap_analysis: "Gap analysis",
+  household_backup: "Household backup",
   llm_logline_enrichment: "LLM logline enrichment",
   metadata_enrichment: "Metadata enrichment",
   plot_neighbors: "Refresh similar titles",

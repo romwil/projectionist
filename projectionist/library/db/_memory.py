@@ -106,6 +106,28 @@ class MemoryMixin:
                     "UPDATE users SET is_youth = 1, youth_since = ? WHERE id = ?",
                     (time.time(), user_id),
                 )
+            if is_youth:
+                # Youth accounts never carry the member add autoconfirm.
+                conn.execute("UPDATE users SET autoconfirm_adds = 0 WHERE id = ?", (user_id,))
+            row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        assert row is not None
+        return self._row_to_user(row)
+
+    def set_user_autoconfirm_adds(self, user_id: str, enabled: bool) -> Dict[str, Any]:
+        """Owner-set: this member's Radarr/Sonarr adds confirm without the owner.
+
+        Refused for Youth accounts; ``set_user_youth(True)`` also clears it.
+        """
+        with self.connect() as conn:
+            current = conn.execute("SELECT is_youth FROM users WHERE id = ?", (user_id,)).fetchone()
+            if current is None:
+                raise ValueError("User not found")
+            if enabled and int(current["is_youth"] or 0):
+                raise ValueError("Youth accounts cannot add without the owner's confirm")
+            conn.execute(
+                "UPDATE users SET autoconfirm_adds = ? WHERE id = ?",
+                (1 if enabled else 0, user_id),
+            )
             row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         assert row is not None
         return self._row_to_user(row)

@@ -853,7 +853,7 @@ def library_anniversaries_endpoint(
         last_viewed = row["last_viewed_at"]
         if last_viewed:
             months_ago = max(1, int((_time.time() - last_viewed) / (30 * 86400)))
-            context += f" \u00b7 Last watched {months_ago} month{'s' if months_ago != 1 else ''} ago"
+            context += f" \u00b7 Last played on this server {months_ago} month{'s' if months_ago != 1 else ''} ago"
         item_data = dict(row)
         item_data["anniversary_context"] = context
         items.append(item_data)

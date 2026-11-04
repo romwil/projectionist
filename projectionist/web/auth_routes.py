@@ -13,7 +13,13 @@ def register_auth_routes(app):
     from pydantic import BaseModel, Field
 
     import projectionist.web.app as app_mod
+    from projectionist import authz
     from projectionist import security_audit as sa
+
+    _APPRISE_OWNER_ONLY = (
+        "Only the household owner can set Apprise destinations. "
+        "Inbox and email still work for your account."
+    )
 
     AccessRequestApprovePayload = app_mod.AccessRequestApprovePayload
     AuthMeUpdatePayload = app_mod.AuthMeUpdatePayload
@@ -181,6 +187,10 @@ def register_auth_routes(app):
         if "notify_channel_apprise" in fields_set:
             updates["notify_channel_apprise"] = payload.notify_channel_apprise
         if "apprise_urls" in fields_set:
+            if str(payload.apprise_urls or "").strip() and not authz.acts_as_owner(
+                _settings(), user.role
+            ):
+                raise HTTPException(status_code=403, detail=_APPRISE_OWNER_ONLY)
             updates["apprise_urls"] = payload.apprise_urls
         if "default_page" in fields_set:
             updates["default_page"] = payload.default_page
@@ -263,7 +273,8 @@ def register_auth_routes(app):
         user=Depends(get_current_user_dep),
     ) -> Dict[str, Any]:
         """Send a short test notification to one self-serve Apprise URL."""
-        del user
+        if not authz.acts_as_owner(_settings(), user.role):
+            raise HTTPException(status_code=403, detail=_APPRISE_OWNER_ONLY)
         from projectionist.notifications.apprise_transport import (
             AppriseSendError,
             apprise_available,
@@ -374,6 +385,7 @@ def register_auth_routes(app):
             payload.auth_token,
             _db(),
             invite_token=payload.invite_token,
+            request=request,
         )
         sa.audit(_db(), sa.SIGN_IN, actor_id=user.id, method="plex_token")
         set_session_cookie(response, user.id, request, db=_db())
@@ -784,8 +796,15 @@ def register_auth_routes(app):
         payload: UserUpdatePayload,
         user=Depends(require_role("owner")),
     ) -> Dict[str, Any]:
-        if payload.role is None and payload.disabled is None and payload.is_youth is None:
-            raise HTTPException(status_code=400, detail="Provide role, disabled, and/or is_youth")
+        if (
+            payload.role is None
+            and payload.disabled is None
+            and payload.is_youth is None
+            and payload.autoconfirm_adds is None
+        ):
+            raise HTTPException(
+                status_code=400, detail="Provide role, disabled, is_youth, and/or autoconfirm_adds"
+            )
         db = _db()
         target = db.get_user(user_id)
         if target is None:
@@ -801,6 +820,20 @@ def register_auth_routes(app):
                     "They will be notified, and the change is recorded in the security log."
                 ),
             )
+        if payload.autoconfirm_adds:
+            final_role = payload.role or str(target["role"])
+            final_youth = was_youth if payload.is_youth is None else bool(payload.is_youth)
+            if final_youth:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Youth accounts can't add to Radarr or Sonarr without your confirm.",
+                )
+            if final_role != "member":
+                raise HTTPException(
+                    status_code=400,
+                    detail="Adding without confirm is a setting for adult member accounts.",
+                )
+        was_autoconfirm = bool(target["autoconfirm_adds"]) if "autoconfirm_adds" in target.keys() else False
         updated: Optional[Dict[str, Any]] = None
         if payload.role is not None:
             if user_id == user.id and payload.role != "owner":
@@ -824,6 +857,16 @@ def register_auth_routes(app):
                     before=str(target["role"]),
                     after=payload.role,
                 )
+                if was_autoconfirm and payload.autoconfirm_adds is None:
+                    sa.audit(
+                        db,
+                        sa.AUTOCONFIRM_CHANGE,
+                        actor_id=user.id,
+                        target_id=user_id,
+                        autoconfirm_adds=False,
+                        reason="role_change",
+                    )
+                    was_autoconfirm = False
         if payload.disabled is not None:
             if user_id == user.id and payload.disabled:
                 raise HTTPException(status_code=400, detail="Cannot disable your own account")
@@ -866,6 +909,32 @@ def register_auth_routes(app):
                 confirmed=bool(payload.confirm_youth),
                 member_notified=notified,
             )
+            if payload.is_youth and was_autoconfirm and payload.autoconfirm_adds is None:
+                sa.audit(
+                    db,
+                    sa.AUTOCONFIRM_CHANGE,
+                    actor_id=user.id,
+                    target_id=user_id,
+                    autoconfirm_adds=False,
+                    reason="youth_on",
+                )
+                was_autoconfirm = False
+        if payload.autoconfirm_adds is not None:
+            try:
+                updated = db.set_user_autoconfirm_adds(user_id, payload.autoconfirm_adds)
+            except ValueError as error:
+                raise HTTPException(
+                    status_code=404 if "not found" in str(error).lower() else 409,
+                    detail=_safe_error_detail(error, "Could not change that setting"),
+                ) from error
+            if bool(payload.autoconfirm_adds) != was_autoconfirm:
+                sa.audit(
+                    db,
+                    sa.AUTOCONFIRM_CHANGE,
+                    actor_id=user.id,
+                    target_id=user_id,
+                    autoconfirm_adds=bool(payload.autoconfirm_adds),
+                )
         assert updated is not None
         return {"user": updated}
 

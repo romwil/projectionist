@@ -10,6 +10,7 @@ import {
   normalizePendingTokens,
   normalizeUserRole,
   resolveAddCapability,
+  ASK_OWNER_COPY,
   summarizePendingTokenActions,
   tokenConfirmButtonLabel,
   tokenConfirmFailureMessage,
@@ -194,6 +195,29 @@ test("resolveAddCapability maps legacy guest to member capability", () => {
   assert.equal(ownerArr.canRequest, false);
 });
 
+test("only the owner adds to Radarr/Sonarr; members see Ask the owner (SEC-006)", () => {
+  const memberArr = resolveAddCapability({ role: "member", requestPath: "arr" });
+  assert.equal(memberArr.canAdd, false);
+  assert.equal(memberArr.canRequest, false);
+  assert.equal(memberArr.showGuidedCopy, true);
+  assert.equal(memberArr.guidedCopy, ASK_OWNER_COPY);
+
+  const singleUser = resolveAddCapability({ role: "member", requestPath: "arr", multiUserEnabled: false });
+  assert.equal(singleUser.canAdd, true);
+});
+
+test("youth never get an acquisition control on either path", () => {
+  for (const requestPath of ["arr", "seerr"]) {
+    const youth = resolveAddCapability({ role: "member", requestPath, isYouth: true });
+    assert.equal(youth.canAdd, false);
+    assert.equal(youth.canRequest, false);
+    assert.equal(youth.showGuidedCopy, false);
+  }
+  const items = [{ title: "Dune", media_type: "movie", tmdb_id: 1 }];
+  const youthSeerr = groupAddableItems(items, { requestPath: "seerr", role: "member", isYouth: true });
+  assert.deepEqual(youthSeerr, { radarr: [], sonarr: [], seerr: [] });
+});
+
 test("groupAddableItems treats legacy guest as member", () => {
   const items = [
     { title: "Dune", media_type: "movie", tmdb_id: 1 },
@@ -202,6 +226,7 @@ test("groupAddableItems treats legacy guest as member", () => {
   const guest = groupAddableItems(items, { requestPath: "arr", role: "guest" });
   const memberArr = groupAddableItems(items, { requestPath: "arr", role: "member" });
   assert.deepEqual(guest, memberArr);
+  assert.deepEqual(memberArr, { radarr: [], sonarr: [], seerr: [] });
   const member = groupAddableItems(items, { requestPath: "seerr", role: "member" });
   assert.equal(member.seerr.length, 2);
   assert.equal(member.radarr.length, 0);
@@ -227,4 +252,25 @@ test("groupAddableItems skips owned and queued movies", () => {
   const owner = groupAddableItems(items, { requestPath: "arr", role: "owner" });
   assert.equal(owner.radarr.length, 1);
   assert.equal(owner.radarr[0].title, "Gap");
+});
+
+test("an autoconfirm member gets the add button; Youth and the Seerr path do not (BD-3)", () => {
+  const on = resolveAddCapability({ role: "member", requestPath: "arr", autoconfirmAdds: true });
+  assert.equal(on.canAdd, true);
+  assert.equal(on.showGuidedCopy, false);
+  const off = resolveAddCapability({ role: "member", requestPath: "arr" });
+  assert.equal(off.canAdd, false);
+  assert.equal(off.guidedCopy, ASK_OWNER_COPY);
+  const youth = resolveAddCapability({
+    role: "member",
+    requestPath: "arr",
+    isYouth: true,
+    autoconfirmAdds: true,
+  });
+  assert.equal(youth.canAdd, false);
+  const seerr = resolveAddCapability({ role: "member", requestPath: "seerr", autoconfirmAdds: true });
+  assert.equal(seerr.canAdd, false);
+  const items = [{ title: "Gap", media_type: "movie", tmdb_id: 4 }];
+  const grouped = groupAddableItems(items, { requestPath: "arr", role: "member", autoconfirmAdds: true });
+  assert.equal(grouped.radarr.length, 1);
 });

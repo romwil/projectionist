@@ -2,8 +2,8 @@
 
 Projectionist exposes a Model Context Protocol server over your indexed Plex library, with **two trust planes** selected by which API key you present.
 
-Repository memory is shared, sanitized media knowledge and may be added to the
-read-only MCP surface. Private user memory, account exports, and user-memory
+Repository memory is shared media knowledge saved as the curator wrote it (not
+scrubbed), and may be added to the read-only MCP surface. Private user memory, account exports, and user-memory
 events are never exposed through either MCP trust plane.
 
 ## Why MCP for media curation?

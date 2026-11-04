@@ -99,6 +99,8 @@ const AUDIT_EVENT_LABELS: Record<string, string> = {
   role_change: "Role changed",
   account_disable: "Account enabled or disabled",
   youth_change: "Youth setting changed",
+  autoconfirm_change: "Add-without-confirm setting changed",
+  autoconfirm_add: "Added to Radarr or Sonarr without owner confirm",
   account_delete: "Account removed",
   settings_save: "Settings saved",
   secret_reveal: "Saved key shown",
@@ -120,6 +122,10 @@ export function auditDetailLine(row: JsParam) {
   if (detail.before && detail.after) parts.push(`${detail.before} → ${detail.after}`);
   if (typeof detail.is_youth === "boolean") parts.push(detail.is_youth ? "youth on" : "youth off");
   if (typeof detail.disabled === "boolean") parts.push(detail.disabled ? "disabled" : "enabled");
+  if (typeof detail.autoconfirm_adds === "boolean") {
+    parts.push(detail.autoconfirm_adds ? "adds without confirm on" : "adds without confirm off");
+  }
+  if (detail.service && detail.title) parts.push(`${detail.service}: ${detail.title}`);
   if (detail.role && !detail.after) parts.push(`role ${detail.role}`);
   if (detail.field) parts.push(String(detail.field));
   if (detail.which) parts.push(`${detail.which} key`);

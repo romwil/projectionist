@@ -448,14 +448,160 @@ def failed_tasks(scheduler: Any) -> List[Dict[str, Any]]:
     return failed
 
 
+ACCESS_REQUEST_URGENT_DAYS = 2
+INVITE_EXPIRY_WARNING_SECONDS = 24 * 60 * 60
+BACKUP_STALE_DAYS = 3
+
+
+def _days(seconds: float) -> int:
+    return max(0, int(seconds // 86400))
+
+
+def _plural(count: int, word: str) -> str:
+    return f"{count} {word}{'' if count == 1 else 's'}"
+
+
+def people_waiting(db: Any, *, now: Optional[float] = None) -> Dict[str, Any]:
+    """Pending join requests and invites about to lapse (OPS-006)."""
+    now = time.time() if now is None else float(now)
+    out: Dict[str, Any] = {"requests": 0, "oldest_request_days": 0, "invites_expiring": 0, "invites_expired": 0}
+    try:
+        requests = db.list_access_requests(status="pending", limit=200)
+    except Exception:  # noqa: BLE001
+        logger.debug("Needs attention: access requests unavailable", exc_info=True)
+        requests = []
+    if requests:
+        oldest = min(float(r.get("created_at") or now) for r in requests)
+        out["requests"] = len(requests)
+        out["oldest_request_days"] = _days(now - oldest)
+    try:
+        invites = db.list_invites(status="pending", limit=200)
+    except Exception:  # noqa: BLE001
+        logger.debug("Needs attention: invites unavailable", exc_info=True)
+        invites = []
+    for invite in invites:
+        expires_at = float(invite.get("expires_at") or 0)
+        if not expires_at:
+            continue
+        if expires_at <= now:
+            out["invites_expired"] += 1
+        elif expires_at - now <= INVITE_EXPIRY_WARNING_SECONDS:
+            out["invites_expiring"] += 1
+    return out
+
+
+def backup_health(data_dir: Optional[Path], scheduler: Any, *, now: Optional[float] = None) -> Dict[str, Any]:
+    """Automatic backup freshness from DATA_DIR/backups and the scheduler (OPS-009)."""
+    now = time.time() if now is None else float(now)
+    out: Dict[str, Any] = {"latest_at": None, "age_days": None, "task_enabled": None}
+    if data_dir is not None:
+        from projectionist.backups import latest_snapshot_at
+
+        latest = latest_snapshot_at(Path(data_dir))
+        if latest is not None:
+            out["latest_at"] = latest
+            out["age_days"] = _days(now - latest)
+    if scheduler is not None:
+        try:
+            for state in scheduler.get_task_states():
+                if state.get("name") == "household_backup":
+                    out["task_enabled"] = bool(state.get("enabled"))
+        except Exception:  # noqa: BLE001
+            logger.debug("Needs attention: scheduler state unavailable", exc_info=True)
+    return out
+
+
+def _owner_attention_items(
+    people: Optional[Mapping[str, Any]],
+    backup: Optional[Mapping[str, Any]],
+    env_owner: str,
+) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+    if env_owner:
+        items.append(
+            {
+                "id": "env-owner-skipped",
+                "kind": "recovery",
+                "severity": "high",
+                "title": "Owner password from the container didn't apply",
+                "detail": (
+                    "PROJECTIONIST_OWNER_PASSWORD is shorter than 8 characters."
+                    if env_owner == "weak"
+                    else "PROJECTIONIST_OWNER_PASSWORD is set, but PROJECTIONIST_OWNER_USERNAME "
+                    "doesn't match an owner. Set it to the owner's username and restart, or remove both."
+                ),
+                "to": "/help#owner-recovery",
+            }
+        )
+    people = people or {}
+    requests = int(people.get("requests") or 0)
+    if requests:
+        oldest = int(people.get("oldest_request_days") or 0)
+        items.append(
+            {
+                "id": "access-requests",
+                "kind": "people",
+                "severity": "high" if oldest >= ACCESS_REQUEST_URGENT_DAYS else "medium",
+                "title": f"{requests} {'person' if requests == 1 else 'people'} asked to join",
+                "detail": "Oldest waiting less than a day." if oldest == 0 else f"Oldest waiting {_plural(oldest, 'day')}.",
+                "to": "/admin/access",
+            }
+        )
+    expired = int(people.get("invites_expired") or 0)
+    expiring = int(people.get("invites_expiring") or 0)
+    if expired or expiring:
+        parts = []
+        if expired:
+            parts.append(f"{_plural(expired, 'invite')} expired before anyone joined")
+        if expiring:
+            parts.append(f"{_plural(expiring, 'invite')} expire within a day")
+        items.append(
+            {
+                "id": "invites-expiring",
+                "kind": "people",
+                "severity": "medium",
+                "title": "Join links are running out",
+                "detail": "; ".join(parts) + ". Revoke and send a new link if they still want in.",
+                "to": "/admin/access",
+            }
+        )
+    backup = backup or {}
+    if backup.get("task_enabled") is False:
+        items.append(
+            {
+                "id": "backup-off",
+                "kind": "backup",
+                "severity": "medium",
+                "title": "Automatic backups are off",
+                "detail": "Turn Household backup back on in Tasks so a bad upgrade or disk error is recoverable.",
+                "to": "/admin/tasks",
+            }
+        )
+    elif backup.get("age_days") is not None and int(backup["age_days"]) >= BACKUP_STALE_DAYS:
+        items.append(
+            {
+                "id": "backup-stale",
+                "kind": "backup",
+                "severity": "medium",
+                "title": f"Last automatic backup was {_plural(int(backup['age_days']), 'day')} ago",
+                "detail": "Check Household backup in Tasks.",
+                "to": "/admin/tasks",
+            }
+        )
+    return items
+
+
 def build_needs_attention(
     *,
     secrets: Mapping[str, Any],
     setup: Mapping[str, Any],
     monday: Mapping[str, Any],
     failed: List[Mapping[str, Any]],
+    people: Optional[Mapping[str, Any]] = None,
+    backup: Optional[Mapping[str, Any]] = None,
+    env_owner: str = "",
 ) -> List[Dict[str, Any]]:
-    items: List[Dict[str, Any]] = []
+    items: List[Dict[str, Any]] = _owner_attention_items(people, backup, env_owner)
     labels = {s["id"]: s["label"] for s in secrets.get("services", [])}
     unreadable_services = [s["label"] for s in secrets.get("services", []) if s.get("key_unreadable")]
     if secrets.get("unreadable_fields"):
@@ -535,6 +681,11 @@ def build_owner_ops_overview(
     setup = build_setup_checklist(db, settings, secrets)
     monday = build_monday_pass(db)
     failed = failed_tasks(scheduler)
+    people = people_waiting(db)
+    backup = backup_health(data_dir, scheduler)
+    from projectionist.web.auth import env_owner_status
+
+    env_owner = env_owner_status(db)
     try:
         activity = db.local_event_counts(days=7)
     except Exception:  # noqa: BLE001
@@ -544,8 +695,16 @@ def build_owner_ops_overview(
         "monday": monday,
         "secrets": secrets,
         "failed_tasks": failed,
+        "people_waiting": people,
+        "backup": backup,
         "needs_attention": build_needs_attention(
-            secrets=secrets, setup=setup, monday=monday, failed=failed
+            secrets=secrets,
+            setup=setup,
+            monday=monday,
+            failed=failed,
+            people=people,
+            backup=backup,
+            env_owner=env_owner,
         ),
         "activity_7d": activity,
     }

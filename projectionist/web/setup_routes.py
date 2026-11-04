@@ -171,7 +171,12 @@ def register_setup_routes(app):
 
 
     @router.put("/api/settings")
-    def put_settings(payload: SettingsPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    def put_settings(
+        payload: SettingsPayload,
+        request: Request,
+        response: Response,
+        user=Depends(require_role("owner")),
+    ) -> Dict[str, Any]:
         settings_path = DATA_DIR / "settings.json"
         before = Settings.load(settings_path)
         existing = _settings()
@@ -229,6 +234,12 @@ def register_setup_routes(app):
                 seed_env_owner(_db())
             except Exception:  # noqa: BLE001
                 logger.exception("Owner seeding after settings update failed (continuing)")
+            # Without an env owner, bind the first owner sign-in to this browser (SEC-008).
+            from projectionist.web.auth import has_real_owner
+            from projectionist.web.owner_claim import issue_owner_claim, set_owner_claim_cookie
+
+            if not has_real_owner(_db()):
+                set_owner_claim_cookie(response, issue_owner_claim(_db()), request)
         return _mask_settings(settings)
 
 

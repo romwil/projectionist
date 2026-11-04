@@ -860,7 +860,7 @@
 }
 
 .settings-learn-more > summary:hover {
-  color: var(--accent, var(--gold, #c9a227));
+  color: var(--accent-ink);
 }
 
 .settings-learn-more p {

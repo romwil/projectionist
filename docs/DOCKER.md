@@ -312,6 +312,23 @@ SQLite uses **WAL** + `busy_timeout=30s` + `synchronous=NORMAL` so the UI can re
 
 Copying files while the container is running can capture a torn SQLite database: WAL mode keeps recent commits in `*-wal` / `*-shm` sidecars, so a naive `cp` of only `*.db` may miss or corrupt data.
 
+**Automatic — daily on-box snapshot.** The **Household backup** scheduled task writes `/config/backups/projectionist-auto-<timestamp>.zip` once a day: `settings.json` plus a consistent SQLite copy taken with SQLite's online backup. It keeps the newest seven and uploads nothing. **Admin → Overview → Needs attention** warns when the task is off or the newest snapshot is more than three days old. The snapshot sits on the same disk as the data, so copy `/config/backups` somewhere else for disk-failure protection.
+
+```bash
+# List snapshots, or take one now (runs as the app user)
+docker exec -u projectionist projectionist python -m projectionist.backups list
+docker exec -u projectionist projectionist python -m projectionist.backups create
+
+# Restore: stop the app, restore in a one-off container, start again
+docker stop projectionist
+docker run --rm -v /mnt/user/appdata/projectionist/config:/config \
+  romwil/projectionist:latest python -m projectionist.backups restore \
+  --from /config/backups/projectionist-auto-YYYYMMDDTHHMMSSZ.zip --yes
+docker start projectionist
+```
+
+**How restore works / honest limits.** Restore refuses a zip without a database, with unreadable `settings.json`, or with a database that fails SQLite's integrity check. Before replacing anything it moves the current database, its `-wal`/`-shm` sidecars, and `settings.json` into `/config/backups/pre-restore-<timestamp>/`, so a bad restore can be undone by hand. Those set-aside folders are not pruned. Restore does not bring back `PROJECTIONIST_SECRETS_KEY`; keep that with your backups, or encrypted settings can't be read. A **Full household backup** downloaded from **Admin → Overview** has the same layout and restores the same way.
+
 **Preferred — online consistent snapshot** (container can stay up):
 
 ```bash

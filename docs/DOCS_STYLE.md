@@ -41,7 +41,7 @@ Projectionist documentation serves three audiences. Pick the audience per docume
 **The render split is real and load-bearing.** `frontend/src/pages/HelpPage.tsx` (`markdownForRole`, ~127–140) drops everything from the first `## For owners` heading down to `## Related documentation` for members and guests. So:
 
 - Owner-only depth (API endpoints, `curl`, config keys) belongs **below** `## For owners` in `docs/HELP.md`, where members never see it.
-- A member-facing endpoint reference (e.g. "export your memory") must be **restated as a guided UI action** in the member half — "Export or delete your private memory from **Settings → Privacy**" — not a `GET /api/me/memory` line.
+- A member-facing endpoint reference (e.g. "export your memory") must be **restated as a guided UI action** in the member half, not a `GET /api/me/memory` line. If no UI exists yet, say so and give the honest path instead ("There's no **Download my data** button yet; ask the owner"). Never name a menu that doesn't exist.
 - Do not rename the `## For owners` heading or the anchor headings the app links to (`#start-here`, `#chat`, `#plot-lab`, `#coverage-over-time`, etc.) without updating `HelpPage.tsx` and `PrivacyPage.tsx`.
 
 ---

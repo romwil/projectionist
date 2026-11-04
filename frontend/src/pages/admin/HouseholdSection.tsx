@@ -48,6 +48,7 @@ export default function HouseholdSection({
   handleUserRoleChange,
   handleUserDisableToggle,
   handleYouthModeToggle,
+  handleAutoconfirmAddsToggle,
   handleUserRemove,
   handleUserSyncSeerr,
   handleUserResetPassword,
@@ -57,7 +58,8 @@ export default function HouseholdSection({
             <h2>Household login (optional)</h2>
             <p className="wizard-note">
               When enabled, people open Projectionist via <strong>Sign in with Plex</strong> (plex.tv PIN / link
-              on the login page). The first account becomes owner; later accounts join via an invite link
+              on the login page). Sign in from this browser right after you save: only this browser can
+              claim the owner account, so a neighbor on your network can't. Later accounts join via an invite link
               from <strong>Admin → Access</strong> (invite-only by default). This is separate from the Plex{" "}
               <em>server</em> token above used for library sync.
             </p>
@@ -236,6 +238,7 @@ export default function HouseholdSection({
                               <th scope="col">Email</th>
                               <th scope="col">Role</th>
                               <th scope="col">Youth mode</th>
+                              <th scope="col">Radarr / Sonarr adds</th>
                               <th scope="col">Seerr</th>
                               <th scope="col">Status</th>
                               <th scope="col">Actions</th>
@@ -278,6 +281,24 @@ export default function HouseholdSection({
                                     >
                                       {entry.is_youth ? "Youth mode on" : "Set Youth mode"}
                                     </button>
+                                  </td>
+                                  <td data-testid={`user-adds-${entry.id}`}>
+                                    {entry.role === "owner" ? (
+                                      <span className="wizard-note">Owner adds</span>
+                                    ) : entry.is_youth ? (
+                                      <span className="wizard-note">Not for Youth</span>
+                                    ) : (
+                                      <label className="config-toggle">
+                                        <input
+                                          type="checkbox"
+                                          data-testid={`user-autoconfirm-adds-${entry.id}`}
+                                          aria-label={`Let ${entry.display_name || entry.id} add to Radarr and Sonarr without your confirm`}
+                                          checked={Boolean(entry.autoconfirm_adds)}
+                                          onChange={() => handleAutoconfirmAddsToggle?.(entry)}
+                                        />
+                                        <span>Without my confirm</span>
+                                      </label>
+                                    )}
                                   </td>
                                   <td>
                                     {seerrLinked ? (

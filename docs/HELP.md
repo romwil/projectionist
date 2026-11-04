@@ -54,7 +54,7 @@ Keyboard cheat sheet: press `?` (outside a text field). Slash commands in chat: 
 
 **When no chat provider is connected.** Chat needs a language model, and only the owner can connect one. Until they do, Projectionist opens on **Explore** instead of Chat, with a note that says why. Search, Explore, Library, Inbox, and Play keep working; Chat shows the same note and can't reply. If you changed **Settings → Profile → Default page** to **Chat**, you still land on Chat — it just can't answer yet.
 
-**What stays private.** Your chat transcripts and private memory belong to your account and are never shown to other members. The activity counts on the owner's **Admin → Overview** are household totals and never include what you typed. Someone with direct access to the server's files can still read its database, so [Privacy](/privacy) spells out exactly what is stored and how to export or delete it.
+**What stays private.** Your chat transcripts and private memory belong to your account and are never shown to other members. Activity counts never include what you typed. Someone with the server's files or its backups can still read everything, so [Privacy](/privacy) spells out exactly what is stored, what the owner can see, and what removing your account leaves behind.
 
 See also: [Joining the household](#joining-the-household) · [Default page, password, and sessions](#default-page-password-and-sessions)
 
@@ -207,7 +207,7 @@ Under **Settings → Notifications** you can:
 - Set a **notification email** (or leave blank to use your account email)
 - Turn the **in-app inbox** on or off (always self-serve)
 - Opt into **email alerts** when the owner has mail configured (**Needs owner setup**)
-- Opt into **Apprise alerts** and add your own Discord / Telegram / push destinations with the destination builder (**Self-serve**; optional household URLs can also be configured by the owner)
+- Opt into **Apprise alerts** to also get alerts on the household's Discord / Telegram / push destinations (**Needs owner setup**). Only the owner adds Apprise destinations, because each one tells the server where to connect.
 - Subscribe to the **weekly newsletter** — a short, personalized note in your default curator’s voice (youth-safe when the member is in Youth mode). Each title names a subject, creator, or franchise it shares with something you have watched. If nothing qualifies that week, you don't get a note — no "nothing for you" mail. It usually arrives on the weekly schedule; the owner can also push one early from Admin. Every note ends with how to change or stop it.
 - Opt into **curator nudges** — occasional “you have to see this” picks that name a shared subject, creator, or franchise with something you have watched. A recent watch by itself is not enough. These are never live Plex session alerts.
 - Opt into **Year in Review** — a private year-end recap of **your Plex plays this year (this account)**, not the household and not only titles played inside Projectionist. Plex marks a title played (`viewedAt`); that is not credits-roll proof. You get a short reel, then a linger sheet: totals, top movie genre vs top TV genre, catalog hours, and the titles that defined the year. Live-observed progress vs Plex-played confidence stays on the reel. Late December may tease the reel; early January drops the full link to your inbox (and email if you’ve enabled it).
@@ -235,7 +235,9 @@ Sometimes the thing you want isn't in the library yet. Whenever you've searched,
 What the button on each beyond result does depends on your role, and Projectionist never double-adds something you already have:
 
 - **Owners** get **Add to Radarr** (movies) or **Add to Sonarr** (shows), which queues the title for download.
-- **Members** get **Request in Seerr**, sending it to the household request queue for approval.
+- **Members** see **Ask the owner to add this** when the household adds through Radarr and Sonarr. Only the owner confirms those adds. When the household uses Seerr, members get **Request in Seerr** instead, sending it to the request queue for approval.
+- **Members the owner trusts to add** get the same **Add to Radarr** / **Add to Sonarr** button as the owner. Their add starts right away with no owner confirm, because the owner turned on **Without my confirm** for their account in **Admin → Members**. Each add is recorded in the owner's security log. Removing titles stays with the owner.
+- **Youth accounts** never get an add or request button. The owner can't turn on adding without a confirm for a Youth account, and turning Youth mode on turns it off.
 - Signed-out visitors see a gentle *"Ask owner"* note instead of a button — browsing and discovery stay open on the LAN, but only owners and members can bring titles in.
 
 Anything already in your library (or already queued to download) is shown with an **In library** or **In queue** badge and no add button, so you can see it exists without accidentally requesting a duplicate. If external search isn't available, the button steps aside with a short note rather than failing loudly.
@@ -306,10 +308,10 @@ On a library title, the **Plot knowledge** panel shows which plot layers are pre
 
 The curator keeps two kinds of memory:
 
-- **Shared knowledge** about titles, people, and companies it has researched, with sources cited. This isn't tied to any one account, so a second question about the same subject recalls the earlier cited answer instead of starting over.
+- **Shared knowledge** about titles, people, and companies it has researched, with sources cited. This isn't tied to any one account, so a second question about the same subject recalls the earlier cited answer instead of starting over. It's saved as the curator wrote it, so keep personal details out of research questions.
 - **Your private memory** — preferences, stated goals, watch intentions, and follow-ups for *your* account only. It's surfaced back to you at the start of a conversation (including a "resume where we left off" nudge) and is never shared with, or applied to, another household member. Youth-mode accounts show a badge in **Profile**. Curator memory is off for Youth accounts unless the owner turns it on, and the owner can review only notes saved after an account entered Youth mode. Turning Youth mode on never opens what the curator remembered before.
 
-**Your private memory is yours.** Projectionist can hand you a full copy or permanently delete everything it remembers for your account — private notes, chat transcripts, saved library pages, and preference facts. See the [Privacy](/privacy) page for exactly what that export and purge cover, and how to run them.
+**Getting a copy or leaving.** There's no **Download my data** or **Delete my data** button yet. You can delete a conversation from the thread list in **Chat**. To leave, ask the owner to remove your account. [Privacy](/privacy#getting-a-copy-or-leaving) lists what removal deletes and what it leaves behind.
 
 ### Youth mode
 
@@ -335,7 +337,9 @@ If you don't have a link yet, use **Need an invite?** on `/login`. The owner see
 
 **Sign out everywhere.** **Settings → Profile → Sessions → Sign out everywhere else** ends every other signed-in session for your account without changing your password. This device stays signed in.
 
-**Forgot your password?** There's no separate recovery key to hunt down — reset it from the login page, or ask another owner to reset it for you from **Admin → Members**.
+**Forgot your password?** Ask the household owner. They can set a new one for you from **Admin → Members → Reset password**, without needing your old one. There's no reset link on the login page and no email reset. If you sign in with Plex or SSO, there's no Projectionist password to forget — recover that account with Plex or your SSO provider.
+
+**Are you the owner, and locked out?** See [Owner recovery](#owner-recovery) in the owner section of this guide (it needs access to the container's settings).
 
 ---
 
@@ -392,7 +396,7 @@ Identify is usually **show-level** (theme or score). It does **not** pick season
 
 ### Needs attention
 
-**Admin → Overview** opens with one **Needs attention** list. It rolls up everything that wants you this week: a saved key the server can no longer read, a connection that was verified but whose key is now missing, scheduled tasks that failed or were quarantined, setup steps you haven't done or skipped, and an unfinished Monday pass. Each row links to the page that fixes it. When the list is empty, it says so — there is no separate panel to check.
+**Admin → Overview** opens with one **Needs attention** list. It rolls up everything that wants you this week: people who asked to join (urgent once someone has waited two days), join links that expired or expire within a day, an owner password from the container that didn't apply, automatic backups that are off or more than three days old, a saved key the server can no longer read, a connection that was verified but whose key is now missing, scheduled tasks that failed or were quarantined, setup steps you haven't done or skipped, and an unfinished Monday pass. Each row links to the page that fixes it. When the list is empty, it says so — there is no separate panel to check.
 
 ### Monday pass
 
@@ -548,6 +552,7 @@ curl -s "http://localhost:8788/api/search/external?q=arrival&media_type=movie&li
 The add/request buttons on beyond results reuse the same **propose → confirm** acquisition flow as the rest of the app, so it's role-aware without new plumbing:
 
 - **Owners** propose `add_radarr` (by `tmdb_id`) or `add_sonarr` (by `tvdb_id`, which shows results carry via TMDB enrichment). Requires Radarr/Sonarr configured with a valid root folder.
+- **Members** are refused `add_radarr` / `add_sonarr` (403, "Only the household owner can add titles…") at propose, at confirm, and in chat, unless you turned on **Without my confirm** for them in **Admin → Members** (`PATCH /api/users/{id}` with `{"autoconfirm_adds": true}`, owner-only, adult members only, off by default). With it on, their own click proposes and confirms in one step, and in chat the curator's `add_to_radarr` / `add_to_sonarr` adds right away with no confirm card. Every such add writes an `autoconfirm_add` row to the security log with the member, the service, and the title. It never records their chat or memory. `remove_from_arr`, collections, and the other owner tools stay owner-only. Youth accounts are refused the setting (409), and turning Youth mode on clears it; the Youth rating ceiling still applies.
 - **Members** propose `request_seerr` — routed to Seerr for approval. With `seerr.require_linked_user_for_requests` on, the member must have a linked Seerr account.
 - Signed-out callers get no write path at all; the API rejects acquisition just as it does elsewhere.
 
@@ -775,8 +780,9 @@ curl -s -X POST http://localhost:8788/api/admin/mail/test \
 
 Projectionist can fan out the same alerts through [Apprise](https://github.com/caronc/apprise) URLs.
 
-- **Self-serve:** under **Settings → Notifications**, turn on **Apprise alerts** and add destinations with the builder (Discord, Telegram, Slack, email, Pushover, Gotify, ntfy) or paste any Apprise URL. Use **Test** on a row to verify it. No owner setup required.
-- **Installation / owner:** under **Admin → Mail & alerts**, enable installation Apprise URLs (and optional config / tag) for household-wide destinations. Members who opt into Apprise also receive those. Empty URL/config fields on save keep the previously stored secrets.
+- **Your own destinations (owner only):** under **Settings → Notifications**, turn on **Apprise alerts** and add destinations with the builder (Discord, Telegram, Slack, email, Pushover, Gotify, ntfy) or paste any Apprise URL. Use **Test** on a row to verify it.
+- **Installation / household:** under **Admin → Mail & alerts**, enable installation Apprise URLs (and optional config / tag) for household-wide destinations. Members who opt into Apprise receive those. Empty URL/config fields on save keep the previously stored secrets.
+- **Why members can't add URLs:** an Apprise URL makes the server open a connection to whatever host it names, including services on your LAN. Member accounts can't save or test Apprise URLs, and any URLs a member saved earlier are ignored at send time. Their inbox and email alerts are unchanged.
 
 ```bash
 # Inspect masked Apprise settings (owner session cookie required)
@@ -787,7 +793,7 @@ curl -s -X POST http://localhost:8788/api/admin/apprise/test \
   -H 'Content-Type: application/json' \
   -d '{}'
 
-# Member self-serve: test one personal destination URL
+# Owner: test one personal destination URL (members get 403)
 curl -s -X POST http://localhost:8788/api/auth/me/apprise/test \
   -H 'Content-Type: application/json' \
   -d '{"url":"json://localhost/hook"}'
@@ -844,26 +850,53 @@ The members table on **Admin → Members** confirms before it does anything dest
 For a member who signed in with a username and password (not Plex or SSO) and is locked out, **Reset password** on that member's row sets a new password for them without needing their old one. They are signed out of every existing session the next time they load the app, the same as if they had changed their own password.
 
 ```bash
-# Owner session cookie required; 404s for Plex/SSO accounts (nothing to reset)
+# Owner session cookie required; 400 for Plex/SSO accounts (nothing to reset)
 curl -s -X POST http://localhost:8788/api/users/USER_ID/reset-password \
   -H 'Content-Type: application/json' \
   -d '{"new_password":"a-new-shared-secret"}'
 ```
 
+### Owner recovery
+
+If you are the owner and forgot your Projectionist password, you recover from the container, not the login page. Projectionist has no email reset and no recovery key.
+
+**Worked example.** You made the owner account in the setup wizard with the username `will`, and you can't remember its password.
+
+1. Set two environment variables on the container (Unraid: edit the container template; Compose: the `environment:` block):
+
+   ```yaml
+   environment:
+     PROJECTIONIST_OWNER_USERNAME: will              # your owner username, exactly
+     PROJECTIONIST_OWNER_PASSWORD: a-new-long-password  # 8+ characters
+   ```
+
+2. Restart the container. At startup Projectionist finds the owner named `will` and sets its password to the new one. The Security log records a password reset with method `env`.
+3. Sign in as `will` with the new password.
+4. Remove `PROJECTIONIST_OWNER_PASSWORD` afterward if you don't want the container to keep resetting it on every restart. Leaving it set is also fine: it stays the owner's password.
+
+**How it works / honest limits.**
+
+- The username must match an existing **owner** account. If it matches nobody and an owner already exists, nothing changes. **Admin → Overview → Needs attention** then shows *"Owner password from the container didn't apply"*, and the container log has a warning.
+- If it matches a **member**, that member is not promoted while another owner exists.
+- An owner who signs in only with Plex or SSO has no Projectionist password. Recover that account through Plex or your SSO provider. If that account is gone for good, a second owner (if you made one) can promote someone from **Admin → Members**.
+- If no owner exists at all, a fresh sign-in can't claim the server. Set `PROJECTIONIST_OWNER_PASSWORD` (with any username) and restart: that creates the owner. See [Configuration](https://github.com/romwil/projectionist/blob/main/docs/CONFIGURATION.md) for the first-owner rules.
+
 ### Memory & privacy controls (owner)
 
-Because members can't see this half, here's the exact mechanism behind the member-facing "export or delete your memory" guidance. Each signed-in account can export or purge its own data via `/api/me/memory`:
+Members have no export or delete button yet. Each signed-in account can export or purge part of its own data through the API; an owner can't run it for someone else.
 
 ```bash
-# Export everything Projectionist holds for the signed-in account (JSON)
-curl -s http://localhost:8788/api/me/memory > my-projectionist-export.json
+# Export the signed-in account (JSON). Use that account's session cookie.
+curl -s -b 'curatorx_session=YOUR_SESSION' \
+  http://localhost:8788/api/me/memory > my-projectionist-export.json
 
-# Permanently delete the same set — private notes, chat threads + message
-# transcripts, saved pages, preferences, and personal watch evidence. Export first.
-curl -s -X DELETE http://localhost:8788/api/me/memory
+# Permanently delete the same set: private notes, chat threads and messages,
+# saved pages, preference facts, mapped watch evidence, and activity counts.
+curl -s -b 'curatorx_session=YOUR_SESSION' -X DELETE \
+  http://localhost:8788/api/me/memory
 ```
 
-Export and purge cover **exactly the same set**, including normalized watch events and their derived sessions/completions, so a copy taken before a purge is complete. Removing a household account uses the same purge before deleting the profile. Shared, sanitized repository research about media is *not* part of an account purge — it isn't tied to any one account. For **Youth-mode** accounts only, an owner may review that account's memory for moderation from the **Admin → Youth review** dashboard, which lists Youth-flagged accounts and the notes saved since each entered Youth mode (Youth memory is off by default, so this is often empty). The same data is available over HTTP (`GET /api/users/{id}/memory`, owner-only); adult member memory is not readable in the app, and the endpoint fails closed — it returns memory only for accounts actually flagged Youth, and only notes saved since that account's Youth mode started. Full data map: [Privacy](/privacy).
+**Honest limits.** Export and purge cover the same set, but it is not everything. The export leaves out the profile, watchlist, lists, reviews, inbox, and taste profile, and the Markdown format lists thread titles without messages. Removing an account in **Admin → Members** runs the purge, then deletes the profile and everything tied to it. Reviews, rating prompts, pending confirmations, the join request, invite emails, the avatar file, shared repository insights, and the security log stay. So do existing backups. The full table is in [Privacy](/privacy#export-and-removal-exactly). For **Youth-mode** accounts only, an owner may review that account's memory for moderation from the **Admin → Youth review** dashboard, which lists Youth-flagged accounts and the notes saved since each entered Youth mode (Youth memory is off by default, so this is often empty). The same data is available over HTTP (`GET /api/users/{id}/memory`, owner-only); adult member memory is not readable in the app, and the endpoint fails closed — it returns memory only for accounts actually flagged Youth, and only notes saved since that account's Youth mode started. Turning Youth mode on for an adult account needs a confirm, tells them, and is written to the security log; it never opens what the curator remembered before. Full data map: [Privacy](/privacy).
 
 ### LLM vs free sources
 
