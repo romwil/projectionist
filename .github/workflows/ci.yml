@@ -67,10 +67,31 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          python -m pytest tests/ -v --cov=projectionist --cov-report=term-missing --cov-fail-under=74
+          # Health timing runs in its own job so this suite's load cannot
+          # push it over the 0.5s bound.
+          python -m pytest tests/ -v --cov=projectionist --cov-report=term-missing --cov-fail-under=74 -k "not test_health_answers_while_a_slow_library_query_runs"
           npm run test:e2e
         env:
           CI: true
+
+  # Kept off the full suite on purpose. The assertion stays under 0.5s.
+  health-timing:
+    name: Health stays under 0.5s
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install Python package
+        run: pip install ".[web,dev,mcp]"
+
+      - name: Health answers during a slow library query
+        run: python -m pytest tests/test_phase2_trust_core.py::MoviesQueryOffLoopTests::test_health_answers_while_a_slow_library_query_runs -q
 
   # H6: prove the shippable image builds, entrypoint starts, and /api/health answers.
   docker-smoke:
