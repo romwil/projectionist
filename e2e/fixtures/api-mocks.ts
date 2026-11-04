@@ -708,7 +708,6 @@ export async function mockCuratorApis(page: Page) {
           multi_user_enabled: false,
           seerr_enabled: false,
           plex_collections_enabled: false,
-          guest_tour_enabled: true,
           invite_only: true,
           open_auto_provision: false,
           live_channels_enabled: false,
@@ -764,14 +763,6 @@ export async function mockCuratorApis(page: Page) {
       return;
     }
     await route.continue();
-  });
-
-  await page.route("**/api/engagement/streak", async (route: Route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ session_count_30d: 1, streak_visible: false }),
-    });
   });
 
   await page.route("**/api/persona/typing-phrases", async (route: Route) => {
@@ -893,7 +884,6 @@ export type FeatureFlags = {
   multi_user_enabled?: boolean;
   seerr_enabled?: boolean;
   plex_collections_enabled?: boolean;
-  guest_tour_enabled?: boolean;
   invite_only?: boolean;
   open_auto_provision?: boolean;
   live_channels_enabled?: boolean;
@@ -941,7 +931,6 @@ export async function mockFeatures(page: Page, features: MockFeaturesOptions = {
           multi_user_enabled: false,
           seerr_enabled: false,
           plex_collections_enabled: false,
-          guest_tour_enabled: true,
           invite_only: true,
           open_auto_provision: false,
           live_channels_enabled: false,

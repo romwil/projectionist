@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 
 export default function NotFoundPage() {
   return (
-    <div className="not-found-page" data-testid="not-found-page">
+    <main id="main" tabIndex={-1} className="not-found-page" data-testid="not-found-page">
       <div className="not-found-card">
         <p className="eyebrow">Projectionist</p>
         <h1>Page not found</h1>
@@ -13,6 +13,6 @@ export default function NotFoundPage() {
           Back to chat
         </Link>
       </div>
-    </div>
+    </main>
   );
 }

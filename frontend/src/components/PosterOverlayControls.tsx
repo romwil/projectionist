@@ -14,6 +14,8 @@ import {
 import { watchProgressState } from "../lib/watchProgress.js";
 import PosterActionMenu from "./PosterActionMenu";
 import WatchProgressBadge from "./WatchProgressBadge";
+import { focusTrailerFrame, trailerEmbedUrl } from "../lib/trailerEmbed";
+import Button from "./Button";
 
 /**
  * Shared interactive title-poster controls. Play deliberately requires a
@@ -180,11 +182,11 @@ export default function PosterOverlayControls({
               <h2>{item.title || "Trailer"}</h2>
               <div className="trailer-modal-actions">
                 <a className="btn-link ghost" href={`https://www.youtube.com/watch?v=${encodeURIComponent(trailerKey)}`} target="_blank" rel="noopener noreferrer">Open on YouTube</a>
-                <button type="button" className="ghost" onClick={() => setTrailerOpen(false)}>Close</button>
+                <Button variant="secondary" size="sm" onClick={() => setTrailerOpen(false)}>Close</Button>
               </div>
             </div>
             <div className="trailer-modal-frame">
-              <iframe title={`${item.title || "Title"} trailer`} src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(trailerKey)}?autoplay=1&rel=0`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" referrerPolicy="strict-origin-when-cross-origin" allowFullScreen />
+              <iframe title={`${item.title || "Title"} trailer`} ref={focusTrailerFrame} src={trailerEmbedUrl(trailerKey)} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" referrerPolicy="strict-origin-when-cross-origin" allowFullScreen />
             </div>
           </div>
         </div>

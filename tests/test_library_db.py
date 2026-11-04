@@ -158,7 +158,6 @@ class DatabaseTests(unittest.TestCase):
                 "curator_persona_metrics",
                 "curation_lenses",
                 "lens_taste_profile",
-                "interaction_telemetry",
                 "schema_version",
             }
             with db.connect() as conn:
@@ -168,6 +167,38 @@ class DatabaseTests(unittest.TestCase):
                 names = {str(r["name"]) for r in rows}
             self.assertTrue(expected.issubset(names))
             self.assertNotIn("agent_blueprints", names)
+            self.assertNotIn("interaction_telemetry", names)
+
+    def test_upgrade_drops_unwritten_interaction_telemetry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "test.db"
+            db = Database(path)
+            with db.connect() as conn:
+                conn.execute(
+                    "CREATE TABLE interaction_telemetry (id TEXT PRIMARY KEY, title_id TEXT)"
+                )
+                conn.execute("DELETE FROM schema_version WHERE version = 63")
+            reopened = Database(path)
+            with reopened.connect() as conn:
+                names = {
+                    str(r["name"])
+                    for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                }
+                self.assertNotIn("interaction_telemetry", names)
+                self.assertTrue(
+                    conn.execute("SELECT 1 FROM schema_version WHERE version = 63").fetchone()
+                )
+                # Youth (61) and autoconfirm (62) stay applied on a database that already ran them.
+                for version in (61, 62):
+                    self.assertTrue(
+                        conn.execute(
+                            "SELECT 1 FROM schema_version WHERE version = ?", (version,)
+                        ).fetchone(),
+                        version,
+                    )
+                columns = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
+                self.assertIn("youth_since", columns)
+                self.assertIn("autoconfirm_adds", columns)
 
     def test_service_integrations_certified_column(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

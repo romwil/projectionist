@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { relativeTime } from "../api/client";
 import { filterThreads } from "../lib/threadFilter.js";
 import { personaChipLabel } from "../lib/personaLabels";
+import Button from "./Button";
 
 /** Props for ThreadList. `any` = API/handler bags until Wave 4 client generics. */
 type ThreadListProps = {
@@ -92,23 +93,24 @@ export default function ThreadList({
                   <div className="thread-delete-confirm" data-testid={`thread-delete-confirm-${thread.id}`}>
                     <p>Delete this conversation?</p>
                     <div className="thread-delete-confirm-actions">
-                      <button
-                        type="button"
-                        className="ghost"
+                      <Button
+                        variant="secondary"
+                        size="sm"
                         data-testid={`thread-delete-cancel-${thread.id}`}
                         disabled={deletingId === thread.id}
                         onClick={() => setConfirmId(null)}
                       >
                         Keep
-                      </button>
-                      <button
-                        type="button"
+                      </Button>
+                      <Button
+                        variant="danger"
+                        size="sm"
                         data-testid={`thread-delete-confirm-btn-${thread.id}`}
                         disabled={deletingId === thread.id}
                         onClick={() => handleDelete(thread.id)}
                       >
                         {deletingId === thread.id ? "Deleting…" : "Delete"}
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 ) : (

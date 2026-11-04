@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import tempfile
 import unittest
-from unittest.mock import patch
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from projectionist.web.__main__ import (
     UVICORN_H11_MAX_INCOMPLETE_EVENT_SIZE,
@@ -98,6 +100,57 @@ class UvicornTimeoutTests(unittest.TestCase):
         with patch.dict("os.environ", {}, clear=False) as env:
             env.pop("PROJECTIONIST_THEATER_PORT", None)
             self.assertEqual(resolve_theater_port(), 8791)
+
+
+class LobbyOptInTests(unittest.TestCase):
+    """PRD-013: the unauthenticated theater port opens only after the owner opts in."""
+
+    def _main_with_settings(self, payload: str | None, env: dict[str, str] | None = None):
+        with tempfile.TemporaryDirectory() as tmp:
+            if payload is not None:
+                (Path(tmp) / "settings.json").write_text(payload, encoding="utf-8")
+            environ = {"DATA_DIR": tmp, "PROJECTIONIST_SKIP_DOTENV": "1", **(env or {})}
+            with patch.dict("os.environ", environ, clear=False) as live:
+                if not env or "PROJECTIONIST_THEATER_DISABLE" not in env:
+                    live.pop("PROJECTIONIST_THEATER_DISABLE", None)
+                live.pop("PORT", None)
+                live.pop("PROJECTIONIST_THEATER_PORT", None)
+                with (
+                    patch("uvicorn.run") as run,
+                    patch(
+                        "projectionist.web.__main__._serve_dual", new=MagicMock(return_value=None)
+                    ) as dual,
+                    patch("asyncio.run") as arun,
+                ):
+                    main()
+            return run, dual, arun
+
+    def test_fresh_install_serves_only_the_main_port(self) -> None:
+        run, dual, arun = self._main_with_settings(None)
+        run.assert_called_once()
+        self.assertEqual(run.call_args.kwargs["port"], 8788)
+        dual.assert_not_called()
+        arun.assert_not_called()
+
+    def test_saved_lobby_settings_left_off_stay_off(self) -> None:
+        run, _dual, arun = self._main_with_settings(
+            '{"theater": {"enabled": false, "orientation": "portrait"}}'
+        )
+        run.assert_called_once()
+        arun.assert_not_called()
+
+    def test_owner_who_turned_lobby_on_keeps_the_theater(self) -> None:
+        run, dual, arun = self._main_with_settings('{"theater": {"enabled": true}}')
+        run.assert_not_called()
+        arun.assert_called_once()
+        self.assertEqual(dual.call_args.kwargs["theater_port"], 8791)
+
+    def test_disable_env_wins_over_the_setting(self) -> None:
+        run, _dual, arun = self._main_with_settings(
+            '{"theater": {"enabled": true}}', env={"PROJECTIONIST_THEATER_DISABLE": "1"}
+        )
+        run.assert_called_once()
+        arun.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -26,6 +26,7 @@ from projectionist.library.plot_kinship import (
     honest_plot_link,
     parse_plot_link_json,
     plot_blob,
+    readable_why,
     specific_plot_link,
 )
 
@@ -805,10 +806,15 @@ def watched_bridge(
     link_sentence = str(inner.get("sentence") or "").strip()
     if not link_sentence:
         return None
-    # "Both stories turn on X." → keep as clause after em dash.
-    clause = link_sentence[0].lower() + link_sentence[1:] if link_sentence else ""
+    # "Both stories turn on X." → keep as clause after em dash. Only "Both"
+    # folds; a clause that opens on a name ("Adam McKay worked on both") keeps it.
+    clause = link_sentence
+    if clause.startswith("Both "):
+        clause = "b" + clause[1:]
     if clause.endswith("."):
         clause = clause[:-1]
+    if not readable_why(clause):
+        return None
     sentence = _finish(f"You {verb} {seed_label}; {candidate_label} — {clause}")
     return build_explanation(
         kind="watched_bridge",
@@ -1164,6 +1170,13 @@ def _pick_from_row(
     }
 
 
+def _seed_id(seed: Mapping[str, Any]) -> int:
+    try:
+        return int(seed.get("id") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _youth_row_allowed(row: Mapping[str, Any], youth_max_rating: Optional[str]) -> bool:
     if not youth_max_rating:
         return True
@@ -1212,6 +1225,10 @@ def list_linked_unwatched(
     candidate_ids = _candidate_ids(db, watched[:8], exclude_ids=watched_ids)
     loaded = _load_items(db, candidate_ids)
     picks: List[Dict[str, Any]] = []
+    # One watched title must not explain most of a rail: 2 of 8 per seed.
+    # A household with a single seed has nothing to diversify against.
+    per_seed_cap = max(2, capped // 4) if len(seed_ids) > 1 else capped
+    seed_uses: Dict[int, int] = {}
     for item_id in candidate_ids:
         if len(picks) >= capped:
             break
@@ -1222,9 +1239,16 @@ def list_linked_unwatched(
             continue
         if not _youth_row_allowed(row, youth_max_rating):
             continue
-        explanation = specific_bridge(db, row, watched)
+        open_seeds = [
+            seed for seed in watched if seed_uses.get(_seed_id(seed), 0) < per_seed_cap
+        ]
+        if not open_seeds:
+            break
+        explanation = specific_bridge(db, row, open_seeds)
         if not explanation:
             continue
+        for seed in (int(seed) for seed in (explanation.get("seed_ids") or [])):
+            seed_uses[seed] = seed_uses.get(seed, 0) + 1
         seed_title = None
         evidence = explanation.get("evidence") if isinstance(explanation.get("evidence"), dict) else {}
         if evidence:

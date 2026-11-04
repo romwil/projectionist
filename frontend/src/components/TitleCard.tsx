@@ -34,6 +34,7 @@ import PosterActionMenu from "./PosterActionMenu";
 import TitleDetailLink from "./TitleDetailLink";
 import TitleYearText from "./TitleYearText";
 import WatchProgressBadge from "./WatchProgressBadge";
+import Button from "./Button";
 
 let cachedPlexMachineId: any;
 let plexMachineIdPromise: any;
@@ -270,46 +271,49 @@ export default function TitleCard({
     <>
       {watchPlexAction}
       {onRecommend ? (
-        <button
-          type="button"
-          className="ghost"
+        <Button
+          variant="secondary"
+          size="sm"
           data-testid="recommend-title-button"
           title="Watch together"
           aria-label="Watch together"
           onClick={handleRecommend}
         >
           Watch together
-        </button>
+        </Button>
       ) : null}
       {canRequestSeerr ? (
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="sm"
           data-testid="request-seerr-button"
           disabled={addStatus === "loading"}
           onClick={handleAdd("seerr")}
         >
           {addButtonLabel("Request in Seerr")}
-        </button>
+        </Button>
       ) : null}
       {canAddRadarr ? (
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="sm"
           data-testid="add-radarr-button"
           disabled={addStatus === "loading"}
           onClick={handleAdd("radarr")}
         >
           {addButtonLabel("Add to Radarr")}
-        </button>
+        </Button>
       ) : null}
       {canAddSonarr ? (
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="sm"
           data-testid="add-sonarr-button"
           disabled={addStatus === "loading"}
           onClick={handleAdd("sonarr")}
         >
           {addButtonLabel("Add to Sonarr")}
-        </button>
+        </Button>
       ) : null}
       {sonarrBlockedReason ? (
         <span
@@ -494,9 +498,9 @@ export default function TitleCard({
         <div className="card-actions">
           {!compact ? addActions : null}
           {!compact ? (
-            <button type="button" className="ghost" onClick={handleDismiss}>
+            <Button variant="secondary" size="sm" onClick={handleDismiss}>
               Not interested
-            </button>
+            </Button>
           ) : null}
         </div>
       </div>

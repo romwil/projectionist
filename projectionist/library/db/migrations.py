@@ -61,7 +61,6 @@ def _cleanup_fk_orphans(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -
         "DELETE FROM message_feedback WHERE session_id NOT IN (SELECT id FROM chat_sessions)",
         "DELETE FROM message_feedback WHERE user_id IS NOT NULL AND user_id NOT IN (SELECT id FROM users)",
         "DELETE FROM lens_taste_profile WHERE lens_id NOT IN (SELECT lens_id FROM curation_lenses)",
-        "DELETE FROM interaction_telemetry WHERE lens_id NOT IN (SELECT lens_id FROM curation_lenses)",
         "DELETE FROM system_telemetry_stream WHERE associated_context_hash IS NOT NULL "
         "AND associated_context_hash NOT IN (SELECT context_hash FROM derived_contexts)",
         "DELETE FROM memory_snapshots WHERE entity_id NOT IN (SELECT id FROM memory_entities)",
@@ -140,6 +139,12 @@ def _drop_agent_blueprints(db: "SchemaMigrationsMixin", conn: sqlite3.Connection
     del db
     conn.execute("DROP TABLE IF EXISTS agent_blueprints")
     logger.info("Dropped unused agent_blueprints table")
+
+
+def _drop_interaction_telemetry(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
+    del db
+    conn.execute("DROP TABLE IF EXISTS interaction_telemetry")
+    logger.info("Dropped unused interaction_telemetry table")
 
 
 def _backfill_show_file_size_rollups(
@@ -405,6 +410,7 @@ def _build_migrations() -> List[Migration]:
         (60, "owner_ops", wrap("_migrate_owner_ops")),
         (61, "youth_guardrails", _youth_guardrails),
         (62, "member_autoconfirm_adds", _member_autoconfirm_adds),
+        (63, "drop_interaction_telemetry", _drop_interaction_telemetry),
     ]
 
 

@@ -212,8 +212,9 @@ export default function LobbyDisplayPage() {
             testId="lobby-enabled-toggle"
           />
           <p className="wizard-note">
-            When on, open <code>{kioskUrl}</code> from a LAN browser. Do not reverse-proxy this port to the
-            public internet.
+            Off by default. After you turn it on, restart Projectionist so it opens port{" "}
+            <code>{port}</code>, then open <code>{kioskUrl}</code> from a LAN browser. Do not reverse-proxy
+            this port to the public internet.
           </p>
 
           <label className="config-field">

@@ -286,7 +286,6 @@ def commit_setup(
     settings.features.multi_user_enabled = multi_user
     settings.features.invite_only = resolved_invite_only
     settings.features.open_auto_provision = False
-    settings.features.guest_tour_enabled = False
     settings.features.household_profile = cleaned_profile
     settings.features.trust_proxy_headers = resolved_trust_proxy
     settings.features.access_requests_enabled = resolved_access_requests

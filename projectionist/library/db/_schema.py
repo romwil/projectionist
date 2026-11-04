@@ -1256,22 +1256,6 @@ class SchemaMigrationsMixin:
                 1,
             ),
             (
-                "badge-chat-streak-3",
-                "chat-streak-3",
-                "Three-day chat streak",
-                "Talked with the curator three days in a row.",
-                '{"event":"chat_streak","min_count":3}',
-                1,
-            ),
-            (
-                "badge-story-explorer",
-                "story-explorer",
-                "Story explorer",
-                "Asked the curator about three different titles.",
-                '{"event":"chat_streak","min_count":2}',
-                1,
-            ),
-            (
                 "badge-family-picks",
                 "family-picks",
                 "Family picks starter",

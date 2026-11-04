@@ -7,6 +7,7 @@ import {
   isPrimaryNavActive,
   shouldHidePrimaryBottomNav,
 } from "../lib/primaryNav.js";
+import { formatUnreadBadge } from "../lib/recommendationInbox.js";
 import { isIosSafariUserAgent } from "../lib/theaterPlayer.js";
 
 const COMPOSER_SELECTOR = "[data-testid='composer-input']";
@@ -65,7 +66,7 @@ export default function PrimaryBottomNav() {
     <nav className="primary-bottom-nav" data-testid="primary-bottom-nav" aria-label="Primary">
       {items.map((item) => {
         const active = isPrimaryNavActive(item, location.pathname);
-        const showBadge = item.kind === "inbox" && unreadCount > 0;
+        const badge = item.kind === "inbox" ? formatUnreadBadge(unreadCount) : "";
         return (
           <Link
             key={item.id}
@@ -73,14 +74,15 @@ export default function PrimaryBottomNav() {
             className={`primary-bottom-nav-item${active ? " is-active" : ""}`}
             data-testid={`bottom-nav-${item.id}`}
             aria-current={active ? "page" : undefined}
+            aria-label={badge ? `${item.label}, ${unreadCount} unread` : undefined}
           >
             <span className="primary-bottom-nav-icon-wrap">
               <span className="material-symbols-outlined primary-bottom-nav-icon" aria-hidden="true">
                 {item.icon}
               </span>
-              {showBadge ? (
+              {badge ? (
                 <span className="primary-bottom-nav-badge" data-testid="bottom-nav-inbox-badge">
-                  {unreadCount > 9 ? "9+" : unreadCount}
+                  {badge}
                 </span>
               ) : null}
             </span>

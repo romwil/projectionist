@@ -1,4 +1,5 @@
 import { serviceLabelForTarget, tokenConfirmButtonLabel, tokenConfirmPrompt } from "../lib/addActions";
+import Button from "./Button";
 
 type AddProgress = {
   current?: number;
@@ -60,12 +61,12 @@ export default function AddActionBanner({
         </p>
         {progressLabel ? <p className="bulk-add-progress">{progressLabel}</p> : null}
         <div className="add-action-buttons">
-          <button type="button" data-testid="bulk-add-confirm" onClick={onConfirm} disabled={inProgress}>
+          <Button variant="primary" data-testid="bulk-add-confirm" onClick={onConfirm} disabled={inProgress}>
             {inProgress ? "Adding…" : `Confirm all ${count}`}
-          </button>
-          <button type="button" className="ghost" data-testid="bulk-add-cancel" onClick={onCancel} disabled={inProgress}>
+          </Button>
+          <Button variant="secondary" data-testid="bulk-add-cancel" onClick={onCancel} disabled={inProgress}>
             Cancel
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -94,12 +95,12 @@ export default function AddActionBanner({
         </p>
         {progressLabel ? <p className="bulk-add-progress">{progressLabel}</p> : null}
         <div className="add-action-buttons">
-          <button type="button" data-testid="token-confirm-all" onClick={onConfirm} disabled={inProgress}>
+          <Button variant="primary" data-testid="token-confirm-all" onClick={onConfirm} disabled={inProgress}>
             {inProgress ? "Confirming…" : tokenConfirmButtonLabel(count, pendingTokens)}
-          </button>
-          <button type="button" className="ghost" data-testid="token-confirm-cancel" onClick={onCancel} disabled={inProgress}>
+          </Button>
+          <Button variant="secondary" data-testid="token-confirm-cancel" onClick={onCancel} disabled={inProgress}>
             Cancel
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -125,8 +126,8 @@ export default function AddActionBanner({
         )}
       </p>
       <div className="add-action-buttons">
-        <button
-          type="button"
+        <Button
+          variant="primary"
           data-testid="add-action-confirm"
           onClick={onConfirm}
           disabled={inProgress}
@@ -138,10 +139,10 @@ export default function AddActionBanner({
             : target === "seerr"
               ? "Request in Seerr"
               : `Add to ${service}`}
-        </button>
-        <button type="button" className="ghost" data-testid="add-action-cancel" onClick={onCancel} disabled={inProgress}>
+        </Button>
+        <Button variant="secondary" data-testid="add-action-cancel" onClick={onCancel} disabled={inProgress}>
           Cancel
-        </button>
+        </Button>
       </div>
     </div>
   );

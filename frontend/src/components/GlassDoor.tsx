@@ -27,13 +27,13 @@ export default function GlassDoor({
         <div className="glass-door-grain" />
         <div className="glass-door-wash" />
       </div>
-      <div className="glass-door-card">
+      <main id="main" tabIndex={-1} className="glass-door-card">
         <p className="eyebrow glass-door-eyebrow">{eyebrow}</p>
         {title ? <h1 className="glass-door-title">{title}</h1> : null}
         {lede ? <p className="login-lede glass-door-lede">{lede}</p> : null}
         {children}
         {footer ? <div className="glass-door-footer">{footer}</div> : null}
-      </div>
+      </main>
     </div>
   );
 }

@@ -78,6 +78,30 @@ class TasteEngagementDbTests(unittest.TestCase):
         badges = self.db.list_engagement_badges()
         self.assertGreaterEqual(len(badges), 3)
 
+    def test_no_badge_or_payload_rewards_chatting(self) -> None:
+        """PRD-008: engagement rewards watching and rating, not chat days."""
+        summary = engagement_summary(self.db, user_id=self.user_id)
+        for key in ("streak", "streak_visible", "session_count_30d"):
+            self.assertNotIn(key, summary)
+        events = {(b.get("criteria") or {}).get("event") for b in self.db.list_engagement_badges()}
+        self.assertNotIn("chat_streak", events)
+
+    def test_badge_already_earned_for_chatting_stays_visible(self) -> None:
+        now = 1.0
+        with self.db.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO engagement_badges (
+                    id, slug, name, description, criteria_json, youth_safe, created_at
+                ) VALUES ('badge-chat-streak-3', 'chat-streak-3', 'Three-day chat streak',
+                          'Earned before streaks were retired', '{"event":"chat_streak","min_count":3}', 1, ?)
+                """,
+                (now,),
+            )
+        self.assertTrue(self.db.award_badge(self.user_id, "badge-chat-streak-3"))
+        summary = engagement_summary(self.db, user_id=self.user_id)
+        self.assertIn("chat-streak-3", {b["slug"] for b in summary["badges"]})
+
     def test_review_challenge_progress(self) -> None:
         with self.db.connect() as conn:
             for i in range(5):
@@ -184,6 +208,9 @@ class TasteEngagementApiTests(unittest.TestCase):
         self.assertIn("badges", body)
         self.assertIn("challenges", body)
         self.assertIn("explainers", body)
+
+    def test_chat_streak_endpoint_is_gone(self) -> None:
+        self.assertEqual(self.client.get("/api/engagement/streak").status_code, 404)
 
     def test_for_you_feed_and_generate(self) -> None:
         self.db.upsert_library_item(
