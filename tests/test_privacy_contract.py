@@ -42,9 +42,12 @@ WE_DO_NOT: Dict[str, List[str]] = {
     "Store raw microphone audio": [
         "tests/test_privacy_contract.py::NoAudioUploadTests::test_only_file_upload_is_the_avatar",
     ],
-    "Let members add Apprise destinations, or confirm Radarr/Sonarr adds": [
+    "Let members add Apprise destinations, or confirm Radarr/Sonarr adds unless the owner turned on **Without my confirm** for that adult member (each such add is in the security log with the member and title, never their chat or memory)": [
         "tests/test_trust_phase1.py::AppriseOwnerOnlyTests::test_member_cannot_set_or_test_apprise_urls",
         "tests/test_trust_phase1.py::AcquisitionRouteTests::test_member_and_youth_cannot_confirm_their_own_add_token",
+        "tests/test_member_autoconfirm_adds.py::AutoconfirmAddRouteTests::test_flag_off_member_still_cannot_add",
+        "tests/test_member_autoconfirm_adds.py::AutoconfirmAddRouteTests::test_autoconfirm_member_add_runs_and_writes_audit_without_memory",
+        "tests/test_member_autoconfirm_adds.py::AutoconfirmToggleRouteTests::test_youth_and_owner_accounts_cannot_carry_autoconfirm",
     ],
     'Use someone else\'s viewing to write your "You watched" lines': [
         "tests/test_trust_phase1.py::OwnEvidenceTests::test_member_only_sees_own_seed",
