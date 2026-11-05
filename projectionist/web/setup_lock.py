@@ -1,7 +1,9 @@
 """Passcode gate in front of first-run setup (SEC-008, SEC-010).
 
-A data directory with no real owner answers only ``GET /api/health`` until the
-container owner passcode is entered. That passcode is
+A data directory with no real owner answers only ``GET /api/health``,
+``GET /api/ready``, and the lock page until the
+container owner passcode is entered. Ready stays a readiness probe (status,
+version, and whether the database answers). That passcode is
 ``PROJECTIONIST_OWNER_PASSWORD`` (the same variable that seeds an existing
 owner). There is no second secret and no first-login fallback.
 
