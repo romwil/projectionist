@@ -9,9 +9,18 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
+from projectionist.config_store import Settings
 from projectionist.library.db import Database
-from projectionist.library.plot_kinship import plot_link_json, specific_plot_link
-from projectionist.notifications.newsletters import build_member_newsletter
+from projectionist.library.plot_kinship import (
+    parse_plot_link_json,
+    plot_link_json,
+    readable_why,
+    specific_plot_link,
+)
+from projectionist.notifications.newsletters import (
+    build_member_newsletter,
+    deliver_weekly_newsletters,
+)
 from projectionist.notifications.nudges import pick_nudge_title
 from projectionist.library.feeds import feed_for_you
 from projectionist.notifications.recommendation_reasons import (
@@ -1343,6 +1352,174 @@ class HouseholdBridgeTests(unittest.TestCase):
         picks = list_linked_unwatched(self.db, limit=8)
         self.assertEqual(picks, [])
         self.assertFalse(any(item.get("title") == "Thief" for item in picks))
+
+    def test_screenshot_keyword_sentences_never_become_a_reason(self) -> None:
+        """Keyword overlap is not a checkable link for inbox or the newsletter."""
+        for sentence in (
+            "both stories turn on american children",
+            "both stories turn on a taking place",
+        ):
+            with self.subTest(sentence=sentence):
+                self.assertFalse(readable_why(sentence))
+
+        now = time.time()
+        children_seed = (
+            "Harsh winter traps american children indoors beside the mountains "
+            "until the roads reopen."
+        )
+        children_peer = (
+            "Late spring frees american children outdoors beside the harbor "
+            "until the ferry returns."
+        )
+        place_seed = (
+            "Detectives learn a confession is taking place under the courthouse "
+            "before midnight arrives."
+        )
+        place_peer = (
+            "Reporters learn a meeting is taking place under the stadium "
+            "before sunrise arrives."
+        )
+        pairs = (
+            ("rk-child-seed", "rk-child-peer", "County Road", children_seed, children_peer, 1),
+            ("rk-place-seed", "rk-place-peer", "Night Court", place_seed, place_peer, 2),
+        )
+        for seed_key, peer_key, peer_title, seed_plot, peer_plot, tmdb in pairs:
+            seed = _title(
+                self.db,
+                rating_key=seed_key,
+                tmdb_id=800 + tmdb,
+                title=f"Seed {tmdb}",
+                summary=seed_plot,
+                added_at=int(now - 40 * 86400),
+            )
+            peer = _title(
+                self.db,
+                rating_key=peer_key,
+                tmdb_id=900 + tmdb,
+                title=peer_title,
+                summary=peer_plot,
+                added_at=int(now - 600),
+            )
+            link = specific_plot_link(
+                seed_text=seed_plot, peer_text=peer_plot, shelf_labels=set()
+            )
+            self.assertIsNone(link)
+            with self.db.connect() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO item_neighbors
+                        (item_id, neighbor_id, score, surprise_score, explainable, plot_link_json)
+                    VALUES (?, ?, 0.9, 0.7, 1, ?)
+                    """,
+                    (
+                        seed,
+                        peer,
+                        '{"sentence":"Both stories turn on american children.",'
+                        '"terms":["american children","taking place"]}',
+                    ),
+                )
+            self.assertIsNone(
+                parse_plot_link_json(
+                    '{"sentence":"Both stories turn on american children.","terms":["american children"]}'
+                )
+            )
+            _insert_completion(
+                self.db,
+                user_id="will",
+                rating_key=seed_key,
+                completed_at_ms=1_700_000_000_000 + tmdb,
+            )
+
+        picks = list_linked_unwatched(self.db, limit=8)
+        why_blob = " ".join(str(item.get("why") or "") for item in picks).lower()
+        self.assertNotIn("both stories turn on", why_blob)
+        self.assertNotIn("american children", why_blob)
+        self.assertNotIn("taking place", why_blob)
+
+        letter = build_member_newsletter(
+            self.db,
+            user={"id": "will", "preferred_name": "Will", "display_name": "Will", "role": "owner"},
+            now=now,
+        )
+        self.assertTrue(letter["quiet"])
+        self.assertNotIn("both stories turn on", letter["body"].lower())
+        self.assertNotIn("american children", letter["body"].lower())
+        self.assertNotIn("taking place", letter["body"].lower())
+
+        member = self.db.create_local_user(
+            user_id="quiet-member",
+            display_name="Quiet",
+            password_hash="x",
+            role="member",
+            email="quiet@example.com",
+        )
+        self.db.update_user_profile(
+            member["id"],
+            newsletter_opt_in=True,
+            notify_channel_inbox=True,
+            notify_channel_email=False,
+        )
+        sent = deliver_weekly_newsletters(
+            self.db,
+            Settings(),
+            now=now,
+            user_ids=[member["id"]],
+        )
+        self.assertEqual(sent["delivered"], 0)
+        self.assertEqual(sent["emailed"], 0)
+        self.assertGreaterEqual(sent["skipped_empty"], 1)
+
+    def test_family_guy_is_one_pick_per_issue(self) -> None:
+        """Episode seeds of one show explain at most one line in the issue."""
+        now = time.time()
+        for index in range(3):
+            seed = _title(
+                self.db,
+                rating_key=f"rk-fg-{index}",
+                tmdb_id=1400 + index,
+                title="Family Guy",
+                year=1999,
+                media_type="show",
+                summary=BAKE_PLOT,
+                added_at=int(now - 40 * 86400),
+            )
+            peer = _title(
+                self.db,
+                rating_key=f"rk-new-{index}",
+                tmdb_id=1500 + index,
+                title=f"New Arrival {index}",
+                year=2024,
+                summary=SPY_PLOT,
+                added_at=int(now - 1000 + index),
+            )
+            _explainable_neighbor(self.db, seed, peer, seed_text=BAKE_PLOT, peer_text=SPY_PLOT)
+            _insert_completion(
+                self.db,
+                user_id="will",
+                rating_key=f"rk-fg-{index}",
+                completed_at_ms=1_700_000_000_000 + index,
+                media_type="episode",
+            )
+
+        letter = build_member_newsletter(
+            self.db,
+            user={"id": "will", "preferred_name": "Will", "display_name": "Will", "role": "owner"},
+            now=now,
+        )
+        self.assertFalse(letter["quiet"])
+        reason_lines = [
+            line for line in letter["body"].splitlines() if line.startswith("You ")
+        ]
+        self.assertEqual(len(reason_lines), 1)
+        self.assertEqual(reason_lines[0].lower().count("family guy"), 1)
+        self.assertNotIn("both stories turn on", letter["body"].lower())
+        self.assertIn("amateur bakers", letter["body"].lower())
+        guy_picks = [
+            pick for pick in letter["picks"] if "family guy" in str(pick.get("why") or "").lower()
+        ]
+        self.assertEqual(len(guy_picks), 1)
+        shows = [str(pick.get("title") or "") for pick in letter["picks"]]
+        self.assertEqual(len(shows), len(set(shows)))
 
 
 if __name__ == "__main__":

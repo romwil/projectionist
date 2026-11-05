@@ -425,7 +425,11 @@ class EnrichmentMixin:
         After migration 57, legacy rows default to ``explainable=0`` with a NULL
         ``plot_link_json``. Annotating them is cheaper than a full cosine refresh.
         """
+        from projectionist.library.plot_kinship import PLOT_LINK_CACHE_VERSION
+
         capped = max(1, int(limit))
+        # ``"v":2`` with no space, matching ``plot_link_json`` separators.
+        current = f'%"v":{int(PLOT_LINK_CACHE_VERSION)}%'
         with self.connect() as conn:
             cols = self._table_columns(conn, "item_neighbors")
             if "explainable" not in cols:
@@ -436,12 +440,19 @@ class EnrichmentMixin:
                 FROM item_neighbors n
                 WHERE EXISTS (
                     SELECT 1 FROM item_neighbors u
-                    WHERE u.item_id = n.item_id AND u.plot_link_json IS NULL
+                    WHERE u.item_id = n.item_id
+                      AND (
+                        u.plot_link_json IS NULL
+                        OR (
+                          u.plot_link_json LIKE '%"sentence"%'
+                          AND u.plot_link_json NOT LIKE ?
+                        )
+                      )
                 )
                 ORDER BY n.item_id ASC
                 LIMIT ?
                 """,
-                (capped,),
+                (current, capped),
             ).fetchall()
             return [int(row["item_id"]) for row in rows]
 

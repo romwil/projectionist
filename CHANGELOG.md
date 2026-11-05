@@ -41,6 +41,7 @@ The trust release. Only the owner adds to Radarr or Sonarr, nobody else's viewin
 - **A11Y-007** jsx-a11y rules are errors in the files cleaned so far (My data, Privacy, Overview, routes). Footer links no longer fade below contrast, and the watch badge is a labelled image.
 - **ARCH-006** mypy now covers auth, backups, the write queue, rate limits, session tokens, and the runtime modules.
 - **PRD-001 / UX-012** A recommendation reason shows only when it reads as a sentence.
+- **PRD-001 / UX-012** The weekly newsletter and the inbox keep a reason only when it is a shared director or writer, the same collection, or a plot noun you could check. Keyword overlap and "both stories turn on" are dropped, each show is one pick in an issue, and a quiet week sends nothing.
 - **UX-008** Unknown pages boot the app's not-found page, with a way back.
 - **UX-011** A signed-in visitor goes to their page instead of the sign-in form. The phone tab bar stays off the sign-in doors.
 - **A11Y-002 / A11Y-003 / A11Y-005 / A11Y-008 / A11Y-009** One main landmark, real tab titles, a skip link, trailers that don't autoplay, and an honest "Opening your library…" composer.
