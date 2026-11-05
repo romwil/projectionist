@@ -151,21 +151,29 @@ describe("launch readiness", () => {
   const preflight = {
     checks: [
       { id: "plex_reachable", ok: true, soft: false, label: "Plex reachable", message: "ok" },
-      { id: "tunarr_url", ok: false, soft: false, label: "Tunarr URL or managed Docker", message: "Tunarr is not reachable" },
+      { id: "lineup", ok: true, soft: true, label: "Lineup", message: "Channels are saved in Projectionist." },
+      {
+        id: "tunarr_url",
+        ok: false,
+        soft: false,
+        label: "Tunarr URL or managed Docker",
+        message: "Tunarr is not reachable",
+      },
       { id: "gpu", ok: false, soft: true, label: "GPU (optional)", message: "none" },
     ],
   };
 
-  it("maps checks to friendly labels and scrubs messages", () => {
+  it("maps checks to friendly labels and does not require a Tunarr URL", () => {
     const rows = launchReadinessRows(preflight);
     assert.equal(rows[0].label, "Plex is connected");
-    assert.equal(rows[1].label, "Broadcast engine is reachable");
-    assert.doesNotMatch(rows[1].message, LIVE_OWNER_JARGON);
+    assert.equal(rows[1].label, "Stations saved in Projectionist");
+    assert.equal(rows.some((row) => row.id === "tunarr_url"), false);
+    assert.doesNotMatch(rows.map((row) => `${row.label} ${row.message}`).join(" "), LIVE_OWNER_JARGON);
   });
 
   it("only hard failures block launch", () => {
     const blockers = launchBlockers(preflight);
-    assert.deepEqual(blockers.map((b) => b.id), ["tunarr_url"]);
+    assert.deepEqual(blockers, []);
     assert.deepEqual(launchBlockers({ checks: [] }), []);
     assert.deepEqual(launchBlockers(null), []);
   });

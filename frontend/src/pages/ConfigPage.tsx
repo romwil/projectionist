@@ -164,12 +164,6 @@ function settingsPayloadForTest(service: string, settings: JsParam) {
       seerr_api_key: settings.seerr?.api_key || "",
     };
   }
-  if (service === "tunarr") {
-    return {
-      ...settings,
-      tunarr_url: settings.tunarr?.url || "",
-    };
-  }
   return settings;
 }
 
@@ -303,8 +297,6 @@ function serviceCredentialsPresent(service: string, settings: JsParam) {
       return Boolean(settings.tautulli_url && settings.tautulli_api_key_set);
     case "seerr":
       return Boolean(settings.seerr?.url && settings.seerr?.api_key_set);
-    case "tunarr":
-      return Boolean(settings.features?.live_channels_enabled && settings.tunarr?.url);
     default:
       return false;
   }

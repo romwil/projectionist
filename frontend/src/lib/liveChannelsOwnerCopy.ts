@@ -198,22 +198,24 @@ export function liveStationState(
   };
 }
 
-/**
- * Plain-language readiness rows for the launch step, from preflight checks.
- * Hard failures block; soft ones are reminders.
- */
+/** Checks that only existed to require an external Tunarr server. */
+const RETIRED_TUNARR_GATES = new Set(["tunarr_url", "docker_orchestration"]);
+
 const CHECK_LABELS: Record<string, any> = {
   plex_reachable: "Plex is connected",
   plex_pass: "Plex Pass (needed for Live TV in Plex)",
-  tunarr_url: "Broadcast engine is reachable",
-  docker_orchestration: "Projectionist can start the broadcast for you",
+  lineup: "Stations saved in Projectionist",
   disk_space: "Enough free disk space",
   gpu: "Hardware video acceleration (optional)",
 };
 
+/**
+ * Plain-language readiness rows for the launch step, from preflight checks.
+ * Hard failures block; soft ones are reminders. A Tunarr URL is not a check.
+ */
 export function launchReadinessRows(preflight: JsParam) {
   const checks = Array.isArray(preflight?.checks) ? preflight.checks : [];
-  return checks.map((check: JsParam) => ({
+  return checks.filter((check: JsParam) => !RETIRED_TUNARR_GATES.has(String(check?.id || ""))).map((check: JsParam) => ({
     id: String(check.id || check.label || ""),
     ok: Boolean(check.ok),
     soft: Boolean(check.soft),
