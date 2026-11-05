@@ -11,6 +11,7 @@ import {
   playCaptionsDefaultIndex,
   resolvePlaySubtitleTracks,
   titleLanguageIsHousehold,
+  titleSubtitlePanelState,
 } from "./subtitleCues.ts";
 
 const CACHED = {
@@ -22,7 +23,14 @@ const CACHED = {
   renderable: true,
   cached: true,
 };
-const PGS = { id: "9", language_code: "fra", format: "pgs", proxy_url: "", renderable: false, image: true };
+const PGS = {
+  id: "9",
+  language_code: "fra",
+  format: "pgs",
+  proxy_url: "",
+  renderable: false,
+  image: true,
+};
 
 function livePayload(overrides = {}) {
   return {
@@ -43,21 +51,66 @@ test("title language compares across 2- and 3-letter codes", () => {
   assert.equal(titleLanguageIsHousehold("", "en"), null);
 });
 
+test("Title page lists the cached file the same way Play's CC menu does", () => {
+  const listed = titleSubtitlePanelState({
+    ok: true,
+    has_preferred: true,
+    preferred_languages: ["en"],
+    streams: [CACHED, PGS],
+  });
+  const play = resolvePlaySubtitleTracks({
+    listedStreams: [CACHED, PGS],
+    preferredLanguages: ["en"],
+  });
+  assert.equal(listed.hasCached, true);
+  assert.equal(listed.showAsk, false);
+  assert.equal(listed.tracks.length, play.tracks.length);
+  assert.equal(listed.tracks[0].id, "cached-en");
+  assert.equal(listed.tracks[0].onServer, true);
+  assert.equal(listed.tracks[0].label, "English — on this server");
+
+  const uncached = titleSubtitlePanelState({
+    ok: true,
+    has_preferred: false,
+    preferred_languages: ["en"],
+    streams: [PGS],
+  });
+  assert.equal(uncached.hasCached, false);
+  assert.equal(uncached.tracks.length, 0);
+  assert.equal(uncached.showAsk, true);
+});
+
 test("Play: the cached track is listed immediately without a fetch", () => {
-  const resolved = resolvePlaySubtitleTracks({ listedStreams: [CACHED, PGS], preferredLanguages: ["en"] });
+  const resolved = resolvePlaySubtitleTracks({
+    listedStreams: [CACHED, PGS],
+    preferredLanguages: ["en"],
+  });
   assert.equal(resolved.needsFetch, false);
   assert.equal(resolved.tracks[0].index, "plex-cached-en");
   assert.equal(resolved.autoSelectIndex, -1, "auto-select-after-fetch rule is unchanged");
 });
 
 test("Play: a foreign title turns the cached track on; an English title stays off", () => {
-  const resolved = resolvePlaySubtitleTracks({ listedStreams: [CACHED], preferredLanguages: ["en"] });
+  const resolved = resolvePlaySubtitleTracks({
+    listedStreams: [CACHED],
+    preferredLanguages: ["en"],
+  });
   assert.equal(
-    playCaptionsDefaultIndex({ resolved, titleLanguage: "fr", householdLanguage: "en", preferredLanguages: ["en"] }),
+    playCaptionsDefaultIndex({
+      resolved,
+      titleLanguage: "fr",
+      householdLanguage: "en",
+      preferredLanguages: ["en"],
+    }),
     "plex-cached-en",
   );
   assert.equal(
-    playCaptionsDefaultIndex({ resolved, titleLanguage: "en", householdLanguage: "en", preferredLanguages: ["en"] }),
+    playCaptionsDefaultIndex({
+      resolved,
+      titleLanguage: "en",
+      householdLanguage: "en",
+      preferredLanguages: ["en"],
+    }),
     -1,
   );
 });
@@ -70,11 +123,21 @@ test("Play: an English title stays off even after an on-the-spot fetch", () => {
   });
   assert.equal(resolved.autoSelectIndex, "plex-cached-en");
   assert.equal(
-    playCaptionsDefaultIndex({ resolved, titleLanguage: "en", householdLanguage: "en", preferredLanguages: ["en"] }),
+    playCaptionsDefaultIndex({
+      resolved,
+      titleLanguage: "en",
+      householdLanguage: "en",
+      preferredLanguages: ["en"],
+    }),
     -1,
   );
   assert.equal(
-    playCaptionsDefaultIndex({ resolved, titleLanguage: "", householdLanguage: "en", preferredLanguages: ["en"] }),
+    playCaptionsDefaultIndex({
+      resolved,
+      titleLanguage: "",
+      householdLanguage: "en",
+      preferredLanguages: ["en"],
+    }),
     "plex-cached-en",
     "unknown language keeps the existing after-fetch rule",
   );
@@ -98,10 +161,7 @@ test("Live: flex/filler never turns captions on", () => {
 test("Live: turning captions off sticks for that airing only", () => {
   const airing = liveCaptionAiringKey("104", "55", 1700000000);
   const offFor = airing;
-  assert.equal(
-    liveCaptionsDefaultTrack(livePayload(), { userTurnedOff: offFor === airing }),
-    -1,
-  );
+  assert.equal(liveCaptionsDefaultTrack(livePayload(), { userTurnedOff: offFor === airing }), -1);
   const nextAiring = liveCaptionAiringKey("104", "56", 1700007200);
   assert.equal(
     liveCaptionsDefaultTrack(livePayload(), { userTurnedOff: offFor === nextAiring }),
