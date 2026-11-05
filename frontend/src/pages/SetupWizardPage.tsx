@@ -31,6 +31,8 @@ export default function SetupWizardPage() {
   const [accessRequests, setAccessRequests] = useState(true);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [plexUrl, setPlexUrl] = useState("");
+  const [plexToken, setPlexToken] = useState("");
   const [plexCheck, setPlexCheck] = useState<any | null>(null);
   const [tmdbCheck, setTmdbCheck] = useState<any | null>(null);
   const [busy, setBusy] = useState(false);
@@ -82,6 +84,12 @@ export default function SetupWizardPage() {
 
   async function handleCommit(event: any) {
     event.preventDefault();
+    const url = plexUrl.trim();
+    const token = plexToken.trim();
+    if ((url && !token) || (!url && token)) {
+      setError("Enter both a Plex URL and a token, or leave both blank.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -93,6 +101,7 @@ export default function SetupWizardPage() {
         trust_proxy: setupCommitTrustProxy(profile, trustProxy),
         allow_access_requests: accessRequests,
         invite_only: setupCommitInviteOnly(profile, inviteOnly),
+        ...(url && token ? { plex_url: url, plex_token: token } : {}),
       });
       setHouseholdLocked(true);
       try {
@@ -253,6 +262,30 @@ export default function SetupWizardPage() {
 
           {step === 2 ? (
             <div className="login-form">
+              <p className="login-help">
+                Plex is optional. Leave both fields blank to skip, or bind the server now. This is the
+                library token, not the owner sign-in.
+              </p>
+              <label className="login-field">
+                <span>Plex server URL</span>
+                <input
+                  data-testid="setup-plex-url"
+                  value={plexUrl}
+                  onChange={(e) => setPlexUrl(e.target.value)}
+                  placeholder="http://192.168.1.10:32400"
+                  autoComplete="off"
+                />
+              </label>
+              <label className="login-field">
+                <span>Plex token</span>
+                <input
+                  type="password"
+                  data-testid="setup-plex-token"
+                  value={plexToken}
+                  onChange={(e) => setPlexToken(e.target.value)}
+                  autoComplete="off"
+                />
+              </label>
               <p className="login-help">Connection checks are optional. You can continue with warnings.</p>
               <button type="button" className="login-secondary" data-testid="setup-run-checks" onClick={runChecks}>
                 Check Plex and TMDB

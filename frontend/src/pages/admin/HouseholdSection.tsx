@@ -94,6 +94,12 @@ export default function HouseholdSection({
               />
               <span>Require Plex sign-in for the app</span>
             </label>
+            {settings?.features?.multi_user_enabled ? null : (
+              <p className="wizard-note" data-testid="single-owner-lan-warning">
+                Household login is off, so this network is trusted: anyone who can reach the server
+                is the owner. Turn sign-in on unless that is what you want.
+              </p>
+            )}
             {settings?.features?.multi_user_enabled ? (
               <>
                 <label className="config-toggle" data-testid="agent-may-mutate-personal-data-toggle">

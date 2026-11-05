@@ -16,10 +16,11 @@ Self-hosted. One container, one data folder, no cloud account, no phone-home.
 ```bash
 docker run -d --name projectionist -p 8788:8788 \
   -e PROJECTIONIST_SESSION_SECRET="$(openssl rand -hex 32)" \
+  -e PROJECTIONIST_OWNER_PASSWORD='choose-a-long-passcode' \
   -v /path/to/projectionist/config:/config romwil/projectionist:latest
 ```
 
-Open `http://your-server:8788` and finish the setup wizard (Name → Connections → Libraries). Keep port 8788 on your home network, or put it behind an authenticated reverse proxy. Don't expose it to the internet directly.
+Open `http://your-server:8788`. A new install stays on the lock page until `PROJECTIONIST_OWNER_PASSWORD` is entered, then setup creates the owner account. Keep port 8788 on your home network, or put it behind an authenticated reverse proxy. Don't expose it to the internet directly.
 
 On Unraid, install from **Community Applications** (search "Projectionist").
 
