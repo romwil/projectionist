@@ -49,18 +49,25 @@ class OutboundBlocked(socket.gaierror, ValueError):
     """
 
 
-def blocked_ip_reason(ip: ipaddress._BaseAddress, *, allow_private: bool = False) -> Optional[str]:
+def blocked_ip_reason(
+    ip: ipaddress.IPv4Address | ipaddress.IPv6Address, *, allow_private: bool = False
+) -> Optional[str]:
     """Return a short reason when ``ip`` must not be contacted, else ``None``."""
-    mapped = getattr(ip, "ipv4_mapped", None)
-    if mapped is not None:
-        ip = mapped
-    if ip.is_link_local or (ip.version == 4 and ip in _LINK_LOCAL_V4):
-        return "link-local or metadata address"
-    if ip.version == 6 and (ip in _LINK_LOCAL_V6 or ip in _AWS_METADATA_V6):
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    if isinstance(ip, ipaddress.IPv4Address):
+        if ip.is_link_local or ip in _LINK_LOCAL_V4:
+            return "link-local or metadata address"
+        if ip.is_loopback or ip.is_unspecified or ip.is_multicast or ip.is_reserved:
+            return "blocked address range"
+        if not allow_private and (ip.is_private or ip in _CGNAT_V4):
+            return "private address range"
+        return None
+    if ip.is_link_local or ip in _LINK_LOCAL_V6 or ip in _AWS_METADATA_V6:
         return "link-local or metadata address"
     if ip.is_loopback or ip.is_unspecified or ip.is_multicast or ip.is_reserved:
         return "blocked address range"
-    if not allow_private and (ip.is_private or (ip.version == 4 and ip in _CGNAT_V4)):
+    if not allow_private and ip.is_private:
         return "private address range"
     return None
 
