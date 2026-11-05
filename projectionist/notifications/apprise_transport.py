@@ -8,10 +8,17 @@ from dataclasses import dataclass
 from typing import Iterable, List, Optional, Sequence
 
 from projectionist.config_store import AppriseSettings, Settings
+from projectionist.connectors.outbound_guard import (
+    OutboundBlocked,
+    check_public_destination,
+    last_block_reason,
+    public_only_outbound,
+)
 
 logger = logging.getLogger(__name__)
 
 _URL_SPLIT = re.compile(r"[\s,;]+")
+_BLOCKED_PREFIX = "Apprise destination refused (private, link-local, or metadata target)"
 
 
 class AppriseSendError(RuntimeError):
@@ -97,7 +104,11 @@ def _build_apprise(
 ):
     import apprise
 
-    asset = apprise.AppriseAsset(app_id="Projectionist", app_desc="Projectionist")
+    # Sequential sends keep every connect on this thread, where the
+    # public-only outbound guard is active.
+    asset = apprise.AppriseAsset(
+        app_id="Projectionist", app_desc="Projectionist", async_mode=False
+    )
     app = apprise.Apprise(asset=asset)
     for url in urls:
         if not app.add(url):
@@ -149,6 +160,12 @@ def send_apprise(
     if not target_urls and not install_config:
         raise AppriseSendError("No Apprise URLs or config to notify.")
 
+    for url in target_urls:
+        try:
+            check_public_destination(url)
+        except OutboundBlocked as exc:
+            raise AppriseSendError(f"{_BLOCKED_PREFIX}: {exc}") from exc
+
     try:
         app = _build_apprise(target_urls, config_body=install_config or None)
     except AppriseSendError:
@@ -159,15 +176,22 @@ def send_apprise(
     if not len(app):
         raise AppriseSendError("No valid Apprise destinations were loaded.")
 
-    try:
-        ok = app.notify(
-            title=str(title or "Projectionist").strip() or "Projectionist",
-            body=str(body or title or "").strip() or str(title or "Notification"),
-            tag=notify_tag,
-        )
-    except Exception as exc:  # noqa: BLE001
-        raise AppriseSendError(str(exc) or "Apprise notify failed") from exc
+    with public_only_outbound():
+        try:
+            ok = app.notify(
+                title=str(title or "Projectionist").strip() or "Projectionist",
+                body=str(body or title or "").strip() or str(title or "Notification"),
+                tag=notify_tag,
+            )
+        except Exception as exc:  # noqa: BLE001
+            blocked = last_block_reason()
+            if blocked:
+                raise AppriseSendError(f"{_BLOCKED_PREFIX}: {blocked}") from exc
+            raise AppriseSendError(str(exc) or "Apprise notify failed") from exc
+        blocked = last_block_reason()
 
+    if blocked:
+        raise AppriseSendError(f"{_BLOCKED_PREFIX}: {blocked}")
     if not ok:
         raise AppriseSendError("Apprise notify returned failure for all destinations.")
 

@@ -11,6 +11,7 @@ import {
   searchExternal,
 } from "../api/client";
 import BackLink from "../components/BackLink";
+import ManageToggle from "../components/ManageToggle";
 import { useBulkActionProgress } from "../components/BulkActionProgress";
 import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog";
 import RemovalSummaryDialog from "../components/RemovalSummaryDialog";
@@ -53,6 +54,7 @@ import {
   formatBulkLibraryDeleteResultMessage,
   libraryBrowseItemKey,
   partitionBulkDeleteSelection,
+  bulkManageControls,
 } from "../lib/bulkLibraryDelete.js";
 import {
   MEDIA_BROWSE_PAGE_SIZES,
@@ -97,7 +99,9 @@ type LibraryBrowsePageProps = {
 export default function LibraryBrowsePage({ embedded = false }: LibraryBrowsePageProps) {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { isOwner, multiUserEnabled } = useAuthGate();
+  const { isOwner, isYouth, multiUserEnabled } = useAuthGate();
+  const [manageOn, setManageOn] = useState(false);
+  const bulkControls = bulkManageControls({ isOwner, isYouth, manageOn });
   const { start, update, finish } = useBulkActionProgress();
   const removal = useRemovalProgressSession();
   const isSearchRoute =
@@ -402,7 +406,7 @@ export default function LibraryBrowsePage({ embedded = false }: LibraryBrowsePag
   }
 
   function openBulkDelete() {
-    if (!isOwner || !selected.size) return;
+    if (!bulkControls.showDelete || !selected.size) return;
     setDeleteError("");
     setDeleteOpen(true);
   }
@@ -695,7 +699,15 @@ export default function LibraryBrowsePage({ embedded = false }: LibraryBrowsePag
             >
               {pinning ? "Pinning…" : `Pin ${selected.size || ""} to watchlist`.trim()}
             </button>
-            {isOwner ? (
+            {bulkControls.showManage ? (
+              <ManageToggle
+                on={manageOn}
+                onToggle={() => setManageOn((value) => !value)}
+                testId="library-browse-manage"
+                disabled={deleteOpen || deleting}
+              />
+            ) : null}
+            {bulkControls.showDelete ? (
               <button
                 type="button"
                 className="btn-danger"

@@ -362,6 +362,40 @@ def _subtitle_state(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> No
     )
 
 
+def _release2_highs(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
+    """Per-program email mutes and unsubscribe nonces (GRO-008); likely pick watches (GRO-010)."""
+    del db
+    columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(users)")}
+    if "email_muted_kinds" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN email_muted_kinds TEXT")
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS mail_unsubscribe_nonces (
+            user_id TEXT PRIMARY KEY,
+            nonce TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS pick_watched_likely (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            rating_key TEXT NOT NULL,
+            surface TEXT NOT NULL,
+            surfaced_at REAL NOT NULL,
+            watched_at REAL NOT NULL,
+            lag_hours REAL NOT NULL,
+            watch_event_id TEXT NOT NULL,
+            app_version TEXT,
+            created_at REAL NOT NULL,
+            UNIQUE (user_id, watch_event_id),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_pick_watched_likely_watched
+            ON pick_watched_likely(watched_at DESC);
+        """
+    )
+
+
 def _build_migrations() -> List[Migration]:
     def wrap(method_name: str) -> MigrationFn:
         def _run(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
@@ -434,6 +468,7 @@ def _build_migrations() -> List[Migration]:
         (62, "member_autoconfirm_adds", _member_autoconfirm_adds),
         (63, "drop_interaction_telemetry", _drop_interaction_telemetry),
         (64, "subtitle_state", _subtitle_state),
+        (65, "release2_highs", _release2_highs),
     ]
 
 

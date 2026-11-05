@@ -126,12 +126,34 @@ class LifecycleMailTests(unittest.TestCase):
         self.assertTrue(result["emailed"])
         kwargs = send.call_args.kwargs
         self.assertIn("https://movies.example.com/inbox", kwargs["body_text"])
-        self.assertIn("Stop these emails: https://movies.example.com/settings/notifications", kwargs["body_text"])
         self.assertNotIn(NEWSLETTER_FOOTER, kwargs["body_text"])
         self.assertIn('href="https://movies.example.com/inbox"', kwargs["body_html"])
-        self.assertEqual(kwargs["list_unsubscribe"], "https://movies.example.com/settings/notifications")
         rows = inbox["items"] if isinstance(inbox, dict) else inbox
         self.assertIn(NEWSLETTER_FOOTER, rows[0]["body"])
+        stop = kwargs["list_unsubscribe"]
+        self.assertIn(f"Stop these emails: {stop}", kwargs["body_text"])
+        if kwargs["one_click"]:
+            self.assertTrue(stop.startswith("https://movies.example.com/api/mail/unsubscribe?t="))
+        else:
+            self.assertEqual(stop, "https://movies.example.com/settings/notifications")
+
+    def test_notification_email_uses_one_click_link_when_secret_resolves(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = _db(tmp)
+            with patch.dict(os.environ, {"PROJECTIONIST_SESSION_SECRET": "lifecycle-one-click-secret"}):
+                clear_session_secret_cache()
+                with patch(
+                    "projectionist.notifications.service.send_mail",
+                    return_value=MailSendResult(ok=True, provider="smtp"),
+                ) as send:
+                    deliver_notification(
+                        db, _settings(domain="movies.example.com"), user_id=OWNER, kind="digest", title="Picks"
+                    )
+            clear_session_secret_cache()
+        kwargs = send.call_args.kwargs
+        self.assertTrue(kwargs["one_click"])
+        self.assertTrue(kwargs["list_unsubscribe"].startswith("https://movies.example.com/api/mail/unsubscribe?t="))
+        self.assertIn(f"Stop these emails: {kwargs['list_unsubscribe']}", kwargs["body_text"])
 
     def test_owner_letter_email_points_at_newsletters_admin(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

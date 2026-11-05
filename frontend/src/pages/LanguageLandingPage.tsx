@@ -7,6 +7,7 @@ import {
   queryLibrary,
 } from "../api/client";
 import BackLink from "../components/BackLink";
+import ManageToggle from "../components/ManageToggle";
 import { useBulkActionProgress } from "../components/BulkActionProgress";
 import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog";
 import RemovalSummaryDialog from "../components/RemovalSummaryDialog";
@@ -22,6 +23,7 @@ import {
   formatBulkLibraryDeleteResultMessage,
   libraryBrowseItemKey,
   partitionBulkDeleteSelection,
+  bulkManageControls,
 } from "../lib/bulkLibraryDelete.js";
 import { formatLanguageName } from "../lib/languageNames.js";
 import {
@@ -58,7 +60,9 @@ const EMPTY_STATE = {
 
 export default function LanguageLandingPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { isOwner } = useAuthGate();
+  const { isOwner, isYouth } = useAuthGate();
+  const [manageOn, setManageOn] = useState(false);
+  const bulkControls = bulkManageControls({ isOwner, isYouth, manageOn });
   const { start, update, finish } = useBulkActionProgress();
   const removal = useRemovalProgressSession();
   const rawLanguage = searchParams.get("language");
@@ -256,7 +260,7 @@ export default function LanguageLandingPage() {
   }
 
   function openBulkDelete() {
-    if (!isOwner || !selected.size) return;
+    if (!bulkControls.showDelete || !selected.size) return;
     setDeleteError("");
     setDeleteOpen(true);
   }
@@ -394,7 +398,15 @@ export default function LanguageLandingPage() {
             >
               {pinning ? "Pinning…" : `Pin ${selected.size || ""} to watchlist`.trim()}
             </button>
-            {isOwner ? (
+            {bulkControls.showManage ? (
+              <ManageToggle
+                on={manageOn}
+                onToggle={() => setManageOn((value) => !value)}
+                testId="language-landing-manage"
+                disabled={deleteOpen || deleting}
+              />
+            ) : null}
+            {bulkControls.showDelete ? (
               <button
                 type="button"
                 className="btn-danger"

@@ -170,19 +170,22 @@ export function buildPrimaryDrawerItems(opts: JsParam = {}) {
   }));
 }
 
+/** Bottom-bar peers handed to the drawer first, in order, when there are more than 5. */
+const BOTTOM_NAV_DROP_ORDER = ["admin", "settings"];
+
 /**
- * UX-014: phone/iPad bottom nav shows the same role-correct peers as the
- * topbar/drawer, but a bottom bar only has room for 5 — drop Live and Admin
- * first (both stay reachable from the hamburger drawer) rather than
- * cramming or wrapping.
+ * UX-014 / UX-002: phone/iPad bottom nav shows the same role-correct peers as
+ * the topbar/drawer, but a bottom bar only has room for 5. When Live is ready
+ * it stays on the bar; Admin, then Settings, move to the hamburger drawer
+ * instead (both stay reachable there) rather than cramming or wrapping.
  */
 export function buildPrimaryBottomNavItems(opts: JsParam = {}) {
-  const items = buildPrimaryNavItems(opts);
-  if (items.length <= 5) return items;
-  const droppable = new Set(["live", "admin"]);
-  const trimmed = items.filter((item) => !droppable.has(item.id));
-  if (trimmed.length <= 5) return trimmed;
-  return trimmed.slice(0, 5);
+  let items = buildPrimaryNavItems(opts);
+  for (const id of BOTTOM_NAV_DROP_ORDER) {
+    if (items.length <= 5) break;
+    items = items.filter((item) => item.id !== id);
+  }
+  return items.slice(0, 5);
 }
 
 /**

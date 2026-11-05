@@ -12,6 +12,7 @@ PUBLIC_BODY_CLAMP_PATHS = frozenset(
         "/api/auth/plex/pin",
         "/api/access-requests",
         "/api/invites/redeem/local",
+        "/api/mail/unsubscribe",
     }
 )
 PUBLIC_BODY_MAX_BYTES = 64 * 1024

@@ -7,6 +7,7 @@ import {
   getExploreFeedRecentlyAdded,
 } from "../api/client";
 import BackLink from "../components/BackLink";
+import ManageToggle from "../components/ManageToggle";
 import BrowseResultsRegion from "../components/BrowseResultsRegion";
 import { useBulkActionProgress } from "../components/BulkActionProgress";
 import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog";
@@ -24,6 +25,7 @@ import {
   formatBulkLibraryDeleteResultMessage,
   libraryBrowseItemKey,
   partitionBulkDeleteSelection,
+  bulkManageControls,
 } from "../lib/bulkLibraryDelete.js";
 import {
   EXPLORE_PAGE_SIZES,
@@ -69,7 +71,9 @@ export default function ExploreSectionPage() {
   const { sectionId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { isOwner } = useAuthGate();
+  const { isOwner, isYouth } = useAuthGate();
+  const [manageOn, setManageOn] = useState(false);
+  const bulkControls = bulkManageControls({ isOwner, isYouth, manageOn });
   const { start, update, finish } = useBulkActionProgress();
   const removal = useRemovalProgressSession();
   const config = getExploreSectionConfig(sectionId);
@@ -269,7 +273,7 @@ export default function ExploreSectionPage() {
   }
 
   function openBulkDelete() {
-    if (!isOwner || !selected.size) return;
+    if (!bulkControls.showDelete || !selected.size) return;
     setDeleteError("");
     setDeleteOpen(true);
   }
@@ -462,7 +466,15 @@ export default function ExploreSectionPage() {
             >
               {pinning ? "Pinning…" : `Pin ${selected.size || ""} to watchlist`.trim()}
             </button>
-            {isOwner ? (
+            {bulkControls.showManage ? (
+              <ManageToggle
+                on={manageOn}
+                onToggle={() => setManageOn((value) => !value)}
+                testId="explore-section-manage"
+                disabled={deleteOpen || deleting}
+              />
+            ) : null}
+            {bulkControls.showDelete ? (
               <button
                 type="button"
                 className="btn-danger"

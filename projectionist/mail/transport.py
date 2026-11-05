@@ -16,6 +16,7 @@ from projectionist.config_store import MailSettings, Settings
 logger = logging.getLogger(__name__)
 
 RESEND_API_URL = "https://api.resend.com/emails"
+ONE_CLICK_POST = "List-Unsubscribe=One-Click"
 
 
 class MailSendError(RuntimeError):
@@ -109,6 +110,7 @@ def _send_smtp(
     text: str,
     html: str,
     list_unsubscribe: str = "",
+    one_click: bool = False,
 ) -> MailSendResult:
     host = str(mail.smtp_host or "").strip()
     port = int(mail.smtp_port or 587)
@@ -122,6 +124,8 @@ def _send_smtp(
     msg["To"] = to_email
     if list_unsubscribe:
         msg["List-Unsubscribe"] = list_unsubscribe
+        if one_click:
+            msg["List-Unsubscribe-Post"] = ONE_CLICK_POST
     msg.set_content(text)
     msg.add_alternative(html, subtype="html")
 
@@ -153,6 +157,7 @@ def _send_resend(
     text: str,
     html: str,
     list_unsubscribe: str = "",
+    one_click: bool = False,
 ) -> MailSendResult:
     api_key = str(mail.resend_api_key or "").strip()
     payload: dict[str, Any] = {
@@ -164,6 +169,8 @@ def _send_resend(
     }
     if list_unsubscribe:
         payload["headers"] = {"List-Unsubscribe": list_unsubscribe}
+        if one_click:
+            payload["headers"]["List-Unsubscribe-Post"] = ONE_CLICK_POST
     try:
         with httpx.Client(timeout=30.0) as client:
             response = client.post(
@@ -197,12 +204,14 @@ def send_mail(
     body_text: str,
     body_html: Optional[str] = None,
     list_unsubscribe: Optional[str] = None,
+    one_click: bool = False,
 ) -> MailSendResult:
     """Send one email using the configured provider.
 
-    ``list_unsubscribe`` is an http(s) page where the reader turns the mail off.
-    It is sent as ``List-Unsubscribe`` without ``List-Unsubscribe-Post``: the page
-    needs a sign-in, so it is not an RFC 8058 one-click endpoint.
+    ``list_unsubscribe`` is an http(s) URL where the reader turns the mail off,
+    sent as ``List-Unsubscribe``. ``one_click`` adds ``List-Unsubscribe-Post``
+    (RFC 8058); only set it when the URL is the signed one-click endpoint, not a
+    page that needs a sign-in.
 
     Raises ``MailSendError`` when configuration is incomplete or the provider fails.
     """
@@ -218,13 +227,16 @@ def send_mail(
     text = str(body_text or "").strip() or final_subject
     html = _html_body(mail, body_text=text, body_html=body_html)
     unsubscribe = _list_unsubscribe_header(list_unsubscribe)
+    one_click = bool(one_click and unsubscribe)
 
     if provider == "smtp":
         return _send_smtp(
-            mail, to_email=recipient, subject=final_subject, text=text, html=html, list_unsubscribe=unsubscribe
+            mail, to_email=recipient, subject=final_subject, text=text, html=html, list_unsubscribe=unsubscribe,
+            one_click=one_click,
         )
     if provider == "resend":
         return _send_resend(
-            mail, to_email=recipient, subject=final_subject, text=text, html=html, list_unsubscribe=unsubscribe
+            mail, to_email=recipient, subject=final_subject, text=text, html=html, list_unsubscribe=unsubscribe,
+            one_click=one_click,
         )
     raise MailSendError(f"Unsupported mail provider: {provider}")

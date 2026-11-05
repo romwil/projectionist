@@ -7,6 +7,7 @@ single ``Database`` class in ``projectionist/library/db/__init__.py``.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import time
 from contextlib import contextmanager
@@ -257,6 +258,7 @@ class UsersAuthMixin:
         apprise_urls: Any = ...,
         weather_location: Any = ...,
         default_page: Any = ...,
+        email_muted_kinds: Any = ...,
     ) -> Dict[str, Any]:
         with self.connect() as conn:
             existing = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
@@ -333,6 +335,12 @@ class UsersAuthMixin:
                     cleaned_default_page = "auto"
                 updates.append("default_page = ?")
                 params.append(cleaned_default_page)
+            if email_muted_kinds is not ... and "email_muted_kinds" in cols:
+                from projectionist.mail.unsubscribe import PROGRAM_LABELS
+
+                kept = sorted({str(k) for k in (email_muted_kinds or []) if str(k) in PROGRAM_LABELS})
+                updates.append("email_muted_kinds = ?")
+                params.append(json.dumps(kept) if kept else None)
             if updates:
                 params.append(user_id)
                 conn.execute(
@@ -636,10 +644,13 @@ class UsersAuthMixin:
             cleaned_default_page = str(row["default_page"]).strip().lower()
             if cleaned_default_page in {"auto", "chat", "explore"}:
                 default_page = cleaned_default_page
+        from projectionist.mail.unsubscribe import email_muted_kinds
+
         return {
             "id": str(row["id"]),
             "display_name": str(row["display_name"]),
             "preferred_name": preferred_name,
+            "email_muted_kinds": sorted(email_muted_kinds(row if "email_muted_kinds" in keys else None)),
             "ui_font_size": ui_font_size,
             "ui_theme": ui_theme,
             "email": str(row["email"]) if row["email"] is not None else None,

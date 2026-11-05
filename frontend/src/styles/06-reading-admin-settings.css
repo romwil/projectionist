@@ -949,8 +949,8 @@
 }
 
 .settings-channel-badge.is-owner-required {
-  color: var(--warning-text, #c9842a);
-  border-color: color-mix(in srgb, var(--warning-text, #c9842a) 45%, transparent);
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 45%, transparent);
 }
 
 .settings-channel-badge.is-ready,

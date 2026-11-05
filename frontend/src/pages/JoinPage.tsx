@@ -11,6 +11,7 @@ import {
 } from "../api/client";
 import GlassDoor from "../components/GlassDoor";
 import InlineAlert from "../components/InlineAlert";
+import { isLocalOnlyJoin, joinLede, joinMethods } from "../lib/joinPage";
 import { resolveAuthMethods } from "../lib/loginScreen";
 import { startPlexPinPoll } from "../lib/plexPinPoll";
 
@@ -69,10 +70,11 @@ export default function JoinPage() {
     };
   }, []);
 
-  const methods = resolveAuthMethods(features?.auth_methods);
-  const plexEnabled = methods.includes("plex") && (invite?.allowed_methods || []).includes("plex");
-  const oidcEnabled = methods.includes("oidc") && (invite?.allowed_methods || []).includes("oidc");
-  const localEnabled = methods.includes("local") && (invite?.allowed_methods || []).includes("local");
+  const methods = joinMethods(resolveAuthMethods(features?.auth_methods), invite?.allowed_methods);
+  const plexEnabled = methods.plex;
+  const oidcEnabled = methods.oidc;
+  const localEnabled = methods.local;
+  const localOnly = isLocalOnlyJoin(methods);
 
   function stopPinWait() {
     if (typeof pollRef.current === "function") {
@@ -162,13 +164,7 @@ export default function JoinPage() {
       testId="join-page"
       eyebrow="You’re invited"
       title="Join this household"
-      lede={
-        loading
-          ? "Checking invite…"
-          : invite
-            ? "Sign in with Plex to join. Username and password is a fallback on the same link."
-            : "This invite is not available."
-      }
+      lede={joinLede({ loading, hasInvite: Boolean(invite), methods })}
       footer={
         <p className="login-help">
           Already a member? <Link to="/login">Sign in</Link>
@@ -218,7 +214,7 @@ export default function JoinPage() {
             </button>
           ) : null}
           {localEnabled ? (
-            showLocal ? (
+            showLocal || localOnly ? (
               <form className="login-form" onSubmit={handleLocal} data-testid="join-local-form">
                 <label className="login-field">
                   <span>Choose a username</span>

@@ -10,6 +10,7 @@ from projectionist.config_store import Settings
 from projectionist.library.db import Database
 from projectionist.scheduler.engine import IdleScheduler, TaskDefinition
 from projectionist.watch_tracker.plex_history import normalize_plex_history
+from projectionist.telemetry.likely_picks import refresh_likely_pick_watches
 from projectionist.watch_tracker.store import get_ingest_cursor, ingest_watch_events, set_ingest_cursor
 
 logger = logging.getLogger(__name__)
@@ -166,7 +167,12 @@ def run_history_ingest(
 async def run(
     db: Database, settings: Settings, should_stop: Callable[[], bool]
 ) -> Dict[str, Any]:
-    return run_history_ingest(db, settings, should_stop)
+    result = run_history_ingest(db, settings, should_stop)
+    try:
+        result["likely_picks"] = refresh_likely_pick_watches(db)
+    except Exception:  # noqa: BLE001
+        logger.exception("likely pick watch refresh failed")
+    return result
 
 
 def register(scheduler: IdleScheduler) -> None:

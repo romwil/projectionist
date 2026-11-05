@@ -66,14 +66,14 @@ describe("Live guide cells show a from–to time", () => {
     assert.match(selected[0], new RegExp(`>${escapeRegExp(heatRange)}<`));
     assert.match(
       selected[0],
-      new RegExp(`aria-label="${escapeRegExp(guideProgramAccessibleName("Heat", heatRange, "R"))}"`),
+      new RegExp(`aria-label="${escapeRegExp(guideProgramAccessibleName("4 Drama", "Heat", heatRange, "R"))}"`),
     );
 
     assert.match(html, />Night Shift</);
     assert.match(html, new RegExp(`>${escapeRegExp(nightRange)}<`));
     assert.match(
       html,
-      new RegExp(`aria-label="${escapeRegExp(guideProgramAccessibleName("Night Shift", nightRange))}"`),
+      new RegExp(`aria-label="${escapeRegExp(guideProgramAccessibleName("4 Drama", "Night Shift", nightRange))}"`),
     );
   });
 
