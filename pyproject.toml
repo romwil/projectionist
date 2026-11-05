@@ -40,7 +40,7 @@ web = [
 mcp = [
     # Stay on the v1 SDK until Projectionist migrates off mcp.server.fastmcp.
     # pip install mcp now resolves to 2.x, which relocated FastMCP.
-    "mcp>=1.30.0,<2",
+    "mcp>=1.30.0,<3",
 ]
 
 # Optional ANN prefilter for neighbor rebuild / semantic search. Not required
