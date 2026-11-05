@@ -1,66 +1,45 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type SVGProps } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getLiveWeatherChannel } from "../../api/client";
 import {
-  forecastDayColumns,
+  activeWarning,
+  captionDwellMs,
+  CHYRON_SUMMARY_MS,
+  chyronGroups,
   formatWeatherClock,
-  hasCurrentConditions,
-  nextWeatherBoardIndex,
-  skyFromWeatherCode,
-  weatherBoardSequence,
-  WEATHER_BOARD_DWELL_MS,
+  initialPlannerState,
+  nextWeatherSegment,
+  PAYLOAD_POLL_MS,
+  pickVariant,
+  segmentLabel,
   weatherSky,
-  weatherTickerLines,
-} from "../../lib/weatherChannel.js";
+  type PlannerState,
+} from "../../lib/weatherChannel";
+import { WeatherMusicBed, type AudioLike } from "../../lib/weatherMusic";
 import WeatherLocationPicker from "../weather/WeatherLocationPicker";
 import TheaterPlayer from "../theater/TheaterPlayer";
+import {
+  AlertsBoard,
+  AlmanacBoard,
+  CurrentBoard,
+  FiveDayBoard,
+  HeadlinesBoard,
+  HourlyBoard,
+  OverviewBoard,
+  RadarBoard,
+  RegionalBoard,
+  SatelliteBoard,
+  SeasonalBoard,
+  WebcamsBoard,
+} from "./weather/WeatherBoards";
 
-export type WeatherSkyKind = "clear" | "cloudy" | "rain" | "storm" | "snow" | "mixed";
-
-type WeatherCurrent = {
-  temperature_2m?: number | null;
-  weather_code?: number | null;
-  wind_speed_10m?: number | null;
-  relative_humidity_2m?: number | null;
-};
-
-type WeatherDaily = {
-  time?: unknown[];
-  temperature_2m_max?: unknown[];
-  temperature_2m_min?: unknown[];
-  weather_code?: unknown[];
-  precipitation_probability_max?: unknown[];
-};
-
-type WeatherMuzak = {
-  url?: string;
-  title?: string;
-};
-
-type WeatherPayload = {
-  place?: string;
-  error?: string;
-  location_source?: string;
-  household_place?: string;
-  current?: WeatherCurrent | null;
-  daily?: WeatherDaily | null;
-  muzak?: WeatherMuzak | null;
-  muzak_note?: string;
-  voiceover?: string;
-};
-
-type WeatherDayColumn = {
-  date: string;
-  weekday?: string;
-  sky: WeatherSkyKind;
-  condition?: string;
-  high?: number | null;
-  low?: number | null;
-};
+type WeatherPayload = Record<string, any>;
 
 export type WeatherChannelPlayerProps = {
   className?: string;
   onClose?: (...args: any[]) => void;
 };
+
+const VOICE_GAP_MS = 1_200;
 
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message) return err.message;
@@ -71,171 +50,258 @@ function errorMessage(err: unknown, fallback: string): string {
   return fallback;
 }
 
-function SkyGlyph({ sky }: { sky: WeatherSkyKind }) {
-  const common: SVGProps<SVGSVGElement> = {
-    viewBox: "0 0 48 48",
-    "aria-hidden": true,
-    className: `weather-sky-glyph weather-sky-glyph--${sky}`,
-  };
-  if (sky === "clear") {
-    return (
-      <svg {...common}>
-        <circle cx="24" cy="24" r="8" />
-        <g strokeWidth="2" strokeLinecap="round">
-          <path d="M24 6v6M24 36v6M6 24h6M36 24h6M11 11l4 4M33 33l4 4M37 11l-4 4M15 33l-4 4" />
-        </g>
-      </svg>
-    );
-  }
-  if (sky === "storm") {
-    return (
-      <svg {...common}>
-        <path d="M16 30h18a8 8 0 0 0 0-16 10 10 0 0 0-19-2A7 7 0 0 0 16 30z" />
-        <path d="M22 32l-4 8h6l-3 7" />
-      </svg>
-    );
-  }
-  if (sky === "rain" || sky === "snow") {
-    return (
-      <svg {...common}>
-        <path d="M16 28h18a8 8 0 0 0 0-16 10 10 0 0 0-19-2A7 7 0 0 0 16 28z" />
-        {sky === "rain" ? (
-          <g strokeWidth="2" strokeLinecap="round">
-            <path d="M18 34l-2 6M24 34l-2 6M30 34l-2 6" />
-          </g>
-        ) : (
-          <g>
-            <circle cx="18" cy="36" r="1.4" />
-            <circle cx="25" cy="38" r="1.4" />
-            <circle cx="31" cy="35" r="1.4" />
-          </g>
-        )}
-      </svg>
-    );
-  }
-  return (
-    <svg {...common}>
-      <path d="M16 30h18a8 8 0 0 0 0-16 10 10 0 0 0-19-2A7 7 0 0 0 16 30z" />
-    </svg>
+function usePrefersReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(
+    () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches,
   );
+  useEffect(() => {
+    const query = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    if (!query) return undefined;
+    const onChange = () => setReduced(query.matches);
+    query.addEventListener?.("change", onChange);
+    return () => query.removeEventListener?.("change", onChange);
+  }, []);
+  return reduced;
+}
+
+function renderBoard(segment: string, payload: WeatherPayload, elapsedMs: number, reducedMotion: boolean) {
+  const boards = payload?.boards || {};
+  const label = segmentLabel(payload, segment);
+  switch (segment) {
+    case "current":
+      return boards.current ? <CurrentBoard board={boards.current} label={label} /> : null;
+    case "overview":
+      return boards.overview ? <OverviewBoard board={boards.overview} label={label} /> : null;
+    case "hourly":
+      return <HourlyBoard hours={boards.hourly || []} label={label} />;
+    case "five_day":
+      return <FiveDayBoard days={boards.five_day || []} label={label} />;
+    case "alerts":
+      return <AlertsBoard items={boards.alerts?.items || []} label={label} />;
+    case "regional":
+      return <RegionalBoard cities={boards.regional || []} label={label} />;
+    case "radar":
+      return boards.radar ? (
+        <RadarBoard radar={boards.radar} label={label} elapsedMs={elapsedMs} reducedMotion={reducedMotion} />
+      ) : null;
+    case "satellite":
+      return boards.satellite ? <SatelliteBoard satellite={boards.satellite} label={label} /> : null;
+    case "webcams":
+      return <WebcamsBoard cams={boards.webcams || []} label={label} />;
+    case "almanac":
+      return boards.almanac ? <AlmanacBoard board={boards.almanac} label={label} /> : null;
+    case "seasonal":
+      return boards.seasonal ? <SeasonalBoard board={boards.seasonal} label={label} /> : null;
+    case "headlines":
+      return <HeadlinesBoard scopes={payload?.headlines?.scopes || []} label={label} />;
+    default:
+      return null;
+  }
 }
 
 /**
- * Weather Channel cable experience: two boards (now, then the days ahead),
- * a crawl of the other forecast fields, optional music, and a spoken readout.
+ * Cable-style Weather Channel: a segment player over server-cached boards, a
+ * weather-only chyron, a separate headline segment with a spoken recap between
+ * weather pieces, a red bulletin bar for Warnings, server-rendered narration,
+ * and a shuffled music bed that fades around each voiceover.
  */
 export default function WeatherChannelPlayer({ className = "", onClose }: WeatherChannelPlayerProps) {
   const [payload, setPayload] = useState<WeatherPayload | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(true);
   const [editingPlace, setEditingPlace] = useState(false);
-  const [boardCursor, setBoardCursor] = useState<any>({ key: "", index: 0 });
+  const [segment, setSegment] = useState("");
+  const [caption, setCaption] = useState("");
+  const [segmentStart, setSegmentStart] = useState(() => Date.now());
+  const [now, setNow] = useState(() => Date.now());
   const [clock, setClock] = useState(() => formatWeatherClock());
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const spokenRef = useRef(false);
+  const [summary, setSummary] = useState("");
+  const [warningAnnouncement, setWarningAnnouncement] = useState("");
+  const [soundBlocked, setSoundBlocked] = useState(false);
+  const reducedMotion = usePrefersReducedMotion();
 
-  const loadForecast = useCallback(async () => {
-    setBusy(true);
-    setError("");
-    try {
-      const data = (await getLiveWeatherChannel()) as WeatherPayload;
-      setPayload(data);
-      spokenRef.current = false;
-    } catch (err: any) {
-      setError(errorMessage(err, "Weather channel unavailable."));
-    } finally {
-      setBusy(false);
+  const payloadRef = useRef<WeatherPayload | null>(null);
+  const plannerRef = useRef<PlannerState>(initialPlannerState());
+  const countersRef = useRef<Record<string, number>>({});
+  const versionRef = useRef<number | null>(null);
+  const timerRef = useRef<number | null>(null);
+  const voiceRef = useRef<HTMLAudioElement | null>(null);
+  const bedRef = useRef<WeatherMusicBed | null>(null);
+  const deckARef = useRef<HTMLAudioElement | null>(null);
+  const deckBRef = useRef<HTMLAudioElement | null>(null);
+  const announcedRef = useRef<Set<string>>(new Set());
+  const startedRef = useRef(false);
+
+  const clearTimer = () => {
+    if (timerRef.current != null) window.clearTimeout(timerRef.current);
+    timerRef.current = null;
+  };
+
+  const advance = useCallback(() => {
+    clearTimer();
+    const data = payloadRef.current;
+    if (!data) return;
+    const next = nextWeatherSegment(plannerRef.current, data, new Date());
+    plannerRef.current = next.state;
+    if (!next.segment) return;
+    const picked = pickVariant(data.scripts, next.segment, countersRef.current);
+    countersRef.current = picked.counters;
+    const text = String(picked.variant?.text || "");
+    const audioUrl = picked.variant?.audio_url ? String(picked.variant.audio_url) : "";
+    setSegment(next.segment);
+    setCaption(text);
+    setSegmentStart(Date.now());
+    const voice = voiceRef.current;
+    if (audioUrl && voice && data.narration?.enabled) {
+      voice.src = audioUrl;
+      voice.currentTime = 0;
+      const started = voice.play?.();
+      if (started && typeof started.catch === "function") {
+        started.catch(() => {
+          setSoundBlocked(true);
+          timerRef.current = window.setTimeout(advance, captionDwellMs(next.segment, text));
+        });
+      }
+      return;
     }
+    timerRef.current = window.setTimeout(advance, captionDwellMs(next.segment, text));
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setBusy(true);
+  const applyPayload = useCallback(
+    (data: WeatherPayload) => {
+      payloadRef.current = data;
+      setPayload(data);
+      if (versionRef.current !== data?.scripts_version) {
+        versionRef.current = data?.scripts_version ?? null;
+        countersRef.current = {};
+      }
+      const warning = activeWarning(data);
+      const warningId = warning ? String(warning.id || warning.event) : "";
+      if (warningId && !announcedRef.current.has(warningId)) {
+        announcedRef.current.add(warningId);
+        setWarningAnnouncement(`Weather bulletin: ${warning?.event} for ${warning?.area_short || "the area"}.`);
+      }
+      if (!startedRef.current) {
+        startedRef.current = true;
+        setSummary(String(data?.chyron_summary || ""));
+        advance();
+      } else if (warningId && !plannerRef.current.warningsPlayed.includes(warningId)) {
+        voiceRef.current?.pause();
+        if (bedRef.current?.isDucked) bedRef.current.voiceEnd(performance.now());
+        advance();
+      }
+    },
+    [advance],
+  );
+
+  const loadForecast = useCallback(
+    async (reset = false) => {
+      if (reset) {
+        setBusy(true);
+        plannerRef.current = initialPlannerState();
+        startedRef.current = false;
+      }
+      setError("");
       try {
-        const data = (await getLiveWeatherChannel()) as WeatherPayload;
-        if (!cancelled) setPayload(data);
-      } catch (err: any) {
-        if (!cancelled) setError(errorMessage(err, "Weather channel unavailable."));
+        applyPayload((await getLiveWeatherChannel()) as WeatherPayload);
+      } catch (err: unknown) {
+        setError(errorMessage(err, "Weather channel unavailable."));
       } finally {
-        if (!cancelled) setBusy(false);
+        setBusy(false);
       }
-    })();
+    },
+    [applyPayload],
+  );
+
+  useEffect(() => {
+    loadForecast(true);
+    const poll = window.setInterval(() => loadForecast(false), PAYLOAD_POLL_MS);
     return () => {
-      cancelled = true;
-      if (typeof window !== "undefined" && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-      }
+      window.clearInterval(poll);
+      clearTimer();
     };
-  }, []);
+  }, [loadForecast]);
 
+  // Music bed: shuffle every file; fade around each voiceover.
+  const trackKey = (payload?.music?.tracks || []).map((t: any) => t.id).join(",");
   useEffect(() => {
-    if (!payload?.muzak?.url || !audioRef.current) return undefined;
-    const audio = audioRef.current;
-    audio.src = payload.muzak.url;
-    audio.loop = true;
-    audio.volume = 0.35;
-    audio.play?.().catch(() => {});
+    const tracks = payloadRef.current?.music?.tracks || [];
+    if (!tracks.length) return undefined;
+    const decks = [deckARef.current, deckBRef.current];
+    let made = 0;
+    const bed = new WeatherMusicBed({
+      tracks,
+      createAudio: () => (decks[made++] || new Audio()) as unknown as AudioLike,
+    });
+    bedRef.current = bed;
+    bed.start(performance.now());
+    const tick = window.setInterval(() => bed.tick(performance.now()), 100);
+    const blocked = window.setTimeout(() => {
+      if (bed.activeDeck.paused && !bed.isDucked) setSoundBlocked(true);
+    }, 1500);
     return () => {
-      audio.pause();
-      audio.removeAttribute("src");
+      window.clearInterval(tick);
+      window.clearTimeout(blocked);
+      bed.stop();
+      bedRef.current = null;
     };
-  }, [payload?.muzak?.url]);
+  }, [trackKey]);
 
   useEffect(() => {
-    if (!payload?.voiceover || spokenRef.current) return undefined;
-    if (typeof window === "undefined" || !window.speechSynthesis) return undefined;
-    spokenRef.current = true;
-    const utter = new SpeechSynthesisUtterance(payload.voiceover);
-    utter.rate = 0.95;
-    utter.pitch = 1;
-    const voices = window.speechSynthesis.getVoices?.() || [];
-    const preferred =
-      voices.find(
-        (v) => /en(-|_)US/i.test(v.lang) && /natural|samantha|karen|daniel/i.test(v.name),
-      ) || voices.find((v) => /en/i.test(v.lang));
-    if (preferred) utter.voice = preferred;
-    window.speechSynthesis.speak(utter);
-    return () => window.speechSynthesis.cancel();
-  }, [payload?.voiceover]);
-
-  const boards = useMemo(() => weatherBoardSequence(payload) as Array<"now" | "ahead">, [payload]);
-  const sequenceKey = boards.join(",");
-  const days = useMemo(() => forecastDayColumns(payload?.daily) as WeatherDayColumn[], [payload]);
-  const ticker = useMemo(() => weatherTickerLines(payload) as string[], [payload]);
-  const sky = weatherSky(payload) as WeatherSkyKind;
-  const current = payload?.current && typeof payload.current === "object" ? payload.current : {};
-  const currentSky = skyFromWeatherCode(current.weather_code) as { sky: WeatherSkyKind; label: string };
-  const showNow = hasCurrentConditions(current);
-  const boardIndex = boardCursor.key === sequenceKey ? boardCursor.index : 0;
-  const active = boards.length ? boards[boardIndex % boards.length] : "";
-
-  useEffect(() => {
-    if (boards.length < 2) return undefined;
-    const id = window.setInterval(() => {
-      setBoardCursor((prev: any) => {
-        const index = prev.key === sequenceKey ? prev.index : 0;
-        return { key: sequenceKey, index: nextWeatherBoardIndex(index, boards) };
-      });
-    }, WEATHER_BOARD_DWELL_MS);
-    return () => window.clearInterval(id);
-  }, [boards, sequenceKey]);
+    const voice = voiceRef.current;
+    if (!voice) return undefined;
+    const onPlay = () => bedRef.current?.voiceStart(performance.now());
+    const onDone = () => {
+      bedRef.current?.voiceEnd(performance.now());
+      clearTimer();
+      timerRef.current = window.setTimeout(advance, VOICE_GAP_MS);
+    };
+    const onError = () => {
+      if (bedRef.current?.isDucked) bedRef.current.voiceEnd(performance.now());
+      clearTimer();
+      timerRef.current = window.setTimeout(advance, captionDwellMs("", voice.dataset.caption || ""));
+    };
+    voice.addEventListener("play", onPlay);
+    voice.addEventListener("ended", onDone);
+    voice.addEventListener("error", onError);
+    return () => {
+      voice.removeEventListener("play", onPlay);
+      voice.removeEventListener("ended", onDone);
+      voice.removeEventListener("error", onError);
+      voice.pause();
+    };
+  }, [advance]);
 
   useEffect(() => {
     const id = window.setInterval(() => setClock(formatWeatherClock()), 30_000);
     return () => window.clearInterval(id);
   }, []);
 
-  const temp = current.temperature_2m != null && Number.isFinite(Number(current.temperature_2m))
-    ? Math.round(Number(current.temperature_2m))
-    : null;
-  const wind = current.wind_speed_10m != null && Number.isFinite(Number(current.wind_speed_10m))
-    ? Math.round(Number(current.wind_speed_10m))
-    : null;
-  const humidity = current.relative_humidity_2m != null
-    && Number.isFinite(Number(current.relative_humidity_2m))
-    ? Math.round(Number(current.relative_humidity_2m))
-    : null;
+  useEffect(() => {
+    const id = window.setInterval(() => setSummary(String(payloadRef.current?.chyron_summary || "")), CHYRON_SUMMARY_MS);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const animating = segment === "radar" && !reducedMotion;
+  useEffect(() => {
+    if (!animating) return undefined;
+    const id = window.setInterval(() => setNow(Date.now()), 250);
+    return () => window.clearInterval(id);
+  }, [animating]);
+
+  const warning = activeWarning(payload);
+  const groups = useMemo(() => chyronGroups(payload), [payload]);
+  const sky = weatherSky(payload);
+  const board = payload && segment ? renderBoard(segment, payload, Math.max(0, now - segmentStart), reducedMotion) : null;
+  const narrationOn = !!payload?.narration?.enabled;
+  const egress: Array<{ host: string; purpose: string }> = Array.isArray(payload?.egress) ? payload.egress : [];
+
+  const enableSound = () => {
+    setSoundBlocked(false);
+    bedRef.current?.resume();
+    const voice = voiceRef.current;
+    if (voice?.src && voice.paused && narrationOn) voice.play?.()?.catch?.(() => {});
+  };
 
   return (
     <TheaterPlayer
@@ -243,19 +309,12 @@ export default function WeatherChannelPlayer({ className = "", onClose }: Weathe
       className={`weather-channel ${className}`.trim()}
       testId="weather-channel"
       osdVisible={false}
-      dataAttrs={{ sky, board: active || "empty" }}
+      dataAttrs={{ sky, board: segment || "empty", warning: warning ? "true" : "false", motion: reducedMotion ? "reduced" : "full" }}
     >
       <div className="weather-channel-sky" aria-hidden="true" />
-      <header className="weather-channel-header">
-        <p className="weather-channel-eyebrow">Projectionist Weather Channel</p>
-        <h1 className="weather-channel-place">{payload?.place || "Local conditions"}</h1>
+      <div className="weather-channel-controls">
         {onClose ? (
-          <button
-            type="button"
-            className="ghost weather-channel-close"
-            onClick={onClose}
-            data-testid="weather-channel-close"
-          >
+          <button type="button" className="ghost weather-channel-close" onClick={onClose} data-testid="weather-channel-close">
             Back to Live
           </button>
         ) : null}
@@ -267,7 +326,12 @@ export default function WeatherChannelPlayer({ className = "", onClose }: Weathe
         >
           {editingPlace ? "Hide place" : "Change place"}
         </button>
-      </header>
+        {soundBlocked ? (
+          <button type="button" className="ghost" data-testid="weather-sound-on" onClick={enableSound}>
+            Turn on sound
+          </button>
+        ) : null}
+      </div>
       {editingPlace ? (
         <WeatherLocationPicker
           variant="channel"
@@ -276,87 +340,91 @@ export default function WeatherChannelPlayer({ className = "", onClose }: Weathe
           householdPlace={payload?.household_place || ""}
           onSaved={() => {
             setEditingPlace(false);
-            loadForecast();
+            loadForecast(true);
           }}
         />
       ) : null}
 
-      {busy ? <p className="weather-channel-status">Tuning the forecast…</p> : null}
-      {error ? (
-        <p className="weather-channel-status weather-channel-status--error">{error}</p>
-      ) : null}
-      {payload?.error ? <p className="weather-channel-status muted">{payload.error}</p> : null}
+      {busy && !payload ? <p className="weather-channel-status">Tuning the forecast…</p> : null}
+      {error ? <p className="weather-channel-status weather-channel-status--error">{error}</p> : null}
+      {payload?.error ? <p className="weather-channel-status">{payload.error}</p> : null}
 
-      <div className="weather-board-stage" data-testid="weather-board-stage">
-        {showNow ? (
-          <section
-            className={`weather-board weather-board--now${active === "now" ? " is-active" : ""}`}
-            data-testid="weather-board-now"
-            aria-hidden={active !== "now"}
-          >
-            <p className="weather-board-kicker">Right now</p>
-            <SkyGlyph sky={currentSky.sky} />
-            <p className="weather-channel-temp" data-testid="weather-channel-now">
-              {temp != null ? `${temp}°` : "—"}
-            </p>
-            <p className="weather-channel-cond">{currentSky.label}</p>
-            {wind != null ? <p className="weather-channel-wind">Wind {wind} mph</p> : null}
-          </section>
+      <div className="weather-stage" data-testid="weather-board-stage">
+        <header className="weather-stage-top">
+          <span className="weather-stage-segment">{segment ? segmentLabel(payload, segment) : "Local forecast"}</span>
+          <span className="weather-stage-place">{payload?.place || "Local conditions"}</span>
+          <span className="weather-stage-clock">{clock}</span>
+        </header>
+        {warning ? (
+          <p className="weather-bulletin-bar" data-testid="weather-bulletin-bar">
+            <span className="weather-bulletin-kicker">Weather bulletin</span>
+            <span>
+              {warning.event} · {warning.area_short}
+              {warning.ends_label ? ` · until ${warning.ends_label}` : ""}
+            </span>
+          </p>
         ) : null}
-
-        {days.length ? (
-          <section
-            className={`weather-board weather-board--ahead${active === "ahead" ? " is-active" : ""}`}
-            data-testid="weather-board-ahead"
-            aria-hidden={active !== "ahead"}
-          >
-            <p className="weather-board-kicker">The days ahead</p>
-            <p className="weather-board-place">{payload?.place || "Local conditions"}</p>
-            <ol className="weather-day-grid" data-testid="weather-day-grid">
-              {days.map((day) => (
-                <li key={day.date} className="weather-day-col" data-testid="weather-day-col">
-                  <p className="weather-day-weekday">{day.weekday || day.date}</p>
-                  <SkyGlyph sky={day.sky} />
-                  <p className="weather-day-cond">{day.condition}</p>
-                  <p className="weather-day-high">{day.high != null ? day.high : "—"}</p>
-                  <p className="weather-day-low">{day.low != null ? day.low : "—"}</p>
-                </li>
+        <div className="weather-stage-body" key={segment}>
+          {board}
+        </div>
+        {caption ? (
+          <p className="weather-caption" data-testid="weather-caption">
+            {caption}
+          </p>
+        ) : null}
+        {groups.length ? (
+          <div className="weather-channel-ticker weather-chyron" data-testid="weather-chyron">
+            <div className="weather-chyron-track" aria-hidden="true">
+              {[0, 1].map((copy) => (
+                <span key={copy} className="weather-chyron-run">
+                  {groups.map((group) => (
+                    <span key={`${copy}-${group.group}`} className="weather-chyron-group">
+                      <span className="weather-chyron-label">{group.group}</span>
+                      {group.items.map((item, i) => (
+                        <span key={`${item}-${i}`} className="weather-chyron-item">
+                          {item}
+                        </span>
+                      ))}
+                    </span>
+                  ))}
+                </span>
               ))}
-            </ol>
-            <div className="weather-now-bar" data-testid="weather-now-bar">
-              <span className="weather-now-bar-kicker">Now</span>
-              <span className="weather-now-bar-place">{payload?.place || "Local"}</span>
-              {humidity != null ? <span>Humidity {humidity}%</span> : null}
-              <span>{clock}</span>
-              {temp != null ? <span className="weather-now-bar-temp">{temp}°</span> : null}
             </div>
-          </section>
+            <p className="sr-only" aria-live="polite" data-testid="weather-chyron-summary">
+              {summary}
+            </p>
+          </div>
         ) : null}
       </div>
 
-      {ticker.length ? (
-        <div
-          className="weather-channel-ticker"
-          data-testid="weather-channel-ticker"
-          aria-live="polite"
-        >
-          <div className="weather-channel-ticker-track">
-            {[...ticker, ...ticker].map((line, idx) => (
-              <span key={`${line}-${idx}`} className="weather-channel-ticker-item">
-                {line}
-              </span>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      <p className="weather-channel-egress muted">
-        Forecast via Open-Meteo (leaves LAN).{" "}
-        {payload?.muzak
-          ? `Music: ${payload.muzak.title}.`
-          : payload?.muzak_note || "No soundtrack — the forecast plays without music."}
+      <p className="sr-only" aria-live="assertive" data-testid="weather-warning-announcement">
+        {warningAnnouncement}
       </p>
-      <audio ref={audioRef} data-testid="weather-channel-muzak" />
+      <p className="sr-only" aria-live="polite">
+        {segment ? `Now showing: ${segmentLabel(payload, segment)}` : ""}
+      </p>
+
+      <footer className="weather-channel-egress" data-testid="weather-channel-egress">
+        <p>
+          This channel calls{" "}
+          {egress.map((row, index) => (
+            <span key={row.host} title={row.purpose}>
+              {row.host}
+              {index < egress.length - 1 ? ", " : ""}
+            </span>
+          ))}
+          {egress.length ? "" : "nothing yet"}. They get the place’s coordinates or name, never who is watching.
+        </p>
+        <p>
+          {payload?.music?.tracks?.length
+            ? `Music: ${payload.music.tracks.length} track${payload.music.tracks.length === 1 ? "" : "s"} from the owner’s folder, shuffled.`
+            : payload?.muzak_note || "No soundtrack — the forecast plays without music."}{" "}
+          {narrationOn ? "Narration: local voice on this server." : "Narration is off, so the forecast is captioned."}
+        </p>
+      </footer>
+      <audio ref={deckARef} data-testid="weather-channel-muzak" preload="auto" />
+      <audio ref={deckBRef} data-testid="weather-channel-muzak-next" preload="auto" />
+      <audio ref={voiceRef} data-testid="weather-channel-voice" data-caption={caption} preload="auto" />
     </TheaterPlayer>
   );
 }

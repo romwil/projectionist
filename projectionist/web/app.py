@@ -1116,6 +1116,10 @@ def _mask_settings(settings: Settings) -> Dict[str, Any]:
     acr_payload["access_key"] = ""
     acr_payload["access_secret"] = ""
     payload["acrcloud"] = acr_payload
+    weather_payload = dict(payload.get("weather") or {})
+    weather_payload["windy_api_key_set"] = bool(getattr(getattr(settings, "weather", None), "windy_api_key", ""))
+    weather_payload["windy_api_key"] = ""
+    payload["weather"] = weather_payload
     from projectionist.theater.normalize import normalize_theater_settings, theater_host_port_hint
 
     theater = normalize_theater_settings(getattr(settings, "theater", None))
@@ -1393,6 +1397,7 @@ register_playback_routes(
 register_theater_delight_routes(
     app,
     settings_factory=_settings,
+    db_factory=_db,
 )
 register_investigate_routes(app)
 register_rematch_routes(app)

@@ -1,4 +1,5 @@
 import MuzakFolderPanel from "../../components/admin/MuzakFolderPanel";
+import WeatherNarrationPanel from "../../components/admin/WeatherNarrationPanel";
 import SectionHelp from "../../components/SectionHelp";
 import {
   deleteLiveChannelsChannel,
@@ -479,6 +480,8 @@ export default function LiveChannelsAdvanced({
                     currentPath={settings?.tunarr?.muzak_folder || ""}
                     onSaved={(path) => updateTunarrSettings({ muzak_folder: path })}
                   />
+
+                  <WeatherNarrationPanel />
 
                   <div
                     className={`service-card${

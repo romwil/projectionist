@@ -1,29 +1,33 @@
-"""Weather Channel–style cable experience — real forecast + optional local muzak.
+"""Weather Channel entry points: household location, music folder, payload.
 
-Forecast egress uses Open-Meteo (no API key). A saved profile lat/lon is sent
-as-is; place search is a separate call (see weather_geo). See docs/PRIVACY.md.
-Muzak plays from the owner-chosen folder under Live admin when that folder
-has audio. An empty or unset folder is reported honestly.
+The data collectors, script writer, TTS renderer, and cache live in
+``projectionist.theater.weather_channel``. See docs/PRIVACY.md for every host.
 """
 
 from __future__ import annotations
 
-import json
-import logging
 import os
 import random
-import urllib.error
-import urllib.parse
-import urllib.request
-from typing import Any, Dict, List, Optional, Tuple
+import threading
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from projectionist.theater.media_browser import confine_muzak_folder
 from projectionist.theater.preroll import list_preroll_audio, pick_preroll, resolve_preroll_root
+from projectionist.theater.weather_channel.payload import build_payload
+from projectionist.theater.weather_channel.place import Place, place_from_label
+from projectionist.theater.weather_channel.service import NarrationSettings, WeatherService
+from projectionist.theater.weather_channel.sources.forecast import wmo_label
 
-logger = logging.getLogger(__name__)
+__all__ = [
+    "household_place",
+    "narration_settings",
+    "select_muzak",
+    "weather_channel_payload",
+    "get_weather_service",
+    "wmo_label",
+]
 
-OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
-USER_AGENT = "ProjectionistWeather/1.0 (+https://github.com/romwil/projectionist)"
 _DEFAULT_PLACE = "your area"
 
 
@@ -37,127 +41,7 @@ def _default_coords(environ: Optional[Any] = None) -> Tuple[float, float]:
         return 41.88, -87.63
 
 
-def _fetch_json(url: str, *, timeout: float = 8.0) -> Dict[str, Any]:
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 — fixed Open-Meteo host
-        raw = resp.read()
-    return json.loads(raw.decode("utf-8"))
-
-
-def fetch_open_meteo_forecast(
-    *,
-    latitude: float,
-    longitude: float,
-    fetch_json=None,
-) -> Dict[str, Any]:
-    """Pull current + daily forecast from Open-Meteo (leaves LAN)."""
-    params = urllib.parse.urlencode(
-        {
-            "latitude": f"{latitude:.4f}",
-            "longitude": f"{longitude:.4f}",
-            "current": "temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m",
-            "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
-            "temperature_unit": "fahrenheit",
-            "wind_speed_unit": "mph",
-            "timezone": "auto",
-            "forecast_days": "3",
-        }
-    )
-    url = f"{OPEN_METEO_URL}?{params}"
-    loader = fetch_json or _fetch_json
-    return loader(url)
-
-
-_WMO = {
-    0: "Clear",
-    1: "Mainly clear",
-    2: "Partly cloudy",
-    3: "Overcast",
-    45: "Fog",
-    48: "Depositing rime fog",
-    51: "Light drizzle",
-    53: "Drizzle",
-    55: "Dense drizzle",
-    61: "Light rain",
-    63: "Rain",
-    65: "Heavy rain",
-    71: "Light snow",
-    73: "Snow",
-    75: "Heavy snow",
-    80: "Rain showers",
-    81: "Rain showers",
-    82: "Violent rain showers",
-    95: "Thunderstorm",
-}
-
-
-def wmo_label(code: Any) -> str:
-    try:
-        return _WMO.get(int(code), "Mixed skies")
-    except (TypeError, ValueError):
-        return "Mixed skies"
-
-
-def build_voiceover_script(payload: Dict[str, Any], *, place_name: str = _DEFAULT_PLACE) -> str:
-    current = payload.get("current") if isinstance(payload.get("current"), dict) else {}
-    daily = payload.get("daily") if isinstance(payload.get("daily"), dict) else {}
-    temp = current.get("temperature_2m")
-    humidity = current.get("relative_humidity_2m")
-    wind = current.get("wind_speed_10m")
-    cond = wmo_label(current.get("weather_code"))
-    parts = [
-        f"You're watching the Projectionist Weather Channel for {place_name}.",
-        f"Right now: {cond}",
-    ]
-    if temp is not None:
-        parts.append(f"at {temp:.0f} degrees.")
-    else:
-        parts.append(".")
-    if humidity is not None:
-        parts.append(f"Humidity {humidity:.0f} percent.")
-    if wind is not None:
-        parts.append(f"Wind around {wind:.0f} miles per hour.")
-    times = daily.get("time") if isinstance(daily.get("time"), list) else []
-    tmax = daily.get("temperature_2m_max") if isinstance(daily.get("temperature_2m_max"), list) else []
-    tmin = daily.get("temperature_2m_min") if isinstance(daily.get("temperature_2m_min"), list) else []
-    codes = daily.get("weather_code") if isinstance(daily.get("weather_code"), list) else []
-    if times:
-        parts.append("Looking ahead:")
-        for i, day in enumerate(times[:3]):
-            hi = tmax[i] if i < len(tmax) else None
-            lo = tmin[i] if i < len(tmin) else None
-            label = wmo_label(codes[i] if i < len(codes) else None)
-            bit = f"{day}: {label}"
-            if hi is not None and lo is not None:
-                bit += f", high {hi:.0f}, low {lo:.0f}"
-            parts.append(bit + ".")
-    parts.append("This has been your local conditions. Stay tuned.")
-    return " ".join(parts)
-
-
-def build_ticker_lines(current: Dict[str, Any], daily: Dict[str, Any]) -> List[str]:
-    """Crawl lines that are not the current-temperature headline or daily highs/lows.
-
-    Those belong on the current-conditions board and the days-ahead columns.
-    """
-    lines: List[str] = []
-    humidity = current.get("relative_humidity_2m") if isinstance(current, dict) else None
-    if isinstance(humidity, (int, float)) and not isinstance(humidity, bool):
-        lines.append(f"Humidity {humidity:.0f}%")
-    times = daily.get("time") if isinstance(daily, dict) and isinstance(daily.get("time"), list) else []
-    precip = (
-        daily.get("precipitation_probability_max")
-        if isinstance(daily, dict) and isinstance(daily.get("precipitation_probability_max"), list)
-        else []
-    )
-    for i, day in enumerate(times):
-        chance = precip[i] if i < len(precip) else None
-        if isinstance(chance, (int, float)) and not isinstance(chance, bool):
-            lines.append(f"{day} rain chance {chance:.0f}%")
-    return lines
-
-
-def _household_place(environ: Optional[Any] = None) -> str:
+def household_place(environ: Optional[Any] = None) -> str:
     """Household label from the server env only.
 
     A signed-in profile place is an override for the forecast, never this field.
@@ -175,11 +59,15 @@ def select_muzak(
     allowed_roots: Optional[List[Any]] = None,
     rng: Any = None,
     mountinfo_text: Optional[str] = None,
-) -> Tuple[Optional[Dict[str, Any]], str]:
-    """Pick one audio file from the configured folder, or explain why there is none."""
+) -> Tuple[List[Dict[str, Any]], str]:
+    """Every audio file in the owner's folder, shuffled — or why there is none.
+
+    The player plays them in turn, reshuffling after the last one, and fades the
+    bed around each voiceover.
+    """
     text = str(folder or "").strip()
     if not text:
-        return None, (
+        return [], (
             "No music folder is set — the forecast plays with no soundtrack. "
             "The owner can choose one under Admin → Live Channels → Setup."
         )
@@ -188,37 +76,89 @@ def select_muzak(
 
         resolved = resolve_within_roots(text, allowed_roots)
         if resolved is None or not resolved.is_dir():
-            return None, "The music folder isn’t available in this container."
+            return [], "The music folder isn’t available in this container."
     else:
-        resolved = confine_muzak_folder(
-            text,
-            settings=settings,
-            environ=environ,
-            mountinfo_text=mountinfo_text,
-        )
+        resolved = confine_muzak_folder(text, settings=settings, environ=environ, mountinfo_text=mountinfo_text)
         if resolved is None:
-            return None, "The music folder isn’t available in this container."
+            return [], "The music folder isn’t available in this container."
     audio_items = list_preroll_audio(resolved)
     if not audio_items:
-        return None, "That music folder is empty, so the forecast plays without music."
+        return [], "That music folder is empty, so the forecast plays without music."
     picker = rng if rng is not None else random.SystemRandom()
-    chosen = picker.choice(audio_items)
-    return (
+    tracks = [
         {
-            "id": chosen["id"],
-            "title": chosen["title"],
-            "url": f"/api/preroll/asset/{chosen['id']}",
-            "content_type": chosen["content_type"],
-        },
-        "",
+            "id": item["id"],
+            "title": item["title"],
+            "url": f"/api/preroll/asset/{item['id']}",
+            "content_type": item["content_type"],
+        }
+        for item in audio_items
+    ]
+    picker.shuffle(tracks)
+    return tracks, ""
+
+
+def narration_settings(settings: Any) -> NarrationSettings:
+    weather = getattr(settings, "weather", None)
+    if weather is None:
+        return NarrationSettings()
+    try:
+        rate = float(getattr(weather, "tts_rate", 1.0) or 1.0)
+    except (TypeError, ValueError):
+        rate = 1.0
+    return NarrationSettings(
+        enabled=bool(getattr(weather, "narration_enabled", False)),
+        engine=str(getattr(weather, "tts_engine", "kokoro") or "kokoro"),
+        voice=str(getattr(weather, "tts_voice", "") or ""),
+        rate=rate,
+        windy_api_key=str(getattr(weather, "windy_api_key", "") or ""),
     )
+
+
+_SERVICE: Optional[WeatherService] = None
+_SERVICE_LOCK = threading.Lock()
+
+
+def get_weather_service(
+    data_dir: Path,
+    *,
+    settings_factory: Callable[[], Any],
+    llm_factory: Callable[[], Any] = lambda: None,
+    holidays_factory: Callable[[], Sequence[Dict[str, Any]]] = lambda: (),
+) -> WeatherService:
+    global _SERVICE
+    with _SERVICE_LOCK:
+        if _SERVICE is None or _SERVICE.data_dir != Path(data_dir):
+            _SERVICE = WeatherService(
+                Path(data_dir),
+                settings_factory=lambda: narration_settings(settings_factory()),
+                llm_factory=llm_factory,
+                holidays_factory=holidays_factory,
+            )
+        return _SERVICE
+
+
+def resolve_place(
+    *,
+    environ: Optional[Any] = None,
+    place_name: str = "",
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+    location_source: str = "household",
+) -> Tuple[Place, str]:
+    if latitude is not None and longitude is not None:
+        label = str(place_name or "").strip() or household_place(environ)
+        source = location_source if location_source in {"profile", "household"} else "profile"
+        return place_from_label(label, float(latitude), float(longitude)), source
+    lat, lon = _default_coords(environ)
+    return place_from_label(household_place(environ), lat, lon), "household"
 
 
 def weather_channel_payload(
     *,
+    service: WeatherService,
     environ: Optional[Any] = None,
-    fetch_json=None,
-    place_name: str = _DEFAULT_PLACE,
+    place_name: str = "",
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
     location_source: str = "household",
@@ -228,25 +168,15 @@ def weather_channel_payload(
     rng: Any = None,
     mountinfo_text: Optional[str] = None,
 ) -> Dict[str, Any]:
-    household_place = _household_place(environ)
-    if latitude is not None and longitude is not None:
-        lat, lon = float(latitude), float(longitude)
-        place = str(place_name or "").strip() or household_place
-        source = location_source if location_source in {"profile", "household"} else "profile"
-    else:
-        lat, lon = _default_coords(environ)
-        place = household_place
-        source = "household"
-    error = ""
-    forecast: Dict[str, Any] = {}
-    try:
-        forecast = fetch_open_meteo_forecast(latitude=lat, longitude=lon, fetch_json=fetch_json)
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError, ValueError) as exc:
-        logger.warning("weather forecast fetch failed: %s", exc)
-        error = "Weather is temporarily unavailable — check LAN egress to api.open-meteo.com."
-
-    root = resolve_preroll_root(environ)
-    muzak, muzak_note = select_muzak(
+    place, source = resolve_place(
+        environ=environ,
+        place_name=place_name,
+        latitude=latitude,
+        longitude=longitude,
+        location_source=location_source,
+    )
+    state = service.view(place)
+    tracks, note = select_muzak(
         muzak_folder,
         settings=settings,
         environ=environ,
@@ -254,34 +184,14 @@ def weather_channel_payload(
         rng=rng,
         mountinfo_text=mountinfo_text,
     )
-
-    script = build_voiceover_script(forecast, place_name=place) if forecast else (
-        "Projectionist Weather Channel. Forecast is offline for the moment."
+    root = resolve_preroll_root(environ)
+    return build_payload(
+        service,
+        state,
+        location_source=source,
+        household_place=household_place(environ),
+        music=tracks,
+        music_note=note,
+        intro_preroll=pick_preroll(context="live", root=root, rng=rng) if root else None,
+        preroll_root_found=root is not None,
     )
-    current = forecast.get("current") if isinstance(forecast.get("current"), dict) else {}
-    daily = forecast.get("daily") if isinstance(forecast.get("daily"), dict) else {}
-    ticker = build_ticker_lines(current, daily)
-
-    return {
-        "enabled": True,
-        "place": place,
-        "latitude": lat,
-        "longitude": lon,
-        "location_source": source,
-        "household_place": household_place,
-        "egress": {
-            "provider": "Open-Meteo",
-            "host": "api.open-meteo.com",
-            "purpose": "Local forecast for the Weather Channel cable experience",
-        },
-        "error": error,
-        "current": current,
-        "daily": daily,
-        "ticker": ticker,
-        "voiceover": script,
-        "muzak": muzak,
-        "muzak_note": muzak_note,
-        "preroll_root_found": root is not None,
-        # Optional bumper before weather graphics (same independent picker).
-        "intro_preroll": pick_preroll(context="live", root=root, rng=rng) if root else None,
-    }
