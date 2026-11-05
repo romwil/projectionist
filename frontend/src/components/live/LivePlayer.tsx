@@ -17,6 +17,8 @@ import {
   LIVE_STALL_NOTICE_MS,
   flexPlaybackPlan,
   flexSlateCopy,
+  liveCaptionAiringKey,
+  liveCaptionsDefaultTrack,
   liveFlexHoldMs,
   livePadHandoff,
   liveHlsErrorPolicy,
@@ -153,6 +155,10 @@ export default function LivePlayer({
     flexPadWasOnRef.current = false;
   }
   const nowPlexKey = osd?.plexRatingKey || channel?.now?.plex_rating_key || "";
+  const ccAiringKey = liveCaptionAiringKey(channelId, nowPlexKey, channel?.now?.start);
+  const ccAiringKeyRef = useRef(ccAiringKey);
+  ccAiringKeyRef.current = ccAiringKey;
+  const ccOffAiringRef = useRef("");
   const ccMerged = mergeLiveCcTracks(textTracks, plexCc);
   // Plex tracks (embedded or sidecar) are drawn by Projectionist itself, so they work
   // whether or not the Live encode carries captions.
@@ -361,8 +367,8 @@ export default function LivePlayer({
         if (cancelled) return;
         const first = mergeLiveCcTracks([], listed);
         let downloaded = null;
-        if (first.needsFetch && listed?.can_download) {
-          setCcDownloadNote("Looking for text captions…");
+        if (first.needsFetch && listed?.can_download && !listed?.is_flex) {
+          setCcDownloadNote("Finding subtitles…");
           try {
             const result = await downloadLiveChannelSubtitles(channelId);
             if (cancelled) return;
@@ -380,7 +386,10 @@ export default function LivePlayer({
         const payload = { ...(listed || {}), downloaded_streams: downloaded };
         setPlexCc(payload);
         const resolved = mergeLiveCcTracks([], payload);
-        if (resolved.autoSelectIndex !== -1) setActiveTrack(resolved.autoSelectIndex);
+        const defaultTrack = liveCaptionsDefaultTrack(payload, {
+          userTurnedOff: ccOffAiringRef.current === ccAiringKeyRef.current,
+        });
+        if (defaultTrack !== -1) setActiveTrack(defaultTrack);
         if (resolved.plexTracks.length) {
           setCcDownloadNote("");
         } else if (first.needsFetch) {
@@ -801,6 +810,7 @@ export default function LivePlayer({
 
   function selectCcTrack(track: any) {
     if (!track || track.index === -1) {
+      ccOffAiringRef.current = ccAiringKeyRef.current;
       setActiveTrack(-1);
       setCcDownloadNote("");
       bumpOsd();
@@ -1090,7 +1100,7 @@ export default function LivePlayer({
                 disabled={ccDownloadBusy}
                 onClick={askPlexForSubtitles}
               >
-                {ccDownloadBusy ? "Asking Plex…" : "Ask Plex for subtitles"}
+                {ccDownloadBusy ? "Finding subtitles…" : "Find subtitles"}
               </button>
             ) : null
           }

@@ -381,6 +381,71 @@ export function resolvePlaySubtitleTracks(
 }
 
 /**
+ * True / false when the title's language is known to match / differ from the
+ * household language; null when either is unknown.
+ */
+export function titleLanguageIsHousehold(titleLanguage: unknown, householdLanguage: unknown) {
+  const title = String(titleLanguage || "").trim();
+  const household = String(householdLanguage || "").trim();
+  if (!title || !household) return null;
+  return subtitleLanguageMatches(title, household) || subtitleLanguageMatches(household, title);
+}
+
+/**
+ * Play default: a title in another language starts with captions on; a title
+ * in the household language stays off until the member turns captions on.
+ * Unknown language keeps `resolvePlaySubtitleTracks`' auto-select-after-fetch rule.
+ */
+export function playCaptionsDefaultIndex(
+  {
+  resolved = null,
+  titleLanguage = "",
+  householdLanguage = "",
+  preferredLanguages = ["en"],
+}: JsParam = {},
+) {
+  const tracks = Array.isArray(resolved?.tracks) ? resolved.tracks : [];
+  const household = titleLanguageIsHousehold(titleLanguage, householdLanguage || preferredLanguages?.[0]);
+  if (household === true) return -1;
+  if (household === false) return preferredPickableSubtitle(tracks, preferredLanguages)?.index ?? -1;
+  return resolved?.autoSelectIndex ?? -1;
+}
+
+/**
+ * Title page: the same drawable tracks Play's CC menu lists. A cached
+ * household file is marked so the member can see it is already on the server.
+ * Ask Plex stays available only when that file is not cached yet.
+ */
+export function titleSubtitlePanelState(payload: JsParam = null) {
+  const streams = Array.isArray(payload?.streams) ? payload.streams : [];
+  const preferred = Array.isArray(payload?.preferred_languages) && payload.preferred_languages.length
+    ? payload.preferred_languages
+    : ["en"];
+  const resolved = resolvePlaySubtitleTracks({ listedStreams: streams, preferredLanguages: preferred });
+  const cachedIds = new Set(
+    streams
+      .filter((row: JsParam) => row && (row.cached === true || String(row.id || "").startsWith("cached-")))
+      .map((row: JsParam) => String(row.id)),
+  );
+  const tracks = resolved.tracks.map((track: JsParam) => {
+    const onServer = cachedIds.has(String(track.id));
+    const label = String(track.label || "");
+    return {
+      id: String(track.id || ""),
+      label: onServer ? `${label} — on this server` : label,
+      onServer,
+    };
+  });
+  const hasCached = tracks.some((track) => track.onServer);
+  const hasPreferred = Boolean(payload?.has_preferred) || hasCached;
+  return {
+    tracks,
+    hasCached,
+    showAsk: payload?.ok !== false && !hasPreferred,
+  };
+}
+
+/**
  * Seconds into a Live airing: wall clock minus the program's scheduled start.
  * Live encodes are cut at the schedule offset, so this tracks the movie timeline.
  */

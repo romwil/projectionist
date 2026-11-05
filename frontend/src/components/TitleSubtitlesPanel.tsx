@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
-import {
-  downloadLibraryItemSubtitles,
-  getLibraryItemSubtitles,
-} from "../api/client";
+import { downloadLibraryItemSubtitles, getLibraryItemSubtitles } from "../api/client";
 import { useConfirmModal } from "../hooks/useConfirmModal";
+import { titleSubtitlePanelState } from "../lib/subtitleCues";
 
 type SubtitleStream = {
   id?: string | number;
@@ -41,10 +39,17 @@ function errorMessage(error: unknown) {
 /**
  * Dig-in / dual-watch subtitle surface — prefer Plex-attached tracks; soft-fail download.
  */
-export default function TitleSubtitlesPanel({ ratingKey, canDownload = true }: TitleSubtitlesPanelProps) {
+export default function TitleSubtitlesPanel({
+  ratingKey,
+  canDownload = true,
+}: TitleSubtitlesPanelProps) {
   const { confirm, modal } = useConfirmModal();
   const key = String(ratingKey || "").trim();
-  const [state, setState] = useState<SubtitlePanelState>({ status: "idle", payload: null, note: "" });
+  const [state, setState] = useState<SubtitlePanelState>({
+    status: "idle",
+    payload: null,
+    note: "",
+  });
 
   useEffect(() => {
     if (!key) {
@@ -73,10 +78,8 @@ export default function TitleSubtitlesPanel({ ratingKey, canDownload = true }: T
 
   if (!key) return null;
 
-  const streams = Array.isArray(state.payload?.streams) ? state.payload.streams : [];
-  const hasPreferred = Boolean(state.payload?.has_preferred);
-  const showAsk =
-    canDownload && state.status === "ready" && state.payload?.ok !== false && !hasPreferred;
+  const panel = titleSubtitlePanelState(state.payload);
+  const showAsk = canDownload && state.status === "ready" && panel.showAsk;
 
   async function onAskPlex() {
     if (
@@ -90,7 +93,10 @@ export default function TitleSubtitlesPanel({ ratingKey, canDownload = true }: T
     }
     setState((prev) => ({ ...prev, status: "downloading", note: "" }));
     try {
-      const result = (await downloadLibraryItemSubtitles(key)) as { ok?: boolean; message?: string };
+      const result = (await downloadLibraryItemSubtitles(key)) as {
+        ok?: boolean;
+        message?: string;
+      };
       const refreshed = result?.ok ? await getLibraryItemSubtitles(key) : state.payload;
       setState({
         status: "ready",
@@ -109,14 +115,12 @@ export default function TitleSubtitlesPanel({ ratingKey, canDownload = true }: T
   return (
     <section className="title-subtitles-panel" data-testid="title-subtitles-panel">
       <h3 className="title-subtitles-heading">Subtitles</h3>
-      {state.status === "loading" ? (
-        <p className="wizard-note">Checking Plex…</p>
-      ) : null}
-      {streams.length ? (
+      {state.status === "loading" ? <p className="wizard-note">Checking Plex…</p> : null}
+      {panel.tracks.length ? (
         <ul className="title-subtitles-list" data-testid="title-subtitles-list">
-          {streams.map((stream: SubtitleStream) => (
-            <li key={stream.id || stream.label}>
-              {stream.label || stream.display_title || stream.language || "Track"}
+          {panel.tracks.map((track) => (
+            <li key={track.id} data-testid={track.onServer ? "title-subtitles-cached" : undefined}>
+              {track.label}
             </li>
           ))}
         </ul>

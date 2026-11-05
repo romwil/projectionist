@@ -61,7 +61,30 @@ def count_remaining(db: Database, scope: Optional[str]) -> Optional[int]:
         return db.count_embeddings()
     if scope == "neighbors_backlog":
         return db.count_items_missing_neighbors()
+    if scope == "subtitle_backlog":
+        return _subtitle_backlog(db)
     return None
+
+
+def _subtitle_backlog(db: Database) -> Optional[int]:
+    from projectionist.config_store import load_merged_settings
+    from projectionist.library import subtitle_state
+    from projectionist.library.episode_investigate.capabilities import opensubtitles_api_key
+    from projectionist.library.subtitle_cache import household_language
+    from projectionist.logging_config import resolve_data_dir
+
+    try:
+        settings = load_merged_settings(resolve_data_dir())
+    except Exception:  # noqa: BLE001
+        settings = None
+    try:
+        return subtitle_state.count_pending(
+            db,
+            household_language(settings),
+            opensubtitles_configured=bool(opensubtitles_api_key(settings)),
+        )
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def estimate_progress(
@@ -92,6 +115,7 @@ def estimate_progress(
         "embeddings_pending": "titles with plot text still needing embeddings",
         "embeddings_pass": "embedded titles in one full neighbor pass",
         "neighbors_backlog": "embedded titles still missing neighbor rows",
+        "subtitle_backlog": "movies and episodes still without a saved subtitle file",
     }
     if items_per_hour is not None and float(items_per_hour) > 0 and remaining > 0:
         estimated_seconds = int(math.ceil((remaining / float(items_per_hour)) * 3600))

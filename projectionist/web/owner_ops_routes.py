@@ -289,6 +289,37 @@ def register_owner_ops_routes(app) -> None:
             raise HTTPException(status_code=503, detail="Scheduler not available")
         return scheduler.optimize_autotune_rates(dry_run=dry_run)
 
+    @router.get("/api/admin/subtitles/backfill")
+    def subtitle_backfill_status(user=Depends(require_role("owner"))) -> Dict[str, Any]:
+        """Done / remaining / last error for the subtitle backfill (from DB rows)."""
+        del user
+        from projectionist.scheduler.tasks import subtitle_enrichment
+
+        scheduler = _scheduler()
+        running = bool(scheduler is not None and subtitle_enrichment.backfill_running(scheduler))
+        return subtitle_enrichment.backfill_status(_db(), app_mod._settings(), running=running)
+
+    @router.post("/api/admin/subtitles/backfill")
+    async def start_subtitle_backfill(user=Depends(require_role("owner"))) -> Dict[str, Any]:
+        """Start the server-side backfill as a manual run. A second confirm shows the running one."""
+        from projectionist.scheduler.tasks import subtitle_enrichment
+
+        scheduler = _scheduler()
+        if scheduler is None:
+            raise HTTPException(status_code=503, detail="Scheduler not available")
+        return subtitle_enrichment.start_backfill(scheduler, requested_by=getattr(user, "id", None))
+
+    @router.post("/api/admin/subtitles/backfill/stop")
+    async def stop_subtitle_backfill(user=Depends(require_role("owner"))) -> Dict[str, Any]:
+        """Stop between titles. Finished titles stay cached."""
+        del user
+        from projectionist.scheduler.tasks import subtitle_enrichment
+
+        scheduler = _scheduler()
+        if scheduler is None:
+            raise HTTPException(status_code=503, detail="Scheduler not available")
+        return subtitle_enrichment.stop_backfill(scheduler)
+
 
     @router.put("/api/admin/scheduled-tasks/{name}")
     def update_scheduled_task(
