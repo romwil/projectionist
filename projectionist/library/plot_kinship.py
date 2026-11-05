@@ -21,6 +21,10 @@ MIN_SURPRISE_COSINE = 0.55
 MAX_SURPRISE_OVERLAP = 0.35
 # Shorter blurbs are placeholders, boilerplate, or empty plots.
 MIN_PLOT_UNIGRAMS = 4
+# Bump when a stored neighbor plot link would no longer be honest.
+# Readers ignore any ``plot_link_json`` that is not this version, the same way
+# the Explore hub prefix drops a stale rail. ``{}`` stays "already scored".
+PLOT_LINK_CACHE_VERSION = 2
 
 _PLOT_FIELDS = ("summary", "tmdb_overview", "tagline", "long_synopsis", "llm_logline")
 _PLACEHOLDER_BLOBS = frozenset(
@@ -582,6 +586,25 @@ _WHY_REJECT_PHRASES = (
     "was released",
     "broadcasting company",
     "principal photography",
+    # Keyword overlap from the weekly letter: not a story someone would name.
+    "american children",
+    "taking place",
+)
+# Words that make a shared bigram a keyword, not a plot noun or a name.
+# One of these in either slot is enough: "american children", "taking place".
+# A real plot noun can still sit beside a generic shelf word ("haunted house").
+_KEYWORD_GLUE = frozenset(
+    {
+        "american",
+        "children",
+        "child",
+        "kids",
+        "kid",
+        "place",
+        "places",
+        "taking",
+        "taken",
+    }
 )
 _WHY_DANGLING_TAILS = frozenset(
     {"a", "an", "the", "of", "on", "in", "to", "with", "and", "or", "by", "for", "at", "off"}
@@ -672,11 +695,46 @@ def _participle_head(word: str) -> bool:
     return len(word) > 3 and word.endswith("ed")
 
 
-def _gerund_head(word: str) -> bool:
-    """A verb form in the head slot ("began airing"), not an -ing noun."""
+def _bare_gerund(word: str) -> bool:
+    """A verb form ("taking"), not an -ing noun ("racing", "wedding")."""
     if word in _ING_COUNT_NOUNS or word in _ING_ACTIVITY_NOUNS:
         return False
     return len(word) > 5 and word.endswith("ing")
+
+
+def _gerund_head(word: str) -> bool:
+    """A verb form in the head slot ("began airing"), not an -ing noun."""
+    return _bare_gerund(word)
+
+
+def _distinctive_plot_word(word: str) -> bool:
+    """A plot noun or name, not a generic keyword."""
+    if not word or word in _KEYWORD_GLUE or _bare_gerund(word):
+        return False
+    if word in _GENERIC_UNIGRAMS or word in _VAGUE_SUBJECTS:
+        return False
+    if word in _NOISE_TOKENS or word in _FUNCTION_UNIGRAMS:
+        return False
+    if word in _FORMAT_UNIGRAMS or word in _NON_PLOT_UNIGRAMS:
+        return False
+    if word in _PRODUCTION_HISTORY_UNIGRAMS:
+        return False
+    if word in _LEFT_VERBS or word in _PAST_TENSE_LEFT or _looks_like_adverb(word):
+        return False
+    if _participle_head(word):
+        return False
+    return True
+
+
+def _keyword_only_bigram(left: str, right: str) -> bool:
+    """True when the phrase is keyword overlap, not a plot noun or a name.
+
+    "haunted house" stays: "haunted" is a plot noun beside a generic shelf word.
+    "american children" and "taking place" go: neither word names a story.
+    """
+    if _bare_gerund(left) or _bare_gerund(right):
+        return True
+    return not (_distinctive_plot_word(left) or _distinctive_plot_word(right))
 
 
 def _np_shape_ok(left: str, right: str) -> bool:
@@ -709,6 +767,8 @@ def _honest_subject(left: str, right: str) -> bool:
     if left in _PRODUCTION_HISTORY_UNIGRAMS or right in _PRODUCTION_HISTORY_UNIGRAMS:
         return False
     if left in _GENERIC_UNIGRAMS and right in _GENERIC_UNIGRAMS:
+        return False
+    if _keyword_only_bigram(left, right):
         return False
     if not _np_shape_ok(left, right):
         return False
@@ -779,6 +839,43 @@ def _sentence(terms: Sequence[str]) -> str:
         sentence = f"Both stories turn on {rendered[0]}."
     else:
         sentence = f"Both stories turn on {rendered[0]} and {rendered[1]}."
+    return sentence if readable_why(sentence) else ""
+
+
+def _render_terms(terms: Sequence[str]) -> list[str]:
+    """Article-aware phrases for up to two non-overlapping terms."""
+    rendered: list[str] = []
+    used: Set[str] = set()
+    for term in terms:
+        words = set(str(term).split())
+        if not words or words & used:
+            continue
+        phrase = _phrase(str(term))
+        if not phrase:
+            continue
+        rendered.append(phrase)
+        used |= words
+        if len(rendered) == 2:
+            break
+    return rendered
+
+
+def checkable_plot_sentence(terms: Sequence[str]) -> str:
+    """Name shared plot nouns without the keyword template.
+
+    Newsletter, inbox, and For you use this. "Both stories turn on X" is not
+    a reason a person can check. Crew and collection links are a different kind.
+    """
+    rendered = _render_terms(terms)
+    if not rendered:
+        return ""
+    if len(rendered) == 1:
+        sentence = f"Both are about {rendered[0]}."
+    else:
+        sentence = f"Both are about {rendered[0]} and {rendered[1]}."
+    folded = sentence.casefold()
+    if "both stories turn on" in folded:
+        return ""
     return sentence if readable_why(sentence) else ""
 
 
@@ -904,6 +1001,7 @@ def plot_link_json(link: Optional[Mapping[str, Any]]) -> Optional[str]:
         return None
     return json.dumps(
         {
+            "v": PLOT_LINK_CACHE_VERSION,
             "sentence": sentence,
             "terms": [str(term) for term in (link.get("terms") or [])][:3],
         },
@@ -911,18 +1009,33 @@ def plot_link_json(link: Optional[Mapping[str, Any]]) -> Optional[str]:
     )
 
 
+def _current_plot_link(raw: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+    """Accept a plot-link mapping only at ``PLOT_LINK_CACHE_VERSION``."""
+    try:
+        version = int(raw.get("v") or 0)
+    except (TypeError, ValueError):
+        version = 0
+    if version != PLOT_LINK_CACHE_VERSION:
+        return None
+    sentence = str(raw.get("sentence") or "").strip()
+    if not sentence:
+        return None
+    return {
+        "sentence": sentence,
+        "terms": [str(term) for term in (raw.get("terms") or [])][:3],
+    }
+
+
 def parse_plot_link_json(raw: Any) -> Optional[Dict[str, Any]]:
-    """Parse stored ``plot_link_json`` back into ``{sentence, terms}``."""
+    """Parse stored ``plot_link_json`` back into ``{sentence, terms}``.
+
+    A missing or older ``v`` is ignored so a keyword link from a previous
+    gate is not read back. ``{}`` (scored, no link) stays empty.
+    """
     if raw is None:
         return None
     if isinstance(raw, dict):
-        sentence = str(raw.get("sentence") or "").strip()
-        if not sentence:
-            return None
-        return {
-            "sentence": sentence,
-            "terms": [str(term) for term in (raw.get("terms") or [])][:3],
-        }
+        return _current_plot_link(raw)
     text = str(raw or "").strip()
     if not text:
         return None
@@ -932,7 +1045,7 @@ def parse_plot_link_json(raw: Any) -> Optional[Dict[str, Any]]:
         return None
     if not isinstance(parsed, dict):
         return None
-    return parse_plot_link_json(parsed)
+    return _current_plot_link(parsed)
 
 
 def neighbor_identity(item: Any) -> str:
@@ -1026,6 +1139,25 @@ def honest_plot_link(
     if not sentence:
         return None
     return {"sentence": sentence, "terms": terms[:3]}
+
+
+def checkable_plot_link(
+    link: Optional[Mapping[str, Any]],
+    *,
+    shelf_labels: Optional[Set[str]] = None,
+) -> Optional[dict[str, Any]]:
+    """Plot link for newsletter, inbox, and For you.
+
+    Keeps ``honest_plot_link`` terms when they are plot nouns or names, and
+    names them without "both stories turn on". Keyword-only overlap is empty.
+    """
+    accepted = honest_plot_link(link, shelf_labels=shelf_labels)
+    if not accepted:
+        return None
+    sentence = checkable_plot_sentence(list(accepted.get("terms") or []))
+    if not sentence:
+        return None
+    return {"sentence": sentence, "terms": list(accepted.get("terms") or [])}
 
 
 def specific_plot_link(
