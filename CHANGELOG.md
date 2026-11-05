@@ -2,12 +2,14 @@
 
 ## [Unreleased]
 
-The trust release. Only the owner adds to Radarr or Sonarr, nobody else's viewing shows up as yours, the Privacy page says only what the code does, and the server now keeps a daily backup you can restore.
+## [1.39.0] — 2026-11-05
+
+The trust release. Only the owner adds to Radarr or Sonarr, nobody else's viewing shows up as yours, Youth accounts get real privacy guardrails, the Privacy page says only what the code does, and the server now keeps a daily backup you can restore. Every title can also get a subtitle file ready before you press Play.
 
 ### Highlights
-- **The owner decides who adds titles.** By default members see "Ask the owner to add this" instead of an add button, and only the owner confirms Radarr and Sonarr adds. The owner can let a trusted adult member add without a confirm, and every one of those adds lands in the security log. Youth accounts never see a confirm.
-- **Your picks are yours.** Newsletters, nudges, and whispers only use what you finished. Someone else's viewing never becomes your "You watched".
-- **An honest Privacy page.** It lists what is stored, what the owner can see, and what removing an account leaves behind. Claims the app couldn't back up are gone.
+- **The owner decides who adds titles.** By default members see "Ask the owner to add this" instead of an add button, and only the owner confirms Radarr and Sonarr adds. The owner can let a trusted adult member add without a confirm, and every one of those adds lands in the security log.
+- **Your picks and your privacy are yours.** Newsletters, nudges, and whispers only use what you finished, so someone else's viewing never becomes your "You watched". The curator doesn't remember things for Youth accounts unless the owner turns that on, Youth chat never goes to the household's cloud AI, and the Privacy page lists only what the app really stores.
+- **Subtitles ready before you press Play.** Projectionist keeps one subtitle file per title in your household's language, from Plex or OpenSubtitles, and turns captions on when a film isn't in your language.
 - **A daily backup, and a way back.** The server writes a snapshot every day, keeps a week, and Needs attention tells you when backups stop or people are waiting to join.
 
 ### Security
@@ -59,24 +61,20 @@ The trust release. Only the owner adds to Radarr or Sonarr, nobody else's viewin
 - **PRD-003** Live shows in the nav when Live is on and at least one station exists. A saved Tunarr URL is not part of that check.
 - **Release 2 highs (SEC-007 / A11Y-001 / A11Y-004 / UX-002 / UX-005 / PRD-004 / VIS-002 / VIS-004 / GRO-008 / GRO-009 / GRO-010 / PRIV-023 / PRD-007)** Apprise sends refuse private, link-local, and metadata targets before connect and after redirects. Live guide cells are named "4 Drama · …" with visible focus. The phone bar keeps Live. Bulk Delete waits for **Manage**, which only the owner sees. A one-pick answer shows one card. Status colors use tokens. Each email has a one-click unsubscribe for that program (`/api/mail/unsubscribe`, schema migration 65). Local-only joins never mention Plex. Overview adds a separate "likely" count for Plex plays within 7 days of a suggestion to that person. **Settings → My data** shows what the owner did to your account. The Live scope freeze is in `docs/PRODUCT.md`.
 
-## [1.39.0] — 2026-11-02
+### Fixed
+- Choosing **Chat** from a title preview (the row button or the phone **More** menu) closes the preview, so the chat page isn't hidden under it. Add and request actions still keep the preview open.
 
-Youth accounts get real privacy guardrails. The curator doesn't remember things for Youth accounts unless the owner turns that on, and Youth chats never go to the household's cloud AI. Turning Youth mode on for someone now asks the owner to confirm, tells that person, and records it in the security log. It also never opens what the curator remembered about them before.
+### Youth guardrails
+The curator doesn't remember things for Youth accounts unless the owner turns that on, and Youth chats never go to the household's cloud AI. Turning Youth mode on for someone asks the owner to confirm, tells that person, and records it in the security log. It never opens what the curator remembered about them before.
 
-### Highlights
-- **Youth memory is off by default.** The curator doesn't read or save memory for Youth accounts unless the owner turns it on in Admin → Members.
-- **Youth chat stays at home, or stays off.** The owner picks a model that runs on the home network, or none. With none, Youth chat explains that it's off and sends nothing to any AI model. It never falls back to the household's cloud model.
-- **No quiet switches.** Turning Youth mode on for an existing account needs a confirm. The member gets an inbox notice, and the security log records who did it, when, and for which account.
-- **Earlier memory stays private.** Owner review in Admin → Youth only shows notes saved after an account entered Youth mode, so the Youth toggle can't be used to read an adult's memory.
-
-### Added
+#### Added
 - `youth.memory_enabled` (default `false`), `youth.chat_route` (`none` default, or `local`), `youth.local_base_url`, `youth.local_model` in `settings.json`. Existing settings files without these keys load with the safe defaults. A partial `PUT /api/settings` keeps saved Youth fields it did not send.
 - Admin → Members: **Let the curator remember things for Youth accounts** toggle, **Youth chat model** select, and local model address/name fields.
 - `users.youth_since` (schema migration 61). Accounts created from a Youth invite start at creation; every off → on toggle restarts it.
 - Inbox notification kind `account` (same migration widens the `user_notifications` CHECK by rebuilding from the live table definition, so later columns and indexes survive).
 - Confirm dialog before turning Youth mode on for an existing member.
 
-### Changed
+#### Changed
 - `PATCH /api/users/{id}` with `{"is_youth": true}` for a non-Youth account returns **409** and changes nothing (including `role` / `disabled` in the same body) unless `"confirm_youth": true` is sent. On confirm the member gets an `account` inbox notice (forced to the inbox; email/Apprise only if they opted in) and the `youth_change` audit row records `was_youth`, `confirmed`, and `member_notified`. Neither the response, the notice, the audit row, nor logs include memory contents.
 - `GET /api/users/{id}/memory` (owner, Youth only) returns only notes created at or after `youth_since`, plus `youth_since` and `memory_enabled`.
 - Youth chat (`POST /api/chat`, `POST /api/chat/stream`, and persona consults inside them) uses only the Youth route. `none`, a missing local address/model, or an address that is not on the home network (private IP, loopback, link-local, single-label host, or `.local` / `.lan` / `.home` / `.home.arpa` / `.internal` / `.localdomain` / `.localhost`) means no provider is built and the reply is a fixed explanation. `local` swaps only the LLM fields to a keyless OpenAI-compatible provider, so semantic search falls back to on-box hash embeddings rather than the household embedding endpoint. The household LLM config check no longer blocks Youth chat.
@@ -84,15 +82,17 @@ Youth accounts get real privacy guardrails. The curator doesn't remember things 
 - Existing Youth accounts at upgrade: `youth_since` is set to account creation only when the account joined through a Youth invite and has no `youth_change` audit row; every other existing Youth account starts at upgrade time, so earlier notes are no longer shown in owner review.
 - Help, Privacy, Profile badge, and Admin → Youth copy now describe memory-off-by-default, the review window, the confirm/notice/audit flow, and where Youth chats go.
 
-### Not changed
-- Lobby startup, auth defaults, Live guide, unsubscribe, and account deletion are untouched.
+### Upgrade notes
+- Schema migrations 61 through 65 run on first start.
+- **PRD-013** The lobby port (`:8791`) only listens when **Enable lobby display** is on. An install that already had it on keeps it on; one that didn't stops serving the lobby until the owner turns it on and restarts.
+- The Weather Channel's narration voice is off until the owner turns it on in **Admin → Live**.
 
 ### Verification
-- Backend: `pytest tests/` — 2844 passed, 43 skipped; coverage 77.17% (floor 74%). `tests/test_version.py` re-run green after the version bump.
-- `npm run test:release-perf` within budget.
-- `ruff check` clean on touched Python.
-- New: `tests/test_youth_guardrails.py` (29 tests: defaults, legacy settings, local-URL classification, route resolution, review window, migration backfill + notification-kind rebuild, prompt/tool/memory gating, no provider call for `none` on POST and stream, local route provider settings, 409 without confirm, notice + audit on confirm, no memory in response/notice/audit/logs, partial settings PUT).
-- Frontend: `npm run test:unit` (1179 pass), `npm run lint` (0 errors), `npm run build`.
+- Backend: `pytest tests/` — 3074 passed, 43 skipped; coverage 78.01% (floor 74%). `tests/test_version.py` lockstep 1.39.0.
+- Frontend: `npm run test:unit` (1286 pass), `npm run lint` (0 errors, 883 pre-existing warnings), `npm run build`.
+- Page speed: `npm run test:release-perf` passed (About, Explore, Movies, Inbox, and Live within budget).
+- New suites in this release include `tests/test_youth_guardrails.py`, `tests/test_subtitle_enrichment.py`, `tests/test_subtitle_player_proxy.py`, `tests/test_weather_channel.py`, `tests/test_outbound_guard.py`, `tests/test_mail_unsubscribe.py`, `tests/test_likely_picks.py`, `tests/test_setup_passcode_lock.py`, and `tests/test_privacy_contract.py`.
+- Known leftover, not a release gate: `e2e/explore.spec.ts` "loads feed rails, pulse, and Related titles hub" still times out waiting for `title-detail-open-full`, as on 1.38.0.
 
 ## [1.38.0] — 2026-11-02
 
