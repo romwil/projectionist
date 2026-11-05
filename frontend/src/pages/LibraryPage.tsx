@@ -12,6 +12,7 @@ import { savedLibraryChatHref } from "../lib/backNav.js";
 import { libraryHubPath, librarySavedPath } from "../lib/libraryTabs.js";
 import { librarySharePrivacyNote } from "../lib/householdSocial.js";
 import { savedLibraryBlocks } from "../lib/savedLibraryBlocks";
+import { GENERIC_CURATOR_NAME } from "../lib/curatorName";
 
 function groupedByDate(pages: any) {
   return pages.reduce((groups: any, page: any) => {
@@ -102,7 +103,7 @@ export default function LibraryPage() {
                 );
               }
               if (block.kind === "persona_consult") {
-                const name = block.persona || "Curator";
+                const name = block.persona || GENERIC_CURATOR_NAME;
                 const lead = block.lead || `I asked ${name} and they said`;
                 return (
                   <aside className="persona-consult-quote" key={index} aria-label={`Consulted ${name}`}>

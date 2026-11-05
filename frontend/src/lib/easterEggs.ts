@@ -1,4 +1,5 @@
 import type {JsonObject, LibraryItem, JsParam} from "../api/types";
+import { GENERIC_CURATOR_NAME } from "./curatorName";
 const KONAMI_SEQUENCE = [
   "ArrowUp",
   "ArrowUp",
@@ -58,7 +59,7 @@ export function isReversedCuratorName(text: string, curatorName: JsParam) {
   return trimmed.toLowerCase() === reversed.toLowerCase();
 }
 
-export function easterEggResponse(kind: string, curatorName = "Curator") {
+export function easterEggResponse(kind: string, curatorName = GENERIC_CURATOR_NAME) {
   if (kind === "konami") {
     return [
       `**${curatorName}** — you found the secret combo.`,

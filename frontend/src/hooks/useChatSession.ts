@@ -111,6 +111,7 @@ import {
   appendPerfectPickAck,
   chatErrorMessage,
 } from "../lib/chatSession.js";
+import { activeVoice, curatorDisplayName } from "../lib/curatorName";
 
 export type ChatSessionArgs = {
   persona?: Persona | null;
@@ -648,13 +649,13 @@ export default function useChatSession({
   useEffect(() => {
     if (!loading) return;
     // Neutral wait chip bound to the active thread persona — not a canned phrase lottery.
-    const waitLabel = persona?.curator_name || "Curator";
+    const waitLabel = curatorDisplayName(persona, activeVoice(personas, activePersonaId));
     setTypingLabel(waitLabel);
     setAgentActivityLog((prev) => {
       if (prev.some((entry) => entry.kind === "status")) return prev;
       return appendActivityLog(prev, createActivityEvent({ kind: "status", label: "Working…" }));
     });
-  }, [loading, persona?.curator_name]);
+  }, [loading, persona, personas, activePersonaId]);
 
   const personaUi = persona?.persona_ui;
   const composerPlaceholders =
@@ -817,7 +818,7 @@ export default function useChatSession({
         const assistantMessage = await executeSlashCommand(slash, {
           api,
           getFeatures,
-          curatorName: persona?.curator_name || "Curator",
+          curatorName: curatorDisplayName(persona, activeVoice(personas, activePersonaId)),
           user: reviewUserContext,
         });
         setMessages((prev) => [...prev, assistantMessage]);

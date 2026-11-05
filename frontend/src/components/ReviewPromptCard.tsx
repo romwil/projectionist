@@ -6,6 +6,7 @@ import {
 } from "../lib/starRating.js";
 import { titleDetailPath } from "../lib/titleLinks.js";
 import TitleDetailLink from "./TitleDetailLink";
+import { GENERIC_CURATOR_NAME } from "../lib/curatorName";
 
 const DEFAULT_NEAR_COMPLETE_TEMPLATE =
   "{curator_name} noticed you're {pct}% through **{title}**. Quick rating while it's fresh?";
@@ -13,7 +14,7 @@ const DEFAULT_NEAR_COMPLETE_TEMPLATE =
 export function formatReviewPromptMessage(
   prompt: any,
   {
-    curatorName = "Curator",
+    curatorName = GENERIC_CURATOR_NAME,
     template = DEFAULT_NEAR_COMPLETE_TEMPLATE,
     templateKey = "near_complete",
   } = {},
@@ -135,7 +136,7 @@ type ReviewPromptCardProps = {
 
 export default function ReviewPromptCard({
   prompt,
-  curatorName = "Curator",
+  curatorName = GENERIC_CURATOR_NAME,
   reviewPromptTemplates,
   sessionId,
   onSaved,

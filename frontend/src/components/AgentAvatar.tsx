@@ -1,3 +1,4 @@
+import { GENERIC_CURATOR_NAME } from "../lib/curatorName";
 type AgentAvatarProps = {
   name?: string;
   streaming?: boolean;
@@ -6,8 +7,8 @@ type AgentAvatarProps = {
 /**
  * Circular curator/agent mark shown beside assistant messages.
  */
-export default function AgentAvatar({ name = "Curator", streaming = false }: AgentAvatarProps) {
-  const label = String(name || "Curator").trim() || "Curator";
+export default function AgentAvatar({ name = GENERIC_CURATOR_NAME, streaming = false }: AgentAvatarProps) {
+  const label = String(name || GENERIC_CURATOR_NAME).trim() || GENERIC_CURATOR_NAME;
   const initial = label.charAt(0).toUpperCase() || "C";
   return (
     <div
