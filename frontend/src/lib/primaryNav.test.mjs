@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { ROUTES } from "./backNav.ts";
-import { initialLiveChannelsReady, LIVE_NAV_READY_KEY } from "./liveNavReady.ts";
+import {
+  initialLiveChannelsReady,
+  liveChannelsReadyFromFeatures,
+  LIVE_NAV_READY_KEY,
+} from "./liveNavReady.ts";
 import {
   PRIMARY_NAV_ITEMS,
   buildPrimaryBottomNavItems,
@@ -96,6 +100,34 @@ describe("primaryNav", () => {
       authReady: false,
     });
     assert.equal(itemsUnresolved.some((item) => item.id === "admin"), false);
+  });
+
+  it("shows Live for owner, member, and youth when ready without a Tunarr URL", () => {
+    const features = {
+      features: {
+        live_channels_enabled: true,
+        live_channels_ready: true,
+      },
+    };
+    assert.equal(features.tunarr, undefined);
+    assert.equal(liveChannelsReadyFromFeatures(features), true);
+    const ready = liveChannelsReadyFromFeatures(features);
+    const cases = [
+      { role: "owner", isOwner: true, liveChannelsReady: ready },
+      { role: "member", isOwner: false, liveChannelsReady: ready },
+      { role: "member", isOwner: false, isYouth: true, liveChannelsReady: ready },
+    ];
+    for (const opts of cases) {
+      const items = buildPrimaryNavItems(opts);
+      assert.equal(items.some((item) => item.id === "live" && item.to === ROUTES.live), true);
+      assert.equal(items.some((item) => item.id === "admin"), Boolean(opts.isOwner));
+      const drawer = buildPrimaryDrawerItems(opts);
+      assert.equal(drawer.some((item) => item.id === "live"), true);
+    }
+    const youth = buildPrimaryNavItems(cases[2]);
+    assert.equal(youth.find((item) => item.id === "chat")?.label, "Ask");
+    assert.equal(youth.find((item) => item.id === "explore")?.label, "Browse");
+    assert.equal(youth.some((item) => item.id === "admin"), false);
   });
 
   it("youth sees Ask/Browse labels, never Admin or My Journey", () => {

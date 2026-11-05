@@ -145,11 +145,6 @@ def _live_enabled(settings: Any) -> bool:
     return bool(getattr(flags, "live_channels_enabled", False))
 
 
-def _tunarr_url(settings: Any) -> str:
-    tunarr = getattr(settings, "tunarr", None)
-    return str(getattr(tunarr, "url", "") or "").strip()
-
-
 def _read_reload_stamp(db: Any) -> Optional[float]:
     if db is None or not hasattr(db, "get_sync_state"):
         return None

@@ -87,8 +87,8 @@ const PUBLIC_PRIMARY_IDS = ["search", "chat", "explore", "inbox", "settings"];
  * Owner: full set, once auth has settled.
  *
  * A slow `/api/auth/me` must not hide Search, Chat, Explore, and the other
- * public peers. Live is included when this install already knows the feature
- * is on (HTML stamp or cache), without waiting on features/auth. Admin waits
+ * public peers. Live is included when this install is ready (HTML stamp or
+ * cache: Live on, and at least one station). Admin waits
  * on auth so a member never sees the owner icon while the session check is
  * in flight.
  */
