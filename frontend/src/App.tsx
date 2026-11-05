@@ -48,6 +48,7 @@ import useChatScroll from "./hooks/useChatScroll";
 import useChatSession from "./hooks/useChatSession";
 import useKeyboardShortcuts from "./hooks/useKeyboardShortcuts";
 import useVoiceMode from "./hooks/useVoiceMode.js";
+import { activeVoice, curatorDisplayName } from "./lib/curatorName";
 
 const SIDEBAR_RAIL_KEY = "projectionist.sidebar.rail";
 
@@ -462,7 +463,7 @@ export default function App() {
 
   const requestPath = requestPathFromFeatures(features);
   const agentPulse = resolveAgentPulse({ loading, chatError });
-  const curatorName = persona?.curator_name || "Curator";
+  const curatorName = curatorDisplayName(persona, activeVoice(personas, activePersonaId));
   const radarrConnected = arrServiceConnected(setup, features, "radarr");
   const sonarrConnected = arrServiceConnected(setup, features, "sonarr");
   const dockDropEnabled =

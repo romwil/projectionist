@@ -47,6 +47,11 @@ The trust release. Only the owner adds to Radarr or Sonarr, nobody else's viewin
 - **PRD-008 / PRD-010** Profile no longer rewards chat streaks, and pages nothing linked to are gone.
 - **PRD-013** The lobby port stays closed until the owner turns on **Enable lobby display** and restarts.
 - **GRO-020** The unused `interaction_telemetry` table is dropped (schema migration 63, after youth 61 and autoconfirm 62).
+- **GRO-014** Member-facing copy uses one curator name: the owner's name when it is set, otherwise the voice the picker shows, otherwise "Your curator".
+- **GRO-008** Newsletter, arrival, nudge, and Year in Review mail end with a way back to the inbox and a way to turn mail off. SMTP and Resend send `List-Unsubscribe` for that settings page.
+- **GRO-009** Household invite email sends. The subject names the inviter, and the body says the link works once and when it expires.
+- **GRO-011** The Unraid Community Apps overview reads as a store card: what is needed, what is optional, and one LAN line. Both template copies stay the same.
+- **PERF-005** The first page no longer downloads the player. Play loads that piece when you start it.
 
 ## [1.39.0] — 2026-11-02
 

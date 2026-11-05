@@ -94,7 +94,22 @@ def _html_body(mail: MailSettings, *, body_text: str, body_html: Optional[str] =
     return "".join(parts)
 
 
-def _send_smtp(mail: MailSettings, *, to_email: str, subject: str, text: str, html: str) -> MailSendResult:
+def _list_unsubscribe_header(url: Optional[str]) -> str:
+    cleaned = str(url or "").strip()
+    if not cleaned.startswith(("http://", "https://")) or any(ch in cleaned for ch in "<>\r\n"):
+        return ""
+    return f"<{cleaned}>"
+
+
+def _send_smtp(
+    mail: MailSettings,
+    *,
+    to_email: str,
+    subject: str,
+    text: str,
+    html: str,
+    list_unsubscribe: str = "",
+) -> MailSendResult:
     host = str(mail.smtp_host or "").strip()
     port = int(mail.smtp_port or 587)
     username = str(mail.smtp_username or "").strip()
@@ -105,6 +120,8 @@ def _send_smtp(mail: MailSettings, *, to_email: str, subject: str, text: str, ht
     msg["Subject"] = subject
     msg["From"] = _from_header(mail)
     msg["To"] = to_email
+    if list_unsubscribe:
+        msg["List-Unsubscribe"] = list_unsubscribe
     msg.set_content(text)
     msg.add_alternative(html, subtype="html")
 
@@ -128,7 +145,15 @@ def _send_smtp(mail: MailSettings, *, to_email: str, subject: str, text: str, ht
     return MailSendResult(ok=True, provider="smtp", detail="sent")
 
 
-def _send_resend(mail: MailSettings, *, to_email: str, subject: str, text: str, html: str) -> MailSendResult:
+def _send_resend(
+    mail: MailSettings,
+    *,
+    to_email: str,
+    subject: str,
+    text: str,
+    html: str,
+    list_unsubscribe: str = "",
+) -> MailSendResult:
     api_key = str(mail.resend_api_key or "").strip()
     payload: dict[str, Any] = {
         "from": _from_header(mail),
@@ -137,6 +162,8 @@ def _send_resend(mail: MailSettings, *, to_email: str, subject: str, text: str, 
         "text": text,
         "html": html,
     }
+    if list_unsubscribe:
+        payload["headers"] = {"List-Unsubscribe": list_unsubscribe}
     try:
         with httpx.Client(timeout=30.0) as client:
             response = client.post(
@@ -169,8 +196,13 @@ def send_mail(
     subject: str,
     body_text: str,
     body_html: Optional[str] = None,
+    list_unsubscribe: Optional[str] = None,
 ) -> MailSendResult:
     """Send one email using the configured provider.
+
+    ``list_unsubscribe`` is an http(s) page where the reader turns the mail off.
+    It is sent as ``List-Unsubscribe`` without ``List-Unsubscribe-Post``: the page
+    needs a sign-in, so it is not an RFC 8058 one-click endpoint.
 
     Raises ``MailSendError`` when configuration is incomplete or the provider fails.
     """
@@ -185,9 +217,14 @@ def send_mail(
     final_subject = _apply_subject_prefix(mail, subject)
     text = str(body_text or "").strip() or final_subject
     html = _html_body(mail, body_text=text, body_html=body_html)
+    unsubscribe = _list_unsubscribe_header(list_unsubscribe)
 
     if provider == "smtp":
-        return _send_smtp(mail, to_email=recipient, subject=final_subject, text=text, html=html)
+        return _send_smtp(
+            mail, to_email=recipient, subject=final_subject, text=text, html=html, list_unsubscribe=unsubscribe
+        )
     if provider == "resend":
-        return _send_resend(mail, to_email=recipient, subject=final_subject, text=text, html=html)
+        return _send_resend(
+            mail, to_email=recipient, subject=final_subject, text=text, html=html, list_unsubscribe=unsubscribe
+        )
     raise MailSendError(f"Unsupported mail provider: {provider}")

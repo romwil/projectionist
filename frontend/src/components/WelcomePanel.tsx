@@ -1,3 +1,4 @@
+import { GENERIC_CURATOR_NAME } from "../lib/curatorName";
 const DEFAULT_GREETING = "Hi — I'm {curator_name}. What should we dig into today?";
 const DEFAULT_STARTERS = [
   "Suggest something unwatched from my library",
@@ -16,7 +17,7 @@ type WelcomePanelProps = {
 };
 
 export default function WelcomePanel({
-  curatorName = "Curator",
+  curatorName = GENERIC_CURATOR_NAME,
   greeting,
   starters,
   onStarterSelect,

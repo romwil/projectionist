@@ -1,4 +1,5 @@
 import type {Features, JsonObject, JsParam} from "../api/types";
+import { GENERIC_CURATOR_NAME } from "./curatorName";
 export const PERFECT_PICK_ACK =
   "\n\n*(You're on a roll with these picks — I'll keep that momentum going.)*";
 
@@ -32,7 +33,7 @@ export function chatErrorMessage(reason: unknown, snark: number = 0.5) {
   if (snark <= 0.33) {
     return `Sorry, I couldn't respond just now: ${reason}`;
   }
-  return `Curator couldn't respond: ${reason}`;
+  return `${GENERIC_CURATOR_NAME} couldn't respond: ${reason}`;
 }
 
 export function pickStoredThreadId(threadList: JsParam[] | null | undefined, storedId: string | null | undefined, loaded: boolean) {

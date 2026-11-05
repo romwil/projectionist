@@ -93,7 +93,8 @@ test.describe("Chat workspace", () => {
     await page.getByTestId("send-button").click();
     await expect(page.getByTestId("typing-indicator")).toBeVisible();
     // Neutral persona-bound wait chip — not canned "Searching…" / phrase lottery.
-    await expect(page.getByTestId("typing-indicator")).toContainText(/Curator/i);
+    // Onboarding names the curator "Test Curator", so that name wins over the default voice.
+    await expect(page.getByTestId("typing-indicator")).toContainText("Test Curator");
     await expect(page.getByTestId("typing-indicator")).not.toContainText(/Searching/i);
   });
 

@@ -11,6 +11,7 @@ from projectionist.config_store import Settings
 from projectionist.library.db import Database
 from projectionist.library.feeds import feed_recently_added
 from projectionist.notifications.good_news import format_good_news, persona_from_db
+from projectionist.persona.display import curator_display_name, default_voice
 from projectionist.notifications.service import deliver_notification
 
 logger = logging.getLogger(__name__)
@@ -146,7 +147,7 @@ def notify_arrivals(
             title=title,
             year=year,
             source="gap" if is_gap else "watchlist",
-            curator_name=curator_name,
+            curator_name=curator_display_name(curator_name, default_voice(db)),
             preset_id=preset_id,
         )
         recipients: List[str] = []
