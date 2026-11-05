@@ -381,6 +381,37 @@ export function resolvePlaySubtitleTracks(
 }
 
 /**
+ * True / false when the title's language is known to match / differ from the
+ * household language; null when either is unknown.
+ */
+export function titleLanguageIsHousehold(titleLanguage: unknown, householdLanguage: unknown) {
+  const title = String(titleLanguage || "").trim();
+  const household = String(householdLanguage || "").trim();
+  if (!title || !household) return null;
+  return subtitleLanguageMatches(title, household) || subtitleLanguageMatches(household, title);
+}
+
+/**
+ * Play default: a title in another language starts with captions on; a title
+ * in the household language stays off until the member turns captions on.
+ * Unknown language keeps `resolvePlaySubtitleTracks`' auto-select-after-fetch rule.
+ */
+export function playCaptionsDefaultIndex(
+  {
+  resolved = null,
+  titleLanguage = "",
+  householdLanguage = "",
+  preferredLanguages = ["en"],
+}: JsParam = {},
+) {
+  const tracks = Array.isArray(resolved?.tracks) ? resolved.tracks : [];
+  const household = titleLanguageIsHousehold(titleLanguage, householdLanguage || preferredLanguages?.[0]);
+  if (household === true) return -1;
+  if (household === false) return preferredPickableSubtitle(tracks, preferredLanguages)?.index ?? -1;
+  return resolved?.autoSelectIndex ?? -1;
+}
+
+/**
  * Seconds into a Live airing: wall clock minus the program's scheduled start.
  * Live encodes are cut at the schedule offset, so this tracks the movie timeline.
  */

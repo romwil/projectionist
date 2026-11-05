@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from projectionist.connectors.plex import PlexClient, PlexSubtitleStream
@@ -257,6 +258,269 @@ class FileRouteTests(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 502)
         self.assertNotIn("Plex", str(ctx.exception.detail))
         self.assertIn("text", str(ctx.exception.detail).lower())
+
+
+# -- Household subtitle cache -------------------------------------------------
+
+GOOD_SRT = b"1\n00:00:01,000 --> 00:00:03,000\nBonjour, hello there\n\n2\n00:00:04,000 --> 00:00:05,000\nBye\n"
+FRENCH_TEXT = PlexSubtitleStream(
+    id="7001", language="French", language_code="fra", format="srt", key="/library/streams/7001", external=True
+)
+ENGLISH_TEXT = PlexSubtitleStream(
+    id="7002", language="English", language_code="eng", format="srt", key="/library/streams/7002", external=True
+)
+ENGLISH_PGS = PlexSubtitleStream(id="7003", language="English", language_code="eng", format="pgs", key="")
+
+_OS_ENV = ("PROJECTIONIST_OPENSUBTITLES_API_KEY", "OPENSUBTITLES_API_KEY")
+
+
+class _KeySettings(_Settings):
+    def __init__(self, key: str = "os-key") -> None:
+        self.opensubtitles_api_key = key
+
+
+class _FakePlex:
+    def __init__(self, streams=(), body: bytes = GOOD_SRT) -> None:
+        self.streams = list(streams)
+        self.body = body
+        self.listed = 0
+        self.fetched: list[str] = []
+
+    def list_subtitle_streams(self, rating_key):
+        self.listed += 1
+        return list(self.streams)
+
+    def fetch_subtitle_bytes(self, path):
+        self.fetched.append(path)
+        return self.body
+
+    def media_file_paths(self, rating_key, include_leaves=False):
+        return []
+
+
+class _FakeOpenSubtitles:
+    def __init__(self, *, body: bytes = GOOD_SRT, language: str = "en", hang: float = 0.0) -> None:
+        self.body = body
+        self.language = language
+        self.hang = hang
+        self.searches: list[dict] = []
+        self.downloads: list = []
+
+    def search(self, params):
+        self.searches.append(dict(params))
+        if self.hang:
+            import time as _time
+
+            _time.sleep(self.hang)
+        return [
+            {
+                "attributes": {
+                    "language": self.language,
+                    "hearing_impaired": False,
+                    "files": [{"file_id": 501, "file_name": "movie.srt"}],
+                }
+            }
+        ]
+
+    def download(self, file_id):
+        self.downloads.append(file_id)
+        return self.body, 50, None
+
+
+def _library_db(tmp: str):
+    import time as _time
+
+    from projectionist.library.db import Database
+
+    db = Database(Path(tmp) / "library.db")
+    now = _time.time()
+    with db.connect() as conn:
+        conn.execute(
+            "INSERT INTO library_items (rating_key, media_type, title, year, imdb_id, original_language, updated_at) "
+            "VALUES ('100', 'movie', 'Amélie', 2001, 'tt0211915', 'fr', ?)",
+            (now,),
+        )
+        conn.execute(
+            "INSERT INTO library_items (rating_key, media_type, title, year, imdb_id, original_language, updated_at) "
+            "VALUES ('200', 'movie', 'Heat', 1995, 'tt0113277', 'en', ?)",
+            (now,),
+        )
+        conn.execute(
+            "INSERT INTO library_items (rating_key, media_type, title, year, imdb_id, original_language, updated_at) "
+            "VALUES ('300', 'show', 'Lupin', 2021, 'tt2531336', 'fr', ?)",
+            (now,),
+        )
+        show_id = conn.execute("SELECT id FROM library_items WHERE rating_key = '300'").fetchone()[0]
+        conn.execute(
+            "INSERT INTO library_episodes (show_item_id, rating_key, season_number, episode_number, title) "
+            "VALUES (?, '301', 2, 3, 'Chapter 8')",
+            (show_id,),
+        )
+    return db
+
+
+class HouseholdSubtitleCacheTests(unittest.TestCase):
+    def setUp(self) -> None:
+        import os
+        import tempfile
+
+        self._tmp = tempfile.TemporaryDirectory()
+        self.data_dir = Path(self._tmp.name)
+        self.db = _library_db(self._tmp.name)
+        self._env = patch.dict(os.environ, {"DATA_DIR": self._tmp.name})
+        self._env.start()
+        for name in _OS_ENV:
+            os.environ.pop(name, None)
+
+    def tearDown(self) -> None:
+        self._env.stop()
+        self._tmp.cleanup()
+
+    def _ensure(self, key, *, plex, os_client=None, settings=None, **kwargs):
+        from projectionist.library import subtitle_cache
+
+        with patch.object(subtitle_cache, "OpenSubtitlesClient", return_value=os_client):
+            return subtitle_cache.ensure_household_subtitle(
+                settings or _KeySettings(),
+                key,
+                db=self.db,
+                data_dir=self.data_dir,
+                plex_client=plex,
+                **kwargs,
+            )
+
+    def test_pgs_only_movie_gets_cached_srt_and_vtt(self) -> None:
+        from projectionist.library.subtitle_cache import cache_path, cached_subtitle_vtt
+
+        plex = _FakePlex([PGS, ENGLISH_PGS])
+        opensubs = _FakeOpenSubtitles()
+        result = self._ensure("100", plex=plex, os_client=opensubs)
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(result["source"], "opensubtitles")
+        path = cache_path("100", "en", data_dir=self.data_dir)
+        self.assertEqual(path, self.data_dir / "subtitles" / "100" / "en.srt")
+        self.assertTrue(path.is_file())
+        self.assertEqual(plex.fetched, [], "bitmap tracks are never fetched as text")
+        vtt = cached_subtitle_vtt("100", "cached-en", data_dir=self.data_dir)
+        self.assertTrue(vtt.startswith("WEBVTT"))
+        self.assertIn("00:00:01.000 --> 00:00:03.000", vtt)
+        self.assertEqual(result["track"]["proxy_url"], "/api/library/items/100/subtitles/cached-en/file")
+        self.assertTrue(is_our_subtitle_proxy_url(result["track"]["proxy_url"]))
+
+    def test_cached_file_route_serves_vtt(self) -> None:
+        from projectionist.web import library_routes as library_mod
+
+        self._ensure("100", plex=_FakePlex([PGS]), os_client=_FakeOpenSubtitles())
+        resp = library_mod.library_item_subtitle_file_endpoint("100", "cached-en", user=None)
+        self.assertTrue(resp.media_type.startswith("text/vtt"))
+        self.assertIn("Bonjour", resp.body.decode())
+
+    def test_english_movie_without_text_track_still_gets_a_file(self) -> None:
+        opensubs = _FakeOpenSubtitles()
+        result = self._ensure("200", plex=_FakePlex([ENGLISH_PGS]), os_client=opensubs)
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(opensubs.searches[0].get("imdb_id"), "113277")
+        self.assertEqual(opensubs.searches[0].get("year"), 1995)
+        self.assertTrue((self.data_dir / "subtitles" / "200" / "en.srt").is_file())
+
+    def test_episode_uses_parent_show_lookup(self) -> None:
+        opensubs = _FakeOpenSubtitles()
+        result = self._ensure("301", plex=_FakePlex([]), os_client=opensubs)
+        self.assertTrue(result["ok"], result)
+        query = opensubs.searches[0]
+        self.assertEqual(query["parent_imdb_id"], "2531336")
+        self.assertEqual(query["season_number"], 2)
+        self.assertEqual(query["episode_number"], 3)
+        self.assertNotIn("imdb_id", query)
+
+    def test_plex_text_track_is_copied_without_opensubtitles(self) -> None:
+        plex = _FakePlex([FRENCH_TEXT, ENGLISH_TEXT])
+        opensubs = _FakeOpenSubtitles()
+        result = self._ensure("100", plex=plex, os_client=opensubs)
+        self.assertEqual(result["source"], "plex")
+        self.assertEqual(opensubs.searches, [])
+        self.assertTrue(plex.fetched and "7002" in plex.fetched[0])
+        from projectionist.library.subtitle_state import get_state
+
+        self.assertEqual(get_state(self.db, "100", "en")["status"], "cached")
+
+    def test_cached_file_is_not_downloaded_again(self) -> None:
+        opensubs = _FakeOpenSubtitles()
+        self._ensure("200", plex=_FakePlex([]), os_client=opensubs)
+        plex = _FakePlex([ENGLISH_TEXT])
+        again = self._ensure("200", plex=plex, os_client=opensubs)
+        self.assertEqual(again["reason"], "already_cached")
+        self.assertEqual(len(opensubs.searches), 1)
+        self.assertEqual(len(opensubs.downloads), 1)
+        self.assertEqual(plex.listed, 0)
+
+    def test_no_key_means_no_opensubtitles_call_and_plex_copy_still_works(self) -> None:
+        opensubs = _FakeOpenSubtitles()
+        miss = self._ensure("200", plex=_FakePlex([ENGLISH_PGS]), os_client=opensubs, settings=_KeySettings(""))
+        self.assertEqual(miss["reason"], "no_opensubtitles_key")
+        self.assertFalse(miss["opensubtitles_configured"])
+        self.assertEqual(opensubs.searches, [])
+        copied = self._ensure("100", plex=_FakePlex([ENGLISH_TEXT]), os_client=opensubs, settings=_KeySettings(""))
+        self.assertEqual(copied["source"], "plex")
+        self.assertEqual(opensubs.searches, [])
+
+    def test_empty_body_is_not_cached(self) -> None:
+        from projectionist.library.subtitle_state import get_state
+
+        for body in (b"", b"   \n", b"<html><body>Error</body></html>"):
+            result = self._ensure("200", plex=_FakePlex([]), os_client=_FakeOpenSubtitles(body=body))
+            self.assertFalse(result["ok"])
+            self.assertIsNone(result["track"])
+            self.assertFalse((self.data_dir / "subtitles" / "200" / "en.srt").exists())
+        state = get_state(self.db, "200", "en")
+        self.assertEqual(state["status"], "retry")
+        listed = list_item_subtitles(_Settings(), "200", db=self.db, data_dir=self.data_dir)
+        self.assertFalse(any(str(r.get("id")).startswith("cached-") for r in listed["streams"]))
+
+    def test_empty_plex_text_falls_through_and_is_not_cached(self) -> None:
+        plex = _FakePlex([ENGLISH_TEXT], body=b"")
+        result = self._ensure("200", plex=plex, os_client=None, settings=_KeySettings(""))
+        self.assertFalse(result["ok"])
+        self.assertFalse((self.data_dir / "subtitles" / "200").exists())
+
+    def test_list_puts_cached_track_first_with_title_language(self) -> None:
+        self._ensure("100", plex=_FakePlex([PGS]), os_client=_FakeOpenSubtitles())
+        client = PlexClient("http://plex.test:32400", "SECRET-TOKEN")
+        with patch("projectionist.library.subtitles.plex_client_from_settings", return_value=client), patch.object(
+            client, "list_subtitle_streams", return_value=[PGS]
+        ):
+            listed = list_item_subtitles(_Settings(), "100", db=self.db, data_dir=self.data_dir)
+        self.assertEqual(listed["streams"][0]["id"], "cached-en")
+        self.assertTrue(listed["has_preferred"])
+        self.assertEqual(listed["title_language"], "fr")
+        self.assertEqual(listed["media_type"], "movie")
+
+    def test_live_payload_carries_cache_language_and_media_type(self) -> None:
+        self._ensure("100", plex=_FakePlex([PGS]), os_client=_FakeOpenSubtitles())
+        with patch("projectionist.library.subtitles.plex_client_from_settings", return_value=None):
+            payload = live_subtitles_payload(
+                _Settings(),
+                channel_id="9",
+                now_program={"title": "Amélie", "plex_rating_key": "100", "media_type": "movie"},
+                db=self.db,
+                data_dir=self.data_dir,
+            )
+        self.assertEqual(payload["original_language"], "fr")
+        self.assertEqual(payload["media_type"], "movie")
+        self.assertEqual(payload["cached_track"]["id"], "cached-en")
+        self.assertEqual(payload["plex_streams"][0]["proxy_url"], "/api/library/items/100/subtitles/cached-en/file")
+
+    def test_live_payload_flex_never_lists_or_fetches(self) -> None:
+        with patch("projectionist.library.subtitles.list_item_subtitles") as listed:
+            payload = live_subtitles_payload(
+                _Settings(),
+                channel_id="9",
+                now_program={"title": "Between programs", "plex_rating_key": "100", "is_flex": True},
+                db=self.db,
+            )
+        listed.assert_not_called()
+        self.assertFalse(payload["can_download"])
+        self.assertTrue(payload["is_flex"])
 
 
 if __name__ == "__main__":

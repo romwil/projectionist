@@ -15,10 +15,42 @@ export const TASK_LABELS: Record<string, any> = {
   plot_neighbors: "Refresh similar titles",
   purge_candidates: "Purge candidates",
   semantic_embeddings: "Plot similarity index",
+  subtitle_enrichment: "Save subtitles",
   summary_motifs: "Find plot patterns",
   taste_refresh: "Taste refresh",
   title_relations_refresh: "Refresh title connections",
 };
+
+export const SUBTITLE_TASK_NAME = "subtitle_enrichment";
+
+/** Owner card copy for the subtitle backfill, from the server's DB-row counts. */
+export function describeSubtitleBackfill(status: JsParam) {
+  if (!status || typeof status !== "object") {
+    return { active: false, stateLabel: "", progressLine: "", errorLine: "", keyNote: "" };
+  }
+  const done = Number(status.done) || 0;
+  const remaining = Number(status.remaining) || 0;
+  const state = String(status.state || "");
+  const active = Boolean(status.running) || state === "running" || state === "stopping";
+  const labels: Record<string, string> = {
+    running: status.running ? "Backfill running" : "Backfill waiting to resume",
+    stopping: "Stopping after this title",
+    stopped: "Backfill stopped",
+    paused_quota: "Paused: OpenSubtitles download limit",
+    done: "Backfill finished",
+  };
+  const progressLine = `${done.toLocaleString()} done · ${remaining.toLocaleString()} remaining`;
+  const lastError = String(status.last_error || "").trim();
+  return {
+    active,
+    stateLabel: labels[state] || "",
+    progressLine,
+    errorLine: lastError ? `Last error: ${lastError}` : "",
+    keyNote: status.opensubtitles_configured
+      ? ""
+      : "OpenSubtitles isn’t set up, so only subtitles Plex already has are saved.",
+  };
+}
 
 /** Cadence presets for the owner frequency control (seconds). */
 export const CADENCE_PRESETS = [

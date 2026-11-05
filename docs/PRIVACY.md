@@ -138,6 +138,10 @@ When someone opens the **Weather Channel** from Live:
 
 A place you save is stored on your profile and reused, so it isn't looked up again.
 
+### Subtitles
+
+Subtitle enrichment, the owner's **Backfill subtitles**, Play, or Live may download a caption file from OpenSubtitles and keep it on the server; the lookup sends a file hash or an IMDB id, and there is no OpenSubtitles call when the key is empty.
+
 ### Watchlist and your Plex account
 
 Watchlist pins are yours. When watchlist sync with Plex is on, Projectionist uses the encrypted Plex account token from your sign-in to read and update your Plex watchlist. If that token is missing, it asks you to sign in again. It never uses the household's server token in its place.

@@ -66,6 +66,7 @@ import {
 import {
   SUBTITLE_EMPTY_TRACKS,
   SUBTITLE_NO_TEXT_TRACKS,
+  playCaptionsDefaultIndex,
   resolvePlaySubtitleTracks,
   resolveSubtitlePresentation,
   silenceNativeTextTracks,
@@ -314,7 +315,7 @@ export default function LibraryPlayer({
           preferredLanguages: preferred,
         });
         if (first.needsFetch) {
-          setSubListNote("Looking for text captions…");
+          setSubListNote("Finding subtitles…");
           try {
             const result = await downloadLibraryItemSubtitles(subtitleKey);
             if (cancelled) return;
@@ -337,7 +338,13 @@ export default function LibraryPlayer({
         });
         setSubTracks(resolved.tracks);
         setBurnInTracks(resolved.burnInTracks);
-        if (resolved.autoSelectIndex !== -1) setActiveSub(resolved.autoSelectIndex);
+        const defaultIndex = playCaptionsDefaultIndex({
+          resolved,
+          titleLanguage: listed?.title_language,
+          householdLanguage: listed?.household_language,
+          preferredLanguages: preferred,
+        });
+        if (defaultIndex !== -1) setActiveSub(defaultIndex);
         if (resolved.empty && !resolved.burnInTracks.length) {
           setSubListNote(
             downloadMessage ||

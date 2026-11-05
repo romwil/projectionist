@@ -2,7 +2,12 @@
 
 import type {JsonObject, LibraryItem, JsParam} from "../api/types";
 import { ROUTES } from "./backNav.js";
-import { isOurSubtitleProxyUrl, resolvePlaySubtitleTracks } from "./subtitleCues.js";
+import {
+  isOurSubtitleProxyUrl,
+  preferredPickableSubtitle,
+  resolvePlaySubtitleTracks,
+  titleLanguageIsHousehold,
+} from "./subtitleCues.js";
 import {
   formatProgramDisplayTitle,
   formatProgramEpisodeLabel,
@@ -56,6 +61,29 @@ export function mergeLiveCcTracks(streamTracks: JsParam[] = [], plexPayload: JsP
     emptyMessage,
     hasAny,
   };
+}
+
+/** One airing: channel + title + scheduled start. Turning captions off sticks to this key. */
+export function liveCaptionAiringKey(channelId: unknown, plexRatingKey: unknown, start: unknown) {
+  return `${String(channelId || "")}|${String(plexRatingKey || "")}|${String(start ?? "")}`;
+}
+
+/**
+ * Live default-on, separate from the auto-select-after-fetch rule: a movie whose
+ * `original_language` is not the household language turns captions on once a
+ * drawable track exists. Episodes, flex/filler, household-language films, and
+ * an airing the member already turned off stay off.
+ */
+export function liveCaptionsDefaultTrack(plexPayload: JsParam, { userTurnedOff = false }: JsParam = {}) {
+  if (!plexPayload || userTurnedOff || plexPayload.is_flex) return -1;
+  if (String(plexPayload.media_type || "").toLowerCase() !== "movie") return -1;
+  const household = plexPayload.household_language
+    || (Array.isArray(plexPayload.preferred_languages) ? plexPayload.preferred_languages[0] : "")
+    || "en";
+  if (titleLanguageIsHousehold(plexPayload.original_language, household) !== false) return -1;
+  const merged = mergeLiveCcTracks([], plexPayload);
+  const preferred = Array.isArray(plexPayload.preferred_languages) ? plexPayload.preferred_languages : ["en"];
+  return preferredPickableSubtitle(merged.plexTracks, preferred)?.index ?? -1;
 }
 
 export function liveStreamUrl(channelId: string) {

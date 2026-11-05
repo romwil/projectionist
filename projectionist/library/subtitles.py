@@ -271,11 +271,29 @@ def fetch_subtitle_vtt(client: PlexClient, stream: Mapping[str, Any]) -> str:
     raise last or ValueError("Could not fetch subtitle track")
 
 
+def _title_fields(settings: Any, db: Any, key: str) -> Dict[str, Any]:
+    from projectionist.library.episode_investigate.capabilities import opensubtitles_api_key
+    from projectionist.library.subtitle_cache import household_language, title_subtitle_context
+
+    ctx = title_subtitle_context(db, key)
+    return {
+        "media_type": ctx.get("media_type") or "",
+        "title_language": ctx.get("original_language") or "",
+        "household_language": household_language(settings),
+        "opensubtitles_configured": bool(opensubtitles_api_key(settings)),
+    }
+
+
 def list_item_subtitles(
     settings: Any,
     rating_key: str,
+    *,
+    db: Any = None,
+    data_dir: Any = None,
 ) -> Dict[str, Any]:
-    """List Plex-attached subtitle streams for a movie/episode rating key."""
+    """List the cached household file plus Plex-attached streams for a movie/episode."""
+    from projectionist.library.subtitle_cache import cached_track_rows
+
     key = str(rating_key or "").strip()
     languages = preferred_subtitle_languages(settings)
     if not key:
@@ -288,40 +306,113 @@ def list_item_subtitles(
             "message": "A Plex rating key is required.",
             "reason": "missing_rating_key",
         }
+    cached = cached_track_rows(key, settings, data_dir=data_dir)
+    title = _title_fields(settings, db, key)
     client = plex_client_from_settings(settings)
     if client is None:
         return {
-            "ok": False,
+            "ok": bool(cached),
             "rating_key": key,
-            "streams": [],
+            "streams": cached,
             "preferred_languages": languages,
-            "has_preferred": False,
-            "message": "Plex isn’t connected, so subtitle tracks aren’t available.",
-            "reason": "plex_unconfigured",
+            "has_preferred": bool(cached),
+            "message": "" if cached else "Plex isn’t connected, so subtitle tracks aren’t available.",
+            "reason": "" if cached else "plex_unconfigured",
+            **title,
         }
     try:
         streams = client.list_subtitle_streams(key)
     except Exception as error:  # noqa: BLE001
         logger.info("Plex subtitle list failed for %s: %s", key, error)
         return {
-            "ok": False,
+            "ok": bool(cached),
             "rating_key": key,
-            "streams": [],
+            "streams": cached,
             "preferred_languages": languages,
-            "has_preferred": False,
-            "message": "Couldn’t read subtitle tracks from Plex for this title.",
-            "reason": "plex_error",
+            "has_preferred": bool(cached),
+            "message": "" if cached else "Couldn’t read subtitle tracks from Plex for this title.",
+            "reason": "" if cached else "plex_error",
             "error": str(error)[:200],
+            **title,
         }
-    rows = [decorate_subtitle_row(key, s.to_dict()) for s in streams]
+    rows = cached + [decorate_subtitle_row(key, s.to_dict()) for s in streams]
     return {
         "ok": True,
         "rating_key": key,
         "streams": rows,
         "preferred_languages": languages,
-        "has_preferred": has_preferred_subtitle(streams, languages),
+        "has_preferred": bool(cached) or has_preferred_subtitle(streams, languages),
         "message": "" if rows else "No subtitle tracks are attached in Plex yet.",
         "reason": "" if rows else "none_attached",
+        **title,
+    }
+
+
+def fetch_household_subtitles(
+    settings: Any,
+    rating_key: str,
+    *,
+    db: Any = None,
+    data_dir: Any = None,
+    language: str = "",
+    prefer_sdh: bool = False,
+    ask_plex: bool = True,
+) -> Dict[str, Any]:
+    """Play and Live on-the-spot fetch: cache the household file, else ask Plex.
+
+    Same helper the subtitle task uses, so a file fetched here is the one the
+    next viewer gets from the cache.
+    """
+    from projectionist.library.subtitle_cache import ensure_household_subtitle
+
+    key = str(rating_key or "").strip()
+    ensured = ensure_household_subtitle(
+        settings,
+        key,
+        db=db,
+        data_dir=data_dir,
+        language=language,
+        prefer_sdh=prefer_sdh,
+    )
+    if ensured.get("track") is not None:
+        listed = list_item_subtitles(settings, key, db=db, data_dir=data_dir)
+        return {
+            "ok": True,
+            "downloaded": ensured.get("reason") != "already_cached",
+            "already_present": ensured.get("reason") == "already_cached",
+            "rating_key": key,
+            "language": ensured.get("language") or "",
+            "source": ensured.get("source") or "",
+            "message": "",
+            "reason": str(ensured.get("reason") or ""),
+            "streams": listed.get("streams") or [ensured["track"]],
+            "preferred_languages": listed.get("preferred_languages") or [],
+            "opensubtitles_configured": bool(ensured.get("opensubtitles_configured")),
+        }
+    if ask_plex:
+        asked = download_preferred_subtitles(
+            settings, key, language=language, prefer_sdh=prefer_sdh
+        )
+        if asked.get("downloaded") or asked.get("already_present"):
+            return {**asked, "opensubtitles_configured": bool(ensured.get("opensubtitles_configured"))}
+        note = str(ensured.get("message") or "")
+        if not note or ensured.get("reason") == "none_found":
+            note = str(asked.get("message") or note)
+        return {
+            **asked,
+            "message": note,
+            "cache_reason": str(ensured.get("reason") or ""),
+            "opensubtitles_configured": bool(ensured.get("opensubtitles_configured")),
+        }
+    listed = list_item_subtitles(settings, key, db=db, data_dir=data_dir)
+    return {
+        "ok": False,
+        "downloaded": False,
+        "rating_key": key,
+        "message": str(ensured.get("message") or DOWNLOAD_SOFT_FAIL),
+        "reason": str(ensured.get("reason") or "none_found"),
+        "streams": listed.get("streams") or [],
+        "opensubtitles_configured": bool(ensured.get("opensubtitles_configured")),
     }
 
 
@@ -459,13 +550,27 @@ def live_subtitles_payload(
     *,
     channel_id: str,
     now_program: Optional[Mapping[str, Any]] = None,
+    db: Any = None,
+    data_dir: Any = None,
 ) -> Dict[str, Any]:
-    """Richer `/live` CC payload: Plex tracks when a rating key maps; honest empty otherwise."""
+    """Richer `/live` CC payload: cached file + Plex tracks when a rating key maps.
+
+    Carries the airing's media type and ``original_language`` so the player can
+    decide whether captions start on. Flex and filler never list or fetch.
+    """
+    from projectionist.library.subtitle_cache import household_language
+
     cid = str(channel_id or "").strip()
     languages = preferred_subtitle_languages(settings)
     rating_key = ""
+    program_media_type = ""
+    is_flex = False
     if isinstance(now_program, Mapping):
         rating_key = str(now_program.get("plex_rating_key") or "").strip()
+        program_media_type = str(now_program.get("media_type") or "").strip().lower()
+        is_flex = bool(now_program.get("is_flex"))
+    if is_flex:
+        rating_key = ""
     base: Dict[str, Any] = {
         "ok": True,
         "channel_id": cid,
@@ -481,16 +586,30 @@ def live_subtitles_payload(
         "empty_message": NO_CAPTIONS_AIRING,
         "message": "",
         "reason": "",
+        "is_flex": is_flex,
+        "media_type": program_media_type,
+        "original_language": "",
+        "household_language": household_language(settings),
+        "cached_track": None,
+        "opensubtitles_configured": False,
     }
     if not rating_key:
-        base["reason"] = "no_plex_mapping"
+        base["reason"] = "flex" if is_flex else "no_plex_mapping"
         base["message"] = NO_CAPTIONS_AIRING
         return base
 
-    listed = list_item_subtitles(settings, rating_key)
+    listed = list_item_subtitles(settings, rating_key, db=db, data_dir=data_dir)
     base["plex_streams"] = sanitize_live_plex_streams(listed.get("streams") or [])
     base["has_preferred"] = bool(listed.get("has_preferred"))
-    base["can_download"] = bool(listed.get("ok")) and not bool(listed.get("has_preferred"))
+    base["media_type"] = str(listed.get("media_type") or program_media_type)
+    base["original_language"] = str(listed.get("title_language") or "")
+    base["opensubtitles_configured"] = bool(listed.get("opensubtitles_configured"))
+    base["cached_track"] = next(
+        (row for row in base["plex_streams"] if str(row.get("id") or "").startswith("cached-")),
+        None,
+    )
+    can_fetch = bool(listed.get("ok")) or base["opensubtitles_configured"]
+    base["can_download"] = can_fetch and not bool(listed.get("has_preferred"))
     if listed.get("ok") and base["plex_streams"]:
         base["message"] = ""
         base["reason"] = ""
