@@ -776,6 +776,8 @@ curl -s -X POST http://localhost:8788/api/admin/mail/test \
 
 **How it works / honest limits.** One provider is active at a time (`smtp` or `resend`). Empty password / API-key fields on save keep the previously stored secret. Without mail configured, notifications still appear in the in-app inbox.
 
+**Links in email.** Newsletter, arrival, nudge, and Year in Review emails end with **See these in your inbox** and **Stop these emails**. The owner's house letter links to **Admin → Ops → Newsletters**. Invite emails name you as the inviter and say when the link expires. These links are absolute only when a household domain is set (`household_domain` in `settings.json`, which the Public Household setup writes). Without one, the email says to open Projectionist on your home network and turn mail off in **Settings → Notifications**. Mail also carries a `List-Unsubscribe` header pointing at that page. It is not one-click: the reader signs in and flips the toggle, so no token ever sits in a URL.
+
 ### Apprise (Discord, Telegram, push, …)
 
 Projectionist can fan out the same alerts through [Apprise](https://github.com/caronc/apprise) URLs.

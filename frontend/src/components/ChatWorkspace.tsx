@@ -25,6 +25,7 @@ import { createId } from "../lib/id.js";
 import { createKonamiTracker, easterEggResponse } from "../lib/easterEggs.js";
 import { SURPRISE_MOOD_CHIPS } from "../lib/quickPick.js";
 import { composerStatus } from "../lib/composerStatus";
+import { GENERIC_CURATOR_NAME, curatorNameInSentence } from "../lib/curatorName";
 
 /**
  * Chat workspace chrome — topbar, sidebar, transcript, composer, overlays.
@@ -257,7 +258,6 @@ authReady,
   composerRef,
   setInput,
   konamiTrackerRef,
-  persona,
   setMessages,
   speakAssistantMessage,
   threadsReady,
@@ -350,7 +350,7 @@ authReady,
           silently failing to reply once a message is sent. */}
       {authReady && setup && (setup as any).onboarding_complete && llmConfigured === false ? (
         <div className="banner workspace-banner" data-testid="chat-no-llm-banner">
-          No chat provider is connected yet, so {curatorName || "your curator"} can’t reply here.
+          No chat provider is connected yet, so {curatorNameInSentence(curatorName || GENERIC_CURATOR_NAME)} can’t reply here.
           Connect one in <Link to="/admin">Admin</Link>, or browse the library in{" "}
           <Link to="/explore">Explore</Link> instead.
         </div>
@@ -598,7 +598,7 @@ authReady,
                   onKeyDown={(event) => {
                     if (!(konamiTrackerRef as any).current) {
                       (konamiTrackerRef as any).current = createKonamiTracker((kind: any) => {
-                        const name = persona?.curator_name || "Curator";
+                        const name = curatorName || GENERIC_CURATOR_NAME;
                         const eggMessage = {
                           id: createId(),
                           role: "assistant",

@@ -4,6 +4,8 @@ Projectionist is packaged for Unraid Community Applications as a single containe
 
 CA stays a free self-host household app. New releases are **AGPL-3.0-only** (source on GitHub). Already-shipped Hub tags through **1.36.2** remain MIT.
 
+Keep port **8788** on a trusted LAN. Do not expose it to the internet without an authenticated reverse proxy in front.
+
 CA packaging in this repo:
 
 | File | Role |

@@ -1,4 +1,5 @@
 import type {LibraryItem, JsParam} from "../api/types";
+import { GENERIC_CURATOR_NAME } from "./curatorName";
 /**
  * Normalize the stored `content.blocks` of a saved library page into an ordered
  * list of inert render descriptors.
@@ -114,7 +115,7 @@ export function savedLibraryBlocks(blocks: JsParam[] = []) {
     if ((block as JsParam).type === "persona_consult" && (block as JsParam).payload?.answer) {
       result.push({
         kind: "persona_consult",
-        persona: (block as JsParam).payload.persona || "Curator",
+        persona: (block as JsParam).payload.persona || GENERIC_CURATOR_NAME,
         lead: (block as JsParam).payload.lead || "",
         answer: String((block as JsParam).payload.answer),
         specialty: (block as JsParam).payload.specialty || "",

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { Suspense, lazy, useEffect, useRef, useState, type PointerEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   clearShrunkPlay,
@@ -11,7 +11,9 @@ import {
   watchRatingKeyFromPath,
 } from "../../lib/inAppPip.js";
 import { libraryWatchPath } from "../../lib/theaterPlayer.js";
-import LibraryPlayer from "./LibraryPlayer";
+
+// Lazy so hls.js and the theater player stay out of the entry chunk until someone presses Play.
+const LibraryPlayer = lazy(() => import("./LibraryPlayer"));
 
 type PipState = {
   ratingKey: string;
@@ -192,15 +194,17 @@ export default function InAppPlaybackHost() {
           </button>
         </div>
       ) : null}
-      <LibraryPlayer
-        key={mountKey}
-        ratingKey={decision.ratingKey}
-        floated={floated}
-        continueAtMs={pip?.restored ? pip.offsetMs ?? 0 : null}
-        onPlayhead={floated ? rememberPlayhead : null as any}
-        onShrink={shrink}
-        onAfterPopout={afterPopout}
-      />
+      <Suspense fallback={null}>
+        <LibraryPlayer
+          key={mountKey}
+          ratingKey={decision.ratingKey}
+          floated={floated}
+          continueAtMs={pip?.restored ? pip.offsetMs ?? 0 : null}
+          onPlayhead={floated ? rememberPlayhead : null as any}
+          onShrink={shrink}
+          onAfterPopout={afterPopout}
+        />
+      </Suspense>
     </div>
   );
 }

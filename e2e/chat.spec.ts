@@ -93,7 +93,8 @@ test.describe("Chat workspace", () => {
     await page.getByTestId("send-button").click();
     await expect(page.getByTestId("typing-indicator")).toBeVisible();
     // Neutral persona-bound wait chip — not canned "Searching…" / phrase lottery.
-    await expect(page.getByTestId("typing-indicator")).toContainText(/Curator/i);
+    // Unnamed curator: the chip uses the seeded default voice, as the persona picker shows it.
+    await expect(page.getByTestId("typing-indicator")).toContainText("The Professor");
     await expect(page.getByTestId("typing-indicator")).not.toContainText(/Searching/i);
   });
 

@@ -1,11 +1,18 @@
-"""Owner-only Admin ops routes: Overview rollup, checklist marks, Monday pass, security audit."""
+"""Owner-only Admin routes: Overview, checklists, Monday pass, security audit, logs,
+scheduled tasks, telemetry, LLM usage and models, grooming undo.
+
+New ``/api/admin/*`` routes go here (or in another ``*_routes.py`` module), not in ``app.py``.
+"""
 
 from __future__ import annotations
 
+import asyncio
+import json
 from typing import Any, Dict, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field
+from sse_starlette.sse import EventSourceResponse
 
 from projectionist.web.auth import require_role
 from projectionist.web.owner_ops import (
@@ -24,6 +31,12 @@ from projectionist.web.owner_ops import (
 
 class ChecklistMarkPayload(BaseModel):
     status: Literal["pending", "skipped", "reviewed"]
+
+
+class ScheduledTaskUpdatePayload(BaseModel):
+    enabled: Optional[bool] = None
+    run_interval_seconds: Optional[int] = Field(default=None, ge=60, le=2_592_000)
+    items_per_cycle: Optional[int] = Field(default=None, ge=1, le=500)
 
 
 def register_owner_ops_routes(app) -> None:
@@ -129,5 +142,346 @@ def register_owner_ops_routes(app) -> None:
         except Exception:  # noqa: BLE001
             names = {}
         return {**page, "limit": limit, "offset": offset, "user_names": names}
+
+    @router.get("/api/admin/grooming/actions")
+    def list_grooming_actions(
+        limit: int = 20,
+        user=Depends(require_role("owner")),
+    ) -> Dict[str, Any]:
+        """List recent reversible grooming actions (newest first) for the undo UI."""
+        del user
+        actions = _db().list_grooming_actions(limit=limit)
+        return {"actions": actions, "count": len(actions)}
+
+
+    @router.post("/api/admin/grooming/actions/{action_id}/undo")
+    def undo_grooming_action(
+        action_id: str,
+        user=Depends(require_role("owner")),
+    ) -> Dict[str, Any]:
+        """Restore the index rows a destructive grooming action deleted.
+
+        Only CuratorX index rows are restored; embeddings backfill on the next
+        enrichment cycle. Plex media files were never touched by the delete.
+        """
+        del user
+        db = _db()
+        try:
+            result = db.undo_grooming_action(action_id)
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        if result is None:
+            raise HTTPException(status_code=404, detail="Grooming action not found")
+        return {
+            "undone": True,
+            "restored": result.get("restored", 0),
+            "action": {k: v for k, v in result.items() if k != "snapshot"},
+        }
+
+
+    @router.get("/api/admin/logs")
+    def get_admin_logs(
+        limit: int = 300,
+        level: Optional[str] = None,
+        logger: Optional[str] = None,
+        q: Optional[str] = None,
+        user=Depends(require_role("owner")),
+    ) -> Dict[str, Any]:
+        """Return a filtered tail of the durable application log (owner only)."""
+        del user
+        from projectionist.web.log_viewer import read_log_tail
+
+        try:
+            return read_log_tail(limit=limit, min_level=level, logger_prefix=logger, q=q)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+    @router.get("/api/admin/logs/stream")
+    async def stream_admin_logs(
+        request: Request,
+        after_offset: int = 0,
+        level: Optional[str] = None,
+        logger: Optional[str] = None,
+        q: Optional[str] = None,
+        user=Depends(require_role("owner")),
+    ) -> EventSourceResponse:
+        """SSE tail of new log lines after ``after_offset`` (owner only)."""
+        del user
+        from projectionist.logging_config import resolve_log_file_path
+        from projectionist.web.log_viewer import (
+            SENSITIVE_WARNING,
+            iter_log_chunks,
+            normalize_min_level,
+            read_new_lines,
+        )
+
+        try:
+            min_level = normalize_min_level(level)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+
+        path = resolve_log_file_path()
+        offset = max(0, int(after_offset or 0))
+
+        async def event_generator():
+            nonlocal offset
+            yield {
+                "event": "ready",
+                "data": json.dumps(
+                    {
+                        "path": str(path),
+                        "next_offset": offset,
+                        "sensitive_warning": SENSITIVE_WARNING,
+                    }
+                ),
+            }
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    lines, offset = read_new_lines(
+                        path,
+                        after_offset=offset,
+                        min_level=min_level,
+                        logger_prefix=logger,
+                        q=q,
+                    )
+                except OSError as error:
+                    yield {
+                        "event": "error",
+                        "data": json.dumps({"error": f"Could not read log file: {error}"}),
+                    }
+                    break
+                for chunk in iter_log_chunks(lines):
+                    yield chunk
+                await asyncio.sleep(1.0)
+
+        return EventSourceResponse(event_generator())
+
+    @router.get("/api/admin/scheduled-tasks")
+    def list_scheduled_tasks(user=Depends(require_role("owner"))) -> Dict[str, Any]:
+        del user
+        scheduler = _scheduler()
+        if scheduler is None:
+            return {"items": [], "idle": False, "running": None}
+        return {
+            "items": scheduler.get_task_states(),
+            "idle": scheduler.is_idle(),
+            "running": scheduler._busy_task_name(),
+        }
+
+
+    @router.post("/api/admin/scheduled-tasks/optimize-rates")
+    def optimize_scheduled_task_rates(
+        dry_run: bool = False,
+        user=Depends(require_role("owner")),
+    ) -> Dict[str, Any]:
+        """Recompute safe batch/interval nudges for autotune-eligible tasks.
+
+        Uses the same ``evaluate_autotune`` guards as post-run tuning: per-task
+        min/max batch and interval caps, no disables, and no task starts. Pass
+        ``dry_run=true`` to preview without writing.
+        """
+        del user
+        scheduler = _scheduler()
+        if scheduler is None:
+            raise HTTPException(status_code=503, detail="Scheduler not available")
+        return scheduler.optimize_autotune_rates(dry_run=dry_run)
+
+
+    @router.put("/api/admin/scheduled-tasks/{name}")
+    def update_scheduled_task(
+        name: str,
+        payload: ScheduledTaskUpdatePayload,
+        user=Depends(require_role("owner")),
+    ) -> Dict[str, Any]:
+        del user
+        scheduler = _scheduler()
+        if scheduler is None:
+            raise HTTPException(status_code=503, detail="Scheduler not available")
+        updated = scheduler.update_task(
+            name,
+            enabled=payload.enabled,
+            run_interval_seconds=payload.run_interval_seconds,
+            items_per_cycle=payload.items_per_cycle,
+        )
+        if updated is None:
+            raise HTTPException(status_code=404, detail=f"Task '{name}' not found")
+        return updated
+
+
+    @router.post("/api/admin/scheduled-tasks/{name}/run")
+    async def trigger_scheduled_task(
+        name: str,
+        wait: bool = False,
+        user=Depends(require_role("owner")),
+    ) -> Dict[str, Any]:
+        """Trigger a scheduled task. Default is fire-and-forget for live monitoring.
+
+        Pass ``wait=true`` to await completion and return the full task result.
+        """
+        del user
+        scheduler = _scheduler()
+        if scheduler is None:
+            raise HTTPException(status_code=503, detail="Scheduler not available")
+        if wait:
+            result = await scheduler.trigger_task(name)
+        else:
+            result = scheduler.trigger_task_background(name)
+        if result.get("status") == "busy":
+            raise HTTPException(status_code=409, detail=result.get("error") or "Task already running")
+        if result.get("error"):
+            raise HTTPException(status_code=404, detail=result["error"])
+        return result
+
+
+    @router.get("/api/admin/scheduled-tasks/{name}/log")
+    def get_scheduled_task_log(
+        name: str,
+        after_seq: int = 0,
+        limit: int = 200,
+        user=Depends(require_role("owner")),
+    ) -> Dict[str, Any]:
+        """Poll buffered run events / progress lines for a scheduled task."""
+        del user
+        scheduler = _scheduler()
+        if scheduler is None:
+            raise HTTPException(status_code=503, detail="Scheduler not available")
+        payload = scheduler.get_task_run_log(name, after_seq=after_seq, limit=limit)
+        if payload.get("error"):
+            raise HTTPException(status_code=404, detail=payload["error"])
+        return payload
+
+
+    @router.get("/api/admin/scheduled-tasks/{name}/history")
+    def get_scheduled_task_history(
+        name: str,
+        limit: int = 50,
+        user=Depends(require_role("owner")),
+    ) -> Dict[str, Any]:
+        """Return durable run history for a task (survives restarts)."""
+        del user
+        scheduler = _scheduler()
+        if scheduler is None:
+            raise HTTPException(status_code=503, detail="Scheduler not available")
+        payload = scheduler.get_task_history(name, limit=limit)
+        if payload.get("error"):
+            raise HTTPException(status_code=404, detail=payload["error"])
+        return payload
+
+
+    @router.get("/api/admin/scheduled-tasks/{name}/rate")
+    def get_scheduled_task_rate(
+        name: str,
+        lookback_hours: int = 72,
+        user=Depends(require_role("owner")),
+    ) -> Dict[str, Any]:
+        """Return measured items/hour and duration percentiles from run history."""
+        del user
+        scheduler = _scheduler()
+        if scheduler is None:
+            raise HTTPException(status_code=503, detail="Scheduler not available")
+        payload = scheduler.get_task_rate(name, lookback_hours=lookback_hours)
+        if payload.get("error"):
+            raise HTTPException(status_code=404, detail=payload["error"])
+        return payload
+
+
+    @router.get("/api/admin/scheduled-tasks-log")
+    def get_all_scheduled_task_logs(
+        after_seq: int = 0,
+        limit: int = 200,
+        user=Depends(require_role("owner")),
+    ) -> Dict[str, Any]:
+        """Poll buffered run events across all scheduled tasks."""
+        del user
+        scheduler = _scheduler()
+        if scheduler is None:
+            raise HTTPException(status_code=503, detail="Scheduler not available")
+        return scheduler.get_task_run_log(None, after_seq=after_seq, limit=limit)
+
+
+    @router.get("/api/admin/scheduled-tasks-history")
+    def get_all_scheduled_task_history(
+        limit: int = 100,
+        user=Depends(require_role("owner")),
+    ) -> Dict[str, Any]:
+        """Return newest-first durable run history across all scheduled tasks."""
+        del user
+        scheduler = _scheduler()
+        if scheduler is None:
+            raise HTTPException(status_code=503, detail="Scheduler not available")
+        capped = max(1, min(int(limit or 100), 500))
+        return scheduler.get_all_task_history(limit=capped)
+
+
+    @router.post("/api/admin/scheduled-tasks/{name}/reset")
+    def reset_scheduled_task_quarantine(
+        name: str,
+        user=Depends(require_role("owner")),
+    ) -> Dict[str, Any]:
+        """Clear quarantine state for a task, allowing it to run again."""
+        del user
+        scheduler = _scheduler()
+        if scheduler is None:
+            raise HTTPException(status_code=503, detail="Scheduler not available")
+        result = scheduler.reset_quarantine(name)
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"Task '{name}' not found")
+        return result
+
+
+    @router.get("/api/admin/telemetry/summary")
+    def telemetry_summary(
+        hours: int = 24,
+        user=Depends(require_role("owner")),
+    ) -> Dict[str, Any]:
+        """Owner-only: event counts by type for the given window."""
+        del user
+        windows = {}
+        for window in (24, 168, 720):
+            windows[f"{window}h"] = _db().telemetry_summary(hours=window)
+        return {"windows": windows, "requested_hours": hours, "detail": _db().telemetry_summary(hours=hours)}
+
+
+    @router.get("/api/admin/telemetry/events")
+    def telemetry_events(
+        type: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+        user=Depends(require_role("owner")),
+    ) -> Dict[str, Any]:
+        """Owner-only: recent telemetry events with pagination."""
+        del user
+        events = _db().telemetry_events(event_class=type, limit=min(limit, 200), offset=offset)
+        return {"items": events, "count": len(events)}
+
+
+    @router.get("/api/admin/llm/usage")
+    def admin_llm_usage(
+        days: int = 7,
+        model: Optional[str] = None,
+        purpose: Optional[str] = None,
+        persona_id: Optional[str] = None,
+        user=Depends(require_role("owner")),
+    ) -> Dict[str, Any]:
+        """Owner-only LLM cost / usage BI aggregates for Admin → Usage."""
+        del user
+        return _db().llm_usage_summary(
+            days=days,
+            model=(model or None) or None,
+            purpose=(purpose or None) or None,
+            persona_id=(persona_id or None) or None,
+        )
+
+
+    @router.get("/api/admin/llm/models")
+    async def admin_llm_models(user=Depends(require_role("owner"))) -> Dict[str, Any]:
+        """Owner-only live provider model catalog (fails soft to pinned options)."""
+        del user
+        from projectionist.agent.providers.catalog import fetch_provider_model_catalog
+
+        return await fetch_provider_model_catalog(app_mod._settings())
 
     app.include_router(router)
