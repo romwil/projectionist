@@ -4,16 +4,20 @@ import {
   getAllScheduledTaskHistory,
   getScheduledTaskHistory,
   getScheduledTaskLog,
+  getSubtitleBackfill,
   listScheduledTasks,
   optimizeScheduledTaskRates,
   resetScheduledTaskQuarantine,
   runScheduledTask,
+  startSubtitleBackfill,
+  stopSubtitleBackfill,
   updateScheduledTask,
 } from "../api/client";
 import { useBulkActionProgress } from "../components/BulkActionProgress";
 import KnowledgeCoverageCard from "../components/KnowledgeCoverageCard";
 import {
   CADENCE_PRESETS,
+  describeSubtitleBackfill,
   estimateThroughputEta,
   formatDurationMs,
   formatEpoch,
@@ -33,6 +37,7 @@ import {
   resolveWarmExploreTasks,
   sortScheduledTasks,
   sortTasksByNextRun,
+  SUBTITLE_TASK_NAME,
   TASK_SORT_MODES,
   TASK_SORT_STORAGE_KEY,
   summarizeLastStatus,
@@ -88,6 +93,8 @@ export default function ScheduledTasksPage() {
   const [executionCurrent, setExecutionCurrent] = useState<any | null>(null);
   const [executionLogOpen, setExecutionLogOpen] = useState(false);
   const [nowTick, setNowTick] = useState(() => Date.now() / 1000);
+  const [subtitleBackfill, setSubtitleBackfill] = useState<any | null>(null);
+  const [subtitleBackfillBusy, setSubtitleBackfillBusy] = useState(false);
   const logEndRef = useRef<any>(null);
   const latestSeqRef = useRef(0);
   const warmExploreNames = useMemo(() => resolveWarmExploreTasks(items), [items]);
@@ -467,6 +474,61 @@ export default function ScheduledTasksPage() {
         : Number(selected.items_per_cycle);
     if (Number.isFinite(fallback)) setDraftBatch(fallback);
   }
+
+  const subtitleSelected = selectedName === SUBTITLE_TASK_NAME;
+  useEffect(() => {
+    if (!subtitleSelected) return undefined;
+    let cancelled = false;
+    getSubtitleBackfill()
+      .then((data) => {
+        if (!cancelled) setSubtitleBackfill(data);
+      })
+      .catch(() => {
+        /* keep the last status; the list poll surfaces errors */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [subtitleSelected, nowTick]);
+
+  async function handleStartSubtitleBackfill() {
+    if (subtitleBackfillBusy) return;
+    const confirmed = describeSubtitleBackfill(subtitleBackfill).active || await confirm({
+      title: "Backfill subtitles",
+      body:
+        "Save a household-language subtitle file for every movie and episode?\n\n"
+        + "This runs on the server, so you can close this tab. Chat does not pause it. "
+        + "Plex text tracks are copied first; OpenSubtitles is asked only when an API key is set. "
+        + "Use Stop to end it between titles.",
+      confirmLabel: "Backfill subtitles",
+    });
+    if (!confirmed) return;
+    setSubtitleBackfillBusy(true);
+    setActionError("");
+    try {
+      setSubtitleBackfill(await startSubtitleBackfill());
+      await refreshList();
+    } catch (err: any) {
+      setActionError((err as { message?: string }).message || "Couldn’t start the subtitle backfill");
+    } finally {
+      setSubtitleBackfillBusy(false);
+    }
+  }
+
+  async function handleStopSubtitleBackfill() {
+    if (subtitleBackfillBusy) return;
+    setSubtitleBackfillBusy(true);
+    setActionError("");
+    try {
+      setSubtitleBackfill(await stopSubtitleBackfill());
+    } catch (err: any) {
+      setActionError((err as { message?: string }).message || "Couldn’t stop the subtitle backfill");
+    } finally {
+      setSubtitleBackfillBusy(false);
+    }
+  }
+
+  const subtitleBackfillView = describeSubtitleBackfill(subtitleBackfill);
 
   function handleResetQuarantine(name: any) {
     return withBusy(name, async () => {
@@ -932,6 +994,52 @@ export default function ScheduledTasksPage() {
                 </button>
               </div>
             </div>
+
+            {subtitleSelected ? (
+              <div className="scheduled-task-cadence" data-testid="subtitle-backfill-panel">
+                <div className="scheduled-task-cadence-header">
+                  <h4 className="scheduled-task-cadence-title">Backfill subtitles</h4>
+                  {subtitleBackfillView.stateLabel ? (
+                    <span className="scheduled-task-meta" data-testid="subtitle-backfill-state">
+                      {subtitleBackfillView.stateLabel}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="scheduled-task-meta" data-testid="subtitle-backfill-progress">
+                  {subtitleBackfill ? subtitleBackfillView.progressLine : "Counting titles…"}
+                </p>
+                {subtitleBackfillView.errorLine ? (
+                  <p className="scheduled-task-meta" data-testid="subtitle-backfill-error">
+                    {subtitleBackfillView.errorLine}
+                  </p>
+                ) : null}
+                {subtitleBackfillView.keyNote ? (
+                  <p className="scheduled-task-meta">{subtitleBackfillView.keyNote}</p>
+                ) : null}
+                <div className="scheduled-tasks-detail-actions">
+                  <button
+                    type="button"
+                    className="primary"
+                    disabled={subtitleBackfillBusy}
+                    data-testid="subtitle-backfill-start"
+                    onClick={handleStartSubtitleBackfill}
+                  >
+                    {subtitleBackfillView.active ? "Show running backfill" : "Backfill subtitles"}
+                  </button>
+                  {subtitleBackfillView.active ? (
+                    <button
+                      type="button"
+                      className="ghost"
+                      disabled={subtitleBackfillBusy}
+                      data-testid="subtitle-backfill-stop"
+                      onClick={handleStopSubtitleBackfill}
+                    >
+                      Stop
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
 
             {selected ? (
               <div className="scheduled-task-cadence" data-testid="task-cadence-panel">

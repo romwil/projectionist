@@ -465,7 +465,13 @@ class RegistryInvariantTests(unittest.TestCase):
         with_gap = {n for n, d in reg.items() if d.catchup_gap_seconds}
         self.assertEqual(
             with_gap,
-            {"metadata_enrichment", "plot_neighbors", "semantic_embeddings", "long_synopsis_enrichment"},
+            {
+                "metadata_enrichment",
+                "subtitle_enrichment",
+                "plot_neighbors",
+                "semantic_embeddings",
+                "long_synopsis_enrichment",
+            },
         )
         self.assertNotIn("llm_logline_enrichment", with_gap)
         for name in with_gap:

@@ -340,6 +340,28 @@ def _member_autoconfirm_adds(db: "SchemaMigrationsMixin", conn: sqlite3.Connecti
         )
 
 
+def _subtitle_state(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
+    """Per-title household subtitle ledger so a backfill resumes after a restart."""
+    del db
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS subtitle_state (
+            rating_key TEXT NOT NULL,
+            language TEXT NOT NULL,
+            status TEXT NOT NULL,
+            source TEXT NOT NULL DEFAULT '',
+            failures INTEGER NOT NULL DEFAULT 0,
+            retry_after REAL NOT NULL DEFAULT 0,
+            last_error TEXT NOT NULL DEFAULT '',
+            updated_at REAL NOT NULL,
+            PRIMARY KEY (rating_key, language)
+        );
+        CREATE INDEX IF NOT EXISTS idx_subtitle_state_status
+            ON subtitle_state(language, status, retry_after);
+        """
+    )
+
+
 def _build_migrations() -> List[Migration]:
     def wrap(method_name: str) -> MigrationFn:
         def _run(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
@@ -411,6 +433,7 @@ def _build_migrations() -> List[Migration]:
         (61, "youth_guardrails", _youth_guardrails),
         (62, "member_autoconfirm_adds", _member_autoconfirm_adds),
         (63, "drop_interaction_telemetry", _drop_interaction_telemetry),
+        (64, "subtitle_state", _subtitle_state),
     ]
 
 

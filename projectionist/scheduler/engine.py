@@ -84,6 +84,7 @@ DEFAULT_IDLE_THRESHOLD_MINUTES = 15
 SCHEDULER_POLL_SECONDS = 30
 SCHEDULER_INITIAL_DELAY_SECONDS = 60
 DEFAULT_TASK_TIMEOUT_SECONDS = 300  # 5 minutes
+TASK_NAME_SUBTITLES = "subtitle_enrichment"
 
 
 @dataclass
@@ -1350,6 +1351,16 @@ class IdleScheduler:
             await run_idle_bootstrap(self)
         except Exception:  # noqa: BLE001
             logger.exception("IdleScheduler: first-start bootstrap failed (continuing)")
+
+        try:
+            from projectionist.scheduler.tasks.subtitle_enrichment import (
+                resume_backfill_if_active,
+            )
+
+            if TASK_NAME_SUBTITLES in self._definitions:
+                resume_backfill_if_active(self)
+        except Exception:  # noqa: BLE001
+            logger.exception("IdleScheduler: subtitle backfill resume failed (continuing)")
 
         while not self._shutdown:
             try:

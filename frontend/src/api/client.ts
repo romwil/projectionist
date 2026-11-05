@@ -2270,6 +2270,18 @@ export async function runScheduledTask(name: string, { wait = false }: JsonObjec
   });
 }
 
+export async function getSubtitleBackfill() {
+  return api(`/admin/subtitles/backfill`);
+}
+
+export async function startSubtitleBackfill() {
+  return api(`/admin/subtitles/backfill`, { method: "POST" });
+}
+
+export async function stopSubtitleBackfill() {
+  return api(`/admin/subtitles/backfill/stop`, { method: "POST" });
+}
+
 export async function updateScheduledTask(name: string, payload: JsonObject) {
   return api(`/admin/scheduled-tasks/${encodeURIComponent(name)}`, {
     method: "PUT",
