@@ -173,6 +173,7 @@ from projectionist.web.webhooks import register_webhook_routes
 from projectionist.web.augmentation_routes import register_augmentation_routes
 from projectionist.web.knowledge_ops_routes import register_knowledge_ops_routes
 from projectionist.web.weekly_letter_routes import register_weekly_letter_routes
+from projectionist.web.mail_unsubscribe_routes import register_mail_unsubscribe_routes
 from projectionist.web.holidays_routes import register_holidays_routes
 from projectionist.web.live_channels_routes import register_live_channels_routes
 from projectionist.web.playback_routes import register_playback_routes
@@ -750,6 +751,7 @@ class AuthMeUpdatePayload(BaseModel):
     weather_lon: Optional[float] = Field(default=None, ge=-180, le=180)
     clear_weather_location: Optional[bool] = None
     default_page: Optional[str] = Field(default=None, pattern="^(auto|chat|explore)$")
+    email_muted_kinds: Optional[List[str]] = Field(default=None, max_length=16)
 
 
 class RecommendPayload(BaseModel):
@@ -1406,6 +1408,7 @@ def _scheduler_trigger_background(name: str) -> Dict[str, Any]:
 
 register_holidays_routes(app, db_factory=_db, settings_factory=_settings)
 register_weekly_letter_routes(app, db_factory=_db, settings_factory=_settings)
+register_mail_unsubscribe_routes(app, db_factory=_db)
 register_augmentation_routes(
     app,
     db_factory=_db,

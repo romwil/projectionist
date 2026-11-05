@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type Keyboard
 import {
   formatGuideProgramTimeRange,
   formatWallTime,
+  guideChannelLabel,
   guideProgramAccessibleName,
   guideTimeScale,
   programCellStyle,
@@ -116,6 +117,14 @@ export default function LiveGuide({
     if (idx >= 0) setFocusRow(idx);
   }, [selectedChannelId, channels]);
 
+  useEffect(() => {
+    const root = gridRef.current;
+    const active = typeof document !== "undefined" ? document.activeElement : null;
+    if (!root || !active || !root.contains(active) || !active.classList.contains("live-guide-cell")) return;
+    const next = root.querySelector<HTMLElement>(`[data-guide-cell="${focusRow}:${focusCol}"]`);
+    if (next && next !== active) next.focus();
+  }, [focusRow, focusCol]);
+
   const nowLineLeft = scale.xForTime(nowMs / 1000);
 
   function tuneAt(row: number, col: number) {
@@ -191,13 +200,15 @@ export default function LiveGuide({
     <div
       className="live-guide"
       data-testid="live-guide"
+      role="group"
+      aria-label="Live guide"
       tabIndex={0}
       ref={gridRef}
       onKeyDown={onKeyDown}
     >
       <div className="live-guide-scroll">
-        <div className="live-guide-rail" aria-hidden="true">
-          <div className="live-guide-rail-corner">
+        <div className="live-guide-rail">
+          <div className="live-guide-rail-corner" aria-hidden="true">
             <span className="live-brand-mark">Projectionist</span>
             <span className="live-guide-rail-label">Live</span>
           </div>
@@ -210,7 +221,7 @@ export default function LiveGuide({
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") event.stopPropagation();
               }}
-              aria-label={`Tune ${channel.number != null ? `${channel.number} ` : ""}${channel.name}${channel.poolNotice ? `. ${channel.poolNotice}` : ""}`}
+              aria-label={`Tune ${guideChannelLabel(channel)}${channel.poolNotice ? `. ${channel.poolNotice}` : ""}`}
               title={channel.poolNotice || undefined}
               data-testid="live-guide-station"
             >
@@ -265,6 +276,7 @@ export default function LiveGuide({
                   const focused = row === focusRow && col === focusCol;
                   const timeRange = formatGuideProgramTimeRange(program);
                   const accessibleName = guideProgramAccessibleName(
+                    guideChannelLabel(channel),
                     title,
                     timeRange,
                     episodeLabel,
@@ -293,6 +305,7 @@ export default function LiveGuide({
                       }}
                       onBlur={scheduleHoverLeave}
                       data-testid="live-guide-cell"
+                      data-guide-cell={`${row}:${col}`}
                       aria-label={accessibleName || undefined}
                       title={episodeLabel ? `${title} — ${episodeLabel}` : title}
                     >

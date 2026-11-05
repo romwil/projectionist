@@ -915,7 +915,7 @@
 }
 
 .user-management-actions .danger {
-  color: #c45c5c;
+  color: var(--danger);
 }
 
 .user-status-pill {
@@ -930,7 +930,7 @@
 }
 
 .user-status-pill.disabled {
-  color: #c45c5c;
+  color: var(--danger);
 }
 
 .app-loading {

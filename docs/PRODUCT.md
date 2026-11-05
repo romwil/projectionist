@@ -81,6 +81,12 @@ Runtime watch surfaces: **library Play** (`/watch`) and **native Live** (`/live`
 
 ---
 
+## Live scope freeze (PRD-007)
+
+For the rest of the path-to-A program, Live takes **no new channel types and no new schedule features**: no new station kinds, dayparts, slot rules, rotation modes, or lineup sources. Work on Live is limited to fixes, accessibility, captions on existing stations, and performance.
+
+The one carve-out is the **weather channel expansion**, which has its own spec. It extends the existing weather station; it is not a new channel type, and it does not open the door to other station kinds.
+
 ## Parked / sunset (near-term non-goals)
 
 From the Tunarr dual-watch era and [live-channels-deferred](superpowers/plans/2026-07-29-live-channels-deferred.md) — **do not schedule** unless product intent reverses:

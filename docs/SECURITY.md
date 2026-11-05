@@ -55,6 +55,8 @@ There is **no** `/api/auth/` prefix leak. Ingress matches **explicit method+path
 | `GET` | `/api/auth/oidc/authorize` | If OIDC enabled |
 | `GET` | `/api/auth/oidc/callback` | If OIDC enabled |
 | `POST` | `/api/auth/logout` | Clears cookie |
+| `GET` | `/api/mail/unsubscribe` | Signed one-click token (GRO-008); shows a confirm button, changes nothing |
+| `POST` | `/api/mail/unsubscribe` | RFC 8058 one-click: turns off one program's email for one person; rejected after "Delete my data" or for another person; security-logged |
 
 Not public: `GET /api/auth/me`, `POST /api/auth/local/register`, `GET /api/guest/tour` (404), whole `/api/auth/` prefix, setup wizard endpoints after ACTIVE_MODE (404). `/api/webhooks/*` stays **secret-gated** (S8). `/mcp` stays **API-key-gated** — do not publish MCP on the WAN hostname.
 

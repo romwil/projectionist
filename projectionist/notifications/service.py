@@ -11,7 +11,8 @@ from projectionist.config_store import Settings
 from projectionist.library.db import Database
 from projectionist.library.db._notifications import NOTIFICATION_KINDS
 from projectionist.mail import MailSendError, mail_configured, send_mail
-from projectionist.mail.links import lifecycle_footer, text_to_html
+from projectionist.mail.links import app_base_url, lifecycle_footer, text_to_html
+from projectionist.mail.unsubscribe import unsubscribe_url
 from projectionist.notifications.apprise_transport import (
     AppriseSendError,
     apprise_install_configured,
@@ -54,6 +55,8 @@ def user_wants_channel(user: Dict[str, Any], *, kind: str, channel: str) -> bool
         return True
     if cleaned_channel == "email":
         if not user.get("notify_channel_email"):
+            return False
+        if cleaned_kind in set(user.get("email_muted_kinds") or ()):
             return False
         # Digests / newsletters also require newsletter opt-in.
         if cleaned_kind == "digest" and not user.get("newsletter_opt_in"):
@@ -125,22 +128,27 @@ def deliver_notification(
             related_id=related_id,
         )
 
-    footer = lifecycle_footer(settings)
     message = str(outbound_body or body or title).strip()
-    outbound_text = f"{message}\n\n{footer.text}"
 
     should_email = force_email or user_wants_channel(user, kind=kind, channel="email")
     if should_email and mail_configured(settings):
         to_email = resolve_notification_email(user)
         if to_email:
             try:
+                one_click_url = unsubscribe_url(app_base_url(settings), db, user_id, kind)
+            except Exception:  # noqa: BLE001
+                logger.warning("One-click unsubscribe link unavailable; using the settings link", exc_info=True)
+                one_click_url = None
+            footer = lifecycle_footer(settings, unsubscribe_url=one_click_url)
+            try:
                 send_mail(
                     settings,
                     to_email=to_email,
                     subject=email_subject or title,
-                    body_text=outbound_text,
+                    body_text=f"{message}\n\n{footer.text}",
                     body_html=text_to_html(message) + footer.html,
                     list_unsubscribe=footer.list_unsubscribe,
+                    one_click=footer.one_click,
                 )
                 result["emailed"] = True
             except MailSendError as exc:

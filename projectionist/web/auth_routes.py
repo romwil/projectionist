@@ -186,6 +186,12 @@ def register_auth_routes(app):
         return {"erased": counts, "total": sum(counts.values())}
 
 
+    @router.get("/api/me/owner-access")
+    def my_owner_access_log(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
+        """What the owner did to my account (PRIV-023). Never includes memory text."""
+        return {"items": _db().owner_actions_on_user(user.id)}
+
+
     @router.get("/api/users/{user_id}/memory")
     def review_youth_memory(user_id: str, user=Depends(require_role("owner"))) -> Dict[str, Any]:
         try:
@@ -196,6 +202,8 @@ def register_auth_routes(app):
             raise HTTPException(status_code=403, detail=str(error)) from error
         from projectionist.youth.memory_policy import youth_memory_enabled
 
+        if user_id != user.id:
+            sa.audit(_db(), sa.MEMORY_REVIEW, actor_id=user.id, target_id=user_id, note_count=len(notes))
         return {
             "user_id": user_id,
             "notes": notes,
@@ -242,6 +250,8 @@ def register_auth_routes(app):
             updates["apprise_urls"] = payload.apprise_urls
         if "default_page" in fields_set:
             updates["default_page"] = payload.default_page
+        if "email_muted_kinds" in fields_set:
+            updates["email_muted_kinds"] = payload.email_muted_kinds or []
         if payload.clear_weather_location:
             updates["weather_location"] = None
         elif any(key in fields_set for key in ("weather_place", "weather_lat", "weather_lon")):

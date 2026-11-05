@@ -756,6 +756,14 @@ export function guideProgramAccessibleName(...parts: unknown[]): string {
     .join(", ");
 }
 
+/** "4 Drama" — channel number then name, the prefix every guide cell is announced with. */
+export function guideChannelLabel(channel: { number?: unknown; name?: unknown } | null | undefined): string {
+  const number = channel?.number;
+  const name = String(channel?.name ?? "").trim();
+  const num = number == null ? "" : String(number).trim();
+  return [num, name].filter(Boolean).join(" ");
+}
+
 /**
  * Effective airing window for a guide program.
  * Caps padded guide ``stop`` at file ``durationSeconds`` when present (past-EOF).

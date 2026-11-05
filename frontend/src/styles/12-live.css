@@ -243,6 +243,11 @@
   justify-content: center;
 }
 
+.live-player:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: -2px;
+}
+
 .live-player-video {
   width: 100%;
   height: 100%;
@@ -348,7 +353,7 @@
 
 .live-flex-slate-kicker {
   margin: 0;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--accent-ink);
@@ -682,6 +687,14 @@
   outline: none;
   display: flex;
   flex-direction: column;
+}
+
+/* A11Y-004: the container and the cells draw a real ring on keyboard focus.
+   Inset so the scroll box never clips it. */
+.live-guide:focus-visible,
+.live-guide-cell:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: -2px;
 }
 
 .live-guide-scroll {
@@ -1101,7 +1114,7 @@
 }
 .live-pause-boundary-kicker {
   margin: 0;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   opacity: 0.75;
