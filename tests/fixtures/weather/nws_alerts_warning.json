@@ -1,0 +1,51 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "id": "urn:oid:adv",
+   "properties": {
+    "id": "urn:oid:adv",
+    "event": "Wind Advisory",
+    "severity": "Moderate",
+    "urgency": "Expected",
+    "certainty": "Likely",
+    "status": "Actual",
+    "areaDesc": "Cook; DuPage",
+    "onset": "2026-11-04T20:00:00-06:00",
+    "ends": "2026-11-05T06:00:00-06:00",
+    "headline": "Wind Advisory issued November 4 at 3:00PM CST until November 5 at 6:00AM CST by NWS Chicago IL",
+    "description": "West winds 25 to 35 mph with gusts up to 50 mph.",
+    "instruction": "Use extra caution when driving, especially if operating a high profile vehicle. Secure outdoor objects.",
+    "senderName": "NWS Chicago IL"
+   }
+  },
+  {
+   "id": "urn:oid:warn",
+   "properties": {
+    "id": "urn:oid:warn",
+    "event": "Severe Thunderstorm Warning",
+    "severity": "Severe",
+    "urgency": "Immediate",
+    "certainty": "Observed",
+    "status": "Actual",
+    "areaDesc": "Cook; Lake",
+    "onset": "2026-11-04T22:40:00-06:00",
+    "ends": "2026-11-04T23:30:00-06:00",
+    "headline": "Severe Thunderstorm Warning issued November 4 at 10:40PM CST until November 4 at 11:30PM CST by NWS Chicago IL",
+    "description": "At 1040 PM CST, a severe thunderstorm was located near Oak Park, moving east at 40 mph. HAZARD...60 mph wind gusts and quarter size hail.",
+    "instruction": "For your protection move to an interior room on the lowest floor of a building.",
+    "senderName": "NWS Chicago IL"
+   }
+  },
+  {
+   "id": "urn:oid:test",
+   "properties": {
+    "id": "urn:oid:test",
+    "event": "Test Message",
+    "severity": "Unknown",
+    "status": "Test",
+    "areaDesc": "Cook"
+   }
+  }
+ ]
+}

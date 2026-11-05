@@ -16,8 +16,7 @@ from projectionist.theater.preroll import (
     resolve_asset,
 )
 from projectionist.theater.weather import (
-    build_ticker_lines,
-    build_voiceover_script,
+    select_muzak,
     weather_channel_payload,
     wmo_label,
 )
@@ -77,137 +76,110 @@ class PrerollTests(unittest.TestCase):
 
 
 class WeatherTests(unittest.TestCase):
-    def test_wmo_and_script(self):
-        self.assertEqual(wmo_label(0), "Clear")
-        payload = {
-            "current": {
-                "temperature_2m": 72.4,
-                "relative_humidity_2m": 40,
-                "weather_code": 1,
-                "wind_speed_10m": 8,
-            },
-            "daily": {
-                "time": ["2026-10-02"],
-                "temperature_2m_max": [80],
-                "temperature_2m_min": [60],
-                "weather_code": [2],
-            },
-        }
-        script = build_voiceover_script(payload, place_name="Chicago")
-        self.assertIn("Chicago", script)
-        self.assertIn("72", script)
-        lines = build_ticker_lines(
-            payload["current"],
-            {
-                "time": ["2026-10-02"],
-                "precipitation_probability_max": [30],
-                "temperature_2m_max": [80],
-                "temperature_2m_min": [60],
-            },
-        )
-        joined = " ".join(lines)
-        self.assertIn("Humidity 40%", joined)
-        self.assertIn("rain chance 30%", joined)
-        self.assertNotIn("72", joined)
-        self.assertNotIn("Hi ", joined)
+    @staticmethod
+    def _service(tmp: str, calls: list):
+        from projectionist.theater.weather_channel.http import FetchResult
+        from projectionist.theater.weather_channel.service import WeatherService
 
-    def test_payload_uses_fetch_and_muzak(self):
+        fixture = Path(__file__).resolve().parent / "fixtures" / "weather" / "forecast_chicago.json"
+
+        def fake_fetch(url: str, **_kwargs):
+            calls.append(url)
+            return FetchResult(fixture.read_bytes())
+
+        service = WeatherService(Path(tmp), fetch=fake_fetch, autostart=False)
+        return service
+
+    def test_wmo_labels(self):
+        self.assertEqual(wmo_label(0), "Clear")
+        self.assertEqual(wmo_label(95), "Thunderstorm")
+        self.assertEqual(wmo_label("x"), "Mixed skies")
+
+    def test_music_is_every_file_in_the_folder_shuffled(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
+            for name in ("a-bed.mp3", "b-bed.mp3", "c-bed.ogg"):
+                (root / name).write_bytes(b"x")
+            tracks, note = select_muzak(str(root), allowed_roots=[root], rng=__import__("random").Random(3))
+            self.assertEqual(note, "")
+            self.assertEqual(len(tracks), 3)
+            self.assertEqual(len({t["id"] for t in tracks}), 3)
+            self.assertTrue(all(t["url"].startswith("/api/preroll/asset/") for t in tracks))
+            orders = {
+                tuple(t["id"] for t in select_muzak(str(root), allowed_roots=[root], rng=__import__("random").Random(seed))[0])
+                for seed in range(12)
+            }
+            self.assertGreater(len(orders), 1)
+
+    def test_empty_music_folder_is_honest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tracks, note = select_muzak(tmp, allowed_roots=[Path(tmp)])
+            self.assertEqual(tracks, [])
+            self.assertIn("empty", note)
+        tracks, note = select_muzak("")
+        self.assertEqual(tracks, [])
+        self.assertIn("no soundtrack", note)
+
+    def test_payload_uses_the_cache_and_music_list(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "music"
+            root.mkdir()
             (root / "weather-bed.mp3").write_bytes(b"x")
-            (root / "intro.mp4").write_bytes(b"x")
-
-            def fake_fetch(_url: str):
-                return {
-                    "current": {
-                        "temperature_2m": 55,
-                        "relative_humidity_2m": 50,
-                        "weather_code": 3,
-                        "wind_speed_10m": 5,
-                    },
-                    "daily": {
-                        "time": ["2026-10-02"],
-                        "temperature_2m_max": [60],
-                        "temperature_2m_min": [50],
-                        "weather_code": [3],
-                    },
-                }
-
-            with mock.patch(
-                "projectionist.theater.weather.resolve_preroll_root",
-                return_value=root,
-            ):
+            (root / "weather-bed-2.mp3").write_bytes(b"x")
+            calls: list = []
+            with mock.patch("projectionist.theater.weather.resolve_preroll_root", return_value=None):
                 data = weather_channel_payload(
+                    service=self._service(tmp, calls),
                     environ={"PROJECTIONIST_WEATHER_PLACE": "Home"},
-                    fetch_json=fake_fetch,
                     muzak_folder=str(root),
                     allowed_roots=[root],
                     rng=__import__("random").Random(1),
                 )
             self.assertEqual(data["place"], "Home")
             self.assertEqual(data["location_source"], "household")
-            self.assertTrue(data["muzak"])
+            self.assertEqual(len(data["music"]["tracks"]), 2)
             self.assertEqual(data["muzak_note"], "")
-            self.assertIn("open-meteo", data["egress"]["host"])
-            self.assertTrue(data["ticker"])
-            joined = " ".join(data["ticker"])
-            self.assertIn("Humidity", joined)
-            self.assertNotIn("NOW", joined)
-            self.assertNotIn("55", joined)
-            self.assertNotIn("Hi ", joined)
+            self.assertIn("api.open-meteo.com", {e["host"] for e in data["egress"]})
+            groups = {item["group"] for item in data["chyron"]}
+            self.assertEqual(groups, {"NOW", "HOURLY", "5-DAY"})
+            self.assertNotIn("ticker", data)
+            self.assertEqual(len(calls), 1)
 
     def test_saved_coords_skip_geocode_and_empty_music_is_honest(self):
-        calls = []
-
-        def fake_fetch(url: str):
-            calls.append(url)
-            return {
-                "current": {"temperature_2m": 70, "weather_code": 0, "wind_speed_10m": 3},
-                "daily": {"time": [], "temperature_2m_max": [], "temperature_2m_min": [], "weather_code": []},
-            }
-
-        data = weather_channel_payload(
-            place_name="Chicago, Illinois, United States",
-            latitude=41.88,
-            longitude=-87.63,
-            location_source="profile",
-            fetch_json=fake_fetch,
-            muzak_folder="",
-        )
-        self.assertEqual(data["location_source"], "profile")
-        self.assertEqual(data["latitude"], 41.88)
-        self.assertIsNone(data["muzak"])
-        self.assertIn("No music folder", data["muzak_note"])
-        self.assertIn("no soundtrack", data["muzak_note"])
-        self.assertTrue(calls)
-        self.assertTrue(all("geocoding-api" not in url for url in calls))
+        with tempfile.TemporaryDirectory() as tmp:
+            calls: list = []
+            data = weather_channel_payload(
+                service=self._service(tmp, calls),
+                place_name="Chicago, Illinois, United States",
+                latitude=41.88,
+                longitude=-87.63,
+                location_source="profile",
+                muzak_folder="",
+            )
+            self.assertEqual(data["location_source"], "profile")
+            self.assertEqual(data["latitude"], 41.88)
+            self.assertIsNone(data["muzak"])
+            self.assertEqual(data["music"]["tracks"], [])
+            self.assertIn("no soundtrack", data["muzak_note"])
+            self.assertTrue(calls)
+            self.assertTrue(all("geocoding-api" not in url for url in calls))
 
     def test_profile_place_does_not_replace_unset_household_default(self):
-        def fake_fetch(_url: str):
-            return {
-                "current": {"temperature_2m": 70, "weather_code": 0},
-                "daily": {
-                    "time": [],
-                    "temperature_2m_max": [],
-                    "temperature_2m_min": [],
-                    "weather_code": [],
-                },
-            }
-
-        data = weather_channel_payload(
-            environ={},
-            place_name="Chicago",
-            latitude=41.8781,
-            longitude=-87.6298,
-            location_source="profile",
-            fetch_json=fake_fetch,
-            muzak_folder="",
-        )
-        self.assertEqual(data["household_place"], "your area")
-        self.assertEqual(data["place"], "Chicago")
-        self.assertEqual(data["location_source"], "profile")
-        self.assertIn("Chicago", data["voiceover"])
-        self.assertNotIn("your area", data["voiceover"])
+        with tempfile.TemporaryDirectory() as tmp:
+            data = weather_channel_payload(
+                service=self._service(tmp, []),
+                environ={},
+                place_name="Chicago",
+                latitude=41.8781,
+                longitude=-87.6298,
+                location_source="profile",
+                muzak_folder="",
+            )
+            self.assertEqual(data["household_place"], "your area")
+            self.assertEqual(data["place"], "Chicago")
+            self.assertEqual(data["location_source"], "profile")
+            self.assertIn("Chicago", data["voiceover"])
+            self.assertNotIn("your area", data["voiceover"])
 
 
 if __name__ == "__main__":

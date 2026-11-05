@@ -53,6 +53,7 @@ NESTED_SECRET_PATHS = (
     ("apprise", "config"),
     ("acrcloud", "access_key"),
     ("acrcloud", "access_secret"),
+    ("weather", "windy_api_key"),
 )
 
 

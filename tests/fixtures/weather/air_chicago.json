@@ -1,0 +1,13 @@
+{
+ "current": {
+  "time": "2026-11-04T23:00",
+  "us_aqi": 42,
+  "uv_index": 0.0,
+  "alder_pollen": null,
+  "birch_pollen": null,
+  "grass_pollen": null,
+  "mugwort_pollen": null,
+  "olive_pollen": null,
+  "ragweed_pollen": null
+ }
+}

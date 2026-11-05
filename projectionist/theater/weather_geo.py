@@ -12,6 +12,17 @@ from typing import Any, Callable, Dict, List, Optional
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 
 
+def _fetch_json(url: str, *, timeout: float = 8.0) -> Any:
+    import json
+    import urllib.request
+
+    from projectionist.theater.weather_channel.http import USER_AGENT
+
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 — fixed geocoding host
+        return json.loads(resp.read().decode("utf-8"))
+
+
 def parse_geocode_results(payload: Any) -> List[Dict[str, Any]]:
     """Turn an Open-Meteo geocoding body into labeled candidates."""
     rows = payload.get("results") if isinstance(payload, dict) else None
@@ -72,8 +83,6 @@ def geocode_query(
     if len(text) < 2 or len(text) > 120:
         return []
     if fetch_json is None:
-        from projectionist.theater.weather import _fetch_json
-
         fetch_json = _fetch_json
     from urllib.parse import urlencode
 
