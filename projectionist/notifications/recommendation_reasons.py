@@ -22,8 +22,8 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 from projectionist.library.db import Database
 from projectionist.library.plot_kinship import (
     build_explanation,
+    checkable_plot_link,
     distinctive_plot_phrases,
-    honest_plot_link,
     parse_plot_link_json,
     plot_blob,
     readable_why,
@@ -701,22 +701,27 @@ def _inner_link(
     shelf |= _labels(seed.get("genres")) | _labels(seed.get("keywords"))
     shelf |= _credit_names(db, candidate_id, seed_id)
 
+    def _accept_plot(link: Optional[Mapping[str, Any]]) -> Optional[Dict[str, Any]]:
+        accepted = checkable_plot_link(link, shelf_labels=shelf)
+        if not accepted or not accepted.get("sentence"):
+            return None
+        sentence = str(accepted["sentence"])
+        if "both stories turn on" in sentence.casefold():
+            return None
+        return {
+            "link_kind": "plot_link",
+            "sentence": sentence,
+            "terms": list(accepted.get("terms") or []),
+        }
+
     def _live_plot_link() -> Optional[Dict[str, Any]]:
-        link = honest_plot_link(
+        return _accept_plot(
             specific_plot_link(
                 seed_text=plot_blob(seed),
                 peer_text=plot_blob(candidate),
                 shelf_labels=shelf,
-            ),
-            shelf_labels=shelf,
+            )
         )
-        if link and link.get("sentence"):
-            return {
-                "link_kind": "plot_link",
-                "sentence": str(link["sentence"]),
-                "terms": list(link.get("terms") or []),
-            }
-        return None
 
     # Finished-episode overlay: live plot first so show-level cosine cache cannot win.
     if seed.get("episode_rating_key"):
@@ -736,13 +741,9 @@ def _inner_link(
         except (TypeError, ValueError, KeyError):
             continue
         stored = parse_plot_link_json(neighbor["plot_link_json"] if "plot_link_json" in neighbor.keys() else None)
-        accepted = honest_plot_link(stored, shelf_labels=shelf)
+        accepted = _accept_plot(stored)
         if accepted:
-            return {
-                "link_kind": "plot_link",
-                "sentence": str(accepted["sentence"]),
-                "terms": list(accepted.get("terms") or []),
-            }
+            return accepted
 
     live = _live_plot_link()
     if live:
@@ -806,8 +807,9 @@ def watched_bridge(
     link_sentence = str(inner.get("sentence") or "").strip()
     if not link_sentence:
         return None
-    # "Both stories turn on X." → keep as clause after em dash. Only "Both"
-    # folds; a clause that opens on a name ("Adam McKay worked on both") keeps it.
+    # Fold a leading "Both" into the clause. A name ("Adam McKay worked on both")
+    # stays capitalized. Plot clauses name the noun; they do not use
+    # "both stories turn on".
     clause = link_sentence
     if clause.startswith("Both "):
         clause = "b" + clause[1:]

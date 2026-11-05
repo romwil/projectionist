@@ -155,6 +155,32 @@ class ExplainableNeighborMaterializeTests(unittest.TestCase):
             self.assertEqual(len(rows), 1)
             self.assertEqual(int(rows[0]["neighbor_id"]), peer)
 
+    def test_stale_plot_link_json_is_rescored(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "kin.db")
+            seed = _title(db, rating_key="bake", tmdb_id=1, title="Bake Show", summary=BAKE_PLOT)
+            peer = _title(db, rating_key="spy", tmdb_id=2, title="Covert Kitchen", summary=SPY_PLOT)
+            with db.connect() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO item_neighbors
+                        (item_id, neighbor_id, score, surprise_score, explainable, plot_link_json)
+                    VALUES (?, ?, 0.9, 0.1, 1, ?)
+                    """,
+                    (
+                        seed,
+                        peer,
+                        '{"sentence":"Both stories turn on american children.","terms":["american children"]}',
+                    ),
+                )
+            needing = db.item_ids_needing_neighbor_explanation(limit=10)
+            self.assertIn(seed, needing)
+            annotate_explainable_neighbors(db, needing)
+            rows = db.get_neighbors(seed, explainable_only=False)
+            stored = str(rows[0]["plot_link_json"] or "")
+            self.assertIn('"v":', stored)
+            self.assertNotIn("american children", stored.lower())
+
 
 class ExplainableCoverageTests(unittest.TestCase):
     def test_coverage_includes_raw_and_explainable_percents(self) -> None:

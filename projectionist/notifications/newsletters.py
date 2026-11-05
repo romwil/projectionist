@@ -6,7 +6,7 @@ import logging
 import time
 from calendar import monthrange
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from projectionist.config_store import Settings
 from projectionist.digest.service import build_weekly_digest
@@ -59,6 +59,17 @@ QUIET_WEEK_LINE = (
     "Quiet week — nothing new connects to what you've watched yet. "
     "We'll write when something does."
 )
+
+
+def _show_key(row: Mapping[str, Any]) -> str:
+    """Group episodes under the show so one series is one pick."""
+    media = str(row.get("media_type") or "").strip().casefold()
+    if media == "episode":
+        for field in ("show_title", "grandparent_title", "series_title"):
+            show = str(row.get(field) or "").strip().casefold()
+            if show:
+                return show
+    return str(row.get("title") or "").strip().casefold()
 
 # Plain-text footer: members need a way back in and a way out of every lifecycle note.
 NEWSLETTER_FOOTER = (
@@ -179,6 +190,9 @@ def build_member_newsletter(
     )
     tracker_watched = tracker_watched_item_ids(db)
     linked: List[Dict[str, Any]] = []
+    # One pick per watched show per issue. Episode seeds share the show title.
+    used_seed_shows: set[str] = set()
+    used_candidate_shows: set[str] = set()
     for item in titles:
         if not isinstance(item, dict):
             continue
@@ -197,10 +211,37 @@ def build_member_newsletter(
                 continue
         except (TypeError, ValueError):
             continue
-        explanation = specific_bridge(db, row, watched)
-        why = str(explanation.get("sentence") or "") if explanation else ""
-        if not why:
+        candidate_key = _show_key(row)
+        if candidate_key and candidate_key in used_candidate_shows:
             continue
+        open_seeds = [
+            seed for seed in watched if _show_key(seed) not in used_seed_shows
+        ]
+        if watched and not open_seeds:
+            break
+        explanation = specific_bridge(db, row, open_seeds)
+        why = str(explanation.get("sentence") or "") if explanation else ""
+        if not why or "both stories turn on" in why.casefold():
+            continue
+        evidence = explanation.get("evidence") if isinstance(explanation, dict) else {}
+        seed_key = str((evidence or {}).get("seed_title") or "").strip().casefold()
+        if not seed_key:
+            for seed_id in (explanation.get("seed_ids") or []) if explanation else []:
+                for seed in open_seeds:
+                    try:
+                        if int(seed.get("id") or 0) == int(seed_id):
+                            seed_key = _show_key(seed)
+                            break
+                    except (TypeError, ValueError):
+                        continue
+                if seed_key:
+                    break
+        if seed_key and seed_key in used_seed_shows:
+            continue
+        if seed_key:
+            used_seed_shows.add(seed_key)
+        if candidate_key:
+            used_candidate_shows.add(candidate_key)
         # Body line is the shared watched_bridge sentence (same object as For you).
         linked.append({**item, "why": why, "explanation": explanation})
         if len(linked) >= DIGEST_PICK_CAP:
