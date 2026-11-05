@@ -600,6 +600,9 @@ class SonarrMissingApiTests(unittest.TestCase):
         self._login_owner()
         fake = FakeSonarr()
         with patch("projectionist.web.app.SonarrClient", return_value=fake):
+            # The first authed request pays cold app/DB startup on loaded CI runners;
+            # the bound below is about the scan, not that startup.
+            self.assertEqual(self.client.get("/api/admin/sonarr/missing/status").status_code, 200)
             started = time.monotonic()
             resp = self.client.post(
                 "/api/admin/sonarr/missing/scan",
