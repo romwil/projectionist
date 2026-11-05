@@ -365,6 +365,7 @@ export default function TitleDetailContent({
             compact={compact}
             playTo={playTo}
             onPlayClick={() => overlay?.closeTitleDetail?.()}
+            onChatClick={() => overlay?.closeTitleDetail?.()}
             addPrimary={
               !playTo && canAddOrRequest
                 ? {
