@@ -223,6 +223,13 @@ describe("shouldHidePrimaryBottomNav (UX-014)", () => {
     assert.equal(shouldHidePrimaryBottomNav({ pathname: "/live/watch" }), true);
   });
 
+  it("never paints on the sign-in, join, or setup doors (UX-011)", () => {
+    for (const pathname of ["/login", "/login/", "/join", "/setup"]) {
+      assert.equal(shouldHidePrimaryBottomNav({ pathname }), true, pathname);
+    }
+    assert.equal(shouldHidePrimaryBottomNav({ pathname: "/loginx" }), false);
+  });
+
   it("stays visible on ordinary routes", () => {
     assert.equal(shouldHidePrimaryBottomNav({ pathname: "/explore" }), false);
     assert.equal(shouldHidePrimaryBottomNav({ pathname: "/live" }), false);

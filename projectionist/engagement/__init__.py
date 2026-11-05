@@ -1,4 +1,4 @@
-"""Engagement substrate: badges, streaks, challenges, courses, explainers."""
+"""Engagement substrate: badges, challenges, courses, explainers."""
 
 from __future__ import annotations
 
@@ -27,24 +27,7 @@ def sync_review_challenges(db: Database, user_id: str) -> Dict[str, Any]:
         min_count = int(criteria.get("min_count") or 1)
         if count >= min_count and db.award_badge(user_id, badge["id"]):
             awarded.append(badge["slug"])
-    if count >= 1:
-        # Course / streak badges are handled elsewhere; first-review covered above.
-        pass
     return {"review_count": count, "challenges": updated, "awarded": awarded}
-
-
-def sync_chat_streak(db: Database, user_id: str) -> Dict[str, Any]:
-    streak = db.touch_user_streak(user_id, "chat")
-    awarded = []
-    for badge in db.list_engagement_badges():
-        criteria = badge.get("criteria") or {}
-        if criteria.get("event") != "chat_streak":
-            continue
-        min_count = int(criteria.get("min_count") or 3)
-        if int(streak.get("current_count") or 0) >= min_count:
-            if db.award_badge(user_id, badge["id"]):
-                awarded.append(badge["slug"])
-    return {"streak": streak, "awarded": awarded}
 
 
 def engagement_summary(
@@ -55,12 +38,6 @@ def engagement_summary(
 ) -> Dict[str, Any]:
     """Aggregate engagement payload for the member UI."""
     sync_review_challenges(db, user_id)
-    session_count = 0
-    try:
-        session_count = db.count_chat_sessions_last_days(30)
-    except Exception:  # noqa: BLE001
-        session_count = 0
-    streak = db.get_user_streak(user_id, "chat")
     badges = db.list_user_badges(user_id)
     if youth_safe_only:
         badges = [b for b in badges if b.get("youth_safe")]
@@ -96,9 +73,6 @@ def engagement_summary(
     except Exception:  # noqa: BLE001
         logger.debug("engagement courses listing failed", exc_info=True)
     return {
-        "session_count_30d": session_count,
-        "streak_visible": session_count >= 3 or int(streak.get("current_count") or 0) >= 3,
-        "streak": streak,
         "badges": badges,
         "challenges": challenges,
         "courses": courses,

@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { documentTitleFor, pageTitleFor } from "../lib/routeTitles";
+import { documentTitleFor, pageTitleFor, routeNamesItself, withAppName } from "../lib/routeTitles";
+
+const PAGE_NAMED_EVENT = "projectionist:page-named";
+// A title page that never loads (error, slow network) still gets announced.
+const SELF_NAME_WAIT_MS = 2500;
 
 /**
  * A11Y-004: unique `document.title` per route, focus moved to the page's
@@ -8,6 +12,9 @@ import { documentTitleFor, pageTitleFor } from "../lib/routeTitles";
  * and a polite announcement string for `RouteAnnouncer` ("Help ·
  * Projectionist") so SR users still hear the new page even when no `<h1>`
  * happens to exist yet on a given page.
+ *
+ * A11Y-003: title and episode routes name themselves once loaded through
+ * `usePageName`; the announcer reads that name instead of "Title".
  *
  * Skips the very first render (initial page load already has its own
  * title/focus from the browser) and only reacts to pathname changes, not
@@ -17,6 +24,17 @@ export function useRouteAnnounce() {
   const { pathname } = useLocation();
   const [announcement, setAnnouncement] = useState("");
   const firstRender = useRef(true);
+  const navigated = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    function onNamed(event: Event) {
+      const name = String((event as CustomEvent).detail || "").trim();
+      if (name && navigated.current) setAnnouncement(name);
+    }
+    window.addEventListener(PAGE_NAMED_EVENT, onNamed);
+    return () => window.removeEventListener(PAGE_NAMED_EVENT, onNamed);
+  }, []);
 
   useEffect(() => {
     const title = documentTitleFor(pathname);
@@ -28,10 +46,19 @@ export function useRouteAnnounce() {
       firstRender.current = false;
       return;
     }
+    navigated.current = true;
 
-    setAnnouncement(pageTitleFor(pathname));
+    let fallback: ReturnType<typeof setTimeout> | null = null;
+    if (routeNamesItself(pathname)) {
+      fallback = setTimeout(() => {
+        setAnnouncement((current) => current || pageTitleFor(pathname));
+      }, SELF_NAME_WAIT_MS);
+      setAnnouncement("");
+    } else {
+      setAnnouncement(pageTitleFor(pathname));
+    }
 
-    if (typeof document === "undefined") return;
+    if (typeof document === "undefined") return undefined;
     // Let the new route's DOM commit first, then move focus to its heading.
     // Lazy route chunks render a Suspense fallback with no <h1> first, so keep
     // looking for a few seconds instead of giving up after one frame.
@@ -56,8 +83,26 @@ export function useRouteAnnounce() {
       heading.focus();
     };
     handle = schedule(tryFocus);
-    return () => cancel(handle);
+    return () => {
+      cancel(handle);
+      if (fallback) clearTimeout(fallback);
+    };
   }, [pathname]);
 
   return announcement;
+}
+
+/**
+ * A11Y-003: once a page knows its item ("Alien (1979)"), put that name in the
+ * tab title and the route announcement. Pass "" while loading.
+ */
+export function usePageName(name: string) {
+  useEffect(() => {
+    const label = String(name || "").trim();
+    if (!label || typeof document === "undefined") return;
+    document.title = withAppName(label);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(PAGE_NAMED_EVENT, { detail: label }));
+    }
+  }, [name]);
 }

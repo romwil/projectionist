@@ -197,8 +197,17 @@ export function shouldHidePrimaryBottomNav({
 }: JsParam = {}) {
   const path = String(pathname || "");
   if (path.startsWith("/watch/") || path === ROUTES.liveWatch) return true;
+  if (isDoorPath(path)) return true;
   if (composerFocused && isIos) return true;
   return false;
+}
+
+/** UX-011: sign-in, join, and first-run setup are signed-out doors, never member chrome. */
+const DOOR_PATHS = new Set(["/login", "/join", "/setup"]);
+
+export function isDoorPath(pathname: JsParam) {
+  const path = String(pathname || "").replace(/\/+$/, "") || "/";
+  return DOOR_PATHS.has(path);
 }
 
 /** True when pathname is the chat workspace (including legacy `/`). */

@@ -4,6 +4,7 @@
  */
 import { expect, test } from "@playwright/test";
 import {
+  mockAuthUnauthenticated,
   mockAuthUser,
   mockCuratorApis,
   mockFeatures,
@@ -55,6 +56,8 @@ test.describe("Household authz", () => {
       auth_mode: "oidc",
       oidc_provider_name: "Home IdP",
     });
+    // UX-011: the door stays blank until it knows the visitor is signed out.
+    await mockAuthUnauthenticated(page);
     await mockOidcAuthorize(page, "https://idp.example.test/authorize?client_id=projectionist");
 
     await page.goto("/login");

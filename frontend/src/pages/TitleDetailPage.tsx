@@ -9,13 +9,17 @@ import TitleDetailContent from "../components/TitleDetailContent";
 import TitleNeighborsRails from "../components/TitleNeighborsRails";
 import TitleReviewModal from "../components/TitleReviewModal";
 import AppShell from "../layouts/AppShell";
+import { usePageName } from "../hooks/useRouteAnnounce";
 import { useTitleDetail } from "../hooks/useTitleDetail.js";
 import { useTitleDetailInteractions } from "../hooks/useTitleDetailInteractions.js";
 import { resolveBackTarget, ROUTES } from "../lib/backNav.js";
+import { titlePageName } from "../lib/routeTitles";
+import { focusTrailerFrame, trailerEmbedUrl } from "../lib/trailerEmbed";
 import {
   canOwnerDeleteLibraryTitle,
   LIBRARY_DELETE_NOTICE_KEY,
 } from "../lib/bulkLibraryDelete.js";
+import Button from "../components/Button";
 
 export default function TitleDetailPage() {
   const { mediaType, itemId } = useParams();
@@ -33,6 +37,8 @@ export default function TitleDetailPage() {
     idType,
     enabled: true,
   });
+
+  usePageName(loading ? "" : titlePageName(detail));
 
   const interactions = useTitleDetailInteractions({
     detail,
@@ -67,6 +73,7 @@ export default function TitleDetailPage() {
         className="title-page title-detail-skinned"
         testId="title-detail-page"
         variant="sticky"
+        mainLandmark
         leading={<BackLink fallbackTo={ROUTES.chat} testId="title-detail-back" />}
       >
         <p className="error">{error}</p>
@@ -79,6 +86,7 @@ export default function TitleDetailPage() {
         className="title-page title-detail-skinned"
         testId="title-detail-page"
         variant="sticky"
+        mainLandmark
         leading={<BackLink fallbackTo={ROUTES.chat} testId="title-detail-back" />}
       >
         <p className="title-detail-loading">Loading…</p>
@@ -97,6 +105,7 @@ export default function TitleDetailPage() {
       className="title-page title-detail-skinned"
       testId="title-detail-page"
       variant="sticky"
+      mainLandmark
       leading={<BackLink fallbackTo={ROUTES.chat} testId="title-detail-back" />}
       actions={
         <span className="title-detail-sticky-label">
@@ -158,20 +167,21 @@ export default function TitleDetailPage() {
                 >
                   Open on YouTube
                 </a>
-                <button
-                  type="button"
-                  className="ghost"
+                <Button
+                  variant="secondary"
+                  size="sm"
                   data-testid="close-trailer-modal"
                   onClick={() => setTrailerOpen(false)}
                 >
                   Close
-                </button>
+                </Button>
               </div>
             </div>
             <div className="trailer-modal-frame">
               <iframe
+                ref={focusTrailerFrame}
                 title={`${(detail as any).title} trailer`}
-                src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(trailerKey)}?autoplay=1&rel=0`}
+                src={trailerEmbedUrl(trailerKey)}
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
                 referrerPolicy="strict-origin-when-cross-origin"
                 allowFullScreen

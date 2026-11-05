@@ -51,7 +51,8 @@ logger = logging.getLogger(__name__)
 HUB_CACHE_SOFT_TTL_SECONDS = 120.0
 # Keep memory/disk entries this long for SWR (revalidate asynchronously).
 HUB_CACHE_HARD_TTL_SECONDS = 6 * 3600.0
-HUB_DISK_KEY_PREFIX = "explore_hub:"
+# Bump the version when "why" rules change so a stored rail cannot replay old reasons.
+HUB_DISK_KEY_PREFIX = "explore_hub:v2:"
 
 HUB_CACHE_TTL_SECONDS = HUB_CACHE_SOFT_TTL_SECONDS  # back-compat alias for tests/stats
 # Continue Watching may ask Plex. Cap it so a sleeping server cannot stall the

@@ -947,18 +947,6 @@ class ApiContractTests(unittest.TestCase):
         self.assertTrue(removed.json()["removed"])
         self.assertEqual(self.client.get("/api/watchlist").json()["count"], 0)
 
-    def test_engagement_streak(self) -> None:
-        import projectionist.web.jobs as jobs
-
-        db = jobs.get_job_manager().db
-        for index in range(3):
-            db.create_chat_thread(f"streak-session-{index}", thread_title=f"Streak {index}")
-        resp = self.client.get("/api/engagement/streak")
-        self.assertEqual(resp.status_code, 200)
-        body = resp.json()
-        self.assertGreaterEqual(body["session_count_30d"], 3)
-        self.assertTrue(body["streak_visible"])
-
     def test_message_feedback_clear_via_delete(self) -> None:
         import projectionist.web.jobs as jobs
 

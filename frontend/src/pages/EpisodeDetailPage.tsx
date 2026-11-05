@@ -4,7 +4,9 @@ import { getLibraryEpisode } from "../api/client";
 import BackLink from "../components/BackLink";
 import TitleCtaBar from "../components/TitleCtaBar";
 import AppShell from "../layouts/AppShell";
+import { usePageName } from "../hooks/useRouteAnnounce";
 import { ROUTES } from "../lib/backNav.js";
+import { episodePageName } from "../lib/routeTitles";
 import { formatEpisodeCode } from "../lib/showSeasons.js";
 import {
   libraryEpisodePath,
@@ -83,12 +85,18 @@ export default function EpisodeDetailPage() {
     ? libraryEpisodePath(payload.next_episode.rating_key)
     : "";
   const aired = formatAired(episode?.aired_at);
+  usePageName(
+    episode
+      ? episodePageName({ showTitle: show?.title, episodeTitle: episode?.title, code })
+      : "",
+  );
 
   return (
     <AppShell
       className="title-page title-detail-skinned episode-detail-page"
       testId="episode-detail-page"
       variant="sticky"
+      mainLandmark
       leading={<BackLink fallbackTo={showPath || ROUTES.chat} testId="episode-detail-back" />}
     >
       {loading ? <p className="muted">Opening the episode…</p> : null}
