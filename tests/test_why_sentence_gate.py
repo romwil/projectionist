@@ -32,6 +32,8 @@ BROKEN_REASONS = (
     "both stories turn on a broadcasting company and a began airing",
     "both stories turn on a primetime emmy",
     "both stories turn on",
+    "both stories turn on american children",
+    "both stories turn on a taking place",
     "worked on",
 )
 BAKE_PLOT = "Amateur bakers compete around a signature bake inside a failing colony."
@@ -115,7 +117,8 @@ class WatchedBridgeGateTests(unittest.TestCase):
         peer_row = {"id": peer, "title": "Rivals", "year": 2015, "summary": RIVAL_PLOT}
         explanation = watched_bridge(self.db, peer_row, seed_row)
         assert explanation is not None
-        self.assertIn("— both stories turn on", explanation["sentence"])
+        self.assertIn("— both are about", explanation["sentence"])
+        self.assertNotIn("both stories turn on", explanation["sentence"])
 
 
 class ForYouRailTests(unittest.TestCase):

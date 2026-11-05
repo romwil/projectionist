@@ -6,6 +6,7 @@ import importlib
 import json
 import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -610,6 +611,72 @@ class NotificationPlatformTests(unittest.TestCase):
         bodies = " ".join(str(item.get("body") or "") for item in inbox)
         self.assertNotIn("download complete", f"{titles} {bodies}".lower())
         self.assertNotIn("Now in your library", titles)
+
+
+class NewsletterReasonMailTests(unittest.TestCase):
+    """The weekly letter names a show once and does not use the keyword template."""
+
+    def setUp(self) -> None:
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.db = Database(Path(self._tmpdir.name) / "mail-reasons.db")
+
+    def tearDown(self) -> None:
+        self._tmpdir.cleanup()
+
+    def test_body_has_no_keyword_template_and_one_line_per_show(self) -> None:
+        from tests.test_household_bridges import (
+            BAKE_PLOT,
+            SPY_PLOT,
+            _explainable_neighbor,
+            _insert_completion,
+            _title,
+        )
+
+        now = time.time()
+        for index in range(3):
+            seed = _title(
+                self.db,
+                rating_key=f"rk-fg-{index}",
+                tmdb_id=2400 + index,
+                title="Family Guy",
+                year=1999,
+                media_type="show",
+                summary=BAKE_PLOT,
+                added_at=int(now - 40 * 86400),
+            )
+            peer = _title(
+                self.db,
+                rating_key=f"rk-mail-{index}",
+                tmdb_id=2500 + index,
+                title=f"Arrival {index}",
+                year=2024,
+                summary=SPY_PLOT,
+                added_at=int(now - 500 + index),
+            )
+            _explainable_neighbor(self.db, seed, peer, seed_text=BAKE_PLOT, peer_text=SPY_PLOT)
+            _insert_completion(
+                self.db,
+                user_id="will",
+                rating_key=f"rk-fg-{index}",
+                completed_at_ms=1_700_000_000_000 + index,
+            )
+        letter = build_member_newsletter(
+            self.db,
+            user={"preferred_name": "Will", "display_name": "Will", "role": "owner"},
+            now=now,
+        )
+        body = letter["body"]
+        self.assertNotIn("both stories turn on", body.lower())
+        reason_lines = [line for line in body.splitlines() if line.startswith("You ")]
+        self.assertEqual(len(reason_lines), 1)
+        shows_in_lines: dict[str, int] = {}
+        for line in reason_lines:
+            for show in ("Family Guy", "Arrival 0", "Arrival 1", "Arrival 2"):
+                if show.lower() in line.lower():
+                    shows_in_lines[show] = shows_in_lines.get(show, 0) + 1
+        self.assertTrue(shows_in_lines)
+        self.assertTrue(all(count <= 1 for count in shows_in_lines.values()))
+        self.assertEqual(shows_in_lines.get("Family Guy"), 1)
 
 
 if __name__ == "__main__":
