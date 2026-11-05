@@ -139,6 +139,13 @@ ALLOWED_HOSTS = {
     "webservice.fanart.tv", "assets.fanart.tv", "www.omdbapi.com", "en.wikipedia.org",
     "api.open-meteo.com", "geocoding-api.open-meteo.com", "api.resend.com", "api.opensubtitles.com",
     "www.youtube.com", "www.youtube-nocookie.com", "www.w3.org",
+    # Weather Channel (only while someone watches it); listed in PRIVACY.md.
+    "archive-api.open-meteo.com", "air-quality-api.open-meteo.com", "api.weather.gov",
+    "mesonet.agron.iastate.edu", "api.rainviewer.com", "tilecache.rainviewer.com",
+    "cdn.star.nesdis.noaa.gov", "api.windy.com", "imgproxy.windy.com",
+    "news.google.com", "feeds.bbci.co.uk",
+    # Weather narration voice model, downloaded once when the owner turns it on.
+    "huggingface.co",
     # Links and User-Agent strings only; nothing is fetched from these.
     "github.com", "hub.docker.com",
 }

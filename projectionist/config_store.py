@@ -697,6 +697,20 @@ class TheaterSettings:
     rotate_seconds: int = 12
 
 
+@dataclass
+class WeatherSettings:
+    """Weather Channel narration (local TTS) and the optional Windy webcam key."""
+
+    # Off until the owner turns on Weather narration; enabling downloads the voice model.
+    narration_enabled: bool = False
+    # kokoro (default) | piper (lighter fallback)
+    tts_engine: str = "kokoro"
+    tts_voice: str = ""
+    tts_rate: float = 1.0
+    # Windy Webcams API key. Empty = no webcams board.
+    windy_api_key: str = ""
+
+
 NESTED_SETTINGS_TYPES.update(
     {
         "features": FeatureFlags,
@@ -708,6 +722,7 @@ NESTED_SETTINGS_TYPES.update(
         "youth": YouthSettings,
         "theater": TheaterSettings,
         "acrcloud": AcrcloudSettings,
+        "weather": WeatherSettings,
     }
 )
 
@@ -782,6 +797,7 @@ class Settings:
     youth: YouthSettings = field(default_factory=YouthSettings)
     theater: TheaterSettings = field(default_factory=TheaterSettings)
     acrcloud: AcrcloudSettings = field(default_factory=AcrcloudSettings)
+    weather: WeatherSettings = field(default_factory=WeatherSettings)
 
     def apply_to_environ(self) -> None:
         for env_name, field_name in ENV_TO_FIELD.items():

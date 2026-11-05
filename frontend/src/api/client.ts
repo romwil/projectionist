@@ -1175,6 +1175,19 @@ export async function saveLiveMuzakFolder(path: string) {
   });
 }
 
+/** Owner-only Weather Channel narration status, voice choices, and script previews. */
+export async function getLiveWeatherAdmin() {
+  return api("/admin/live/weather");
+}
+
+/** Save Weather narration / voice / Windy key. Enabling narration starts the one-time voice download. */
+export async function saveLiveWeatherAdmin(body: Record<string, unknown>) {
+  return api("/admin/live/weather", {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
 /** Owner-only: assemble and store the digest for the current week on demand. */
 export async function generateWeeklyDigest() {
   return api("/admin/weekly-digest/generate", { method: "POST" });
