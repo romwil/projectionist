@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import html
 import logging
 import secrets
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urljoin
 
 from projectionist.config_store import Settings, invite_required_for_new_users
 from projectionist.library.db import Database
 from projectionist.mail import MailSendError, mail_configured, send_mail
+from projectionist.mail.links import app_base_url
 from projectionist.web.auth import _hash_password, row_to_current_user_from_dict
 from projectionist.web.ingress import JOIN_LINK_DETAIL
 from projectionist.web.session_tokens import resolve_session_secret
@@ -19,6 +22,12 @@ from projectionist.web.session_tokens import resolve_session_secret
 logger = logging.getLogger(__name__)
 
 DEFAULT_INVITE_TTL_SECONDS = 7 * 24 * 3600
+
+# Same sentence as README, Docker Hub, and the Unraid card (GRO-007).
+POSITIONING_SENTENCE = (
+    "Projectionist is a private movie-and-TV companion for your Plex household: ask for something to watch, "
+    "browse your library by mood and connection, and keep everyone's picks their own."
+)
 
 
 def hash_invite_token(raw_token: str) -> str:
@@ -64,6 +73,38 @@ def public_invite_view(invite: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _inviter_name(db: Database, owner_id: str) -> str:
+    try:
+        row = db.get_user(owner_id)
+        user = db._row_to_user(row) if row is not None else {}
+    except Exception:  # noqa: BLE001
+        user = {}
+    return str(user.get("display_name") or user.get("username") or "").strip()
+
+
+def invite_email(*, inviter: str, join_url: str, expires_at: float) -> Dict[str, str]:
+    """Subject, text, and HTML for an invite email (GRO-009)."""
+    who = inviter or "Someone in your household"
+    day = datetime.fromtimestamp(float(expires_at), tz=timezone.utc)
+    expires = f"{day:%B} {day.day}, {day.year}"
+    subject = f"{who} invited you to join Projectionist"
+    lines = [
+        f"{who} invited you to their Projectionist household.",
+        POSITIONING_SENTENCE,
+        f"Your link works once and expires on {expires}.",
+    ]
+    ignore = "If you did not expect this, you can ignore this email."
+    is_absolute = join_url.startswith(("http://", "https://"))
+    text = "\n\n".join([*lines, f"Accept the invite: {join_url}", ignore])
+    link = (
+        f'<p><a href="{html.escape(join_url, quote=True)}">Accept invite</a></p>'
+        if is_absolute
+        else f"<p>Accept the invite: {html.escape(join_url)}</p>"
+    )
+    markup = "".join(f"<p>{html.escape(line)}</p>" for line in lines) + link + f"<p>{html.escape(ignore)}</p>"
+    return {"subject": subject, "text": text, "html": markup}
+
+
 def create_household_invite(
     db: Database,
     settings: Settings,
@@ -105,29 +146,23 @@ def create_household_invite(
         invite_id=invite_id,
     )
     signed = encode_invite_token(str(invite["id"]), raw)
-    domain = str(getattr(settings, "household_domain", "") or "").strip()
-    origin = str(base_url or "").rstrip("/")
-    if domain and not origin:
-        origin = domain if domain.startswith("http") else f"https://{domain}"
+    origin = str(base_url or "").rstrip("/") or app_base_url(settings)
     join_path = f"/join?token={signed}"
     join_url = urljoin(origin + "/", join_path.lstrip("/")) if origin else join_path
     mailed = False
     if send_email and email and mail_configured(settings):
+        message = invite_email(
+            inviter=_inviter_name(db, owner_id),
+            join_url=join_url,
+            expires_at=expires_at,
+        )
         try:
             send_mail(
                 settings,
-                to=str(email),
-                subject="You're invited to join Projectionist",
-                text=(
-                    "You've been invited to join a Projectionist household.\n\n"
-                    f"Open this link to finish joining:\n{join_url}\n\n"
-                    "If you did not expect this, you can ignore the message."
-                ),
-                html=(
-                    "<p>You've been invited to join a Projectionist household.</p>"
-                    f'<p><a href="{join_url}">Open your invite</a></p>'
-                    "<p>If you did not expect this, you can ignore the message.</p>"
-                ),
+                to_email=str(email),
+                subject=message["subject"],
+                body_text=message["text"],
+                body_html=message["html"],
             )
             mailed = True
         except MailSendError:

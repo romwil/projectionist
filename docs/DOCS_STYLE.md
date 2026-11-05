@@ -126,6 +126,18 @@ A short one-line summary of the release.
 
 ---
 
+## Names (glossary)
+
+One name per thing in member-facing copy. Code identifiers keep their names; only the label changes.
+
+| Thing | Say | Not |
+|---|---|---|
+| The chat agent | The owner's curator name when set (Admin → Persona). Otherwise the active voice as the persona picker shows it (*The Professor*). With neither, **your curator**. | A bare "Curator" or "CURATOR", or a voice's long name (*Academic Critic*) where the picker says *The Professor* |
+
+The app applies this rule in `frontend/src/lib/curatorName.ts` and `projectionist/persona/display.py`. Use those helpers instead of falling back to the literal `"Curator"`.
+
+---
+
 ## Definition of done for docs
 
 A user-facing change is not done until:

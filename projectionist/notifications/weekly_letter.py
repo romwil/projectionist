@@ -443,6 +443,7 @@ def deliver_weekly_letter(
     configured; inbox delivery never depends on mail.
     """
     from projectionist.mail import MailSendError, mail_configured, send_mail
+    from projectionist.mail.links import lifecycle_footer, text_to_html
     from projectionist.notifications.service import resolve_notification_email
 
     state = load_letter_settings(db)
@@ -488,12 +489,17 @@ def deliver_weekly_letter(
         if want_email:
             to_email = resolve_notification_email(owner)
             if to_email:
+                footer = lifecycle_footer(
+                    settings, manage_path="/admin/newsletters", manage_label="Admin → Ops → Newsletters"
+                )
                 try:
                     send_mail(
                         settings,
                         to_email=to_email,
                         subject=f"{letter['title']} — {bucket}",
-                        body_text=body,
+                        body_text=f"{body}\n\n{footer.text}",
+                        body_html=text_to_html(body) + footer.html,
+                        list_unsubscribe=footer.list_unsubscribe,
                     )
                     result["emailed"] += 1
                 except MailSendError as exc:
