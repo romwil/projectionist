@@ -52,6 +52,7 @@ The trust release. Only the owner adds to Radarr or Sonarr, nobody else's viewin
 - **GRO-009** Household invite email sends. The subject names the inviter, and the body says the link works once and when it expires.
 - **GRO-011** The Unraid Community Apps overview reads as a store card: what is needed, what is optional, and one LAN line. Both template copies stay the same.
 - **PERF-005** The first page no longer downloads the player. Play loads that piece when you start it.
+- **PRD-003** Live shows in the nav when Live is on and at least one station exists. A saved Tunarr URL is not part of that check.
 
 ## [1.39.0] — 2026-11-02
 
