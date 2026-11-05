@@ -22,7 +22,7 @@
   <Requires>Plex Media Server on your LAN. Optional: Radarr, Sonarr, Tautulli, Fanart.tv, and an LLM API key or Ollama on the Unraid host.</Requires>
   <Changes>
 ### 1.39.0
-Youth guardrails: Youth memory off by default, Youth chat uses a home model or none (never the household cloud model), and turning Youth mode on needs a confirm, notifies the member, and is logged.
+The trust release: only the owner adds to Radarr/Sonarr, your picks use only what you watched, Youth memory off and home-only Youth chat, an honest Privacy page, daily backups, play-ready subtitles, and a cable-style Weather Channel. The lobby port only listens when Enable lobby display is on.
 
 ### 1.38.0
 Ready to invite your household: members get their own sign-in, chats, and start page; owners get Needs attention and a Monday pass; faster pages; Live guide shows start and end times.

@@ -1,30 +1,92 @@
 {
-  "generated_at": "2026-11-02T23:11:31Z",
+  "generated_at": "2026-11-05T08:21:59Z",
   "releases": [
     {
       "version": "1.39.0",
-      "date": "2026-11-02",
-      "summary": "Youth accounts get real privacy guardrails. The curator doesn't remember things for Youth accounts unless the owner turns that on, and Youth chats never go to the household's cloud AI. Turning Youth mode on for someone now asks the owner to confirm, tells that person, and records it in the security log. It also never opens what the curator remembered about them before.",
+      "date": "2026-11-05",
+      "summary": "The trust release. Only the owner adds to Radarr or Sonarr, nobody else's viewing shows up as yours, Youth accounts get real privacy guardrails, the Privacy page says only what the code does, and the server now keeps a daily backup you can restore. Every title can also get a subtitle file ready before you press Play.",
       "highlights": [
-        "**Youth memory is off by default.** The curator doesn't read or save memory for Youth accounts unless the owner turns it on in Admin → Members.",
-        "**Youth chat stays at home, or stays off.** The owner picks a model that runs on the home network, or none. With none, Youth chat explains that it's off and sends nothing to any AI model. It never falls back to the household's cloud model.",
-        "**No quiet switches.** Turning Youth mode on for an existing account needs a confirm. The member gets an inbox notice, and the security log records who did it, when, and for which account.",
-        "**Earlier memory stays private.** Owner review in Admin → Youth only shows notes saved after an account entered Youth mode, so the Youth toggle can't be used to read an adult's memory."
+        "**The owner decides who adds titles.** By default members see \"Ask the owner to add this\" instead of an add button, and only the owner confirms Radarr and Sonarr adds. The owner can let a trusted adult member add without a confirm, and every one of those adds lands in the security log.",
+        "**Your picks and your privacy are yours.** Newsletters, nudges, and whispers only use what you finished, so someone else's viewing never becomes your \"You watched\". The curator doesn't remember things for Youth accounts unless the owner turns that on, Youth chat never goes to the household's cloud AI, and the Privacy page lists only what the app really stores.",
+        "**Subtitles ready before you press Play.** Projectionist keeps one subtitle file per title in your household's language, from Plex or OpenSubtitles, and turns captions on when a film isn't in your language.",
+        "**A daily backup, and a way back.** The server writes a snapshot every day, keeps a week, and Needs attention tells you when backups stop or people are waiting to join."
       ],
       "sections": [
         {
+          "title": "Security",
+          "bullets": [
+            "**SEC-008 / SEC-010** A new install serves only `GET /api/health`, `GET /api/ready`, and a setup lock page until `PROJECTIONIST_OWNER_PASSWORD` is entered. Ready stays a readiness probe. Setup then creates the owner account and can bind Plex. A Plex, SSO, or local sign-in cannot become owner by arriving first. If the variable is unset, the lock page says to set it. An install that already has an owner never shows the lock; if that owner is later gone, the same passcode opens setup again. With household login off, Admin warns that the LAN is trusted.",
+            "**SEC-006** One policy (`projectionist/authz.py`) decides propose, confirm, and agent tool access. `add_radarr` / `add_sonarr` are owner-only at propose, confirm, and agent dispatch; Youth are also refused `request_seerr`. Owner delete stays owner-only.",
+            "**BD-3 / SEC-006** Admin → Members → **Without my confirm** (`users.autoconfirm_adds`, schema migration 62, off by default, `PATCH /api/users/{id}` owner-only). With it on, that adult member may propose and redeem their own `add_radarr` / `add_sonarr` in one step, and the agent's `add_to_radarr` / `add_to_sonarr` add without a confirm card. Each such add writes an `autoconfirm_add` security-log row with the member, service, and title (no chat or memory text); toggling it writes `autoconfirm_change`. Youth accounts are refused the setting (409); turning Youth on or changing the account's role clears it. `remove_from_arr` and every other owner-only tool stay owner-only.",
+            "**SEC-007** Members can't set or test Apprise URLs (403), and delivery ignores any stored member URL. Owners keep per-account and household destinations.",
+            "**SEC-008** With sign-in on and no owner, the first Plex or SSO sign-in needs proof: the owner password from the container, the setup wizard, or the one-time claim cookie issued to the owner session that turned sign-in on. An OIDC callback spends that claim only when the same browser started the login, so a cross-site callback can't bind ownership to someone else's IdP account. The new-install default is unchanged.",
+            "**SEC-009** The agent's review lookup is scoped to the caller, like `GET /api/reviews`."
+          ]
+        },
+        {
+          "title": "Privacy",
+          "bullets": [
+            "**PRIV-001 / PRIV-009** With sign-in on, \"You watched\" seeds are the reader's own mapped evidence only: no household fallback, no unmapped accounts, no server-wide Plex view counts. Nudge payloads no longer carry `recently_watched`, and older stored ones are stripped on read. Anniversary copy says \"played on this server\" instead of \"watched\".",
+            "**PRIV-002** `docs/PRIVACY.md` (and `/privacy`) rewritten against the code; Help, FAQ, and MCP docs follow.",
+            "**PRIV-005 / PRIV-023** **Settings → My data**: list and delete your notes, download your data (JSON or Markdown with message text), or Delete my data (keeps the account). `GET /api/me/memory` now carries every registered store, the caller's rows only.",
+            "**PRIV-006 / ARCH-009** One registry (`projectionist/privacy/registry.py`) names every personal table and what export and removal do with it. Account removal is one transaction with secure delete, and leaves no orphan rows. Restoring a backup re-applies removals and data deletions from `privacy-erasures.json`, and refuses if that file can't be read.",
+            "**PRIV-024** `tests/test_privacy_contract.py` fails when the Privacy page claims something no test backs, or uses a retired promise."
+          ]
+        },
+        {
           "title": "Added",
           "bullets": [
-            "`youth.memory_enabled` (default `false`), `youth.chat_route` (`none` default, or `local`), `youth.local_base_url`, `youth.local_model` in `settings.json`. Existing settings files without these keys load with the safe defaults. A partial `PUT /api/settings` keeps saved Youth fields it did not send.",
-            "Admin → Members: **Let the curator remember things for Youth accounts** toggle, **Youth chat model** select, and local model address/name fields.",
-            "`users.youth_since` (schema migration 61). Accounts created from a Youth invite start at creation; every off → on toggle restarts it.",
-            "Inbox notification kind `account` (same migration widens the `user_notifications` CHECK by rebuilding from the live table definition, so later columns and indexes survive).",
-            "Confirm dialog before turning Youth mode on for an existing member."
+            "**Weather Channel, cable edition.** Current, overview, hourly, 5-day, NWS bulletins (US; a Warning jumps the queue and paints a red bar), regional cities, radar and satellite, webcams with a Windy key, almanac, and seasonal boards, with Local on the 8s at :08 through :58. A weather-only chyron runs at the bottom. Headlines (local, national, world) are their own segment, with a short spoken recap between weather pieces that a checker drops if it names a story not on the list. Voiceovers are written from the numbers (3 variants, number-checked, templates without an AI) and read by a local Kokoro or Piper voice that downloads when the owner turns narration on; no browser speech, captions if the voice fails. Music shuffles the whole folder and fades around each voiceover. One server cache per location, refreshed only while someone is watching. **Admin → Live → Weather Channel narration**; every outbound host is on the Privacy page and the channel footer.",
+            "**PERF-002 / OPS-009** `household_backup` scheduled task (daily, keeps 7) and `python -m projectionist.backups {create,list,restore}`. Restore validates the snapshot and sets the previous files aside.",
+            "**OPS-006** Needs attention lists people waiting to join, expiring or expired invites, stale or disabled backups, and an owner password from the container that didn't apply.",
+            "**GRO-006** `docs/DOCKERHUB.md` listing; `docs/RELEASE.md` adds \"Hub description pushed\".",
+            "**Play-ready subtitles.** Every movie and episode gets one household-language text file at `DATA_DIR/subtitles/{rating_key}/{language}.srt`, served as WebVTT on the existing subtitle route: a Plex text track is copied first, otherwise OpenSubtitles (file hash, then IMDB, or the show's IMDB plus season and episode) when `PROJECTIONIST_OPENSUBTITLES_API_KEY` is set. New `subtitle_enrichment` idle task (no TMDB key needed, Live lineup first) and an owner **Backfill subtitles** action on Admin → Scheduled Tasks that runs on the server, ignores chat, resumes after a restart from `subtitle_state` (schema migration 64), and pauses on the OpenSubtitles quota. Play turns captions on when the title's language isn't the household's; Live does the same for a foreign-language film, and Off sticks for that airing.",
+            "**PERF-001** Owner-only `GET /api/admin/runtime`: write-queue depth and wait, request p50/p95 per group since restart, and the latency SLO check. In memory only; one log line a minute.",
+            "**GRO-018** **Household pulse** on Admin → Overview (`GET /api/admin/pulse`): plays from a pick per week with a 4-week sparkline, chat failure rate, p95 reply time, AI spend, and quiet members. Household totals only, read from this server.",
+            "**A11Y-012** `e2e/a11y-axe.spec.ts` runs axe on ten routes in Lights Up and Lights Down and fails on serious or critical violations."
           ]
         },
         {
           "title": "Changed",
           "bullets": [
+            "**OPS-007** Help's password recovery matches the product: ask the owner, or use the container owner password (new **Owner recovery** section).",
+            "**VIS-003** Text that used the gold fill now uses `--accent-ink` (`#735c00` in Lights Up); the gold search button pairs its fill with `--accent-text`.",
+            "**GRO-007** One positioning sentence across README, `pyproject`, About, and the Unraid template; \"zero-telemetry\" and \"multi-tenant\" claims removed.",
+            "**PERF-007** `/api/ready` returns 503 unless the database opens and answers within 100 ms (a missing or unreadable file fails ready, not health). CI smoke checks both.",
+            "**A11Y-007** jsx-a11y rules are errors in the files cleaned so far (My data, Privacy, Overview, routes). Footer links no longer fade below contrast, and the watch badge is a labelled image.",
+            "**ARCH-006** mypy now covers auth, backups, the write queue, rate limits, session tokens, and the runtime modules.",
+            "**PRD-001 / UX-012** A recommendation reason shows only when it reads as a sentence.",
+            "**PRD-001 / UX-012** The weekly newsletter and the inbox keep a reason only when it is a shared director or writer, the same collection, or a plot noun you could check. Keyword overlap and \"both stories turn on\" are dropped, each show is one pick in an issue, and a quiet week sends nothing.",
+            "**UX-008** Unknown pages boot the app's not-found page, with a way back.",
+            "**UX-011** A signed-in visitor goes to their page instead of the sign-in form. The phone tab bar stays off the sign-in doors.",
+            "**A11Y-002 / A11Y-003 / A11Y-005 / A11Y-008 / A11Y-009** One main landmark, real tab titles, a skip link, trailers that don't autoplay, and an honest \"Opening your library…\" composer.",
+            "**VIS-001 / VIS-004** The worst screens use the shared Button, and type outside Live stays at 12px or larger.",
+            "**PRD-008 / PRD-010** Profile no longer rewards chat streaks, and pages nothing linked to are gone.",
+            "**PRD-013** The lobby port stays closed until the owner turns on **Enable lobby display** and restarts.",
+            "**GRO-020** The unused `interaction_telemetry` table is dropped (schema migration 63, after youth 61 and autoconfirm 62).",
+            "**GRO-014** Member-facing copy uses one curator name: the owner's name when it is set, otherwise the voice the picker shows, otherwise \"Your curator\".",
+            "**GRO-008** Newsletter, arrival, nudge, and Year in Review mail end with a way back to the inbox and a way to turn mail off. SMTP and Resend send `List-Unsubscribe` for that settings page.",
+            "**GRO-009** Household invite email sends. The subject names the inviter, and the body says the link works once and when it expires.",
+            "**GRO-011** The Unraid Community Apps overview reads as a store card: what is needed, what is optional, and one LAN line. Both template copies stay the same.",
+            "**PERF-005** The first page no longer downloads the player. Play loads that piece when you start it.",
+            "**PRD-003** Live shows in the nav when Live is on and at least one station exists. A saved Tunarr URL is not part of that check.",
+            "**Release 2 highs (SEC-007 / A11Y-001 / A11Y-004 / UX-002 / UX-005 / PRD-004 / VIS-002 / VIS-004 / GRO-008 / GRO-009 / GRO-010 / PRIV-023 / PRD-007)** Apprise sends refuse private, link-local, and metadata targets before connect and after redirects. Live guide cells are named \"4 Drama · …\" with visible focus. The phone bar keeps Live. Bulk Delete waits for **Manage**, which only the owner sees. A one-pick answer shows one card. Status colors use tokens. Each email has a one-click unsubscribe for that program (`/api/mail/unsubscribe`, schema migration 65). Local-only joins never mention Plex. Overview adds a separate \"likely\" count for Plex plays within 7 days of a suggestion to that person. **Settings → My data** shows what the owner did to your account. The Live scope freeze is in `docs/PRODUCT.md`."
+          ]
+        },
+        {
+          "title": "Fixed",
+          "bullets": [
+            "Choosing **Chat** from a title preview (the row button or the phone **More** menu) closes the preview, so the chat page isn't hidden under it. Add and request actions still keep the preview open."
+          ]
+        },
+        {
+          "title": "Youth guardrails",
+          "bullets": [
+            "`youth.memory_enabled` (default `false`), `youth.chat_route` (`none` default, or `local`), `youth.local_base_url`, `youth.local_model` in `settings.json`. Existing settings files without these keys load with the safe defaults. A partial `PUT /api/settings` keeps saved Youth fields it did not send.",
+            "Admin → Members: **Let the curator remember things for Youth accounts** toggle, **Youth chat model** select, and local model address/name fields.",
+            "`users.youth_since` (schema migration 61). Accounts created from a Youth invite start at creation; every off → on toggle restarts it.",
+            "Inbox notification kind `account` (same migration widens the `user_notifications` CHECK by rebuilding from the live table definition, so later columns and indexes survive).",
+            "Confirm dialog before turning Youth mode on for an existing member.",
             "`PATCH /api/users/{id}` with `{\"is_youth\": true}` for a non-Youth account returns **409** and changes nothing (including `role` / `disabled` in the same body) unless `\"confirm_youth\": true` is sent. On confirm the member gets an `account` inbox notice (forced to the inbox; email/Apprise only if they opted in) and the `youth_change` audit row records `was_youth`, `confirmed`, and `member_notified`. Neither the response, the notice, the audit row, nor logs include memory contents.",
             "`GET /api/users/{id}/memory` (owner, Youth only) returns only notes created at or after `youth_since`, plus `youth_since` and `memory_enabled`.",
             "Youth chat (`POST /api/chat`, `POST /api/chat/stream`, and persona consults inside them) uses only the Youth route. `none`, a missing local address/model, or an address that is not on the home network (private IP, loopback, link-local, single-label host, or `.local` / `.lan` / `.home` / `.home.arpa` / `.internal` / `.localdomain` / `.localhost`) means no provider is built and the reply is a fixed explanation. `local` swaps only the LLM fields to a keyless OpenAI-compatible provider, so semantic search falls back to on-box hash embeddings rather than the household embedding endpoint. The household LLM config check no longer blocks Youth chat.",
@@ -34,19 +96,21 @@
           ]
         },
         {
-          "title": "Not changed",
+          "title": "Upgrade notes",
           "bullets": [
-            "Lobby startup, auth defaults, Live guide, unsubscribe, and account deletion are untouched."
+            "Schema migrations 61 through 65 run on first start.",
+            "**PRD-013** The lobby port (`:8791`) only listens when **Enable lobby display** is on. An install that already had it on keeps it on; one that didn't stops serving the lobby until the owner turns it on and restarts.",
+            "The Weather Channel's narration voice is off until the owner turns it on in **Admin → Live**."
           ]
         },
         {
           "title": "Verification",
           "bullets": [
-            "Backend: `pytest tests/` — 2844 passed, 43 skipped; coverage 77.17% (floor 74%). `tests/test_version.py` re-run green after the version bump.",
-            "`npm run test:release-perf` within budget.",
-            "`ruff check` clean on touched Python.",
-            "New: `tests/test_youth_guardrails.py` (29 tests: defaults, legacy settings, local-URL classification, route resolution, review window, migration backfill + notification-kind rebuild, prompt/tool/memory gating, no provider call for `none` on POST and stream, local route provider settings, 409 without confirm, notice + audit on confirm, no memory in response/notice/audit/logs, partial settings PUT).",
-            "Frontend: `npm run test:unit` (1179 pass), `npm run lint` (0 errors), `npm run build`."
+            "Backend: `pytest tests/` — 3074 passed, 43 skipped; coverage 78.01% (floor 74%). `tests/test_version.py` lockstep 1.39.0.",
+            "Frontend: `npm run test:unit` (1286 pass), `npm run lint` (0 errors, 883 pre-existing warnings), `npm run build`.",
+            "Page speed: `npm run test:release-perf` passed (About, Explore, Movies, Inbox, and Live within budget).",
+            "New suites in this release include `tests/test_youth_guardrails.py`, `tests/test_subtitle_enrichment.py`, `tests/test_subtitle_player_proxy.py`, `tests/test_weather_channel.py`, `tests/test_outbound_guard.py`, `tests/test_mail_unsubscribe.py`, `tests/test_likely_picks.py`, `tests/test_setup_passcode_lock.py`, and `tests/test_privacy_contract.py`.",
+            "Known leftover, not a release gate: `e2e/explore.spec.ts` \"loads feed rails, pulse, and Related titles hub\" still times out waiting for `title-detail-open-full`, as on 1.38.0."
           ]
         }
       ]
