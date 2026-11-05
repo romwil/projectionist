@@ -482,6 +482,13 @@ export async function deleteMyMemoryNote(noteId: string) {
   return api(`/me/memory/notes/${encodeURIComponent(noteId)}`, { method: "DELETE" });
 }
 
+/** Settings → My data: what the owner did to this account (PRIV-023). */
+export async function listMyOwnerAccess() {
+  return api<{
+    items: Array<{ created_at: number; event: string; label: string; outcome?: string; actor_name?: string }>;
+  }>("/me/owner-access");
+}
+
 /** Delete my data: everything except the account row. Needs the typed phrase. */
 export async function eraseMyData(confirm: string) {
   return api<{ total: number; erased: Record<string, number> }>("/me/data/erase", {

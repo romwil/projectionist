@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { deleteMyMemoryNote, eraseMyData, listMyMemoryNotes } from "../../api/client";
+import { deleteMyMemoryNote, eraseMyData, listMyMemoryNotes, listMyOwnerAccess } from "../../api/client";
 import Button from "../../components/Button";
 import SettingsPageHeader from "../../components/settings/SettingsPageHeader";
 import SettingsPanel from "../../components/settings/SettingsPanel";
@@ -10,7 +10,9 @@ import {
   erasedSummary,
   exportMyDataUrl,
   noteKindLabel,
+  ownerAccessLine,
   type MemoryNote,
+  type OwnerAccessEntry,
 } from "../../lib/myData";
 
 function errorText(error: unknown, fallback: string) {
@@ -26,6 +28,8 @@ export default function MyDataPage() {
   const [erasing, setErasing] = useState(false);
   const [eraseStatus, setEraseStatus] = useState("");
   const [eraseError, setEraseError] = useState("");
+  const [ownerAccess, setOwnerAccess] = useState<OwnerAccessEntry[] | null>(null);
+  const [ownerAccessError, setOwnerAccessError] = useState("");
 
   function loadNotes() {
     return listMyMemoryNotes()
@@ -41,6 +45,12 @@ export default function MyDataPage() {
 
   useEffect(() => {
     void loadNotes();
+    listMyOwnerAccess()
+      .then((data) => setOwnerAccess(data?.items || []))
+      .catch((error: unknown) => {
+        setOwnerAccess([]);
+        setOwnerAccessError(errorText(error, "Could not load the owner-access log."));
+      });
   }, []);
 
   async function removeNote(noteId: string) {
@@ -115,6 +125,33 @@ export default function MyDataPage() {
         {notesError ? (
           <p className="status status-error" role="alert">
             {notesError}
+          </p>
+        ) : null}
+      </SettingsPanel>
+
+      <SettingsPanel
+        title="What the owner did"
+        lead="Changes the household owner made to your account, and any time they opened the Youth memory review. It never shows them notes from before Youth mode."
+        testId="my-data-owner-access"
+      >
+        {ownerAccess === null ? <p className="status status-secondary">Loading…</p> : null}
+        {ownerAccess && ownerAccess.length === 0 && !ownerAccessError ? (
+          <p className="field-help" data-testid="my-data-owner-access-empty">
+            The owner hasn&apos;t changed anything on your account.
+          </p>
+        ) : null}
+        {ownerAccess && ownerAccess.length > 0 ? (
+          <ul className="my-data-owner-access" aria-label="Owner actions on your account">
+            {ownerAccess.map((entry, index) => (
+              <li key={`${entry.created_at}-${entry.event}-${index}`} data-testid="my-data-owner-access-row">
+                {ownerAccessLine(entry)}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {ownerAccessError ? (
+          <p className="status status-error" role="alert">
+            {ownerAccessError}
           </p>
         ) : null}
       </SettingsPanel>

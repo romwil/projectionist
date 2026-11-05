@@ -240,7 +240,12 @@ export default function OwnerOpsOverview({ onOpenWizard, children }: OwnerOpsOve
             <p className="wizard-note owner-ops-activity" data-testid="owner-ops-activity">
               On this server, last 7 days: {Number(activity.chat_turns) || 0} chat turns ·{" "}
               {Number(activity.plays) || 0} plays in Projectionist · {Number(activity.plays_from_picks) || 0} from a
-              pick. Counted here; nothing leaves your server.
+              pick (confirmed).{" "}
+              <span data-testid="owner-ops-activity-likely">
+                Likely: {Number(activity.plays_likely_from_picks) || 0} played in Plex within 7 days of being suggested
+                to that same person — not counted as confirmed.
+              </span>{" "}
+              Counted here; nothing leaves your server.
             </p>
           ) : null}
         </section>

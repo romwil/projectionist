@@ -61,6 +61,43 @@ class OwnerOpsMixin:
 
         return self.run_write(_write, label="record_security_event")
 
+    def owner_actions_on_user(self, user_id: str, *, limit: int = 100) -> List[Dict[str, Any]]:
+        """Audit rows where someone else acted on ``user_id`` (PRIV-023 owner-access log)."""
+        from projectionist.security_audit import OWNER_ACCESS_LABELS
+
+        events = list(OWNER_ACCESS_LABELS)
+        marks = ", ".join("?" for _ in events)
+        with self.connect() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT a.created_at, a.event, a.outcome, a.detail_json, u.display_name AS actor_name
+                FROM security_audit_log a
+                LEFT JOIN users u ON u.id = a.actor_id
+                WHERE a.target_id = ? AND a.actor_id IS NOT NULL AND a.actor_id != ?
+                  AND a.event IN ({marks})
+                ORDER BY a.created_at DESC, a.id DESC
+                LIMIT ?
+                """,
+                (user_id, user_id, *events, int(limit)),
+            ).fetchall()
+        items = []
+        for row in rows:
+            try:
+                detail = json.loads(row["detail_json"] or "{}")
+            except (TypeError, ValueError):
+                detail = {}
+            items.append(
+                {
+                    "created_at": float(row["created_at"]),
+                    "event": row["event"],
+                    "label": OWNER_ACCESS_LABELS.get(str(row["event"]), str(row["event"])),
+                    "outcome": row["outcome"],
+                    "actor_name": row["actor_name"] or "The owner",
+                    "detail": detail if isinstance(detail, dict) else {},
+                }
+            )
+        return items
+
     def list_security_events(
         self,
         *,
@@ -206,6 +243,8 @@ class OwnerOpsMixin:
     # --- Local event spine counts (GRO-007 / GRO-014) ---
 
     def local_event_counts(self, *, days: int = 7) -> Dict[str, int]:
+        from projectionist.telemetry.likely_picks import likely_pick_watch_count
+
         cutoff = f"-{int(days)} days"
         with self.connect() as conn:
             chat_row = conn.execute(
@@ -234,4 +273,5 @@ class OwnerOpsMixin:
             "chat_turns": int(chat_row["c"] if chat_row else 0),
             "plays": len(play_rows),
             "plays_from_picks": attributed,
+            "plays_likely_from_picks": likely_pick_watch_count(self, days=days),
         }

@@ -22,6 +22,19 @@ export const EXPLORE_SECTION_TOOLBAR_LAYOUT = {
   overflowRule: "clip",
 };
 
+/**
+ * UX-005: Search and Browse toolbars show bulk Delete only after the owner turns
+ * Manage on. Members and youth never get Manage, so never get Delete.
+ */
+export function bulkManageControls({
+  isOwner = false,
+  isYouth = false,
+  manageOn = false,
+}: { isOwner?: boolean; isYouth?: boolean; manageOn?: boolean } = {}) {
+  const showManage = Boolean(isOwner) && !isYouth;
+  return { showManage, showDelete: showManage && Boolean(manageOn) };
+}
+
 export function normalizeLibraryDeleteMode(value: unknown) {
   const mode = String(value || LIBRARY_DELETE_MODE_INDEX).trim().toLowerCase();
   return mode === LIBRARY_DELETE_MODE_FULL ? LIBRARY_DELETE_MODE_FULL : LIBRARY_DELETE_MODE_INDEX;

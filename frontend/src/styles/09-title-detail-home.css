@@ -2000,7 +2000,7 @@ a.explore-cinema-card-link:focus-visible h3 {
 }
 .show-episode-title-link:hover,
 .show-episode-title-link:focus-visible {
-  color: var(--gold, #e6b422);
+  color: var(--star);
   text-decoration: underline;
 }
 .show-episode-title-link:focus-visible {

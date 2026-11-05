@@ -61,6 +61,10 @@
   --accent-text: #1a1208;
   --danger: #e8918a;
   --success: #7dba98;
+  /* VIS-002: status and decorative hues as tokens, not literals. */
+  --warning: #e0b25c;
+  --on-danger: #1a1208;
+  --star: #f5c542;
   --ambient-accent: hsl(36 18% 22%);
   --workspace-wash-a: #1a1612;
   --workspace-wash-b: #12151c;
@@ -96,6 +100,10 @@ html[data-theme="lights-down"] {
   --accent-text: #1a1208;
   --danger: #e8918a;
   --success: #7dba98;
+  /* VIS-002: status and decorative hues as tokens, not literals. */
+  --warning: #e0b25c;
+  --on-danger: #1a1208;
+  --star: #f5c542;
   --ambient-accent: hsl(36 18% 22%);
   --workspace-wash-a: #1a1612;
   --workspace-wash-b: #12151c;
@@ -127,6 +135,9 @@ html[data-theme="lights-up"] {
   --accent-text: #1a1208;
   --danger: #ba1a1a;
   --success: #2e7d57;
+  --warning: #8a5a00;
+  --on-danger: #ffffff;
+  --star: #f5c542;
   --ambient-accent: hsl(40 28% 78%);
   --workspace-wash-a: #f0ebe0;
   --workspace-wash-b: #e8e4d8;

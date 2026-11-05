@@ -231,20 +231,31 @@ describe("buildPrimaryBottomNavItems (UX-014)", () => {
     ]);
   });
 
-  it("drops Live and Admin first to stay at 5 for an owner with live channels", () => {
-    const items = buildPrimaryBottomNavItems({
-      role: "owner",
-      isOwner: true,
-      liveChannelsReady: true,
-    });
+  it("keeps Live on the bar for an owner and moves Admin and Settings to the drawer (UX-002)", () => {
+    const opts = { role: "owner", isOwner: true, liveChannelsReady: true };
+    const items = buildPrimaryBottomNavItems(opts);
     assert.equal(items.length, 5);
-    assert.deepEqual(items.map((item) => item.id), [
-      "search",
-      "chat",
-      "explore",
-      "inbox",
-      "settings",
-    ]);
+    assert.deepEqual(items.map((item) => item.id), ["search", "chat", "explore", "live", "inbox"]);
+    const drawer = buildPrimaryDrawerItems(opts).map((item) => item.id);
+    assert.ok(drawer.includes("admin") && drawer.includes("settings"));
+  });
+
+  it("keeps Live on the bar for members and youth, with Settings in the drawer (UX-002)", () => {
+    for (const opts of [
+      { role: "member", isOwner: false, liveChannelsReady: true },
+      { role: "youth", isOwner: false, isYouth: true, liveChannelsReady: true },
+    ]) {
+      const items = buildPrimaryBottomNavItems(opts);
+      assert.equal(items.length, 5, opts.role);
+      assert.ok(items.some((item) => item.id === "live"), opts.role);
+      assert.ok(!items.some((item) => item.id === "settings"), opts.role);
+      assert.ok(buildPrimaryDrawerItems(opts).some((item) => item.id === "settings"), opts.role);
+    }
+  });
+
+  it("without Live, an owner keeps Settings and gives Admin to the drawer", () => {
+    const items = buildPrimaryBottomNavItems({ role: "owner", isOwner: true });
+    assert.deepEqual(items.map((item) => item.id), ["search", "chat", "explore", "inbox", "settings"]);
   });
 });
 

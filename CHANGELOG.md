@@ -56,6 +56,7 @@ The trust release. Only the owner adds to Radarr or Sonarr, nobody else's viewin
 - **GRO-011** The Unraid Community Apps overview reads as a store card: what is needed, what is optional, and one LAN line. Both template copies stay the same.
 - **PERF-005** The first page no longer downloads the player. Play loads that piece when you start it.
 - **PRD-003** Live shows in the nav when Live is on and at least one station exists. A saved Tunarr URL is not part of that check.
+- **Release 2 highs (SEC-007 / A11Y-001 / A11Y-004 / UX-002 / UX-005 / PRD-004 / VIS-002 / VIS-004 / GRO-008 / GRO-009 / GRO-010 / PRIV-023 / PRD-007)** Apprise sends refuse private, link-local, and metadata targets before connect and after redirects. Live guide cells are named "4 Drama · …" with visible focus. The phone bar keeps Live. Bulk Delete waits for **Manage**, which only the owner sees. A one-pick answer shows one card. Status colors use tokens. Each email has a one-click unsubscribe for that program (`/api/mail/unsubscribe`, schema migration 65). Local-only joins never mention Plex. Overview adds a separate "likely" count for Plex plays within 7 days of a suggestion to that person. **Settings → My data** shows what the owner did to your account. The Live scope freeze is in `docs/PRODUCT.md`.
 
 ## [1.39.0] — 2026-11-02
 

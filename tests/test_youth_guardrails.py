@@ -503,6 +503,29 @@ class YouthToggleApiTests(unittest.TestCase):
         self.assertFalse(review.json()["memory_enabled"])
         self.assertNotIn(SECRET_NOTE, review.text)
 
+    def test_my_data_owner_access_log_lists_owner_actions_without_memory(self) -> None:
+        resp = self.client.patch(
+            "/api/users/local-member", json={"is_youth": True, "confirm_youth": True}
+        )
+        self.assertEqual(resp.status_code, 200, resp.text)
+        review = self.client.get("/api/users/local-member/memory")
+        self.assertEqual(review.status_code, 200, review.text)
+        self.assertEqual(review.json()["notes"], [])
+        self.assertEqual(self.client.get("/api/me/owner-access").json()["items"], [])
+
+        self._login("member")
+        log = self.client.get("/api/me/owner-access")
+        self.assertEqual(log.status_code, 200, log.text)
+        items = log.json()["items"]
+        self.assertEqual([i["event"] for i in items], ["memory_review", "youth_change"])
+        self.assertEqual({i["actor_name"] for i in items}, {"owner"})
+        self.assertEqual(items[0]["detail"]["note_count"], 0)
+        self.assertNotIn(SECRET_NOTE, log.text)
+        self.assertNotIn("sign_in", log.text)
+
+        mine = self.client.get("/api/me/memory/notes")
+        self.assertIn(SECRET_NOTE, mine.text)
+
     def test_turning_youth_off_needs_no_confirm(self) -> None:
         self.db.set_user_youth("local-member", True)
         resp = self.client.patch("/api/users/local-member", json={"is_youth": False})
