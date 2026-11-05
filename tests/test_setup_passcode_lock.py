@@ -1,8 +1,8 @@
 """SEC-008 / SEC-010: the container owner passcode locks a fresh install.
 
-A fresh data directory serves only GET /api/health until
-PROJECTIONIST_OWNER_PASSWORD is entered. A data directory that already has
-an owner boots straight into the app.
+A fresh data directory serves only GET /api/health, GET /api/ready, and the
+lock page until PROJECTIONIST_OWNER_PASSWORD is entered. Ready is a probe,
+not the app. A data directory that already has an owner boots straight in.
 """
 
 from __future__ import annotations
@@ -95,9 +95,12 @@ class FreshInstallLockTests(_LockCase):
         health = client.get("/api/health")
         self.assertEqual(health.status_code, 200, health.text)
         self.assertEqual(health.json().get("status"), "ok")
+        ready = client.get("/api/ready")
+        self.assertEqual(ready.status_code, 200, ready.text)
+        self.assertEqual(ready.json().get("status"), "ready")
+        self.assertNotIn("items", ready.json())
 
         blocked = (
-            ("GET", "/api/ready"),
             ("GET", "/api/features"),
             ("GET", "/api/settings"),
             ("GET", "/api/auth/me"),

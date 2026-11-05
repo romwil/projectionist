@@ -266,9 +266,10 @@ def bootstrap_owner(db: Optional[Database] = None) -> CurrentUser:
 # holds the credential (no lockout). When unset, the first sign-in becomes owner
 # only with the one-time claim in ``projectionist.web.owner_claim`` (SEC-008).
 # A fresh install never reaches that path: the setup passcode lock serves only
-# GET /api/health and the lock page until PROJECTIONIST_OWNER_PASSWORD is
-# entered, and the wizard creates the owner. Login cannot take the role by
-# arriving first. If the owner is later gone, that same passcode reopens setup.
+# GET /api/health, GET /api/ready, and the lock page until
+# PROJECTIONIST_OWNER_PASSWORD is entered, and the wizard creates the owner.
+# Login cannot take the role by arriving first. If the owner is later gone,
+# that same passcode reopens setup.
 
 DEFAULT_OWNER_USERNAME = "owner"
 MIN_OWNER_PASSWORD_LENGTH = 8
@@ -497,9 +498,12 @@ async def multi_user_api_auth_middleware(request: Request, call_next):
     if path.startswith("/mcp"):
         return await call_next(request)
 
-    # Health never opens the perimeter database. A contended library file waits
-    # up to SQLITE_BUSY_TIMEOUT_MS (30s); this probe stays a liveness answer.
-    if method == "GET" and path == "/api/health":
+    # Health and ready never open the perimeter database. A contended library
+    # file waits up to SQLITE_BUSY_TIMEOUT_MS (30s); health stays a liveness
+    # answer, and ready does its own 100 ms probe in the handler. The setup
+    # lock must not 404 ready: a fresh container still has to report whether
+    # the database answers (CI smoke, PERF-007). Neither body is household data.
+    if method == "GET" and path in {"/api/health", "/api/ready"}:
         return await call_next(request)
 
     from starlette.concurrency import run_in_threadpool
