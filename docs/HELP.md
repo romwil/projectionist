@@ -881,7 +881,7 @@ If you are the owner and forgot your Projectionist password, you recover from th
 - The username must match an existing **owner** account. If it matches nobody and an owner already exists, nothing changes. **Admin → Overview → Needs attention** then shows *"Owner password from the container didn't apply"*, and the container log has a warning.
 - If it matches a **member**, that member is not promoted while another owner exists.
 - An owner who signs in only with Plex or SSO has no Projectionist password. Recover that account through Plex or your SSO provider. If that account is gone for good, a second owner (if you made one) can promote someone from **Admin → Members**.
-- If no owner exists at all, a fresh sign-in can't claim the server. Set `PROJECTIONIST_OWNER_PASSWORD` (with any username) and restart: that creates the owner. See [Configuration](https://github.com/romwil/projectionist/blob/main/docs/CONFIGURATION.md) for the first-owner rules.
+- If no owner exists at all, a fresh sign-in can't claim the server. Set `PROJECTIONIST_OWNER_PASSWORD` and restart. The lock page asks for that passcode, then setup creates the owner. The next login does not become owner. See [Configuration](https://github.com/romwil/projectionist/blob/main/docs/CONFIGURATION.md).
 
 ### Memory & privacy controls (owner)
 

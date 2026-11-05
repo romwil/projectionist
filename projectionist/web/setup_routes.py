@@ -38,7 +38,9 @@ def register_setup_routes(app):
     build_setup_status = app_mod.build_setup_status
     build_wizard_status = app_mod.build_wizard_status
     has_usable_session_secret = app_mod.has_usable_session_secret
-    invalidate_certifications_on_settings_change = app_mod.invalidate_certifications_on_settings_change
+    invalidate_certifications_on_settings_change = (
+        app_mod.invalidate_certifications_on_settings_change
+    )
     logger = app_mod.logger
     merge_secret_fields = app_mod.merge_secret_fields
     merge_theater_settings_payload = app_mod.merge_theater_settings_payload
@@ -72,7 +74,6 @@ def register_setup_routes(app):
         del user
         return build_setup_status(_settings(), _db())
 
-
     class SetupCommitPayload(BaseModel):
         profile: str = Field(min_length=3, max_length=16)
         username: str = Field(min_length=2, max_length=80)
@@ -81,7 +82,66 @@ def register_setup_routes(app):
         trust_proxy: bool = False
         allow_access_requests: Optional[bool] = None
         invite_only: Optional[bool] = None
+        plex_url: str = ""
+        plex_token: str = ""
 
+    @router.post("/api/setup/unlock")
+    async def setup_unlock(request: Request):
+        """Accept the container owner passcode and unlock this browser for setup."""
+        from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+
+        from projectionist.web.rate_limit import enforce_rate_limit
+        from projectionist.web.setup_lock import (
+            MISMATCH_DETAIL,
+            UNSET_DETAIL,
+            issue_setup_unlock,
+            lock_page_html,
+            passcode_configured,
+            passcode_matches,
+            set_setup_unlock_cookie,
+        )
+
+        from projectionist.web.auth import has_real_owner
+
+        if has_real_owner(_db()):
+            raise HTTPException(status_code=404, detail="Not found")
+        enforce_rate_limit(request, bucket="setup-unlock", limit=10, window_seconds=60.0)
+        content_type = (request.headers.get("content-type") or "").lower()
+        wants_json = "application/json" in content_type
+        if wants_json:
+            try:
+                body = await request.json()
+            except Exception:  # noqa: BLE001
+                body = {}
+            passcode = str((body or {}).get("passcode") or "")
+        else:
+            form = await request.form()
+            passcode = str(form.get("passcode") or "")
+
+        if not passcode_configured():
+            if wants_json:
+                raise HTTPException(status_code=403, detail=UNSET_DETAIL)
+            return HTMLResponse(
+                lock_page_html(configured=False, error=UNSET_DETAIL),
+                status_code=403,
+                headers={"Cache-Control": "no-store"},
+            )
+        if not passcode_matches(passcode):
+            if wants_json:
+                raise HTTPException(status_code=401, detail=MISMATCH_DETAIL)
+            return HTMLResponse(
+                lock_page_html(configured=True, error=MISMATCH_DETAIL),
+                status_code=401,
+                headers={"Cache-Control": "no-store"},
+            )
+
+        raw = issue_setup_unlock(_db())
+        if wants_json:
+            response = JSONResponse({"ok": True})
+        else:
+            response = RedirectResponse("/setup", status_code=303)
+        set_setup_unlock_cookie(response, raw, request)
+        return response
 
     @router.get("/api/setup/handshake")
     def setup_handshake_get(request: Request) -> Dict[str, Any]:
@@ -89,13 +149,11 @@ def register_setup_routes(app):
 
         return handshake_payload(request, _db(), persist=True)
 
-
     @router.post("/api/setup/handshake")
     def setup_handshake_post(request: Request) -> Dict[str, Any]:
         from projectionist.web.setup_mode import handshake_payload
 
         return handshake_payload(request, _db(), persist=True)
-
 
     @router.post("/api/setup/commit")
     def setup_commit_endpoint(
@@ -117,20 +175,19 @@ def register_setup_routes(app):
             trust_proxy=payload.trust_proxy,
             allow_access_requests=payload.allow_access_requests,
             invite_only=payload.invite_only,
+            plex_url=payload.plex_url,
+            plex_token=payload.plex_token,
         )
         set_session_cookie(response, str(result["user"]["id"]), request, db=_db())
         return result
-
 
     @router.get("/api/setup/wizard")
     def setup_wizard() -> Dict[str, Any]:
         return build_wizard_status(_settings(), _db())
 
-
     @router.get("/api/setup/certifications")
     def setup_certifications() -> Dict[str, Any]:
         return build_certifications_status(_db(), DATA_DIR)
-
 
     @router.get("/api/setup/llm-providers")
     def llm_providers() -> Dict[str, Any]:
@@ -143,12 +200,10 @@ def register_setup_routes(app):
             "anthropic_model_rows": [model_price_row(m) for m in ANTHROPIC_MODEL_OPTIONS],
         }
 
-
     @router.get("/api/settings")
     def get_settings(user=Depends(require_role("owner"))) -> Dict[str, Any]:
         del user
         return _mask_settings(_settings())
-
 
     @router.post("/api/settings/secrets/reveal")
     def reveal_settings_secret(
@@ -168,7 +223,6 @@ def register_setup_routes(app):
         # Intentionally no logger call with *value* — the audit row names the field only.
         sa.audit(_db(), sa.SECRET_REVEAL, actor_id=user.id, field=field)
         return {"field": field, "value": value}
-
 
     @router.put("/api/settings")
     def put_settings(
@@ -242,20 +296,15 @@ def register_setup_routes(app):
                 set_owner_claim_cookie(response, issue_owner_claim(_db()), request)
         return _mask_settings(settings)
 
-
     class AskDeleteConfirmationPayload(BaseModel):
         ask_delete_confirmation: bool
-
 
     @router.get("/api/settings/ask-delete-confirmation")
     def get_ask_delete_confirmation(user=Depends(require_role("owner"))) -> Dict[str, Any]:
         """Owner-only typed-DELETE preference. Missing installs still ask."""
         del user
         settings = _settings()
-        return {
-            "ask_delete_confirmation": bool(getattr(settings, "ask_delete_confirmation", True))
-        }
-
+        return {"ask_delete_confirmation": bool(getattr(settings, "ask_delete_confirmation", True))}
 
     @router.put("/api/settings/ask-delete-confirmation")
     def put_ask_delete_confirmation(
@@ -276,13 +325,13 @@ def register_setup_routes(app):
             "ask_delete_confirmation": bool(updated.ask_delete_confirmation),
         }
 
-
     def _mcp_key_field(which: str) -> str:
         return "mcp_api_key" if which == "privacy" else "mcp_full_api_key"
 
-
     @router.post("/api/settings/mcp-keys/rotate")
-    def rotate_mcp_key(payload: McpKeyWhichPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    def rotate_mcp_key(
+        payload: McpKeyWhichPayload, user=Depends(require_role("owner"))
+    ) -> Dict[str, Any]:
         """Generate a new MCP key, persist to settings.json, return plaintext once."""
         field = _mcp_key_field(payload.which)
         settings_path = DATA_DIR / "settings.json"
@@ -311,9 +360,10 @@ def register_setup_routes(app):
             "settings": _mask_settings(updated),
         }
 
-
     @router.post("/api/settings/mcp-keys/clear")
-    def clear_mcp_key(payload: McpKeyWhichPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    def clear_mcp_key(
+        payload: McpKeyWhichPayload, user=Depends(require_role("owner"))
+    ) -> Dict[str, Any]:
         """Clear a file-persisted MCP key. Env/Unraid-sourced keys must be removed from the template."""
         field = _mcp_key_field(payload.which)
         sources = secret_field_sources(DATA_DIR)
@@ -346,7 +396,6 @@ def register_setup_routes(app):
         sa.audit(_db(), sa.MCP_KEY_CLEAR, actor_id=user.id, which=payload.which)
         return {"which": payload.which, "field": field, "settings": _mask_settings(updated)}
 
-
     @router.post("/api/setup/test/plex")
     def api_test_plex(payload: TestPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
         del user
@@ -361,9 +410,10 @@ def register_setup_routes(app):
         )
         return result
 
-
     @router.post("/api/setup/test/radarr")
-    def api_test_radarr(payload: TestPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    def api_test_radarr(
+        payload: TestPayload, user=Depends(require_role("owner"))
+    ) -> Dict[str, Any]:
         del user
         settings = _settings()
         resolved = _resolve_test_payload(payload)
@@ -381,9 +431,10 @@ def register_setup_routes(app):
         )
         return result
 
-
     @router.post("/api/setup/test/sonarr")
-    def api_test_sonarr(payload: TestPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    def api_test_sonarr(
+        payload: TestPayload, user=Depends(require_role("owner"))
+    ) -> Dict[str, Any]:
         del user
         settings = _settings()
         resolved = _resolve_test_payload(payload)
@@ -401,7 +452,6 @@ def register_setup_routes(app):
         )
         return result
 
-
     @router.post("/api/setup/test/tmdb")
     def api_test_tmdb(payload: TestPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
         del user
@@ -415,9 +465,10 @@ def register_setup_routes(app):
         )
         return result
 
-
     @router.post("/api/setup/test/fanart")
-    def api_test_fanart(payload: TestPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    def api_test_fanart(
+        payload: TestPayload, user=Depends(require_role("owner"))
+    ) -> Dict[str, Any]:
         del user
         resolved = _resolve_test_payload(payload)
         result = test_fanart(resolved["fanart_api_key"])
@@ -429,9 +480,10 @@ def register_setup_routes(app):
         )
         return result
 
-
     @router.post("/api/setup/test/tautulli")
-    def api_test_tautulli(payload: TestPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    def api_test_tautulli(
+        payload: TestPayload, user=Depends(require_role("owner"))
+    ) -> Dict[str, Any]:
         del user
         resolved = _resolve_test_payload(payload)
         result = test_tautulli(resolved["tautulli_url"], resolved["tautulli_api_key"])
@@ -443,7 +495,6 @@ def register_setup_routes(app):
             ok=bool(result.get("ok")),
         )
         return result
-
 
     @router.post("/api/setup/test/seerr")
     def api_test_seerr(payload: TestPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
@@ -459,9 +510,10 @@ def register_setup_routes(app):
         )
         return result
 
-
     @router.post("/api/setup/test/tunarr")
-    def api_test_tunarr(payload: TestPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    def api_test_tunarr(
+        payload: TestPayload, user=Depends(require_role("owner"))
+    ) -> Dict[str, Any]:
         del user
         resolved = _resolve_test_payload(payload)
         result = test_tunarr(resolved.get("tunarr_url") or "")
@@ -473,7 +525,6 @@ def register_setup_routes(app):
             ok=bool(result.get("ok")),
         )
         return result
-
 
     @router.post("/api/setup/test/llm")
     def api_test_llm(payload: TestPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
@@ -493,7 +544,6 @@ def register_setup_routes(app):
             ok=bool(result.get("ok")),
         )
         return result
-
 
     @router.get("/api/plex/sections")
     def plex_sections() -> List[Dict[str, str]]:

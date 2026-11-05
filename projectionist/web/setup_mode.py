@@ -39,6 +39,7 @@ SETUP_API_ALLOWLIST_EXACT = frozenset(
         ("GET", "/api/setup/handshake"),
         ("POST", "/api/setup/handshake"),
         ("POST", "/api/setup/commit"),
+        ("POST", "/api/setup/unlock"),
     }
 )
 
@@ -65,32 +66,33 @@ def _env_setup_state() -> Optional[str]:
 
 
 def resolve_setup_state(db: Database) -> str:
-    """Return setup | active. Existing households with a real owner skip the wizard."""
+    """Return setup | active. A real owner skips the wizard.
+
+    Active is not permanent if that owner later disappears: the same data
+    directory returns to setup so the passcode lock can open it again.
+    ``PROJECTIONIST_SETUP_STATE`` still forces a state for tests.
+    """
     forced = _env_setup_state()
     if forced:
         return forced
-    stored = str(db.get_config(SETUP_STATE_KEY) or "").strip().lower()
-    if stored == SETUP_STATE_ACTIVE:
-        return SETUP_STATE_ACTIVE
-    if stored == SETUP_STATE_SETUP:
-        if has_real_owner(db):
-            db.set_config(SETUP_STATE_KEY, SETUP_STATE_ACTIVE)
-            return SETUP_STATE_ACTIVE
-        return SETUP_STATE_SETUP
     if has_real_owner(db):
-        db.set_config(SETUP_STATE_KEY, SETUP_STATE_ACTIVE)
+        stored = str(db.get_config(SETUP_STATE_KEY) or "").strip().lower()
+        if stored != SETUP_STATE_ACTIVE:
+            db.set_config(SETUP_STATE_KEY, SETUP_STATE_ACTIVE)
         return SETUP_STATE_ACTIVE
-    db.set_config(SETUP_STATE_KEY, SETUP_STATE_SETUP)
+    stored = str(db.get_config(SETUP_STATE_KEY) or "").strip().lower()
+    if stored != SETUP_STATE_SETUP:
+        db.set_config(SETUP_STATE_KEY, SETUP_STATE_SETUP)
     return SETUP_STATE_SETUP
 
 
 def is_setup_mode(db: Database) -> bool:
     """True only while the one-way setup ratchet is still open.
 
-    Active mode is terminal, so the first successful read is remembered on the
+    Once this process has seen a real owner, active mode is remembered on the
     database object. Later requests — including ones that arrive while a writer
     holds SQLite — do not sit on ``SQLITE_BUSY_TIMEOUT_MS`` just to learn that
-    setup already finished.
+    setup already finished. A new process with no owner returns to setup.
     """
     if getattr(db, "_projectionist_active_mode", False):
         return False
@@ -128,6 +130,7 @@ def setup_endpoint_locked(path: str) -> bool:
     return cleaned in {
         "/api/setup/handshake",
         "/api/setup/commit",
+        "/api/setup/unlock",
     }
 
 
@@ -226,6 +229,8 @@ def commit_setup(
     trust_proxy: bool = False,
     allow_access_requests: Optional[bool] = None,
     invite_only: Optional[bool] = None,
+    plex_url: str = "",
+    plex_token: str = "",
     plex_pin_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Create the master owner, persist posture, and lock ACTIVE_MODE."""
@@ -264,6 +269,13 @@ def commit_setup(
         raise HTTPException(status_code=400, detail="Username must be at least 2 characters")
     if len(password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    cleaned_plex_url = str(plex_url or "").strip()
+    cleaned_plex_token = str(plex_token or "").strip()
+    if (cleaned_plex_url or cleaned_plex_token) and not (cleaned_plex_url and cleaned_plex_token):
+        raise HTTPException(
+            status_code=400,
+            detail="Plex URL and token are both required to bind Plex",
+        )
     if db.get_user_by_display_name(name) is not None:
         raise HTTPException(status_code=409, detail="Username already taken")
 
@@ -292,6 +304,10 @@ def commit_setup(
     settings.auth.local_login_enabled = True
     settings.household_domain = resolved_household_domain
     settings.onboarding_complete = False
+    plex_bound = bool(cleaned_plex_url and cleaned_plex_token)
+    if plex_bound:
+        settings.plex_url = cleaned_plex_url
+        settings.plex_token = cleaned_plex_token
     save_settings(data_dir, settings)
 
     db.set_config(SETUP_STATE_KEY, SETUP_STATE_ACTIVE)
@@ -303,7 +319,7 @@ def commit_setup(
         resolved_invite_only,
         bool(settings.features.trust_proxy_headers),
     )
-    del plex_pin_id  # optional Plex bind is a post-login Settings action
+    del plex_pin_id  # account linking stays a post-login Settings action
 
     return {
         "setup_state": SETUP_STATE_ACTIVE,
@@ -317,4 +333,5 @@ def commit_setup(
             "household_domain": settings.household_domain,
             "classification": classified["classification"],
         },
+        "plex_bound": plex_bound,
     }
