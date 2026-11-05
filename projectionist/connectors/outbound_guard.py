@@ -9,12 +9,15 @@ Two layers:
   ``smtplib`` resolve through ``socket.getaddrinfo`` before every connect, so a
   redirect to an internal host is refused before its socket opens.
 
-The connect-time check is thread-local: callers must run the outbound work in
-the calling thread (Apprise ``async_mode=False``).
+The connect-time check follows a ``contextvars`` context. Apprise 2.1 copies
+that context onto the worker thread it uses for a timed notify, so a redirect
+is still refused before connect. A plain ``threading.Thread`` does not inherit
+it, so Plex and *arr keep their LAN access.
 """
 
 from __future__ import annotations
 
+import contextvars
 import ipaddress
 import re
 import socket
@@ -133,23 +136,45 @@ def check_public_destination(url: str) -> None:
     check_public_host(hostname, port)
 
 
-_state = threading.local()
+class _GuardState:
+    """Mutable so a copied context (Apprise's worker) shares the refusal with the caller."""
+
+    __slots__ = ("depth", "blocked")
+
+    def __init__(self) -> None:
+        self.depth = 0
+        self.blocked: Optional[str] = None
+
+
+_state_var: contextvars.ContextVar[_GuardState] = contextvars.ContextVar("projectionist_outbound_guard")
 _install_lock = threading.Lock()
 _installed = False
 
 
+def _state() -> _GuardState:
+    try:
+        return _state_var.get()
+    except LookupError:
+        state = _GuardState()
+        _state_var.set(state)
+        return state
+
+
 def _guard_active() -> bool:
-    return getattr(_state, "depth", 0) > 0
+    return _state().depth > 0
 
 
 def _refuse(message: str) -> None:
-    _state.blocked = message
+    _state().blocked = message
     raise OutboundBlocked(message)
 
 
 def last_block_reason() -> Optional[str]:
-    """Reason for the most recent refusal inside ``public_only_outbound`` on this thread."""
-    return getattr(_state, "blocked", None)
+    """Reason for the most recent refusal inside ``public_only_outbound`` on this context."""
+    try:
+        return _state_var.get().blocked
+    except LookupError:
+        return None
 
 
 def _guarded_getaddrinfo(host, port, *args, **kwargs):
@@ -181,12 +206,13 @@ def _install() -> None:
 
 @contextmanager
 def public_only_outbound() -> Iterator[None]:
-    """Refuse non-public DNS answers for this thread until the block exits."""
+    """Refuse non-public DNS answers in this context until the block exits."""
     _install()
-    if not _guard_active():
-        _state.blocked = None
-    _state.depth = getattr(_state, "depth", 0) + 1
+    state = _state()
+    if state.depth == 0:
+        state.blocked = None
+    state.depth += 1
     try:
         yield
     finally:
-        _state.depth -= 1
+        state.depth -= 1

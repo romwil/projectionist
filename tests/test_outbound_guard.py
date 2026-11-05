@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextvars
 import http.server
 import ipaddress
 import socket
@@ -95,6 +96,23 @@ class ConnectTimeGuardTests(unittest.TestCase):
             worker.join()
             self.assertTrue(seen, "other threads (Plex, *arr) keep LAN access")
         self.assertTrue(socket.getaddrinfo("127.0.0.1", 80))
+
+    def test_guard_follows_a_copied_context_into_a_worker(self) -> None:
+        """Apprise 2.1 notifies on a worker that inherits the caller's context."""
+        seen: list[str] = []
+
+        def worker() -> None:
+            try:
+                socket.getaddrinfo("10.0.0.8", 80)
+            except OutboundBlocked as exc:
+                seen.append(str(exc))
+
+        with public_only_outbound():
+            worker_thread = threading.Thread(target=contextvars.copy_context().run, args=(worker,))
+            worker_thread.start()
+            worker_thread.join()
+            self.assertTrue(seen)
+            self.assertIn("private", outbound_guard.last_block_reason() or "")
 
     def test_redirect_to_private_host_is_refused_before_its_connect(self) -> None:
         import requests

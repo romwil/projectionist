@@ -18,6 +18,7 @@ from projectionist.connectors.outbound_guard import (
 logger = logging.getLogger(__name__)
 
 _URL_SPLIT = re.compile(r"[\s,;]+")
+_CONFIG_URL = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://[^\s\"'<>]+")
 _BLOCKED_PREFIX = "Apprise destination refused (private, link-local, or metadata target)"
 
 
@@ -160,7 +161,7 @@ def send_apprise(
     if not target_urls and not install_config:
         raise AppriseSendError("No Apprise URLs or config to notify.")
 
-    for url in target_urls:
+    for url in [*target_urls, *_CONFIG_URL.findall(install_config)]:
         try:
             check_public_destination(url)
         except OutboundBlocked as exc:
