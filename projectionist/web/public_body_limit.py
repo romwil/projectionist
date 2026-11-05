@@ -7,6 +7,7 @@ from typing import Any, Awaitable, Callable, Iterable
 PUBLIC_BODY_CLAMP_PATHS = frozenset(
     {
         "/api/auth/local/login",
+        "/api/setup/unlock",
         "/api/auth/plex",
         "/api/auth/plex/pin",
         "/api/access-requests",
