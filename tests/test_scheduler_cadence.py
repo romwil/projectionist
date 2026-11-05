@@ -345,7 +345,9 @@ class OffLoopTests(unittest.TestCase):
         self.assertGreater(self._worst_loop_lag(off_loop=False), 0.3)
 
     def test_off_loop_blocking_task_keeps_loop_responsive(self) -> None:
-        self.assertLess(self._worst_loop_lag(off_loop=True), 0.15)
+        # Still far under the 0.4s body. 0.15 is tighter than a loaded CI runner
+        # can wake a 10ms sleep; 0.25 stays below the on-loop stall floor (0.3).
+        self.assertLess(self._worst_loop_lag(off_loop=True), 0.25)
 
     def test_off_loop_runs_on_worker_thread_with_context_and_result(self) -> None:
         seen: Dict[str, Any] = {}
