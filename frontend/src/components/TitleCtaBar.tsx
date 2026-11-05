@@ -78,6 +78,8 @@ type TitleCtaBarProps = {
   playTo?: To | null;
   playTestId?: string;
   onPlayClick?: React.MouseEventHandler<HTMLAnchorElement>;
+  /** Dismiss an in-place title sheet when Chat navigates underneath it. */
+  onChatClick?: () => void;
   addPrimary?: TitleCtaAdd;
   askOwner?: TitleCtaAdd;
   trailerKey?: string;
@@ -109,6 +111,7 @@ export default function TitleCtaBar({
   playTo = null,
   playTestId = "title-detail-play",
   onPlayClick,
+  onChatClick,
   addPrimary = null,
   askOwner = null,
   trailerKey = "",
@@ -181,7 +184,10 @@ export default function TitleCtaBar({
                 className="title-detail-cta-menu-item title-detail-cta-phone-only"
                 data-testid="chat-about-title-link-more"
                 role="menuitem"
-                onClick={closeMore}
+                onClick={() => {
+                  closeMore();
+                  onChatClick?.();
+                }}
               >
                 <CtaIcon name={TITLE_CTA_ICONS.chat} />
                 {TITLE_CTA_COPY.chat.tooltip}
@@ -346,6 +352,7 @@ export default function TitleCtaBar({
             testId="chat-about-title-link"
             phoneOverflow={TITLE_CTA_PHONE_OVERFLOW.includes("chat")}
             compact={compact}
+            onClick={onChatClick}
           />
         ) : null}
         {multiUserEnabled ? (

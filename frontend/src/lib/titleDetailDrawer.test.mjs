@@ -63,6 +63,33 @@ test("titleDetailHrefFromTarget builds full-page route", () => {
   );
 });
 
+test("title sheet chat action closes the overlay", () => {
+  const content = readFileSync(join(componentsDir, "TitleDetailContent.tsx"), "utf8");
+  const cta = readFileSync(join(componentsDir, "TitleCtaBar.tsx"), "utf8");
+
+  function sliceAfter(source, marker) {
+    const index = source.indexOf(marker);
+    assert.ok(index >= 0, `missing ${marker}`);
+    return source.slice(index, index + 500);
+  }
+
+  const chatRow = sliceAfter(cta, 'testId="chat-about-title-link"');
+  assert.match(chatRow, /onClick=\{onChatClick\}/);
+
+  const chatMore = sliceAfter(cta, 'data-testid="chat-about-title-link-more"');
+  assert.match(chatMore, /closeMore\(\)/);
+  assert.match(chatMore, /onChatClick\?\.\(\)/);
+
+  assert.match(content, /onChatClick=\{\(\) => overlay\?\.closeTitleDetail\?\.\(\)\}/);
+
+  const addPrimary = content.slice(content.indexOf("addPrimary="), content.indexOf("askOwner="));
+  const secondaryAdd = content.slice(content.indexOf("secondaryAdd="), content.indexOf("plexHref="));
+  assert.match(addPrimary, /onClick: onRequestAdd/);
+  assert.match(secondaryAdd, /onClick: onRequestAdd/);
+  assert.doesNotMatch(addPrimary, /closeTitleDetail/);
+  assert.doesNotMatch(secondaryAdd, /closeTitleDetail/);
+});
+
 test("shouldOpenTitleOverlayClick allows plain left clicks only", () => {
   assert.equal(shouldOpenTitleOverlayClick({ button: 0 }), true);
   assert.equal(shouldOpenTitleOverlayClick({ button: 1 }), false);
