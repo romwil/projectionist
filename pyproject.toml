@@ -43,6 +43,14 @@ mcp = [
     "mcp>=1.30.0,<2",
 ]
 
+# Local neural voice for Weather Channel narration (Kokoro default, Piper fallback).
+# The packages ship in the image; the voice model downloads only when the owner
+# turns on Weather narration.
+tts = [
+    "kokoro-onnx>=0.4.9",
+    "piper-tts>=1.3.0",
+]
+
 # Optional ANN prefilter for neighbor rebuild / semantic search. Not required
 # for default Docker/Unraid images — exact cosine remains the fallback.
 vec = [
@@ -78,6 +86,7 @@ include = ["projectionist*"]
 [tool.setuptools.package-data]
 "projectionist.web" = ["static/**/*"]
 "projectionist.facets" = ["data/*.json"]
+"projectionist.theater.weather_channel" = ["data/*.json"]
 
 # ---------------------------------------------------------------------------
 # Lint / format toolchain (config-only baseline).

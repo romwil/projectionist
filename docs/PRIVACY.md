@@ -135,10 +135,21 @@ When someone opens the **Weather Channel** from Live:
 
 | Signal | What leaves the server | When |
 |--------|------------------------|------|
-| **Place search** | The text you type (ZIP, city and state, or city and country) to Open-Meteo, a free weather service | You search for a place |
-| **Forecast** | The latitude and longitude of your saved place, or the household default, to Open-Meteo | The channel opens |
-| **Voiceover** | Nothing. Your browser speaks it. | The channel opens |
+| **Place search** | The text you type (ZIP, city and state, or city and country) to Open-Meteo (`geocoding-api.open-meteo.com`) | You search for a place |
+| **Forecast, hourly, regional cities** | The coordinates of the place, and of nearby cities from a list built into Projectionist, to Open-Meteo (`api.open-meteo.com`) | Every 30 minutes while someone watches |
+| **Records, frost, first snow** | The coordinates to the Open-Meteo archive (`archive-api.open-meteo.com`) | Once a day while someone watches |
+| **UV, air quality, pollen** | The coordinates to Open-Meteo air quality (`air-quality-api.open-meteo.com`) | Every 30 minutes while someone watches |
+| **Alerts (US only)** | The coordinates to the National Weather Service (`api.weather.gov`) | Every 5 minutes while someone watches a US place |
+| **Radar and satellite** | A map box around the coordinates to Iowa Environmental Mesonet (`mesonet.agron.iastate.edu`) and NOAA (`cdn.star.nesdis.noaa.gov`) for US places, or to RainViewer (`api.rainviewer.com`, `tilecache.rainviewer.com`) elsewhere | Every 10 minutes while someone watches |
+| **Webcams** | The coordinates to Windy (`api.windy.com`, images from `imgproxy.windy.com`) | Only when the owner adds a Windy key |
+| **Headlines** | The city name (local search) or the country (front page) to Google News (`news.google.com`). The world feed from BBC (`feeds.bbci.co.uk`) gets nothing about the place. | Every 30 minutes while someone watches |
+| **Voiceover scripts** | The weather data and the place name to the household model (the LLM in Configuration) | When the data changes, if a model is set |
+| **Headline recap** | Only the fetched headline titles and their sources to the household model | When headlines change, if a model is set |
+| **Voice** | Nothing. Speech is rendered on the server by a local voice model. | Weather narration is on |
+| **Voice model** | A one-time download of the voice files from GitHub (`github.com`, Kokoro) or Hugging Face (`huggingface.co`, Piper). Both redirect to their file CDNs. | The owner turns on Weather narration |
 | **Music** | Nothing. It plays from the owner's music folder. | A music folder is set |
+
+Weather services get coordinates and place names, never who is watching. Your browser loads maps, webcam stills, and voice audio from Projectionist, not from those services. One cache serves everyone watching the same place. Nothing is fetched for a place nobody is watching, and nothing at all while the channel is off. If narration is off or the voice fails, the channel shows captions instead; it does not use your browser's voice.
 
 A place you save is stored on your profile and reused, so it isn't looked up again.
 

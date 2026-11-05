@@ -714,6 +714,12 @@ def merge_secret_fields(incoming: Mapping[str, Any], existing: Settings) -> Dict
         from dataclasses import asdict
 
         merged["acrcloud"] = asdict(existing_acrcloud)
+    existing_weather = getattr(existing, "weather", None)
+    if existing_weather is not None:
+        from dataclasses import asdict
+
+        # Weather narration and the Windy key are saved only by their own Live admin route.
+        merged["weather"] = asdict(existing_weather)
     for field in PRESERVE_IF_EMPTY_FIELDS:
         if not str(merged.get(field) or "").strip():
             merged[field] = getattr(existing, field)
