@@ -26,7 +26,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional
 
 import httpx
 from fastapi import Depends, HTTPException, Request, Response
-from starlette.responses import JSONResponse
+from starlette.responses import HTMLResponse, JSONResponse
 
 from projectionist.config_store import Settings, SettingsCorruptError, load_merged_settings
 from projectionist.connectors.plex_account import (
@@ -170,7 +170,9 @@ def row_to_current_user(row) -> CurrentUser:
         cleaned_theme = str(row["ui_theme"]).strip().lower()
         if cleaned_theme in {"lights_up", "lights_down", "system"}:
             ui_theme = cleaned_theme
-    is_youth = bool(int(row["is_youth"])) if "is_youth" in keys and row["is_youth"] is not None else False
+    is_youth = (
+        bool(int(row["is_youth"])) if "is_youth" in keys and row["is_youth"] is not None else False
+    )
     autoconfirm_adds = (
         not is_youth and "autoconfirm_adds" in keys and bool(int(row["autoconfirm_adds"] or 0))
     )
@@ -263,6 +265,10 @@ def bootstrap_owner(db: Optional[Database] = None) -> CurrentUser:
 # seeded up front, so ownership is never up for grabs and the operator always
 # holds the credential (no lockout). When unset, the first sign-in becomes owner
 # only with the one-time claim in ``projectionist.web.owner_claim`` (SEC-008).
+# A fresh install never reaches that path: the setup passcode lock serves only
+# GET /api/health and the lock page until PROJECTIONIST_OWNER_PASSWORD is
+# entered, and the wizard creates the owner. Login cannot take the role by
+# arriving first. If the owner is later gone, that same passcode reopens setup.
 
 DEFAULT_OWNER_USERNAME = "owner"
 MIN_OWNER_PASSWORD_LENGTH = 8
@@ -485,20 +491,51 @@ def _user_from_session(request: Request, db: Database) -> Optional[CurrentUser]:
 
 
 async def multi_user_api_auth_middleware(request: Request, call_next):
-    """Household perimeter: SETUP_MODE lock, WAN interlock, then session gate."""
+    """Household perimeter: setup passcode, SETUP_MODE, WAN, then session gate."""
     path = request.url.path
     method = request.method
     if path.startswith("/mcp"):
         return await call_next(request)
 
-    # Documents, assets, and the health/ready probes do not take the perimeter's
-    # database connection. A contended library file waits up to
-    # SQLITE_BUSY_TIMEOUT_MS (30s). Health stays a liveness answer. Ready does
-    # its own 100 ms read-only probe in the handler.
-    if (method == "GET" and path in {"/api/health", "/api/ready"}) or not path.startswith("/api/"):
+    # Health never opens the perimeter database. A contended library file waits
+    # up to SQLITE_BUSY_TIMEOUT_MS (30s); this probe stays a liveness answer.
+    if method == "GET" and path == "/api/health":
         return await call_next(request)
 
     from starlette.concurrency import run_in_threadpool
+
+    from projectionist.web.setup_lock import (
+        install_known_active,
+        is_setup_lock_document,
+        lock_page_html,
+        passcode_configured,
+        request_passes_setup_lock,
+    )
+
+    if not install_known_active():
+        try:
+            passed = await run_in_threadpool(request_passes_setup_lock, request)
+        except Exception:
+            logger.exception("auth middleware: database unavailable")
+            if path == "/api/features":
+                return await call_next(request)
+            return JSONResponse({"detail": "Service unavailable"}, status_code=503)
+        if not passed:
+            if method == "POST" and path == "/api/setup/unlock":
+                return await call_next(request)
+            if is_setup_lock_document(method, path):
+                return HTMLResponse(
+                    lock_page_html(configured=passcode_configured()),
+                    status_code=200,
+                    headers={"Cache-Control": "no-store"},
+                )
+            return JSONResponse({"detail": "Not found"}, status_code=404)
+
+    # Documents, assets, and the ready probe do not take the perimeter's
+    # database connection once the install is past the setup lock. Ready does
+    # its own 100 ms read-only probe in the handler.
+    if (method == "GET" and path == "/api/ready") or not path.startswith("/api/"):
+        return await call_next(request)
 
     from projectionist.web.ingress import WAN_INTERLOCK_DETAIL, wan_interlock_blocks
     from projectionist.web.jobs import get_job_manager
@@ -601,7 +638,9 @@ def require_role(minimum_role: UserRole) -> Callable[..., CurrentUser]:
     return dependency
 
 
-def _plex_profile_fields(profile: dict[str, object]) -> tuple[str, str, Optional[str], Optional[str]]:
+def _plex_profile_fields(
+    profile: dict[str, object],
+) -> tuple[str, str, Optional[str], Optional[str]]:
     plex_user_id = str(profile.get("id") or profile.get("uuid") or "").strip()
     if not plex_user_id:
         raise HTTPException(status_code=400, detail="Plex account response missing user id")
@@ -643,7 +682,9 @@ def _ensure_plex_login_enabled() -> Settings:
 def _purge_expired_pin_bindings() -> None:
     now = time.time()
     with _pin_bindings_lock:
-        expired = [key for key, value in _pin_bindings.items() if float(value.get("expires_at", 0)) < now]
+        expired = [
+            key for key, value in _pin_bindings.items() if float(value.get("expires_at", 0)) < now
+        ]
         for key in expired:
             _pin_bindings.pop(key, None)
 
@@ -724,7 +765,9 @@ def start_plex_pin_login(
     try:
         pin = create_plex_pin(get_or_create_client_id(_data_dir()))
     except Exception as error:  # noqa: BLE001
-        raise HTTPException(status_code=502, detail=f"Could not start Plex login: {error}") from error
+        raise HTTPException(
+            status_code=502, detail=f"Could not start Plex login: {error}"
+        ) from error
     _bind_pin_nonce(int(pin["id"]), response, request, invite_token=invite_token)
     return {
         "id": pin["id"],
@@ -756,7 +799,9 @@ def _load_plex_pin_status(pin_id: int, client_id: str) -> Optional[Dict[str, Any
         if _plex_pin_check_still_pending(error):
             logger.debug("Plex PIN status check still waiting pin_id=%s", int(pin_id))
             return None
-        raise HTTPException(status_code=502, detail=f"Could not check Plex login: {error}") from error
+        raise HTTPException(
+            status_code=502, detail=f"Could not check Plex login: {error}"
+        ) from error
     if not isinstance(pin, dict):
         return None
     return pin
@@ -894,7 +939,9 @@ def link_plex_identity(
             timeout=PLEX_PIN_CONFIRM_TIMEOUT_SECONDS,
         )
     except Exception as error:  # noqa: BLE001
-        raise HTTPException(status_code=502, detail=f"Could not check Plex login: {error}") from error
+        raise HTTPException(
+            status_code=502, detail=f"Could not check Plex login: {error}"
+        ) from error
     auth_token = pin.get("authToken") or pin.get("auth_token")
     if not auth_token:
         raise HTTPException(status_code=409, detail="Plex PIN is not authorized yet")
@@ -1270,10 +1317,7 @@ def authenticate_local_user(
         raw = row["password_hash"] if "password_hash" in row.keys() else None
         stored_hash = str(raw or "")
     dummy_or_missing = (
-        row is None
-        or _user_is_disabled(row)
-        or not stored_hash
-        or "$" not in stored_hash
+        row is None or _user_is_disabled(row) or not stored_hash or "$" not in stored_hash
     )
     if dummy_or_missing:
         _verify_password(password, _DUMMY_PASSWORD_HASH)
@@ -1305,7 +1349,8 @@ def row_to_current_user_from_dict(d: dict) -> CurrentUser:
         ui_font_size=font,
         ui_theme=theme,
         is_youth=bool(d.get("is_youth", False)),
-        autoconfirm_adds=bool(d.get("autoconfirm_adds", False)) and not bool(d.get("is_youth", False)),
+        autoconfirm_adds=bool(d.get("autoconfirm_adds", False))
+        and not bool(d.get("is_youth", False)),
         weather_place=d.get("weather_place"),
         weather_lat=d.get("weather_lat"),
         weather_lon=d.get("weather_lon"),
@@ -1467,10 +1512,7 @@ def handle_oidc_callback(
         raise HTTPException(status_code=502, detail="OIDC user info missing sub claim")
 
     display_name = str(
-        userinfo.get("preferred_username")
-        or userinfo.get("name")
-        or userinfo.get("email")
-        or sub
+        userinfo.get("preferred_username") or userinfo.get("name") or userinfo.get("email") or sub
     ).strip()
     email = userinfo.get("email")
     email_str = str(email) if email else None
@@ -1505,9 +1547,7 @@ def handle_oidc_callback(
         raise HTTPException(status_code=403, detail=str(error)) from error
 
     try:
-        invite_for_new = require_invite_or_open(
-            settings, db, raw_token=invite_token, method="oidc"
-        )
+        invite_for_new = require_invite_or_open(settings, db, raw_token=invite_token, method="oidc")
     except ValueError as error:
         raise HTTPException(status_code=403, detail=str(error)) from error
 
@@ -1543,6 +1583,10 @@ def available_auth_methods(settings: Settings) -> List[str]:
         methods.append("plex")
     if settings.auth.local_login_enabled:
         methods.append("local")
-    if settings.auth.oidc_enabled and settings.auth.oidc_issuer_url and settings.auth.oidc_client_id:
+    if (
+        settings.auth.oidc_enabled
+        and settings.auth.oidc_issuer_url
+        and settings.auth.oidc_client_id
+    ):
         methods.append("oidc")
     return methods

@@ -17,7 +17,6 @@ from projectionist.web.auth import has_real_owner
 from projectionist.web.setup_mode import (
     SETUP_SNAPSHOT_KEY,
     SETUP_STATE_KEY,
-    WAN_COMMIT_OWNER_PASSWORD_DETAIL,
     is_setup_public_path,
     resolve_commit_household_domain,
     resolve_commit_invite_only,
@@ -39,12 +38,14 @@ class SetupModeApiTests(unittest.TestCase):
         clear_rate_limits()
         import projectionist.web.jobs as jobs
 
+        os.environ["PROJECTIONIST_OWNER_PASSWORD"] = "host-owner-password"
         jobs._manager = None
         import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.app_mod = app_mod
         self.client = TestClient(app_mod.app, client=("192.168.1.20", 43210))
+        self._unlock(self.client)
 
     def tearDown(self) -> None:
         import projectionist.web.jobs as jobs
@@ -83,8 +84,18 @@ class SetupModeApiTests(unittest.TestCase):
         self.assertIsNotNone(stored)
         self.assertNotIn("authorization", stored.lower())
 
-    def _client_at(self, host: str) -> TestClient:
-        return TestClient(self.app_mod.app, client=(host, 43210))
+    def _unlock(self, client: TestClient) -> None:
+        resp = client.post(
+            "/api/setup/unlock",
+            json={"passcode": "host-owner-password"},
+        )
+        self.assertEqual(resp.status_code, 200, resp.text)
+
+    def _client_at(self, host: str, *, unlock: bool = True) -> TestClient:
+        client = TestClient(self.app_mod.app, client=(host, 43210))
+        if unlock:
+            self._unlock(client)
+        return client
 
     def _assert_setup_uncommitted(self) -> None:
         from projectionist.web.jobs import get_job_manager
@@ -92,6 +103,8 @@ class SetupModeApiTests(unittest.TestCase):
         db = get_job_manager().db
         self.assertFalse(has_real_owner(db))
         self.assertNotEqual(db.get_config(SETUP_STATE_KEY), "active")
+        # Another peer entering the passcode rotates the unlock cookie.
+        self._unlock(self.client)
         features = self.client.get("/api/features")
         self.assertEqual(features.status_code, 200, features.text)
         self.assertEqual(features.json()["setup_state"], "setup")
@@ -149,7 +162,8 @@ class SetupModeApiTests(unittest.TestCase):
         self.assertEqual(plex.status_code, 404, plex.text)
 
     def test_public_failsafe_commit_requires_owner_password(self) -> None:
-        docker = self._client_at("172.17.0.1")
+        """The passcode has to be entered; setting the env var is not enough."""
+        docker = self._client_at("172.17.0.1", unlock=False)
         commit = docker.post(
             "/api/setup/commit",
             json={
@@ -160,8 +174,11 @@ class SetupModeApiTests(unittest.TestCase):
                 "trust_proxy": True,
             },
         )
-        self.assertEqual(commit.status_code, 403, commit.text)
-        self.assertEqual(commit.json()["detail"], WAN_COMMIT_OWNER_PASSWORD_DETAIL)
+        self.assertEqual(commit.status_code, 404, commit.text)
+        page = docker.get("/")
+        self.assertEqual(page.status_code, 200, page.text)
+        self.assertIn("PROJECTIONIST_OWNER_PASSWORD", page.text)
+        self.assertIn("setup-lock", page.text)
         self._assert_setup_uncommitted()
 
     def test_public_failsafe_commit_allowed_when_owner_password_set(self) -> None:
@@ -367,8 +384,12 @@ class SetupPublicPathTests(unittest.TestCase):
     def test_exact_allowlist_ignores_classification(self) -> None:
         self.assertTrue(is_setup_public_path("GET", "/api/health"))
         self.assertTrue(is_setup_public_path("GET", "/api/ready"))
-        self.assertTrue(is_setup_public_path("POST", "/api/setup/commit", classification="halt_wan"))
-        self.assertTrue(is_setup_public_path("POST", "/api/setup/handshake", classification="public_failsafe"))
+        self.assertTrue(
+            is_setup_public_path("POST", "/api/setup/commit", classification="halt_wan")
+        )
+        self.assertTrue(
+            is_setup_public_path("POST", "/api/setup/handshake", classification="public_failsafe")
+        )
 
     def test_plex_tmdb_tests_only_when_lan(self) -> None:
         self.assertTrue(is_setup_public_path("POST", "/api/setup/test/plex", classification="lan"))
@@ -377,7 +398,9 @@ class SetupPublicPathTests(unittest.TestCase):
         self.assertFalse(
             is_setup_public_path("POST", "/api/setup/test/plex", classification="public_failsafe")
         )
-        self.assertFalse(is_setup_public_path("POST", "/api/setup/test/tmdb", classification="halt_wan"))
+        self.assertFalse(
+            is_setup_public_path("POST", "/api/setup/test/tmdb", classification="halt_wan")
+        )
 
 
 class ResolveCommitInviteOnlyTests(unittest.TestCase):
