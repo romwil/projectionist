@@ -625,11 +625,11 @@ def library_item_subtitles_endpoint(
     rating_key: str,
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
-    """List Plex-attached subtitle streams for a movie or episode (soft-fail empty)."""
+    """List the cached household file plus Plex streams for a movie or episode (soft-fail empty)."""
     del user
     from projectionist.library.subtitles import list_item_subtitles
 
-    return list_item_subtitles(_settings(), rating_key)
+    return list_item_subtitles(_settings(), rating_key, db=_db())
 
 
 @router.post("/api/library/items/{rating_key}/subtitles/download")
@@ -638,21 +638,22 @@ def library_item_subtitles_download_endpoint(
     payload: LibraryItemSubtitlesDownloadPayload,
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
-    """Ask Plex to download preferred-language subtitles (confirm-before-fleet)."""
-    if not payload.confirm:
-        raise HTTPException(
-            status_code=400,
-            detail="Asking Plex for subtitles requires confirm=true",
-        )
+    """Cache a household-language file now (Plex copy, then OpenSubtitles).
+
+    Only when that finds nothing and ``confirm`` is set does it fall back to
+    asking Plex's agents to download a track.
+    """
     settings = _settings()
-    from projectionist.library.subtitles import download_preferred_subtitles
+    from projectionist.library.subtitles import fetch_household_subtitles
 
     prefer_sdh = bool(getattr(user, "is_youth", False))
-    return download_preferred_subtitles(
+    return fetch_household_subtitles(
         settings,
         rating_key,
+        db=_db(),
         language=str(payload.language or ""),
         prefer_sdh=prefer_sdh,
+        ask_plex=bool(payload.confirm),
     )
 
 
@@ -667,12 +668,25 @@ def library_item_subtitle_file_endpoint(
     Plex tokens stay server-side; the browser only sees this authenticated route.
     """
     del user
+    from projectionist.library.subtitle_cache import (
+        cached_subtitle_vtt,
+        language_from_cached_stream_id,
+    )
     from projectionist.library.subtitles import (
         fetch_subtitle_vtt,
         list_item_subtitles,
         plex_client_from_settings,
     )
 
+    if language_from_cached_stream_id(stream_id):
+        cached = cached_subtitle_vtt(rating_key, stream_id)
+        if not cached:
+            raise HTTPException(status_code=404, detail="Subtitle track not found")
+        return Response(
+            content=cached.encode("utf-8"),
+            media_type="text/vtt; charset=utf-8",
+            headers={"Cache-Control": "private, max-age=300"},
+        )
     settings = _settings()
     listed = list_item_subtitles(settings, rating_key)
     wanted = str(stream_id or "").strip()

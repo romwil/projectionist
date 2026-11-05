@@ -1523,7 +1523,7 @@ def live_channels_channel_subtitles_endpoint(
     now = channel.get("now") if isinstance(channel, Mapping) else None
     # proxy_url is our /api/library/.../file (decorate_subtitle_row). Never
     # re-attach a raw Plex stream key — overlay/PGS sidecars 404 there.
-    return live_subtitles_payload(settings, channel_id=cid, now_program=now)
+    return live_subtitles_payload(settings, channel_id=cid, now_program=now, db=_db())
 
 
 @router.post("/api/live-channels/channels/{channel_id}/subtitles/download")
@@ -1532,16 +1532,14 @@ def live_channels_channel_subtitles_download_endpoint(
     payload: LiveChannelsDownloadSubtitlesPayload,
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
-    """Ask Plex to download preferred-language subs for the now-playing library title."""
+    """Cache the household file for the now-playing title (same helper as Play).
+
+    Falls back to asking Plex only when ``confirm`` is set. Flex and filler never fetch.
+    """
     from projectionist.live_channels.guide import build_on_now_snapshot
-    from projectionist.library.subtitles import download_preferred_subtitles
+    from projectionist.library.subtitles import fetch_household_subtitles
     from projectionist.youth.rating_gate import resolve_youth_max_rating, youth_gate_active
 
-    if not payload.confirm:
-        raise HTTPException(
-            status_code=400,
-            detail="Asking Plex for subtitles requires confirm=true",
-        )
     settings = _settings()
     if not settings.features.live_channels_enabled:
         raise HTTPException(status_code=400, detail="Live Channels is not enabled")
@@ -1557,20 +1555,29 @@ def live_channels_channel_subtitles_download_endpoint(
         None,
     )
     now = channel.get("now") if isinstance(channel, Mapping) else None
+    if isinstance(now, Mapping) and now.get("is_flex"):
+        return {
+            "ok": False,
+            "downloaded": False,
+            "message": "Nothing to caption between programs.",
+            "reason": "flex",
+        }
     rating_key = str((now or {}).get("plex_rating_key") or "").strip()
     if not rating_key:
         return {
             "ok": False,
             "downloaded": False,
-            "message": "This airing isn’t mapped to a Plex library title, so Projectionist can’t ask Plex for subtitles.",
+            "message": "This airing isn’t mapped to a Plex library title, so Projectionist can’t find subtitles for it.",
             "reason": "no_plex_mapping",
         }
     prefer_sdh = bool(getattr(user, "is_youth", False))
-    return download_preferred_subtitles(
+    return fetch_household_subtitles(
         settings,
         rating_key,
+        db=_db(),
         language=str(payload.language or ""),
         prefer_sdh=prefer_sdh,
+        ask_plex=bool(payload.confirm),
     )
 
 

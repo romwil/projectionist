@@ -109,6 +109,10 @@ CLAIMS: Dict[str, List[str]] = {
         "tests/test_privacy_registry.py::SchemaContractTests::test_every_person_linked_column_is_registered",
         "tests/test_privacy_registry.py::SchemaContractTests::test_privacy_doc_table_is_generated_from_the_registry",
     ],
+    r"there is no OpenSubtitles call when the key is empty": [
+        "tests/test_subtitle_player_proxy.py::HouseholdSubtitleCacheTests::test_no_key_means_no_opensubtitles_call_and_plex_copy_still_works",
+        "tests/test_subtitle_player_proxy.py::HouseholdSubtitleCacheTests::test_episode_uses_parent_show_lookup",
+    ],
     r"Projectionist does not phone home": [
         "tests/test_privacy_contract.py::NoPhoneHomeTests::test_outbound_hosts_are_third_party_services",
     ],
