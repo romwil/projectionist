@@ -756,15 +756,6 @@ class TelemetryConfigMixin:
             )
             return cursor.rowcount
 
-    def prune_interaction_telemetry(self, retention_days: int) -> int:
-        """Delete interaction telemetry older than *retention_days*. Returns rows deleted."""
-        with self.connect() as conn:
-            cursor = conn.execute(
-                "DELETE FROM interaction_telemetry WHERE timestamp < datetime('now', ?)",
-                (f"-{retention_days} days",),
-            )
-            return cursor.rowcount
-
     def prune_daily_anniversaries(self, retention_days: int) -> int:
         """Delete daily anniversary entries older than *retention_days*. Returns rows deleted.
 

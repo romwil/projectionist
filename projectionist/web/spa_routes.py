@@ -8,8 +8,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 router = APIRouter(tags=["spa"])
 
@@ -62,6 +64,7 @@ def _frontend_public_file(*parts: str) -> Path | None:
 @router.get("/chat", response_class=HTMLResponse)
 @router.get("/search", response_class=HTMLResponse)
 @router.get("/inbox", response_class=HTMLResponse)
+@router.get("/whisper", response_class=HTMLResponse)
 @router.get("/my-journey", response_class=HTMLResponse)
 @router.get("/setup", response_class=HTMLResponse)
 @router.get("/join", response_class=HTMLResponse)
@@ -77,6 +80,7 @@ def config_page() -> HTMLResponse:
 
 @router.get("/explore", response_class=HTMLResponse)
 @router.get("/explore/tags", response_class=HTMLResponse)
+@router.get("/explore/related", response_class=HTMLResponse)
 @router.get("/explore/plot-lab", response_class=HTMLResponse)
 @router.get("/explore/browse", response_class=HTMLResponse)
 @router.get("/explore/engagement", response_class=HTMLResponse)
@@ -195,9 +199,39 @@ def settings_page(section: str = "") -> HTMLResponse:
     return _serve_index()
 
 
+# API, assets, and MCP keep their own 404s so a broken fetch is not hidden by HTML.
+_NON_DOCUMENT_PREFIXES = ("/api/", "/api", "/assets/", "/static/", "/mcp")
+
+
+def _wants_spa_shell(request: Request) -> bool:
+    if request.method not in {"GET", "HEAD"}:
+        return False
+    path = request.url.path
+    if any(path == prefix or path.startswith(prefix) for prefix in _NON_DOCUMENT_PREFIXES):
+        return False
+    # A missing file (``/release-notes.json``, ``/robots.txt``) is not a page.
+    last_segment = path.rstrip("/").rsplit("/", 1)[-1]
+    return "." not in last_segment
+
+
+async def _spa_not_found(request: Request, exc: StarletteHTTPException):
+    """Unknown pages boot the app so its not-found page can help (UX-008, ARCH-010).
+
+    The status stays 404 and the shell is never cached, so a later client
+    route that gains a server twin is picked up on the next load.
+    """
+    if exc.status_code == 404 and _wants_spa_shell(request):
+        response = _serve_index()
+        response.status_code = 404
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+    return await http_exception_handler(request, exc)
+
+
 def register_spa_routes(app, *, frontend_dist: Path, static_dir: Path) -> None:
     """Attach SPA HTML + public asset routes to the FastAPI app."""
     global _frontend_dist, _static_dir
     _frontend_dist = frontend_dist
     _static_dir = static_dir
     app.include_router(router)
+    app.add_exception_handler(StarletteHTTPException, _spa_not_found)

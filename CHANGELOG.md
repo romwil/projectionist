@@ -39,6 +39,14 @@ The trust release. Only the owner adds to Radarr or Sonarr, nobody else's viewin
 - **PERF-007** `/api/ready` returns 503 unless the database opens and answers within 100 ms (a missing or unreadable file fails ready, not health). CI smoke checks both.
 - **A11Y-007** jsx-a11y rules are errors in the files cleaned so far (My data, Privacy, Overview, routes). Footer links no longer fade below contrast, and the watch badge is a labelled image.
 - **ARCH-006** mypy now covers auth, backups, the write queue, rate limits, session tokens, and the runtime modules.
+- **PRD-001 / UX-012** A recommendation reason shows only when it reads as a sentence.
+- **UX-008** Unknown pages boot the app's not-found page, with a way back.
+- **UX-011** A signed-in visitor goes to their page instead of the sign-in form. The phone tab bar stays off the sign-in doors.
+- **A11Y-002 / A11Y-003 / A11Y-005 / A11Y-008 / A11Y-009** One main landmark, real tab titles, a skip link, trailers that don't autoplay, and an honest "Opening your library…" composer.
+- **VIS-001 / VIS-004** The worst screens use the shared Button, and type outside Live stays at 12px or larger.
+- **PRD-008 / PRD-010** Profile no longer rewards chat streaks, and pages nothing linked to are gone.
+- **PRD-013** The lobby port stays closed until the owner turns on **Enable lobby display** and restarts.
+- **GRO-020** The unused `interaction_telemetry` table is dropped (schema migration 63, after youth 61 and autoconfirm 62).
 
 ## [1.39.0] — 2026-11-02
 

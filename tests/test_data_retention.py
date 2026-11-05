@@ -32,22 +32,6 @@ def _seed_telemetry(db: Database, count: int, *, days_old: int = 0) -> None:
             )
 
 
-def _seed_interaction_telemetry(db: Database, count: int, *, days_old: int = 0) -> None:
-    """Insert interaction_telemetry rows."""
-    import uuid
-    offset = f"-{days_old} days" if days_old > 0 else "+0 seconds"
-    with db.connect() as conn:
-        for i in range(count):
-            conn.execute(
-                """
-                INSERT OR IGNORE INTO interaction_telemetry
-                    (id, title_id, lens_id, source, event_type, timestamp)
-                VALUES (?, ?, 'general', 'test', 'view', datetime('now', ?))
-                """,
-                (str(uuid.uuid4()), f"title-{i}", offset),
-            )
-
-
 def _seed_daily_anniversaries(db: Database, count: int, *, days_old: int = 0) -> None:
     """Insert daily_anniversaries rows with a backdated scanned_date."""
     from datetime import date, timedelta
@@ -100,26 +84,6 @@ class PruneTelemetryTests(unittest.TestCase):
             self.assertEqual(deleted, 0)
 
 
-class PruneInteractionTelemetryTests(unittest.TestCase):
-    def test_prune_deletes_old_rows(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            db = _make_db(tmp)
-            _seed_interaction_telemetry(db, 4, days_old=200)
-            _seed_interaction_telemetry(db, 2, days_old=5)
-            deleted = db.prune_interaction_telemetry(retention_days=90)
-            self.assertEqual(deleted, 4)
-            with db.connect() as conn:
-                remaining = conn.execute("SELECT COUNT(*) FROM interaction_telemetry").fetchone()[0]
-            self.assertEqual(remaining, 2)
-
-    def test_prune_respects_retention_period(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            db = _make_db(tmp)
-            _seed_interaction_telemetry(db, 5, days_old=30)
-            deleted = db.prune_interaction_telemetry(retention_days=90)
-            self.assertEqual(deleted, 0)
-
-
 class PruneDailyAnniversariesTests(unittest.TestCase):
     def test_prune_deletes_old_rows(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -153,7 +117,6 @@ class DataRetentionTaskTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             db = _make_db(tmp)
             _seed_telemetry(db, 10, days_old=200)
-            _seed_interaction_telemetry(db, 5, days_old=200)
 
             settings = Settings()
             result = asyncio.run(
@@ -161,14 +124,13 @@ class DataRetentionTaskTests(unittest.TestCase):
             )
             self.assertEqual(result["status"], "completed")
             self.assertEqual(result["pruned"]["system_telemetry_stream"], 10)
-            self.assertEqual(result["pruned"]["interaction_telemetry"], 5)
-            self.assertEqual(result["total_pruned"], 15)
+            self.assertNotIn("interaction_telemetry", result["pruned"])
+            self.assertEqual(result["total_pruned"], 10)
 
     def test_task_skips_recent_data(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = _make_db(tmp)
             _seed_telemetry(db, 5, days_old=10)
-            _seed_interaction_telemetry(db, 3, days_old=10)
 
             settings = Settings()
             result = asyncio.run(

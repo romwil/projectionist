@@ -87,7 +87,6 @@ from projectionist.models.schemas import (
     CuratedListItemCreate,
     CuratedListItemUpdate,
     CuratedListUpdate,
-    EngagementStreakResponse,
     CourseProgressUpdate,
     Lens,
     LensCreate,
@@ -2788,30 +2787,6 @@ def get_persona_ui_copy() -> PersonaUiCopy:
     return PersonaUiCopy(**persona_ui_for(preset_id, curator_name))
 
 
-@app.get("/api/engagement/streak", response_model=EngagementStreakResponse)
-def get_engagement_streak(user=Depends(get_current_user_dep)) -> EngagementStreakResponse:
-    db = _db()
-    count = db.count_chat_sessions_last_days(30)
-    streak = {"current_count": 0, "best_count": 0}
-    user_id = getattr(user, "id", None)
-    if user_id:
-        try:
-            from projectionist.engagement import sync_chat_streak
-
-            sync_chat_streak(db, str(user_id))
-            streak = db.get_user_streak(str(user_id), "chat")
-        except Exception:  # noqa: BLE001
-            streak = db.get_user_streak(str(user_id), "chat")
-    current = int(streak.get("current_count") or 0)
-    best = int(streak.get("best_count") or 0)
-    return EngagementStreakResponse(
-        session_count_30d=count,
-        streak_visible=count >= 3 or current >= 3,
-        current_count=current,
-        best_count=best,
-    )
-
-
 @app.get("/api/engagement/summary")
 def get_engagement_summary(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
     from projectionist.engagement import engagement_summary
@@ -3669,11 +3644,6 @@ def list_published_collections(
         items=[CuratedList(**item) for item in items],
         count=len(items),
     )
-
-
-@app.get("/api/guest/tour")
-def guest_tour() -> Dict[str, Any]:
-    raise HTTPException(status_code=404, detail="Not found")
 
 
 @app.get("/api/collections/{list_id}", response_model=CuratedList)

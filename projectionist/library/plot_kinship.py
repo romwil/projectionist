@@ -434,6 +434,160 @@ _STUDIO_TRAILER_RE = re.compile(
     r"(?:productions|associates|entertainment)\b",
     re.IGNORECASE,
 )
+# Production, broadcast, and awards history from Wikipedia-style synopses.
+# "took place", "began airing", "spin off", "primetime emmy" are how a show
+# was made or aired, never what the story is about.
+_PRODUCTION_HISTORY_UNIGRAMS = frozenset(
+    {
+        "took",
+        "began",
+        "airing",
+        "aired",
+        "airs",
+        "spin",
+        "spinoff",
+        "spun",
+        "off",
+        "emmy",
+        "emmys",
+        "primetime",
+        "oscar",
+        "oscars",
+        "award",
+        "awards",
+        "nominated",
+        "nomination",
+        "nominations",
+        "broadcasting",
+        "broadcaster",
+        "season",
+        "seasons",
+        "episode",
+        "episodes",
+        "renewed",
+        "cancelled",
+        "canceled",
+        "debuted",
+        "debut",
+        "ratings",
+        "viewers",
+        "theatrical",
+        "distributor",
+        "distribution",
+        "sequel",
+        "prequel",
+        "remake",
+        "reboot",
+        "franchise",
+        "adaptation",
+        "adapted",
+        "premiering",
+    }
+)
+# Irregular past-tense verbs that read as a noun slot after "a"/"an".
+_PAST_TENSE_LEFT = frozenset(
+    {
+        "became",
+        "began",
+        "brought",
+        "came",
+        "fell",
+        "found",
+        "gave",
+        "got",
+        "held",
+        "left",
+        "lost",
+        "made",
+        "met",
+        "ran",
+        "saw",
+        "told",
+        "took",
+        "went",
+        "won",
+        "wrote",
+    }
+)
+# -ing words that are real nouns and take an article ("a wedding").
+_ING_COUNT_NOUNS = frozenset(
+    {
+        "wedding",
+        "painting",
+        "meeting",
+        "uprising",
+        "offspring",
+        "ceiling",
+        "sibling",
+        "darling",
+        "duckling",
+        "earring",
+        "evening",
+        "morning",
+        "clothing",
+        "building",
+        "pudding",
+        "stocking",
+        "viking",
+        "lightning",
+    }
+)
+# -ing activity nouns. They name a subject but take no article ("street racing").
+_ING_ACTIVITY_NOUNS = frozenset(
+    {
+        "boxing",
+        "wrestling",
+        "racing",
+        "surfing",
+        "skating",
+        "fishing",
+        "hunting",
+        "sailing",
+        "smuggling",
+        "kidnapping",
+        "bombing",
+        "hacking",
+        "dancing",
+        "singing",
+        "cooking",
+        "baking",
+        "gambling",
+        "trafficking",
+        "mining",
+        "farming",
+        "ranching",
+        "bowling",
+        "climbing",
+        "skiing",
+        "logging",
+        "whaling",
+        "rowing",
+        "fencing",
+        "diving",
+        "camping",
+        "drumming",
+    }
+)
+# Multi-word phrases a "why" must never contain, checked on the final
+# sentence so a stored or upstream link cannot sneak one past the bigram gate.
+_WHY_REJECT_PHRASES = (
+    "took place",
+    "began airing",
+    "spin off",
+    "spin-off",
+    "primetime emmy",
+    "box office",
+    "filmed in",
+    "premiered on",
+    "was released",
+    "broadcasting company",
+    "principal photography",
+)
+_WHY_DANGLING_TAILS = frozenset(
+    {"a", "an", "the", "of", "on", "in", "to", "with", "and", "or", "by", "for", "at", "off"}
+)
+_ARTICLE_THEN_WORD_RE = re.compile(r"\b(?:a|an)\s+([a-z]+)\b")
+
 _IRREGULAR_PLURALS = frozenset(
     {
         "people",
@@ -518,11 +672,20 @@ def _participle_head(word: str) -> bool:
     return len(word) > 3 and word.endswith("ed")
 
 
+def _gerund_head(word: str) -> bool:
+    """A verb form in the head slot ("began airing"), not an -ing noun."""
+    if word in _ING_COUNT_NOUNS or word in _ING_ACTIVITY_NOUNS:
+        return False
+    return len(word) > 5 and word.endswith("ing")
+
+
 def _np_shape_ok(left: str, right: str) -> bool:
     """Adj+noun or noun+noun. Refuse verb/adverb glue and studio tails."""
-    if left in _LEFT_VERBS or _looks_like_adverb(left):
+    if left in _LEFT_VERBS or left in _PAST_TENSE_LEFT or _looks_like_adverb(left):
         return False
     if _looks_like_adverb(right) or right in _STUDIO_TAILS or _participle_head(right):
+        return False
+    if _gerund_head(right):
         return False
     if left.endswith("ly") and _participle_head(right):
         return False
@@ -542,6 +705,8 @@ def _honest_subject(left: str, right: str) -> bool:
     if left in _VAGUE_SUBJECTS or right in _VAGUE_SUBJECTS:
         return False
     if left in _NON_PLOT_UNIGRAMS or right in _NON_PLOT_UNIGRAMS:
+        return False
+    if left in _PRODUCTION_HISTORY_UNIGRAMS or right in _PRODUCTION_HISTORY_UNIGRAMS:
         return False
     if left in _GENERIC_UNIGRAMS and right in _GENERIC_UNIGRAMS:
         return False
@@ -582,8 +747,11 @@ def _phrase(term: str) -> Optional[str]:
     if not _np_shape_ok(words[0], words[1]):
         return None
     head = words[1]
-    # Plurals already read as a noun phrase ("amateur bakers").
+    # Plurals and activities already read as a noun phrase
+    # ("amateur bakers", "street racing").
     if head in _IRREGULAR_PLURALS or (head.endswith("s") and not head.endswith("ss")):
+        return term
+    if head in _ING_ACTIVITY_NOUNS:
         return term
     article = "an" if words[0][:1] in "aeiou" else "a"
     return f"{article} {term}"
@@ -608,8 +776,37 @@ def _sentence(terms: Sequence[str]) -> str:
     if not rendered:
         return ""
     if len(rendered) == 1:
-        return f"Both stories turn on {rendered[0]}."
-    return f"Both stories turn on {rendered[0]} and {rendered[1]}."
+        sentence = f"Both stories turn on {rendered[0]}."
+    else:
+        sentence = f"Both stories turn on {rendered[0]} and {rendered[1]}."
+    return sentence if readable_why(sentence) else ""
+
+
+def readable_why(clause: str) -> bool:
+    """True when a "why" clause reads as a sentence a person would say.
+
+    The last gate before a reason reaches a card. Refuses production-history
+    phrases, "a"/"an" before a verb ("a took place"), a dangling preposition
+    or article, and fragments under three words. A caller that gets False
+    shows no reason rather than a broken one.
+    """
+    text = " ".join(str(clause or "").split()).strip()
+    if not text:
+        return False
+    words = text.rstrip(".!?").split()
+    if len(words) < 3:
+        return False
+    folded = text.casefold()
+    for phrase in _WHY_REJECT_PHRASES:
+        if re.search(rf"\b{re.escape(phrase)}\b", folded):
+            return False
+    if words[-1].casefold() in _WHY_DANGLING_TAILS:
+        return False
+    for match in _ARTICLE_THEN_WORD_RE.finditer(folded):
+        word = match.group(1)
+        if word in _PAST_TENSE_LEFT or word in _PRODUCTION_HISTORY_UNIGRAMS:
+            return False
+    return True
 
 
 def peers_with_named_explanation(items: Sequence[Any]) -> List[Dict[str, Any]]:

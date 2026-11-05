@@ -12,8 +12,9 @@
   --font-display: "Fraunces Variable", "Times New Roman", serif;
   --font-body: "DM Sans Variable", system-ui, sans-serif;
   --font-mono: "SF Mono", "Fira Code", "Cascadia Code", ui-monospace, monospace;
-  --text-xs: 0.75rem;
-  --text-sm: 0.8125rem;
+  /* VIS-004: 12px floor on the 15px root (xs = 12px, sm ≈ 13.1px). */
+  --text-xs: 0.8rem;
+  --text-sm: 0.875rem;
   --text-md: 0.9375rem;
   --text-base: 1rem;
   --text-lg: 1.125rem;
@@ -315,6 +316,29 @@ a {
    components may override with their own :focus-visible rule, but must keep
    a real `outline` (see DESIGN.md "Focus"), not `outline: none`. */
 :focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
+}
+
+/* A11Y-008: first Tab on every route. Hidden until focused, then a solid
+   chip on the surface color so it reads in both themes. */
+.skip-link {
+  position: fixed;
+  top: var(--space-2);
+  left: var(--space-2);
+  z-index: 1000;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(calc(-100% - var(--space-4)));
+}
+.skip-link:focus,
+.skip-link:focus-visible {
+  transform: none;
   outline: 2px solid var(--accent-ink);
   outline-offset: 2px;
 }
