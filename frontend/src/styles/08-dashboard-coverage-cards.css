@@ -1320,9 +1320,9 @@ a.on-this-day-item:focus-visible {
 }
 
 .recommend-modal-actions .primary.danger {
-  background: var(--danger, #c45c4a);
-  color: #fff;
-  border: 1px solid var(--danger, #c45c4a);
+  background: var(--danger);
+  color: var(--on-danger);
+  border: 1px solid var(--danger);
 }
 
 .recommend-intent-toggle {

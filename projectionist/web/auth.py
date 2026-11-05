@@ -64,6 +64,8 @@ PUBLIC_HANDSHAKE_EXACT = frozenset(
         ("POST", "/api/auth/logout"),
         ("GET", "/api/auth/oidc/authorize"),
         ("GET", "/api/auth/oidc/callback"),
+        ("GET", "/api/mail/unsubscribe"),
+        ("POST", "/api/mail/unsubscribe"),
     }
 )
 PLEX_PIN_POLL_PATH = re.compile(r"^/api/auth/plex/pin/\d+$")

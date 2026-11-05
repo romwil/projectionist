@@ -37,3 +37,23 @@ export function erasedSummary(total: number): string {
   if (total <= 0) return "There was nothing to delete.";
   return `Deleted ${total.toLocaleString()} ${total === 1 ? "item" : "items"}. Your account is still here.`;
 }
+
+export type OwnerAccessEntry = {
+  created_at: number;
+  event: string;
+  label: string;
+  outcome?: string;
+  actor_name?: string;
+};
+
+/** One line per owner action: "Jan 3, 2026 — Alex: Changed Youth mode on your account". */
+export function ownerAccessLine(entry: OwnerAccessEntry, locale?: string): string {
+  const when = new Date(Number(entry.created_at) * 1000).toLocaleDateString(locale, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+  const who = (entry.actor_name || "").trim() || "The owner";
+  const denied = entry.outcome && entry.outcome !== "ok" ? " (not allowed)" : "";
+  return `${when} — ${who}: ${entry.label}${denied}`;
+}

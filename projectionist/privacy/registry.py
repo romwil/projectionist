@@ -209,6 +209,13 @@ STORES: Tuple[PersonalStore, ...] = (
         covers_cols=("source_user_key",),
     ),
     PersonalStore(
+        table="pick_watched_likely",
+        label="Picks you probably watched in Plex within 7 days (likely, not confirmed)",
+        match=_direct("user_id"),
+        subject_cols=("user_id",),
+        erase="memory",
+    ),
+    PersonalStore(
         table="watch_source_identities",
         label="Your linked Plex account on the Plex server",
         match=_direct("user_id"),
@@ -400,6 +407,15 @@ STORES: Tuple[PersonalStore, ...] = (
         subject_cols=("owner_user_id",),
         erase="activity",
     ),
+    PersonalStore(
+        table="mail_unsubscribe_nonces",
+        label="The key that makes your email unsubscribe links work",
+        match=_direct("user_id"),
+        subject_cols=("user_id",),
+        export=False,
+        erase="activity",
+        secret_cols=("nonce",),
+    ),
     # --- The account itself (removed last) -----------------------------------
     PersonalStore(
         table="users",
@@ -415,6 +431,7 @@ STORES: Tuple[PersonalStore, ...] = (
             "oidc_sub",
             "notification_email",
             "notify_channel_email",
+            "email_muted_kinds",
             "notify_channel_apprise",
             "apprise_urls",
             "password_hash",

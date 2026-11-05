@@ -34,6 +34,8 @@ SECRET_REVEAL = "secret_reveal"
 MCP_KEY_ROTATE = "mcp_key_rotate"
 MCP_KEY_CLEAR = "mcp_key_clear"
 HOUSEHOLD_BACKUP = "household_backup"
+EMAIL_UNSUBSCRIBE = "email_unsubscribe"
+MEMORY_REVIEW = "memory_review"
 
 AUDIT_EVENTS = (
     SIGN_IN,
@@ -58,7 +60,20 @@ AUDIT_EVENTS = (
     MCP_KEY_ROTATE,
     MCP_KEY_CLEAR,
     HOUSEHOLD_BACKUP,
+    EMAIL_UNSUBSCRIBE,
+    MEMORY_REVIEW,
 )
+
+# Settings → My data owner-access log (PRIV-023): owner actions aimed at one member.
+OWNER_ACCESS_LABELS: Dict[str, str] = {
+    ROLE_CHANGE: "Changed your role",
+    ACCOUNT_DISABLE: "Turned your account off or on",
+    YOUTH_CHANGE: "Changed Youth mode on your account",
+    AUTOCONFIRM_CHANGE: "Changed auto-confirm for your requests",
+    AUTOCONFIRM_ADD: "Changed auto-confirm for your requests",
+    PASSWORD_RESET: "Reset your password",
+    MEMORY_REVIEW: "Opened the Youth memory review for your account",
+}
 
 _SECRET_HINTS = ("password", "token", "secret", "api_key", "apikey", "credential", "key_value")
 _MAX_DETAIL_STR = 200

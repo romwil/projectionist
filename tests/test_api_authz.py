@@ -449,6 +449,8 @@ class ApiAuthzTests(unittest.TestCase):
             ("POST", "/api/auth/logout"),
             ("GET", "/api/auth/oidc/authorize"),
             ("GET", "/api/auth/oidc/callback"),
+            ("GET", "/api/mail/unsubscribe"),
+            ("POST", "/api/mail/unsubscribe"),
         }
         self.assertEqual(PUBLIC_HANDSHAKE_EXACT, documented)
         self.assertTrue(is_public_handshake("GET", "/api/auth/plex/pin/42"))

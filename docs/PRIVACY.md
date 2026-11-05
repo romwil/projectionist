@@ -66,10 +66,14 @@ Your chats are private from other members. They are **not** private from the ser
 - **Youth accounts.** Curator memory is **off by default** for Youth accounts: the curator neither reads nor saves it unless the owner turns Youth memory on. When it is on, the owner can read notes saved since that account entered Youth mode in **Admin → Youth review**. Turning **Youth mode** on for an existing account needs the owner to confirm, sends that person an inbox notice, and is written to the security log. It never opens what the curator remembered before. Your profile shows a **Youth** badge while it is on.
 - **The household list** the owner sees includes your notification email, your saved weather place, your Plex account number, and when you last signed in.
 - **Activity.** **Admin → Overview** shows household totals. The owner's tools can also list individual chat turns and plays with the account that made them. Those rows never include what you typed.
+- **Likely picks.** Overview also shows a separate **likely** count: Plex plays of a title Projectionist suggested to that same person in the 7 days before. It never counts as a confirmed play from a pick. Each row is kept 90 days, is in **Download my data**, and is removed by **Delete my data**.
+- **What the owner did.** **Settings → My data** lists the changes the owner made to your account (role, account on or off, Youth mode, auto-confirm, password reset) and each time they opened the Youth memory review. It shows no note text.
 
 ### Inbox, newsletters, and alerts
 
 Projectionist can write to you: a weekly newsletter, the occasional "you have to see this" nudge, a whisper about something new, and a Year in Review. Each lands in your **Inbox**.
+
+Each email has a one-click unsubscribe link. It turns off only that kind of email for you, and it stops working after **Delete my data**.
 
 **How it works.** A newsletter, nudge, or whisper names a title and one reason it connects to something **you** finished. Only your own viewing counts. If you haven't watched enough yet, you get a quieter note or none. Someone else's viewing never stands in.
 
@@ -245,6 +249,7 @@ Account removal runs as one database transaction, so a failure part-way leaves t
 | Plex viewing: session links | No | Yes | Deleted | `watch_session_events` |
 | Plex viewing: sessions | Yes | Yes | Deleted | `watch_sessions` |
 | Plex viewing: play, pause, and stop events | Yes | Yes | Deleted | `watch_events` |
+| Picks you probably watched in Plex within 7 days (likely, not confirmed) | Yes | Yes | Deleted | `pick_watched_likely` |
 | Your linked Plex account on the Plex server | Yes | Yes | Deleted | `watch_source_identities` |
 | Thumbs up or down on curator replies | Yes | Yes | Deleted | `message_feedback` |
 | Chat messages | Yes | Yes | Deleted | `chat_messages` |
@@ -272,6 +277,7 @@ Account removal runs as one database transaction, so a failure part-way leaves t
 | Year in Review | Yes | Yes | Deleted | `year_in_review_snapshots` |
 | AI usage records (token counts, no words) | Yes | Yes | Deleted | `llm_usage` |
 | Private curator voices you made | Yes | Yes | Deleted | `persona_templates` |
+| The key that makes your email unsubscribe links work | No | Yes | Deleted | `mail_unsubscribe_nonces` |
 | Your profile: name, email, sign-in links, and settings | Yes | No | Deleted | `users` |
 | Uploaded profile picture | No | No | Deleted | `DATA_DIR/avatars/<account>.*` |
 <!-- privacy-registry:end -->

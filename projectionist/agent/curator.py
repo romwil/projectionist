@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import uuid
 from typing import Any, AsyncIterator, Dict, List, Mapping, Optional
 
@@ -208,13 +209,128 @@ def _title_card_blocks(registry: ToolRegistry) -> List[Dict[str, Any]]:
     return [{"type": "title_cards", "items": [card.model_dump() for card in items]}]
 
 
+_PICK_NOUN = r"(?:movie|film|show|series|title|pick|documentary|doc|cartoon|episode)"
+_PICK_ADJ = r"(?:\w+\s+){0,3}?"
+_SINGLE_PICK_RE = re.compile(
+    rf"\b(?:just|only)\s+one\b"
+    rf"|\ba\s+single\b"
+    rf"|\bone\s+{_PICK_ADJ}{_PICK_NOUN}\b"
+    rf"|\b(?:pick|recommend|suggest|choose|give|find)\s+(?:me\s+|us\s+)?(?:one|a|an)\s+{_PICK_ADJ}{_PICK_NOUN}\b"
+    rf"|\bwhat\s+(?:{_PICK_NOUN}\s+)?should\s+(?:i|we)\s+watch\b",
+    re.IGNORECASE,
+)
+_BOLD_RE = re.compile(r"\*\*(.+?)\*\*|__(.+?)__")
+_LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]*)\)")
+_TITLE_PATH_RE = re.compile(r"/title/([A-Za-z0-9_:.-]+)")
+
+
+def is_single_pick_request(user_message: str) -> bool:
+    """True when the ask is for one title ("pick a movie", "one show for tonight")."""
+    text = str(user_message or "")
+    if re.search(r"\b(?:some|few|several|list|options|ideas|\d+)\b", text, re.IGNORECASE):
+        return False
+    return bool(_SINGLE_PICK_RE.search(text))
+
+
+def _title_position(haystack: str, title: str) -> Optional[int]:
+    cleaned = str(title or "").strip()
+    if not cleaned:
+        return None
+    match = re.search(rf"(?<!\w){re.escape(cleaned)}(?!\w)", haystack, re.IGNORECASE)
+    return match.start() if match else None
+
+
+def _named_card_order(cards: List[Dict[str, Any]], final_text: str) -> List[int]:
+    """Indexes of ``cards`` the final text names, in mention order.
+
+    Bold or linked titles win: when the answer marks any title that way, plain
+    mentions (often a rejected candidate in the narration) do not count.
+    """
+    text = str(final_text or "")
+    if not text or not cards:
+        return []
+    emphasised: List[tuple[int, str]] = []
+    for match in _BOLD_RE.finditer(text):
+        emphasised.append((match.start(), match.group(1) or match.group(2) or ""))
+    linked_keys: List[tuple[int, str]] = []
+    for match in _LINK_RE.finditer(text):
+        emphasised.append((match.start(), match.group(1)))
+        path = _TITLE_PATH_RE.search(match.group(2) or "")
+        if path:
+            linked_keys.append((match.start(), path.group(1)))
+    for match in _TITLE_PATH_RE.finditer(text):
+        linked_keys.append((match.start(), match.group(1)))
+
+    def positions(source: List[tuple[int, str]]) -> Dict[int, int]:
+        found: Dict[int, int] = {}
+        for index, card in enumerate(cards):
+            title = str(card.get("title") or "")
+            key = str(card.get("rating_key") or "")
+            for pos, chunk in source:
+                if (title and _title_position(chunk, title) is not None) or (key and chunk == key):
+                    if index not in found or pos < found[index]:
+                        found[index] = pos
+        return found
+
+    found = positions(emphasised + linked_keys)
+    if not found:
+        for index, card in enumerate(cards):
+            pos = _title_position(text, str(card.get("title") or ""))
+            if pos is not None:
+                found[index] = pos
+    return [index for index, _ in sorted(found.items(), key=lambda item: item[1])]
+
+
+def bind_cards_to_answer(
+    card_blocks: List[Dict[str, Any]],
+    *,
+    final_text: str = "",
+    user_message: str = "",
+) -> List[Dict[str, Any]]:
+    """PRD-004: the card strip follows the answer, not the search trace.
+
+    Titles the final text names lead, in mention order. A single-pick ask
+    emits exactly one card, the pick, so a discarded candidate never shows.
+    """
+    if not card_blocks:
+        return card_blocks
+    flat: List[tuple[int, Dict[str, Any]]] = [
+        (block_index, item)
+        for block_index, block in enumerate(card_blocks)
+        for item in (block.get("items") or [])
+    ]
+    order = _named_card_order([item for _, item in flat], final_text)
+    if not order:
+        return card_blocks
+    if is_single_pick_request(user_message):
+        block_index, pick = flat[order[0]]
+        block = {key: value for key, value in card_blocks[block_index].items() if key != "items"}
+        block["items"] = [pick]
+        block["primary_count"] = 1
+        return [block]
+    named = set(order)
+    lead_block = flat[order[0]][0]
+    rebuilt: List[Dict[str, Any]] = []
+    for block_index in [lead_block] + [i for i in range(len(card_blocks)) if i != lead_block]:
+        block = card_blocks[block_index]
+        positions = [i for i, (owner, _) in enumerate(flat) if owner == block_index]
+        lead = [i for i in order if i in positions]
+        rest = [i for i in positions if i not in named]
+        rebuilt.append({**block, "items": [flat[i][1] for i in lead + rest]})
+    return rebuilt
+
+
 def _append_title_card_response_blocks(
     blocks: List[Dict[str, Any]],
     registry: ToolRegistry,
     *,
     default_viewport_title: str = "Results",
+    final_text: str = "",
+    user_message: str = "",
 ) -> None:
-    card_blocks = _title_card_blocks(registry)
+    card_blocks = bind_cards_to_answer(
+        _title_card_blocks(registry), final_text=final_text, user_message=user_message
+    )
     if not card_blocks:
         return
     blocks.extend(card_blocks)
@@ -462,7 +578,9 @@ class CuratorAgent:
                 text = await self._fallback_run(registry, user_message)
             blocks: List[Dict[str, Any]] = [{"type": "text", "content": text}]
             if registry.cards:
-                _append_title_card_response_blocks(blocks, registry)
+                _append_title_card_response_blocks(
+                    blocks, registry, final_text=text, user_message=user_message
+                )
             _append_persona_consult_blocks(blocks, registry)
             _append_review_prompt_blocks(blocks, registry)
             _append_review_conflict_blocks(blocks, registry)
@@ -639,7 +757,9 @@ class CuratorAgent:
                 }
             )
         if registry.cards:
-            _append_title_card_response_blocks(blocks, registry)
+            _append_title_card_response_blocks(
+                blocks, registry, final_text=text, user_message=user_message
+            )
         _append_persona_consult_blocks(blocks, registry)
         _append_review_prompt_blocks(blocks, registry)
         _append_review_conflict_blocks(blocks, registry)
@@ -1044,7 +1164,9 @@ async def stream_agent(
         )
 
     if registry.cards:
-        _append_title_card_response_blocks(blocks, registry)
+        _append_title_card_response_blocks(
+            blocks, registry, final_text=final_text, user_message=user_message
+        )
 
     _append_persona_consult_blocks(blocks, registry)
     _append_review_prompt_blocks(blocks, registry)
@@ -1139,7 +1261,9 @@ async def _emit_buffered(
 
     blocks: List[Dict[str, Any]] = [{"type": "text", "content": text}]
     if registry.cards:
-        _append_title_card_response_blocks(blocks, registry)
+        _append_title_card_response_blocks(
+            blocks, registry, final_text=text, user_message=user_message
+        )
     _append_persona_consult_blocks(blocks, registry)
     _append_review_prompt_blocks(blocks, registry)
     _append_review_conflict_blocks(blocks, registry)

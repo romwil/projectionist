@@ -689,7 +689,7 @@ def build_owner_ops_overview(
     try:
         activity = db.local_event_counts(days=7)
     except Exception:  # noqa: BLE001
-        activity = {"chat_turns": 0, "plays": 0, "plays_from_picks": 0}
+        activity = {"chat_turns": 0, "plays": 0, "plays_from_picks": 0, "plays_likely_from_picks": 0}
     return {
         "setup": setup,
         "monday": monday,

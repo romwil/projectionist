@@ -1,7 +1,8 @@
 """Absolute links back into the app for outbound mail (GRO-008).
 
-Links are plain app URLs that need a normal sign-in. Nothing secret goes in a
-URL, so mail logs, proxies, and link scanners learn nothing they could replay.
+Links are plain app URLs that need a normal sign-in. The one exception is the
+unsubscribe link: its signed token can only turn one program off for one
+person (see ``projectionist.mail.unsubscribe``), so replaying it does no harm.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ class MailFooter:
     text: str
     html: str
     list_unsubscribe: Optional[str]
+    one_click: bool = False
 
 
 def lifecycle_footer(
@@ -35,8 +37,13 @@ def lifecycle_footer(
     manage_path: str = NOTIFICATION_SETTINGS_PATH,
     manage_label: str = "Settings → Notifications",
     noun: str = "emails",
+    unsubscribe_url: Optional[str] = None,
 ) -> MailFooter:
-    """Footer for recurring mail: a way back in and a way to stop these emails."""
+    """Footer for recurring mail: a way back in and a way to stop these emails.
+
+    With ``unsubscribe_url`` the stop link is the one-click unsubscribe for this
+    person and program, and the mail carries RFC 8058 one-click headers.
+    """
     base = app_base_url(settings)
     if not base:
         text = (
@@ -45,7 +52,8 @@ def lifecycle_footer(
         )
         return MailFooter(text=text, html=_paragraph(text), list_unsubscribe=None)
     inbox_url = f"{base}{INBOX_PATH}"
-    manage_url = f"{base}{manage_path}"
+    one_click = bool(unsubscribe_url and str(unsubscribe_url).startswith(base))
+    manage_url = str(unsubscribe_url) if one_click else f"{base}{manage_path}"
     text = f"See these in your inbox: {inbox_url}\nStop these {noun}: {manage_url}"
     markup = (
         '<p style="margin:1.5rem 0 0;font-size:0.9rem;color:#555">'
@@ -54,7 +62,7 @@ def lifecycle_footer(
         f'<a href="{html.escape(manage_url, quote=True)}">Stop these {html.escape(noun)}</a>'
         "</p>"
     )
-    return MailFooter(text=text, html=markup, list_unsubscribe=manage_url)
+    return MailFooter(text=text, html=markup, list_unsubscribe=manage_url, one_click=one_click)
 
 
 def _paragraph(text: str) -> str:
