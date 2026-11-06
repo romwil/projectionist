@@ -1,9 +1,19 @@
 ---
-description: Codegraph lives in the git-root DB; do not init worktrees; reconnect MCP after first index
+description: Use Codegraph MCP before Grep or Read on indexed source; git-root DB only; do not init or reindex
 alwaysApply: true
 ---
 
 # Codegraph (local index)
+
+## Use Codegraph first
+
+- Before Grep or Read on indexed source, use the Codegraph MCP tools: `codegraph_explore`, `codegraph_search`, `codegraph_node`, `codegraph_callers`.
+- `codegraph_explore` is the default for “how does X work” and before edits.
+- `codegraph_node` reads an indexed file. `codegraph_search` locates a symbol. `codegraph_callers` lists call sites.
+- Fall back to Read/Grep only for what Codegraph does not index (configs, docs) or when a staleness banner says a file is pending re-index.
+- If there is no `.codegraph/` index, stop calling Codegraph for that project. Do not run `codegraph init` yourself.
+
+## Index constraints
 
 - Canonical DB is the **git root** `.codegraph/codegraph.db`. Do **not** `codegraph init` or `--force` reindex. Worktrees are unindexed unless that file already exists; skip them.
 - Cursor MCP is `codegraph serve --mcp --path ${workspaceFolder}` (user-global). While connected it file-watches and catch-up-syncs. Git hooks (`scripts/git-hooks`, enable with `git config core.hooksPath scripts/git-hooks`) run `codegraph sync --quiet` after merge/commit/checkout when the DB exists.
