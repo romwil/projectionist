@@ -22,6 +22,7 @@ from projectionist.agent.tools import (
     ToolRegistry,
     build_tool_definitions,
 )
+from projectionist.authz import OWNER_ONLY_MESSAGE, YOUTH_MESSAGE
 from projectionist.config_store import FeatureFlags, Settings
 from projectionist.library.db import DEFAULT_LENS_ID, Database
 from projectionist.web.auth import _hash_password, clear_pin_bindings
@@ -368,9 +369,8 @@ class ConfirmRouteTests(_HouseholdApp):
                 client = self._client_for(username)
                 resp = client.post("/api/actions/confirm", json={"token": token, "confirmed": True})
                 self.assertEqual(resp.status_code, 403, (username, resp.text))
-                self.assertEqual(
-                    resp.json()["detail"], "Only the household owner can confirm this action"
-                )
+                expected = YOUTH_MESSAGE if username == "youth" else OWNER_ONLY_MESSAGE
+                self.assertEqual(resp.json()["detail"], expected)
                 self.assertEqual(self.db.peek_pending_action_kind(token), "remove_arr")
             radarr_cls.assert_not_called()
             sonarr_cls.assert_not_called()
