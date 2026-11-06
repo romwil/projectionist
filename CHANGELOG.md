@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Pin oauthlib 4.0.1 in the runtime lock (CVE-2026-49272). A device-code token request now has to carry a real device code.
+
 ## [1.39.0] — 2026-11-05
 
 The trust release. Only the owner adds to Radarr or Sonarr, nobody else's viewing shows up as yours, Youth accounts get real privacy guardrails, the Privacy page says only what the code does, and the server now keeps a daily backup you can restore. Every title can also get a subtitle file ready before you press Play.
