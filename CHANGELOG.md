@@ -2,7 +2,27 @@
 
 ## [Unreleased]
 
-- Pin oauthlib 4.0.1 in the runtime lock (CVE-2026-49272). A device-code token request now has to carry a real device code.
+## [1.39.1] — 2026-11-08
+
+One patch on 1.39.0: the runtime lock pins oauthlib past a token-exchange CVE, remove-from-arr stays owner-only in the tests, and agents reach for Codegraph before grepping indexed source.
+
+### Highlights
+- **Token exchange stays honest.** Device-code token requests need a real device code again — the runtime lock pins oauthlib 4.0.1 for CVE-2026-49272.
+- **Remove stays owner-only.** Crafted remove tokens still refuse non-owners and Youth at execute and confirm, with tests that match those refusals.
+- **Agents read the index first.** The Codegraph rule tells Cursor to explore indexed source before Grep or Read.
+
+### Security
+- Pin `oauthlib==4.0.1` in the runtime lock (CVE-2026-49272). A device-code token request must carry a real device code.
+
+### Changed
+- Agent rule: use Codegraph (`codegraph_explore` / `codegraph_search` / `codegraph_node` / `codegraph_callers`) before Grep or Read on indexed source.
+
+### Fixed
+- Tests expect the current owner-only and Youth refusals on crafted `remove_from_arr` tokens at execute and confirm.
+
+### Verification
+- `./scripts/patch-release.sh 1.39.1` lockstep + `frontend/public/release-notes.json`.
+- CI on the release PR (required checks); known Explore e2e timeout may remain red and is not a merge blocker for this ship.
 
 ## [1.39.0] — 2026-11-05
 
