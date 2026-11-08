@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "projectionist"
-version = "1.39.0"
+version = "1.39.1"
 description = "Projectionist is a private movie-and-TV companion for your Plex household: ask for something to watch, browse your library by mood and connection, and keep everyone's picks their own."
 readme = "README.md"
 license = { text = "AGPL-3.0-only" }
