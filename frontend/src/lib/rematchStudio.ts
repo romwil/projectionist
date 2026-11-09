@@ -6,6 +6,20 @@ export const INVESTIGATORS_NOTE =
 
 export const GOOD_NEWS_NOT_DOWNLOAD = "Good News is a watchlist or gap arrival — never “download complete.”";
 
+export const PATH_CONFLICT_HINT =
+  "Path conflicts: use Repair the miss below — Open Rematch studio scrolls to Rematch studio; fix identity in Plex or Radarr, then Retry. Retry alone won’t clear a path conflict.";
+
+export function tmdbMovieUrl(id: unknown) {
+  const n = Number(id);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  return `https://www.themoviedb.org/movie/${Math.trunc(n)}`;
+}
+
+export function radarrRegisterHasPathConflicts(job: JsParam) {
+  const items = Array.isArray(job?.items) ? job.items : [];
+  return items.some((row: JsParam) => String(row?.outcome || "").toLowerCase() === "path_conflict");
+}
+
 export function looksLikeJsonDump(text: string) {
   const cleaned = String(text || "").trim();
   if (!cleaned) return false;
@@ -73,14 +87,21 @@ export function collectRepairItems(radarrRegister: JsParam, sonarrMissing: JsPar
     const outcome = String(raw.outcome || "").toLowerCase();
     if (status !== "failed" && outcome !== "path_conflict" && outcome !== "failed") continue;
     const kind = outcome === "path_conflict" ? "path_conflict" : "failed";
+    const plexTmdb = raw.plex_tmdb_id ?? raw.tmdb_id;
+    const radarrTmdb = raw.radarr_tmdb_id;
+    const folderPath = String(raw.folder_path || raw.folder || "").trim();
     items.push({
       id: raw.id,
       source: "radarr_register",
       title: raw.title || raw.name || "This title",
+      year: raw.year,
       kind,
       message: humanizeMiss(raw.error || raw.message || ""),
       mediaType: "movie",
-      tmdbId: raw.tmdb_id,
+      tmdbId: plexTmdb,
+      plexTmdbId: plexTmdb,
+      radarrTmdbId: radarrTmdb,
+      folderPath: folderPath || undefined,
       actions: repairActionsFor(kind, "movie"),
     });
   }

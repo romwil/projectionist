@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- Admin → Libraries: path-conflict register runs point to Repair the miss with an **Open Rematch studio** label (scroll only), and Repair rows show Plex/Radarr TMDB ids (linked) plus folder path when the job already knows them.
+
 ## [1.39.1] — 2026-11-08
 
 One patch on 1.39.0: the runtime lock pins oauthlib past a token-exchange CVE, remove-from-arr stays owner-only in the tests, and agents reach for Codegraph before grepping indexed source.
