@@ -1,11 +1,16 @@
-import { collectRepairItems } from "../../lib/rematchStudio.js";
+import { collectRepairItems, tmdbMovieUrl } from "../../lib/rematchStudio.js";
 
 type RepairItem = {
   id?: string | number;
   source?: string;
   title?: string;
+  year?: number | string | null;
+  kind?: string;
   message?: string;
   actions?: string[];
+  plexTmdbId?: string | number | null;
+  radarrTmdbId?: string | number | null;
+  folderPath?: string;
 };
 
 type RepairMissProps = {
@@ -18,6 +23,23 @@ type RepairMissProps = {
   retryingId?: string | number;
   skippingId?: string | number;
 };
+
+function TmdbIdLine({ label, id, testId }: { label: string; id?: string | number | null; testId: string }) {
+  if (id == null || id === "" || Number(id) <= 0) return null;
+  const href = tmdbMovieUrl(id);
+  return (
+    <p className="status status-secondary" data-testid={testId}>
+      {label}:{" "}
+      {href ? (
+        <a href={href} target="_blank" rel="noreferrer">
+          {String(id)}
+        </a>
+      ) : (
+        String(id)
+      )}
+    </p>
+  );
+}
 
 /**
  * Failed search / register rows with rematch, skip, retry, Investigate.
@@ -59,6 +81,25 @@ export default function RepairMiss({
           <p className="status status-secondary" data-testid={`repair-miss-copy-${item.id}`}>
             {item.message}
           </p>
+          {String(item.kind || "").toLowerCase() === "path_conflict" ? (
+            <div data-testid={`repair-miss-identity-${item.id}`}>
+              <TmdbIdLine
+                label="Plex TMDB id"
+                id={item.plexTmdbId}
+                testId={`repair-miss-plex-tmdb-${item.id}`}
+              />
+              <TmdbIdLine
+                label="Radarr TMDB id"
+                id={item.radarrTmdbId}
+                testId={`repair-miss-radarr-tmdb-${item.id}`}
+              />
+              {item.folderPath ? (
+                <p className="status status-secondary" data-testid={`repair-miss-folder-${item.id}`}>
+                  Folder path: {item.folderPath}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <div className="config-actions">
             {(item.actions || []).includes("rematch") ? (
               <button
@@ -67,7 +108,7 @@ export default function RepairMiss({
                 data-testid={`repair-rematch-${item.id}`}
                 onClick={() => onRematch?.(item)}
               >
-                Rematch
+                Open Rematch studio
               </button>
             ) : null}
             {(item.actions || []).includes("retry") ? (
