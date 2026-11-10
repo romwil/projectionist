@@ -3,7 +3,7 @@
 [![License: AGPL-3.0-only](https://img.shields.io/badge/License-AGPL--3.0--only-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Docker Hub](https://img.shields.io/badge/docker-romwil%2Fprojectionist-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/romwil/projectionist)
-[![Version](https://img.shields.io/badge/version-1.39.1-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.39.2-green.svg)](CHANGELOG.md)
 
 **Projectionist is a private movie-and-TV companion for your Plex household: ask for something to watch, browse your library by mood and connection, and keep everyone's picks their own.**
 
