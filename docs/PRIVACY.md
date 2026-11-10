@@ -356,6 +356,7 @@ Fonts and icons are self-hosted. A signed-in browser contacts only the origins y
 | Origin | When | Why |
 |---|---|---|
 | `image.tmdb.org`, `artworks.thetvdb.com`, `assets.fanart.tv` | A poster or backdrop loads | Artwork CDNs; no Plex token or LAN hostname in the URL |
+| `www.themoviedb.org` | Rematch studio / Repair the miss links a title's TMDB page | Public TMDB title page; no API key leaves the browser |
 | `www.youtube.com` / `www.youtube-nocookie.com` | Someone opens a trailer that only has a YouTube source | Trailer playback |
 
 ### Webhooks, logs, and network
