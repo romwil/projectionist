@@ -2,8 +2,21 @@
 
 ## [Unreleased]
 
+## [1.39.2] — 2026-11-10
+
+One patch on 1.39.1: Libraries rematch path conflicts show clearer next steps, TMDB ids, and folder path so you can fix identity without guessing.
+
+### Highlights
+- **Path conflicts say what to do next.** Register runs that hit a path conflict point at Repair the miss, and the control that scrolls there is labeled **Open Rematch studio**.
+- **Repair rows show the ids that matter.** When the job already knows them, you see Plex and Radarr TMDB ids (linked to TMDB) plus the folder path.
+
 ### Changed
 - Admin → Libraries: path-conflict register runs point to Repair the miss with an **Open Rematch studio** label (scroll only), and Repair rows show Plex/Radarr TMDB ids (linked) plus folder path when the job already knows them.
+- Privacy contract: allowlist `www.themoviedb.org` for those public TMDB title links and document it under browser-side third parties.
+
+### Verification
+- `./scripts/patch-release.sh 1.39.2` lockstep + `frontend/public/release-notes.json`.
+- CI on the release PR (required checks); known Explore e2e timeout may remain red and is not a merge blocker for this ship.
 
 ## [1.39.1] — 2026-11-08
 
