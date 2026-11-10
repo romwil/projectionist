@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   GOOD_NEWS_NOT_DOWNLOAD,
   INVESTIGATORS_NOTE,
+  PATH_CONFLICT_HINT,
   collectRepairItems,
   folderColumnCopy,
   humanizeMiss,
@@ -13,7 +14,9 @@ import {
   looksLikeJsonDump,
   plexColumnCopy,
   radarrColumnCopy,
+  radarrRegisterHasPathConflicts,
   repairActionsFor,
+  tmdbMovieUrl,
 } from "./rematchStudio.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -66,6 +69,9 @@ describe("rematch studio copy", () => {
             status: "failed",
             outcome: "path_conflict",
             error: '{"errorCode":"MoviePathValidator"}',
+            plex_tmdb_id: 1388150,
+            radarr_tmdb_id: 111,
+            folder_path: "/movies/Presence (2025)",
           },
         ],
       },
@@ -75,16 +81,60 @@ describe("rematch studio copy", () => {
     assert.equal(items[0].actions.includes("rematch"), true);
     assert.equal(items[1].actions.includes("investigate"), true);
     assert.equal(items[0].message.includes("errorCode"), false);
+    assert.equal(items[0].plexTmdbId, 1388150);
+    assert.equal(items[0].radarrTmdbId, 111);
+    assert.equal(items[0].folderPath, "/movies/Presence (2025)");
+  });
+
+  it("falls back to tmdb_id for Plex when plex_tmdb_id is absent", () => {
+    const items = collectRepairItems(
+      {
+        items: [
+          {
+            id: 5,
+            title: "Presence (2025)",
+            status: "failed",
+            outcome: "path_conflict",
+            error: "Path conflict",
+            tmdb_id: 1388150,
+          },
+        ],
+      },
+      {},
+    );
+    assert.equal(items[0].plexTmdbId, 1388150);
+    assert.equal(items[0].folderPath, undefined);
+  });
+
+  it("builds TMDB movie links and detects register path conflicts", () => {
+    assert.equal(tmdbMovieUrl(1388150), "https://www.themoviedb.org/movie/1388150");
+    assert.equal(tmdbMovieUrl(0), "");
+    assert.equal(tmdbMovieUrl(null), "");
+    assert.equal(
+      radarrRegisterHasPathConflicts({
+        items: [{ outcome: "path_conflict" }],
+      }),
+      true,
+    );
+    assert.equal(radarrRegisterHasPathConflicts({ items: [{ outcome: "failed" }] }), false);
+    assert.match(PATH_CONFLICT_HINT, /Open Rematch studio/);
+    assert.match(PATH_CONFLICT_HINT, /Retry alone/);
   });
 
   it("wires Rematch studio and Repair the miss on Libraries", () => {
     assert.match(libraries, /RematchStudio/);
     assert.match(libraries, /RepairMiss/);
     assert.match(libraries, /data-testid="rematch-studio-card"|RematchStudio/);
+    assert.match(libraries, /radarr-register-path-conflict-hint/);
+    assert.match(libraries, /PATH_CONFLICT_HINT/);
     assert.match(rematch, /data-testid="rematch-studio-card"/);
     assert.match(rematch, /Scan identities/);
     assert.match(repair, /data-testid="repair-miss-card"/);
-    assert.match(repair, /Rematch/);
+    assert.match(repair, /Open Rematch studio/);
+    assert.match(repair, /Plex TMDB id/);
+    assert.match(repair, /Radarr TMDB id/);
+    assert.match(repair, /Folder path/);
+    assert.match(repair, /tmdbMovieUrl/);
     assert.match(repair, /Investigate/);
     assert.match(INVESTIGATORS_NOTE, /FileBot/);
     assert.match(INVESTIGATORS_NOTE, /Plex Match/);

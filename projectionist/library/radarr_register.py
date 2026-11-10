@@ -261,6 +261,9 @@ def _register_batch(
                 "failed",
                 error=classified.message[:400],
                 outcome="path_conflict",
+                plex_tmdb_id=tmdb_id or None,
+                radarr_tmdb_id=classified.occupant_tmdb_id or None,
+                folder_path=classified.folder_path or intended_path or "",
             )
             logger.warning(
                 "Radarr register path conflict tmdb_id=%s title=%r occupant_tmdb=%s path=%s",

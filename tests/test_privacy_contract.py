@@ -135,7 +135,7 @@ ALLOWED_HOSTS = {
     "api.openai.com", "api.anthropic.com", "openrouter.ai", "generativelanguage.googleapis.com",
     "api.together.xyz", "api.mistral.ai", "api.groq.com", "api.deepseek.com",
     "plex.tv", "app.plex.tv", "discover.provider.plex.tv",
-    "api.themoviedb.org", "image.tmdb.org", "api4.thetvdb.com", "artworks.thetvdb.com",
+    "api.themoviedb.org", "www.themoviedb.org", "image.tmdb.org", "api4.thetvdb.com", "artworks.thetvdb.com",
     "webservice.fanart.tv", "assets.fanart.tv", "www.omdbapi.com", "en.wikipedia.org",
     "api.open-meteo.com", "geocoding-api.open-meteo.com", "api.resend.com", "api.opensubtitles.com",
     "www.youtube.com", "www.youtube-nocookie.com", "www.w3.org",

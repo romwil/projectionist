@@ -4,6 +4,10 @@ import useLibraryJobs from "../../hooks/useLibraryJobs.js";
 import InlineAlert from "../../components/InlineAlert";
 import SettingsToggle from "../../components/settings/SettingsToggle";
 import AdminExecutionCard from "../../components/AdminExecutionCard";
+import {
+  PATH_CONFLICT_HINT,
+  radarrRegisterHasPathConflicts,
+} from "../../lib/rematchStudio.js";
 import InvestigateShowCombobox from "../../components/InvestigateShowCombobox";
 import { api } from "../../api/client";
 import RematchStudio from "./RematchStudio";
@@ -371,6 +375,11 @@ export default function LibrariesSection({
             phaseLabels={{ registering: "Registering in Radarr", done: "Registration finished" }}
             onCancel={handleRadarrRegisterCancel}
           />
+          {!radarrRegister?.busy && radarrRegisterHasPathConflicts(radarrRegister) ? (
+            <p className="wizard-note" data-testid="radarr-register-path-conflict-hint">
+              {PATH_CONFLICT_HINT}
+            </p>
+          ) : null}
           <InlineAlert
             type={actionAlert?.area === "radarr-register" ? actionAlert.type : null}
             message={actionAlert?.area === "radarr-register" ? actionAlert.message : null}
