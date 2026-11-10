@@ -306,6 +306,7 @@ class AdminExecutionStore:
         error: str = "",
         outcome: str = "",
         message: str = "",
+        **extra: Any,
     ) -> None:
         now = time.time()
         with self._lock:
@@ -324,6 +325,12 @@ class AdminExecutionStore:
                     row["outcome"] = outcome
                 if message:
                     row["message"] = message
+                for key, value in extra.items():
+                    if key in {"id", "status"}:
+                        continue
+                    if value is None or value == "":
+                        continue
+                    row[key] = value
                 if status in TERMINAL_ITEM_STATUSES:
                     row["ended_ts"] = now
                     row["ended_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
