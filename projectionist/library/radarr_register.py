@@ -90,6 +90,7 @@ def _item_from_preview(row: Mapping[str, Any]) -> Dict[str, Any]:
     return {
         "id": int(row["id"]),
         "title": label,
+        "plex_title": title,
         "year": year,
         "tmdb_id": int(row["tmdb_id"]),
         "status": "queued",
@@ -194,24 +195,26 @@ def _register_batch(
     for row in rows:
         item_id = int(row["id"])
         tmdb_id = int(row["tmdb_id"])
-        title = str(row.get("title") or "")
+        display_title = str(row.get("title") or "")
+        plex_title = str(row.get("plex_title") or display_title)
         year = row.get("year")
         if cancel.is_set():
             store.set_item(item_id, "cancelled", outcome="cancelled")
             cancelled += 1
             continue
-        store.set_item(item_id, "running", message=f"Registering {title}…")
+        store.set_item(item_id, "running", message=f"Registering {display_title}…")
         intended_path = intended_movie_folder(
             root_folder=root_folder,
-            title=title,
+            title=plex_title,
             year=year,
         )
+        occupant = movie_occupying_folder(by_path, intended_path)
         classified = classify_radarr_catalog(
             intended_tmdb_id=tmdb_id,
-            intended_title=title,
+            intended_title=plex_title,
             intended_path=intended_path,
             by_tmdb=by_tmdb.get(tmdb_id),
-            by_path=movie_occupying_folder(by_path, intended_path),
+            by_path=occupant,
         )
         if classified is None:
             try:
@@ -221,7 +224,7 @@ def _register_batch(
                     quality_profile_id=settings.radarr_quality_profile_id,
                     search_for_movie=False,
                 )
-                mark_in_radarr(db, tmdb_id, title=title)
+                mark_in_radarr(db, tmdb_id, title=plex_title)
                 registered += 1
                 store.set_item(item_id, "completed", outcome="registered")
             except Exception as error:  # noqa: BLE001 — continue remaining titles
@@ -232,13 +235,13 @@ def _register_batch(
                 classified = classify_radarr_add_error(
                     error,
                     intended_tmdb_id=tmdb_id,
-                    intended_title=title,
+                    intended_title=plex_title,
                     occupant=occupant,
                 )
             else:
                 continue
         if classified.kind == "already":
-            mark_in_radarr(db, tmdb_id, title=title or classified.occupant_title)
+            mark_in_radarr(db, tmdb_id, title=plex_title or classified.occupant_title)
             already += 1
             store.set_item(
                 item_id,
@@ -248,10 +251,20 @@ def _register_batch(
             )
             continue
         if classified.kind == "path_conflict":
+            from projectionist.library.rematch import soft_identity_match
+
+            occupant_title = str(classified.occupant_title or "")
+            occupant_year = getattr(occupant, "year", None) if occupant is not None else None
+            soft = soft_identity_match(
+                plex_title=plex_title,
+                plex_year=year,
+                radarr_title=occupant_title,
+                radarr_year=occupant_year,
+            )
             failed.append(
                 {
                     "tmdb_id": tmdb_id,
-                    "title": title,
+                    "title": display_title,
                     "error": classified.message,
                     "outcome": "path_conflict",
                 }
@@ -264,21 +277,26 @@ def _register_batch(
                 plex_tmdb_id=tmdb_id or None,
                 radarr_tmdb_id=classified.occupant_tmdb_id or None,
                 folder_path=classified.folder_path or intended_path or "",
+                plex_title=plex_title,
+                radarr_title=occupant_title,
+                radarr_year=occupant_year,
+                same_title=soft,
+                soft_match=soft,
             )
             logger.warning(
                 "Radarr register path conflict tmdb_id=%s title=%r occupant_tmdb=%s path=%s",
                 tmdb_id,
-                title,
+                plex_title,
                 classified.occupant_tmdb_id,
                 classified.folder_path,
             )
             continue
-        failed.append({"tmdb_id": tmdb_id, "title": title, "error": classified.message})
+        failed.append({"tmdb_id": tmdb_id, "title": display_title, "error": classified.message})
         store.set_item(item_id, "failed", error=classified.message[:400], outcome="failed")
         logger.warning(
             "Radarr register-existing failed tmdb_id=%s title=%r: %s",
             tmdb_id,
-            title,
+            plex_title,
             classified.message,
         )
     snap = store.snapshot()
