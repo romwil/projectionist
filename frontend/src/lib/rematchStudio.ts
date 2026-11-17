@@ -1,5 +1,5 @@
 import type {JsonObject, JsParam} from "../api/types";
-/** Copy helpers for Admin → Libraries Rematch studio and Repair the miss (v1.36.2). */
+/** Copy helpers for Admin → Libraries Rematch studio and Repair the miss (v1.36.2+). */
 
 export const INVESTIGATORS_NOTE =
   "FileBot, Plex Match, and Gracenote are not investigators. Compare Plex GUID, Radarr TMDB, and the folder.";
@@ -7,7 +7,13 @@ export const INVESTIGATORS_NOTE =
 export const GOOD_NEWS_NOT_DOWNLOAD = "Good News is a watchlist or gap arrival — never “download complete.”";
 
 export const PATH_CONFLICT_HINT =
-  "Path conflicts: use Repair the miss below — Open Rematch studio scrolls to Rematch studio; fix identity in Plex or Radarr, then Retry. Retry alone won’t clear a path conflict.";
+  "Path conflicts: Repair the miss can re-check after you fix identity, or propose Use Radarr’s / Use Plex’s identity when title and year soft-match. Open Rematch studio scrolls to the studio. Full Plex Fix Match / Radarr Change Movie stay manual — no silent file deletes.";
+
+export const USE_RADARR_CONFIRM =
+  "Update Projectionist’s indexed TMDB id to match Radarr for this title? Plex GUID is unchanged — rematch in Plex if the next library sync should keep Radarr’s identity. Files on disk are not deleted.";
+
+export const USE_PLEX_CONFIRM =
+  "Remove the conflicting movie from Radarr’s catalog (files stay on disk), then register under Plex’s TMDB id without a download search?";
 
 export function tmdbMovieUrl(id: unknown) {
   const n = Number(id);
@@ -18,6 +24,14 @@ export function tmdbMovieUrl(id: unknown) {
 export function radarrRegisterHasPathConflicts(job: JsParam) {
   const items = Array.isArray(job?.items) ? job.items : [];
   return items.some((row: JsParam) => String(row?.outcome || "").toLowerCase() === "path_conflict");
+}
+
+export function pathConflictItemIds(job: JsParam) {
+  const items = Array.isArray(job?.items) ? job.items : [];
+  return items
+    .filter((row: JsParam) => String(row?.outcome || "").toLowerCase() === "path_conflict")
+    .map((row: JsParam) => Number(row?.id))
+    .filter((id: number) => Number.isFinite(id) && id > 0);
 }
 
 export function looksLikeJsonDump(text: string) {
@@ -71,11 +85,26 @@ export function folderColumnCopy(row: JsParam) {
   return String(row?.folder || row?.radarr?.folder_path || "").trim() || "Folder unknown";
 }
 
-export function repairActionsFor(kind: string, mediaType: string = "movie") {
+export function titlesSoftMatch(plexTitle: unknown, radarrTitle: unknown) {
+  const stripYear = (value: unknown) =>
+    String(value || "")
+      .trim()
+      .replace(/\s*\(\d{4}\)\s*$/, "")
+      .toLowerCase();
+  const left = stripYear(plexTitle);
+  const right = stripYear(radarrTitle);
+  return Boolean(left && right && left === right);
+}
+
+export function repairActionsFor(kind: string, mediaType: string = "movie", softMatch: boolean = false) {
   const key = String(kind || "").toLowerCase();
   const media = String(mediaType || "movie").toLowerCase();
   if (key === "needs_plex_id") return ["rematch", "skip"];
-  if (key === "path_conflict" || key === "title_collision") return ["rematch", "skip", "retry"];
+  if (key === "path_conflict") {
+    if (softMatch) return ["use_radarr", "use_plex", "retry", "rematch", "skip"];
+    return ["retry", "rematch", "skip"];
+  }
+  if (key === "title_collision") return ["rematch", "skip", "retry"];
   if (media === "show" || media === "episode" || media === "tv") return ["retry", "investigate", "skip"];
   return ["retry", "skip", "rematch"];
 }
@@ -90,6 +119,10 @@ export function collectRepairItems(radarrRegister: JsParam, sonarrMissing: JsPar
     const plexTmdb = raw.plex_tmdb_id ?? raw.tmdb_id;
     const radarrTmdb = raw.radarr_tmdb_id;
     const folderPath = String(raw.folder_path || raw.folder || "").trim();
+    const softMatch =
+      Boolean(raw.soft_match) ||
+      (kind === "path_conflict" &&
+        titlesSoftMatch(raw.plex_title || raw.title, raw.radarr_title || raw.occupant_title));
     items.push({
       id: raw.id,
       source: "radarr_register",
@@ -102,7 +135,9 @@ export function collectRepairItems(radarrRegister: JsParam, sonarrMissing: JsPar
       plexTmdbId: plexTmdb,
       radarrTmdbId: radarrTmdb,
       folderPath: folderPath || undefined,
-      actions: repairActionsFor(kind, "movie"),
+      softMatch,
+      sameTitle: Boolean(raw.same_title) || softMatch,
+      actions: repairActionsFor(kind, "movie", softMatch),
     });
   }
   const execution = sonarrMissing?.execution || {};
@@ -121,4 +156,12 @@ export function collectRepairItems(radarrRegister: JsParam, sonarrMissing: JsPar
     });
   }
   return items;
+}
+
+export function primaryRepairAction(actions: string[] | undefined) {
+  const list = Array.isArray(actions) ? actions : [];
+  if (list.includes("use_radarr")) return "use_radarr";
+  if (list.includes("retry")) return "retry";
+  if (list.includes("investigate")) return "investigate";
+  return list[0] || "";
 }

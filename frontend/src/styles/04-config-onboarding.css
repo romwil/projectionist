@@ -87,6 +87,69 @@
 .config-section h2 {
   margin-bottom: var(--space-4);
   font-size: var(--text-lg);
+  font-family: var(--font-body);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.config-subsection {
+  margin-top: var(--space-5);
+  display: grid;
+  gap: var(--space-3);
+}
+
+.config-subsection-title {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--text-md, 1rem);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.config-nested-controls {
+  display: grid;
+  gap: var(--space-3);
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--border-subtle);
+}
+
+.config-field {
+  display: grid;
+  gap: var(--space-2);
+  max-width: 20rem;
+}
+
+.repair-miss-toolbar {
+  margin-bottom: var(--space-2);
+}
+
+.repair-miss-row {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.repair-miss-title {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--text-md, 1rem);
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.35;
+}
+
+.admin-execution-item-head {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+.admin-execution-item-identity,
+.admin-execution-item-actions {
+  margin-top: var(--space-2);
 }
 
 .identity-field {
