@@ -15,13 +15,19 @@ from projectionist.library.rematch import (
     KIND_NEEDS_PLEX_ID,
     KIND_PATH_CONFLICT,
     KIND_TITLE_COLLISION,
+    OUTCOME_ADOPTED_PLEX,
+    OUTCOME_ADOPTED_RADARR,
+    adopt_plex_identity,
+    adopt_radarr_identity,
     collect_repair_misses,
     humanize_operator_error,
     looks_like_json_dump,
+    recheck_path_conflicts,
     repair_actions_for,
     retry_register_title,
     scan_identity_mismatches,
     set_skipped,
+    soft_identity_match,
 )
 from projectionist.notifications.good_news import format_good_news
 
@@ -30,6 +36,7 @@ class _CatalogRadarr:
     def __init__(self, movies: Optional[List[RadarrMovie]] = None) -> None:
         self._movies = list(movies or [])
         self.added: List[int] = []
+        self.deleted: List[int] = []
 
     def movies(self) -> List[RadarrMovie]:
         return list(self._movies)
@@ -37,7 +44,24 @@ class _CatalogRadarr:
     def add_movie(self, tmdb_id: int, **kwargs: Any) -> Dict[str, Any]:
         del kwargs
         self.added.append(int(tmdb_id))
+        self._movies = [m for m in self._movies if int(m.tmdb_id or 0) != int(tmdb_id)]
+        self._movies.append(
+            RadarrMovie(
+                id=99,
+                title="Added",
+                year=2000,
+                tmdb_id=int(tmdb_id),
+                monitored=True,
+                has_file=True,
+                folder_path="/movies/Added (2000)",
+            )
+        )
         return {"id": 99, "tmdbId": int(tmdb_id)}
+
+    def delete_movie(self, movie_id: int, **kwargs: Any) -> None:
+        del kwargs
+        self.deleted.append(int(movie_id))
+        self._movies = [m for m in self._movies if int(m.id or 0) != int(movie_id)]
 
 
 def _settings() -> SimpleNamespace:
@@ -103,6 +127,7 @@ class RematchStudioTests(unittest.TestCase):
             self.assertEqual(row["radarr"]["tmdb_id"], 111)
             self.assertIn("retry", row["actions"])
             self.assertIn("rematch", row["actions"])
+            self.assertNotIn("use_radarr", row["actions"])
 
     def test_same_title_path_conflict_is_honest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -288,6 +313,129 @@ class RematchStudioTests(unittest.TestCase):
             repair_actions_for(kind="failed", media_type="show"),
             ["retry", "investigate", "skip"],
         )
+
+
+    def test_soft_match_same_title_offers_identity_actions(self) -> None:
+        self.assertTrue(
+            soft_identity_match(
+                plex_title="Talk to Me",
+                plex_year=2023,
+                radarr_title="Talk to Me (2023)",
+                radarr_year=2023,
+            )
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_items(
+                [_movie(rating_key="rk-ttm", title="Talk to Me", year=2023, tmdb_id=986259)]
+            )
+            catalog = [
+                RadarrMovie(
+                    id=7,
+                    title="Talk to Me",
+                    year=2023,
+                    tmdb_id=1008042,
+                    monitored=True,
+                    has_file=True,
+                    folder_path="/movies/Talk to Me (2023)",
+                )
+            ]
+            row = scan_identity_mismatches(db, _settings(), catalog=catalog)["items"][0]
+            self.assertEqual(row["kind"], KIND_PATH_CONFLICT)
+            self.assertTrue(row["soft_match"])
+            self.assertIn("use_radarr", row["actions"])
+            self.assertIn("use_plex", row["actions"])
+
+    def test_adopt_radarr_updates_index(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_items(
+                [_movie(rating_key="rk-ttm", title="Talk to Me", year=2023, tmdb_id=986259)]
+            )
+            item_id = int(db.library_item_by_tmdb(986259, "movie")["id"])
+            client = _CatalogRadarr(
+                [
+                    RadarrMovie(
+                        id=7,
+                        title="Talk to Me",
+                        year=2023,
+                        tmdb_id=1008042,
+                        monitored=True,
+                        has_file=True,
+                        folder_path="/movies/Talk to Me (2023)",
+                    )
+                ]
+            )
+            with self.assertRaises(ValueError):
+                adopt_radarr_identity(db, _settings(), item_id, confirm=False, client=client)
+            result = adopt_radarr_identity(db, _settings(), item_id, confirm=True, client=client)
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["outcome"], OUTCOME_ADOPTED_RADARR)
+            self.assertEqual(int(db.library_item_by_id(item_id)["tmdb_id"]), 1008042)
+            self.assertEqual(int(db.library_item_by_id(item_id)["in_radarr"] or 0), 1)
+
+    def test_adopt_plex_replaces_radarr_without_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_items(
+                [_movie(rating_key="rk-ttm", title="Talk to Me", year=2023, tmdb_id=986259)]
+            )
+            item_id = int(db.library_item_by_tmdb(986259, "movie")["id"])
+            client = _CatalogRadarr(
+                [
+                    RadarrMovie(
+                        id=7,
+                        title="Talk to Me",
+                        year=2023,
+                        tmdb_id=1008042,
+                        monitored=True,
+                        has_file=True,
+                        folder_path="/movies/Talk to Me (2023)",
+                    )
+                ]
+            )
+            result = adopt_plex_identity(db, _settings(), item_id, confirm=True, client=client)
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["outcome"], OUTCOME_ADOPTED_PLEX)
+            self.assertEqual(client.deleted, [7])
+            self.assertEqual(client.added, [986259])
+            self.assertEqual(int(db.library_item_by_tmdb(986259, "movie")["in_radarr"] or 0), 1)
+
+    def test_recheck_clears_when_identities_now_match(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_items(
+                [_movie(rating_key="rk-moon", title="Moon", year=2009, tmdb_id=17431)]
+            )
+            item_id = int(db.library_item_by_tmdb(17431, "movie")["id"])
+            client = _CatalogRadarr(
+                [
+                    RadarrMovie(
+                        id=1,
+                        title="Moon",
+                        year=2009,
+                        tmdb_id=17431,
+                        monitored=True,
+                        has_file=True,
+                        folder_path="/movies/Moon (2009)",
+                    )
+                ]
+            )
+            result = recheck_path_conflicts(db, _settings(), [item_id], client=client)
+            self.assertEqual(result["cleared"], 1)
+            self.assertEqual(result["remaining"], 0)
+            self.assertTrue(result["results"][0]["ok"])
+
+    def test_repair_actions_soft_match_order(self) -> None:
+        self.assertEqual(
+            repair_actions_for(kind="path_conflict", media_type="movie", soft_match=True),
+            ["use_radarr", "use_plex", "retry", "rematch", "skip"],
+        )
+        self.assertEqual(
+            repair_actions_for(kind="path_conflict", media_type="movie", soft_match=False),
+            ["retry", "rematch", "skip"],
+        )
+
         misses = collect_repair_misses(
             register_items=[
                 {

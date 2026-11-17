@@ -6,6 +6,8 @@
 - Year in Review: poster strips (Movies that stuck, binge, busy month, ratings, recap lists) ship the full title set with Show all / Show less expand; binge previews six by default.
 - Year in Review sticky titles prefer this-year ratings, then true restart-from-start rewatches; multi-device resumes and naked Plex played marks across days no longer count as “Movies that stuck.”
 - Year in Review chapter and recap copy can be rewritten by the household’s default curator agent (plots, persona, safe same-year memory/chat; Youth memory excluded) with an honest template fallback when no LLM is configured.
+- **Admin UX redesign (Phase 1):** Rail regrouped to Overview → Setup → Members → Experience → Health → Advanced; compact density on the Admin shell; Overview keeps Needs attention first with ≤1 gold primary per action group; Libraries becomes a hub with sticky Sync | Arr jobs | Repair | Rematch | Identify | Plex subnav plus an attention strip for path conflicts, failed/stale sync, and Sonarr failures. Absorbs Libraries path-conflict automation (re-check, soft-match Use Radarr’s / Use Plex’s identity with confirm, finished-log actions). Live feature set unchanged; no Hub publish in this change.
+- Admin → Libraries path conflicts: **Re-check** / **Retry** clear rows when Plex and Radarr TMDB already match after an external fix; soft title/year matches offer confirmed **Use Radarr’s identity** (index only) or **Use Plex’s identity** (Radarr catalog replace, files kept). Finished registration log rows get the same actions. Typography and Plex libraries controls align with the Admin type scale (no third visual dialect). Full Plex Fix Match / Radarr Change Movie remain manual — not available via API.
 
 ## [1.39.2] — 2026-11-10
 

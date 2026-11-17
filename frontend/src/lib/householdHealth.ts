@@ -95,11 +95,11 @@ export function buildHouseholdHealthChips(
     },
     {
       id: "library",
-      label: "Indexed",
+      label: "Titles",
       value: total ? total.toLocaleString() : "—",
       detail: stats.last_sync
         ? `${num(stats.movies)} movies · ${num(stats.shows)} shows`
-        : "Run Sync library after Plex is connected",
+        : "Sync your library once Plex is connected",
       to: "/admin/libraries",
       tone: total ? "neutral" : "warn",
     },

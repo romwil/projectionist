@@ -1,15 +1,28 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useConfirmModal } from "../../hooks/useConfirmModal";
 import useLibraryJobs from "../../hooks/useLibraryJobs.js";
+import Button from "../../components/Button";
 import InlineAlert from "../../components/InlineAlert";
 import SettingsToggle from "../../components/settings/SettingsToggle";
 import AdminExecutionCard from "../../components/AdminExecutionCard";
 import {
   PATH_CONFLICT_HINT,
+  USE_PLEX_CONFIRM,
+  USE_RADARR_CONFIRM,
+  pathConflictItemIds,
   radarrRegisterHasPathConflicts,
 } from "../../lib/rematchStudio.js";
+import {
+  LIBRARIES_HUB_TABS,
+  buildLibrariesAttention,
+  countPathConflicts,
+  resolveLibrariesHubTab,
+  type LibrariesHubTabId,
+} from "../../lib/librariesHub.js";
 import InvestigateShowCombobox from "../../components/InvestigateShowCombobox";
 import { api } from "../../api/client";
+import LibrariesHubChrome from "./LibrariesHubChrome";
 import RematchStudio from "./RematchStudio";
 import RepairMiss from "./RepairMiss";
 import {
@@ -141,11 +154,15 @@ export default function LibrariesSection({
     setLibraryHealth,
     setActionFeedback,
   });
+  const { hash } = useLocation();
   const [investigateHint, setInvestigateHint] = useState<any | null>(null);
   const [repairRetryingId, setRepairRetryingId] = useState("");
   const [repairSkippingId, setRepairSkippingId] = useState("");
+  const [repairActingId, setRepairActingId] = useState("");
+  const [repairRechecking, setRepairRechecking] = useState(false);
   const [hiddenRepairs, setHiddenRepairs] = useState<Set<string>>(() => new Set());
   const [sonarrPicked, setSonarrPicked] = useState<Set<string>>(() => new Set());
+  const [activeTab, setActiveTab] = useState<LibrariesHubTabId>(() => resolveLibrariesHubTab(hash));
   const { confirm, modal } = useConfirmModal();
 
   function formatLastSync(lastSync: any) {
@@ -157,12 +174,31 @@ export default function LibrariesSection({
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  function selectHubTab(tabId: LibrariesHubTabId) {
+    setActiveTab(tabId);
+    const panelId = LIBRARIES_HUB_TABS.find((tab) => tab.id === tabId)?.panelId;
+    if (panelId) scrollToId(panelId);
+  }
+
+  useEffect(() => {
+    const tab = resolveLibrariesHubTab(hash);
+    setActiveTab(tab);
+    const panelId = LIBRARIES_HUB_TABS.find((item) => item.id === tab)?.panelId;
+    if (!panelId || typeof document === "undefined") return;
+    // Hash deep-links (rematch-studio, episode-investigate) still honor their anchors.
+    const hashId = String(hash || "").replace(/^#/, "");
+    const target = hashId && document.getElementById(hashId) ? hashId : panelId;
+    requestAnimationFrame(() => scrollToId(target));
+  }, [hash]);
+
   function handleRepairRematch() {
+    setActiveTab("rematch");
     scrollToId("rematch-studio");
   }
 
   function handleRepairInvestigate(item: any) {
     setInvestigateHint({ title: item?.title || "", source: item?.source || "" });
+    setActiveTab("identify");
     scrollToId("episode-investigate");
   }
 
@@ -175,10 +211,13 @@ export default function LibrariesSection({
     if (item?.id == null) return;
     setRepairRetryingId(String(item.id));
     try {
-      await api("/admin/rematch/retry", {
+      const result = await api("/admin/rematch/retry", {
         method: "POST",
         body: JSON.stringify({ item_id: Number(item.id) }),
       });
+      if (result?.ok) {
+        setHiddenRepairs((prev) => new Set(prev).add(`radarr_register-${item.id}`));
+      }
     } catch {
       /* job card + repair copy stay visible */
     } finally {
@@ -189,17 +228,71 @@ export default function LibrariesSection({
   async function handleRepairSkip(item: any) {
     setRepairSkippingId(String(item.id));
     try {
-      if (item?.source === "radarr_register" && item.id != null) {
+      if (item?.id != null) {
         await api("/admin/rematch/skip", {
           method: "POST",
           body: JSON.stringify({ item_id: Number(item.id), skipped: true }),
         });
       }
-      setHiddenRepairs((prev) => new Set(prev).add(`${item.source}-${item.id}`));
+      setHiddenRepairs((prev) => new Set(prev).add(`${item.source || "radarr_register"}-${item.id}`));
     } catch {
       /* keep the row */
     } finally {
       setRepairSkippingId("");
+    }
+  }
+
+  async function handleRepairUseRadarr(item: any) {
+    if (item?.id == null) return;
+    if (
+      !(await confirm({
+        title: "Use Radarr’s identity",
+        body: USE_RADARR_CONFIRM,
+        confirmLabel: "Use Radarr’s identity",
+      }))
+    ) {
+      return;
+    }
+    setRepairActingId(`use-radarr-${item.id}`);
+    try {
+      const result = await api("/admin/rematch/adopt-radarr", {
+        method: "POST",
+        body: JSON.stringify({ item_id: Number(item.id), confirm: true }),
+      });
+      if (result?.ok) {
+        setHiddenRepairs((prev) => new Set(prev).add(`radarr_register-${item.id}`));
+      }
+    } catch {
+      /* keep the row */
+    } finally {
+      setRepairActingId("");
+    }
+  }
+
+  async function handleRepairUsePlex(item: any) {
+    if (item?.id == null) return;
+    if (
+      !(await confirm({
+        title: "Use Plex’s identity",
+        body: USE_PLEX_CONFIRM,
+        confirmLabel: "Use Plex’s identity",
+      }))
+    ) {
+      return;
+    }
+    setRepairActingId(`use-plex-${item.id}`);
+    try {
+      const result = await api("/admin/rematch/adopt-plex", {
+        method: "POST",
+        body: JSON.stringify({ item_id: Number(item.id), confirm: true }),
+      });
+      if (result?.ok) {
+        setHiddenRepairs((prev) => new Set(prev).add(`radarr_register-${item.id}`));
+      }
+    } catch {
+      /* keep the row */
+    } finally {
+      setRepairActingId("");
     }
   }
 
@@ -209,6 +302,33 @@ export default function LibrariesSection({
     );
     return { ...radarrRegister, items };
   }, [radarrRegister, hiddenRepairs]);
+
+  async function handleRecheckAllPathConflicts() {
+    const ids = pathConflictItemIds(repairRegister);
+    setRepairRechecking(true);
+    try {
+      const result = await api("/admin/rematch/recheck", {
+        method: "POST",
+        body: JSON.stringify({ item_ids: ids.length ? ids : null }),
+      });
+      const cleared = Array.isArray(result?.results)
+        ? result.results.filter((row: any) => row?.ok).map((row: any) => row?.item?.id ?? row?.id)
+        : [];
+      if (cleared.length) {
+        setHiddenRepairs((prev) => {
+          const next = new Set(prev);
+          for (const id of cleared) {
+            if (id != null) next.add(`radarr_register-${id}`);
+          }
+          return next;
+        });
+      }
+    } catch {
+      /* keep conflicts visible */
+    } finally {
+      setRepairRechecking(false);
+    }
+  }
 
   const sonarrGroups = useMemo(
     () => sonarrMissingBySeries(sonarrMissing?.result),
@@ -258,8 +378,42 @@ export default function LibrariesSection({
     ? { ...sonarrMissing, execution: { ...(sonarrMissing?.execution || {}), failed: 0, last_error: "" }, error: "" }
     : sonarrMissing;
 
+  const attention = useMemo(
+    () =>
+      buildLibrariesAttention({
+        libraryStats,
+        radarrRegister: repairRegister,
+        sonarrMissing: repairSonarr,
+        activeSyncJob,
+      }),
+    [libraryStats, repairRegister, repairSonarr, activeSyncJob],
+  );
+
+  const hubBadges = useMemo(() => {
+    const pathCount = countPathConflicts(repairRegister);
+    const arrBusy =
+      (radarrRegister?.busy ? 1 : 0) +
+      (sonarrMissing?.busy ? 1 : 0);
+    return {
+      arr: arrBusy || undefined,
+      repair: pathCount || undefined,
+    } as Partial<Record<LibrariesHubTabId, number>>;
+  }, [repairRegister, radarrRegister?.busy, sonarrMissing?.busy]);
+
   return (
-        <>
+        <div className="libraries-hub" data-testid="libraries-hub">
+        <LibrariesHubChrome
+          activeTab={activeTab}
+          attention={attention}
+          badges={hubBadges}
+          onSelectTab={selectHubTab}
+        />
+
+        <div
+          className={`libraries-hub-panel ${activeTab === "sync" ? "is-active-panel" : ""}`}
+          id="libraries-panel-sync"
+          data-testid="libraries-panel-sync"
+        >
         <section className="config-section" data-testid="library-sync-card" id="library-sync">
           <h2>Sync library</h2>
           <p className="wizard-note">
@@ -267,9 +421,14 @@ export default function LibrariesSection({
             are indexed and enriched.
           </p>
           <div className="config-actions">
-            <button type="button" className="primary" data-testid="library-sync-button" onClick={handleLibrarySync} disabled={syncingLibrary}>
+            <Button
+              variant="primary"
+              data-testid="library-sync-button"
+              onClick={handleLibrarySync}
+              disabled={syncingLibrary}
+            >
               {syncingLibrary ? "Syncing…" : "Sync library"}
-            </button>
+            </Button>
           </div>
           {(() => {
             const details = formatSyncJobDetails(activeSyncJob, libraryStats);
@@ -340,7 +499,13 @@ export default function LibrariesSection({
             message={actionAlert?.area === "library-sync" ? actionAlert.message : null}
           />
         </section>
+        </div>
 
+        <div
+          className={`libraries-hub-panel ${activeTab === "arr" ? "is-active-panel" : ""}`}
+          id="libraries-panel-arr"
+          data-testid="libraries-panel-arr"
+        >
         <section className="config-section" data-testid="radarr-register-existing-card">
           <h2>Radarr — register on disk</h2>
           <p className="wizard-note">
@@ -370,12 +535,22 @@ export default function LibrariesSection({
             </button>
           </div>
           <AdminExecutionCard
-            job={radarrRegister}
+            job={repairRegister}
             testId="radarr-register-progress"
             phaseLabels={{ registering: "Registering in Radarr", done: "Registration finished" }}
             onCancel={handleRadarrRegisterCancel}
+            itemActions={{
+              onRematch: handleRepairRematch,
+              onRetry: handleRepairRetry,
+              onSkip: handleRepairSkip,
+              onUseRadarr: handleRepairUseRadarr,
+              onUsePlex: handleRepairUsePlex,
+              retryingId: repairRetryingId,
+              skippingId: repairSkippingId,
+              actingId: repairActingId,
+            }}
           />
-          {!radarrRegister?.busy && radarrRegisterHasPathConflicts(radarrRegister) ? (
+          {!radarrRegister?.busy && radarrRegisterHasPathConflicts(repairRegister) ? (
             <p className="wizard-note" data-testid="radarr-register-path-conflict-hint">
               {PATH_CONFLICT_HINT}
             </p>
@@ -385,16 +560,6 @@ export default function LibrariesSection({
             message={actionAlert?.area === "radarr-register" ? actionAlert.message : null}
           />
         </section>
-
-        <RepairMiss
-          radarrRegister={repairRegister}
-          onRematch={handleRepairRematch}
-          onRetry={handleRepairRetry}
-          onSkip={handleRepairSkip}
-          onInvestigate={handleRepairInvestigate}
-          retryingId={repairRetryingId}
-          skippingId={repairSkippingId}
-        />
 
         <section className="config-section" data-testid="sonarr-find-missing-card">
           <h2>Sonarr — find all missing</h2>
@@ -592,29 +757,72 @@ export default function LibrariesSection({
             message={actionAlert?.area === "sonarr-missing" ? actionAlert.message : null}
           />
         </section>
+        </div>
 
+        <div
+          className={`libraries-hub-panel ${activeTab === "repair" ? "is-active-panel" : ""}`}
+          id="libraries-panel-repair"
+          data-testid="libraries-panel-repair"
+        >
+        <RepairMiss
+          radarrRegister={repairRegister}
+          onRematch={handleRepairRematch}
+          onRetry={handleRepairRetry}
+          onSkip={handleRepairSkip}
+          onInvestigate={handleRepairInvestigate}
+          onUseRadarr={handleRepairUseRadarr}
+          onUsePlex={handleRepairUsePlex}
+          onRecheckAll={handleRecheckAllPathConflicts}
+          retryingId={repairRetryingId}
+          skippingId={repairSkippingId}
+          actingId={repairActingId}
+          rechecking={repairRechecking}
+        />
         <RepairMiss
           sonarrMissing={repairSonarr}
           onRematch={handleRepairRematch}
           onRetry={handleRepairRetry}
           onSkip={handleRepairSkip}
           onInvestigate={handleRepairInvestigate}
+          onUseRadarr={handleRepairUseRadarr}
+          onUsePlex={handleRepairUsePlex}
           retryingId={repairRetryingId}
           skippingId={repairSkippingId}
+          actingId={repairActingId}
         />
+        </div>
 
+        <div
+          className={`libraries-hub-panel ${activeTab === "rematch" ? "is-active-panel" : ""}`}
+          id="libraries-panel-rematch"
+          data-testid="libraries-panel-rematch"
+        >
         <RematchStudio
           onInvestigate={handleRepairInvestigate}
           onHighlight={handleRepairRematch}
         />
+        </div>
 
+        <div
+          className={`libraries-hub-panel ${activeTab === "identify" ? "is-active-panel" : ""}`}
+          id="libraries-panel-identify"
+          data-testid="libraries-panel-identify"
+        >
         <IdentifySettingsPanel />
 
         <InvestigatePanel focusHint={investigateHint} />
+        </div>
 
+        <div
+          className={`libraries-hub-panel ${activeTab === "plex" ? "is-active-panel" : ""}`}
+          id="libraries-panel-plex"
+          data-testid="libraries-panel-plex"
+        >
         <section className="config-section" data-testid="plex-library-mapping">
           <h2>Plex libraries</h2>
-          <p className="wizard-note">Choose which movie and TV libraries Projectionist indexes. Update these if you rename or add libraries in Plex.</p>
+          <p className="wizard-note">
+            Choose which movie and TV libraries Projectionist indexes. Update these if you rename or add libraries in Plex.
+          </p>
           <div className="wizard-actions">
             <CertifiedBadge certified={certifications.plex?.certified} testing={testing === "plex"} serviceId="plex" />
             {!sections.length ? (
@@ -623,121 +831,133 @@ export default function LibrariesSection({
               </button>
             ) : null}
           </div>
-          <div className="section-dropdowns">
-            <label>
-              <span>Movie library</span>
-              <select
-                data-testid="plex-movie-section"
-                value={settings.plex_movie_section ?? ""}
-                onChange={(event) => handleSectionChange?.("plex_movie_section", event.target.value)}
-                disabled={!sections.length}
-              >
-                <option value="">Select a movie library</option>
-                {movieSections.map((section: any) => (
-                  <option key={section.key} value={section.key}>
-                    {section.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>TV library</span>
-              <select
-                data-testid="plex-tv-section"
-                value={settings.plex_tv_section ?? ""}
-                onChange={(event) => handleSectionChange?.("plex_tv_section", event.target.value)}
-                disabled={!sections.length}
-              >
-                <option value="">Select a TV library</option>
-                {tvSections.map((section: any) => (
-                  <option key={section.key} value={section.key}>
-                    {section.title}
-                  </option>
-                ))}
-              </select>
-            </label>
+          <div className="config-subsection">
+            <h3 className="config-subsection-title">Library mapping</h3>
+            <div className="section-dropdowns">
+              <label>
+                <span>Movie library</span>
+                <select
+                  data-testid="plex-movie-section"
+                  value={settings.plex_movie_section ?? ""}
+                  onChange={(event) => handleSectionChange?.("plex_movie_section", event.target.value)}
+                  disabled={!sections.length}
+                >
+                  <option value="">Select a movie library</option>
+                  {movieSections.map((section: any) => (
+                    <option key={section.key} value={section.key}>
+                      {section.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>TV library</span>
+                <select
+                  data-testid="plex-tv-section"
+                  value={settings.plex_tv_section ?? ""}
+                  onChange={(event) => handleSectionChange?.("plex_tv_section", event.target.value)}
+                  disabled={!sections.length}
+                >
+                  <option value="">Select a TV library</option>
+                  {tvSections.map((section: any) => (
+                    <option key={section.key} value={section.key}>
+                      {section.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
           </div>
-          <label className="config-toggle" data-testid="sync-reviews-to-plex">
-            <input
-              type="checkbox"
-              checked={Boolean(settings.sync_reviews_to_plex)}
-              onChange={(event) => handleSyncReviewsToggle?.(event.target.checked)}
+          <div className="config-subsection">
+            <h3 className="config-subsection-title">Ratings &amp; removals</h3>
+            <label className="config-toggle" data-testid="sync-reviews-to-plex">
+              <input
+                type="checkbox"
+                checked={Boolean(settings.sync_reviews_to_plex)}
+                onChange={(event) => handleSyncReviewsToggle?.(event.target.checked)}
+              />
+              <span>Copy star ratings to Plex when you review a title</span>
+            </label>
+            <p className="wizard-note">
+              A 1–5 star review in Projectionist becomes the matching Plex rating (2, 4, 6, 8, or 10).
+            </p>
+            <SettingsToggle
+              id="ask-delete-confirmation"
+              testId="ask-delete-confirmation-toggle"
+              checked={settings?.ask_delete_confirmation !== false}
+              onChange={handleAskDeleteConfirmationToggle}
+              label="Ask me to type DELETE before removing titles"
+              help="Checked means removal still asks you to type DELETE. Uncheck it to skip that step. You still choose index only or full remove in the dialog."
             />
-            <span>Copy star ratings to Plex when you review a title</span>
-          </label>
-          <p className="wizard-note">
-            A 1–5 star review in Projectionist becomes the matching Plex rating (2, 4, 6, 8, or 10).
-          </p>
-          <SettingsToggle
-            id="ask-delete-confirmation"
-            testId="ask-delete-confirmation-toggle"
-            checked={settings?.ask_delete_confirmation !== false}
-            onChange={handleAskDeleteConfirmationToggle}
-            label="Ask me to type DELETE before removing titles"
-            help="Checked means removal still asks you to type DELETE. Uncheck it to skip that step. You still choose index only or full remove in the dialog."
-          />
-          <label className="config-toggle" data-testid="plex-collections-enabled">
-            <input
-              type="checkbox"
-              checked={Boolean(settings?.features?.plex_collections_enabled)}
-              onChange={(event) => handlePlexCollectionsToggle?.(event.target.checked)}
-            />
-            <span>Let the curator propose Plex collections</span>
-          </label>
-          <p className="wizard-note">
-            The curator can suggest creating a collection or adding titles you already own — you always confirm first.
-            Agent / movie-night shelves are tagged with a <code>[Projectionist]</code> prefix and expire after the TTL below.
-          </p>
-          <label className="config-toggle" data-testid="ephemeral-collection-gc-toggle">
-            <input
-              type="checkbox"
-              checked={settings?.features?.ephemeral_collection_gc_enabled !== false}
-              onChange={(event) => handleEphemeralCollectionGcToggle?.(event.target.checked)}
-              disabled={!settings?.features?.plex_collections_enabled}
-            />
-            <span>Auto-clean expired Projectionist movie-night collections</span>
-          </label>
-          <label className="config-toggle" data-testid="ephemeral-collection-gc-dry-run-toggle">
-            <input
-              type="checkbox"
-              checked={Boolean(settings?.features?.ephemeral_collection_gc_dry_run)}
-              onChange={(event) => handleEphemeralCollectionGcDryRunToggle?.(event.target.checked)}
-              disabled={
-                !settings?.features?.plex_collections_enabled ||
-                settings?.features?.ephemeral_collection_gc_enabled === false
-              }
-            />
-            <span>Dry-run only (log what would be deleted)</span>
-          </label>
-          <label>
-            <span>Ephemeral collection TTL (hours)</span>
-            <input
-              type="number"
-              min={1}
-              data-testid="ephemeral-collection-ttl-hours"
-              value={settings?.ephemeral_collection_ttl_hours ?? 168}
-              onChange={(event) => {
-                const next = Math.max(1, Number(event.target.value) || 168);
-                updateSettings({ ephemeral_collection_ttl_hours: next });
-              }}
-              onBlur={() =>
-                persistSettings({
-                  ephemeral_collection_ttl_hours: Math.max(
-                    1,
-                    Number(settings?.ephemeral_collection_ttl_hours) || 168,
-                  ),
-                }).catch((error: any) => setActionFeedback?.("plex-sections", "error", (error as { message?: string }).message))
-              }
-              disabled={!settings?.features?.plex_collections_enabled}
-            />
-          </label>
+          </div>
+          <div className="config-subsection">
+            <h3 className="config-subsection-title">Collections</h3>
+            <label className="config-toggle" data-testid="plex-collections-enabled">
+              <input
+                type="checkbox"
+                checked={Boolean(settings?.features?.plex_collections_enabled)}
+                onChange={(event) => handlePlexCollectionsToggle?.(event.target.checked)}
+              />
+              <span>Let the curator propose Plex collections</span>
+            </label>
+            <p className="wizard-note">
+              The curator can suggest creating a collection or adding titles you already own — you always confirm first.
+              Agent / movie-night shelves are tagged with a <code>[Projectionist]</code> prefix and expire after the TTL below.
+            </p>
+            <div className="config-nested-controls">
+              <label className="config-toggle" data-testid="ephemeral-collection-gc-toggle">
+                <input
+                  type="checkbox"
+                  checked={settings?.features?.ephemeral_collection_gc_enabled !== false}
+                  onChange={(event) => handleEphemeralCollectionGcToggle?.(event.target.checked)}
+                  disabled={!settings?.features?.plex_collections_enabled}
+                />
+                <span>Auto-clean expired Projectionist movie-night collections</span>
+              </label>
+              <label className="config-toggle" data-testid="ephemeral-collection-gc-dry-run-toggle">
+                <input
+                  type="checkbox"
+                  checked={Boolean(settings?.features?.ephemeral_collection_gc_dry_run)}
+                  onChange={(event) => handleEphemeralCollectionGcDryRunToggle?.(event.target.checked)}
+                  disabled={
+                    !settings?.features?.plex_collections_enabled ||
+                    settings?.features?.ephemeral_collection_gc_enabled === false
+                  }
+                />
+                <span>Dry-run only (log what would be deleted)</span>
+              </label>
+              <label className="config-field">
+                <span>Ephemeral collection TTL (hours)</span>
+                <input
+                  type="number"
+                  min={1}
+                  data-testid="ephemeral-collection-ttl-hours"
+                  value={settings?.ephemeral_collection_ttl_hours ?? 168}
+                  onChange={(event) => {
+                    const next = Math.max(1, Number(event.target.value) || 168);
+                    updateSettings({ ephemeral_collection_ttl_hours: next });
+                  }}
+                  onBlur={() =>
+                    persistSettings({
+                      ephemeral_collection_ttl_hours: Math.max(
+                        1,
+                        Number(settings?.ephemeral_collection_ttl_hours) || 168,
+                      ),
+                    }).catch((error: any) => setActionFeedback?.("plex-sections", "error", (error as { message?: string }).message))
+                  }
+                  disabled={!settings?.features?.plex_collections_enabled}
+                />
+              </label>
+            </div>
+          </div>
           <InlineAlert
             type={actionAlert?.area === "plex-sections" ? actionAlert.type : null}
             message={actionAlert?.area === "plex-sections" ? actionAlert.message : null}
           />
         </section>
+        </div>
         {modal}
-        </>
+        </div>
   );
 }
 

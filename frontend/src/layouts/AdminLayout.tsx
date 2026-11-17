@@ -31,6 +31,7 @@ type AdminNavGroup = {
   id: string;
   label: string;
   subtitle?: string | null;
+  hideHeading?: boolean;
   links: AdminNavLink[];
 };
 
@@ -111,7 +112,7 @@ export default function AdminLayout() {
 
   if (!ready) {
     return (
-      <div className="admin-shell" data-testid="admin-layout-loading">
+      <div className="admin-shell" data-density="compact" data-testid="admin-layout-loading">
         <PrimaryTopbar
           showNavToggle
           isOwner={false}
@@ -139,6 +140,7 @@ export default function AdminLayout() {
   return (
     <div
       className={`admin-shell ${wizardMode ? "admin-shell-wizard" : ""}`}
+      data-density="compact"
       data-testid="admin-layout"
     >
       {!wizardMode ? (
@@ -169,19 +171,23 @@ export default function AdminLayout() {
                   key={group.id}
                   className={`admin-rail-group admin-rail-group-${group.id.replace(/^heading-/, "")}`}
                   data-testid={`admin-nav-group-${group.id}`}
-                  aria-labelledby={`admin-rail-${group.id}`}
+                  {...(group.hideHeading
+                    ? { "aria-label": group.label }
+                    : { "aria-labelledby": `admin-rail-${group.id}` })}
                 >
                   {groupIndex > 0 ? (
                     <hr className="admin-rail-group-rule" data-testid={`admin-nav-rule-${group.id}`} />
                   ) : null}
                   <div className="admin-rail-group-band">
-                    <p
-                      id={`admin-rail-${group.id}`}
-                      className="admin-rail-heading"
-                      data-testid={`admin-nav-${group.id}`}
-                    >
-                      {group.label}
-                    </p>
+                    {group.hideHeading ? null : (
+                      <p
+                        id={`admin-rail-${group.id}`}
+                        className="admin-rail-heading"
+                        data-testid={`admin-nav-${group.id}`}
+                      >
+                        {group.label}
+                      </p>
+                    )}
                     <div className="admin-rail-group-links">
                       {group.links.map((item) => {
                         const count = item.badge

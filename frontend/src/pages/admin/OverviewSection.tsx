@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getLiveChannelsStatus } from "../../api/client";
+import Button from "../../components/Button";
 import InlineAlert from "../../components/InlineAlert";
 import OwnerOpsOverview from "../../components/OwnerOpsOverview";
 import SectionHelp from "../../components/SectionHelp";
@@ -83,7 +84,7 @@ export default function OverviewSection({
   });
 
   return (
-    <>
+    <div data-testid="admin-overview-page">
       <OwnerOpsOverview onOpenWizard={setShowWizard ? () => setShowWizard(true) : undefined}>
         <section className="config-section owner-health-hero" data-testid="household-health-hero">
           <div className="dashboard-header owner-health-hero-head">
@@ -94,10 +95,10 @@ export default function OverviewSection({
                 <SectionHelp glossaryKey="Setup" testId="household-health-help" />
               </h2>
               <p className="wizard-note">
-                Stack readiness for the living room — Plex, library, and Live in one place.
+                Is everything ready for movie night? Plex, your library, and Live at a glance.
               </p>
             </div>
-            <a href="#setup-checklist" className="btn-link" data-testid="stewardship-checklist-link">
+            <a href="#setup-checklist" className="btn-link ghost" data-testid="stewardship-checklist-link">
               Setup checklist
             </a>
           </div>
@@ -130,14 +131,14 @@ export default function OverviewSection({
         <section className="config-section" data-testid="live-channels-overview-echo">
           {liveOn ? (
             <>
-              <h2>Live Channels</h2>
+              <h2>Live</h2>
               <p data-testid="live-channels-overview-health">
                 {liveOverviewLine(liveChannelsStatus)}
               </p>
               <LiveJobRail job={liveChannelsStatus?.job} compact />
               <div className="config-actions">
-                <Link to="/admin/live-channels" className="btn-link" data-testid="live-overview-open">
-                  Open Live Channels
+                <Link to="/admin/live-channels" className="btn-link ghost" data-testid="live-overview-open">
+                  Open Live
                 </Link>
               </div>
             </>
@@ -146,7 +147,7 @@ export default function OverviewSection({
               <h2>{tip.title}</h2>
               <p>{tip.body}</p>
               <div className="config-actions">
-                <Link to={tip.ctaTo} className="btn-link" data-testid="live-onboarding-cta">
+                <Link to={tip.ctaTo} className="btn-link ghost" data-testid="live-onboarding-cta">
                   {tip.ctaLabel}
                 </Link>
               </div>
@@ -162,15 +163,14 @@ export default function OverviewSection({
           data is not included.
         </p>
         <div className="config-actions">
-          <button
-            type="button"
+          <Button
+            variant="primary"
             data-testid="my-taste-export-button"
-            className="primary"
             onClick={handleExportMyTaste}
             disabled={exportingTaste}
           >
             {exportingTaste ? "Preparing export…" : "Download taste data"}
-          </button>
+          </Button>
         </div>
         <InlineAlert
           type={actionAlert?.area === "taste-export" ? actionAlert.type : null}
@@ -194,21 +194,20 @@ export default function OverviewSection({
           I&apos;ll store this like a password vault.
         </label>
         <div className="config-actions">
-          <button
-            type="button"
-            className="primary"
+          <Button
+            variant="primary"
             data-testid="admin-backup-snapshot-button"
             onClick={handleDownloadAdminSnapshot}
             disabled={exportingSnapshot || !backupAcknowledged}
           >
             {exportingSnapshot ? "Preparing backup…" : "Download household backup"}
-          </button>
+          </Button>
         </div>
         <InlineAlert
           type={actionAlert?.area === "admin-snapshot" ? actionAlert.type : null}
           message={actionAlert?.area === "admin-snapshot" ? actionAlert.message : null}
         />
       </section>
-    </>
+    </div>
   );
 }
