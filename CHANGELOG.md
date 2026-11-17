@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- Admin → Libraries path conflicts: **Re-check** / **Retry** clear rows when Plex and Radarr TMDB already match after an external fix; soft title/year matches offer confirmed **Use Radarr’s identity** (index only) or **Use Plex’s identity** (Radarr catalog replace, files kept). Finished registration log rows get the same actions. Typography and Plex libraries controls align with the Admin type scale (no third visual dialect). Full Plex Fix Match / Radarr Change Movie remain manual — not available via API.
+
 ## [1.39.2] — 2026-11-10
 
 One patch on 1.39.1: Libraries rematch path conflicts show clearer next steps, TMDB ids, and folder path so you can fix identity without guessing.

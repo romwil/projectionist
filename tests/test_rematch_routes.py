@@ -49,6 +49,9 @@ class RematchRoutesTests(unittest.TestCase):
         self.assertIn("/api/admin/rematch/scan", paths)
         self.assertIn("/api/admin/rematch/skip", paths)
         self.assertIn("/api/admin/rematch/retry", paths)
+        self.assertIn("/api/admin/rematch/recheck", paths)
+        self.assertIn("/api/admin/rematch/adopt-radarr", paths)
+        self.assertIn("/api/admin/rematch/adopt-plex", paths)
         self.assertIn("/api/admin/rematch/repairs", paths)
 
     def test_scan_lists_path_conflict(self) -> None:
