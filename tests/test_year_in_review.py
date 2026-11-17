@@ -33,7 +33,10 @@ from projectionist.year_in_review.chapters import (
     build_monthly_rhythm,
     build_ratings,
     build_top_movies,
+    build_tv_depth,
 )
+from projectionist.watch_tracker.rollups import counts_as_full_finish
+from projectionist.year_in_review.voice import enrich_reel_with_curator_voice
 from projectionist.year_in_review.signals import collect_social_signals
 from projectionist.watch_tracker.rollups import build_year_rollup
 from projectionist.reviews.store import save_review
@@ -318,9 +321,11 @@ def _title(
     title: str,
     completions: int = 1,
     distinct_days: int = 1,
+    full_finish_count: int | None = None,
     media_type: str = "movie",
     last_ms: int = 1_700_000_000_000,
 ) -> TitleRollup:
+    finishes = int(full_finish_count) if full_finish_count is not None else max(1, int(completions))
     return TitleRollup(
         rating_key=rating_key,
         media_type=media_type,  # type: ignore[arg-type]
@@ -332,6 +337,7 @@ def _title(
         confidence={"certain": 0, "likely": 0, "plex_event_only": completions},
         last_completed_at_ms=last_ms,
         distinct_days=distinct_days,
+        full_finish_count=finishes,
     )
 
 
@@ -400,6 +406,50 @@ class YearInReviewChapterPolishTests(unittest.TestCase):
             ],
         )
 
+    def _ingest_full_finish(
+        self,
+        *,
+        rating_key: str,
+        occurred_at_ms: int,
+        source_event_id: str,
+        start_progress_ms: int = 0,
+        client: str = "tv",
+    ) -> None:
+        """Observed sitting that starts near the beginning and crosses completion."""
+        duration = 6_000_000
+        ingest_watch_events(
+            self.db,
+            [
+                WatchEventInput(
+                    source="plex_sessions",
+                    source_event_id=f"{source_event_id}-a",
+                    source_event_kind="session_progress",
+                    server_machine_id="srv",
+                    source_user_key="111",
+                    rating_key=rating_key,
+                    media_type="movie",
+                    occurred_at_ms=occurred_at_ms,
+                    client_key=client,
+                    progress_ms=start_progress_ms,
+                    duration_ms=duration,
+                ),
+                WatchEventInput(
+                    source="plex_sessions",
+                    source_event_id=f"{source_event_id}-b",
+                    source_event_kind="session_stop",
+                    server_machine_id="srv",
+                    source_user_key="111",
+                    rating_key=rating_key,
+                    media_type="movie",
+                    occurred_at_ms=occurred_at_ms + 3_600_000,
+                    client_key=client,
+                    progress_ms=int(duration * 0.95),
+                    duration_ms=duration,
+                    terminal=True,
+                ),
+            ],
+        )
+
     def test_same_day_completion_noise_is_not_a_rewatch(self) -> None:
         year = 2026
         start_ms, _ = year_bounds_ms(year)
@@ -447,24 +497,25 @@ class YearInReviewChapterPolishTests(unittest.TestCase):
         self.assertNotIn("revisited", chapter["body"].lower())
         self.assertNotIn("stuck", chapter["body"].lower())
 
-    def test_distinct_days_count_as_rewatch(self) -> None:
+    def test_played_marks_across_days_are_not_rewatch(self) -> None:
+        """Multi-device / undated Plex played marks on two days ≠ a full rewatch."""
         year = 2026
         start_ms, _ = year_bounds_ms(year)
         self.db.upsert_library_item(
             {
-                "rating_key": "rewatch-1",
+                "rating_key": "noise-1",
                 "media_type": "movie",
-                "title": "Coherence",
-                "year": 2013,
+                "title": "Unfriended",
+                "year": 2014,
             }
         )
         self._ingest_movie(
-            rating_key="rewatch-1",
+            rating_key="noise-1",
             occurred_at_ms=start_ms + 86_400_000,
             source_event_id="day1",
         )
         self._ingest_movie(
-            rating_key="rewatch-1",
+            rating_key="noise-1",
             occurred_at_ms=start_ms + 10 * 86_400_000,
             source_event_id="day2",
         )
@@ -475,12 +526,133 @@ class YearInReviewChapterPolishTests(unittest.TestCase):
         )
         rebuild_watch_derivations(self.db, user_id="owner-1")
         rollup = build_year_rollup(self.db, user_id="owner-1", year=year)
+        noise = next(t for t in rollup.top_movies if t.rating_key == "noise-1")
+        self.assertGreaterEqual(noise.distinct_days, 2)
+        self.assertEqual(noise.full_finish_count, 1)
+        self.assertFalse(noise.is_rewatch)
+        chapter = build_top_movies(rollup, {})
+        assert chapter is not None
+        self.assertNotEqual(chapter["title"], "Movies that stuck")
+        self.assertNotIn("rewatch", chapter["body"].lower())
+
+    def test_restart_from_start_counts_as_rewatch(self) -> None:
+        year = 2026
+        start_ms, _ = year_bounds_ms(year)
+        self.db.upsert_library_item(
+            {
+                "rating_key": "rewatch-1",
+                "media_type": "movie",
+                "title": "Coherence",
+                "year": 2013,
+            }
+        )
+        self._ingest_full_finish(
+            rating_key="rewatch-1",
+            occurred_at_ms=start_ms + 86_400_000,
+            source_event_id="day1",
+            client="tv",
+        )
+        self._ingest_full_finish(
+            rating_key="rewatch-1",
+            occurred_at_ms=start_ms + 10 * 86_400_000,
+            source_event_id="day2",
+            client="tv",
+        )
+        self._ingest_movie(
+            rating_key="filler-1",
+            occurred_at_ms=start_ms + 20 * 86_400_000,
+            source_event_id="fill",
+        )
+        rebuild_watch_derivations(self.db, user_id="owner-1")
+        rollup = build_year_rollup(self.db, user_id="owner-1", year=year)
+        stuck = next(t for t in rollup.top_movies if t.rating_key == "rewatch-1")
+        self.assertGreaterEqual(stuck.full_finish_count, 2)
+        self.assertTrue(stuck.is_rewatch)
         chapter = build_top_movies(rollup, {})
         assert chapter is not None
         self.assertEqual(chapter["title"], "Movies that stuck")
         self.assertIn("Coherence", chapter["body"])
-        self.assertIn("different days", chapter["body"])
-        self.assertIn("not a pause and resume", chapter["body"])
+        self.assertIn("separate times", chapter["body"])
+        self.assertIn("not a multi-device resume", chapter["body"])
+        self.assertGreaterEqual(len(chapter["posters"]), 1)
+
+    def test_mid_title_resume_across_devices_is_not_rewatch(self) -> None:
+        year = 2026
+        start_ms, _ = year_bounds_ms(year)
+        self.db.upsert_library_item(
+            {
+                "rating_key": "resume-1",
+                "media_type": "movie",
+                "title": "The Devils",
+                "year": 1971,
+            }
+        )
+        self._ingest_full_finish(
+            rating_key="resume-1",
+            occurred_at_ms=start_ms + 86_400_000,
+            source_event_id="first",
+            client="tv",
+        )
+        # Later day: pick up mid-title on another device and finish — not a rewatch.
+        self._ingest_full_finish(
+            rating_key="resume-1",
+            occurred_at_ms=start_ms + 12 * 86_400_000,
+            source_event_id="resume",
+            start_progress_ms=3_000_000,
+            client="tablet",
+        )
+        self._ingest_movie(
+            rating_key="filler-2",
+            occurred_at_ms=start_ms + 20 * 86_400_000,
+            source_event_id="fill2",
+        )
+        rebuild_watch_derivations(self.db, user_id="owner-1")
+        rollup = build_year_rollup(self.db, user_id="owner-1", year=year)
+        title = next(t for t in rollup.top_movies if t.rating_key == "resume-1")
+        self.assertEqual(title.full_finish_count, 1)
+        self.assertFalse(title.is_rewatch)
+
+    def test_ratings_preferred_over_rewatch_for_sticky_movies(self) -> None:
+        rollup = _rollup(
+            top_movies=[
+                _title(
+                    rating_key="rewatch-1",
+                    title="Coherence",
+                    completions=3,
+                    distinct_days=3,
+                    full_finish_count=3,
+                ),
+                _title(rating_key="rated-1", title="Sinners", completions=1),
+            ]
+        )
+        chapter = build_top_movies(
+            rollup,
+            {
+                "ratings": [
+                    {
+                        "title": "Sinners",
+                        "rating_key": "rated-1",
+                        "stars": 5,
+                        "source": "projectionist",
+                    }
+                ]
+            },
+        )
+        assert chapter is not None
+        self.assertEqual(chapter["title"], "Movies that stuck")
+        self.assertIn("Sinners", chapter["body"])
+        self.assertIn("ratings", chapter["body"])
+        self.assertEqual(chapter["posters"][0]["title"], "Sinners")
+
+    def test_binge_chapter_includes_full_poster_set(self) -> None:
+        shows = [
+            _title(rating_key=f"s{i}", title=f"Show {i}", media_type="episode", completions=10 - i)
+            for i in range(8)
+        ]
+        chapter = build_tv_depth(_rollup(top_shows=shows, episode_completions=40), {})
+        assert chapter is not None
+        self.assertEqual(len(chapter["posters"]), 8)
+        self.assertEqual(chapter["posters_preview"], 6)
 
     def test_busy_month_lists_concrete_titles(self) -> None:
         titles = [
@@ -503,7 +675,42 @@ class YearInReviewChapterPolishTests(unittest.TestCase):
         self.assertIn("Death Note", chapter["body"])
         self.assertIn("Midway", chapter["body"])
         self.assertIn("And 1 more", chapter["body"])
-        self.assertTrue(chapter["posters"])
+        self.assertEqual(len(chapter["posters"]), 5)
+        self.assertEqual(chapter["posters_preview"], 4)
+
+    def test_full_finish_helper_requires_restart_evidence(self) -> None:
+        self.assertTrue(
+            counts_as_full_finish(
+                prior_full_finishes=0, start_progress_ms=None, duration_ms=None
+            )
+        )
+        self.assertFalse(
+            counts_as_full_finish(
+                prior_full_finishes=1, start_progress_ms=None, duration_ms=6_000_000
+            )
+        )
+        self.assertTrue(
+            counts_as_full_finish(
+                prior_full_finishes=1, start_progress_ms=100_000, duration_ms=6_000_000
+            )
+        )
+        self.assertFalse(
+            counts_as_full_finish(
+                prior_full_finishes=1, start_progress_ms=3_000_000, duration_ms=6_000_000
+            )
+        )
+
+    def test_curator_voice_falls_back_without_llm(self) -> None:
+        reel = {
+            "display_name": "Owner",
+            "chapters": [{"id": "volume", "kind": "volume", "title": "The totals", "body": "Facts."}],
+            "recap": {"headline": "Template"},
+        }
+        out = enrich_reel_with_curator_voice(
+            self.db, Settings(), reel, user_id="owner-1", year=2026
+        )
+        self.assertEqual(out["voice"]["source"], "template")
+        self.assertEqual(out["chapters"][0]["body"], "Facts.")
 
     def test_honesty_copy_is_plain_and_short(self) -> None:
         rollup = _rollup(

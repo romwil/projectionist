@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-REEL_SCHEMA_VERSION = 3
+REEL_SCHEMA_VERSION = 4
 
 HONESTY_FOOTNOTE = (
     "Your Plex plays this year (this account), not the household "

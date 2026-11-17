@@ -74,11 +74,18 @@ class TitleRollup:
     # Distinct UTC calendar days with a finish — not raw completion rows
     # (pause/restart fragments of one sitting collapse to one day).
     distinct_days: int = 1
+    # Completions that look like a full sitting from near the start.
+    # Multi-device resumes and mid-title rewinds do not increment this.
+    full_finish_count: int = 1
 
     @property
     def is_rewatch(self) -> bool:
-        """True only when finishes landed on ≥2 distinct calendar days."""
-        return int(self.distinct_days) >= 2
+        """True when there is clear evidence of a second complete finish.
+
+        Distinct calendar days alone are not enough — multi-device handoffs and
+        rewind/resume can land finishes on two days without a real rewatch.
+        """
+        return int(self.full_finish_count) >= 2
 
 
 @dataclass(frozen=True)
@@ -123,6 +130,7 @@ class YearRollup:
                 "confidence": dict(t.confidence),
                 "last_completed_at_ms": t.last_completed_at_ms,
                 "distinct_days": int(t.distinct_days),
+                "full_finish_count": int(t.full_finish_count),
                 "is_rewatch": t.is_rewatch,
             }
 

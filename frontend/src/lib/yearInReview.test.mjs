@@ -4,15 +4,19 @@ import {
   chapterDurationMs,
   monthBarPercents,
   nextChapterIndex,
+  posterPreviewCount,
   prevChapterIndex,
   recapIsReady,
   recapShareText,
   runConfirmedYirGenerate,
   shareCardText,
   shouldAutoAdvance,
+  visiblePosters,
   yirPath,
   yirPathFromGenerateResult,
+  YIR_BINGE_POSTER_PREVIEW_DEFAULT,
   YIR_DEFAULT_DURATION_MS,
+  YIR_POSTER_PREVIEW_DEFAULT,
   YIR_SELF_GENERATE_PAYLOAD,
 } from "./yearInReview.ts";
 
@@ -66,6 +70,16 @@ describe("yearInReview helpers", () => {
       "/year-in-review/2026",
     );
     assert.equal(yirPathFromGenerateResult({ year: 2026 }), null);
+  });
+
+  it("expands poster strips beyond the preview count", () => {
+    assert.equal(posterPreviewCount({ kind: "tv_depth" }), YIR_BINGE_POSTER_PREVIEW_DEFAULT);
+    assert.equal(posterPreviewCount({ posters_preview: 8 }), 8);
+    assert.equal(posterPreviewCount({ kind: "top_movies" }), YIR_POSTER_PREVIEW_DEFAULT);
+    const posters = Array.from({ length: 7 }, (_, i) => ({ title: `T${i}` }));
+    assert.equal(visiblePosters(posters, 4, false).length, 4);
+    assert.equal(visiblePosters(posters, 4, true).length, 7);
+    assert.equal(visiblePosters(posters, 6, false).length, 6);
   });
 
   it("runs generateYearInReview only after confirm", async () => {

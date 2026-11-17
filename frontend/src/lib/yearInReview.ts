@@ -2,6 +2,31 @@ import type {JsonObject, JsParam} from "../api/types";
 /** Pure helpers for Year in Review cinema reel. */
 
 export const YIR_DEFAULT_DURATION_MS = 5500;
+export const YIR_POSTER_PREVIEW_DEFAULT = 4;
+export const YIR_BINGE_POSTER_PREVIEW_DEFAULT = 6;
+
+/**
+ * How many posters to show before expand, matching chapter kind defaults.
+ * @param {{ kind?: string, posters_preview?: number }|null|undefined} chapter
+ */
+export function posterPreviewCount(chapter: JsParam) {
+  const raw = Number(chapter?.posters_preview);
+  if (Number.isFinite(raw) && raw >= 1) return Math.floor(raw);
+  if (String(chapter?.kind || "") === "tv_depth") return YIR_BINGE_POSTER_PREVIEW_DEFAULT;
+  return YIR_POSTER_PREVIEW_DEFAULT;
+}
+
+/**
+ * Slice posters for the collapsed strip; expand reveals the full chapter set.
+ * @param {unknown} posters
+ * @param {number} preview
+ * @param {boolean} expanded
+ */
+export function visiblePosters(posters: JsParam, preview: number, expanded: boolean) {
+  const rows = Array.isArray(posters) ? posters.filter((item) => item && (item.title || item.poster_url)) : [];
+  if (expanded || preview >= rows.length) return rows;
+  return rows.slice(0, Math.max(0, preview));
+}
 
 /**
  * @param {Array<{ duration_ms?: number }>} chapters

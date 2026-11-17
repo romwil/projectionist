@@ -117,11 +117,19 @@
   display: flex;
   gap: var(--space-3);
   overflow: hidden;
+  flex-wrap: nowrap;
+  margin: 0 0 var(--space-3);
+}
+
+.yir-posters.is-expanded {
+  flex-wrap: wrap;
+  overflow: visible;
 }
 
 .yir-poster {
   width: 72px;
   height: 108px;
+  flex: 0 0 auto;
   border-radius: var(--radius-sm);
   background: var(--surface-2);
   overflow: hidden;
@@ -137,6 +145,30 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.yir-expand {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--accent-ink);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  letter-spacing: 0.02em;
+  padding: 0;
+  margin: 0 0 var(--space-4);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.yir-expand:hover,
+.yir-expand:focus-visible {
+  color: var(--text);
+}
+
+.yir-recap-title-block .yir-expand {
+  margin-top: var(--space-2);
 }
 
 .yir-controls {

@@ -199,7 +199,7 @@ def start_year_in_review_job(
                     year=year,
                     should_stop=cancel.is_set,
                 )
-                snap = build_reel_for_user(db, user_id=str(user_id), year=year, status_hint=status_hint)
+                snap = build_reel_for_user(db, user_id=str(user_id), year=year, status_hint=status_hint, settings=settings)
                 status = snap.get("status")
                 path = f"/year-in-review/{year}" if status in ("ready", "tease") else None
                 payload = {
