@@ -40,7 +40,7 @@ export default function YearInReviewPage() {
   const [paused, setPaused] = useState(false);
   const [shareNote, setShareNote] = useState<any | null>(null);
   const [view, setView] = useState("reel");
-  const [postersExpanded, setPostersExpanded] = useState(false);
+  const [expandedPosterChapterId, setExpandedPosterChapterId] = useState<string | null>(null);
   const cardRef = useRef<any>(null);
   const prefersReducedMotion = usePrefersReducedMotion();
 
@@ -101,15 +101,13 @@ export default function YearInReviewPage() {
 
   const chapters = Array.isArray(reel?.chapters) ? reel.chapters : [];
   const chapter = chapters[index] || null;
+  const chapterId = chapter?.id != null ? String(chapter.id) : null;
+  const postersExpanded = Boolean(chapterId && expandedPosterChapterId === chapterId);
   const showRecap = recapIsReady(reel) && view === "recap";
   const previewCount = posterPreviewCount(chapter);
   const chapterPosters = Array.isArray(chapter?.posters) ? chapter.posters : [];
   const shownPosters = visiblePosters(chapterPosters, previewCount, postersExpanded);
   const canExpandPosters = chapterPosters.length > previewCount;
-
-  useEffect(() => {
-    setPostersExpanded(false);
-  }, [index, view, chapter?.id]);
 
   useEffect(() => {
     if (showRecap || !chapter || !shouldAutoAdvance({ paused, prefersReducedMotion })) {
@@ -139,10 +137,10 @@ export default function YearInReviewPage() {
     }
   }, []);
 
-  const handleShare = useCallback(async () => {
+  async function handleShare() {
     if (!chapter?.shareable) return;
     await copyText(shareCardText(chapter, year));
-  }, [chapter, copyText, year]);
+  }
 
   if (!authReady || reelLoading) {
     return (
@@ -256,7 +254,9 @@ export default function YearInReviewPage() {
                 data-testid="yir-expand-posters"
                 aria-expanded={postersExpanded}
                 onClick={() => {
-                  setPostersExpanded((open) => !open);
+                  setExpandedPosterChapterId((current) =>
+                    current === chapterId ? null : chapterId,
+                  );
                   setPaused(true);
                 }}
               >
