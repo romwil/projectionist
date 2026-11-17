@@ -81,6 +81,7 @@ def _poster(t: TitleRollup) -> Dict[str, Any]:
         "year": t.year,
         "completions": int(t.completions),
         "distinct_days": int(t.distinct_days),
+        "full_finish_count": int(t.full_finish_count),
         "is_rewatch": t.is_rewatch,
         "rating_key": t.rating_key,
     }
@@ -110,7 +111,7 @@ def _peak_named(counts: Mapping[int, int], labels: Sequence[str]) -> Optional[Tu
 
 def build_recap(rollup: YearRollup, ctx: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
     """First-class linger sheet. Omit beats we cannot honestly compute."""
-    del ctx
+    context = dict(ctx or {})
     movie_crown = _genre_crown(rollup.movie_genre_counts)
     tv_crown = _genre_crown(rollup.tv_genre_counts)
     headline = personality_line(
@@ -153,6 +154,7 @@ def build_recap(rollup: YearRollup, ctx: Optional[Mapping[str, Any]] = None) -> 
             rewatch = {
                 "title": title.title,
                 "days": int(title.distinct_days),
+                "full_finish_count": int(title.full_finish_count),
                 "poster_url": title.poster_url,
             }
             break
@@ -175,8 +177,35 @@ def build_recap(rollup: YearRollup, ctx: Optional[Mapping[str, Any]] = None) -> 
             "month": month,
             "label": month_label(month),
             "count": int(count),
-            "titles": [_poster(t) for t in list(rollup.peak_month_titles or [])[:4]],
+            "titles": [_poster(t) for t in list(rollup.peak_month_titles or [])],
         }
+
+    ratings = list(context.get("ratings") or [])
+    rated_movies: List[Dict[str, Any]] = []
+    if ratings:
+        by_key = {str(t.rating_key): t for t in rollup.top_movies}
+        for row in ratings:
+            key = str(row.get("rating_key") or "").strip()
+            matched = by_key.get(key) if key else None
+            if matched is not None:
+                payload = _poster(matched)
+            else:
+                title = str(row.get("title") or "").strip()
+                if not title:
+                    continue
+                payload = {
+                    "title": title,
+                    "poster_url": row.get("poster_url"),
+                    "year": row.get("year"),
+                    "completions": 0,
+                    "distinct_days": 1,
+                    "is_rewatch": False,
+                    "rating_key": key or None,
+                }
+            if row.get("stars") is not None:
+                payload["stars"] = row.get("stars")
+            rated_movies.append(payload)
+    top_movie_rows = rated_movies or [_poster(t) for t in list(rollup.top_movies)]
 
     weekday = None
     wd = _peak_named(dict(rollup.weekday_counts), WEEKDAY_NAMES)
@@ -242,8 +271,8 @@ def build_recap(rollup: YearRollup, ctx: Optional[Mapping[str, Any]] = None) -> 
         "hero": hero,
         "movie_genre": movie_crown,
         "tv_genre": tv_crown,
-        "top_movies": [_poster(t) for t in list(rollup.top_movies)[:5]],
-        "top_shows": [_poster(t) for t in list(rollup.top_shows)[:5]],
+        "top_movies": top_movie_rows,
+        "top_shows": [_poster(t) for t in list(rollup.top_shows)],
         "peak_month": peak_payload,
         "rewatch": rewatch,
         "binge": binge,
