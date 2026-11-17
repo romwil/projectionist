@@ -33,6 +33,8 @@ export default function AdminRoutes() {
         <Route path="logs" element={<LogsPage />} />
         <Route path="scheduled-tasks" element={<Navigate to="/admin/tasks" replace />} />
         <Route path="sync" element={<Navigate to="/admin/libraries" replace />} />
+        <Route path="members" element={<Navigate to="/admin/household" replace />} />
+        <Route path="live" element={<Navigate to="/admin/live-channels" replace />} />
         <Route path=":section" element={<ConfigPage />} />
       </Route>
     </Routes>

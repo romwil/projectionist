@@ -52,6 +52,11 @@
   gap: 0.5rem;
   margin-left: auto;
 }
+/* Needs attention "Open" — secondary link, never gold (VIS-013). */
+.owner-ops-open {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
 .owner-ops-check {
   color: var(--muted);
 }

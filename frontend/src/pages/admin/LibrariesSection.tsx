@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useConfirmModal } from "../../hooks/useConfirmModal";
 import useLibraryJobs from "../../hooks/useLibraryJobs.js";
+import Button from "../../components/Button";
 import InlineAlert from "../../components/InlineAlert";
 import SettingsToggle from "../../components/settings/SettingsToggle";
 import AdminExecutionCard from "../../components/AdminExecutionCard";
@@ -11,8 +13,16 @@ import {
   pathConflictItemIds,
   radarrRegisterHasPathConflicts,
 } from "../../lib/rematchStudio.js";
+import {
+  LIBRARIES_HUB_TABS,
+  buildLibrariesAttention,
+  countPathConflicts,
+  resolveLibrariesHubTab,
+  type LibrariesHubTabId,
+} from "../../lib/librariesHub.js";
 import InvestigateShowCombobox from "../../components/InvestigateShowCombobox";
 import { api } from "../../api/client";
+import LibrariesHubChrome from "./LibrariesHubChrome";
 import RematchStudio from "./RematchStudio";
 import RepairMiss from "./RepairMiss";
 import {
@@ -144,6 +154,7 @@ export default function LibrariesSection({
     setLibraryHealth,
     setActionFeedback,
   });
+  const { hash } = useLocation();
   const [investigateHint, setInvestigateHint] = useState<any | null>(null);
   const [repairRetryingId, setRepairRetryingId] = useState("");
   const [repairSkippingId, setRepairSkippingId] = useState("");
@@ -151,6 +162,7 @@ export default function LibrariesSection({
   const [repairRechecking, setRepairRechecking] = useState(false);
   const [hiddenRepairs, setHiddenRepairs] = useState<Set<string>>(() => new Set());
   const [sonarrPicked, setSonarrPicked] = useState<Set<string>>(() => new Set());
+  const [activeTab, setActiveTab] = useState<LibrariesHubTabId>(() => resolveLibrariesHubTab(hash));
   const { confirm, modal } = useConfirmModal();
 
   function formatLastSync(lastSync: any) {
@@ -162,12 +174,31 @@ export default function LibrariesSection({
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  function selectHubTab(tabId: LibrariesHubTabId) {
+    setActiveTab(tabId);
+    const panelId = LIBRARIES_HUB_TABS.find((tab) => tab.id === tabId)?.panelId;
+    if (panelId) scrollToId(panelId);
+  }
+
+  useEffect(() => {
+    const tab = resolveLibrariesHubTab(hash);
+    setActiveTab(tab);
+    const panelId = LIBRARIES_HUB_TABS.find((item) => item.id === tab)?.panelId;
+    if (!panelId || typeof document === "undefined") return;
+    // Hash deep-links (rematch-studio, episode-investigate) still honor their anchors.
+    const hashId = String(hash || "").replace(/^#/, "");
+    const target = hashId && document.getElementById(hashId) ? hashId : panelId;
+    requestAnimationFrame(() => scrollToId(target));
+  }, [hash]);
+
   function handleRepairRematch() {
+    setActiveTab("rematch");
     scrollToId("rematch-studio");
   }
 
   function handleRepairInvestigate(item: any) {
     setInvestigateHint({ title: item?.title || "", source: item?.source || "" });
+    setActiveTab("identify");
     scrollToId("episode-investigate");
   }
 
@@ -347,8 +378,42 @@ export default function LibrariesSection({
     ? { ...sonarrMissing, execution: { ...(sonarrMissing?.execution || {}), failed: 0, last_error: "" }, error: "" }
     : sonarrMissing;
 
+  const attention = useMemo(
+    () =>
+      buildLibrariesAttention({
+        libraryStats,
+        radarrRegister: repairRegister,
+        sonarrMissing: repairSonarr,
+        activeSyncJob,
+      }),
+    [libraryStats, repairRegister, repairSonarr, activeSyncJob],
+  );
+
+  const hubBadges = useMemo(() => {
+    const pathCount = countPathConflicts(repairRegister);
+    const arrBusy =
+      (radarrRegister?.busy ? 1 : 0) +
+      (sonarrMissing?.busy ? 1 : 0);
+    return {
+      arr: arrBusy || undefined,
+      repair: pathCount || undefined,
+    } as Partial<Record<LibrariesHubTabId, number>>;
+  }, [repairRegister, radarrRegister?.busy, sonarrMissing?.busy]);
+
   return (
-        <>
+        <div className="libraries-hub" data-testid="libraries-hub">
+        <LibrariesHubChrome
+          activeTab={activeTab}
+          attention={attention}
+          badges={hubBadges}
+          onSelectTab={selectHubTab}
+        />
+
+        <div
+          className={`libraries-hub-panel ${activeTab === "sync" ? "is-active-panel" : ""}`}
+          id="libraries-panel-sync"
+          data-testid="libraries-panel-sync"
+        >
         <section className="config-section" data-testid="library-sync-card" id="library-sync">
           <h2>Sync library</h2>
           <p className="wizard-note">
@@ -356,9 +421,14 @@ export default function LibrariesSection({
             are indexed and enriched.
           </p>
           <div className="config-actions">
-            <button type="button" className="primary" data-testid="library-sync-button" onClick={handleLibrarySync} disabled={syncingLibrary}>
+            <Button
+              variant="primary"
+              data-testid="library-sync-button"
+              onClick={handleLibrarySync}
+              disabled={syncingLibrary}
+            >
               {syncingLibrary ? "Syncing…" : "Sync library"}
-            </button>
+            </Button>
           </div>
           {(() => {
             const details = formatSyncJobDetails(activeSyncJob, libraryStats);
@@ -429,7 +499,13 @@ export default function LibrariesSection({
             message={actionAlert?.area === "library-sync" ? actionAlert.message : null}
           />
         </section>
+        </div>
 
+        <div
+          className={`libraries-hub-panel ${activeTab === "arr" ? "is-active-panel" : ""}`}
+          id="libraries-panel-arr"
+          data-testid="libraries-panel-arr"
+        >
         <section className="config-section" data-testid="radarr-register-existing-card">
           <h2>Radarr — register on disk</h2>
           <p className="wizard-note">
@@ -484,21 +560,6 @@ export default function LibrariesSection({
             message={actionAlert?.area === "radarr-register" ? actionAlert.message : null}
           />
         </section>
-
-        <RepairMiss
-          radarrRegister={repairRegister}
-          onRematch={handleRepairRematch}
-          onRetry={handleRepairRetry}
-          onSkip={handleRepairSkip}
-          onInvestigate={handleRepairInvestigate}
-          onUseRadarr={handleRepairUseRadarr}
-          onUsePlex={handleRepairUsePlex}
-          onRecheckAll={handleRecheckAllPathConflicts}
-          retryingId={repairRetryingId}
-          skippingId={repairSkippingId}
-          actingId={repairActingId}
-          rechecking={repairRechecking}
-        />
 
         <section className="config-section" data-testid="sonarr-find-missing-card">
           <h2>Sonarr — find all missing</h2>
@@ -696,7 +757,27 @@ export default function LibrariesSection({
             message={actionAlert?.area === "sonarr-missing" ? actionAlert.message : null}
           />
         </section>
+        </div>
 
+        <div
+          className={`libraries-hub-panel ${activeTab === "repair" ? "is-active-panel" : ""}`}
+          id="libraries-panel-repair"
+          data-testid="libraries-panel-repair"
+        >
+        <RepairMiss
+          radarrRegister={repairRegister}
+          onRematch={handleRepairRematch}
+          onRetry={handleRepairRetry}
+          onSkip={handleRepairSkip}
+          onInvestigate={handleRepairInvestigate}
+          onUseRadarr={handleRepairUseRadarr}
+          onUsePlex={handleRepairUsePlex}
+          onRecheckAll={handleRecheckAllPathConflicts}
+          retryingId={repairRetryingId}
+          skippingId={repairSkippingId}
+          actingId={repairActingId}
+          rechecking={repairRechecking}
+        />
         <RepairMiss
           sonarrMissing={repairSonarr}
           onRematch={handleRepairRematch}
@@ -709,16 +790,34 @@ export default function LibrariesSection({
           skippingId={repairSkippingId}
           actingId={repairActingId}
         />
+        </div>
 
+        <div
+          className={`libraries-hub-panel ${activeTab === "rematch" ? "is-active-panel" : ""}`}
+          id="libraries-panel-rematch"
+          data-testid="libraries-panel-rematch"
+        >
         <RematchStudio
           onInvestigate={handleRepairInvestigate}
           onHighlight={handleRepairRematch}
         />
+        </div>
 
+        <div
+          className={`libraries-hub-panel ${activeTab === "identify" ? "is-active-panel" : ""}`}
+          id="libraries-panel-identify"
+          data-testid="libraries-panel-identify"
+        >
         <IdentifySettingsPanel />
 
         <InvestigatePanel focusHint={investigateHint} />
+        </div>
 
+        <div
+          className={`libraries-hub-panel ${activeTab === "plex" ? "is-active-panel" : ""}`}
+          id="libraries-panel-plex"
+          data-testid="libraries-panel-plex"
+        >
         <section className="config-section" data-testid="plex-library-mapping">
           <h2>Plex libraries</h2>
           <p className="wizard-note">
@@ -856,8 +955,9 @@ export default function LibrariesSection({
             message={actionAlert?.area === "plex-sections" ? actionAlert.message : null}
           />
         </section>
+        </div>
         {modal}
-        </>
+        </div>
   );
 }
 

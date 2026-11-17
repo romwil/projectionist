@@ -13,9 +13,11 @@ test.describe("Admin maintenance dashboard", () => {
     await page.goto("/admin/overview");
     await page.getByTestId("household-health-hero").waitFor();
     await expect(page.getByRole("heading", { name: "Overview", level: 1 })).toBeVisible();
+    await expect(page.getByTestId("owner-needs-attention")).toBeVisible();
     await expect(page.getByTestId("household-health-hero")).toBeVisible();
     await expect(page.getByTestId("wizard-nav")).toHaveCount(0);
     await expect(page.getByTestId("admin-rail")).toBeVisible();
+    await expect(page.getByTestId("admin-layout")).toHaveAttribute("data-density", "compact");
   });
 
   test("/config redirects to admin", async ({ page }) => {
@@ -80,6 +82,7 @@ test.describe("Admin maintenance dashboard", () => {
     await expect(page.getByTestId("persona-preset-grid")).toBeVisible();
 
     await page.goto("/admin/libraries");
+    await expect(page.getByTestId("libraries-hub-subnav")).toBeVisible();
     await expect(page.getByTestId("plex-library-mapping")).toBeVisible();
 
     await page.goto("/admin/advanced");

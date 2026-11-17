@@ -1,61 +1,65 @@
 /** Admin section destinations — desktop rail + adaptive AppNav on `/admin/*`. */
 
 import { ROUTES } from "./backNav.js";
-import type {JsonObject, JsParam} from "../api/types";
+import type { JsParam } from "../api/types";
 
 /**
  * Admin rail items. `kind: "heading"` groups dense destinations without adding
  * routes. Labels stay short so the rail stays scannable.
  */
 export const ADMIN_NAV = [
-  { kind: "heading", id: "heading-setup", label: "Setup" },
+  // Overview sits at the top of the rail without a visible section label.
+  { kind: "heading", id: "heading-overview", label: "Overview", hideHeading: true },
   { to: "/admin/overview", id: "overview", label: "Overview" },
+  { kind: "heading", id: "heading-setup", label: "Setup" },
   { to: "/admin/connections", id: "connections", label: "Connections" },
   { to: "/admin/libraries", id: "libraries", label: "Libraries" },
-  { to: "/admin/persona", id: "persona", label: "Persona" },
+  { kind: "heading", id: "heading-members", label: "Members" },
   { to: "/admin/household", id: "household", label: "Members" },
+  { to: "/admin/access", id: "access", label: "Access" },
+  { to: "/admin/youth", id: "youth", label: "Youth" },
   { kind: "heading", id: "heading-experience", label: "Experience" },
-  { to: "/admin/live-channels", id: "live-channels", label: "Live Channels" },
+  { to: "/admin/live-channels", id: "live-channels", label: "Live" },
   { to: "/admin/lobby", id: "lobby", label: "Lobby" },
   { to: "/admin/holidays", id: "holidays", label: "Holidays" },
   { to: "/admin/seerr", id: "seerr", label: "Seerr" },
-  { kind: "heading", id: "heading-platform", label: "Platform" },
+  { kind: "heading", id: "heading-health", label: "Health" },
   { to: "/admin/tasks", id: "tasks", label: "Tasks" },
-  { to: "/admin/taxonomy", id: "taxonomy", label: "Library knowledge" },
   { to: "/admin/health", id: "health", label: "Health", badge: "openIssues" },
-  { kind: "heading", id: "heading-comms", label: "Communications" },
+  { to: "/admin/taxonomy", id: "taxonomy", label: "Library knowledge" },
+  { to: "/admin/logs", id: "logs", label: "Logs" },
+  { kind: "heading", id: "heading-advanced", label: "Advanced" },
+  { to: "/admin/persona", id: "persona", label: "Persona" },
   { to: "/admin/mail", id: "mail", label: "Mail" },
   { to: "/admin/newsletters", id: "newsletters", label: "Newsletters" },
-  { kind: "heading", id: "heading-system", label: "System" },
-  { to: "/admin/access", id: "access", label: "Access" },
-  { to: "/admin/youth", id: "youth", label: "Youth" },
   {
     to: "/admin/advanced",
     id: "advanced",
     label: "Advanced",
     subtitle: "Integrations & keys",
   },
-  { to: "/admin/logs", id: "logs", label: "Logs" },
 ];
 
-/** Link ids for solo installs (`multi_user_enabled=false`). */
+/** Link ids for solo installs (`multi_user_enabled=false`), in rail order. */
 export const SINGLE_USER_ADMIN_LINK_IDS = [
   "overview",
   "connections",
   "libraries",
-  "persona",
   "lobby",
   "live-channels",
   "tasks",
-  "advanced",
   "logs",
+  "persona",
+  "advanced",
 ];
 
-const SINGLE_USER_SETUP_IDS = ["overview", "connections", "libraries", "persona"];
+const SINGLE_USER_OVERVIEW_IDS = ["overview"];
+const SINGLE_USER_SETUP_IDS = ["connections", "libraries"];
 const SINGLE_USER_EXPERIENCE_IDS = ["lobby", "live-channels"];
-const SINGLE_USER_PLATFORM_IDS = ["tasks", "advanced", "logs"];
+const SINGLE_USER_HEALTH_IDS = ["tasks", "logs"];
+const SINGLE_USER_ADVANCED_IDS = ["persona", "advanced"];
 
-/** Copy grouping Lobby + Live Channels for living-room setup. */
+/** Copy grouping Lobby + Live for living-room setup. */
 export const ADMIN_EXPERIENCE_SUBTITLE =
   "On the wall — lobby kiosk & live TV. See Help → Living room.";
 
@@ -68,14 +72,17 @@ function pickAdminItems(ids: JsParam) {
 }
 
 /**
- * Solo-install admin rail — Setup / Experience / Platform (~9 links).
+ * Solo-install admin rail — same groups as multi-user, minus Members and the
+ * dense Health / Advanced destinations (~9 links).
  * @param {{ seerrEnabled?: boolean }} [opts]
  */
 function buildSingleUserAdminNav({ seerrEnabled = false }: JsParam = {}) {
-  const platformIds = [...SINGLE_USER_PLATFORM_IDS];
-  if (seerrEnabled) platformIds.push("seerr");
+  const experienceIds = [...SINGLE_USER_EXPERIENCE_IDS];
+  if (seerrEnabled) experienceIds.push("seerr");
 
   return [
+    { kind: "heading", id: "heading-overview", label: "Overview", hideHeading: true },
+    ...pickAdminItems(SINGLE_USER_OVERVIEW_IDS),
     { kind: "heading", id: "heading-setup", label: "Setup" },
     ...pickAdminItems(SINGLE_USER_SETUP_IDS),
     {
@@ -84,9 +91,11 @@ function buildSingleUserAdminNav({ seerrEnabled = false }: JsParam = {}) {
       label: "Experience",
       subtitle: ADMIN_EXPERIENCE_SUBTITLE,
     },
-    ...pickAdminItems(SINGLE_USER_EXPERIENCE_IDS),
-    { kind: "heading", id: "heading-platform", label: "Platform" },
-    ...pickAdminItems(platformIds),
+    ...pickAdminItems(experienceIds),
+    { kind: "heading", id: "heading-health", label: "Health" },
+    ...pickAdminItems(SINGLE_USER_HEALTH_IDS),
+    { kind: "heading", id: "heading-advanced", label: "Advanced" },
+    ...pickAdminItems(SINGLE_USER_ADVANCED_IDS),
   ];
 }
 
@@ -107,7 +116,7 @@ export function adminNavLinks(opts: JsParam = {}) {
 /**
  * Admin rail as ordered groups.
  * @param {{ multiUserEnabled?: boolean, seerrEnabled?: boolean }} [opts]
- * @returns {Array<{ id: string, label: string, subtitle?: string, links: Array<object> }>}
+ * @returns {Array<{ id: string, label: string, subtitle?: string, hideHeading?: boolean, links: Array<object> }>}
  */
 export function adminNavGroups(opts: JsParam = {}) {
   const groups: JsParam[] = [];
@@ -118,6 +127,7 @@ export function adminNavGroups(opts: JsParam = {}) {
         id: item.id,
         label: item.label,
         subtitle: item.subtitle || null,
+        hideHeading: item.hideHeading === true,
         links: [] as JsParam[],
       };
       groups.push(current);
@@ -148,6 +158,7 @@ export function buildAdminDrawerItems(opts: JsParam = {}) {
         id: `admin-${item.id}`,
         label: item.label,
         subtitle: item.subtitle || null,
+        ...(item.hideHeading ? { hideHeading: true } : {}),
         testId: `app-nav-admin-${item.id}`,
       };
     }

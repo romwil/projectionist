@@ -36,7 +36,7 @@ describe("admin chrome — Live Channels type and buttons", () => {
 
   it("wraps Overview / Connections card primaries in service-card-actions", () => {
     assert.match(configPage, /className="service-card-actions"/);
-    assert.match(configPage, /className="btn-link" data-testid="live-overview-open"/);
+    assert.match(configPage, /className="btn-link ghost" data-testid="live-overview-open"/);
     assert.match(configPage, /data-testid="verify-llm"/);
     assert.match(configPage, /className="primary"[\s\S]*?data-testid="library-sync-button"/);
   });
