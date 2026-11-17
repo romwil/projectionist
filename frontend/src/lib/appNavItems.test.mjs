@@ -129,7 +129,7 @@ describe("buildAppNavItems", () => {
     ]);
     const adminIdx = ids.indexOf("heading-admin");
     assert.ok(adminIdx > 0);
-    assert.equal(ids[adminIdx + 1], "admin-heading-setup");
+    assert.equal(ids[adminIdx + 1], "admin-heading-overview");
     assert.ok(ids.includes("admin-overview"));
     assert.ok(ids.includes("admin-health"));
     assert.equal(
@@ -159,6 +159,10 @@ describe("buildAppNavItems", () => {
     });
     const adminLinks = items.filter((item) => item.kind === "admin");
     assert.equal(adminLinks.length, 9);
+    assert.equal(
+      items.some((item) => item.id === "admin-heading-members"),
+      false,
+    );
     assert.equal(adminLinks.some((item) => item.id === "admin-household"), false);
     assert.equal(adminLinks.some((item) => item.id === "admin-issues"), false);
     assert.equal(adminLinks.some((item) => item.id === "admin-house"), false);

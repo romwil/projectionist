@@ -78,13 +78,14 @@ const SECTION_TITLES: Record<string, string> = {
   connections: "Connections",
   libraries: "Libraries",
   persona: "Persona",
-  household: "Household",
+  household: "Members",
   seerr: "Seerr",
-  "live-channels": "Live Channels",
+  "live-channels": "Live",
   advanced: "Advanced",
 };
 
 const SECTION_LEADS: Record<string, string> = {
+  libraries: "Sync, Arr jobs, repair, and Plex mapping in one hub.",
   advanced: "Integrations & keys",
 };
 
