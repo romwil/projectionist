@@ -23,6 +23,7 @@ PURPOSE_LOGLINE = "logline"
 PURPOSE_EMBED = "embed"
 PURPOSE_PERSONA_CONSULT = "persona_consult"
 PURPOSE_SEASONAL_CURATION = "seasonal_curation"
+PURPOSE_YEAR_IN_REVIEW = "year_in_review"
 
 VALID_PURPOSES = frozenset(
     {
@@ -34,6 +35,7 @@ VALID_PURPOSES = frozenset(
         PURPOSE_EMBED,
         PURPOSE_PERSONA_CONSULT,
         PURPOSE_SEASONAL_CURATION,
+        PURPOSE_YEAR_IN_REVIEW,
     }
 )
 

@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+- Year in Review: poster strips (Movies that stuck, binge, busy month, ratings, recap lists) ship the full title set with Show all / Show less expand; binge previews six by default.
+- Year in Review sticky titles prefer this-year ratings, then true restart-from-start rewatches; multi-device resumes and naked Plex played marks across days no longer count as “Movies that stuck.”
+- Year in Review chapter and recap copy can be rewritten by the household’s default curator agent (plots, persona, safe same-year memory/chat; Youth memory excluded) with an honest template fallback when no LLM is configured.
+
 ## [1.39.2] — 2026-11-10
 
 One patch on 1.39.1: Libraries rematch path conflicts show clearer next steps, TMDB ids, and folder path so you can fix identity without guessing.

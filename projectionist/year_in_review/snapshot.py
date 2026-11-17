@@ -7,12 +7,14 @@ import logging
 import time
 from typing import Any, Dict, List, Optional
 
+from projectionist.config_store import Settings
 from projectionist.library.db import Database
 from projectionist.watch_tracker.rollups import build_year_rollup
 from projectionist.year_in_review import CONFIDENCE_NOTE, HONESTY_FOOTNOTE, REEL_SCHEMA_VERSION
 from projectionist.year_in_review.chapters import assemble_chapters
 from projectionist.year_in_review.recap import build_recap
 from projectionist.year_in_review.signals import collect_social_signals
+from projectionist.year_in_review.voice import enrich_reel_with_curator_voice
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +120,7 @@ def build_reel_for_user(
     user_id: str,
     year: int,
     status_hint: str = "ready",
+    settings: Optional[Settings] = None,
 ) -> Dict[str, Any]:
     """Compute rollup + chapters and persist a snapshot."""
     user_row = db.get_user(user_id)
@@ -162,4 +165,8 @@ def build_reel_for_user(
         "chapters": chapters,
         "path": f"/year-in-review/{int(year)}",
     }
+    if status in ("ready", "tease") and chapters:
+        enrich_reel_with_curator_voice(
+            db, settings, reel, user_id=user_id, year=int(year)
+        )
     return save_snapshot(db, user_id=user_id, year=year, status=status, reel=reel)

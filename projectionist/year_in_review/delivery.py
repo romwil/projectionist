@@ -106,7 +106,9 @@ def deliver_year_in_review(
             from projectionist.watch_tracker.year_backfill import backfill_member_year_history
 
             backfill_member_year_history(db, settings, user_id=uid, year=year)
-            snap = build_reel_for_user(db, user_id=uid, year=year, status_hint=status_hint)
+            snap = build_reel_for_user(
+                db, user_id=uid, year=year, status_hint=status_hint, settings=settings
+            )
         except Exception:  # noqa: BLE001
             logger.exception("YIR generate failed for %s", uid)
             continue

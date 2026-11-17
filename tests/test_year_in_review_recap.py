@@ -33,6 +33,7 @@ def _title(**overrides: object) -> TitleRollup:
         confidence={"plex_event_only": 1},
         last_completed_at_ms=1,
         distinct_days=1,
+        full_finish_count=1,
     )
     base.update(overrides)
     return TitleRollup(**base)  # type: ignore[arg-type]
@@ -87,18 +88,25 @@ class RecapBuilderTests(unittest.TestCase):
         self.assertFalse(any(item["id"] == "hours" for item in recap["hero"]))
         self.assertEqual(recap["hours_note"], "")
 
-    def test_rewatch_only_on_distinct_days(self) -> None:
+    def test_rewatch_requires_full_finish_evidence(self) -> None:
         recap = build_recap(
             _rollup(
                 top_movies=[
-                    _title(distinct_days=1, completions=2, title="Noise"),
-                    _title(rating_key="m2", title="Coherence", distinct_days=3, completions=3),
+                    _title(distinct_days=2, completions=2, full_finish_count=1, title="Noise"),
+                    _title(
+                        rating_key="m2",
+                        title="Coherence",
+                        distinct_days=3,
+                        completions=3,
+                        full_finish_count=3,
+                    ),
                 ]
             )
         )
         assert recap["rewatch"] is not None
         self.assertEqual(recap["rewatch"]["title"], "Coherence")
-        self.assertEqual(recap["rewatch"]["days"], 3)
+        self.assertEqual(recap["rewatch"]["full_finish_count"], 3)
+        self.assertFalse(_title(distinct_days=2, completions=2, full_finish_count=1).is_rewatch)
 
     def test_format_hours_and_ranked_names(self) -> None:
         self.assertEqual(format_catalog_hours(60), "1")

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 
 from projectionist.watch_tracker.models import TitleRollup, YearRollup
 from projectionist.watch_tracker.rollups import month_label, peak_month
@@ -11,6 +11,9 @@ from projectionist.year_in_review.recap import format_catalog_hours, ranked_name
 ChapterBuilder = Callable[[YearRollup, Dict[str, Any]], Optional[Dict[str, Any]]]
 
 MAX_CHAPTERS = 12
+# Default visible posters before expand; binge shows a few more up front.
+POSTER_PREVIEW = 4
+BINGE_POSTER_PREVIEW = 6
 BUSY_MONTH_TITLE_SHOW = 4
 
 
@@ -22,17 +25,20 @@ def _chapter(
     body: str,
     stat_lines: Optional[List[str]] = None,
     posters: Optional[List[Dict[str, Any]]] = None,
+    posters_preview: int = POSTER_PREVIEW,
     shareable: bool = True,
     duration_ms: int = 5500,
     hero: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
+    poster_list = list(posters or [])
     payload = {
         "id": id,
         "kind": kind,
         "title": title,
         "body": body,
         "stat_lines": list(stat_lines or []),
-        "posters": list(posters or []),
+        "posters": poster_list,
+        "posters_preview": max(1, int(posters_preview)),
         "shareable": shareable,
         "duration_ms": duration_ms,
     }
@@ -48,10 +54,26 @@ def _poster_from_title(t: Any) -> Optional[Dict[str, Any]]:
     title = getattr(t, "title", None) or (t.get("title") if isinstance(t, dict) else None)
     if not title:
         return None
+    rating_key = getattr(t, "rating_key", None) if not isinstance(t, dict) else t.get("rating_key")
     return {
         "title": str(title),
         "poster_url": url,
         "year": getattr(t, "year", None) if not isinstance(t, dict) else t.get("year"),
+        "rating_key": str(rating_key) if rating_key else None,
+    }
+
+
+def _poster_from_rating(row: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+    title = str(row.get("title") or "").strip()
+    if not title:
+        return None
+    return {
+        "title": title,
+        "poster_url": row.get("poster_url"),
+        "year": row.get("year"),
+        "rating_key": str(row.get("rating_key") or "") or None,
+        "stars": row.get("stars"),
+        "source": row.get("source"),
     }
 
 
@@ -160,30 +182,85 @@ def build_tv_genre(rollup: YearRollup, ctx: Dict[str, Any]) -> Optional[Dict[str
     )
 
 
+def _match_rated_movies(
+    rollup: YearRollup, ratings: Sequence[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """Prefer this-year ratings as the sticky-title signal."""
+    by_key = {str(t.rating_key): t for t in rollup.top_movies}
+    by_title = {str(t.title).strip().lower(): t for t in rollup.top_movies if t.title}
+    out: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in ratings:
+        if str(row.get("source") or "") not in ("projectionist", "plex"):
+            continue
+        key = str(row.get("rating_key") or "").strip()
+        title = str(row.get("title") or "").strip()
+        matched = by_key.get(key) if key else None
+        if matched is None and title:
+            matched = by_title.get(title.lower())
+        poster = _poster_from_title(matched) if matched else _poster_from_rating(dict(row))
+        if not poster:
+            continue
+        identity = str(poster.get("rating_key") or poster.get("title") or "")
+        if identity in seen:
+            continue
+        seen.add(identity)
+        if row.get("stars") is not None:
+            poster["stars"] = row.get("stars")
+        poster["source"] = row.get("source")
+        out.append(poster)
+    return out
+
+
 def build_top_movies(rollup: YearRollup, ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    if not rollup.top_movies:
+    if not rollup.top_movies and not (ctx.get("ratings") or []):
         return None
+
+    ratings = list(ctx.get("ratings") or [])
+    rated_posters = _match_rated_movies(rollup, ratings)
+    if rated_posters:
+        top = rated_posters[0]
+        stars = top.get("stars")
+        star_bit = f" ({stars}★)" if stars is not None else ""
+        body = (
+            f"{top['title']}{star_bit} topped the ratings you left this year — "
+            f"the clearest signal for movies that stuck."
+        )
+        extras = rated_posters[1:]
+        if extras:
+            body += f" Also in the favorites: {_join_titles([str(p['title']) for p in extras])}."
+        return _chapter(
+            id="top-movies",
+            kind="top_movies",
+            title="Movies that stuck",
+            body=body,
+            posters=rated_posters,
+            posters_preview=POSTER_PREVIEW,
+        )
+
     rewatched = [t for t in rollup.top_movies if t.is_rewatch]
     if rewatched:
         top = rewatched[0]
-        extras = [t for t in rewatched[1:4]]
+        extras = list(rewatched[1:])
+        finishes = int(top.full_finish_count)
         body = (
-            f"You finished {top.title} on {top.distinct_days} different days "
-            f"this year — a real rewatch, not a pause and resume."
+            f"You finished {top.title} all the way through {finishes} separate times "
+            f"this year — a real rewatch, not a multi-device resume or rewind."
         )
         if extras:
-            body += f" Also back more than once: {_join_titles([t.title for t in extras])}."
-        posters = [p for p in (_poster_from_title(t) for t in rewatched[:4]) if p]
+            body += f" Also revisited end-to-end: {_join_titles([t.title for t in extras])}."
+        posters = [p for p in (_poster_from_title(t) for t in rewatched) if p]
         return _chapter(
             id="top-movies",
             kind="top_movies",
             title="Movies that stuck",
             body=body,
             posters=posters,
+            posters_preview=POSTER_PREVIEW,
         )
 
-    showcase = list(rollup.top_movies[:4])
-    names = _join_titles([t.title for t in showcase])
+    showcase = list(rollup.top_movies)
+    names = _join_titles([t.title for t in showcase[:4]])
     body = f"Movies that defined the year: {names}."
     posters = [p for p in (_poster_from_title(t) for t in showcase) if p]
     return _chapter(
@@ -192,6 +269,7 @@ def build_top_movies(rollup: YearRollup, ctx: Dict[str, Any]) -> Optional[Dict[s
         title="The movies",
         body=body,
         posters=posters,
+        posters_preview=POSTER_PREVIEW,
     )
 
 
@@ -202,13 +280,14 @@ def build_tv_depth(rollup: YearRollup, ctx: Dict[str, Any]) -> Optional[Dict[str
     body = f"{top.title} was the binge — {top.completions} episode finish{'es' if top.completions != 1 else ''}."
     if rollup.unique_episodes:
         body += f" {rollup.unique_episodes} unique episodes across everything."
-    posters = [p for p in (_poster_from_title(t) for t in rollup.top_shows[:4]) if p]
+    posters = [p for p in (_poster_from_title(t) for t in rollup.top_shows) if p]
     return _chapter(
         id="tv-depth",
         kind="tv_depth",
         title="The binge",
         body=body,
         posters=posters,
+        posters_preview=BINGE_POSTER_PREVIEW,
         hero={"value": str(top.completions), "label": f"episodes of {top.title}"},
     )
 
@@ -221,22 +300,23 @@ def build_monthly_rhythm(rollup: YearRollup, ctx: Dict[str, Any]) -> Optional[Di
     if count <= 0:
         return None
     highlights: Sequence[TitleRollup] = list(rollup.peak_month_titles or [])
-    shown = list(highlights[:BUSY_MONTH_TITLE_SHOW])
+    shown_names = list(highlights[:BUSY_MONTH_TITLE_SHOW])
     label = month_label(month)
     body = f"{label} was your busiest stretch — {count} finish{'es' if count != 1 else ''}."
-    if shown:
-        names = _join_titles([t.title for t in shown])
+    if shown_names:
+        names = _join_titles([t.title for t in shown_names])
         body += f" In the mix: {names}."
-        remaining = max(0, len(highlights) - len(shown))
+        remaining = max(0, len(highlights) - len(shown_names))
         if remaining > 0:
             body += f" And {remaining} more."
-    posters = [p for p in (_poster_from_title(t) for t in shown) if p]
+    posters = [p for p in (_poster_from_title(t) for t in highlights) if p]
     return _chapter(
         id="monthly-rhythm",
         kind="monthly_rhythm",
         title=label,
         body=body,
         posters=posters,
+        posters_preview=POSTER_PREVIEW,
         hero={"value": str(count), "label": f"finishes in {label}"},
         stat_lines=[f"{label}: {count} finishes"],
     )
@@ -281,11 +361,14 @@ def build_ratings(rollup: YearRollup, ctx: Dict[str, Any]) -> Optional[Dict[str,
     elif has_plex and not has_proj:
         body += " Plex library stars on titles you finished (Plex doesn’t date ratings)."
 
+    posters = [p for p in (_poster_from_rating(dict(r)) for r in ratings) if p]
     return _chapter(
         id="ratings",
         kind="ratings",
         title="Stars you meant",
         body=body,
+        posters=posters,
+        posters_preview=POSTER_PREVIEW,
         shareable=True,
     )
 
