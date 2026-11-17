@@ -12,10 +12,13 @@ import {
   humanizeMiss,
   identityKindLabel,
   looksLikeJsonDump,
+  pathConflictItemIds,
   plexColumnCopy,
+  primaryRepairAction,
   radarrColumnCopy,
   radarrRegisterHasPathConflicts,
   repairActionsFor,
+  titlesSoftMatch,
   tmdbMovieUrl,
 } from "./rematchStudio.ts";
 
@@ -23,6 +26,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const libraries = readFileSync(join(here, "../pages/admin/LibrariesSection.tsx"), "utf8");
 const rematch = readFileSync(join(here, "../pages/admin/RematchStudio.tsx"), "utf8");
 const repair = readFileSync(join(here, "../pages/admin/RepairMiss.tsx"), "utf8");
+const execution = readFileSync(join(here, "../components/AdminExecutionCard.tsx"), "utf8");
 
 describe("rematch studio copy", () => {
   it("labels Presence/Savages vs same-title conflicts", () => {
@@ -54,9 +58,23 @@ describe("rematch studio copy", () => {
   });
 
   it("offers rematch skip retry Investigate by kind", () => {
-    assert.deepEqual(repairActionsFor("path_conflict", "movie"), ["rematch", "skip", "retry"]);
+    assert.deepEqual(repairActionsFor("path_conflict", "movie"), ["retry", "rematch", "skip"]);
+    assert.deepEqual(repairActionsFor("path_conflict", "movie", true), [
+      "use_radarr",
+      "use_plex",
+      "retry",
+      "rematch",
+      "skip",
+    ]);
     assert.deepEqual(repairActionsFor("failed", "show"), ["retry", "investigate", "skip"]);
     assert.deepEqual(repairActionsFor("needs_plex_id", "movie"), ["rematch", "skip"]);
+    assert.equal(primaryRepairAction(["use_radarr", "retry"]), "use_radarr");
+    assert.equal(primaryRepairAction(["retry", "rematch"]), "retry");
+  });
+
+  it("soft-matches titles with optional year suffixes", () => {
+    assert.equal(titlesSoftMatch("Talk to Me", "Talk to Me (2023)"), true);
+    assert.equal(titlesSoftMatch("Presence", "Savages"), false);
   });
 
   it("collects failed register and Sonarr search rows", () => {
@@ -65,25 +83,30 @@ describe("rematch studio copy", () => {
         items: [
           {
             id: 4,
-            title: "Presence (2025)",
+            title: "Talk to Me (2023)",
             status: "failed",
             outcome: "path_conflict",
             error: '{"errorCode":"MoviePathValidator"}',
-            plex_tmdb_id: 1388150,
-            radarr_tmdb_id: 111,
-            folder_path: "/movies/Presence (2025)",
+            plex_tmdb_id: 986259,
+            radarr_tmdb_id: 1008042,
+            folder_path: "/movies/Talk to Me (2023)",
+            plex_title: "Talk to Me",
+            radarr_title: "Talk to Me",
+            soft_match: true,
           },
         ],
       },
       { execution: { failed: 1, last_error: '{"errorCode":"x"}' } },
     );
     assert.equal(items.length, 2);
+    assert.equal(items[0].actions.includes("use_radarr"), true);
     assert.equal(items[0].actions.includes("rematch"), true);
     assert.equal(items[1].actions.includes("investigate"), true);
     assert.equal(items[0].message.includes("errorCode"), false);
-    assert.equal(items[0].plexTmdbId, 1388150);
-    assert.equal(items[0].radarrTmdbId, 111);
-    assert.equal(items[0].folderPath, "/movies/Presence (2025)");
+    assert.equal(items[0].plexTmdbId, 986259);
+    assert.equal(items[0].radarrTmdbId, 1008042);
+    assert.equal(items[0].folderPath, "/movies/Talk to Me (2023)");
+    assert.equal(items[0].softMatch, true);
   });
 
   it("falls back to tmdb_id for Plex when plex_tmdb_id is absent", () => {
@@ -117,8 +140,17 @@ describe("rematch studio copy", () => {
       true,
     );
     assert.equal(radarrRegisterHasPathConflicts({ items: [{ outcome: "failed" }] }), false);
-    assert.match(PATH_CONFLICT_HINT, /Open Rematch studio/);
-    assert.match(PATH_CONFLICT_HINT, /Retry alone/);
+    assert.deepEqual(
+      pathConflictItemIds({
+        items: [
+          { id: 4, outcome: "path_conflict" },
+          { id: 5, outcome: "failed" },
+        ],
+      }),
+      [4],
+    );
+    assert.match(PATH_CONFLICT_HINT, /re-check/i);
+    assert.match(PATH_CONFLICT_HINT, /Use Radarr/);
   });
 
   it("wires Rematch studio and Repair the miss on Libraries", () => {
@@ -127,8 +159,12 @@ describe("rematch studio copy", () => {
     assert.match(libraries, /data-testid="rematch-studio-card"|RematchStudio/);
     assert.match(libraries, /radarr-register-path-conflict-hint/);
     assert.match(libraries, /PATH_CONFLICT_HINT/);
+    assert.match(libraries, /handleRecheckAllPathConflicts|repair-recheck-all|onRecheckAll/);
+    assert.match(libraries, /adopt-radarr/);
+    assert.match(libraries, /config-subsection/);
     assert.match(rematch, /data-testid="rematch-studio-card"/);
     assert.match(rematch, /Scan identities/);
+    assert.match(rematch, /adopt-radarr|Use Radarr/);
     assert.match(repair, /data-testid="repair-miss-card"/);
     assert.match(repair, /Open Rematch studio/);
     assert.match(repair, /Plex TMDB id/);
@@ -136,6 +172,11 @@ describe("rematch studio copy", () => {
     assert.match(repair, /Folder path/);
     assert.match(repair, /tmdbMovieUrl/);
     assert.match(repair, /Investigate/);
+    assert.match(repair, /repair-miss-title/);
+    assert.match(repair, /Re-check all path conflicts/);
+    assert.match(repair, /Use Radarr/);
+    assert.match(execution, /itemActions/);
+    assert.match(execution, /use-radarr/);
     assert.match(INVESTIGATORS_NOTE, /FileBot/);
     assert.match(INVESTIGATORS_NOTE, /Plex Match/);
     assert.match(GOOD_NEWS_NOT_DOWNLOAD, /download complete/);
