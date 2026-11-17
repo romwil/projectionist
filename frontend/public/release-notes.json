@@ -1,6 +1,35 @@
 {
-  "generated_at": "2026-11-10T15:23:17Z",
+  "generated_at": "2026-11-17T23:41:35Z",
   "releases": [
+    {
+      "version": "1.40.0",
+      "date": "2026-11-17",
+      "summary": "Admin gets a clearer rail and a Libraries hub for path-conflict repair, and Year in Review shows fuller poster strips, honest rewatches, and optional curator voice.",
+      "highlights": [
+        "**Admin is easier to scan.** The rail groups Setup, Members, Experience, Health, and Advanced; Overview keeps Needs attention first; Libraries is one hub for Sync, Arr jobs, Repair, Rematch, Identify, and Plex.",
+        "**Path conflicts resolve in place.** Re-check clears rows that already match, and soft matches offer Use Radarr’s or Use Plex’s identity with a confirm — without leaving Libraries.",
+        "**Year in Review shows the full set.** Poster strips expand with Show all / Show less, sticky titles prefer real rewatches over multi-device resumes, and chapter copy can use the household curator when an LLM is configured."
+      ],
+      "sections": [
+        {
+          "title": "Changed",
+          "bullets": [
+            "Year in Review: poster strips (Movies that stuck, binge, busy month, ratings, recap lists) ship the full title set with Show all / Show less expand; binge previews six by default.",
+            "Year in Review sticky titles prefer this-year ratings, then true restart-from-start rewatches; multi-device resumes and naked Plex played marks across days no longer count as “Movies that stuck.”",
+            "Year in Review chapter and recap copy can be rewritten by the household’s default curator agent (plots, persona, safe same-year memory/chat; Youth memory excluded) with an honest template fallback when no LLM is configured.",
+            "**Admin UX redesign (Phase 1):** Rail regrouped to Overview → Setup → Members → Experience → Health → Advanced; compact density on the Admin shell; Overview keeps Needs attention first with ≤1 gold primary per action group; Libraries becomes a hub with sticky Sync | Arr jobs | Repair | Rematch | Identify | Plex subnav plus an attention strip for path conflicts, failed/stale sync, and Sonarr failures. Absorbs Libraries path-conflict automation (re-check, soft-match Use Radarr’s / Use Plex’s identity with confirm, finished-log actions). Live feature set unchanged.",
+            "Admin → Libraries path conflicts: **Re-check** / **Retry** clear rows when Plex and Radarr TMDB already match after an external fix; soft title/year matches offer confirmed **Use Radarr’s identity** (index only) or **Use Plex’s identity** (Radarr catalog replace, files kept). Finished registration log rows get the same actions. Typography and Plex libraries controls align with the Admin type scale (no third visual dialect). Full Plex Fix Match / Radarr Change Movie remain manual — not available via API."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "`./scripts/patch-release.sh 1.40.0` lockstep + `frontend/public/release-notes.json`.",
+            "CI on the release PR (required checks); known Explore e2e timeout may remain red and is not a merge blocker for this ship."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.39.2",
       "date": "2026-11-10",
