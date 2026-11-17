@@ -14,8 +14,12 @@ test.describe("Admin UX redesign Phase 1", () => {
     await page.getByTestId("admin-overview-page").waitFor();
     await expect(page.getByTestId("admin-layout")).toHaveAttribute("data-density", "compact");
     await expect(page.getByTestId("owner-needs-attention")).toBeVisible();
+    // Mocked e2e is solo-install: same group dialect minus Members.
     await expect(page.getByTestId("admin-nav-group-heading-setup")).toBeVisible();
-    await expect(page.getByTestId("admin-nav-group-heading-members")).toBeVisible();
+    await expect(page.getByTestId("admin-nav-group-heading-experience")).toBeVisible();
+    await expect(page.getByTestId("admin-nav-group-heading-health")).toBeVisible();
+    await expect(page.getByTestId("admin-nav-group-heading-advanced")).toBeVisible();
+    await expect(page.getByTestId("admin-nav-group-heading-members")).toHaveCount(0);
     await expect(page.getByTestId("admin-nav-live-channels")).toHaveText(/Live/);
     await expect(page.getByRole("heading", { name: "Overview", level: 1 })).toBeVisible();
 
