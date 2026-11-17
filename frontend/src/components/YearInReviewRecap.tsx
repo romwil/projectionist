@@ -1,4 +1,11 @@
-import { monthBarPercents, recapShareText } from "../lib/yearInReview.js";
+import { useState } from "react";
+import {
+  monthBarPercents,
+  posterPreviewCount,
+  recapShareText,
+  visiblePosters,
+  YIR_POSTER_PREVIEW_DEFAULT,
+} from "../lib/yearInReview.js";
 
 const MONTH_SHORT = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
 
@@ -6,30 +13,49 @@ const MONTH_SHORT = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"]
 type PosterRowProps = {
   items?: any;
   testId?: string;
+  preview?: number;
 };
 
-function PosterRow({ items, testId }: PosterRowProps) {
+function PosterRow({ items, testId, preview = YIR_POSTER_PREVIEW_DEFAULT }: PosterRowProps) {
+  const [expanded, setExpanded] = useState(false);
   const rows = Array.isArray(items) ? items.filter((item) => item?.title) : [];
   if (!rows.length) return null;
+  const shown = visiblePosters(rows, preview, expanded);
+  const canExpand = rows.length > preview;
   return (
-    <ul className="yir-recap-titles" data-testid={testId}>
-      {rows.map((item) => (
-        <li key={item.rating_key || item.title} className="yir-recap-title">
-          <div className="yir-poster">
-            {item.poster_url ? <img src={item.poster_url} alt="" /> : <span>{item.title}</span>}
-          </div>
-          <div>
-            <strong>{item.title}</strong>
-            {item.completions ? (
-              <span className="muted">
-                {" "}
-                · {item.completions} finish{item.completions === 1 ? "" : "es"}
-              </span>
-            ) : null}
-          </div>
-        </li>
-      ))}
-    </ul>
+    <div className="yir-recap-title-block">
+      <ul className="yir-recap-titles" data-testid={testId}>
+        {shown.map((item: any) => (
+          <li key={item.rating_key || item.title} className="yir-recap-title">
+            <div className="yir-poster">
+              {item.poster_url ? <img src={item.poster_url} alt="" /> : <span>{item.title}</span>}
+            </div>
+            <div>
+              <strong>{item.title}</strong>
+              {item.stars != null ? (
+                <span className="muted"> · {item.stars}★</span>
+              ) : item.completions ? (
+                <span className="muted">
+                  {" "}
+                  · {item.completions} finish{item.completions === 1 ? "" : "es"}
+                </span>
+              ) : null}
+            </div>
+          </li>
+        ))}
+      </ul>
+      {canExpand ? (
+        <button
+          type="button"
+          className="yir-expand"
+          data-testid={`${testId || "yir-recap"}-expand`}
+          aria-expanded={expanded}
+          onClick={() => setExpanded((open) => !open)}
+        >
+          {expanded ? "Show less" : `Show all ${rows.length} titles`}
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -66,11 +92,13 @@ export default function YearInReviewRecap({ recap, year, onBackToReel, onCopy, s
   const bars = monthBarPercents(recap?.monthly_counts);
   const hero = Array.isArray(recap?.hero) ? recap.hero : [];
   const extras = Array.isArray(recap?.extras) ? recap.extras : [];
+  const showPreview = posterPreviewCount({ posters_preview: YIR_POSTER_PREVIEW_DEFAULT });
 
   return (
     <section className="yir-recap" data-testid="yir-recap" aria-label={`${year} recap`}>
       <p className="yir-kicker">Your recap</p>
       <h1 className="yir-title">{recap?.headline || `Your ${year}`}</h1>
+      {recap?.curator_note ? <p className="yir-body">{recap.curator_note}</p> : null}
 
       {hero.length > 0 ? (
         <ul className="yir-hero-grid" data-testid="yir-recap-hero">
@@ -91,14 +119,14 @@ export default function YearInReviewRecap({ recap, year, onBackToReel, onCopy, s
       {recap?.top_movies?.length ? (
         <div className="yir-recap-block">
           <h2>Movies</h2>
-          <PosterRow items={recap.top_movies} testId="yir-recap-movies" />
+          <PosterRow items={recap.top_movies} testId="yir-recap-movies" preview={showPreview} />
         </div>
       ) : null}
 
       {recap?.top_shows?.length ? (
         <div className="yir-recap-block">
           <h2>TV</h2>
-          <PosterRow items={recap.top_shows} testId="yir-recap-shows" />
+          <PosterRow items={recap.top_shows} testId="yir-recap-shows" preview={6} />
         </div>
       ) : null}
 
@@ -108,9 +136,16 @@ export default function YearInReviewRecap({ recap, year, onBackToReel, onCopy, s
           <p>
             {recap.peak_month.count} finish{recap.peak_month.count === 1 ? "" : "es"}
             {recap.peak_month.titles?.length
-              ? ` · ${_join(recap.peak_month.titles.map((t: any) => t.title))}`
+              ? ` · ${_join(recap.peak_month.titles.slice(0, 4).map((t: any) => t.title))}`
               : ""}
           </p>
+          {recap.peak_month.titles?.length ? (
+            <PosterRow
+              items={recap.peak_month.titles}
+              testId="yir-recap-peak-titles"
+              preview={showPreview}
+            />
+          ) : null}
         </div>
       ) : null}
 

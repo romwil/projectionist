@@ -50,6 +50,7 @@ from projectionist.telemetry.llm_usage import (
     PURPOSE_PERSONA_CONSULT,
     PURPOSE_SEASONAL_CURATION,
     PURPOSE_WRAP_UP,
+    PURPOSE_YEAR_IN_REVIEW,
 )
 
 __all__ = [
@@ -83,4 +84,5 @@ __all__ = [
     "PURPOSE_EMBED",
     "PURPOSE_PERSONA_CONSULT",
     "PURPOSE_SEASONAL_CURATION",
+    "PURPOSE_YEAR_IN_REVIEW",
 ]

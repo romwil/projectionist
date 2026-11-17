@@ -8,11 +8,38 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set
 
 from projectionist.library.db import Database
+from projectionist.watch_tracker import RESTART_PROGRESS_PCT
 from projectionist.watch_tracker.models import TitleRollup, YearRollup
 
 # Soft floor so YIR does not tease empty years.
 MIN_COMPLETIONS_FOR_YIR = 3
 PEAK_MONTH_TITLE_LIMIT = 8
+
+
+def _progress_pct(progress_ms: Optional[int], duration_ms: Optional[int]) -> Optional[float]:
+    if progress_ms is None or duration_ms is None or int(duration_ms) <= 0:
+        return None
+    return min(100.0, (float(progress_ms) / float(duration_ms)) * 100.0)
+
+
+def counts_as_full_finish(
+    *,
+    prior_full_finishes: int,
+    start_progress_ms: Optional[int],
+    duration_ms: Optional[int],
+) -> bool:
+    """Whether this completion should count toward rewatch / full-finish tallies.
+
+    The first finish always counts. Later finishes need restart-from-start
+    evidence (session began at or below ``RESTART_PROGRESS_PCT``). Naked Plex
+    'played' marks with no progress — common across devices — do not.
+    """
+    if int(prior_full_finishes) <= 0:
+        return True
+    start_pct = _progress_pct(start_progress_ms, duration_ms)
+    if start_pct is None:
+        return False
+    return float(start_pct) <= float(RESTART_PROGRESS_PCT)
 
 
 def year_bounds_ms(year: int) -> tuple[int, int]:
@@ -189,15 +216,33 @@ def _empty_bucket(
         "confidence": {"certain": 0, "likely": 0, "plex_event_only": 0},
         "last_completed_at_ms": completed_at,
         "days": set(),
+        "full_finish_count": 0,
+        "full_finish_days": set(),
     }
 
 
-def _touch_bucket(bucket: Dict[str, Any], *, conf: str, completed_at: int, day: str) -> None:
+def _touch_bucket(
+    bucket: Dict[str, Any],
+    *,
+    conf: str,
+    completed_at: int,
+    day: str,
+    start_progress_ms: Optional[int] = None,
+    duration_ms: Optional[int] = None,
+) -> None:
     bucket["completions"] += 1
     bucket["confidence"][conf] += 1
     bucket["last_completed_at_ms"] = max(bucket["last_completed_at_ms"], completed_at)
     days: Set[str] = bucket["days"]
     days.add(day)
+    if counts_as_full_finish(
+        prior_full_finishes=int(bucket.get("full_finish_count") or 0),
+        start_progress_ms=start_progress_ms,
+        duration_ms=duration_ms,
+    ):
+        bucket["full_finish_count"] = int(bucket.get("full_finish_count") or 0) + 1
+        full_days: Set[str] = bucket["full_finish_days"]
+        full_days.add(day)
 
 
 def build_year_rollup(db: Database, *, user_id: str, year: int) -> YearRollup:
@@ -212,7 +257,10 @@ def build_year_rollup(db: Database, *, user_id: str, year: int) -> YearRollup:
     with db.connect() as conn:
         rows = conn.execute(
             """
-            SELECT c.*, s.event_count AS sittings
+            SELECT c.*, s.event_count AS sittings,
+                   s.start_progress_ms AS session_start_progress_ms,
+                   s.duration_ms AS session_duration_ms,
+                   s.client_count AS session_client_count
             FROM watch_completions c
             LEFT JOIN watch_sessions s ON s.id = c.session_id
             WHERE c.user_id = ?
@@ -277,6 +325,8 @@ def build_year_rollup(db: Database, *, user_id: str, year: int) -> YearRollup:
         media_type = str(row["media_type"])
         rating_key = str(row["rating_key"])
         parent = row["parent_rating_key"]
+        start_progress_ms = row["session_start_progress_ms"]
+        session_duration_ms = row["session_duration_ms"]
         if media_type == "movie":
             meta = movie_meta.get(rating_key) or _library_title(db, rating_key, "movie")
             runtime = meta.get("runtime_minutes")
@@ -306,7 +356,14 @@ def build_year_rollup(db: Database, *, user_id: str, year: int) -> YearRollup:
                     completed_at=completed_at,
                 ),
             )
-            _touch_bucket(bucket, conf=conf, completed_at=completed_at, day=day)
+            _touch_bucket(
+                bucket,
+                conf=conf,
+                completed_at=completed_at,
+                day=day,
+                start_progress_ms=start_progress_ms,
+                duration_ms=session_duration_ms,
+            )
             month_bucket = monthly_titles[month].setdefault(
                 f"movie:{rating_key}",
                 _empty_bucket(
@@ -319,7 +376,14 @@ def build_year_rollup(db: Database, *, user_id: str, year: int) -> YearRollup:
                     completed_at=completed_at,
                 ),
             )
-            _touch_bucket(month_bucket, conf=conf, completed_at=completed_at, day=day)
+            _touch_bucket(
+                month_bucket,
+                conf=conf,
+                completed_at=completed_at,
+                day=day,
+                start_progress_ms=start_progress_ms,
+                duration_ms=session_duration_ms,
+            )
         else:
             ep = episode_meta.get(rating_key) or {}
             show_key = str(parent or ep.get("parent_rating_key") or rating_key)
@@ -355,7 +419,14 @@ def build_year_rollup(db: Database, *, user_id: str, year: int) -> YearRollup:
                     completed_at=completed_at,
                 ),
             )
-            _touch_bucket(bucket, conf=conf, completed_at=completed_at, day=day)
+            _touch_bucket(
+                bucket,
+                conf=conf,
+                completed_at=completed_at,
+                day=day,
+                start_progress_ms=start_progress_ms,
+                duration_ms=session_duration_ms,
+            )
             month_bucket = monthly_titles[month].setdefault(
                 f"show:{show_key}",
                 _empty_bucket(
@@ -368,10 +439,18 @@ def build_year_rollup(db: Database, *, user_id: str, year: int) -> YearRollup:
                     completed_at=completed_at,
                 ),
             )
-            _touch_bucket(month_bucket, conf=conf, completed_at=completed_at, day=day)
+            _touch_bucket(
+                month_bucket,
+                conf=conf,
+                completed_at=completed_at,
+                day=day,
+                start_progress_ms=start_progress_ms,
+                duration_ms=session_duration_ms,
+            )
 
     def _to_title(d: Dict[str, Any]) -> TitleRollup:
         days = d.get("days") or set()
+        full_finishes = max(1, int(d.get("full_finish_count") or 0) or 1)
         return TitleRollup(
             rating_key=d["rating_key"],
             media_type=d["media_type"],
@@ -383,11 +462,17 @@ def build_year_rollup(db: Database, *, user_id: str, year: int) -> YearRollup:
             confidence=dict(d["confidence"]),
             last_completed_at_ms=int(d["last_completed_at_ms"]),
             distinct_days=max(1, len(days)),
+            full_finish_count=full_finishes,
         )
 
     def _rank_key(d: Dict[str, Any]) -> tuple:
-        # Prefer true multi-day rewatches over same-day completion noise.
-        return (-len(d.get("days") or ()), -int(d["completions"]), -int(d["last_completed_at_ms"]))
+        # Prefer true restart-from-start rewatches over multi-day resume noise.
+        return (
+            -int(d.get("full_finish_count") or 0),
+            -len(d.get("full_finish_days") or ()),
+            -int(d["completions"]),
+            -int(d["last_completed_at_ms"]),
+        )
 
     top_movies = sorted(by_movie.values(), key=_rank_key)[:8]
     top_shows = sorted(by_show.values(), key=_rank_key)[:8]

@@ -6,10 +6,12 @@ import { useAuthGate } from "../components/UserMenu";
 import {
   chapterDurationMs,
   nextChapterIndex,
+  posterPreviewCount,
   prevChapterIndex,
   recapIsReady,
   shareCardText,
   shouldAutoAdvance,
+  visiblePosters,
 } from "../lib/yearInReview.js";
 
 function usePrefersReducedMotion() {
@@ -38,6 +40,7 @@ export default function YearInReviewPage() {
   const [paused, setPaused] = useState(false);
   const [shareNote, setShareNote] = useState<any | null>(null);
   const [view, setView] = useState("reel");
+  const [postersExpanded, setPostersExpanded] = useState(false);
   const cardRef = useRef<any>(null);
   const prefersReducedMotion = usePrefersReducedMotion();
 
@@ -99,6 +102,14 @@ export default function YearInReviewPage() {
   const chapters = Array.isArray(reel?.chapters) ? reel.chapters : [];
   const chapter = chapters[index] || null;
   const showRecap = recapIsReady(reel) && view === "recap";
+  const previewCount = posterPreviewCount(chapter);
+  const chapterPosters = Array.isArray(chapter?.posters) ? chapter.posters : [];
+  const shownPosters = visiblePosters(chapterPosters, previewCount, postersExpanded);
+  const canExpandPosters = chapterPosters.length > previewCount;
+
+  useEffect(() => {
+    setPostersExpanded(false);
+  }, [index, view, chapter?.id]);
 
   useEffect(() => {
     if (showRecap || !chapter || !shouldAutoAdvance({ paused, prefersReducedMotion })) {
@@ -222,15 +233,38 @@ export default function YearInReviewPage() {
                 ))}
               </ul>
             )}
-            {chapter.posters?.length > 0 && (
-              <div className="yir-posters" aria-hidden="true">
-                {chapter.posters.slice(0, 4).map((poster: any) => (
-                  <div key={`${poster.title}-${poster.poster_url || ""}`} className="yir-poster">
-                    {poster.poster_url ? <img src={poster.poster_url} alt="" /> : <span>{poster.title}</span>}
+            {shownPosters.length > 0 && (
+              <div className={`yir-posters ${postersExpanded ? "is-expanded" : ""}`}>
+                {shownPosters.map((poster: any) => (
+                  <div
+                    key={`${poster.title}-${poster.poster_url || poster.rating_key || ""}`}
+                    className="yir-poster"
+                  >
+                    {poster.poster_url ? (
+                      <img src={poster.poster_url} alt="" />
+                    ) : (
+                      <span>{poster.title}</span>
+                    )}
                   </div>
                 ))}
               </div>
             )}
+            {canExpandPosters ? (
+              <button
+                type="button"
+                className="yir-expand"
+                data-testid="yir-expand-posters"
+                aria-expanded={postersExpanded}
+                onClick={() => {
+                  setPostersExpanded((open) => !open);
+                  setPaused(true);
+                }}
+              >
+                {postersExpanded
+                  ? "Show less"
+                  : `Show all ${chapterPosters.length} titles`}
+              </button>
+            ) : null}
           </article>
         )}
       </section>
