@@ -2039,7 +2039,7 @@
 }
 
 .admin-shell[data-density="compact"] .admin-rail-heading {
-  font-size: 0.68rem;
+  font-size: var(--text-xs); /* VIS-004 floor: 12px on 15px root */
   letter-spacing: 0.08em;
   margin-bottom: 4px;
 }
@@ -2168,7 +2168,7 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--warning) 22%, transparent);
   color: var(--warning);
-  font-size: 0.7rem;
+  font-size: var(--text-xs); /* VIS-004 floor */
   font-weight: 700;
 }
 
