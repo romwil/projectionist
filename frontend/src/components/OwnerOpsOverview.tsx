@@ -39,6 +39,10 @@ const STEP_STATUS_COPY: Record<string, string> = {
  * Admin Overview stewardship surface. One Needs attention list rolls up
  * secrets, failed tasks, setup gaps, and this week's Monday pass.
  * State lives on the server (SQLite), so it survives reloads and devices.
+ *
+ * VIS-013 — one gold primary per action group: Needs attention rows use
+ * secondary links only; the Monday pass owns the single primary ("Mark pass
+ * done"); Setup and Secrets use secondary actions.
  */
 export default function OwnerOpsOverview({ onOpenWizard, children }: OwnerOpsOverviewProps) {
   const [data, setData] = useState<any | null>(null);
@@ -123,7 +127,12 @@ export default function OwnerOpsOverview({ onOpenWizard, children }: OwnerOpsOve
                   <span className="owner-ops-row-title">{item.title}</span>
                   <span className="owner-ops-row-detail">{item.detail}</span>
                 </div>
-                <Link className="btn-link" to={item.to}>
+                <Link
+                  className="btn btn-secondary btn-sm owner-ops-open"
+                  to={item.to}
+                  data-testid={`needs-attention-open-${item.id}`}
+                  aria-label={`Open: ${item.title}`}
+                >
                   Open
                 </Link>
               </li>
@@ -347,7 +356,7 @@ export default function OwnerOpsOverview({ onOpenWizard, children }: OwnerOpsOve
             })}
           </ul>
           <div className="config-actions">
-            <Link to="/admin/connections" className="btn-link" data-testid="secrets-open-connections">
+            <Link to="/admin/connections" className="btn btn-secondary" data-testid="secrets-open-connections">
               Open Connections to test
             </Link>
           </div>

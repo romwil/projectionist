@@ -54,41 +54,53 @@ describe("adminNav", () => {
     assert.equal(adminNavLinks().length, 18);
   });
 
-  it("groups the dense rail with Setup / Experience / Platform / Communications / System headings", () => {
+  it("groups the rail as Overview / Setup / Members / Experience / Health / Advanced", () => {
     const headings = ADMIN_NAV.filter((item) => item.kind === "heading").map((item) => item.label);
     assert.deepEqual(headings, [
+      "Overview",
       "Setup",
+      "Members",
       "Experience",
-      "Platform",
-      "Communications",
-      "System",
+      "Health",
+      "Advanced",
     ]);
     const groups = adminNavGroups();
-    assert.equal(groups.length, 5);
+    assert.equal(groups.length, 6);
     assert.deepEqual(
       groups.map((group) => group.label),
-      ["Setup", "Experience", "Platform", "Communications", "System"],
+      ["Overview", "Setup", "Members", "Experience", "Health", "Advanced"],
     );
+    assert.equal(groups[0].hideHeading, true, "Overview group label is hidden in the rail");
+    assert.ok(groups.slice(1).every((group) => group.hideHeading === false));
     assert.equal(
       groups.reduce((sum, group) => sum + group.links.length, 0),
       18,
     );
     assert.deepEqual(
-      groups[0].links.map((item) => item.id),
-      ["overview", "connections", "libraries", "persona", "household"],
+      groups.map((group) => group.links.map((item) => item.id)),
+      [
+        ["overview"],
+        ["connections", "libraries"],
+        ["household", "access", "youth"],
+        ["live-channels", "lobby", "holidays", "seerr"],
+        ["tasks", "health", "taxonomy", "logs"],
+        ["persona", "mail", "newsletters", "advanced"],
+      ],
     );
-    assert.deepEqual(
-      groups[1].links.map((item) => item.id),
-      ["live-channels", "lobby", "holidays", "seerr"],
-    );
-    assert.ok(groups[2].links.some((item) => item.id === "health"));
-    assert.ok(groups[3].links.some((item) => item.id === "mail"));
-    assert.ok(groups[3].links.some((item) => item.id === "newsletters"));
-    const commsIds = groups[3].links.map((item) => item.id);
+    const advancedIds = groups[5].links.map((item) => item.id);
     assert.ok(
-      commsIds.indexOf("newsletters") === commsIds.indexOf("mail") + 1,
-      "Newsletters sits next to Mail in Communications",
+      advancedIds.indexOf("newsletters") === advancedIds.indexOf("mail") + 1,
+      "Newsletters sits next to Mail in Advanced",
     );
+    assert.equal(
+      adminNavLinks().find((item) => item.id === "live-channels")?.label,
+      "Live",
+    );
+    assert.equal(
+      adminNavLinks().find((item) => item.id === "live-channels")?.to,
+      "/admin/live-channels",
+    );
+    assert.equal(adminNavLinks().find((item) => item.id === "household")?.to, "/admin/household");
     assert.equal(
       adminNavLinks().some((item) => item.id === "sync"),
       false,
@@ -110,7 +122,7 @@ describe("adminNav", () => {
     const items = buildAdminDrawerItems();
     assert.equal(items.length, ADMIN_NAV.length);
     assert.equal(items[0].kind, "heading");
-    assert.equal(items[0].id, "admin-heading-setup");
+    assert.equal(items[0].id, "admin-heading-overview");
     const overview = items.find((item) => item.id === "admin-overview");
     assert.equal(overview?.kind, "admin");
     assert.equal(overview?.testId, "app-nav-admin-overview");
@@ -137,18 +149,35 @@ describe("adminNav", () => {
     const groups = adminNavGroups({ multiUserEnabled: false });
     assert.deepEqual(
       groups.map((group) => group.label),
-      ["Setup", "Experience", "Platform"],
+      ["Overview", "Setup", "Experience", "Health", "Advanced"],
     );
-    assert.match(String(groups[1].subtitle || ""), /On the wall/i);
+    assert.equal(groups[0].hideHeading, true);
     assert.deepEqual(
-      groups[1].links.map((item) => item.id),
-      ["lobby", "live-channels"],
+      groups.map((group) => group.links.map((item) => item.id)),
+      [
+        ["overview"],
+        ["connections", "libraries"],
+        ["lobby", "live-channels"],
+        ["tasks", "logs"],
+        ["persona", "advanced"],
+      ],
     );
+    assert.match(String(groups[2].subtitle || ""), /On the wall/i);
+    assert.equal(links.length, 9);
+    assert.equal(links.some((item) => item.id === "health"), false);
+    assert.equal(links.some((item) => item.id === "taxonomy"), false);
   });
 
   it("keeps Seerr in single-user nav when seerr_enabled", () => {
     const links = adminNavLinks({ multiUserEnabled: false, seerrEnabled: true });
     assert.equal(links.length, SINGLE_USER_ADMIN_LINK_IDS.length + 1);
     assert.ok(links.some((item) => item.id === "seerr"));
+    const experience = adminNavGroups({ multiUserEnabled: false, seerrEnabled: true }).find(
+      (group) => group.id === "heading-experience",
+    );
+    assert.deepEqual(
+      experience.links.map((item) => item.id),
+      ["lobby", "live-channels", "seerr"],
+    );
   });
 });
