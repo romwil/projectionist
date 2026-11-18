@@ -796,13 +796,21 @@ export default function ConfigPage() {
 
   async function handleYouthModeToggle(entry: JsParam) {
     const turningOn = !entry.is_youth;
+    const label = entry.display_name || entry.email || entry.id;
+    const rating = settings?.youth?.max_content_rating || "PG-13";
     if (turningOn) {
-      const label = entry.display_name || entry.email || entry.id;
-      const rating = settings?.youth?.max_content_rating || "PG-13";
       const confirmed = await confirm({
         title: "Turn on Youth mode",
-        body: `Turn on Youth mode for ${label}? They will only see titles rated ${rating} or lower, and unrated titles are hidden. ${label} gets an inbox notice, and the change is recorded in the security log. What the curator already remembers about ${label} stays private. Youth mode does not open it.${entry.autoconfirm_adds ? ` ${label} also stops adding to Radarr or Sonarr without your confirm.` : ""}`,
+        body: `Turn on Youth mode for ${label}? They will only see titles rated ${rating} or lower, and unrated titles are hidden. ${label} gets an inbox notice, and the change is recorded in the security log. What the curator already remembers about ${label} stays private — memory review opens only after Youth has been on for 7 days.${entry.autoconfirm_adds ? ` ${label} also stops adding to Radarr or Sonarr without your confirm.` : ""}`,
         confirmLabel: "Turn on Youth mode",
+      });
+      if (!confirmed) return;
+    } else {
+      // OPS-008: Youth off needs an explicit confirm naming the rating ceiling.
+      const confirmed = await confirm({
+        title: "Remove Youth mode",
+        body: `Remove Youth mode for ${label}? They'll see titles above ${rating} and unrated titles immediately.`,
+        confirmLabel: "Remove Youth mode",
       });
       if (!confirmed) return;
     }

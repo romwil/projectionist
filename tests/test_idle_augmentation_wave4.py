@@ -289,7 +289,8 @@ class RegistryWave4Tests(unittest.TestCase):
             self.assertIsNone(logline.catchup_gap_seconds)
 
             embeddings = scheduler._definitions["semantic_embeddings"]
-            self.assertFalse(embeddings.off_loop)
+            # PERF-009: heaviest idle task runs off the web event loop.
+            self.assertTrue(embeddings.off_loop)
             self.assertEqual(embeddings.catchup_gap_seconds, 300)
 
 

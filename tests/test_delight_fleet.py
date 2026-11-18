@@ -156,49 +156,13 @@ class FleetProposeGapTests(unittest.TestCase):
 
 
 @skipUnless(HAS_MCP, "mcp package not installed")
-class NewsletterPreviewTests(unittest.TestCase):
-    """NW-01: preview wraps build_member_newsletter and does not send mail."""
+class NewsletterPreviewRemovedTests(unittest.TestCase):
+    """PRIV-004: per-member newsletter preview is Admin-only, not MCP."""
 
-    def setUp(self) -> None:
-        self._tmpdir = tempfile.TemporaryDirectory()
-        os.environ["DATA_DIR"] = self._tmpdir.name
-        os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
-        set_mcp_mode("full")
-        self.db = Database(Path(self._tmpdir.name) / "test.db")
-        self.user = self.db.create_local_user(
-            user_id="local-preview",
-            display_name="PreviewMember",
-            password_hash="x",
-            role="member",
-            email="preview@example.com",
-        )
-        self.settings = Settings.load(Path(self._tmpdir.name) / "settings.json")
-
-    def tearDown(self) -> None:
-        os.environ.pop("PROJECTIONIST_SKIP_DOTENV", None)
-        self._tmpdir.cleanup()
-        set_mcp_mode("privacy")
-
-    def test_preview_body_matches_admin_builder_and_does_not_send(self) -> None:
-        expected = build_member_newsletter(
-            self.db, self.settings, user=self.db._row_to_user(self.db.get_user(self.user["id"]))
-        )
-        with (
-            patch.object(mcp_server, "_database", return_value=self.db),
-            patch.object(mcp_server, "_settings", return_value=self.settings),
-            patch("projectionist.notifications.service.deliver_notification") as deliver,
-            patch("projectionist.notifications.newsletters.deliver_weekly_newsletters") as fanout,
-        ):
-            raw = mcp_server.weekly_newsletter_preview(user_id=self.user["id"])
-        payload = json.loads(raw)
-        self.assertTrue(payload.get("preview"))
-        self.assertFalse(payload.get("sent"))
-        self.assertEqual(payload.get("body"), expected["body"])
-        self.assertEqual(payload.get("subject"), expected["subject"])
-        self.assertEqual(payload.get("picks"), expected.get("picks") or [])
-        self.assertIn("Quiet week", payload["body"])
-        deliver.assert_not_called()
-        fanout.assert_not_called()
+    def test_weekly_newsletter_preview_tool_is_gone(self) -> None:
+        self.assertFalse(hasattr(mcp_server, "weekly_newsletter_preview"))
+        # Builder still exists for Admin generate — only the MCP export left.
+        self.assertTrue(callable(build_member_newsletter))
 
 
 class ProgrammeCandidateTests(unittest.TestCase):

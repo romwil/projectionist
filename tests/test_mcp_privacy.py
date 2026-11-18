@@ -223,10 +223,20 @@ class McpPrivacyToolTests(unittest.TestCase):
         self.assertIn("error", payload)
         self.assertIn("rating_key", payload["error"])
 
-    def test_privacy_cannot_preview_newsletter(self) -> None:
-        payload = json.loads(mcp_server.weekly_newsletter_preview(user_id="u1"))
-        self.assertIn("error", payload)
-        self.assertIn("full MCP", payload["error"])
+    def test_mcp_has_no_per_member_newsletter_preview(self) -> None:
+        # PRIV-004: full-mode MCP must not expose per-person newsletter drafts.
+        self.assertFalse(hasattr(mcp_server, "weekly_newsletter_preview"))
+        import inspect
+
+        for name, fn in inspect.getmembers(mcp_server, inspect.isfunction):
+            if name.startswith("_"):
+                continue
+            params = inspect.signature(fn).parameters
+            self.assertNotIn(
+                "user_id",
+                params,
+                f"MCP tool {name} must not take a per-member user_id",
+            )
 
 
 if __name__ == "__main__":

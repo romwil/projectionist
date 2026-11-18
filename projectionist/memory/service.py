@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any, Dict, List, Optional
 
 from projectionist.library.db import Database
+
+# OPS-008: owner review stays closed until Youth has been on for a full week,
+# so flipping Youth on an adult cannot unlock private notes immediately.
+YOUTH_MEMORY_REVIEW_DELAY_SECONDS = 7 * 24 * 60 * 60
+YOUTH_MEMORY_REVIEW_TOO_SOON = (
+    "Youth mode was turned on recently; memory review opens after 7 days"
+)
 
 
 class MemoryAccessError(PermissionError):
@@ -36,6 +44,8 @@ class UserMemoryService:
         since = self.db.youth_since(target)
         if since is None:
             raise MemoryAccessError("Private memory is not available for this account")
+        if time.time() < float(since) + YOUTH_MEMORY_REVIEW_DELAY_SECONDS:
+            raise MemoryAccessError(YOUTH_MEMORY_REVIEW_TOO_SOON)
         return self.db.list_user_memory_notes_since(target, since=since, limit=limit)
 
     def remember(self, *, caller_id: str, kind: str, text: str, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:

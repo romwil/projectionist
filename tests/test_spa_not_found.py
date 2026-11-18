@@ -73,6 +73,25 @@ class SpaNotFoundTests(unittest.TestCase):
         tour = self.client.get("/tour", follow_redirects=False)
         self.assertIn(tour.status_code, {302, 307})
 
+    def test_login_shell_is_noindex_with_share_preview_meta(self) -> None:
+        """GRO-012: invite links get a brand preview; crawlers stay out."""
+        from pathlib import Path
+
+        resp = self.client.get("/login")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.headers.get("x-robots-tag"), "noindex, nofollow")
+        # Dist may be unbuilt in unit tests — assert the Vite shell source of truth.
+        shell = Path(__file__).resolve().parents[1] / "frontend" / "index.html"
+        html = shell.read_text(encoding="utf-8")
+        self.assertIn('name="robots" content="noindex, nofollow"', html)
+        self.assertIn('property="og:title" content="Projectionist"', html)
+        self.assertIn('property="og:image" content="/og-card.png"', html)
+        self.assertIn('name="description"', html)
+        og = self.client.get("/og-card.png")
+        self.assertEqual(og.status_code, 200)
+        self.assertEqual(og.headers.get("content-type"), "image/png")
+        self.assertTrue(og.content.startswith(b"\x89PNG"))
+
 
 if __name__ == "__main__":
     unittest.main()
