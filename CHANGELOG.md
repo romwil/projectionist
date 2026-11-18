@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [1.40.1] — 2026-11-17
+
+Closes the trust residuals left after 1.40.0: Youth memory review is gated and audited, full MCP no longer exports per-member newsletters, embeddings stay off the request loop, and the app shell stops inviting crawlers while Explore hides owner indexing jargon from members.
+
+### Highlights
+- **Youth memory review stays honest.** Flipping Youth on an adult no longer opens private notes for a week, every owner read is audited, and turning Youth off asks you to confirm the rating ceiling.
+- **Automation stays library-scoped.** Full MCP no longer previews a member’s weekly letter — that stays in Admin → Newsletters.
+- **Share links look like Projectionist.** Invite URLs get a brand Open Graph card and `noindex`, so crawlers stay out of household shells.
+
 ### Security
 - OPS-008: Youth memory review writes a `youth_memory_read` audit row and returns 403 until `youth_since + 7d`; Youth off confirms in Admin with the rating ceiling.
 
@@ -13,6 +22,11 @@
 - PRD-011: owner indexing / knowledge coverage strip is owner-only on Explore (Admin → Library knowledge keeps the full view).
 - GRO-012: app shell ships description, Open Graph / Twitter cards, `noindex`, `X-Robots-Tag`, brand-only `og-card.png`, and a web manifest.
 - UX-004: disabled Chat composer says “One moment — opening your library.” instead of the typing invitation.
+- PRODUCT.md framing moves off 1.37.59 to the 1.40 Admin hub / YIR / Live freeze truth.
+
+### Verification
+- `./scripts/patch-release.sh 1.40.1` lockstep + `frontend/public/release-notes.json`.
+- CI on the release PR (required checks); known Explore e2e timeout may remain red and is not a merge blocker for this ship.
 
 ## [1.40.0] — 2026-11-17
 
