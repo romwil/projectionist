@@ -1,0 +1,17 @@
+{
+  "name": "Projectionist",
+  "short_name": "Projectionist",
+  "description": "Your household's private movie and TV companion.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F5F0E8",
+  "theme_color": "#1A1714",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

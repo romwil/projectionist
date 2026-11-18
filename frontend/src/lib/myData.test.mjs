@@ -41,7 +41,7 @@ test("owner-access log lines name who did what, and flag refused attempts (PRIV-
     "Jan 3, 2026 — Alex: Changed Youth mode on your account",
   );
   assert.equal(
-    ownerAccessLine({ created_at: at, event: "memory_review", label: "Opened the Youth memory review for your account" }, "en-US"),
+    ownerAccessLine({ created_at: at, event: "youth_memory_read", label: "Opened the Youth memory review for your account" }, "en-US"),
     "Jan 3, 2026 — The owner: Opened the Youth memory review for your account",
   );
   assert.match(

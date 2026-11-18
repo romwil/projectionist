@@ -27,7 +27,8 @@ test("hash-fallback is labeled on coverage strip and Admin panel", () => {
   assert.match(card, /variant === "strip"/);
   assert.match(card, /embeddingCoverageLabel/);
   assert.match(card, /knowledge-coverage-embedding/);
-  assert.match(explore, /KnowledgeCoverageCard variant="strip"/);
+  // PRD-011: member Explore must not mount owner indexing telemetry.
+  assert.match(explore, /ownerChrome \? \(\s*<KnowledgeCoverageCard variant="strip"/);
   assert.match(knowledgeOps, /embeddingCoverageLabel/);
   assert.match(knowledgeOps, /knowledge-ops-coverage-embedding/);
   assert.equal(

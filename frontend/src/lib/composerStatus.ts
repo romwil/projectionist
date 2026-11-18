@@ -1,4 +1,5 @@
-export const COMPOSER_OPENING_LINE = "Opening your library…";
+// UX-004 / A11Y-009: honest wait copy — never the typing invitation while disabled.
+export const COMPOSER_OPENING_LINE = "One moment — opening your library.";
 export const COMPOSER_IDLE_PLACEHOLDER = "Describe what you're hunting for…";
 
 /**
