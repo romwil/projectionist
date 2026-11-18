@@ -42,10 +42,12 @@ test.describe("Explore hub", () => {
     await expect(page).toHaveURL(/\/explore\/related$/);
 
     await page.goto("/explore");
-    // Click the title link — a mid-card hit targets Play on hover (known 1.38+ leftover).
+    // Poster mid-clicks hit always-on Play (1.38+); open the sheet via Actions instead.
     const card = page.getByTestId("explore-recently-added-rail").getByTestId("explore-title-card").first();
-    await card.locator(".explore-cinema-card-link").click();
+    await card.getByRole("button", { name: /Actions for/ }).click();
+    await page.getByRole("menu").getByText("Open details").click();
     await expect(page.getByTestId("title-detail-drawer")).toBeVisible();
+    await expect(page.getByTestId("title-detail-open-full")).toBeVisible();
     await page.getByTestId("title-detail-open-full").click();
     await expect(page).toHaveURL(/\/title\/movie\/348/);
   });
