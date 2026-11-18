@@ -944,8 +944,12 @@ function ExploreHubPage() {
         <ExploreSection
           id="library-pulse"
           title="Library Pulse"
-          helpAnchorId="what-knowledge-coverage-means"
-          helpTitle="What Library Pulse & knowledge coverage mean"
+          helpAnchorId={ownerChrome ? "what-knowledge-coverage-means" : undefined}
+          helpTitle={
+            ownerChrome
+              ? "What Library Pulse & knowledge coverage mean"
+              : "What Library Pulse means"
+          }
           isOwner={ownerChrome}
           empty={pulse.error || (!pulse.loading && !pulse.stats.length ? "No overview stats yet." : null)}
         >
@@ -995,7 +999,10 @@ function ExploreHubPage() {
             </div>
           ) : null}
         </ExploreSection>
-          <KnowledgeCoverageCard variant="strip" className="explore-footer-knowledge" />
+          {/* PRD-011: indexing telemetry stays on Admin → Library knowledge / owner Explore. */}
+          {ownerChrome ? (
+            <KnowledgeCoverageCard variant="strip" className="explore-footer-knowledge" />
+          ) : null}
         </div>
 
         {facetWall.label ? (

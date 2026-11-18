@@ -169,17 +169,16 @@ Empty neighbor/relation results mean the idle scheduler has not materialized the
 
 `suggest_purge_candidates_tool` stays a **review list**. These wraps do not delete, repair, or promote misses into staged augmentations.
 
-### Full mode only (tonight + *arr + newsletter draft)
+### Full mode only (tonight + *arr)
 
 | Tool | Purpose |
 |------|---------|
 | `what_to_watch_tonight` | Same For you path as Explore (`list_linked_unwatched`): `{mode, empty, note, items[].explanation, continue[]}`. Privacy callers get the existing full-mode error — never a TMDB tonight. |
-| `weekly_newsletter_preview` | Read-only wrap of `build_member_newsletter` for one `user_id`. Body matches Admin → Newsletters generate. Does **not** send inbox/SMTP/Resend/Apprise (`sent: false`). |
 | `propose_add_radarr` / `propose_add_sonarr` | Queue add; returns `pending_token`. Optional `source`: `discover_missing_titles` or `owner_named` (default). Titles already in `library_items` or already in *arr short-circuit — no new token. Cosine / `search_tmdb_proxy` is not a valid source. |
 | `propose_remove_arr` | Queue remove; returns `pending_token` |
 | `confirm_pending_action` | Cancel a pending token, or confirm/execute it **when the key is scoped for active curation** |
 
-Privacy mode callers receive an error if they invoke tonight, newsletter preview, or propose/confirm tools. There is no silent `require_confirmation=false` path.
+Per-member newsletter preview is **not** an MCP tool (PRIV-004) — owners preview and send under Admin → Newsletters. Privacy mode callers receive an error if they invoke tonight or propose/confirm tools. There is no silent `require_confirmation=false` path.
 
 **Live recipes (LP-01).** There is **no** MCP publish/shuffle tool. A programming assistant builds a candidate list from owned `library_query` hits (`in_library` / playable `rating_key`). `discover_missing_titles` hits are refused as programmes. The owner still publishes in Admin (Go on air / Rebuild).
 

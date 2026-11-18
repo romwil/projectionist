@@ -29,6 +29,9 @@ def _index_html() -> str:
     return "<h1>Projectionist</h1><p>Build the frontend with <code>npm run build</code>.</p>"
 
 
+_NOINDEX_HEADERS = {"X-Robots-Tag": "noindex, nofollow"}
+
+
 def _serve_index() -> HTMLResponse:
     from projectionist.web.nav_bootstrap import inject_nav_bootstrap, live_channels_nav_ready
 
@@ -39,7 +42,11 @@ def _serve_index() -> HTMLResponse:
         ready = live_channels_nav_ready(_settings())
     except Exception:
         ready = False
-    return HTMLResponse(inject_nav_bootstrap(_index_html(), ready=ready))
+    # GRO-012: keep household shells out of search indexes even when a profile is public.
+    return HTMLResponse(
+        inject_nav_bootstrap(_index_html(), ready=ready),
+        headers=_NOINDEX_HEADERS,
+    )
 
 
 def _frontend_public_file(*parts: str) -> Path | None:
@@ -183,6 +190,31 @@ def favicon_svg() -> FileResponse:
     if path is None:
         raise HTTPException(status_code=404, detail="Favicon not found")
     return FileResponse(path, media_type="image/svg+xml")
+
+
+@router.get("/og-card.png")
+def og_card_png() -> FileResponse:
+    """GRO-012: brand-only Open Graph card (no library or member data)."""
+    path = _frontend_public_file("og-card.png")
+    if path is None:
+        raise HTTPException(status_code=404, detail="OG card not found")
+    return FileResponse(
+        path,
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
+@router.get("/manifest.webmanifest")
+def web_manifest() -> FileResponse:
+    path = _frontend_public_file("manifest.webmanifest")
+    if path is None:
+        raise HTTPException(status_code=404, detail="Web manifest not found")
+    return FileResponse(
+        path,
+        media_type="application/manifest+json",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 @router.get("/admin", response_class=HTMLResponse)

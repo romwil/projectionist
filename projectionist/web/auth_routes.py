@@ -203,7 +203,13 @@ def register_auth_routes(app):
         from projectionist.youth.memory_policy import youth_memory_enabled
 
         if user_id != user.id:
-            sa.audit(_db(), sa.MEMORY_REVIEW, actor_id=user.id, target_id=user_id, note_count=len(notes))
+            sa.audit(
+                _db(),
+                sa.YOUTH_MEMORY_READ,
+                actor_id=user.id,
+                target_id=user_id,
+                note_count=len(notes),
+            )
         return {
             "user_id": user_id,
             "notes": notes,

@@ -7,6 +7,27 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
     />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- GRO-012: share preview + noindex. OG image is brand-only (no library/member data). -->
+    <meta
+      name="description"
+      content="Your household's private movie and TV companion."
+    />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta property="og:title" content="Projectionist" />
+    <meta
+      property="og:description"
+      content="Your household's private movie and TV companion."
+    />
+    <meta property="og:image" content="/og-card.png" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Projectionist" />
+    <meta
+      name="twitter:description"
+      content="Your household's private movie and TV companion."
+    />
+    <meta name="twitter:image" content="/og-card.png" />
     <!-- VIS-014 / PRIV-009: fonts are self-hosted (src/styles/00-fonts.css).
          No fonts.googleapis.com / fonts.gstatic.com request on any route. -->
     <script>

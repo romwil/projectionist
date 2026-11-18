@@ -46,8 +46,7 @@ mcp = FastMCP(
         "Live programme lists are owned library_query hits with playable keys; "
         "never schedule discover_missing_titles gaps. There is no MCP Live publish "
         "tool — the owner publishes in Admin. "
-        "weekly_newsletter_preview is a read-only draft of the Admin generate body "
-        "and does not send mail. "
+        "Full MCP has no per-member newsletter preview — preview letters in Admin. "
         "Full MCP propose_add_* only for discover_missing_titles gaps or an "
         "owner-named TMDB/TVDB id (optional source on the pending token). "
         "Confirming *arr changes over MCP requires a key scoped for active "
@@ -1072,41 +1071,6 @@ def kinship_miss_list(limit: int = 50) -> str:
 
     capped = max(1, min(int(limit or 50), 200))
     return _emit(list_kinship_miss(_database(), limit=capped))
-
-
-@mcp.tool()
-def weekly_newsletter_preview(user_id: str) -> str:
-    """Read-only draft of the weekly letter Admin generate would send (NW-01).
-
-    Wraps ``build_member_newsletter`` so the body cannot drift from Admin.
-    Does not send inbox, SMTP, Resend, or Apprise. Full MCP only.
-    """
-    denied = _require_full_mode()
-    if denied:
-        return denied
-    from projectionist.notifications.newsletters import build_member_newsletter
-
-    uid = str(user_id or "").strip()
-    if not uid:
-        return _emit({"error": "Provide user_id for the member whose letter to preview"})
-    db = _database()
-    row = db.get_user(uid)
-    if row is None:
-        return _emit({"error": f"User not found: {uid}"})
-    user = db._row_to_user(row)
-    content = build_member_newsletter(db, _settings(), user=user)
-    return _emit(
-        {
-            "preview": True,
-            "sent": False,
-            "user_id": uid,
-            "subject": content.get("subject"),
-            "body": content.get("body"),
-            "title": content.get("title"),
-            "blurb": content.get("blurb"),
-            "picks": content.get("picks") or [],
-        }
-    )
 
 
 @mcp.tool()

@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Security
+- OPS-008: Youth memory review writes a `youth_memory_read` audit row and returns 403 until `youth_since + 7d`; Youth off confirms in Admin with the rating ceiling.
+
+### Privacy
+- PRIV-004: remove per-member `weekly_newsletter_preview` from full-mode MCP (preview stays in Admin → Newsletters).
+
+### Changed
+- PERF-009: `semantic_embeddings` idle task registers with `off_loop=True`.
+- PRD-011: owner indexing / knowledge coverage strip is owner-only on Explore (Admin → Library knowledge keeps the full view).
+- GRO-012: app shell ships description, Open Graph / Twitter cards, `noindex`, `X-Robots-Tag`, brand-only `og-card.png`, and a web manifest.
+- UX-004: disabled Chat composer says “One moment — opening your library.” instead of the typing invitation.
+
 ## [1.40.0] — 2026-11-17
 
 Admin gets a clearer rail and a Libraries hub for path-conflict repair, and Year in Review shows fuller poster strips, honest rewatches, and optional curator voice.
