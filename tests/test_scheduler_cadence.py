@@ -496,15 +496,16 @@ class RegistryInvariantTests(unittest.TestCase):
             "plot_neighbors",
             "metadata_enrichment",
             "long_synopsis_enrichment",
+            # PERF-009
+            "semantic_embeddings",
         }
         for name in must_be_off:
             self.assertTrue(reg[name].off_loop, f"{name} must not run on the web event loop")
 
     def test_loop_bound_async_tasks_stay_on_main_loop(self) -> None:
         reg = self._registry()
-        # These await provider clients created on the main loop.
-        for name in ("semantic_embeddings", "llm_logline_enrichment"):
-            self.assertFalse(reg[name].off_loop)
+        # Paid LLM loglines still await provider clients on the main loop.
+        self.assertFalse(reg["llm_logline_enrichment"].off_loop)
 
 
 class ColdPathCostTests(unittest.TestCase):
