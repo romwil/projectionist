@@ -42,7 +42,10 @@ test.describe("Explore hub", () => {
     await expect(page).toHaveURL(/\/explore\/related$/);
 
     await page.goto("/explore");
-    await page.getByTestId("explore-recently-added-rail").getByTestId("explore-title-card").first().click();
+    // Click the title link — a mid-card hit targets Play on hover (known 1.38+ leftover).
+    const card = page.getByTestId("explore-recently-added-rail").getByTestId("explore-title-card").first();
+    await card.locator(".explore-cinema-card-link").click();
+    await expect(page.getByTestId("title-detail-drawer")).toBeVisible();
     await page.getByTestId("title-detail-open-full").click();
     await expect(page).toHaveURL(/\/title\/movie\/348/);
   });
