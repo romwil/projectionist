@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -70,6 +71,14 @@ class UserMemoryTests(unittest.TestCase):
     def test_owner_can_review_youth_only(self) -> None:
         self.db.set_user_youth("youth", True)
         self.service.remember(caller_id="youth", kind="learning_goal", text="learn animation")
+        # OPS-008: review stays closed until youth_since + 7d.
+        with self.assertRaises(MemoryAccessError):
+            self.service.recall(caller_id="owner", caller_role="owner", target_id="youth")
+        with self.db.connect() as conn:
+            conn.execute(
+                "UPDATE users SET youth_since = ? WHERE id = ?",
+                (time.time() - 8 * 24 * 60 * 60, "youth"),
+            )
         notes = self.service.recall(caller_id="owner", caller_role="owner", target_id="youth")
         self.assertEqual([note["text"] for note in notes], ["learn animation"])
 

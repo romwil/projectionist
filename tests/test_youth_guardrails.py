@@ -141,20 +141,63 @@ class _DbCase(unittest.TestCase):
         self.tmp.cleanup()
 
 
+def _backdate_youth_since(db: Database, user_id: str, *, days: float = 8.0) -> float:
+    """Move youth_since into the past so OPS-008's 7-day gate is open.
+
+    Returns the new ``youth_since`` so callers can age older notes behind it.
+    """
+    since = time.time() - days * 24 * 60 * 60
+    with db.connect() as conn:
+        conn.execute(
+            "UPDATE users SET youth_since = ? WHERE id = ?",
+            (since, user_id),
+        )
+    return since
+
+
+def _age_notes_before(db: Database, user_id: str, *, before: float, text: str | None = None) -> None:
+    """Push matching notes behind ``before`` so owner review still excludes them."""
+    stamp = before - 60.0
+    with db.connect() as conn:
+        if text is None:
+            conn.execute(
+                "UPDATE user_memory_notes SET created_at = ?, updated_at = ? WHERE user_id = ?",
+                (stamp, stamp, user_id),
+            )
+        else:
+            conn.execute(
+                """UPDATE user_memory_notes
+                   SET created_at = ?, updated_at = ?
+                   WHERE user_id = ? AND text = ?""",
+                (stamp, stamp, user_id, text),
+            )
+
+
 class YouthMemoryReviewTests(_DbCase):
-    def test_toggle_on_does_not_open_existing_adult_memory(self) -> None:
+    def test_toggle_on_blocks_owner_review_for_seven_days(self) -> None:
         self.service.remember(caller_id="adult", kind="self_disclosure", text=SECRET_NOTE)
         self.db.set_user_youth("adult", True)
-        notes = self.service.recall(caller_id="owner", caller_role="owner", target_id="adult")
-        self.assertEqual(notes, [])
-        # The member still sees their own memory.
+        with self.assertRaises(MemoryAccessError) as raised:
+            self.service.recall(caller_id="owner", caller_role="owner", target_id="adult")
+        self.assertIn("7 days", str(raised.exception))
+        # The member still sees their own memory immediately.
         own = self.service.recall(caller_id="adult", caller_role="member")
         self.assertEqual([n["text"] for n in own], [SECRET_NOTE])
+
+    def test_toggle_on_does_not_open_existing_adult_memory_after_delay(self) -> None:
+        self.service.remember(caller_id="adult", kind="self_disclosure", text=SECRET_NOTE)
+        self.db.set_user_youth("adult", True)
+        since = _backdate_youth_since(self.db, "adult")
+        _age_notes_before(self.db, "adult", before=since, text=SECRET_NOTE)
+        notes = self.service.recall(caller_id="owner", caller_role="owner", target_id="adult")
+        self.assertEqual(notes, [])
 
     def test_owner_sees_only_notes_written_after_youth_started(self) -> None:
         self.service.remember(caller_id="adult", kind="note", text=SECRET_NOTE)
         self.db.set_user_youth("adult", True)
         self.service.remember(caller_id="adult", kind="note", text="likes dragons")
+        since = _backdate_youth_since(self.db, "adult")
+        _age_notes_before(self.db, "adult", before=since, text=SECRET_NOTE)
         notes = self.service.recall(caller_id="owner", caller_role="owner", target_id="adult")
         self.assertEqual([n["text"] for n in notes], ["likes dragons"])
 
@@ -166,6 +209,11 @@ class YouthMemoryReviewTests(_DbCase):
             self.service.recall(caller_id="owner", caller_role="owner", target_id="adult")
         time.sleep(0.01)
         self.db.set_user_youth("adult", True)
+        with self.assertRaises(MemoryAccessError) as raised:
+            self.service.recall(caller_id="owner", caller_role="owner", target_id="adult")
+        self.assertIn("7 days", str(raised.exception))
+        since = _backdate_youth_since(self.db, "adult")
+        _age_notes_before(self.db, "adult", before=since, text="first youth note")
         notes = self.service.recall(caller_id="owner", caller_role="owner", target_id="adult")
         self.assertEqual(notes, [])
 
@@ -188,6 +236,7 @@ class YouthMemoryReviewTests(_DbCase):
         )
         self.assertIsNotNone(self.db.youth_since("kid"))
         self.service.remember(caller_id="kid", kind="note", text="loves animation")
+        _backdate_youth_since(self.db, "kid")
         notes = self.service.recall(caller_id="owner", caller_role="owner", target_id="kid")
         self.assertEqual([n["text"] for n in notes], ["loves animation"])
 
@@ -498,9 +547,8 @@ class YouthToggleApiTests(unittest.TestCase):
         self.assertNotIn(SECRET_NOTE, json.dumps(event))
 
         review = self.client.get("/api/users/local-member/memory")
-        self.assertEqual(review.status_code, 200, review.text)
-        self.assertEqual(review.json()["notes"], [])
-        self.assertFalse(review.json()["memory_enabled"])
+        self.assertEqual(review.status_code, 403, review.text)
+        self.assertIn("7 days", review.json()["detail"])
         self.assertNotIn(SECRET_NOTE, review.text)
 
     def test_my_data_owner_access_log_lists_owner_actions_without_memory(self) -> None:
@@ -508,6 +556,10 @@ class YouthToggleApiTests(unittest.TestCase):
             "/api/users/local-member", json={"is_youth": True, "confirm_youth": True}
         )
         self.assertEqual(resp.status_code, 200, resp.text)
+        too_soon = self.client.get("/api/users/local-member/memory")
+        self.assertEqual(too_soon.status_code, 403, too_soon.text)
+        since = _backdate_youth_since(self.db, "local-member")
+        _age_notes_before(self.db, "local-member", before=since, text=SECRET_NOTE)
         review = self.client.get("/api/users/local-member/memory")
         self.assertEqual(review.status_code, 200, review.text)
         self.assertEqual(review.json()["notes"], [])
@@ -517,7 +569,7 @@ class YouthToggleApiTests(unittest.TestCase):
         log = self.client.get("/api/me/owner-access")
         self.assertEqual(log.status_code, 200, log.text)
         items = log.json()["items"]
-        self.assertEqual([i["event"] for i in items], ["memory_review", "youth_change"])
+        self.assertEqual([i["event"] for i in items], ["youth_memory_read", "youth_change"])
         self.assertEqual({i["actor_name"] for i in items}, {"owner"})
         self.assertEqual(items[0]["detail"]["note_count"], 0)
         self.assertNotIn(SECRET_NOTE, log.text)

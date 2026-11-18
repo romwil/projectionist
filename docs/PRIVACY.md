@@ -323,7 +323,7 @@ Newsletters, nudges, whispers, and Year in Review are built per member from that
 
 - **Email** goes through SMTP or Resend as set in **Admin → Mail**. Invites with an email address are mailed the same way.
 - **Apprise** goes to the household destinations set in **Admin → Mail**. Only the owner can add per-account destinations; members can't, so a member can't make the server call an address they chose.
-- **Full MCP** includes a newsletter preview tool that can show any member's letter. See [MCP](#mcp).
+- Newsletter previews stay in **Admin → Newsletters** (authenticated owner session). Full MCP does not expose per-member letters. See [MCP](#mcp).
 
 ### Investigate episodes
 
@@ -379,7 +379,7 @@ MCP lets external AI apps query your library. The key a client presents decides 
 
 ### Full mode (trusted LAN automation)
 
-- **Tools:** the privacy tools with internal fields, taste and watch-based helpers (`analyze_watch_patterns`, `recommend_hidden_gems`, purge candidates, watchlist pins), confirm-gated Radarr/Sonarr/Seerr proposals, and a **weekly newsletter preview for any member**. That preview includes the member's name and watch-based reasons, and it reaches whatever AI provider the client uses.
+- **Tools:** the privacy tools with internal fields, taste and watch-based helpers (`analyze_watch_patterns`, `recommend_hidden_gems`, purge candidates, watchlist pins), and confirm-gated Radarr/Sonarr/Seerr proposals. There is **no** per-member newsletter preview on MCP — owners preview letters under Admin → Newsletters.
 - **Never includes:** live `X-Plex-Token` URLs, webhook, session, LLM, or *arr keys, or `settings.json`.
 
 | Key | Env | Purpose |

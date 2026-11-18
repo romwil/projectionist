@@ -273,4 +273,6 @@ def register(scheduler: IdleScheduler) -> None:
         items_per_cycle=MAX_ITEMS_PER_CYCLE,
         catchup_gap_seconds=CATCHUP_GAP_SECONDS,
         progress_scope="embeddings_pending",
+        # PERF-009: heaviest idle task — never share the web request loop.
+        off_loop=True,
     )

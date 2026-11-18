@@ -35,7 +35,9 @@ MCP_KEY_ROTATE = "mcp_key_rotate"
 MCP_KEY_CLEAR = "mcp_key_clear"
 HOUSEHOLD_BACKUP = "household_backup"
 EMAIL_UNSUBSCRIBE = "email_unsubscribe"
-MEMORY_REVIEW = "memory_review"
+# OPS-008: owner Youth memory review. Prefer YOUTH_MEMORY_READ in new writes.
+YOUTH_MEMORY_READ = "youth_memory_read"
+MEMORY_REVIEW = YOUTH_MEMORY_READ  # back-compat alias
 
 AUDIT_EVENTS = (
     SIGN_IN,
@@ -61,10 +63,11 @@ AUDIT_EVENTS = (
     MCP_KEY_CLEAR,
     HOUSEHOLD_BACKUP,
     EMAIL_UNSUBSCRIBE,
-    MEMORY_REVIEW,
+    YOUTH_MEMORY_READ,
 )
 
 # Settings → My data owner-access log (PRIV-023): owner actions aimed at one member.
+_YOUTH_MEMORY_READ_LABEL = "Opened the Youth memory review for your account"
 OWNER_ACCESS_LABELS: Dict[str, str] = {
     ROLE_CHANGE: "Changed your role",
     ACCOUNT_DISABLE: "Turned your account off or on",
@@ -72,7 +75,9 @@ OWNER_ACCESS_LABELS: Dict[str, str] = {
     AUTOCONFIRM_CHANGE: "Changed auto-confirm for your requests",
     AUTOCONFIRM_ADD: "Changed auto-confirm for your requests",
     PASSWORD_RESET: "Reset your password",
-    MEMORY_REVIEW: "Opened the Youth memory review for your account",
+    YOUTH_MEMORY_READ: _YOUTH_MEMORY_READ_LABEL,
+    # Historical rows written before OPS-008 renamed the event.
+    "memory_review": _YOUTH_MEMORY_READ_LABEL,
 }
 
 _SECRET_HINTS = ("password", "token", "secret", "api_key", "apikey", "credential", "key_value")

@@ -179,5 +179,19 @@ class TrickleIngestionTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(sum(call_sizes), 12)
 
 
+class SemanticEmbeddingsRegistrationTests(unittest.TestCase):
+    def test_register_sets_off_loop(self) -> None:
+        """PERF-009: embeddings must not share the web request event loop."""
+        from projectionist.scheduler.engine import IdleScheduler
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db = Database(root / "test.db")
+            scheduler = IdleScheduler(db, root)
+            semantic_embeddings.register(scheduler)
+            defn = scheduler._definitions[semantic_embeddings.TASK_NAME]
+            self.assertTrue(defn.off_loop)
+
+
 if __name__ == "__main__":
     unittest.main()
