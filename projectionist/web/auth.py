@@ -122,7 +122,7 @@ class CurrentUser:
     weather_lat: Optional[float] = None
     weather_lon: Optional[float] = None
     auth_method: str = "plex"
-    default_page: str = "auto"
+    default_page: str = "explore"
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -215,11 +215,14 @@ def row_to_current_user(row) -> CurrentUser:
     auth_method = "plex"
     if "auth_method" in keys and row["auth_method"] is not None:
         auth_method = str(row["auth_method"])
-    default_page = "auto"
+    # EXP-013: Explore is home; legacy "auto" surfaces as explore.
+    default_page = "explore"
     if "default_page" in keys and row["default_page"] is not None:
         cleaned_default_page = str(row["default_page"]).strip().lower()
-        if cleaned_default_page in {"auto", "chat", "explore"}:
-            default_page = cleaned_default_page
+        if cleaned_default_page == "chat":
+            default_page = "chat"
+        elif cleaned_default_page in {"auto", "explore"}:
+            default_page = "explore"
     user_id = str(row["id"])
     return CurrentUser(
         id=user_id,
@@ -1417,7 +1420,11 @@ def row_to_current_user_from_dict(d: dict) -> CurrentUser:
         weather_lat=d.get("weather_lat"),
         weather_lon=d.get("weather_lon"),
         auth_method=str(d.get("auth_method") or "plex"),
-        default_page=str(d.get("default_page") or "auto"),
+        default_page=(
+            "chat"
+            if str(d.get("default_page") or "").strip().lower() == "chat"
+            else "explore"
+        ),
     )
 
 

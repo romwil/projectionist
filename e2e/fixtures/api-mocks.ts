@@ -888,7 +888,7 @@ export type FeatureFlags = {
   open_auto_provision?: boolean;
   live_channels_enabled?: boolean;
   live_channels_ready?: boolean;
-  /** Mocks default to true so `/` lands on Chat; pass false for the Explore landing (BD-5). */
+  /** EXP-013: `/` lands on Explore regardless. Still useful for Chat honesty banners. */
   llm_configured?: boolean;
 };
 

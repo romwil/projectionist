@@ -67,7 +67,7 @@ export default function ProfilePage() {
   const [changingPassword, setChangingPassword] = useState(false);
   const [signOutEverywhereStatus, setSignOutEverywhereStatus] = useState<any | null>(null);
   const [signingOutEverywhere, setSigningOutEverywhere] = useState(false);
-  const [defaultPage, setDefaultPage] = useState("auto");
+  const [defaultPage, setDefaultPage] = useState("explore");
   const [llmConfigured, setLlmConfigured] = useState(true);
   const [engagement, setEngagement] = useState<any>({ loading: true, data: null, error: "" });
 
@@ -84,7 +84,7 @@ export default function ProfilePage() {
         setUiTheme(nextTheme);
         applyUiTheme(nextTheme);
         setSeerrLinked(Boolean(next?.seerr_user_id));
-        setDefaultPage(String(next?.default_page || "auto"));
+        setDefaultPage(String(next?.default_page || "explore"));
       })
       .catch(() => setUser(null));
     getFeatures()
@@ -432,14 +432,14 @@ export default function ProfilePage() {
           title="Default page"
           lead={
             llmConfigured
-              ? "Where Projectionist opens after you sign in."
-              : "No language model is configured yet, so Auto opens Explore instead of Chat until one is connected."
+              ? "Where Projectionist opens after you sign in. Explore is the product default."
+              : "Where Projectionist opens after you sign in. Explore is home; Chat needs a language model before it can answer."
           }
           testId="default-page-fieldset"
         >
           <div className="settings-default-page-options" role="radiogroup" aria-label="Default page">
             {[
-              { value: "auto", label: "Auto", help: llmConfigured ? "Chat" : "Explore (no LLM yet)" },
+              { value: "auto", label: "Auto", help: "Explore (product default)" },
               { value: "chat", label: "Chat" },
               { value: "explore", label: "Explore" },
             ].map((option) => (

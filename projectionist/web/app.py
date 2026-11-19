@@ -190,6 +190,7 @@ from projectionist.web.whisper_routes import register_whisper_routes
 from projectionist.web.device_routes import register_device_routes
 from projectionist.web.library_routes import register_library_routes
 from projectionist.web.chat_routes import register_chat_routes
+from projectionist.web.spike_engine_remux_routes import register_spike_engine_remux_routes
 from projectionist.web.setup import (
     REVEALABLE_SECRET_FIELDS,
     SECRET_FIELDS,
@@ -1314,7 +1315,7 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
             "is_youth": bool(getattr(user, "is_youth", False)),
             "seerr_user_id": user.seerr_user_id,
             "avatar_url": user.avatar_url,
-            "default_page": str(getattr(user, "default_page", "auto") or "auto"),
+            "default_page": str(getattr(user, "default_page", "explore") or "explore"),
         }
         payload["youth"] = {
             "max_content_rating": str(
@@ -1404,6 +1405,7 @@ register_investigate_routes(app)
 register_rematch_routes(app)
 register_whisper_routes(app)
 register_device_routes(app)
+register_spike_engine_remux_routes(app)
 
 
 def _scheduler_trigger_background(name: str) -> Dict[str, Any]:

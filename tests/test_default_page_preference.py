@@ -49,10 +49,11 @@ class DefaultPagePreferenceTests(unittest.TestCase):
         os.environ.pop("OPENAI_API_KEY", None)
         self._tmpdir.cleanup()
 
-    def test_default_page_defaults_to_auto(self) -> None:
+    def test_default_page_defaults_to_explore(self) -> None:
+        # EXP-013: Explore is home; legacy auto is not the product default.
         me = self.client.get("/api/auth/me")
         self.assertEqual(me.status_code, 200)
-        self.assertEqual(me.json()["user"].get("default_page"), "auto")
+        self.assertEqual(me.json()["user"].get("default_page"), "explore")
 
     def test_default_page_round_trips_chat_and_explore(self) -> None:
         patched = self.client.patch("/api/auth/me", json={"default_page": "explore"})
@@ -65,6 +66,13 @@ class DefaultPagePreferenceTests(unittest.TestCase):
         back = self.client.patch("/api/auth/me", json={"default_page": "chat"})
         self.assertEqual(back.status_code, 200)
         self.assertEqual(back.json()["user"]["default_page"], "chat")
+
+    def test_default_page_auto_normalizes_to_explore(self) -> None:
+        patched = self.client.patch("/api/auth/me", json={"default_page": "auto"})
+        self.assertEqual(patched.status_code, 200)
+        self.assertEqual(patched.json()["user"]["default_page"], "explore")
+        again = self.client.get("/api/auth/me")
+        self.assertEqual(again.json()["user"]["default_page"], "explore")
 
     def test_default_page_rejects_unknown_value(self) -> None:
         resp = self.client.patch("/api/auth/me", json={"default_page": "admin"})

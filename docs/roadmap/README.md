@@ -74,7 +74,7 @@ Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` ·
 | EXP-010 | Chat, quieter | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | EXP-011 | Design gallery | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | EXP-012 | Title detail keeps navigation | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
-| EXP-013 | Explore is the default home | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| EXP-013 | Explore is the default home | done | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 
 SES-001 and NAT-002 describe the same work from two sides; build them as one change.
 

@@ -2093,6 +2093,27 @@ class SchemaMigrationsMixin:
                 "ALTER TABLE users ADD COLUMN default_page TEXT NOT NULL DEFAULT 'auto'"
             )
 
+    def _migrate_explore_default_home(self, conn: sqlite3.Connection) -> None:
+        """EXP-013: Explore is the product default home; rewrite legacy auto → explore.
+
+        SQLite cannot cheaply change the column DEFAULT from migration 59
+        (``DEFAULT 'auto'``). New inserts that omit the column may still land as
+        ``auto``; read/write paths coerce ``auto`` to ``explore``.
+        """
+        user_cols = self._table_columns(conn, "users")
+        if "default_page" not in user_cols:
+            conn.execute(
+                "ALTER TABLE users ADD COLUMN default_page TEXT NOT NULL DEFAULT 'explore'"
+            )
+            return
+        conn.execute(
+            """
+            UPDATE users
+            SET default_page = 'explore'
+            WHERE lower(trim(default_page)) = 'auto'
+            """
+        )
+
     def _migrate_session_revocation(self, conn: sqlite3.Connection) -> None:
         """Session epoch + jti denylist so logout / password rotate invalidate cookies."""
         user_cols = self._table_columns(conn, "users")

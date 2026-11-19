@@ -330,9 +330,14 @@ class UsersAuthMixin:
                     )
                     params.extend([str(place), float(lat), float(lon)])
             if default_page is not ... and "default_page" in cols:
-                cleaned_default_page = str(default_page or "auto").strip().lower()
-                if cleaned_default_page not in {"auto", "chat", "explore"}:
-                    cleaned_default_page = "auto"
+                # EXP-013: normalize auto/empty/invalid → explore; keep chat/explore.
+                cleaned_default_page = str(default_page or "explore").strip().lower()
+                if cleaned_default_page == "chat":
+                    cleaned_default_page = "chat"
+                elif cleaned_default_page in {"auto", "explore"}:
+                    cleaned_default_page = "explore"
+                else:
+                    cleaned_default_page = "explore"
                 updates.append("default_page = ?")
                 params.append(cleaned_default_page)
             if email_muted_kinds is not ... and "email_muted_kinds" in cols:
@@ -639,11 +644,14 @@ class UsersAuthMixin:
             weather_lat = float(row["weather_lat"])
         if "weather_lon" in keys and row["weather_lon"] is not None:
             weather_lon = float(row["weather_lon"])
-        default_page = "auto"
+        # EXP-013: Explore is home; legacy "auto" surfaces as explore.
+        default_page = "explore"
         if "default_page" in keys and row["default_page"] is not None:
             cleaned_default_page = str(row["default_page"]).strip().lower()
-            if cleaned_default_page in {"auto", "chat", "explore"}:
-                default_page = cleaned_default_page
+            if cleaned_default_page == "chat":
+                default_page = "chat"
+            elif cleaned_default_page in {"auto", "explore"}:
+                default_page = "explore"
         from projectionist.mail.unsubscribe import email_muted_kinds
 
         return {

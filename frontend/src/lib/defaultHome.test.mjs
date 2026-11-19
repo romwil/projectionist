@@ -3,10 +3,11 @@ import { describe, it } from "node:test";
 
 import { resolveDefaultHome } from "./defaultHome.ts";
 
-describe("resolveDefaultHome (BD-5)", () => {
-  it("defaults to chat when unset and an LLM is configured", () => {
-    assert.equal(resolveDefaultHome({ defaultPage: "auto", llmConfigured: true }), "/chat");
-    assert.equal(resolveDefaultHome({}), "/chat");
+describe("resolveDefaultHome (EXP-013)", () => {
+  it("defaults to explore when unset, including when an LLM is configured", () => {
+    assert.equal(resolveDefaultHome({ defaultPage: "auto", llmConfigured: true }), "/explore");
+    assert.equal(resolveDefaultHome({}), "/explore");
+    assert.equal(resolveDefaultHome({ llmConfigured: true }), "/explore");
   });
 
   it("defaults to explore when unset and no LLM is configured", () => {
@@ -22,8 +23,8 @@ describe("resolveDefaultHome (BD-5)", () => {
     assert.equal(resolveDefaultHome({ defaultPage: "explore", llmConfigured: true }), "/explore");
   });
 
-  it("treats unknown values as auto", () => {
-    assert.equal(resolveDefaultHome({ defaultPage: "nonsense", llmConfigured: true }), "/chat");
+  it("treats unknown values as explore", () => {
+    assert.equal(resolveDefaultHome({ defaultPage: "nonsense", llmConfigured: true }), "/explore");
     assert.equal(resolveDefaultHome({ defaultPage: "nonsense", llmConfigured: false }), "/explore");
   });
 });

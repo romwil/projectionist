@@ -107,7 +107,7 @@ Footer links on every layout (**Help · Privacy · About**), plus the hamburger 
 
 ## What is Explore?
 
-The top-bar cinema icon opens `/explore`: browse rails (Recently Added, Recent Releases, On This Day, Revisit These, Plot Lab) that read the same SQLite feeds as the curator, plus a hero search across titles and plot summaries. Chat remains the primary curation loop; Explore is for cinema browsing. Full tour: in-app [Help](/help).
+The top-bar cinema icon opens `/explore` — home: browse rails (Recently Added, Recent Releases, On This Day, Revisit These, Plot Lab) that read the same SQLite feeds as the curator, plus a hero search across titles and plot summaries. Chat stays a primary peer for the deep curator loop. Full tour: in-app [Help](/help).
 
 ## Why is "More Like This" / Plot Lab empty?
 

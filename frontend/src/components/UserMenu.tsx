@@ -98,7 +98,7 @@ export function useAuthGate({ redirect = true } = {}) {
   const [liveChannelsReady, setLiveChannelsReady] = useState(initialLiveChannelsReady);
   const [seerrEnabled, setSeerrEnabled] = useState(Boolean(seededView?.seerrEnabled));
   const [llmConfigured, setLlmConfigured] = useState(Boolean(seededView?.llmConfigured));
-  const [defaultPage, setDefaultPage] = useState(seededView?.defaultPage || "auto");
+  const [defaultPage, setDefaultPage] = useState(seededView?.defaultPage || "explore");
 
   useEffect(() => {
     let cancelled = false;
@@ -119,7 +119,7 @@ export function useAuthGate({ redirect = true } = {}) {
       setMultiUserEnabled(view.multiUserEnabled);
       setSeerrEnabled(view.seerrEnabled);
       setLlmConfigured(view.llmConfigured);
-      setDefaultPage(view.defaultPage || "auto");
+      setDefaultPage(view.defaultPage || "explore");
       setIsOwner(view.isOwner);
       setRole(view.role);
       setIsYouth(view.isYouth);
