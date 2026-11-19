@@ -14,5 +14,5 @@ When asked to process the roadmap, or when files appear in `docs/roadmap/inbox/`
 - Every item has Why, Done when, Depends on, Client contract (capability + version), honest limits.
 - Cross-repo work: server item here + a handoff in `docs/roadmap/outbox/`. Never write into a client repo.
 - Move processed drops to `docs/roadmap/accepted/` with a processing note; update `docs/roadmap/README.md`.
-- No implementation, no commits, no release rituals unless the person asks.
+- Commit and merge roadmap work via PR when required CI is green (never bypass); no implementation or release rituals unless the person asks.
 - Docs you touch meet `docs/DOCS_STYLE.md`.

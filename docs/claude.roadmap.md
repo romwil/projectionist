@@ -74,7 +74,7 @@ Mark anything you inferred as *Proposed:* — never present your own call as the
 2. Update the board.
 3. Summarize to the person in a few lines: what you created, what conflicts or questions remain.
 
-Do **not** commit unless the person asks. Do not start implementation; picking an item up for building is a separate request that follows the repo’s normal design → plan → build flow (`docs/superpowers/`).
+Commit roadmap work on a branch, open a PR, and merge it when every required `main` CI check is green (`gh pr checks --watch` then `gh pr merge --merge --delete-branch` — never `--admin`, never skip checks). Do not start implementation; picking an item up for building is a separate request that follows the repo’s normal design → plan → build flow (`docs/superpowers/`).
 
 ## 6. Coordinating with client repositories
 
@@ -93,3 +93,4 @@ Clients (the web app here, and separate native clients such as the Apple apps) d
 - Never invent endpoints as if they ship; mark them *Proposed*.
 - Never run release rituals (Hub publish, tags, rollout) as part of roadmap processing.
 - Never paste proprietary client material into this repository.
+- Never merge by bypassing required checks.
