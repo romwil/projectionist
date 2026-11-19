@@ -17,7 +17,7 @@ Read this whole file before touching the inbox.
 | Owning docs | Where an item’s design lives: [PLAYBACK_ENGINE.md](PLAYBACK_ENGINE.md) (ENG), [SHARED_SESSIONS.md](SHARED_SESSIONS.md) (SES), [TIMELINE.md](TIMELINE.md) (TML), [TRACKS.md](TRACKS.md) (TRK), [NATIVE_CLIENTS.md](NATIVE_CLIENTS.md) (NAT), [PRODUCT.md](PRODUCT.md) for everything else |
 | `docs/superpowers/specs/` | Full design specs for items too big for a table row (existing convention) |
 
-ID prefixes are fixed: `ENG` playback engine · `SES` shared sessions · `TML` timeline layer · `TRK` tracks · `NAT` native-client contract · `EXP` experience convergence (approved 2026-11-18) · `PRD` product (existing series in `docs/reviews/`) · `OPS`, `PRIV`, `PERF`, `GRO`, `UX` (existing review series). A new prefix needs the person’s approval.
+ID prefixes are fixed: `ENG` playback engine · `SES` shared sessions · `TML` timeline layer · `TRK` tracks · `NAT` native-client contract · `EXP` experience convergence (approved 2026-11-18) · `PRD` product · `OPS`, `PRIV`, `PERF`, `GRO`, `UX` (existing review-series IDs; review run artifacts are local-only). A new prefix needs the person’s approval.
 
 ## 2. Read before you write
 

@@ -45,5 +45,5 @@ Unless product intent reverses. Detail stays in the linked docs:
 - [PRODUCT.md](PRODUCT.md) — living product sequencing + Tunarr-era non-goals
 - [DELIGHT-WISHLIST.md](DELIGHT-WISHLIST.md) — persona briefs; parked inventory is not the plan
 - [ARCHITECTURE.md](ARCHITECTURE.md) — SQLite WAL + write serializer
-- [reviews/2026-07-architecture-code-review.md](reviews/2026-07-architecture-code-review.md) — H8 embeddings, M3 GET retries
+- 2026-07 architecture review — H8 embeddings, M3 GET retries (review note is local-only)
 - [RELEASE.md](RELEASE.md) — Hub manifest lists vs OCI indexes

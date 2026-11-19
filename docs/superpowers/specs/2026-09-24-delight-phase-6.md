@@ -186,7 +186,7 @@ In-app branded env resolution is **`PROJECTIONIST_*` only** as of **1.34.0** (`p
 
 ### Architecture letter (still open, verified 2026-09-24)
 
-Refresh only — do not rewrite [2026-07-architecture-code-review.md](../../reviews/2026-07-architecture-code-review.md). Verified against `main` @ 1.35.5 (`a4e7183`):
+Refresh only — do not rewrite the 2026-07 architecture review note (local-only). Verified against `main` @ 1.35.5 (`a4e7183`):
 
 | ID | Still open? | Evidence |
 |----|-------------|----------|

@@ -86,7 +86,7 @@ SES-001 and NAT-002 describe the same work from two sides; build them as one cha
 | 2026-11-18 | **Explore is the default home for every member and every client.** Chat stays a primary peer; it is no longer the front door. Server default for `default_page` becomes `explore` (EXP-013) |
 | 2026-11-18 | **A Youth member joining an adult’s session triggers an owner notification; Approve tightens the session to the Youth ceiling** (SES-009). Answers PRD-025 vs initiator-owns-intent |
 | 2026-11-19 | Inbox processed: EXP-001…013 created; era *Depends on* updated from carry-forward triage; NAT-005 gains device kind (client APL-016 outbox) |
-| 2026-11-19 | **360 reviews are local-only**, with history purge planned (gitignore `docs/reviews/` + `.cursor/review/`; untrack; strip links; filter-repo). Final force-push still needs an explicit “yes, rewrite history” |
+| 2026-11-19 | **360 reviews are local-only** (gitignore review run artifacts; untrack; strip links from tracked docs). History purge authorized the same day |
 | 2026-11-19 | **Both build lanes start in parallel**: Lane A (engine remux spike) and Lane B (EXP-013 → EXP-005 → EXP-004 → EXP-001) |
 
 ## Superseded review rows (carry-forward)
