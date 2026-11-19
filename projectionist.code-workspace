@@ -3,18 +3,6 @@
         {
             "name": "Projectionist",
             "path": "."
-        },
-        {
-            "path": "../../../../Volumes/appdata/projectionist"
-        },
-        {
-            "path": "../../../../Volumes/appdata/projectionist-qa"
-        },
-        {
-            "path": "../../../../Volumes/appdata/projectionist-qa-build"
-        },
-        {
-            "path": "../../../../Volumes/appdata/projectionist-qa-scripts"
         }
     ]
 }

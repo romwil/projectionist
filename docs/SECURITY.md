@@ -57,6 +57,9 @@ There is **no** `/api/auth/` prefix leak. Ingress matches **explicit method+path
 | `POST` | `/api/auth/logout` | Clears cookie |
 | `GET` | `/api/mail/unsubscribe` | Signed one-click token (GRO-008); shows a confirm button, changes nothing |
 | `POST` | `/api/mail/unsubscribe` | RFC 8058 one-click: turns off one program's email for one person; rejected after "Delete my data" or for another person; security-logged |
+| `POST` | `/api/devices/pair/issue` | Apple TV sign-in code. Short code, expiry, pending id. No library data, no device credential. Rate limited |
+| `POST` | `/api/devices/pair/rotate` | New code for a pending id. The previous code dies. Unknown or already claimed: tell the TV to issue again |
+| `GET` | `/api/devices/pair/pending/{id}` | Pattern match, like the Plex PIN poll. Pending, or the device credential **once** after claim. Not a library read |
 
 Not public: `GET /api/auth/me`, `POST /api/auth/local/register`, `GET /api/guest/tour` (404), whole `/api/auth/` prefix, setup wizard endpoints after ACTIVE_MODE (404). `/api/webhooks/*` stays **secret-gated** (S8). `/mcp` stays **API-key-gated** — do not publish MCP on the WAN hostname.
 

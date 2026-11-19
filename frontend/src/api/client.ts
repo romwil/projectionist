@@ -2458,3 +2458,25 @@ export async function sendWeeklyLetterNow() {
   return api("/admin/weekly-letter/send", { method: "POST" });
 }
 
+export async function listPairedDevices() {
+  return api<{ devices?: JsonObject[] }>("/devices");
+}
+
+export async function claimAppleTv(code: string) {
+  return api("/devices/pair/claim", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+}
+
+export async function revokeAppleTv(deviceId: string) {
+  return api(`/devices/${encodeURIComponent(deviceId)}/revoke`, { method: "POST" });
+}
+
+export async function throwToAppleTv(deviceId: string, payload: JsonObject) {
+  return api(`/devices/${encodeURIComponent(deviceId)}/throw`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
