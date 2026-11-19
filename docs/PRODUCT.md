@@ -2,7 +2,7 @@
 
 Living product truth for Projectionist — positioning, surface map, SWOT, sequenced priorities, and parked Tunarr-era non-goals. Baseline tip: Automat **1.40.1** (trust residuals on **1.40.0** Admin + YIR). Do not reopen Tunarr dual-watch, Phase 6 gift queue, or Live **new** channel types (PRD-007 freeze).
 
-Related: [HELP.md](HELP.md) · [MEDIA_INTELLIGENCE.md](MEDIA_INTELLIGENCE.md) · [DELIGHT-WISHLIST.md](DELIGHT-WISHLIST.md) · [RELEASE.md](RELEASE.md) · [README](../README.md) · [2026-11-18 department rescore](reviews/2026-11-18/2026-11-18_department-rescore.md)
+Related: [HELP.md](HELP.md) · [MEDIA_INTELLIGENCE.md](MEDIA_INTELLIGENCE.md) · [DELIGHT-WISHLIST.md](DELIGHT-WISHLIST.md) · [RELEASE.md](RELEASE.md) · [README](../README.md) · [roadmap board](roadmap/README.md) · [EXPERIENCE.md](EXPERIENCE.md) · department rescore 2026-11-18 (local review note)
 
 ---
 
@@ -31,6 +31,9 @@ Runtime watch surfaces: **library Play** (`/watch`) and **native Live** (`/live`
 | **Admin → Ops → Newsletters** | Weekly letter, member newsletter push, Year in Review send-test |
 | **Admin → Library knowledge** | Coverage / kinship / staged augmentations (owner ops telemetry) |
 | **Lobby Theater** (`:8791`) | LAN-only kiosk lightbox (enabled when the household relies on it) |
+| **Booth Notes** (*planned*) | Commentary-style track during playback — see [TRACKS.md](TRACKS.md) |
+| **Class / Study** (*planned*) | Lesson tracks with detours — see [TRACKS.md](TRACKS.md) |
+| **Settings → Devices** | Paired companions (Apple TV today; kinds expand under NAT-005) |
 
 ---
 
@@ -62,13 +65,22 @@ Runtime watch surfaces: **library Play** (`/watch`) and **native Live** (`/live`
 
 ## Sequenced priorities (post-1.40.1)
 
-1. **E6 design-system footholds** — opportunistic Button migration, stylelint / tokens, remaining A11Y (trailer focus trap); Admin density from 1.40 is the foothold (no brand rewrite).
-2. **E5 owner operability** — invite lifecycle, break-glass CLI, SLOs, support bundle (backups / Needs attention already shipped).
-3. **GRO-012 packaging fix** — ship `og-card.png` + `manifest.webmanifest` into Hub `frontend/dist` (meta already points at them).
-4. **Growth / join leftovers** — GRO-013–017/022 lifecycle copy; join first-run; keep Live freeze.
-5. **Explore e2e flake** — `title-detail-open-full` is CI hygiene when touching Explore (not a merge blocker for trust patches).
+**Media-engine era** (source of truth: [roadmap board](roadmap/README.md)):
 
-Path-to-A rescore: [2026-11-18 note](reviews/2026-11-18/2026-11-18_department-rescore.md). Do **not** claim department **A** until Highs stay closed in the running Hub-pulled build and a later rescore says so.
+1. **ENG** — own the stream (playback engine) → **SES** shared sessions → **TML** timeline → **TRK** tracks; **NAT** capability contract threaded through.
+2. **EXP** — experience convergence ([EXPERIENCE.md](EXPERIENCE.md)): Explore as home (EXP-013), vocabulary / *why* voice, tokens, cinema-first Explore.
+
+**Still in the residual backlog:**
+
+3. **E6 design-system footholds** — overlaps EXP-001; opportunistic Button migration, remaining A11Y; Admin density from 1.40 is the Workbench foothold.
+4. **E5 owner operability** — invite lifecycle, break-glass CLI, SLOs (extend with ENG/SES: PERF-014), support bundle.
+5. **GRO-012 packaging fix** — ship `og-card.png` + `manifest.webmanifest` into Hub `frontend/dist` when the image still 404s them.
+6. **Growth / join leftovers** — GRO-013–017/022; join first-run (PRD-006) aligns with NAT-002.
+7. **Explore e2e flake** — CI hygiene when touching Explore.
+
+Live’s **PRD-007** freeze still holds: ENG-009 changes the *stream* under existing stations only.
+
+Path-to-A: department rescore 2026-11-18 (~B−, not A). Do **not** claim department **A** until Highs stay closed in the running Hub-pulled build and a later rescore says so.
 
 ---
 

@@ -115,7 +115,7 @@ Everything here applies to episodes as well as films:
 | TML-003 | Scene / shot detection job (jobs engine, resumable) | TML-001 |
 | TML-004 | Speaker hints from cast map + spoken names | TML-002 |
 | TML-005 | `timeline_context` agent tool + spoiler guard | TML-002 |
-| TML-006 | Chat turns carry session context (`session_id`, playhead) | TML-005, SES-003 |
+| TML-006 | Chat turns carry session context (`session_id`, playhead). Youth LLM routing / memory defaults (PRIV-007, PRIV-025) must exist before notes reach Youth sessions | TML-005, SES-003, PRIV-007, PRIV-025 |
 | TML-007 | Series index (recurring characters / places / motifs across episodes) | TML-002 |
 | TML-008 | Owner coverage view (Admin → Library knowledge gains a timeline column) | TML-002 |
 

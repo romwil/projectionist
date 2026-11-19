@@ -225,6 +225,12 @@ Approximate letter sizes (origin/main after the library+chat carve):
 
 Plex sync → SQLite upsert → TMDB enrichment (sync + idle trickle) → layered plot text → embeddings → materialized neighbors → title_relations graph → semantic / facet / feed queries. Structured credits (`people` / `credits`) dual-write alongside legacy JSON cast/directors arrays.
 
+**Timeline layer (*planned*).** Time-coded dialogue, scenes, and curator context for a playing title — see [TIMELINE.md](TIMELINE.md). Built on subtitle cache + jobs; feeds tracks and “ask about now.”
+
+### Playback engine (*planned*)
+
+Today library Play and Live watch use Plex HLS rewritten onto `/api/library/playback/{session}`. The planned household engine remuxes or transcodes from mapped library files into session-scoped fMP4 HLS, with captions and device profiles — see [PLAYBACK_ENGINE.md](PLAYBACK_ENGINE.md). Live’s PRD-007 freeze still holds: ENG-009 replaces the *stream* under existing stations only. New ENG / SES / TML / TRK routes belong in their own router modules (ARCH-005), not more weight on `app.py`.
+
 ### Connectors
 
 Thin HTTP clients for Plex, TMDB, *arr, Fanart, Tautulli, TVDB.
@@ -621,6 +627,9 @@ See [SECURITY.md](SECURITY.md) and [wiki/Multi-User.md](wiki/Multi-User.md) for 
 ## Related documentation
 
 - [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) — why/what/how of library knowledge, idle curation, Plot Lab
+- [PLAYBACK_ENGINE.md](PLAYBACK_ENGINE.md) — planned household stream
+- [SHARED_SESSIONS.md](SHARED_SESSIONS.md) · [TIMELINE.md](TIMELINE.md) · [TRACKS.md](TRACKS.md) · [NATIVE_CLIENTS.md](NATIVE_CLIENTS.md)
+- [EXPERIENCE.md](EXPERIENCE.md) · [roadmap/README.md](roadmap/README.md)
 - [HELP.md](HELP.md) — in-app Help source (`/help`)
 - [DESIGN.md](DESIGN.md) — UX principles, agent tools
 - [DATA_MODEL.md](DATA_MODEL.md) — SQLite and PRD tables
