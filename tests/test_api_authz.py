@@ -451,9 +451,14 @@ class ApiAuthzTests(unittest.TestCase):
             ("GET", "/api/auth/oidc/callback"),
             ("GET", "/api/mail/unsubscribe"),
             ("POST", "/api/mail/unsubscribe"),
+            ("POST", "/api/devices/pair/issue"),
+            ("POST", "/api/devices/pair/rotate"),
         }
         self.assertEqual(PUBLIC_HANDSHAKE_EXACT, documented)
         self.assertTrue(is_public_handshake("GET", "/api/auth/plex/pin/42"))
+        self.assertTrue(is_public_handshake("GET", "/api/devices/pair/pending/abcDEF_123-pending"))
+        self.assertFalse(is_public_handshake("POST", "/api/devices/pair/claim"))
+        self.assertFalse(is_public_handshake("GET", "/api/devices"))
         self.assertFalse(is_public_handshake("GET", "/api/auth/me"))
         self.assertFalse(is_public_handshake("POST", "/api/auth/local/register"))
         self.assertFalse(is_public_handshake("GET", "/api/guest/tour"))
@@ -473,6 +478,10 @@ class ApiAuthzTests(unittest.TestCase):
         pin_poll = self.client.get("/api/auth/plex/pin/1")
         self.assertNotEqual(pin_poll.status_code, 401)
         self.assertNotEqual(pin_poll.status_code, 404)
+        pending = self.client.get("/api/devices/pair/pending/not-a-real-pending-id")
+        self.assertNotEqual(pending.status_code, 401)
+        self.assertEqual(pending.status_code, 410)
+        self.assertEqual(pending.json()["status"], "issue_again")
 
         self.assertEqual(self.client.get("/api/auth/me").status_code, 401)
         register = self.client.post(

@@ -187,6 +187,7 @@ from projectionist.web.runtime_routes import register_runtime_routes
 from projectionist.web import runtime_metrics
 from projectionist.web.setup_routes import register_setup_routes
 from projectionist.web.whisper_routes import register_whisper_routes
+from projectionist.web.device_routes import register_device_routes
 from projectionist.web.library_routes import register_library_routes
 from projectionist.web.chat_routes import register_chat_routes
 from projectionist.web.setup import (
@@ -1402,6 +1403,7 @@ register_theater_delight_routes(
 register_investigate_routes(app)
 register_rematch_routes(app)
 register_whisper_routes(app)
+register_device_routes(app)
 
 
 def _scheduler_trigger_background(name: str) -> Dict[str, Any]:

@@ -66,8 +66,12 @@ PUBLIC_HANDSHAKE_EXACT = frozenset(
         ("GET", "/api/auth/oidc/callback"),
         ("GET", "/api/mail/unsubscribe"),
         ("POST", "/api/mail/unsubscribe"),
+        ("POST", "/api/devices/pair/issue"),
+        ("POST", "/api/devices/pair/rotate"),
     }
 )
+# Pending poll is a capability URL (unguessable id), same shape as the Plex PIN poll.
+DEVICE_PAIR_PENDING_PATH = re.compile(r"^/api/devices/pair/pending/[A-Za-z0-9_-]+$")
 PLEX_PIN_POLL_PATH = re.compile(r"^/api/auth/plex/pin/\d+$")
 PLEX_PIN_NONCE_COOKIE = "plex_pin_nonce"
 PLEX_PIN_NONCE_TTL_SECONDS = 1800
@@ -443,6 +447,8 @@ def is_public_handshake(method: str, path: str) -> bool:
         return True
     if key[0] == "GET" and PLEX_PIN_POLL_PATH.match(cleaned):
         return True
+    if key[0] == "GET" and DEVICE_PAIR_PENDING_PATH.match(cleaned):
+        return True
     if cleaned.startswith("/api/webhooks/"):
         return True
     if cleaned.startswith("/mcp"):
@@ -491,6 +497,52 @@ def _user_from_session(request: Request, db: Database) -> Optional[CurrentUser]:
     if jti and db.is_session_jti_revoked(hash_session_jti(jti)):
         return None
     return row_to_current_user(row)
+
+
+def _bearer_token(request: Request) -> Optional[str]:
+    """Return the bearer credential, or an empty string when the scheme has no token."""
+    raw = request.headers.get("authorization")
+    if not raw:
+        return None
+    scheme, _, rest = raw.partition(" ")
+    if scheme.lower() != "bearer":
+        return None
+    return rest.strip()
+
+
+def _user_from_device_bearer(db: Database, token: str) -> tuple[Optional[CurrentUser], Optional[str]]:
+    """Map a device credential to the member who claimed that Apple TV.
+
+    A revoked credential fails closed with plain language. An unknown bearer
+    does not fall through to the session cookie.
+    """
+    from projectionist.devices.pairing import DEVICE_REVOKED_DETAIL, credential_status
+
+    status, user_id = credential_status(db, token)
+    if status == "revoked":
+        return None, DEVICE_REVOKED_DETAIL
+    if status != "active" or not user_id:
+        return None, "Authentication required"
+    row = db.get_user(user_id)
+    if row is None or _user_is_disabled(row):
+        return None, "Authentication required"
+    return row_to_current_user(row), None
+
+
+def resolve_request_user(
+    request: Request, db: Database
+) -> tuple[Optional[CurrentUser], Optional[str]]:
+    """Cookie session, or the device bearer as that same member.
+
+    Returns ``(user, failure_detail)``. ``failure_detail`` is set when a bearer
+    was presented and rejected. No bearer falls through to ``curatorx_session``.
+    """
+    token = _bearer_token(request)
+    if token is not None:
+        if not token:
+            return None, "Authentication required"
+        return _user_from_device_bearer(db, token)
+    return _user_from_session(request, db), None
 
 
 async def multi_user_api_auth_middleware(request: Request, call_next):
@@ -597,11 +649,14 @@ async def multi_user_api_auth_middleware(request: Request, call_next):
     if is_public_handshake(method, path):
         return await call_next(request)
 
-    user = await run_in_threadpool(_user_from_session, request, db)
+    user, failure = await run_in_threadpool(resolve_request_user, request, db)
     if user is None:
         if method == "POST" and path == "/api/auth/local/register":
             return JSONResponse({"detail": JOIN_LINK_DETAIL}, status_code=403)
-        return JSONResponse({"detail": "Authentication required"}, status_code=401)
+        return JSONResponse(
+            {"detail": failure or "Authentication required"},
+            status_code=401,
+        )
     return await call_next(request)
 
 
@@ -611,9 +666,9 @@ def get_current_user(request: Request, db: Optional[Database] = None) -> Current
         return bootstrap_owner(db)
     if db is None:
         raise HTTPException(status_code=401, detail="Authentication required")
-    user = _user_from_session(request, db)
+    user, failure = resolve_request_user(request, db)
     if user is None:
-        raise HTTPException(status_code=401, detail="Authentication required")
+        raise HTTPException(status_code=401, detail=failure or "Authentication required")
     return user
 
 
@@ -623,7 +678,8 @@ def try_get_current_user(request: Request, db: Optional[Database] = None) -> Opt
         return bootstrap_owner(db)
     if db is None:
         return None
-    return _user_from_session(request, db)
+    user, _failure = resolve_request_user(request, db)
+    return user
 
 
 def get_current_user_dep(request: Request) -> CurrentUser:
