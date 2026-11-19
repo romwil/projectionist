@@ -1,6 +1,6 @@
 # Experience convergence: one design language across web, phone, tablet, and TV
 
-Dropped 2026-11-18 after a pass over the screenshots in `docs/reviews/2026-10-28*/screenshots/` and `docs/reviews/2026-11-01/screenshots/` (builds 1.37.x–1.38.0; some items may be fixed in 1.40.x, so **verify on the current build**), the 2026-11-01 Visual and UX reviews, and the 2026-11-18 rescore.
+Dropped 2026-11-18 after a pass over screenshots from the 2026-10-28 and 2026-11-01 review runs (builds 1.37.x–1.38.0; some items may be fixed in 1.40.x, so **verify on the current build**), the 2026-11-01 Visual and UX reviews, and the 2026-11-18 rescore.
 
 **Goal:** a world-class, singular Projectionist experience. The web app and the native clients feel like one product because they share one language, one navigation model, one voice, and one source for design values.
 
@@ -55,3 +55,11 @@ Dropped 2026-11-18 after a pass over the screenshots in `docs/reviews/2026-10-28
 **Sequencing:** EXP-001, EXP-004, EXP-005 first (they make every later screen cheaper and fix what members read). Then EXP-002, EXP-003, EXP-006 (the art-first core). Then the rest, alongside ENG / SES.
 
 **Open for the person:** approve the `EXP` prefix; confirm Explore (not Chat) as the default home for members, which the red team’s Q2 left open and the native clients already assume.
+
+---
+## Processing note (agent, 2026-11-19)
+- Created: EXP-001 … EXP-012 (EXP-013 from sibling drop); owning doc docs/EXPERIENCE.md
+- Updated: board with EXP rows; screenshot/`docs/reviews/` paths stripped from this accepted copy (review IDs kept as plain text)
+- Prefix EXP already approved 2026-11-18; Explore-as-home already decided
+- Outbox: none
+- Needs the person: nothing for creation; verify older screenshot findings on 1.40.1 before scheduling each EXP item

@@ -165,13 +165,13 @@ For every client that draws track content over the picture:
 | ID | Item | Depends on |
 |----|------|------------|
 | TRK-001 | Track + cue schema, storage, validation (sources, ceiling, duration) | TML-001 |
-| TRK-002 | Moments track generation (curator, on request) | TRK-001, TML-002 |
+| TRK-002 | Moments track generation (curator, on request) | TRK-001, TML-002, PERF-011 |
 | TRK-003 | Track delivery on sessions (cue events on the realtime channel) | TRK-001, SES-004 |
-| TRK-004 | Booth Notes editions (Mix × Heat), persona voice, riff/fact separation | TRK-002 |
-| TRK-005 | Trusted public sources (owner setting, allowlist, server-side fetch, citation) | TRK-004 |
+| TRK-004 | Booth Notes editions (Mix × Heat), persona voice, riff/fact separation | TRK-002, PERF-011, PRIV-007, PRIV-025 |
+| TRK-005 | Trusted public sources (owner setting, allowlist, server-side fetch, citation). Ship PRIV-026 “what leaves this server” panel the same day | TRK-004, SEC-013 |
 | TRK-006 | Class / Study lessons from syllabus walks, placed on the timeline | TRK-002 |
 | TRK-007 | Detours (library clip sessions, bridge card, exact return) | TRK-006, ENG-003 |
-| TRK-008 | “Your edition is ready” Inbox + push notifications | TRK-002 |
+| TRK-008 | “Your edition is ready” Inbox + push notifications (one badge count: UX-007 / PRD-009) | TRK-002, EXP-009 |
 | TRK-009 | Series studies spanning episodes | TRK-006, TML-007 |
 | TRK-010 | Web overlay renderer (element fullscreen) | TRK-003, ENG-007 |
 

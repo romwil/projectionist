@@ -59,8 +59,8 @@ Teaching principles: **sync vs idle trickle**, **materialize similarity**, **hon
 ## Key capabilities
 
 - **Chat + Explore** — cinema workspace with Lights Up / Lights Down themes; `/explore` browse hub with **For you** first (named household links, never cosine filler); title detail with trailer, Watch on Plex, and **More Like This** neighbors
-- **Library Play** — in-app `/watch` for movies and episodes (HLS via Plex); shrink / pop-out / phone; captions, buffering chip, hold-to-2x, and resume on the same stage Live uses
-- **Live Channels** — native household stations from your library (`/live` Guide / Watch / Weather / pop-out; lineup under `DATA_DIR`); craft in Admin → Live Channels. **Plex Live TV / OTA** is your Plex setup — Projectionist does not manage that tuner stack
+- **Library Play** — in-app `/watch` for movies and episodes (HLS via Plex today); shrink / pop-out / phone; captions, buffering chip, hold-to-2x, and resume on the same stage Live uses. *Planned:* a household playback engine that remuxes/transcodes without depending on Plex for the stream ([PLAYBACK_ENGINE.md](docs/PLAYBACK_ENGINE.md))
+- **Live Channels** — native household stations from your library (`/live` Guide / Watch / Weather / pop-out; lineup under `DATA_DIR`); craft in Admin → Live Channels. **Plex Live TV / OTA** is your Plex setup — Projectionist does not manage that tuner stack. Live scope freeze (PRD-007) still holds
 - **Named kinship** — owner KPI on Admin Monday pass / coverage strip (`with_explainable_neighbors_pct`); catch-up is the lever, not raw similar-cache %
 - **Lobby Theater** — open-LAN kiosk lightbox on a dedicated port (`8791` by default): live **now playing** from Plex sessions, idle poster carousel from your library; pick the idle feed with `?feed=recently_added`, `recently_released`, or `trending` (aliases: `recently-added`, `recent-releases`, `popular`); adaptive Plex polling + shared poster cache for Pi-class wall hardware (Admin → Lobby)
 - **Library-grounded curator** — RAG + facet query over structured credits/motifs and layered plot text; explainable “why this?”; agent tools for similar titles, relations, and people
@@ -233,7 +233,14 @@ Details: [Wiki → Multi-User](docs/wiki/Multi-User.md) · [Wiki → Seerr](docs
 | [Penetration tests](docs/security/pentests/README.md) | Repeatable Protocol v1.0 + harness |
 | [FAQ](docs/FAQ.md) | Common questions |
 | [Help](docs/HELP.md) | In-app Help source (`/help`); role-aware product guide |
-| [Product map](docs/PRODUCT.md) | Positioning, surface map, SWOT, top 10, parked Tunarr-era items |
+| [Product map](docs/PRODUCT.md) | Positioning, surface map, SWOT, sequenced priorities, parked Tunarr-era items |
+| [Roadmap board](docs/roadmap/README.md) | Media-engine era + experience convergence items |
+| [Experience](docs/EXPERIENCE.md) | One design language across web and native clients |
+| [Playback engine](docs/PLAYBACK_ENGINE.md) | Planned household stream (ENG) |
+| [Shared sessions](docs/SHARED_SESSIONS.md) | Rooms, guests, second-screen (SES) |
+| [Timeline](docs/TIMELINE.md) | Time-coded title knowledge (TML) |
+| [Tracks](docs/TRACKS.md) | Moments, Booth Notes, Class / Study (TRK) |
+| [Native clients](docs/NATIVE_CLIENTS.md) | Device pairing, capabilities, API contract (NAT) |
 | [Curator knowledge](docs/CURATOR_KNOWLEDGE.md) | Library knowledge depth, motifs, idle curation |
 | [Onboarding](docs/ONBOARDING.md) | First-run checklist |
 | [Web UI](docs/WEB_UI.md) | Workspace layout and routes |

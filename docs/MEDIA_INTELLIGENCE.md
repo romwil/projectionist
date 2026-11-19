@@ -124,3 +124,4 @@ After a TV episode finish, that path uses the **episode plot** (when Plex stored
 - Full closed-loop promote from kinship_miss into staged augmentations (not just idle priority).
 - Deeper episode knowledge graph (per-episode embeddings / neighbors) if show+episode overlay is still too coarse.
 - IdleScheduler rewrite for global priority across all trickle tasks.
+- **Timeline layer (TML)** — time-coded dialogue, scenes, and curator context as the inward extension of title knowledge; feeds tracks and session-aware chat. See [TIMELINE.md](TIMELINE.md) and the [roadmap board](roadmap/README.md).

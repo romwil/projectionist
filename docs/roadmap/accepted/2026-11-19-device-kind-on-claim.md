@@ -11,3 +11,9 @@ This should not wait on NAT-002. Handhelds can pair with the existing code flow 
 **Waiting client item:** APL-016. The routes do not need to block on this; the missing piece is the kind.
 
 No client screens, copy, or product plans in this request.
+
+---
+## Processing note (agent, 2026-11-19)
+- Updated: NAT-005 (device kind on claim/list; Settings → Devices; depends on pairing shipped, not NAT-002)
+- Outbox: 2026-11-19-NAT-005-apple.md (client APL-016)
+- Needs the person: nothing to create the item; say when to implement NAT-005
