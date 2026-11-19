@@ -23,6 +23,7 @@ const ListsSettingsPage = lazy(() => import("./pages/settings/ListsSettingsPage"
 const TasteSettingsPage = lazy(() => import("./pages/settings/TasteSettingsPage"));
 const NotificationsSettingsPage = lazy(() => import("./pages/settings/NotificationsSettingsPage"));
 const MyDataPage = lazy(() => import("./pages/settings/MyDataPage"));
+const AppleTvPage = lazy(() => import("./pages/settings/AppleTvPage"));
 const LivePage = lazy(() => import("./pages/LivePage"));
 const LiveWatchPage = lazy(() => import("./pages/LiveWatchPage"));
 const LibraryWatchPage = lazy(() => import("./pages/LibraryWatchPage"));
@@ -151,6 +152,7 @@ export default function AppRoutes() {
         <Route path="watchlist" element={<WatchlistSettingsPage />} />
         <Route path="lists" element={<ListsSettingsPage />} />
         <Route path="privacy" element={<MyDataPage />} />
+        <Route path="apple-tv" element={<AppleTvPage />} />
       </Route>
       <Route path="/title/:mediaType/:itemId" element={<TitleDetailPage />} />
       <Route path="/person/:tmdbPersonId" element={<PersonPage />} />

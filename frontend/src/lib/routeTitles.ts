@@ -92,6 +92,7 @@ const ROUTE_TITLES: RouteTitleEntry[] = [
   { pattern: "/settings/notifications", title: () => "Notifications" },
   { pattern: "/settings/watchlist", title: () => "Watchlist Settings" },
   { pattern: "/settings/lists", title: () => "Lists Settings" },
+  { pattern: "/settings/apple-tv", title: () => "Apple TV" },
   { pattern: "/settings", title: () => "Profile" },
   { pattern: "/title/:mediaType/:itemId", title: () => "Title" },
   { pattern: "/person/:tmdbPersonId", title: () => "Person" },

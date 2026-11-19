@@ -12,6 +12,7 @@ describe("settingsNav", () => {
     assert.equal(labels.watchlist, "Watchlist");
     assert.equal(labels.lists, "Lists");
     assert.equal(labels.privacy, "My data");
+    assert.equal(labels["apple-tv"], "Apple TV");
   });
 
   it("keeps stable settings nav test ids via route ids", () => {
