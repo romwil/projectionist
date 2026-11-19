@@ -1,6 +1,6 @@
 # Carry-forward triage: 2026-11-01 review findings vs the media-engine era
 
-Dropped 2026-11-18. The 2026-11-01 360 review (`docs/reviews/2026-11-01/`) produced 140 backlog rows. 74 are referenced in `CHANGELOG.md` or `docs/PRODUCT.md` through 1.40.1, and are treated as shipped (verify on the next rescore). The **66 rows below have no shipped reference**. Each one is triaged against the new era (playback engine, shared sessions, timeline, tracks, native clients; board: [../README.md](../README.md)).
+Dropped 2026-11-18. The 2026-11-01 360 review (2026-11-01 360 review) produced 140 backlog rows. 74 are referenced in `CHANGELOG.md` or `docs/PRODUCT.md` through 1.40.1, and are treated as shipped (verify on the next rescore). The **66 rows below have no shipped reference**. Each one is triaged against the new era (playback engine, shared sessions, timeline, tracks, native clients; board: [roadmap board](../README.md)).
 
 **How this list was made:** the ID of every backlog row was searched for in `CHANGELOG.md` and `docs/PRODUCT.md` on `origin/main` at 1.40.1. "Not mentioned" does not prove "not done". Rows marked **verify** may have shipped under another ID.
 
@@ -64,3 +64,11 @@ Verdicts:
 - Close superseded rows in the next rescore ledger with a pointer to the era item.
 - Add the “Include” prerequisites to the *Depends on* column of the era items named.
 - Do not renumber review IDs; the next review run carries them forward (see the review spec’s carry-forward ledger).
+
+---
+## Processing note (agent, 2026-11-19)
+- Created: (none new)
+- Updated: Depends on for TRK-002/004/005/008, TML-006, ENG-003/009, NAT-005/006; board Superseded table for PRD-022 / PRD-024; SES-009 already answers PRD-025 open question (Approve tightens ceiling)
+- Keep / Include rows recorded here for the next rescore ledger — do not renumber review IDs
+- Outbox: none
+- Needs the person: nothing (PRD-025 question already decided via SES-009)

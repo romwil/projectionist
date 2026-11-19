@@ -2,7 +2,7 @@
 
 Projectionist is a private cinema companion for the library you already own. It talks to *your* Plex catalog — not a Netflix top-10 — so every recommendation, comparison, and "what should we watch?" is grounded in titles you actually have. This page is the in-app guide for **Chat**, **Search**, **Explore**, **Live**, **Inbox**, **Related titles**, and — for owners — idle curation, **Lobby Theater**, and Live Channels craft.
 
-New here? Start with **[Chat](/chat)** and just ask for something in plain language. The top bar keeps Search, Chat, Explore, Live (when stations are on the air), Inbox, and Settings as peer destinations (owners also see Admin). Prefer names to icons? The hamburger menu lists those same destinations by label under **Navigate**, then **More** for Related titles, Tags, Watchlist, Library, Help, Privacy, and About — so nothing is reachable from only one of the two. Badges and achievements (formerly "My Journey") live on **Settings → Profile**, not the top bar. Everything below shows you the shortest path to a result, then explains how it works so you can trust it.
+New here? Start on **[Explore](/explore)** — that is home. Ask your curator in **[Chat](/chat)** whenever you want a conversation. The top bar keeps Explore, Live (when stations are on the air), Chat, Search, Inbox, and Settings as peer destinations (owners also see Admin). Prefer names to icons? The hamburger menu lists those same destinations by label under **Navigate**, then **More** for Related titles, Tags, Watchlist, Library, Help, Privacy, and About — so nothing is reachable from only one of the two. Badges and achievements (formerly "My Journey") live on **Settings → Profile**, not the top bar. Everything below shows you the shortest path to a result, then explains how it works so you can trust it.
 
 Deep dive: [PRODUCT.md](PRODUCT.md) · [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) · [About](/about) · [Privacy](/privacy)
 
@@ -12,9 +12,9 @@ Deep dive: [PRODUCT.md](PRODUCT.md) · [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.
 
 | Goal | Where |
 |------|--------|
+| Browse rails & For you (home) | [Explore](/explore) |
 | Talk to your curator | [Chat](/chat) |
 | Search your collection (and beyond) | [Search](/search) |
-| Browse rails & Pulse | [Explore](/explore) |
 | Watch household Live TV | [Live](/live) (when the owner has stations on the air) |
 | Play a library title in Projectionist | Tap **Play** on a poster, card, or title sheet — `/watch` |
 | Recommendations & notices | [Inbox](/inbox) |
@@ -39,8 +39,8 @@ Keyboard cheat sheet: press `?` (outside a text field). Slash commands in chat: 
 
 **What you can do**
 
+- Browse **[Explore](/explore)** (home) and **[Search](/search)**, and press **Play** on a poster to watch in Projectionist.
 - Ask your curator in **[Chat](/chat)** for something to watch, in plain language.
-- Browse **[Explore](/explore)** and **[Search](/search)**, and press **Play** on a poster to watch in Projectionist.
 - Send a title to someone else in the household — it lands in their **[Inbox](/inbox)**.
 - Save a curator reply to your **[Library](/library)** and pin titles to your **Watchlist**.
 

@@ -182,13 +182,13 @@ The web app benefits as much as any native client:
 |----|------|------------|
 | ENG-001 | Media source interface + Plex path mapping + cached `ffprobe` | — |
 | ENG-002 | Planner (`direct` / `remux` / `audio` / `full` / `plex-fallback`) with recorded reason; dry-run `GET /api/playback/plan` | ENG-001 |
-| ENG-003 | Session API `POST /api/playback/sessions` with device profiles; VOD fMP4 HLS remux; session-scoped segment URLs | ENG-002 |
+| ENG-003 | Session API `POST /api/playback/sessions` with device profiles; VOD fMP4 HLS remux; session-scoped segment URLs. *Proposed:* attribution for “evenings that started from a Projectionist pick” (PRD-005 north star) rides owned playback | ENG-002 |
 | ENG-004 | WebVTT caption renditions in the master playlist (household cache first) | ENG-003 |
 | ENG-005 | Image-caption OCR job (jobs engine, cached, labeled) | ENG-004 |
 | ENG-006 | Audio + full transcode plans; hardware encode opt-in; concurrency limits | ENG-003 |
 | ENG-007 | Web player adoption (hls.js on engine sessions; native text tracks + styling layer) | ENG-004 |
 | ENG-008 | Scrub thumbnails (trickplay image sprites / I-frame playlist) | ENG-003 |
-| ENG-009 | Live Channels on engine sessions (same stations, new stream) | ENG-003 |
+| ENG-009 | Live Channels on engine sessions (same stations, new stream). Build as the Live facade ARCH-007 asked for; PRD-007 freeze still holds (no new channel types) | ENG-003; ARCH-007 |
 | ENG-010 | Jellyfin media source | ENG-001 |
 
 ## Open decisions

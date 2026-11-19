@@ -8,7 +8,7 @@ Product principles, single-workspace UX, lens isolation, agent behavior, and API
 
 1. **Intent-aware, not averaged** — Taste lives in **curation lenses**, not one global profile. Casual watches must not poison curated study lanes.
 
-2. **Chat-first** — The curator conversation is the primary loop. Settings, sync, title detail, and the owner dashboard support the chat.
+2. **Explore-first, chat-deep** — Explore is the default home for every member and every client. Chat remains a primary peer (Explore · Live · Chat · Search): the deep curator loop, not the front door. Settings, sync, title detail, and Admin support that map.
 
 3. **One workspace** — Full-width chat (~80% reading column) with a conversation sidebar and status dock. Optional overlay expands large title-card result sets.
 
