@@ -57,3 +57,7 @@ qa-runs/
 # Maintainer live QA pentest kit (canonical: projectionist-qa-scripts/pentest on automat).
 scripts/security/pentest/qa-live/
 .worktrees/
+
+# Internal 360 reviews and pulses: local scratch, never pushed
+docs/reviews/
+.cursor/review/
