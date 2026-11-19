@@ -1,0 +1,79 @@
+# Roadmap board — media engine, shared sessions, and tracks
+
+The single list of planned platform work for the next era of Projectionist: our own playback engine, sessions that span devices, a time-coded understanding of every film and episode, and tracks that play with them. How drops become items: [docs/claude.roadmap.md](../claude.roadmap.md).
+
+**Why this era.** Projectionist is media intelligence for people who love their collections — not a recommendation widget. Owning the stream frees playback from Plex (and makes Jellyfin possible). Knowing *when* things happen inside a title lets the curator speak at the right moment. Sessions that span devices make a phone a companion, not just a remote. Every item here works for **TV episodes and seasons** as well as films.
+
+Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` · `done` · `parked` · `declined`.
+
+## Sequencing
+
+1. **ENG** — the playback engine (everything stands on it)
+2. **SES** — shared sessions (extends the Apple TV pairing + throw work)
+3. **TML** — the timeline layer
+4. **TRK** — tracks: Moments, Booth Notes, Class / Study
+5. **NAT** — the client contract, threaded through 1–4 as each capability ships
+
+## Board
+
+| ID | Title | Status | Owning doc |
+|----|-------|--------|------------|
+| ENG-001 | Media source interface + Plex path mapping + cached ffprobe | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
+| ENG-002 | Planner with recorded reason; dry-run plan endpoint | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
+| ENG-003 | Session API with device profiles; VOD fMP4 HLS remux | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
+| ENG-004 | WebVTT caption renditions (household cache first) | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
+| ENG-005 | Image-caption OCR job | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
+| ENG-006 | Audio + full transcode plans; hardware encode; concurrency | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
+| ENG-007 | Web player adoption | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
+| ENG-008 | Scrub thumbnails | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
+| ENG-009 | Live Channels on engine sessions | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
+| ENG-010 | Jellyfin media source | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
+| SES-001 | Device credentials for handhelds; native sign-in | proposed | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
+| SES-002 | Rooms registry + visibility | proposed | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
+| SES-003 | Session object (owner, screen, position, level) | proposed | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
+| SES-004 | Realtime channel + command authorization + clock | proposed | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
+| SES-005 | Join flow + guest permissions | proposed | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
+| SES-006 | Handheld captions | proposed | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
+| SES-007 | Handoff between screens | proposed | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
+| SES-008 | Web client as a second screen | proposed | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
+| SES-009 | Youth join approval tightens the session ceiling | accepted | [SHARED_SESSIONS](../SHARED_SESSIONS.md#privacy-and-youth) |
+| TML-001 | Timeline schema + file fingerprinting | proposed | [TIMELINE](../TIMELINE.md#roadmap-items) |
+| TML-002 | Dialogue import from the household subtitle cache | proposed | [TIMELINE](../TIMELINE.md#roadmap-items) |
+| TML-003 | Scene / shot detection job | proposed | [TIMELINE](../TIMELINE.md#roadmap-items) |
+| TML-004 | Speaker hints | proposed | [TIMELINE](../TIMELINE.md#roadmap-items) |
+| TML-005 | `timeline_context` agent tool + spoiler guard | proposed | [TIMELINE](../TIMELINE.md#roadmap-items) |
+| TML-006 | Chat turns carry session context | proposed | [TIMELINE](../TIMELINE.md#roadmap-items) |
+| TML-007 | Series index across episodes | proposed | [TIMELINE](../TIMELINE.md#roadmap-items) |
+| TML-008 | Owner timeline coverage view | proposed | [TIMELINE](../TIMELINE.md#roadmap-items) |
+| TRK-001 | Track + cue schema, storage, validation | proposed | [TRACKS](../TRACKS.md#roadmap-items) |
+| TRK-002 | Moments track generation | proposed | [TRACKS](../TRACKS.md#roadmap-items) |
+| TRK-003 | Track delivery on sessions | proposed | [TRACKS](../TRACKS.md#roadmap-items) |
+| TRK-004 | Booth Notes editions (Mix × Heat) | proposed | [TRACKS](../TRACKS.md#roadmap-items) |
+| TRK-005 | Trusted public sources (owner opt-in) | proposed | [TRACKS](../TRACKS.md#roadmap-items) |
+| TRK-006 | Class / Study lessons on the timeline | proposed | [TRACKS](../TRACKS.md#roadmap-items) |
+| TRK-007 | Detours | proposed | [TRACKS](../TRACKS.md#roadmap-items) |
+| TRK-008 | “Your edition is ready” notifications | proposed | [TRACKS](../TRACKS.md#roadmap-items) |
+| TRK-009 | Series studies | proposed | [TRACKS](../TRACKS.md#roadmap-items) |
+| TRK-010 | Web overlay renderer | proposed | [TRACKS](../TRACKS.md#roadmap-items) |
+| NAT-001 | Capability manifest + `api_contract` | proposed | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
+| NAT-002 | Handheld device credentials via native sign-in | proposed | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
+| NAT-003 | OpenAPI snapshot + client route tags + CI drift check | proposed | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
+| NAT-004 | Response fixtures | proposed | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
+| NAT-005 | Settings → Devices | proposed | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
+| NAT-006 | Content-free push via publisher relay | proposed | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
+
+SES-001 and NAT-002 describe the same work from two sides; build them as one change.
+
+## Decisions
+
+| Date | Decision |
+|------|----------|
+| 2026-11-18 | `EXP` (experience convergence) is an approved prefix. Items arrive via `inbox/2026-11-18-experience-convergence.md` |
+| 2026-11-18 | **Explore is the default home for every member and every client.** Chat stays a primary peer; it is no longer the front door. Server default for `default_page` becomes `explore` (EXP-013, proposed in the inbox drop below) |
+| 2026-11-18 | **A Youth member joining an adult’s session triggers an owner notification; Approve tightens the session to the Youth ceiling** (SES-009) |
+
+## Folders
+
+- [`inbox/`](inbox/) — drop new material here
+- [`accepted/`](accepted/) — processed drops with their notes
+- [`outbox/`](outbox/) — handoffs to client repositories
