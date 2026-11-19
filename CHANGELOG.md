@@ -2,23 +2,6 @@
 
 ## [Unreleased]
 
-## [1.41.0] — 2026-11-19
-
-Signing in opens Explore. Chat stays available, and a household that chose Chat still lands there.
-
-### Highlights
-- **Explore is home.** After you sign in, Projectionist opens Explore — the shelves — instead of Chat.
-- **A Chat choice still sticks.** Set Default page to Chat and you still land in Chat.
-- **Auto becomes Explore.** Households that were on Auto now open Explore, the product default.
-
-### Changed
-- EXP-013: server default and legacy `auto` resolve to Explore; explicit `chat` is still honored. Migration 67 rewrites stored `auto`. Profile, Help, and FAQ describe Explore as home.
-
-### Verification
-- `./scripts/patch-release.sh 1.41.0` lockstep + `frontend/public/release-notes.json`.
-- Page speed (`npm run test:release-perf`) before Hub publish.
-- CI on the release PR (required checks).
-
 ## [1.40.1] — 2026-11-17
 
 Closes the trust residuals left after 1.40.0: Youth memory review is gated and audited, full MCP no longer exports per-member newsletters, embeddings stay off the request loop, and the app shell stops inviting crawlers while Explore hides owner indexing jargon from members.
