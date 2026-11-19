@@ -6,7 +6,7 @@ test.describe("Review Plex rating conflict", () => {
     resetMockCertifications();
     await mockCuratorApis(page);
     await mockReviewConflictChat(page);
-    await page.goto("/");
+    await page.goto("/chat");
     await page.getByTestId("composer-input").waitFor();
   });
 

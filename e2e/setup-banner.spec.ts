@@ -14,7 +14,7 @@ test.describe("Setup incomplete banner", () => {
     // Mock status so this suite stays isolated when a shared e2e server already
     // completed onboarding (API refuses to unset onboarding_complete).
     await mockSetupStatus(page, { onboardingComplete: false });
-    await page.goto("/");
+    await page.goto("/chat");
     await page.getByTestId("composer-input").waitFor();
   });
 

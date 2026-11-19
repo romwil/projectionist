@@ -120,7 +120,7 @@ test.describe("Title cards in chat", () => {
     resetMockCertifications();
     await mockCuratorApis(page);
     await mockTitleCardChat(page);
-    await page.goto("/");
+    await page.goto("/chat");
     await page.getByTestId("composer-input").waitFor();
   });
 

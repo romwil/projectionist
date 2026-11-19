@@ -22,7 +22,7 @@ test.describe("Household authz", () => {
     await mockSetupStatus(page, { onboardingComplete: true, radarrOk: true, sonarrOk: true });
   });
 
-  test("local login reaches chat workspace", async ({ page }) => {
+  test("local login reaches Explore home", async ({ page }) => {
     await mockFeatures(page, {
       multi_user_enabled: true,
       local_login_enabled: true,
@@ -42,9 +42,8 @@ test.describe("Household authz", () => {
     await page.getByTestId("local-password").fill("not-a-real-password");
     await page.getByTestId("local-login-submit").click();
 
-    await expect(page).toHaveURL(/\/(chat)?$/);
-    await page.getByTestId("composer-input").waitFor();
-    await expect(page.getByTestId("workspace-main")).toBeVisible();
+    await expect(page).toHaveURL(/\/explore$/);
+    await expect(page.getByTestId("explore-hub-links")).toBeVisible();
     await expect(page.getByTestId("login-page")).toHaveCount(0);
   });
 

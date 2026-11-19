@@ -5,7 +5,7 @@ test.describe("Collections slash command visibility", () => {
   test.beforeEach(async ({ page }) => {
     resetMockCertifications();
     await mockCuratorApis(page);
-    await page.goto("/");
+    await page.goto("/chat");
     await page.getByTestId("composer-input").waitFor();
   });
 
