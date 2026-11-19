@@ -93,8 +93,8 @@ Native clients ship through app stores on their own clocks, so the API they depe
 | NAT-002 | Handheld device credentials via native sign-in (Plex PIN / local / OIDC) | pairing (local work) |
 | NAT-003 | OpenAPI snapshot + client-facing route tags + CI drift check | — |
 | NAT-004 | Response fixtures for client-facing routes | NAT-003 |
-| NAT-005 | **Settings → Devices** (all device kinds; rename of Apple TV settings) | NAT-002 |
-| NAT-006 | Push registration for native clients (APNs token per device). APNs needs the app publisher’s key, so a self-hosted server pushes through the publisher’s relay; *proposed:* pushes are **content-free** (“Something is ready in Projectionist”) and the app fetches the detail from the household server, so no title ever crosses the relay | NAT-002 |
+| NAT-005 | **Settings → Devices** — store and return device **kind** (`tv` / `iphone` / `ipad`) on claim and list; rename Settings → Apple TV to Devices; page title, empty state, and claim confirmation speak the kind (not always “Apple TV”). Handhelds may use the existing code flow before NAT-002. Waiting client: APL-016 | pairing (shipped) |
+| NAT-006 | Push registration for native clients (APNs token per device). APNs needs the app publisher’s key, so a self-hosted server pushes through the publisher’s relay; *proposed:* pushes are **content-free** (“Something is ready in Projectionist”) and the app fetches the detail from the household server, so no title ever crosses the relay. Ship PRIV-026 panel the same day. Deep links need ARCH-010 SPA fallbacks | NAT-002, ARCH-010 |
 
 ## See also
 

@@ -1,8 +1,8 @@
 # Roadmap board — media engine, shared sessions, and tracks
 
-The single list of planned platform work for the next era of Projectionist: our own playback engine, sessions that span devices, a time-coded understanding of every film and episode, and tracks that play with them. How drops become items: [docs/claude.roadmap.md](../claude.roadmap.md).
+The single list of planned platform work for the next era of Projectionist: our own playback engine, sessions that span devices, a time-coded understanding of every film and episode, and tracks that play with them — plus **experience convergence** so web and native clients share one language. How drops become items: [docs/claude.roadmap.md](../claude.roadmap.md).
 
-**Why this era.** Projectionist is media intelligence for people who love their collections — not a recommendation widget. Owning the stream frees playback from Plex (and makes Jellyfin possible). Knowing *when* things happen inside a title lets the curator speak at the right moment. Sessions that span devices make a phone a companion, not just a remote. Every item here works for **TV episodes and seasons** as well as films.
+**Why this era.** Projectionist is media intelligence for people who love their collections — not a recommendation widget. Owning the stream frees playback from Plex (and makes Jellyfin possible). Knowing *when* things happen inside a title lets the curator speak at the right moment. Sessions that span devices make a phone a companion, not just a remote. Every ENG/SES/TML/TRK item here works for **TV episodes and seasons** as well as films.
 
 Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` · `done` · `parked` · `declined`.
 
@@ -13,6 +13,7 @@ Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` ·
 3. **TML** — the timeline layer
 4. **TRK** — tracks: Moments, Booth Notes, Class / Study
 5. **NAT** — the client contract, threaded through 1–4 as each capability ships
+6. **EXP** — experience convergence (parallel; EXP-013 / EXP-004 / EXP-005 unlock cheaper screens)
 
 ## Board
 
@@ -26,7 +27,7 @@ Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` ·
 | ENG-006 | Audio + full transcode plans; hardware encode; concurrency | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-007 | Web player adoption | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-008 | Scrub thumbnails | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
-| ENG-009 | Live Channels on engine sessions | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
+| ENG-009 | Live Channels on engine sessions (ARCH-007 facade; PRD-007 freeze) | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-010 | Jellyfin media source | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | SES-001 | Device credentials for handhelds; native sign-in | proposed | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
 | SES-002 | Rooms registry + visibility | proposed | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
@@ -59,8 +60,21 @@ Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` ·
 | NAT-002 | Handheld device credentials via native sign-in | proposed | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
 | NAT-003 | OpenAPI snapshot + client route tags + CI drift check | proposed | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
 | NAT-004 | Response fixtures | proposed | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
-| NAT-005 | Settings → Devices | proposed | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
+| NAT-005 | Settings → Devices + device kind on claim/list | proposed | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
 | NAT-006 | Content-free push via publisher relay | proposed | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
+| EXP-001 | Design tokens as source of truth | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| EXP-002 | One navigation model | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| EXP-003 | Explore, cinema-first | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| EXP-004 | Voice pass on *why* sentences | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| EXP-005 | Member-vocabulary sweep | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| EXP-006 | Art never looks broken | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| EXP-007 | Search for watching, not managing | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| EXP-008 | Live guide polish (PRD-007 fixes only) | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| EXP-009 | Inbox as letters | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| EXP-010 | Chat, quieter | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| EXP-011 | Design gallery | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| EXP-012 | Title detail keeps navigation | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| EXP-013 | Explore is the default home | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 
 SES-001 and NAT-002 describe the same work from two sides; build them as one change.
 
@@ -68,9 +82,19 @@ SES-001 and NAT-002 describe the same work from two sides; build them as one cha
 
 | Date | Decision |
 |------|----------|
-| 2026-11-18 | `EXP` (experience convergence) is an approved prefix. Items arrive via `inbox/2026-11-18-experience-convergence.md` |
-| 2026-11-18 | **Explore is the default home for every member and every client.** Chat stays a primary peer; it is no longer the front door. Server default for `default_page` becomes `explore` (EXP-013, proposed in the inbox drop below) |
-| 2026-11-18 | **A Youth member joining an adult’s session triggers an owner notification; Approve tightens the session to the Youth ceiling** (SES-009) |
+| 2026-11-18 | `EXP` (experience convergence) is an approved prefix |
+| 2026-11-18 | **Explore is the default home for every member and every client.** Chat stays a primary peer; it is no longer the front door. Server default for `default_page` becomes `explore` (EXP-013) |
+| 2026-11-18 | **A Youth member joining an adult’s session triggers an owner notification; Approve tightens the session to the Youth ceiling** (SES-009). Answers PRD-025 vs initiator-owns-intent |
+| 2026-11-19 | Inbox processed: EXP-001…013 created; era *Depends on* updated from carry-forward triage; NAT-005 gains device kind (client APL-016 outbox) |
+| 2026-11-19 | **360 reviews are local-only**, with history purge planned (gitignore `docs/reviews/` + `.cursor/review/`; untrack; strip links; filter-repo). Final force-push still needs an explicit “yes, rewrite history” |
+| 2026-11-19 | **Both build lanes start in parallel**: Lane A (engine remux spike) and Lane B (EXP-013 → EXP-005 → EXP-004 → EXP-001) |
+
+## Superseded review rows (carry-forward)
+
+| Review ID | Replaced by |
+|-----------|-------------|
+| PRD-022 | SES-002 / SES-003 (Projectionist screens). Plex-as-screen kind can return later behind the same session API |
+| PRD-024 (in part) | Engine attribution (ENG-003). Native-Plex “likely” tier remains GRO-010 |
 
 ## Folders
 

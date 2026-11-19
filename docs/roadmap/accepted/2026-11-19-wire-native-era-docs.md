@@ -12,3 +12,10 @@ Once `main` is current, link them in:
 - `.gitignore` — nothing needed.
 
 Not new roadmap items; a docs chore. Process it as such.
+
+---
+## Processing note (agent, 2026-11-19)
+- Created: (none — docs chore)
+- Updated: README.md, PRODUCT.md, ARCHITECTURE.md, MEDIA_INTELLIGENCE.md to link PLAYBACK_ENGINE / SHARED_SESSIONS / TIMELINE / TRACKS / NATIVE_CLIENTS / EXPERIENCE / roadmap board
+- Outbox: none
+- Needs the person: nothing
