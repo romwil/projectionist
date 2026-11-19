@@ -1,0 +1,18 @@
+---
+description: Process roadmap drops in docs/roadmap/ (inbox → items → board) per docs/claude.roadmap.md
+globs: docs/roadmap/**,docs/claude.roadmap.md,docs/PLAYBACK_ENGINE.md,docs/SHARED_SESSIONS.md,docs/TIMELINE.md,docs/TRACKS.md,docs/NATIVE_CLIENTS.md
+alwaysApply: false
+---
+
+# Roadmap drops
+
+When asked to process the roadmap, or when files appear in `docs/roadmap/inbox/`, follow
+[docs/claude.roadmap.md](../../docs/claude.roadmap.md) exactly:
+
+- Read the drop, `docs/PRODUCT.md` (freezes, non-goals), the owning doc, and the board first.
+- Classify; create or update items with fixed prefixes (ENG / SES / TML / TRK / NAT / EXP).
+- Every item has Why, Done when, Depends on, Client contract (capability + version), honest limits.
+- Cross-repo work: server item here + a handoff in `docs/roadmap/outbox/`. Never write into a client repo.
+- Move processed drops to `docs/roadmap/accepted/` with a processing note; update `docs/roadmap/README.md`.
+- No implementation, no commits, no release rituals unless the person asks.
+- Docs you touch meet `docs/DOCS_STYLE.md`.
