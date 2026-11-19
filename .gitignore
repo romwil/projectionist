@@ -56,3 +56,4 @@ e2e/.auth/
 qa-runs/
 # Maintainer live QA pentest kit (canonical: projectionist-qa-scripts/pentest on automat).
 scripts/security/pentest/qa-live/
+.worktrees/

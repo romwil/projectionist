@@ -13,6 +13,8 @@ PUBLIC_BODY_CLAMP_PATHS = frozenset(
         "/api/access-requests",
         "/api/invites/redeem/local",
         "/api/mail/unsubscribe",
+        "/api/devices/pair/issue",
+        "/api/devices/pair/rotate",
     }
 )
 PUBLIC_BODY_MAX_BYTES = 64 * 1024

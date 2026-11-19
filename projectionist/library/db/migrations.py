@@ -396,6 +396,46 @@ def _release2_highs(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> No
     )
 
 
+def _apple_tv_devices(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
+    """Apple TV sign-in codes, paired devices, and one throw intent per TV."""
+    del db
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS device_pair_pending (
+            id TEXT PRIMARY KEY,
+            code_hash TEXT NOT NULL UNIQUE,
+            expires_at REAL NOT NULL,
+            created_at REAL NOT NULL,
+            claimed_at REAL,
+            user_id TEXT,
+            device_id TEXT,
+            credential_hash TEXT,
+            credential_secret TEXT,
+            label TEXT NOT NULL DEFAULT 'Apple TV'
+        );
+        CREATE TABLE IF NOT EXISTS paired_devices (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            label TEXT NOT NULL,
+            credential_hash TEXT NOT NULL UNIQUE,
+            created_at REAL NOT NULL,
+            revoked_at REAL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_paired_devices_user
+            ON paired_devices(user_id, revoked_at);
+        CREATE TABLE IF NOT EXISTS device_throw_intents (
+            device_id TEXT PRIMARY KEY,
+            intent_id TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            FOREIGN KEY (device_id) REFERENCES paired_devices(id) ON DELETE CASCADE
+        );
+        """
+    )
+
+
 def _build_migrations() -> List[Migration]:
     def wrap(method_name: str) -> MigrationFn:
         def _run(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
@@ -469,6 +509,7 @@ def _build_migrations() -> List[Migration]:
         (63, "drop_interaction_telemetry", _drop_interaction_telemetry),
         (64, "subtitle_state", _subtitle_state),
         (65, "release2_highs", _release2_highs),
+        (66, "apple_tv_devices", _apple_tv_devices),
     ]
 
 
