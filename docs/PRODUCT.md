@@ -2,7 +2,7 @@
 
 Living product truth for Projectionist — positioning, surface map, SWOT, sequenced priorities, and parked Tunarr-era non-goals. Baseline tip: Automat **1.40.1** (trust residuals on **1.40.0** Admin + YIR). Do not reopen Tunarr dual-watch, Phase 6 gift queue, or Live **new** channel types (PRD-007 freeze).
 
-Related: [HELP.md](HELP.md) · [MEDIA_INTELLIGENCE.md](MEDIA_INTELLIGENCE.md) · [DELIGHT-WISHLIST.md](DELIGHT-WISHLIST.md) · [RELEASE.md](RELEASE.md) · [README](../README.md) · [roadmap board](roadmap/README.md) · [EXPERIENCE.md](EXPERIENCE.md) · department rescore 2026-11-18 (local review note)
+Related: [HELP.md](HELP.md) · [MEDIA_INTELLIGENCE.md](MEDIA_INTELLIGENCE.md) · [DELIGHT-WISHLIST.md](DELIGHT-WISHLIST.md) · [RELEASE.md](RELEASE.md) · [README](../README.md) · [roadmap board](roadmap/README.md) · [EXPERIENCE.md](EXPERIENCE.md)
 
 ---
 
@@ -59,7 +59,7 @@ Runtime watch surfaces: **library Play** (`/watch`) and **native Live** (`/live`
 | Admin UX redesign Phase 1 (rail + Libraries hub) | **1.40.0** (#213) |
 | Year in Review enrich (strips, rewatches, curator voice) | **1.40.0** (#211) |
 | Trust residuals (Youth 7d gate, MCP newsletter removal, embeddings off_loop, OG/noindex, Explore telemetry) | **1.40.1** |
-| Post-1.40.1 department rescore (path-to-A note) | **2026-11-18** — overall ~**B−** (was C+ / Security D); **not A** |
+| Post-1.40.1 path-to-A check-in | **2026-11-18** — trust residuals shipped on 1.40.1; path-to-A not claimed yet; next theme is media-engine era + experience convergence |
 
 ---
 
@@ -80,7 +80,7 @@ Runtime watch surfaces: **library Play** (`/watch`) and **native Live** (`/live`
 
 Live’s **PRD-007** freeze still holds: ENG-009 changes the *stream* under existing stations only.
 
-Path-to-A: department rescore 2026-11-18 (~B−, not A). Do **not** claim department **A** until Highs stay closed in the running Hub-pulled build and a later rescore says so.
+Path-to-A: after the 2026-11-18 check-in, do **not** claim department **A** until Highs stay closed in the running Hub-pulled build and a later check-in says so. Living sequencing is the [roadmap board](roadmap/README.md).
 
 ---
 
