@@ -111,7 +111,9 @@ class PersonaPromptTests(unittest.TestCase):
         rendered_a = build_rendered_behavioral_prompt({**base, "curator_name": "Curator"})
         rendered_b = build_rendered_behavioral_prompt({**base, "curator_name": "Marcus"})
         self.assertEqual(template, build_behavioral_prompt_from_sliders({**base, "curator_name": "Marcus"}))
-        self.assertIn("Curator", rendered_a)
+        # EXP-005: bare default "Curator" surfaces as "Your curator".
+        self.assertIn("Your curator", rendered_a)
+        self.assertNotIn("Display name: Curator.", rendered_a)
         self.assertIn("Marcus", rendered_b)
         self.assertNotIn("Curator", rendered_b)
 
