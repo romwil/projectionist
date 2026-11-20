@@ -32,32 +32,21 @@ _PLAYER_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8" />
   <title>Spike: engine remux</title>
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
   <style>
     body { font-family: system-ui, sans-serif; margin: 1.5rem; background: #111; color: #eee; }
     video { width: min(960px, 100%); background: #000; }
     code { background: #222; padding: 0.1em 0.35em; }
+    #log { white-space: pre-wrap; font-size: 12px; opacity: 0.85; }
   </style>
 </head>
 <body>
   <h1>Spike remux player</h1>
   <p>Master: <code id="url"></code></p>
+  <p>Path: <code id="path"></code></p>
   <video id="v" controls crossorigin="anonymous"></video>
-  <script>
-    const master = new URL('master.m3u8', window.location.href).href;
-    document.getElementById('url').textContent = master;
-    const video = document.getElementById('v');
-    if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = master;
-    } else if (window.Hls && Hls.isSupported()) {
-      const hls = new Hls({ enableWorker: true });
-      hls.loadSource(master);
-      hls.attachMedia(video);
-      hls.on(Hls.Events.ERROR, (_, data) => console.error('hls error', data));
-    } else {
-      document.body.insertAdjacentHTML('beforeend', '<p>No HLS support</p>');
-    }
-  </script>
+  <pre id="log"></pre>
+  <!-- External script: CSP default-src 'self' blocks inline JS. -->
+  <script src="vendor/player.js"></script>
 </body>
 </html>
 """
@@ -123,7 +112,22 @@ def register_spike_engine_remux_routes(app) -> None:
     @router.get("/api/spike/engine-remux/{token}/player", response_class=HTMLResponse)
     def player(token: str) -> HTMLResponse:
         _require_token(token)
-        return HTMLResponse(_PLAYER_HTML)
+        # Spike-only: relax CSP so the inline probe script + same-origin hls.js can run.
+        return HTMLResponse(
+            _PLAYER_HTML,
+            headers={
+                "Content-Security-Policy": (
+                    "default-src 'self'; "
+                    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                    "style-src 'self' 'unsafe-inline'; "
+                    "media-src 'self' blob:; "
+                    "connect-src 'self'; "
+                    "worker-src 'self' blob:; "
+                    "img-src 'self' data:; "
+                    "frame-ancestors 'none'"
+                )
+            },
+        )
 
     @router.get("/api/spike/engine-remux/{token}/{asset_path:path}")
     def media_asset(token: str, asset_path: str) -> Response:
