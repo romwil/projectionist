@@ -61,3 +61,4 @@ scripts/security/pentest/qa-live/
 # Internal 360 reviews and pulses: local scratch, never pushed
 docs/reviews/
 .cursor/review/
+tmp/
