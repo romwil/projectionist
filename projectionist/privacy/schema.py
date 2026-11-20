@@ -68,11 +68,21 @@ def _normalize_backdrop_size(size: Optional[str]) -> str:
 
 
 def _settings_image_sizes(settings: Any) -> tuple[str, str]:
-    poster = _normalize_poster_size(getattr(settings, "mcp_tmdb_poster_size", None) if settings else None)
+    poster = _normalize_poster_size(
+        getattr(settings, "mcp_tmdb_poster_size", None) if settings else None
+    )
     backdrop = _normalize_backdrop_size(
         getattr(settings, "mcp_tmdb_backdrop_size", None) if settings else None
     )
     return poster, backdrop
+
+
+def is_cached_art_route(url: str) -> bool:
+    """Same-origin library art route. Never a Plex token or a remote host."""
+    text = str(url or "").strip()
+    if not text.startswith("/api/library/art/") or "://" in text:
+        return False
+    return "x-plex-token" not in text.lower()
 
 
 def is_tmdb_cdn_url(url: str) -> bool:
@@ -161,12 +171,18 @@ def public_image_urls(
     2. Else omit (empty). Callers with tmdb_id may refresh via TMDB separately.
     """
     poster_size, backdrop_size = _settings_image_sizes(settings)
+
+    def _one(url: str, size: str) -> str:
+        if is_cached_art_route(url):
+            return url
+        if is_tmdb_cdn_url(url):
+            return rewrite_tmdb_size(url, size)
+        return ""
+
     poster = str(row.get("poster_url") or "").strip()
     backdrop = str(row.get("backdrop_url") or "").strip()
-    out_poster = rewrite_tmdb_size(poster, poster_size) if is_tmdb_cdn_url(poster) else ""
-    out_backdrop = (
-        rewrite_tmdb_size(backdrop, backdrop_size) if is_tmdb_cdn_url(backdrop) else ""
-    )
+    out_poster = _one(poster, poster_size)
+    out_backdrop = _one(backdrop, backdrop_size)
     return {"poster_url": out_poster, "backdrop_url": out_backdrop}
 
 

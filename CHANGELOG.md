@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- EXP-006: hub, title, and search art points at an authenticated cache. Projectionist fetches the poster and backdrop; the Plex token stays on the server.
+
 ## [1.41.0] — 2026-11-19
 
 Signing in opens Explore. Chat stays available, and a household that chose Chat still lands there.

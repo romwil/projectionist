@@ -69,6 +69,7 @@ from projectionist.scheduler.tasks.purge_candidates import (
 )
 from projectionist.web.auth import get_current_user_dep, require_role
 from projectionist.web.jobs import get_job_manager
+from projectionist.library.cached_art import point_cached_art
 from projectionist.web.library_privacy import (
     normalize_saved_library_content,
     sanitize_library_payload,
@@ -153,6 +154,15 @@ def _sanitize_library_payload(payload: Any, user, *, attach_watch: bool = True) 
     filtered = filter_payload_for_youth(sanitized, user=user, settings=settings)
     _maybe_emit_explore_miss(filtered)
     return filtered
+
+
+def _sanitize_cached_art(payload: Any, user, *, attach_watch: bool = True) -> Any:
+    """Point hub, title, and search art at the cache, then apply the audience filter."""
+    return _sanitize_library_payload(
+        point_cached_art(payload, _settings()),
+        user,
+        attach_watch=attach_watch,
+    )
 
 
 def _apply_youth_filters(filters, user):
@@ -875,6 +885,51 @@ def library_anniversaries_endpoint(
     return {"items": items, "count": len(items)}
 
 
+@router.get("/api/library/art/{media_type}/{item_id}")
+async def library_cached_art(
+    request: Request,
+    media_type: str,
+    item_id: str,
+    id_type: str = "rating_key",
+    kind: str = "poster",
+    user=Depends(get_current_user_dep),
+) -> Response:
+    """Serve one cached poster or backdrop. The upstream URL stays on the server."""
+    from projectionist.library.art_egress import ArtUpstream
+    from projectionist.library.cached_art import ArtNotFound, load_cached_art
+    from projectionist.web.avatars import data_dir
+    from projectionist.web.rate_limit import enforce_rate_limit
+
+    enforce_rate_limit(request, bucket="library_art", limit=600, window_seconds=60.0)
+    if len(media_type) > 16 or len(item_id) > 128:
+        raise HTTPException(status_code=404, detail="Art not found")
+    try:
+        body, content_type, etag = await load_cached_art(
+            _db(),
+            _settings(),
+            media_type=media_type,
+            item_id=item_id,
+            id_type=id_type,
+            kind=kind,
+            user=user,
+            data_dir=data_dir(),
+        )
+    except ArtNotFound:
+        raise HTTPException(status_code=404, detail="Art not found") from None
+    except ArtUpstream:
+        raise HTTPException(status_code=502, detail="Art upstream failed") from None
+    if_none_match = (request.headers.get("if-none-match") or "").strip()
+    headers = {
+        "Cache-Control": "private, max-age=86400",
+        "X-Content-Type-Options": "nosniff",
+    }
+    if etag:
+        headers["ETag"] = etag
+    if etag and if_none_match == etag:
+        return Response(status_code=304, headers=headers)
+    return Response(content=body, media_type=content_type, headers=headers)
+
+
 @router.get("/api/library/feeds/hub")
 def library_feed_explore_hub(
     limit: int = EXPLORE_RAIL_LIMIT,
@@ -896,7 +951,7 @@ def library_feed_explore_hub(
     # Sanitize nested rail items the same way individual feed routes do.
     rails = payload.get("rails") or {}
     sanitized_rails = {
-        key: _sanitize_library_payload(value, user, attach_watch=False)
+        key: _sanitize_cached_art(value, user, attach_watch=False)
         if isinstance(value, dict)
         else value
         for key, value in rails.items()
@@ -1455,7 +1510,7 @@ async def library_query_endpoint(
         result = await query_library_async(_db(), filters, await run_db(_settings))
     else:
         result = await run_db(query_library, _db(), filters)
-    return await run_db(_sanitize_library_payload, result, user)
+    return await run_db(_sanitize_cached_art, result, user)
 
 
 @router.get("/api/search/external")
@@ -1497,7 +1552,7 @@ def external_search_endpoint(
         payload = card.model_dump()
         payload["already_queued"] = bool(card.in_radarr or card.in_sonarr)
         items.append(payload)
-    sanitized = _sanitize_library_payload(items, user)
+    sanitized = _sanitize_cached_art(items, user)
     return {
         "query": query,
         "media_type": normalized_type,

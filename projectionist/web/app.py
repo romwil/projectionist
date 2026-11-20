@@ -1269,6 +1269,8 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
             "llm_configured": bool(
                 settings.llm_api_key or settings.llm_provider == "ollama"
             ),
+            # EXP-006: hub, title, and search art URLs point at the cache route.
+            "cached_art": True,
         },
         "setup_state": setup_state,
         "household_domain": str(getattr(settings, "household_domain", "") or ""),
@@ -1882,7 +1884,9 @@ def title_detail(
 
     if not title_allowed_for_user(dumped, user=user, settings=settings):
         raise HTTPException(status_code=404, detail="Title not available")
-    return _sanitize_library_payload(dumped, user)
+    from projectionist.library.cached_art import point_cached_art
+
+    return _sanitize_library_payload(point_cached_art(dumped, settings), user)
 
 
 def _relation_seed_row(db, media_type: str, item_id: str, id_type: str):

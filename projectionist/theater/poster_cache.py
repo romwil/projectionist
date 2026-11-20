@@ -63,6 +63,7 @@ class TheaterPosterCache:
         self,
         data_dir: Path,
         *,
+        cache_name: str = CACHE_DIR_NAME,
         negative_ttl: float = POSTER_NEGATIVE_TTL_SECONDS,
         disk_ttl: float = POSTER_DISK_TTL_SECONDS,
         memory_max_entries: int = POSTER_MEMORY_MAX_ENTRIES,
@@ -70,7 +71,7 @@ class TheaterPosterCache:
         disk_max_bytes: int = POSTER_DISK_MAX_BYTES,
     ) -> None:
         self.data_dir = Path(data_dir)
-        self.cache_dir = self.data_dir / CACHE_DIR_NAME
+        self.cache_dir = self.data_dir / (cache_name or CACHE_DIR_NAME)
         self.negative_ttl = float(negative_ttl)
         self.disk_ttl = float(disk_ttl)
         self.memory_max_entries = int(memory_max_entries)
@@ -337,13 +338,15 @@ _CACHES: Dict[str, TheaterPosterCache] = {}
 _CACHES_LOCK = threading.Lock()
 
 
-def get_poster_cache(data_dir: Path) -> TheaterPosterCache:
+def get_poster_cache(data_dir: Path, *, cache_name: str = CACHE_DIR_NAME) -> TheaterPosterCache:
     resolved = str(Path(data_dir).expanduser().resolve())
+    name = cache_name or CACHE_DIR_NAME
+    key = resolved if name == CACHE_DIR_NAME else f"{resolved}\0{name}"
     with _CACHES_LOCK:
-        cache = _CACHES.get(resolved)
+        cache = _CACHES.get(key)
         if cache is None:
-            cache = TheaterPosterCache(Path(resolved))
-            _CACHES[resolved] = cache
+            cache = TheaterPosterCache(Path(resolved), cache_name=name)
+            _CACHES[key] = cache
         return cache
 
 

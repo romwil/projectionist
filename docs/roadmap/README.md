@@ -13,7 +13,7 @@ Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` ·
 3. **TML** — the timeline layer
 4. **TRK** — tracks: Moments, Booth Notes, Class / Study
 5. **NAT** — the client contract, threaded through 1–4 as each capability ships
-6. **EXP** — experience convergence (parallel). Lane B’s next item is **EXP-006** (cached art). EXP-013, EXP-004, and EXP-005 are done
+6. **EXP** — experience convergence (parallel). Lane B’s next item is **EXP-001** (design tokens). EXP-013, EXP-004, EXP-005, and EXP-006 are done
 
 ## Board
 
@@ -67,7 +67,7 @@ Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` ·
 | EXP-003 | Explore, cinema-first | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | EXP-004 | Voice pass on *why* sentences | done | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | EXP-005 | Member-vocabulary sweep | done | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
-| EXP-006 | Art never looks broken | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| EXP-006 | Art never looks broken | done | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | EXP-007 | Search for watching, not managing | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | EXP-008 | Live guide polish (PRD-007 fixes only) | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | EXP-009 | Inbox as letters | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
@@ -91,6 +91,7 @@ SES-001 and NAT-002 describe the same work from two sides; build them as one cha
 | 2026-11-19 | **Agents merge their own PRs** when every required `main` CI check is green (`gh pr merge --merge`); never bypass checks; merge ≠ release |
 | 2026-11-20 | **Apple clients adopt ENG-003 engine sessions before the web.** The web player stays on the Plex universal path until ENG-007. Spike code stays off `main` |
 | 2026-11-20 | **EXP-006 moves to the front of Lane B.** EXP-013, EXP-005, and EXP-004 are done, so cached art is the next experience item, ahead of EXP-001 |
+| 2026-11-20 | **EXP-006 ships** `GET /api/library/art/{media_type}/{item_id}`. Hub, title, and search `poster_url` / `backdrop_url` point at it. The server fetches under the SEC-013 allowlist. `features.cached_art` is the client gate |
 | 2026-11-19 | **Lane A remux spike:** H.264+AC-3 fMP4 HLS (`-c copy`) + household WebVTT works on Safari/WebKit and tvOS AVPlayer (seek without restart; captions selectable). Desktop Chrome/hls.js rejects AC-3 — planner must audio-transcode for those profiles. Findings: [engine-spike-findings](../superpowers/specs/2026-11-19-engine-spike-findings.md). Spike code stays on `spike/engine-remux` (not merged) |
 
 ## Superseded review rows (carry-forward)
