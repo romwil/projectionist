@@ -125,7 +125,7 @@ Saved pages preserve the structured text, title cards, reply chips, and any quot
 **[Explore](/explore) is cinema browse** over the same SQLite feeds the curator uses. Open it to skim:
 
 - **Continue Watching** — titles you started and have not finished. Play, pause, or skip ahead in this app and that spot shows on the rail right away. Plays from another device still arrive from Plex On Deck. This is not a live list of what is on in another room.
-- **For you** — the first Explore rail. Unwatched titles with a named link to something this house finished or pinned — same honesty as inbox, never a cosine filler. Finishing a TV episode uses that episode’s plot (not a random similar movie). Empty copy: *no named link to something you finished.*
+- **For you** — the first Explore rail. Unwatched titles with a named link to something this house finished or pinned — same honesty as inbox, never a random similar-title filler. Finishing a TV episode uses that episode’s plot (not a random similar movie). Empty copy: *no named link to something you finished yet.*
 - **Recently Added** (movies and shows) and **Recently added episodes** (fresh episode arrivals, not whole series)
 - **Recent Releases**
 - **Revisit These** — partially watched TV that's been idle 60+ days

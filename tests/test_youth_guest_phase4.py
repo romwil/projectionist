@@ -182,7 +182,7 @@ class YouthAgentToolCardTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("Unlabeled Reel", titles)
         self.assertNotIn("Grim Harvest", {card.title for card in youth.cards})
         self.assertTrue(payload.get("empty"))
-        self.assertIn("not a cosine guess", str(payload.get("note") or "").lower())
+        self.assertIn("no named link to something you finished", str(payload.get("note") or "").lower())
 
     async def test_tonight_picks_and_roulette_stay_under_ceiling(self) -> None:
         youth = self._registry(is_youth=True)

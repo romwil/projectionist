@@ -695,7 +695,7 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
             "description": (
                 "Tonight's For you picks: named watched_bridge links to something "
                 "the house finished, plus a continue list of in-progress TV. "
-                "Empty means no named link — not a cosine guess. Optional "
+                "Empty means no named link to something finished yet. Optional "
                 "runtime_max / media_type filter that list; they do not invent substitutes."
             ),
             "parameters": {

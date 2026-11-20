@@ -63,7 +63,7 @@ export default function TurnstyleResultsOverlay({
       >
         <header>
           <div>
-            <p className="eyebrow">Turnstyle view</p>
+            <p className="eyebrow">Poster view</p>
             <h2>{payload?.title || "Recommendations"}</h2>
           </div>
           <div className="viewport-header-actions">

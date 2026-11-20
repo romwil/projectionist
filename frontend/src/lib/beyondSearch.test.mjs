@@ -110,7 +110,7 @@ test("turnstyle expand is gated on displayable results and counts like the chat"
   ]);
   assert.equal(mixed.show, true);
   assert.equal(mixed.count, 2);
-  assert.equal(mixed.label, "Expand 2 titles in turnstyle view");
+  assert.equal(mixed.label, "Expand 2 titles");
   assert.equal(mixed.title, BEYOND_TURNSTYLE_TITLE);
 });
 
@@ -120,5 +120,5 @@ test("turnstyle expand accepts a custom overlay title", () => {
   });
   assert.equal(expand.title, "Search results");
   assert.equal(expand.count, 1);
-  assert.equal(expand.label, "Expand 1 titles in turnstyle view");
+  assert.equal(expand.label, "Expand 1 titles");
 });

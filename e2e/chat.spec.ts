@@ -98,7 +98,7 @@ test.describe("Chat workspace", () => {
     await expect(page.getByTestId("typing-indicator")).not.toContainText(/Searching/i);
   });
 
-  test("thinking indicator expands agent activity log from tool events", async ({ page }) => {
+  test("thinking indicator expands thinking details from tool events", async ({ page }) => {
     await page.route("**/api/chat/stream**", async (route) => {
       const method = route.request().method();
       if (method !== "POST" && method !== "GET") {
@@ -152,7 +152,7 @@ test.describe("Chat workspace", () => {
     await expect(page.getByTestId("chat-message-assistant")).toContainText("Here is some noir.");
     const indicator = page.getByTestId("typing-indicator");
     await expect(indicator).toBeVisible();
-    await expect(indicator).toContainText("Agent activity");
+    await expect(indicator).toContainText("Thinking details");
     await expect(indicator).not.toContainText(/Searching/i);
     await expect(indicator).toHaveAttribute("aria-expanded", "false");
     await expect(page.getByTestId("agent-activity-panel")).toHaveCount(0);

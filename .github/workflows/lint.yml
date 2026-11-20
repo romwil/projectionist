@@ -46,6 +46,9 @@ jobs:
       - name: eslint
         run: cd frontend && npm run lint
 
+      - name: member-copy vocabulary (EXP-005)
+        run: npm run lint:member-copy
+
       # Non-blocking: existing source predates Prettier. Informational until a
       # dedicated formatting pass lands.
       - name: prettier --check

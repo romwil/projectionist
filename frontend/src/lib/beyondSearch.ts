@@ -117,7 +117,7 @@ export function beyondItemShowsAcquire(item: LibraryItem | null | undefined, cap
 
 /**
  * Decide whether a poster-list search section should offer the
- * "Expand N titles in turnstyle view" control, and with what count/title.
+ * "Expand N titles" control, and with what count/title.
  *
  * Mirrors the chat affordance exactly: only displayable cards are counted
  * (`turnstyleItemCount`), the control is hidden when nothing displayable is
@@ -131,6 +131,6 @@ export function beyondTurnstyleExpand(items: LibraryItem[] | null | undefined = 
     show: count > 0,
     count,
     title,
-    label: `Expand ${count} titles in turnstyle view`,
+    label: `Expand ${count} titles`,
   };
 }

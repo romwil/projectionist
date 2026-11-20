@@ -90,7 +90,7 @@ export default function TypingIndicator({
         data-testid="typing-indicator"
         onClick={toggle}
         onKeyDown={onKeyDown}
-        title={interactive ? (expanded ? "Hide agent activity" : "Show agent activity") : undefined}
+        title={interactive ? (expanded ? "Hide thinking details" : "Show thinking details") : undefined}
       >
         <span className="typing-indicator-label">{displayLabel}</span>
         {streaming ? (
@@ -113,10 +113,10 @@ export default function TypingIndicator({
           ref={panelRef}
           data-testid="agent-activity-panel"
           role="log"
-          aria-label="Agent activity"
+          aria-label="Thinking details"
         >
           {activityLog.length === 0 ? (
-            <div className="agent-activity-empty">Waiting for agent events…</div>
+            <div className="agent-activity-empty">Waiting for the next step…</div>
           ) : (
             activityLog.map((entry: ActivityEntry, index: number) => (
               <div

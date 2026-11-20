@@ -81,7 +81,7 @@ class ChatMouthTests(unittest.IsolatedAsyncioTestCase):
 
             empty = feed_for_you(db, limit=8)
             self.assertTrue(empty["empty"])
-            self.assertIn("not a cosine guess", str(empty.get("note") or "").lower())
+            self.assertIn("no named link to something you finished", str(empty.get("note") or "").lower())
 
             registry = ToolRegistry(db, Settings(), DEFAULT_LENS_ID)
             for_you = json.loads(await registry.execute("get_for_you", {}))

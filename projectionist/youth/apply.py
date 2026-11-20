@@ -93,8 +93,8 @@ def _filter_value(value: Any, *, max_rating: str) -> Any:
             out["empty"] = True
             if not str(out.get("note") or "").strip():
                 out["note"] = (
-                    "No named link to something you finished — not a cosine guess. "
-                    "Finish a title, or let Scheduled Tasks catch up Named kinship."
+                    "No named link to something you finished yet. "
+                    "Finish a title, or give the household a bit more time to learn links."
                 )
         return out
     return value

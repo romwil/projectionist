@@ -649,7 +649,7 @@ class TestWhatToWatchTonight(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["mode"], "watched_bridge")
             self.assertTrue(result["empty"])
             self.assertEqual(result["items"], [])
-            self.assertIn("not a cosine guess", (result.get("note") or "").lower())
+            self.assertIn("no named link to something you finished", (result.get("note") or "").lower())
 
     async def test_empty_library(self):
         """Empty library returns the honest empty payload."""
