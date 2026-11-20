@@ -215,6 +215,20 @@ _FORMAT_UNIGRAMS = frozenset(
         "produced",
         "aired",
         "released",
+        # Genre / format labels that are not a plot subject ("a science fiction").
+        "fiction",
+        "fantasy",
+        "action",
+        "romance",
+        "mystery",
+        "western",
+        "animation",
+        "anime",
+        "musical",
+        "dystopian",
+        "hour",
+        "hours",
+        "half",
     }
 )
 # A shared phrase with one of these in either slot is too vague to name.
@@ -253,9 +267,14 @@ _NON_PLOT_UNIGRAMS = frozenset(
         "budget",
         "gross",
         "grossing",
+        "grossed",
         "title",
         "box",
-        # Reception
+        "million",
+        "worldwide",
+        "installment",
+        "installments",
+        # Reception / awards / meta (1.40.1 For you sample)
         "reviews",
         "review",
         "critic",
@@ -265,6 +284,26 @@ _NON_PLOT_UNIGRAMS = frozenset(
         "acclaimed",
         "reception",
         "following",
+        "globe",
+        "grammy",
+        "bafta",
+        "positive",
+        "negative",
+        "highest",
+        "lowest",
+        "original",
+        "received",
+        "audiences",
+        "audience",
+        "shows",
+        "footage",
+        "archival",
+        "pandemic",
+        "covid",
+        "century",
+        "fifth",
+        "third",
+        "mid",
         # Geography / infobox locations ("new" is a stopword → "york city")
         "united",
         "states",
@@ -289,6 +328,38 @@ _NON_PLOT_UNIGRAMS = frozenset(
         "edwardian",
         "georgian",
         "elizabethan",
+    }
+)
+# Adjective-only heads — "an american dystopian" / "a generally positive".
+_BARE_ADJ_HEADS = frozenset(
+    {
+        "positive",
+        "negative",
+        "highest",
+        "lowest",
+        "original",
+        "dystopian",
+        "critical",
+        "theatrical",
+        "worldwide",
+        "generally",
+    }
+)
+# -ly words that are adjectives/nouns, not adverbs ("deadly virus").
+_LY_ADJECTIVES = frozenset(
+    {
+        "deadly",
+        "lonely",
+        "lovely",
+        "friendly",
+        "silly",
+        "ugly",
+        "early",
+        "only",
+        "monthly",
+        "weekly",
+        "daily",
+        "yearly",
     }
 )
 # Shape gate: a named subject is adj+noun or noun+noun. These classes are
@@ -318,6 +389,7 @@ _ADVERBS = frozenset(
         "immediately",
         "originally",
         "currently",
+        "generally",
     }
 )
 _LEFT_VERBS = frozenset(
@@ -589,6 +661,30 @@ _WHY_REJECT_PHRASES = (
     # Keyword overlap from the weekly letter: not a story someone would name.
     "american children",
     "taking place",
+    # Live 1.40.1 For you fragments (commercial / reception / format).
+    "million worldwide",
+    "grossed million",
+    "golden globe",
+    "generally positive",
+    "received generally",
+    "best original",
+    "fifth highest",
+    "third installment",
+    "science fiction",
+    "american dystopian",
+    "archival footage",
+    "covid pandemic",
+    "half hour",
+    "best shows",
+    "mid century",
+    "modern audiences",
+)
+_ACCOUNT_HANDLE_RE = re.compile(
+    r"(?i)(?:\bqa-[\w.-]+\b)|(?:^[\w.-]+,\s*you\s+(?:watched|finished|pinned)\b)"
+)
+_LOWERCASE_CREW_RE = re.compile(
+    r"(?:^|[;—–-]\s*)([a-z][a-z'’-]*)(?:\s+[A-Za-z][A-Za-z'’-]*)+\s+"
+    r"(?:worked on|is behind)\s+both\b"
 )
 # Words that make a shared bigram a keyword, not a plot noun or a name.
 # One of these in either slot is enough: "american children", "taking place".
@@ -684,6 +780,8 @@ def _looks_like_adverb(word: str) -> bool:
     if word in _ADVERBS:
         return True
     # ``previously used`` — not ``deadly virus`` / ``lonely hearts``.
+    if len(word) > 3 and word.endswith("ly") and word not in _LY_ADJECTIVES:
+        return True
     return False
 
 
@@ -742,6 +840,8 @@ def _np_shape_ok(left: str, right: str) -> bool:
     if left in _LEFT_VERBS or left in _PAST_TENSE_LEFT or _looks_like_adverb(left):
         return False
     if _looks_like_adverb(right) or right in _STUDIO_TAILS or _participle_head(right):
+        return False
+    if right in _BARE_ADJ_HEADS:
         return False
     if _gerund_head(right):
         return False
@@ -865,18 +965,36 @@ def checkable_plot_sentence(terms: Sequence[str]) -> str:
 
     Newsletter, inbox, and For you use this. "Both stories turn on X" is not
     a reason a person can check. Crew and collection links are a different kind.
+    Curator voice (EXP-004): "They share {phrase}."
     """
     rendered = _render_terms(terms)
     if not rendered:
         return ""
     if len(rendered) == 1:
-        sentence = f"Both are about {rendered[0]}."
+        sentence = f"They share {rendered[0]}."
     else:
-        sentence = f"Both are about {rendered[0]} and {rendered[1]}."
+        sentence = f"They share {rendered[0]} and {rendered[1]}."
     folded = sentence.casefold()
-    if "both stories turn on" in folded:
+    if "both stories turn on" in folded or "both are about" in folded:
         return ""
     return sentence if readable_why(sentence) else ""
+
+
+def member_facing_why(sentence: str) -> bool:
+    """True when a finished why has no account handle or lowercase crew name.
+
+    Used on the outer ``You finished …`` line. Fragment / production-history
+    grammar stays on ``readable_why`` for the inner clause only — the outer
+    line may legally contain ``an episode of``.
+    """
+    text = " ".join(str(sentence or "").split()).strip()
+    if not text:
+        return False
+    if _ACCOUNT_HANDLE_RE.search(text) or _ACCOUNT_HANDLE_RE.search(text.casefold()):
+        return False
+    if _LOWERCASE_CREW_RE.search(text):
+        return False
+    return True
 
 
 def readable_why(clause: str) -> bool:
@@ -884,8 +1002,9 @@ def readable_why(clause: str) -> bool:
 
     The last gate before a reason reaches a card. Refuses production-history
     phrases, "a"/"an" before a verb ("a took place"), a dangling preposition
-    or article, and fragments under three words. A caller that gets False
-    shows no reason rather than a broken one.
+    or article, account handles, lowercase crew names, and fragments under
+    three words. A caller that gets False shows no reason rather than a broken
+    one.
     """
     text = " ".join(str(clause or "").split()).strip()
     if not text:
@@ -894,6 +1013,10 @@ def readable_why(clause: str) -> bool:
     if len(words) < 3:
         return False
     folded = text.casefold()
+    if _ACCOUNT_HANDLE_RE.search(text) or _ACCOUNT_HANDLE_RE.search(folded):
+        return False
+    if _LOWERCASE_CREW_RE.search(text):
+        return False
     for phrase in _WHY_REJECT_PHRASES:
         if re.search(rf"\b{re.escape(phrase)}\b", folded):
             return False
@@ -902,6 +1025,8 @@ def readable_why(clause: str) -> bool:
     for match in _ARTICLE_THEN_WORD_RE.finditer(folded):
         word = match.group(1)
         if word in _PAST_TENSE_LEFT or word in _PRODUCTION_HISTORY_UNIGRAMS:
+            return False
+        if word in _NON_PLOT_UNIGRAMS or word in _FORMAT_UNIGRAMS or word in _BARE_ADJ_HEADS:
             return False
     return True
 

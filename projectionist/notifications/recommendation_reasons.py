@@ -26,6 +26,7 @@ from projectionist.library.plot_kinship import (
     distinctive_plot_phrases,
     parse_plot_link_json,
     plot_blob,
+    member_facing_why,
     readable_why,
     specific_plot_link,
 )
@@ -88,6 +89,22 @@ def _finish(sentence: str) -> str:
         return ""
     if text[-1] not in ".!?":
         text += "."
+    return text
+
+
+def _display_crew_name(name: str) -> Optional[str]:
+    """Title-case a crew credit when any token starts lowercase (EXP-004)."""
+    text = " ".join(str(name or "").split())
+    if not text:
+        return None
+    parts = text.split()
+    # Refuse handle-shaped single tokens (qa-owner).
+    if len(parts) == 1 and ("-" in parts[0] or parts[0].casefold().startswith("qa")):
+        return None
+    if any(part[:1].isalpha() and part[:1].islower() for part in parts):
+        text = " ".join(
+            (part[:1].upper() + part[1:]) if part[:1].isalpha() else part for part in parts
+        )
     return text
 
 
@@ -751,10 +768,13 @@ def _inner_link(
 
     creator = _shared_creator(db, candidate_id, seed_id)
     if creator:
+        display = _display_crew_name(creator)
+        if not display:
+            return None
         return {
             "link_kind": "shared_crew",
-            "sentence": f"{creator} worked on both",
-            "terms": [creator],
+            "sentence": f"{display} is behind both",
+            "terms": [display],
         }
 
     try:
@@ -773,7 +793,7 @@ def _inner_link(
     ):
         return {
             "link_kind": "collection",
-            "sentence": f"both are part of {collection}",
+            "sentence": f"both belong to {collection}",
             "terms": [collection],
         }
     return None
@@ -807,17 +827,23 @@ def watched_bridge(
     link_sentence = str(inner.get("sentence") or "").strip()
     if not link_sentence:
         return None
-    # Fold a leading "Both" into the clause. A name ("Adam McKay worked on both")
-    # stays capitalized. Plot clauses name the noun; they do not use
-    # "both stories turn on".
+    # Fold a leading "Both"/"They" into the clause. A name ("Adam McKay is
+    # behind both") stays capitalized. Plot clauses name the noun; they do not
+    # use "both stories turn on" or "both are about".
     clause = link_sentence
     if clause.startswith("Both "):
         clause = "b" + clause[1:]
+    if clause.startswith("They "):
+        clause = "t" + clause[1:]
     if clause.endswith("."):
         clause = clause[:-1]
     if not readable_why(clause):
         return None
     sentence = _finish(f"You {verb} {seed_label}; {candidate_label} — {clause}")
+    # Full outer line may contain "an episode of …" (seed label). Only refuse
+    # account handles / lowercase crew on the finished sentence (EXP-004).
+    if not member_facing_why(sentence):
+        return None
     return build_explanation(
         kind="watched_bridge",
         sentence=sentence,

@@ -1129,7 +1129,7 @@ class HouseholdBridgeTests(unittest.TestCase):
         self.assertNotIn("turn on a bernard", why_blob)
         self.assertNotIn("both stories turn on", why_blob)
         if feed["items"]:
-            self.assertIn("bernard kowalski worked on both", why_blob)
+            self.assertIn("bernard kowalski is behind both", why_blob)
 
     def test_roger_corman_crew_sentence_is_allowed_not_plot_subject(self) -> None:
         seed = _title(
@@ -1186,7 +1186,7 @@ class HouseholdBridgeTests(unittest.TestCase):
         why = str(feed["items"][0].get("why") or "").lower()
         self.assertNotIn("turn on a roger", why)
         self.assertNotIn("both stories turn on", why)
-        self.assertIn("roger corman worked on both", why)
+        self.assertIn("roger corman is behind both", why)
 
     def test_kill_again_is_not_a_for_you_reason(self) -> None:
         seed = _title(
@@ -1315,7 +1315,7 @@ class HouseholdBridgeTests(unittest.TestCase):
         feed = feed_for_you(self.db, limit=8)
         self.assertEqual(len(feed["items"]), 1)
         why = str(feed["items"][0].get("why") or "").lower()
-        self.assertIn("both are part of aip horror", why)
+        self.assertIn("both belong to aip horror", why)
         self.assertNotIn("previously used", why)
         self.assertNotIn("crash lands", why)
 
