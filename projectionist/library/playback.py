@@ -115,6 +115,9 @@ class PlaybackSession:
     last_offset_s: float = 0.0
     # Last-resort PGS/VobSub burn-in. Overlay text never shares this session.
     subtitle_stream_id: Optional[str] = None
+    # Container size of the file being played. With duration_ms this is the
+    # real media bitrate used to advertise the master variant.
+    file_size: int = 0
 
 
 _sessions: Dict[str, PlaybackSession] = {}
@@ -343,6 +346,7 @@ def _playable_from_episode(
         "season": _row_int(row, "season_number"),
         "episode": _row_int(row, "episode_number"),
         "duration_ms": duration,
+        "file_size": _row_int(row, "file_size") or 0,
         "view_offset_ms": _row_int(row, "view_offset_ms") or 0,
         "content_rating": _row_str(row, "content_rating") or show_rating or _row_str(row, "show_content_rating"),
         "poster_url": poster_url or _row_str(row, "show_poster_url"),
@@ -370,6 +374,7 @@ def resolve_playable_item(db: Any, rating_key: str) -> Dict[str, Any]:
                 "season": None,
                 "episode": None,
                 "duration_ms": duration,
+                "file_size": _row_int(item, "file_size") or 0,
                 "view_offset_ms": _row_int(item, "view_offset_ms") or 0,
                 "content_rating": _row_str(item, "content_rating"),
                 "poster_url": _row_str(item, "poster_url"),
@@ -543,14 +548,66 @@ def _proxy_uri_for_plex(
     return f"{proxy_root}/{joined.lstrip('/')}"
 
 
+def variant_bandwidth_bps(file_size_bytes: int, duration_ms: int) -> Optional[int]:
+    """Bits per second for a master variant: container bitrate plus 25% headroom.
+
+    ``file_size`` and ``duration_ms`` are the item's own numbers. Returns None
+    when either is missing so the rewrite leaves Plex's BANDWIDTH unchanged.
+    """
+    size = int(file_size_bytes or 0)
+    duration = int(duration_ms or 0)
+    if size <= 0 or duration <= 0:
+        return None
+    seconds = duration / 1000.0
+    if seconds <= 0:
+        return None
+    average = (size * 8) / seconds
+    return max(1, int(round(average * 1.25)))
+
+
+_STREAM_INF_BANDWIDTH = re.compile(r"(?<!AVERAGE-)BANDWIDTH=\d+", re.IGNORECASE)
+_STREAM_INF_AVERAGE = re.compile(r"AVERAGE-BANDWIDTH=\d+", re.IGNORECASE)
+
+
+def _with_variant_bandwidth(line: str, bandwidth: int) -> str:
+    """Set BANDWIDTH and AVERAGE-BANDWIDTH on one master variant line."""
+    if "EXT-X-STREAM-INF" not in line.upper():
+        return line
+    value = str(int(bandwidth))
+    if _STREAM_INF_BANDWIDTH.search(line):
+        line = _STREAM_INF_BANDWIDTH.sub(f"BANDWIDTH={value}", line, count=1)
+    else:
+        line = re.sub(
+            r"(#EXT-X-STREAM-INF:)",
+            rf"\1BANDWIDTH={value},",
+            line,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+    if _STREAM_INF_AVERAGE.search(line):
+        line = _STREAM_INF_AVERAGE.sub(f"AVERAGE-BANDWIDTH={value}", line, count=1)
+    else:
+        line = line.replace(
+            f"BANDWIDTH={value}",
+            f"BANDWIDTH={value},AVERAGE-BANDWIDTH={value}",
+            1,
+        )
+    return line
+
+
 def rewrite_plex_hls_playlist(
     body: str,
     *,
     session_id: str,
     plex_base: str,
     playlist_path: str,
+    variant_bandwidth: Optional[int] = None,
 ) -> str:
-    """Rewrite playlist URIs onto the Projectionist proxy; strip PMS host + token."""
+    """Rewrite playlist URIs onto the Projectionist proxy; strip PMS host + token.
+
+    ``variant_bandwidth`` is applied only to ``#EXT-X-STREAM-INF`` lines. The
+    caller passes it for the master playlist. Media playlists are left alone.
+    """
     source = str(body or "")
     out_lines = []
     for line in source.splitlines():
@@ -559,6 +616,9 @@ def rewrite_plex_hls_playlist(
             out_lines.append(line)
             continue
         if stripped.startswith("#"):
+            if variant_bandwidth is not None:
+                line = _with_variant_bandwidth(line, variant_bandwidth)
+                stripped = line.strip()
             if "URI=" in stripped:
 
                 def _repl(match: re.Match[str]) -> str:
@@ -877,6 +937,7 @@ def start_playback(
         token=token,
         token_source=str(resolved.get("source") or "") or None,
         duration_ms=int(playable.get("duration_ms") or 0),
+        file_size=int(playable.get("file_size") or 0),
         view_offset_ms=offset_ms,
         title=str(playable.get("title") or ""),
         show_title=str(playable.get("show_title") or ""),
@@ -1029,6 +1090,7 @@ def proxy_session_asset(
 ) -> Dict[str, Any]:
     fetch = fetch or fetch_plex_bytes
     path = validate_playback_path(relative_path)
+    variant_bandwidth = None
     if path in {"index.m3u8", "master.m3u8"}:
         url = universal_start_url(
             session.plex_base,
@@ -1037,6 +1099,7 @@ def proxy_session_asset(
             offset_seconds=session.last_offset_s,
         )
         rewrite_base = UNIVERSAL_HLS_MASTER
+        variant_bandwidth = variant_bandwidth_bps(session.file_size, session.duration_ms)
     else:
         base = session.plex_base.rstrip("/")
         upstream = plex_fetch_path(path)
@@ -1058,6 +1121,7 @@ def proxy_session_asset(
             session_id=session.session_id,
             plex_base=session.plex_base,
             playlist_path=rewrite_base,
+            variant_bandwidth=variant_bandwidth,
         )
         return {
             "body": rewritten.encode("utf-8"),

@@ -32,6 +32,7 @@ from projectionist.library.playback import (
     strip_secret_query,
     universal_start_url,
     validate_playback_path,
+    variant_bandwidth_bps,
     validate_rating_key,
 )
 from projectionist.web.rate_limit import clear_rate_limits
@@ -192,6 +193,74 @@ class PlaylistRewriteTests(unittest.TestCase):
             out,
         )
         self.assertNotIn("/api/library/playback/sess-1/session/", out)
+
+    def test_master_bandwidth_uses_file_bitrate_with_headroom(self) -> None:
+        # 5_000_000 bytes over 10s is 4_000_000 bps; 25% headroom is 5_000_000.
+        self.assertEqual(variant_bandwidth_bps(5_000_000, 10_000), 5_000_000)
+        self.assertIsNone(variant_bandwidth_bps(0, 10_000))
+        self.assertIsNone(variant_bandwidth_bps(5_000_000, 0))
+        body = (
+            "#EXTM3U\n"
+            "#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=2723000,AVERAGE-BANDWIDTH=2000000,RESOLUTION=1920x1080\n"
+            "session/abc/base/index.m3u8\n"
+        )
+        out = rewrite_plex_hls_playlist(
+            body,
+            session_id="sess-1",
+            plex_base="http://plex.test:32400",
+            playlist_path="index.m3u8",
+            variant_bandwidth=variant_bandwidth_bps(5_000_000, 10_000),
+        )
+        self.assertIn("BANDWIDTH=5000000", out)
+        self.assertIn("AVERAGE-BANDWIDTH=5000000", out)
+        self.assertNotIn("BANDWIDTH=2723000", out)
+        self.assertNotIn("AVERAGE-BANDWIDTH=2000000", out)
+        self.assertEqual(out.count("BANDWIDTH="), 2)
+
+    def test_missing_file_size_leaves_plex_bandwidth(self) -> None:
+        body = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=2723000\nmedia.m3u8\n"
+        out = rewrite_plex_hls_playlist(
+            body,
+            session_id="sess-1",
+            plex_base="http://plex.test:32400",
+            playlist_path="index.m3u8",
+            variant_bandwidth=variant_bandwidth_bps(0, 10_000),
+        )
+        self.assertIn("BANDWIDTH=2723000", out)
+        self.assertNotIn("AVERAGE-BANDWIDTH", out)
+
+    def test_master_proxy_advertises_headroom_without_changing_plex_params(self) -> None:
+        session = PlaybackSession(
+            session_id="sess-bw",
+            user_id="owner",
+            rating_key="238445",
+            plex_base="http://plex.test:32400",
+            token="tok",
+            duration_ms=10_000,
+            file_size=5_000_000,
+        )
+        seen: list[str] = []
+
+        def fake_fetch(url, **_kwargs):
+            seen.append(url)
+            return (
+                b"#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=2723000\nsession/abc/base/index.m3u8\n",
+                "application/vnd.apple.mpegurl",
+                200,
+                url,
+            )
+
+        asset = proxy_session_asset(session, "index.m3u8", fetch=fake_fetch)
+        self.assertEqual(len(seen), 1)
+        upstream = seen[0]
+        self.assertIn("directPlay=0", upstream)
+        self.assertIn("directStream=1", upstream)
+        self.assertIn("directStreamAudio=1", upstream)
+        self.assertIn("protocol=hls", upstream)
+        self.assertNotIn("bandwidth=", upstream.lower().split("?", 1)[-1])
+        body = asset["body"].decode()
+        self.assertIn("BANDWIDTH=5000000", body)
+        self.assertIn("AVERAGE-BANDWIDTH=5000000", body)
 
     def test_plex_fetch_path_prefixes_bare_session(self) -> None:
         self.assertEqual(
