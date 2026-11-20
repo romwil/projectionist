@@ -193,6 +193,7 @@ The web app benefits as much as any native client:
 
 ## Open decisions
 
+- **Client order (decided 2026-11-20):** Apple clients adopt ENG-003 engine sessions before the web does. The web player stays on the Plex universal path until ENG-007.
 - **Path naming:** keep `/api/library/playback/*` and switch its backend, or introduce `/api/playback/sessions/*` and deprecate the old routes after ENG-007. *Proposed:* new namespace, old routes stay as the Plex fallback until parity. **Spike (2026-11-19):** path-token session URLs under a new namespace worked for Safari/WebKit and tvOS `AVPlayer` without `Authorization` headers — keeps the proposed ENG-003 shape.
 - **Segment cache:** on-the-fly remux per session vs. a short-lived on-disk segment cache under `DATA_DIR` shared by concurrent viewers. *Proposed:* on-the-fly first; cache only if measurements demand it. **Spike:** serving a pre-built `-c copy` fMP4 package was ~0% CPU idle; no evidence yet that remux needs a shared disk cache for single-viewer Apple playback.
 - **HDR on the web:** whether to tone-map or refuse HDR → SDR on browsers without HDR support.
