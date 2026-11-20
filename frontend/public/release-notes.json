@@ -1,6 +1,32 @@
 {
-  "generated_at": "2026-11-18T01:51:11Z",
+  "generated_at": "2026-11-19T22:33:08Z",
   "releases": [
+    {
+      "version": "1.41.0",
+      "date": "2026-11-19",
+      "summary": "Signing in opens Explore. Chat stays available, and a household that chose Chat still lands there.",
+      "highlights": [
+        "**Explore is home.** After you sign in, Projectionist opens Explore — the shelves — instead of Chat.",
+        "**A Chat choice still sticks.** Set Default page to Chat and you still land in Chat.",
+        "**Auto becomes Explore.** Households that were on Auto now open Explore, the product default."
+      ],
+      "sections": [
+        {
+          "title": "Changed",
+          "bullets": [
+            "EXP-013: server default and legacy `auto` resolve to Explore; explicit `chat` is still honored. Migration 67 rewrites stored `auto`. Profile, Help, and FAQ describe Explore as home."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "`./scripts/patch-release.sh 1.41.0` lockstep + `frontend/public/release-notes.json`.",
+            "Page speed (`npm run test:release-perf`) before Hub publish.",
+            "CI on the release PR (required checks)."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.40.1",
       "date": "2026-11-17",

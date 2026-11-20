@@ -62,7 +62,7 @@ Hub-first. Tags live on `release/1.36`. **Prod Automat waits for end-gate.**
 
 - Full unit suite.
 - Playwright: **desktop + 390×844** (existing `mobile` project). 1080p if cheap. **Do not** require 4K or kiosk. Auth, session revoke, route gates. Layout under throttle. Streaming / job-card races must not stall or thrash.
-- axe WCAG 2.1 AA on `/` (→ `/chat`), `/login`, `/admin`, `/chat`, `/explore`. Lights Down contrast. There is **no `/theater` route** — Live theater is `/live/watch`; lobby theater is `/admin/lobby`.
+- axe WCAG 2.1 AA on `/` (→ `/explore`), `/login`, `/admin`, `/chat`, `/explore`. Lights Down contrast. There is **no `/theater` route** — Live theater is `/live/watch`; lobby theater is `/admin/lobby`.
 - Client-side fuzz of unauthenticated routes (`/login`, `/join`, `/privacy`, `/help`): no secrets in `localStorage` / `sessionStorage` / console. Defensive only.
 
 Interactive UI QA stays authored checklists on `:8792` after code-complete. This rule **adds** what those IDs must prove (hostile input, races, visual triad, focus). It does not replace the skill.

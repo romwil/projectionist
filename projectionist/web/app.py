@@ -1314,7 +1314,7 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
             "is_youth": bool(getattr(user, "is_youth", False)),
             "seerr_user_id": user.seerr_user_id,
             "avatar_url": user.avatar_url,
-            "default_page": str(getattr(user, "default_page", "auto") or "auto"),
+            "default_page": str(getattr(user, "default_page", "explore") or "explore"),
         }
         payload["youth"] = {
             "max_content_rating": str(

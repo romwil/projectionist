@@ -510,6 +510,7 @@ def _build_migrations() -> List[Migration]:
         (64, "subtitle_state", _subtitle_state),
         (65, "release2_highs", _release2_highs),
         (66, "apple_tv_devices", _apple_tv_devices),
+        (67, "explore_default_home", wrap("_migrate_explore_default_home")),
     ]
 
 

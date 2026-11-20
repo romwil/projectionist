@@ -52,7 +52,7 @@ test.describe("Native mobile — member living-room", () => {
   });
 
   test("chat composer is sticky, 16px, 44px send, no page overflow", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/chat");
     const input = page.getByTestId("composer-input");
     await input.waitFor();
 
@@ -93,7 +93,7 @@ test.describe("Native mobile — member living-room", () => {
 
   test("short Simple Browser pane still shows composer and full wordmark", async ({ page }) => {
     await page.setViewportSize({ width: 560, height: 640 });
-    await page.goto("/");
+    await page.goto("/chat");
     const composer = page.locator("form.composer");
     await expect(composer).toBeVisible();
     await assertPinnedNearViewportBottom(composer, 640, 48);
@@ -115,7 +115,7 @@ test.describe("Native mobile — member living-room", () => {
 
   test("420×480 Simple Browser: composer input stays in the pane (not 100vh-clipped)", async ({ page }) => {
     await page.setViewportSize({ width: 420, height: 480 });
-    await page.goto("/");
+    await page.goto("/chat");
     const composer = page.locator("form.composer");
     const input = page.getByTestId("composer-input");
     await expect(composer).toBeVisible();
@@ -153,7 +153,7 @@ test.describe("Native mobile — member living-room", () => {
   });
 
   test("user turn stays visible and New reply chip sits above the composer", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/chat");
     await page.getByTestId("composer-input").waitFor();
     await page.getByTestId("composer-input").fill("I asked about Chinatown");
     await page.getByTestId("send-button").click();
@@ -571,7 +571,7 @@ test.describe("Native mobile — admin pass", () => {
       });
     });
 
-    await page.goto("/");
+    await page.goto("/chat");
     await page.getByTestId("composer-input").waitFor();
     await page.getByTestId("composer-input").fill("recommend neo-noir");
     await page.getByTestId("send-button").click();

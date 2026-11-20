@@ -52,7 +52,7 @@ Keyboard cheat sheet: press `?` (outside a text field). Slash commands in chat: 
 
 **How to sign out.** Open the menu under your name in the top bar and choose **Sign out**, or use **Sign out** at the bottom of **Settings → Profile**. To sign out a lost phone or a shared TV, use **Settings → Profile → Sessions → Sign out everywhere else** — this device stays signed in.
 
-**When no chat provider is connected.** Chat needs a language model, and only the owner can connect one. Until they do, Projectionist opens on **Explore** instead of Chat, with a note that says why. Search, Explore, Library, Inbox, and Play keep working; Chat shows the same note and can't reply. If you changed **Settings → Profile → Default page** to **Chat**, you still land on Chat — it just can't answer yet.
+**When no chat provider is connected.** Chat needs a language model, and only the owner can connect one. Explore stays home either way. Search, Explore, Library, Inbox, and Play keep working; Chat shows a note that says why and can't reply. If you changed **Settings → Profile → Default page** to **Chat**, you still land on Chat — it just can't answer yet.
 
 **What stays private.** Your chat transcripts and private memory belong to your account and are never shown to other members. Activity counts never include what you typed. Someone with the server's files or its backups can still read everything, so [Privacy](/privacy) spells out exactly what is stored, what the owner can see, and what removing your account leaves behind.
 
@@ -329,7 +329,7 @@ If you don't have a link yet, use **Need an invite?** on `/login`. The owner see
 
 ### Default page, password, and sessions
 
-**Where you land.** Set **Settings → Profile → Default page** to **Chat** or **Explore**, or leave it on **Auto** (Chat when a language model is configured, Explore when it isn't — Explore then explains the missing provider instead of a dead-end Chat). Signing in returns you to whatever page you were trying to open before you had to sign in.
+**Where you land.** **Explore** is home. Set **Settings → Profile → Default page** to **Explore** or **Chat**, or leave it on **Auto** (same as Explore — the product default). Signing in returns you to whatever page you were trying to open before you had to sign in.
 
 > **You try to open a title while signed out → sign in → you land back on that title**, not on the default page.
 

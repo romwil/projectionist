@@ -17,9 +17,9 @@ test.describe("Login flow", () => {
   test("skips login when multi-user auth is disabled", async ({ page }) => {
     await mockFeatures(page, { multi_user_enabled: false });
     await page.goto("/");
-    await page.getByTestId("composer-input").waitFor();
+    await expect(page).toHaveURL(/\/explore$/);
+    await expect(page.getByTestId("explore-hub-links")).toBeVisible();
     await expect(page.getByTestId("login-page")).toHaveCount(0);
-    await expect(page.getByTestId("workspace-main")).toBeVisible();
   });
 
   test("redirects to login when multi-user is enabled and session is missing", async ({ page }) => {
@@ -36,7 +36,7 @@ test.describe("Login flow", () => {
     await expect(page.getByTestId("show-token-login")).toHaveText("Advanced");
   });
 
-  test("plex PIN login returns to chat workspace", async ({ page }) => {
+  test("plex PIN login returns to Explore home", async ({ page }) => {
     await mockFeatures(page, { multi_user_enabled: true });
     await mockPlexLogin(page);
 
@@ -44,11 +44,9 @@ test.describe("Login flow", () => {
     await expect(page.getByTestId("login-page")).toBeVisible();
     await page.getByTestId("sign-in-with-plex").click();
     // The mock links the PIN as soon as it is created. The first check is immediate,
-    // so the waiting card may never paint. Login still has to land on chat.
-    // Post-login home is the chat workspace (`/` redirects to `/chat`).
-    await expect(page).toHaveURL(/\/(chat)?$/);
-    await page.getByTestId("composer-input").waitFor();
-    await expect(page.getByTestId("workspace-main")).toBeVisible();
+    // so the waiting card may never paint. EXP-013: post-login home is Explore.
+    await expect(page).toHaveURL(/\/explore$/);
+    await expect(page.getByTestId("explore-hub-links")).toBeVisible();
     await expect(page.getByTestId("login-page")).toHaveCount(0);
   });
 
@@ -66,16 +64,15 @@ test.describe("Login flow", () => {
     await page.getByTestId("plex-token-input").fill("mock-plex-token");
     await page.getByTestId("submit-plex-login").click();
 
-    await expect(page).toHaveURL(/\/(chat)?$/);
-    await page.getByTestId("composer-input").waitFor();
-    await expect(page.getByTestId("workspace-main")).toBeVisible();
+    await expect(page).toHaveURL(/\/explore$/);
+    await expect(page.getByTestId("explore-hub-links")).toBeVisible();
   });
 
   test("shows user menu when authenticated in multi-user mode", async ({ page }) => {
     await mockFeatures(page, { multi_user_enabled: true });
     await mockAuthUser(page);
     await page.goto("/");
-    await page.getByTestId("composer-input").waitFor();
+    await expect(page).toHaveURL(/\/explore$/);
     await expect(page.getByTestId("user-menu")).toBeVisible();
     await expect(page.getByTestId("user-menu-trigger")).toContainText("Test User");
   });
@@ -84,13 +81,13 @@ test.describe("Login flow", () => {
     await mockFeatures(page, { multi_user_enabled: true });
     await mockAuthUser(page);
     await page.goto("/");
-    await page.getByTestId("composer-input").waitFor();
+    await expect(page).toHaveURL(/\/explore$/);
 
     await page.getByTestId("user-menu-trigger").click();
     const panel = page.getByTestId("user-menu-panel");
     await expect(panel).toBeVisible();
 
-    // Click must hit the link, not the chat workspace under the dropdown.
+    // Click must hit the link, not the page under the dropdown.
     await panel.getByRole("link", { name: "About" }).click();
     await expect(page).toHaveURL(/\/about$/);
   });

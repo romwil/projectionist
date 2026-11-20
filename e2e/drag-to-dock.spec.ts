@@ -78,7 +78,7 @@ test.describe("Drag title cards to status dock", () => {
     const setupResponse = page.waitForResponse(
       (response) => response.url().includes("/api/setup/status") && response.ok(),
     );
-    await page.goto("/");
+    await page.goto("/chat");
     await setupResponse;
     await page.getByTestId("composer-input").waitFor();
   });

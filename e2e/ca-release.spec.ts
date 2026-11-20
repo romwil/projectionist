@@ -20,14 +20,14 @@ test.describe("CA release mocked flows", () => {
     const body = await health.json();
     expect(body).toMatchObject({ status: "ok" });
 
+    // EXP-013: Explore is home regardless of LLM.
     await mockFeatures(page, { llm_configured: true });
     await page.goto("/");
-    await expect(page).toHaveURL(/\/chat$/);
-    await page.getByTestId("composer-input").waitFor();
-    await expect(page.getByTestId("workspace-main")).toBeVisible();
+    await expect(page).toHaveURL(/\/explore$/);
+    await expect(page.getByTestId("explore-hub-links")).toBeVisible();
   });
 
-  test("without a chat provider the app shell opens Explore and says why", async ({ page }) => {
+  test("without a chat provider Explore still explains the missing model", async ({ page }) => {
     await mockFeatures(page, { llm_configured: false });
     await page.goto("/");
     await expect(page).toHaveURL(/\/explore$/);

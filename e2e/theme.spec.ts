@@ -46,7 +46,7 @@ test.describe("Theme chrome", () => {
       });
     });
 
-    await page.goto("/");
+    await page.goto("/chat");
     await page.getByTestId("composer-input").waitFor();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "lights-up");
 
@@ -71,7 +71,7 @@ test.describe("Theme chrome", () => {
       ui_theme: "lights_down",
       ui_font_size: "medium",
     });
-    await page.goto("/");
+    await page.goto("/chat");
     await page.getByTestId("composer-input").waitFor();
 
     const trigger = page.getByTestId("user-menu-trigger");
@@ -83,7 +83,7 @@ test.describe("Theme chrome", () => {
 
   test("explore icon navigates to explore shell", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto("/");
+    await page.goto("/chat");
     await page.getByTestId("composer-input").waitFor();
     const explore = page.getByTestId("topbar-explore-link");
     await expect(explore).toBeVisible();
