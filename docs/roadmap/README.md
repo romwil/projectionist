@@ -89,6 +89,7 @@ SES-001 and NAT-002 describe the same work from two sides; build them as one cha
 | 2026-11-19 | **360 reviews are local-only** (gitignore review run artifacts; untrack; strip links from tracked docs). History purge authorized the same day |
 | 2026-11-19 | **Both build lanes start in parallel**: Lane A (engine remux spike) and Lane B (EXP-013 → EXP-005 → EXP-004 → EXP-001) |
 | 2026-11-19 | **Agents merge their own PRs** when every required `main` CI check is green (`gh pr merge --merge`); never bypass checks; merge ≠ release |
+| 2026-11-19 | **Lane A remux spike:** H.264+AC-3 fMP4 HLS (`-c copy`) + household WebVTT works on Safari/WebKit and tvOS AVPlayer (seek without restart; captions selectable). Desktop Chrome/hls.js rejects AC-3 — planner must audio-transcode for those profiles. Findings: [engine-spike-findings](../superpowers/specs/2026-11-19-engine-spike-findings.md). Spike code stays on `spike/engine-remux` (not merged) |
 
 ## Superseded review rows (carry-forward)
 
