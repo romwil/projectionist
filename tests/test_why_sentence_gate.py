@@ -1,4 +1,4 @@
-"""A "why" reaches a card only when it reads as a sentence (PRD-001, UX-012)."""
+"""A "why" reaches a card only when it reads as a sentence (PRD-001, UX-012, EXP-004)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,9 @@ from pathlib import Path
 from projectionist.library.db import Database
 from projectionist.library.feeds import feed_for_you
 from projectionist.library.plot_kinship import (
+    checkable_plot_sentence,
     honest_plot_link,
+    member_facing_why,
     readable_why,
     specific_plot_link,
 )
@@ -36,6 +38,25 @@ BROKEN_REASONS = (
     "both stories turn on a taking place",
     "worked on",
 )
+# Live For you junk sampled on Automat prod 1.40.1 (2026-11-19).
+LIVE_1401_JUNK_TERMS = (
+    "million worldwide",
+    "third installment",
+    "received generally",
+    "generally positive",
+    "grossed million",
+    "best original",
+    "american dystopian",
+    "science fiction",
+    "golden globe",
+    "archival footage",
+    "covid pandemic",
+    "half hour",
+    "best shows",
+    "mid century",
+    "modern audiences",
+    "fifth highest",
+)
 BAKE_PLOT = "Amateur bakers compete around a signature bake inside a failing colony."
 RIVAL_PLOT = "Rivals reunite after amateur bakers compete and ruin a signature bake tonight."
 
@@ -46,16 +67,35 @@ class ReadableWhyTests(unittest.TestCase):
             with self.subTest(reason=reason):
                 self.assertFalse(readable_why(reason))
 
+    def test_live_1401_junk_terms_never_become_sentences(self) -> None:
+        for term in LIVE_1401_JUNK_TERMS:
+            with self.subTest(term=term):
+                self.assertEqual(checkable_plot_sentence([term]), "")
+                self.assertFalse(readable_why(f"They share a {term}."))
+                self.assertFalse(readable_why(f"both are about a {term}"))
+
     def test_real_reasons_pass(self) -> None:
         for reason in (
             "both stories turn on amateur bakers",
             "both stories turn on a haunted house",
             "both stories turn on street racing",
-            "Adam McKay worked on both",
-            "both are part of The Godfather Collection",
+            "Adam McKay is behind both",
+            "both belong to The Godfather Collection",
+            "They share amateur bakers.",
+            "they share a buried treasure",
         ):
             with self.subTest(reason=reason):
                 self.assertTrue(readable_why(reason))
+
+    def test_account_handle_prefix_is_refused(self) -> None:
+        bad = "qa-owner, You watched Heat (1995); Thief (1981) — they share a buried treasure."
+        self.assertFalse(member_facing_why(bad))
+        self.assertFalse(readable_why(bad))
+        ok = (
+            "You finished an episode of Colony Bake-Off (2018); "
+            "Covert Kitchen (2019) — they share amateur bakers."
+        )
+        self.assertTrue(member_facing_why(ok))
 
     def test_production_history_never_becomes_a_plot_link(self) -> None:
         link = specific_plot_link(
@@ -79,6 +119,10 @@ class ReadableWhyTests(unittest.TestCase):
         assert link is not None
         self.assertIn("street racing", link["sentence"])
         self.assertNotIn("a street racing", link["sentence"])
+
+    def test_checkable_plot_uses_share_voice(self) -> None:
+        sentence = checkable_plot_sentence(["buried treasure"])
+        self.assertEqual(sentence, "They share a buried treasure.")
 
 
 class WatchedBridgeGateTests(unittest.TestCase):
@@ -107,9 +151,32 @@ class WatchedBridgeGateTests(unittest.TestCase):
         peer_row = {"id": peer, "title": "Vice", "year": 2018}
         explanation = watched_bridge(self.db, peer_row, seed_row)
         assert explanation is not None
-        self.assertIn("Adam McKay worked on both", explanation["sentence"])
+        self.assertIn("Adam McKay is behind both", explanation["sentence"])
 
-    def test_plot_clause_still_folds_both(self) -> None:
+    def test_lowercase_crew_name_is_title_cased(self) -> None:
+        seed = _title(self.db, rating_key="rk-a2", tmdb_id=11, title="Seed", year=2015)
+        peer = _title(self.db, rating_key="rk-b2", tmdb_id=12, title="Peer", year=2018)
+        credit = [
+            {
+                "tmdb_person_id": 56,
+                "name": "brandon Christensen",
+                "department": "Directing",
+                "job": "Director",
+                "billing_order": 0,
+            }
+        ]
+        self.db.upsert_credits_for_item(seed, credit)
+        self.db.upsert_credits_for_item(peer, credit)
+        explanation = watched_bridge(
+            self.db,
+            {"id": peer, "title": "Peer", "year": 2018},
+            {"id": seed, "title": "Seed", "year": 2015, "seed_source": "completion"},
+        )
+        assert explanation is not None
+        self.assertIn("Brandon Christensen is behind both", explanation["sentence"])
+        self.assertNotIn("brandon Christensen", explanation["sentence"])
+
+    def test_plot_clause_folds_they_share(self) -> None:
         seed = _title(self.db, rating_key="rk-c", tmdb_id=3, title="Bake Off", summary=BAKE_PLOT)
         peer = _title(self.db, rating_key="rk-d", tmdb_id=4, title="Rivals", summary=RIVAL_PLOT)
         _explainable_neighbor(self.db, seed, peer, seed_text=BAKE_PLOT, peer_text=RIVAL_PLOT)
@@ -117,8 +184,9 @@ class WatchedBridgeGateTests(unittest.TestCase):
         peer_row = {"id": peer, "title": "Rivals", "year": 2015, "summary": RIVAL_PLOT}
         explanation = watched_bridge(self.db, peer_row, seed_row)
         assert explanation is not None
-        self.assertIn("— both are about", explanation["sentence"])
+        self.assertIn("— they share", explanation["sentence"])
         self.assertNotIn("both stories turn on", explanation["sentence"])
+        self.assertNotIn("both are about", explanation["sentence"])
 
 
 class ForYouRailTests(unittest.TestCase):

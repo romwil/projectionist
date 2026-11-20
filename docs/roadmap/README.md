@@ -65,7 +65,7 @@ Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` ·
 | EXP-001 | Design tokens as source of truth | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | EXP-002 | One navigation model | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | EXP-003 | Explore, cinema-first | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
-| EXP-004 | Voice pass on *why* sentences | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| EXP-004 | Voice pass on *why* sentences | done | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | EXP-005 | Member-vocabulary sweep | done | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | EXP-006 | Art never looks broken | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | EXP-007 | Search for watching, not managing | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
