@@ -1522,7 +1522,7 @@ def _continue_watching_resume_label(
 
 
 def _library_row_for_on_deck(db: Database, entry: "PlexOnDeckItem"):
-    """Resolve an on-deck Plex entry to a CuratorX library row."""
+    """Resolve an on-deck Plex entry to a Projectionist library row."""
     if entry.media_type == "episode":
         if entry.show_rating_key:
             row = db.library_item_by_rating_key(entry.show_rating_key)
@@ -2312,8 +2312,8 @@ def feed_for_you(
     note = None
     if not items:
         note = (
-            "No named link to something you finished — not a cosine guess. "
-            "Finish a title, or let Scheduled Tasks catch up Named kinship."
+            "No named link to something you finished yet. "
+            "Finish a title, or give the household a bit more time to learn links."
         )
     return {
         "feed": "for-you",

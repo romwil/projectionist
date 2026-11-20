@@ -623,7 +623,8 @@ class HouseholdBridgeTests(unittest.TestCase):
         self.assertEqual(empty["items"], [])
         self.assertTrue(empty["empty"])
         self.assertIn("no named link to something you finished", empty["note"].lower())
-        self.assertIn("not a cosine guess", empty["note"].lower())
+        self.assertNotIn("cosine", empty["note"].lower())
+        self.assertNotIn("scheduled tasks", empty["note"].lower())
 
     def test_house_episode_title_is_not_the_watched_work(self) -> None:
         """XC-02 / HV-01: House S8E2 *Not Cancer* never appears as the watched title."""
@@ -852,7 +853,8 @@ class HouseholdBridgeTests(unittest.TestCase):
         self.assertEqual(youth["items"], [])
         self.assertTrue(youth["empty"])
         self.assertIn("no named link to something you finished", youth["note"].lower())
-        self.assertIn("not a cosine guess", youth["note"].lower())
+        self.assertNotIn("cosine", youth["note"].lower())
+        self.assertNotIn("scheduled tasks", youth["note"].lower())
 
         kept = filter_items_for_youth(adult["items"], max_rating="PG-13")
         self.assertEqual(kept, [])

@@ -208,8 +208,19 @@ def derive_persona_mode(persona: Mapping[str, Any]) -> str:
 
 
 def substitute_curator_name(text: str, curator_name: Optional[str] = None) -> str:
-    """Replace ``{curator_name}`` placeholders with the resolved display name."""
-    name = str(curator_name or "Curator").strip() or "Curator"
+    """Replace ``{curator_name}`` placeholders with the resolved display name.
+
+    Bare / default ``Curator`` becomes ``Your curator`` (EXP-005 / glossary).
+    """
+    from projectionist.persona.display import (
+        DEFAULT_CURATOR_NAME,
+        GENERIC_CURATOR_NAME,
+        curator_display_name,
+    )
+
+    name = curator_display_name(curator_name)
+    if name == DEFAULT_CURATOR_NAME:
+        name = GENERIC_CURATOR_NAME
     return text.replace(CURATOR_NAME_PLACEHOLDER, name)
 
 

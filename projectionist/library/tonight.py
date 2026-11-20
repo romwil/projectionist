@@ -13,7 +13,7 @@ from projectionist.library.db import Database
 from projectionist.library.episodes import summarize_tv_progress
 from projectionist.notifications.recommendation_reasons import list_linked_unwatched
 
-TONIGHT_EMPTY_NOTE = "No named link to something you finished — not a cosine guess."
+TONIGHT_EMPTY_NOTE = "No named link to something you finished yet."
 DEFAULT_TONIGHT_LIMIT = 8
 MAX_TONIGHT_LIMIT = 8
 _FETCH_HEADROOM = 50

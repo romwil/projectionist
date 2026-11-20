@@ -530,7 +530,7 @@ authReady,
             />
             {loading || agentActivityLog.length > 0 ? (
               <TypingIndicator
-                label={loading ? typingLabel || curatorName : "Agent activity"}
+                label={loading ? typingLabel || curatorName : "Thinking details"}
                 activityLog={agentActivityLog}
                 expanded={activityPanelOpen}
                 onToggle={() => setActivityPanelOpen?.((open: any) => !open)}

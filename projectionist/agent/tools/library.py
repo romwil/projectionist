@@ -224,7 +224,7 @@ class LibraryToolsMixin:
             payload = dict(payload)
             payload["empty"] = True
             payload["note"] = str(payload.get("note") or "").strip() or (
-                "No named link to something you finished — not a cosine guess."
+                "No named link to something you finished yet."
             )
         return json.dumps(payload)
 

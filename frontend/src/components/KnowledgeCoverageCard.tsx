@@ -138,11 +138,9 @@ export default function KnowledgeCoverageCard({
       </div>
       <p className="status status-secondary knowledge-coverage-blurb">
         Named kinship on opened titles is the Monday number. Similar cache % is not
-        useful relatedness — empty shelves queue catch-up on{" "}
-        <Link to="/admin/scheduled-tasks" className="app-topbar-link">
-          Scheduled Tasks
-        </Link>
-        . Sparse bars mean enrichment still has work.
+        useful relatedness on its own — empty shelves mean the household is still
+        learning title links in the background. Sparse bars mean enrichment still
+        has work.
         {embeddingLabel ? (
           <>
             {" "}

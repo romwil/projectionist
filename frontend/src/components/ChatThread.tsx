@@ -172,7 +172,7 @@ function renderBulkConfirmActions(message: any, handlers: any, showTokenConfirm:
           })
         }
       >
-        Expand {expandCount} titles in turnstyle view
+        Expand {expandCount} titles
       </button>
     );
   }
@@ -407,7 +407,7 @@ function renderBlock(block: any, handlers: any, role: any, message: any, blockIn
         data-testid="expand-title-cards"
         onClick={() => handlers.onOpenViewport?.({ ...block.payload, items: viewportItems })}
       >
-        Expand {turnstyleItemCount(viewportItems)} titles in turnstyle view
+        Expand {turnstyleItemCount(viewportItems)} titles
       </button>
     );
   }
