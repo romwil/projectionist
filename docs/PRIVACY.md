@@ -350,7 +350,7 @@ These records stay on this server so you can run it well. None is sent anywhere.
 
 ### Images
 
-Member-facing library JSON and privacy MCP prefer TMDB poster and backdrop URLs (`image.tmdb.org`), which carry no Plex token or LAN hostname. Plex thumbnail URLs that embed `X-Plex-Token` stay inside the owner's in-app views.
+Hub, title, and library search set `poster_url` and `backdrop_url` to `GET /api/library/art/...` when the title is in the library and the server can fetch the image. That URL is same-origin and authenticated. It carries no Plex token and no LAN hostname. The server fetches the bytes: HTTPS from `image.tmdb.org`, `artworks.thetvdb.com`, or `assets.fanart.tv`, or from the configured Plex server for a library thumb. The Plex token stays on the server. A title that is not in the library can still carry a public TMDB image URL. Privacy MCP and other payloads keep that same rule: a public TMDB URL, or an empty string. They never include a live `X-Plex-Token`.
 
 ### Browser-side third parties
 
@@ -358,7 +358,7 @@ Fonts and icons are self-hosted. A signed-in browser contacts only the origins y
 
 | Origin | When | Why |
 |---|---|---|
-| `image.tmdb.org`, `artworks.thetvdb.com`, `assets.fanart.tv` | A poster or backdrop loads | Artwork CDNs; no Plex token or LAN hostname in the URL |
+| `image.tmdb.org`, `artworks.thetvdb.com`, `assets.fanart.tv` | A poster that is still a public CDN URL, such as a title outside the library | Artwork CDNs. Hub, title, and library search load art from this server instead |
 | `www.themoviedb.org` | Rematch studio / Repair the miss links a title's TMDB page | Public TMDB title page; no API key leaves the browser |
 | `www.youtube.com` / `www.youtube-nocookie.com` | Someone opens a trailer that only has a YouTube source | Trailer playback |
 
@@ -401,8 +401,9 @@ Legend: **Y** = may see or receive · **—** = not exposed · **\*** = the prov
 | Data | Stored where | Member | Owner | Privacy MCP | Full MCP | AI provider |
 |------|--------------|--------|-------|-------------|----------|-------------|
 | Title metadata, facets, short overviews | Library index | Y | Y | Y | Y | Y\* |
-| TMDB poster / backdrop URLs | Library index | Y | Y | Y | Y | Y\* |
-| Plex tokenized poster URLs | Library index | — | In-app only | — | — | — |
+| TMDB poster / backdrop URLs | Library index | Outside the library | Outside the library | Y | Y | Y\* |
+| Cached art route (`/api/library/art/...`) | Derived, not stored | Y | Y | — | — | — |
+| Plex tokenized poster URLs | Library index | — | — | — | — | — |
 | `tmdb_id` / `tvdb_id` | Library index | Y | Y | Y | Y | Y\* |
 | Plex `rating_key`, file size, `in_radarr` / `in_sonarr` | Library index | — | Y | — | Y | Y\* (tools) |
 | Chats and messages | Database | Own | Server files and backups | — | — | Own chat\* |
