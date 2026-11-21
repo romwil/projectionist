@@ -23,7 +23,7 @@ def client_capabilities() -> dict[str, int]:
     return {
         "device_pairing": 1,
         "throw": 1,
-        "playback_engine": 0,  # ENG-003
+        "playback_engine": 1,  # ENG-003 session API, VOD fMP4 remux
         "caption_tracks": 0,  # ENG-004
         "shared_sessions": 0,  # SES-004
         "timeline": 0,  # TML-005

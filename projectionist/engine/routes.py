@@ -162,6 +162,156 @@ def playback_plan(
     return body
 
 
+class PlaybackSessionPayload(BaseModel):
+    rating_key: str = ""
+    profile: Any = "apple-tv-4k-3"
+    start_over: bool = False
+    offset_ms: Optional[int] = None
+
+
+class PlaybackProgressBody(BaseModel):
+    time_ms: int = Field(default=0, ge=0)
+    duration_ms: int = Field(default=0, ge=0)
+
+
+def _profile_from_body(raw: Any):
+    from projectionist.engine.profiles import (
+        DeviceProfile,
+        VideoCapability,
+        known_profile_ids,
+        named_profile,
+    )
+
+    if isinstance(raw, str) or raw is None:
+        chosen = named_profile(str(raw or "apple-tv-4k-3"))
+        if chosen is None:
+            names = ", ".join(known_profile_ids())
+            raise HTTPException(status_code=400, detail=f"Unknown device profile. Use one of: {names}.")
+        return chosen
+    if not isinstance(raw, dict):
+        raise HTTPException(status_code=400, detail="Device profile must be a name or an object.")
+    video = []
+    for item in raw.get("video") or []:
+        if not isinstance(item, dict):
+            continue
+        video.append(
+            VideoCapability(
+                codec=str(item.get("codec") or ""),
+                max_level=str(item.get("max_level") or ""),
+                hdr=[str(name) for name in (item.get("hdr") or [])],
+            )
+        )
+    return DeviceProfile(
+        id=str(raw.get("id") or "custom"),
+        containers=[str(name) for name in (raw.get("containers") or [])],
+        video=video,
+        audio=[str(name) for name in (raw.get("audio") or [])],
+        captions=[str(name) for name in (raw.get("captions") or ["webvtt"])],
+    )
+
+
+@router.post("/api/playback/sessions")
+def open_playback_session(
+    payload: PlaybackSessionPayload,
+    user=Depends(get_current_user_dep),
+) -> dict[str, Any]:
+    """Open an engine session. Remux and direct plans get a token URL. Other plans record why."""
+    from projectionist.engine.session import assert_session_allowed, open_engine_session
+    from projectionist.library.playback import YouthBlockedError, resolve_playable_item
+
+    try:
+        key = validate_rating_key(payload.rating_key)
+    except PlaybackError as error:
+        raise HTTPException(status_code=error.status_code, detail=error.message) from error
+    profile = _profile_from_body(payload.profile)
+    try:
+        playable = resolve_playable_item(_db(), key)
+        assert_session_allowed(user, _settings(), playable)
+    except YouthBlockedError as error:
+        raise HTTPException(status_code=error.status_code, detail=error.message) from error
+    except PlaybackError as error:
+        raise HTTPException(status_code=error.status_code, detail=error.message) from error
+    asset = describe_title(_settings(), _db(), _dir(), str(playable.get("rating_key") or key))
+    if payload.start_over:
+        offset = 0
+    elif payload.offset_ms is not None:
+        offset = int(payload.offset_ms)
+    else:
+        offset = int(playable.get("view_offset_ms") or 0)
+    session = open_engine_session(
+        asset,
+        profile,
+        user_id=str(getattr(user, "id", "") or ""),
+        title=str(playable.get("title") or ""),
+        duration_ms=int(playable.get("duration_ms") or 0),
+        view_offset_ms=offset,
+        data_dir=_dir(),
+    )
+    return session.public()
+
+
+@router.get("/api/playback/sessions/{session_id}")
+def read_playback_session(session_id: str, user=Depends(get_current_user_dep)) -> dict[str, Any]:
+    from projectionist.engine.session import get_engine_session
+
+    try:
+        session = get_engine_session(session_id, user_id=str(getattr(user, "id", "") or ""))
+    except PlaybackError as error:
+        raise HTTPException(status_code=error.status_code, detail=error.message) from error
+    return session.public()
+
+
+@router.post("/api/playback/sessions/{session_id}/progress")
+def playback_session_progress(
+    session_id: str,
+    payload: PlaybackProgressBody,
+    user=Depends(get_current_user_dep),
+) -> dict[str, Any]:
+    """Write Continue Watching for an engine session. Does not touch a Plex transcode."""
+    from projectionist.engine.session import get_engine_session
+    from projectionist.library.playback import update_local_view_offset
+
+    try:
+        session = get_engine_session(session_id, user_id=str(getattr(user, "id", "") or ""))
+    except PlaybackError as error:
+        raise HTTPException(status_code=error.status_code, detail=error.message) from error
+    update_local_view_offset(_db(), session.rating_key, int(payload.time_ms), int(payload.duration_ms))
+    return {"ok": True, "session_id": session.session_id, "plan": session.plan, "reason": session.reason}
+
+
+@router.post("/api/playback/sessions/{session_id}/stop")
+def close_playback_session(session_id: str, user=Depends(get_current_user_dep)) -> dict[str, Any]:
+    from projectionist.engine.session import get_engine_session, stop_engine_session
+
+    try:
+        session = get_engine_session(session_id, user_id=str(getattr(user, "id", "") or ""))
+    except PlaybackError as error:
+        raise HTTPException(status_code=error.status_code, detail=error.message) from error
+    return stop_engine_session(session)
+
+
+@router.get("/api/playback/sessions/{session_id}/{token}/{asset_path:path}")
+def playback_session_media(session_id: str, token: str, asset_path: str):
+    """Playlist and segments. The token in the path is the credential."""
+    from fastapi.responses import FileResponse
+
+    from projectionist.engine.session import resolve_session_file, session_for_token
+
+    try:
+        session = session_for_token(session_id, token)
+        path = resolve_session_file(session, asset_path)
+    except PlaybackError as error:
+        raise HTTPException(status_code=error.status_code, detail=error.message) from error
+    media_type = "application/octet-stream"
+    if path.suffix == ".m3u8":
+        media_type = "application/vnd.apple.mpegurl"
+    elif path.suffix == ".m4s":
+        media_type = "video/iso.segment"
+    elif path.suffix == ".mp4":
+        media_type = "video/mp4"
+    return FileResponse(path, media_type=media_type, filename=path.name)
+
+
 def register_engine_routes(
     app,
     *,
