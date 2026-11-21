@@ -1,0 +1,482 @@
+{
+  "body": {
+    "boards": {
+      "alerts": {
+        "items": [],
+        "supported": true
+      },
+      "almanac": {
+        "archive_years": null,
+        "day_length_change_s": -120,
+        "day_length_min": 618,
+        "moon": {
+          "age_days": 11.2,
+          "illumination": 86,
+          "name": "Waxing gibbous"
+        },
+        "record_high": null,
+        "record_low": null,
+        "sunrise": "6:21 AM",
+        "sunset": "4:39 PM",
+        "today_label": null,
+        "trivia": ""
+      },
+      "current": {
+        "code": 2,
+        "dew_point": 36,
+        "feels_like": 39,
+        "gusts": 22,
+        "humidity": 71,
+        "is_day": false,
+        "pressure_inhg": 29.86,
+        "pressure_trend": "falling",
+        "sky": "Partly cloudy",
+        "temp": 45,
+        "time": "2026-11-04T23:00",
+        "visibility_mi": 10.0,
+        "wind": 11,
+        "wind_dir": "SW"
+      },
+      "five_day": [
+        {
+          "code": 2,
+          "date": "2026-11-04",
+          "daylight_s": 37080.0,
+          "high": 57,
+          "low": 43,
+          "precip": 10,
+          "sky": "Partly cloudy",
+          "sunrise": "2026-11-04T06:21",
+          "sunset": "2026-11-04T16:39",
+          "uv_max": 2.4,
+          "weekday": "WED",
+          "weekday_name": "Wednesday"
+        },
+        {
+          "code": 61,
+          "date": "2026-11-05",
+          "daylight_s": 36960.0,
+          "high": 52,
+          "low": 38,
+          "precip": 60,
+          "sky": "Light rain",
+          "sunrise": "2026-11-05T06:22",
+          "sunset": "2026-11-05T16:38",
+          "uv_max": 1.0,
+          "weekday": "THU",
+          "weekday_name": "Thursday"
+        },
+        {
+          "code": 3,
+          "date": "2026-11-06",
+          "daylight_s": 36840.0,
+          "high": 49,
+          "low": 35,
+          "precip": 20,
+          "sky": "Overcast",
+          "sunrise": "2026-11-06T06:23",
+          "sunset": "2026-11-06T16:37",
+          "uv_max": 1.8,
+          "weekday": "FRI",
+          "weekday_name": "Friday"
+        },
+        {
+          "code": 0,
+          "date": "2026-11-07",
+          "daylight_s": 36720.0,
+          "high": 46,
+          "low": 32,
+          "precip": 0,
+          "sky": "Clear",
+          "sunrise": "2026-11-07T06:24",
+          "sunset": "2026-11-07T16:36",
+          "uv_max": 2.9,
+          "weekday": "SAT",
+          "weekday_name": "Saturday"
+        },
+        {
+          "code": 1,
+          "date": "2026-11-08",
+          "daylight_s": 36600.0,
+          "high": 51,
+          "low": 33,
+          "precip": 5,
+          "sky": "Mainly clear",
+          "sunrise": "2026-11-08T06:25",
+          "sunset": "2026-11-08T16:35",
+          "uv_max": 2.2,
+          "weekday": "SUN",
+          "weekday_name": "Sunday"
+        }
+      ],
+      "hourly": [
+        {
+          "code": 2,
+          "label": "12 AM",
+          "precip": 10,
+          "sky": "Partly cloudy",
+          "temp": 40,
+          "time": "2026-11-05T00:00"
+        },
+        {
+          "code": 2,
+          "label": "1 AM",
+          "precip": 10,
+          "sky": "Partly cloudy",
+          "temp": 38,
+          "time": "2026-11-05T01:00"
+        },
+        {
+          "code": 2,
+          "label": "2 AM",
+          "precip": 10,
+          "sky": "Partly cloudy",
+          "temp": 37,
+          "time": "2026-11-05T02:00"
+        },
+        {
+          "code": 2,
+          "label": "3 AM",
+          "precip": 10,
+          "sky": "Partly cloudy",
+          "temp": 37,
+          "time": "2026-11-05T03:00"
+        },
+        {
+          "code": 2,
+          "label": "4 AM",
+          "precip": 10,
+          "sky": "Partly cloudy",
+          "temp": 37,
+          "time": "2026-11-05T04:00"
+        },
+        {
+          "code": 2,
+          "label": "5 AM",
+          "precip": 10,
+          "sky": "Partly cloudy",
+          "temp": 38,
+          "time": "2026-11-05T05:00"
+        },
+        {
+          "code": 3,
+          "label": "6 AM",
+          "precip": 10,
+          "sky": "Overcast",
+          "temp": 40,
+          "time": "2026-11-05T06:00"
+        },
+        {
+          "code": 3,
+          "label": "7 AM",
+          "precip": 10,
+          "sky": "Overcast",
+          "temp": 42,
+          "time": "2026-11-05T07:00"
+        },
+        {
+          "code": 3,
+          "label": "8 AM",
+          "precip": 10,
+          "sky": "Overcast",
+          "temp": 44,
+          "time": "2026-11-05T08:00"
+        },
+        {
+          "code": 3,
+          "label": "9 AM",
+          "precip": 10,
+          "sky": "Overcast",
+          "temp": 47,
+          "time": "2026-11-05T09:00"
+        },
+        {
+          "code": 3,
+          "label": "10 AM",
+          "precip": 10,
+          "sky": "Overcast",
+          "temp": 49,
+          "time": "2026-11-05T10:00"
+        },
+        {
+          "code": 3,
+          "label": "11 AM",
+          "precip": 10,
+          "sky": "Overcast",
+          "temp": 52,
+          "time": "2026-11-05T11:00"
+        }
+      ],
+      "overview": {
+        "days": [
+          {
+            "code": 2,
+            "date": "2026-11-04",
+            "daylight_s": 37080.0,
+            "high": 57,
+            "low": 43,
+            "precip": 10,
+            "sky": "Partly cloudy",
+            "sunrise": "2026-11-04T06:21",
+            "sunset": "2026-11-04T16:39",
+            "uv_max": 2.4,
+            "weekday": "WED",
+            "weekday_name": "Wednesday"
+          },
+          {
+            "code": 61,
+            "date": "2026-11-05",
+            "daylight_s": 36960.0,
+            "high": 52,
+            "low": 38,
+            "precip": 60,
+            "sky": "Light rain",
+            "sunrise": "2026-11-05T06:22",
+            "sunset": "2026-11-05T16:38",
+            "uv_max": 1.0,
+            "weekday": "THU",
+            "weekday_name": "Thursday"
+          }
+        ],
+        "text": "Tonight, partly cloudy with a low near 43. Thursday brings light rain and a high of 52, with a 60 percent chance of rain or snow."
+      },
+      "radar": null,
+      "regional": [],
+      "satellite": null,
+      "seasonal": {
+        "next_season": {
+          "date": "December 21",
+          "days": 47,
+          "name": "winter solstice"
+        }
+      },
+      "webcams": []
+    },
+    "chyron": [
+      {
+        "group": "NOW",
+        "text": "45\u00b0 Partly cloudy"
+      },
+      {
+        "group": "HOURLY",
+        "text": "12 AM 40\u00b0"
+      },
+      {
+        "group": "HOURLY",
+        "text": "2 AM 37\u00b0"
+      },
+      {
+        "group": "HOURLY",
+        "text": "4 AM 37\u00b0"
+      },
+      {
+        "group": "HOURLY",
+        "text": "6 AM 40\u00b0"
+      },
+      {
+        "group": "HOURLY",
+        "text": "8 AM 44\u00b0"
+      },
+      {
+        "group": "HOURLY",
+        "text": "10 AM 49\u00b0"
+      },
+      {
+        "group": "5-DAY",
+        "text": "WED 57\u00b0/43\u00b0"
+      },
+      {
+        "group": "5-DAY",
+        "text": "THU 52\u00b0/38\u00b0"
+      },
+      {
+        "group": "5-DAY",
+        "text": "FRI 49\u00b0/35\u00b0"
+      },
+      {
+        "group": "5-DAY",
+        "text": "SAT 46\u00b0/32\u00b0"
+      },
+      {
+        "group": "5-DAY",
+        "text": "SUN 51\u00b0/33\u00b0"
+      }
+    ],
+    "chyron_summary": "your area. NOW: 45\u00b0 Partly cloudy. HOURLY: 12 AM 40\u00b0, 2 AM 37\u00b0, 4 AM 37\u00b0, 6 AM 40\u00b0, 8 AM 44\u00b0, 10 AM 49\u00b0. 5-DAY: WED 57\u00b0/43\u00b0, THU 52\u00b0/38\u00b0, FRI 49\u00b0/35\u00b0, SAT 46\u00b0/32\u00b0, SUN 51\u00b0/33\u00b0.",
+    "country": "",
+    "egress": [
+      {
+        "host": "api.open-meteo.com",
+        "purpose": "Forecast, hourly, and regional cities (coordinates)"
+      },
+      {
+        "host": "archive-api.open-meteo.com",
+        "purpose": "Record highs and lows, frost and first-snow averages (coordinates)"
+      },
+      {
+        "host": "air-quality-api.open-meteo.com",
+        "purpose": "UV, air quality, and pollen (coordinates)"
+      },
+      {
+        "host": "api.weather.gov",
+        "purpose": "NWS alerts, US only (coordinates)"
+      },
+      {
+        "host": "mesonet.agron.iastate.edu",
+        "purpose": "NEXRAD radar frames, US only (map box around the coordinates)"
+      },
+      {
+        "host": "cdn.star.nesdis.noaa.gov",
+        "purpose": "GOES satellite still for the region, US only"
+      },
+      {
+        "host": "news.google.com",
+        "purpose": "Local and national headlines (the city or the country)"
+      },
+      {
+        "host": "feeds.bbci.co.uk",
+        "purpose": "World headlines (nothing about the place)"
+      }
+    ],
+    "enabled": true,
+    "error": "",
+    "headlines": {
+      "failed": [],
+      "scopes": [],
+      "status": "pending"
+    },
+    "household_place": "your area",
+    "intro_preroll": null,
+    "is_us": true,
+    "latitude": 41.88,
+    "local_on_the_8s": [
+      "current",
+      "overview",
+      "hourly"
+    ],
+    "location_source": "household",
+    "longitude": -87.63,
+    "music": {
+      "note": "No music folder is set \u2014 the forecast plays with no soundtrack. The owner can choose one under Admin \u2192 Live Channels \u2192 Setup.",
+      "tracks": []
+    },
+    "muzak": null,
+    "muzak_note": "No music folder is set \u2014 the forecast plays with no soundtrack. The owner can choose one under Admin \u2192 Live Channels \u2192 Setup.",
+    "narration": {
+      "enabled": false,
+      "ready": false
+    },
+    "place": "your area",
+    "preroll_root_found": false,
+    "scripts": {
+      "almanac": [
+        {
+          "audio_url": null,
+          "source": "template",
+          "text": "Sunrise today was 6:21 AM, and sunset comes at 4:39 PM. Tonight's moon: waxing gibbous."
+        }
+      ],
+      "current": [
+        {
+          "audio_url": null,
+          "source": "template",
+          "text": "Here in your area, it's partly cloudy right now at 45 degrees. It feels like 39. Wind SW at 11 miles an hour."
+        },
+        {
+          "audio_url": null,
+          "source": "template",
+          "text": "Your current conditions for your area: 45 degrees under partly cloudy. Humidity is 71 percent."
+        },
+        {
+          "audio_url": null,
+          "source": "template",
+          "text": "Right now in your area we have partly cloudy and 45 degrees. The dew point sits at 36."
+        }
+      ],
+      "five_day": [
+        {
+          "audio_url": null,
+          "source": "template",
+          "text": "Your five-day forecast. Wednesday, partly cloudy, high 57. Thursday, light rain, high 52. Friday, overcast, high 49. Saturday, clear, high 46. Sunday, mainly clear, high 51."
+        },
+        {
+          "audio_url": null,
+          "source": "template",
+          "text": "Looking at the week ahead, Wednesday is the warmest at 57, and the coolest night is Saturday at 32."
+        },
+        {
+          "audio_url": null,
+          "source": "template",
+          "text": "The extended outlook for your area: Wednesday, partly cloudy, high 57; Thursday, light rain, high 52; Friday, overcast, high 49."
+        }
+      ],
+      "hourly": [
+        {
+          "audio_url": null,
+          "source": "template",
+          "text": "Over the next several hours, 40 degrees at 12 AM, heading to 52 by 11 AM. Rain or snow chances stay low."
+        },
+        {
+          "audio_url": null,
+          "source": "template",
+          "text": "Hour by hour: 12 AM, 40; 11 AM, 52. Rain or snow chances stay low."
+        },
+        {
+          "audio_url": null,
+          "source": "template",
+          "text": "Through 11 AM, temperatures go from 40 to 52. Rain or snow chances stay low."
+        }
+      ],
+      "overview": [
+        {
+          "audio_url": null,
+          "source": "template",
+          "text": "Tonight, partly cloudy with a low near 43. Thursday brings light rain and a high of 52, with a 60 percent chance of rain or snow."
+        },
+        {
+          "audio_url": null,
+          "source": "template",
+          "text": "Here's the big picture for your area. Tonight, partly cloudy with a low near 43. Thursday brings light rain and a high of 52, with a 60 percent chance of rain or snow."
+        },
+        {
+          "audio_url": null,
+          "source": "template",
+          "text": "Thursday brings light rain and a high of 52, with a 60 percent chance of rain or snow. Before that, tonight, partly cloudy with a low near 43."
+        }
+      ],
+      "seasonal": []
+    },
+    "scripts_version": 1,
+    "segments": [
+      {
+        "id": "current",
+        "label": "Current conditions"
+      },
+      {
+        "id": "overview",
+        "label": "The overview"
+      },
+      {
+        "id": "hourly",
+        "label": "Next 12 hours"
+      },
+      {
+        "id": "five_day",
+        "label": "5-day forecast"
+      },
+      {
+        "id": "almanac",
+        "label": "Almanac"
+      },
+      {
+        "id": "seasonal",
+        "label": "Seasonal"
+      }
+    ],
+    "voiceover": "Here in your area, it's partly cloudy right now at 45 degrees. It feels like 39. Wind SW at 11 miles an hour."
+  },
+  "content_type": "application/json",
+  "method": "GET",
+  "path": "/api/live/weather",
+  "status": 200
+}

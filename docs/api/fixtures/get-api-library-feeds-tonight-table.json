@@ -1,0 +1,18 @@
+{
+  "body": {
+    "feed": "tonight-table",
+    "items": [],
+    "limit": 3,
+    "note": "No finishable under-two-hour seats right now \u2014 tonight's table is two unwatched and one comfort, not leftover or afterglow.",
+    "seats": {
+      "comfort": 1,
+      "max_runtime_minutes": 120,
+      "unwatched": 2
+    },
+    "total": 0
+  },
+  "content_type": "application/json",
+  "method": "GET",
+  "path": "/api/library/feeds/tonight-table",
+  "status": 200
+}

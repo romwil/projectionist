@@ -1,0 +1,15 @@
+{
+  "body": {
+    "intent": {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "id_type": "rating_key",
+      "item_id": "movie-1",
+      "kind": "title",
+      "media_type": "movie"
+    }
+  },
+  "content_type": "application/json",
+  "method": "GET",
+  "path": "/api/devices/me/intent",
+  "status": 200
+}

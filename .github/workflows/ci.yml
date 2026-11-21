@@ -54,6 +54,9 @@ jobs:
       - name: Client OpenAPI snapshot
         run: ./scripts/check-openapi.sh
 
+      - name: Client response fixtures
+        run: ./scripts/check-fixtures.sh
+
       - name: Install and build frontend
         run: |
           cd frontend

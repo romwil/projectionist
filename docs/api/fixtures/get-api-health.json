@@ -1,0 +1,10 @@
+{
+  "body": {
+    "status": "ok",
+    "version": "1.41.1"
+  },
+  "content_type": "application/json",
+  "method": "GET",
+  "path": "/api/health",
+  "status": 200
+}

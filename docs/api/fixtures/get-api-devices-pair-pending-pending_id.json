@@ -1,0 +1,19 @@
+{
+  "body": {
+    "credential": "cxd_credential-fixture",
+    "device_id": "00000000-0000-4000-8000-000000000001",
+    "member": {
+      "display_name": "Owner",
+      "id": "bootstrap-owner",
+      "is_youth": false,
+      "role": "owner"
+    },
+    "pending_id": "pending-fixture-1",
+    "status": "claimed"
+  },
+  "content_type": "application/json",
+  "example_path": "/api/devices/pair/pending/pending-fixture-1",
+  "method": "GET",
+  "path": "/api/devices/pair/pending/{pending_id}",
+  "status": 200
+}

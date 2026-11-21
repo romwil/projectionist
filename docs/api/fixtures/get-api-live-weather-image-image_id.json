@@ -1,0 +1,10 @@
+{
+  "body": {
+    "detail": "That map frame has expired."
+  },
+  "content_type": "application/json",
+  "example_path": "/api/live/weather/image/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "method": "GET",
+  "path": "/api/live/weather/image/{image_id}",
+  "status": 404
+}

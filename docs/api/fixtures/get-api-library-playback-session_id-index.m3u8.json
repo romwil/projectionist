@@ -1,0 +1,8 @@
+{
+  "body_text": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXTINF:6.000,\n/api/library/playback/00000000-0000-4000-8000-000000000001/video/:/transcode/universal/segment0.ts\n#EXT-X-ENDLIST\n",
+  "content_type": "application/vnd.apple.mpegurl",
+  "example_path": "/api/library/playback/00000000-0000-4000-8000-000000000001/index.m3u8",
+  "method": "GET",
+  "path": "/api/library/playback/{session_id}/index.m3u8",
+  "status": 200
+}

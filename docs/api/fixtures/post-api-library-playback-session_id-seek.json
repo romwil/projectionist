@@ -1,0 +1,25 @@
+{
+  "body": {
+    "can_resume": false,
+    "duration_ms": 10200000,
+    "episode": null,
+    "media_type": "movie",
+    "next_episode": null,
+    "plex_watch_url": "https://app.plex.tv/desktop/#!/server/machine-1/details?key=%2Flibrary%2Fmetadata%2Fmovie-1",
+    "poster_url": "https://image.tmdb.org/t/p/w500/heat.jpg",
+    "rating_key": "movie-1",
+    "season": null,
+    "session_id": "00000000-0000-4000-8000-000000000001",
+    "show_rating_key": "",
+    "show_title": "",
+    "stream_url": "/api/library/playback/00000000-0000-4000-8000-000000000001/index.m3u8",
+    "subtitle_stream_id": "",
+    "title": "Heat",
+    "view_offset_ms": 1000
+  },
+  "content_type": "application/json",
+  "example_path": "/api/library/playback/00000000-0000-4000-8000-000000000001/seek",
+  "method": "POST",
+  "path": "/api/library/playback/{session_id}/seek",
+  "status": 200
+}

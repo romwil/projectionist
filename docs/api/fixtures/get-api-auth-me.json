@@ -1,0 +1,35 @@
+{
+  "body": {
+    "authenticated": true,
+    "user": {
+      "apprise_urls": null,
+      "auth_method": "plex",
+      "autoconfirm_adds": false,
+      "avatar_url": null,
+      "default_page": "explore",
+      "display_name": "Owner",
+      "email": null,
+      "id": "bootstrap-owner",
+      "is_youth": false,
+      "newsletter_opt_in": false,
+      "notification_email": null,
+      "notify_channel_apprise": false,
+      "notify_channel_email": false,
+      "notify_channel_inbox": true,
+      "nudge_opt_in": false,
+      "plex_user_id": null,
+      "preferred_name": null,
+      "role": "owner",
+      "seerr_user_id": null,
+      "ui_font_size": "medium",
+      "ui_theme": "system",
+      "weather_lat": null,
+      "weather_lon": null,
+      "weather_place": null
+    }
+  },
+  "content_type": "application/json",
+  "method": "GET",
+  "path": "/api/auth/me",
+  "status": 200
+}
