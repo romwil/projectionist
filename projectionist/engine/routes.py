@@ -327,8 +327,53 @@ def playback_session_media(session_id: str, token: str, asset_path: str):
     return FileResponse(path, media_type=media_type, filename=path.name)
 
 
+class PlayabilityPayload(BaseModel):
+    """Optional browser profile. The same object a session already accepts."""
+
+    profile: Any = None
+
+
 class EngineSettingPayload(BaseModel):
     play_through_projectionist: bool = False
+
+
+@router.get("/api/playback/playability")
+def get_playability_report(user=Depends(require_role("owner"))) -> dict[str, Any]:
+    """The last library playability report. Owner only. No file paths."""
+    del user
+    from projectionist.engine.playability import load_playability_report
+
+    return load_playability_report(_dir())
+
+
+@router.post("/api/playback/playability")
+def refresh_playability_report(
+    payload: PlayabilityPayload,
+    user=Depends(require_role("owner")),
+) -> dict[str, Any]:
+    """Dry-run the planner across the library and store the report.
+
+    A profile name limits the run to that named profile. A profile object is
+    this browser, kept beside the named profiles. Nothing is transcoded.
+    """
+    del user
+    from projectionist.engine.playability import (
+        PlayabilityProfileError,
+        profiles_for_report,
+        run_library_report,
+    )
+
+    try:
+        profiles = profiles_for_report(payload.profile)
+    except PlayabilityProfileError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return run_library_report(
+        _db(),
+        _settings(),
+        _dir(),
+        locate=lambda key: describe_title(_settings(), _db(), _dir(), key),
+        profiles=profiles,
+    )
 
 
 @router.get("/api/playback/engine-setting")

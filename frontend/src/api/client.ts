@@ -1136,6 +1136,18 @@ export async function putPlayThroughProjectionist(enabled: boolean) {
   });
 }
 
+export async function getPlayabilityReport() {
+  return api("/playback/playability");
+}
+
+/** Dry-run the library. `profile` is this browser's codec answer, when we have one. */
+export async function refreshPlayabilityReport(profile: JsonObject | null = null) {
+  return api("/playback/playability", {
+    method: "POST",
+    body: JSON.stringify(profile ? { profile } : {}),
+  });
+}
+
 export async function seekLibraryPlayback(sessionId: string, offsetMs: number) {
   return api(`/library/playback/${encodeURIComponent(sessionId)}/seek`, {
     method: "POST",

@@ -359,6 +359,20 @@ See [About](/about#license) for the in-app note.
 
 Owners (or single-workspace installs with no login) also configure sync and idle enrichment. This half is hidden from members, so API and config depth is welcome here.
 
+### Library playability (Settings → Playback)
+
+**Settings → Playback** includes **Library playability** for the owner. **Refresh report** walks the movies and episodes and says, for each one, the cheapest way it would play on Apple TV, Safari, Chrome, and this browser: serve the file, remux, audio-only, captions that are not ready yet, picture captions, ask the media source to transcode, or not playable through the engine. The walk uses the probe Projectionist already cached. It does not transcode, and it does not change the next Play.
+
+A line under each device says what a GPU would change, in the form “A GPU with Quick Sync would let N titles play without Plex.” N is only the titles whose video that device cannot play. Audio-only and picture captions are counted on their own.
+
+```bash
+curl -s -H "Authorization: Bearer YOUR_OWNER_CREDENTIAL" \
+  "http://your-host:8788/api/playback/playability" \
+  | python3 -m json.tool
+```
+
+The jobs engine also writes that report on its own schedule. One title looks like this: a name, a tier such as `remux`, the label “Remux,” and the reason the planner recorded. There is no file path in the answer.
+
 ### Curator persona (Admin → Persona)
 
 Tune **name**, **identity**, **presets**, and **behavior sliders** — how the curator sounds when it recommends from your library. Builtin presets carry locked **nicknames** (The Professor, Spark, The Steward, The Host, The Ledger); the picker and Admin cards show **Nickname — Name**. This page is intentionally **not** a prompt editor: you cannot view or rewrite internal system prompts, tool lists, or function schemas from Admin. Capability wiring (search, gaps, acquisition, village consults, bad-media replace, etc.) is maintained in Projectionist releases.

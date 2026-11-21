@@ -2,11 +2,11 @@
 
 How Projectionist plays a title from your library: one stream engine, owned by Projectionist, shared by every client — the web app, native apps, and anything that speaks the API. Plex is the first **media source**, not the player.
 
-**Status:** ENG-001 through ENG-004 and ENG-007 are in the tree. The web player uses an engine session only when the owner turns on Play through Projectionist. That household switch is `features.play_through_projectionist` (also `PUT /api/playback/engine-setting`) and it is off by default. Turning it off changes the next play, with no restart. An engine session is also opt-in on the request: `POST /api/playback/sessions` starts a remux only when `engine_opt_in` is true. `playback_engine` on `GET /api/features` means this server can. It does not mean a client must. When the engine can turn a title's captions into WebVTT — the household subtitle file first, then an embedded text track — that title plays through the engine and the session does not record a caption fallback. Picture captions still stay on the Plex path until ENG-005, and the session records why. A plan the engine cannot remux does the same. Fullscreen controls stay the web player's. Item IDs (`ENG-…`) are tracked in [docs/roadmap/](roadmap/README.md).
+**Status:** ENG-001 through ENG-004, ENG-007, and the library playability report (ENG-011) are in the tree. The web player uses an engine session only when the owner turns on Play through Projectionist. That household switch is `features.play_through_projectionist` (also `PUT /api/playback/engine-setting`) and it is off by default. Turning it off changes the next play, with no restart. An engine session is also opt-in on the request: `POST /api/playback/sessions` starts a remux only when `engine_opt_in` is true. `playback_engine` on `GET /api/features` means this server can. It does not mean a client must. When the engine can turn a title's captions into WebVTT — the household subtitle file first, then an embedded text track — that title plays through the engine and the session does not record a caption fallback. Picture captions still stay on the Plex path until ENG-005, and the session records why. A plan the engine cannot remux does the same. Fullscreen controls stay the web player's. Item IDs (`ENG-…`) are tracked in [docs/roadmap/](roadmap/README.md).
 **Audience:** Developers / contributors, owners for the honest limits.
 **Related:** [SHARED_SESSIONS.md](SHARED_SESSIONS.md) · [TIMELINE.md](TIMELINE.md) · [TRACKS.md](TRACKS.md) · [NATIVE_CLIENTS.md](NATIVE_CLIENTS.md) · [ARCHITECTURE.md](ARCHITECTURE.md)
 
-Jump to: [Why](#why-own-the-stream) · [Today](#today-the-plex-transcode-path) · [Target](#the-target-engine) · [Stream plans](#stream-plans) · [Captions](#captions) · [Devices](#device-profiles) · [Sources](#media-sources) · [QA baseline](#qa-baseline-2026-11-21) · [Playlist 401](#playlist-401-on-a-device-credential-2026-11-21) · [Limits](#honest-limits) · [Items](#roadmap-items) · [Open decisions](#open-decisions)
+Jump to: [Why](#why-own-the-stream) · [Today](#today-the-plex-transcode-path) · [Target](#the-target-engine) · [Stream plans](#stream-plans) · [Captions](#captions) · [Devices](#device-profiles) · [Playability report](#library-playability-report) · [Sources](#media-sources) · [QA baseline](#qa-baseline-2026-11-21) · [Playlist 401](#playlist-401-on-a-device-credential-2026-11-21) · [Limits](#honest-limits) · [Items](#roadmap-items) · [Open decisions](#open-decisions)
 
 ---
 
@@ -155,6 +155,51 @@ A client declares what it can decode; the planner never guesses from a user-agen
 
 ---
 
+## Library playability report
+
+ENG-011 is a dry run. A job walks every movie and episode, uses the cached probe, and asks the planner which tier would play that title on each named device profile (Apple TV, Safari, Chrome). Settings → Playback shows the same report. Refresh can also send this browser’s profile, the same object a session already accepts. The report does not transcode, remux, or extract captions.
+
+For one title the row is the planner’s plan, the tier an owner should read, and the reason. Captions that are text but not WebVTT yet stay apart from picture captions. A video codec the profile cannot play is “ask the media source to transcode.” A file the engine cannot read is “not playable through the engine.”
+
+| Tier | What the owner sees | Planner plan |
+|------|---------------------|--------------|
+| `direct` | Serve the file | `direct` |
+| `remux` | Remux | `remux` |
+| `audio` | Audio-only | `audio` |
+| `captions-pending` | These captions are not ready yet | would have been direct, remux, or audio |
+| `needs-ocr` | Picture captions that are not text yet | would have been direct, remux, or audio |
+| `source-transcode` | Ask the media source to transcode | `full` |
+| `not-playable` | Not playable through the engine | `plex-fallback` |
+
+Shares count those tiers. `hardware` says how many titles on that profile need a video transcode: “A GPU with Quick Sync would let N titles play without Plex.” Audio-only and picture captions are not in that count. Later tiers (audio transcode, source transcode as a served plan, OCR, pre-optimized copies, our own video transcode) are not started.
+
+```bash
+# Owner: the last report. No file paths.
+curl -s -H "Authorization: Bearer YOUR_OWNER_CREDENTIAL" \
+  "http://your-host:8788/api/playback/playability" \
+  | python3 -m json.tool
+```
+
+One title inside `profiles[].titles`:
+
+```json
+{
+  "rating_key": "remux",
+  "title": "Remux Feature",
+  "tier": "remux",
+  "label": "Remux",
+  "plan": "remux",
+  "reason": "MKV container; H.264 + AAC playable on safari (h264 up to 5.2; aac)",
+  "profile_answer": {"video": "h264 up to 5.2", "audio": "aac"}
+}
+```
+
+How it works: the job is `playability_report` on the jobs engine. It calls the same planner as `GET /api/playback/plan`. Refresh from Settings posts this browser’s profile and stores the result under `DATA_DIR/engine/playability.json`.
+
+Honest limits: the named Safari and Chrome profiles are the dry-run shortcuts, not a measurement of one household’s browser. The browser profile on Refresh is the measurement. The report does not play anything, and it does not start ENG-012, ENG-013, ENG-005, ENG-014, or ENG-006.
+
+---
+
 ## Media sources
 
 The engine reads files through a small adapter interface. Every adapter answers the same three questions:
@@ -246,7 +291,7 @@ The fix on main, not in the 1.42.0 image: a client gets a playable engine sessio
 | ENG-005 | Image-caption OCR job (jobs engine, cached, labeled). Tier 4 in the playback stack. Unchanged by the 2026-11-21 findings: picture captions stay on the Plex path until this exists | ENG-004 |
 | ENG-006 | Own video transcode, re-scoped 2026-11-21. (a) Software 1080p H.264 on CPU-rich servers, only after the owner opts in and a startup benchmark clears a threshold, with a low concurrency cap. 4K, HEVC/AV1 output, and HDR tone-mapping in software are never chosen. (b) Hardware VAAPI/QSV and NVENC when an encoder test-open succeeds. Both wait until ENG-011 shows enough titles need them. (a) can be tested on a 2× Xeon E5-2630 v3, 32 threads, no GPU. (b) waits for a GPU box | ENG-003, ENG-011 |
 | ENG-007 | Web player adoption, behind *Play through Projectionist* (off by default). The web sends `engine_opt_in: true` with the session. The profile is built at play time from `canPlayType`, `MediaSource.isTypeSupported`, and `MediaCapabilities.decodingInfo` for HEVC (`hvc1`, including 10-bit), AV1, E-AC-3, and AC-3. The plan records which answer it used. *Mulholland Drive* plans `remux` where that check reports HEVC, and `full` where it does not | ENG-003 |
-| ENG-011 | Library playability report. A job dry-runs the planner across the library for each device profile, using the cached probe. The owner sees, under Settings → Playback, the share that is direct, remux, audio-only, needs OCR, or needs a video transcode, plus the top reasons, the titles, and what hardware would change | ENG-001, ENG-002 |
+| ENG-011 | Library playability report. A job dry-runs the planner across the library for each named device profile, and for a browser profile when Settings sends one, using the cached probe. Settings → Playback shows the share that is direct, remux, audio-only, captions not ready yet, needs OCR, or needs a video transcode, plus the top reasons, each title’s tier, and what a GPU would change. It does not transcode | ENG-001, ENG-002 |
 | ENG-012 | Audio-only transcode tier. Copy the video, convert the audio to the device profile’s target, serve segments like a remux, and cap how many run at once. A DTS or TrueHD film plays in Safari and on an Apple TV profile with the video untouched. The Chrome E-AC-3 row in the QA baseline is the first web case | ENG-003, ENG-011 |
 | ENG-013 | Source-transcode tier. Today’s Plex fallback becomes a planned tier with a reason, behind the media-source interface, so a later source can provide it. Members see the same playback | ENG-003 |
 | ENG-014 | Pre-optimized versions. An owner-triggered or scheduled job makes compatible copies for chosen titles, or for everything the report says needs a video transcode, inside a disk budget. The planner prefers those copies and plays them as direct or remux | ENG-011, ENG-012 |
@@ -264,7 +309,7 @@ The fix on main, not in the 1.42.0 image: a client gets a playable engine sessio
 - **Caption packaging (ENG-004):** a household `DATA_DIR/subtitles/{rating_key}/{lang}.srt` is one WebVTT file plus a one-segment VOD subtitle playlist in the master `SUBTITLES` group. Embedded text tracks are extracted to the same shape ahead of Play, and cached beside that file, when that language is not already in the household cache. Play does not extract. Segmenting the VTT waits until a client requires it. Picture captions stay on the Plex path until ENG-005. The spike showed that shape is selectable in WebKit and tvOS AVPlayer.
 - **Spike evidence:** [2026-11-19-engine-spike-findings.md](superpowers/specs/2026-11-19-engine-spike-findings.md) (throwaway code on `spike/engine-remux`, not merged).
 - **Opt-in (decided 2026-11-21):** an engine session is only for a client that sends `engine_opt_in`. The capability is “this server can.” The household switch does not force a client onto the engine. Playlist URLs stay header-free, and a device credential can fetch them.
-- **Playback tiers (decided 2026-11-21), cheapest first:** direct, remux, audio-only transcode, captions as text (ENG-005), source transcode, own video transcode (ENG-006, opt-in), pre-optimized copies. The planner records the tier, the reason, and the profile answer that chose them. Software video transcode is 1080p H.264 only, above a startup benchmark, with a low cap. The browser runtime profile is done: the web asks the browser at play time. Text captions are extracted ahead of play. Next, not started: ENG-011 report → ENG-012 audio → ENG-013 source tier → ENG-005 → ENG-014 → ENG-006 when the report says it is worth it. ENG-011, ENG-012, ENG-013, and ENG-014 are accepted and not started. Startup detection (core count, a one-time 1080p encode benchmark, Quick Sync or VAAPI, NVENC, and which encoders ffmpeg actually opens) lands with ENG-006 as a `playback_hardware` capability. No hardware is required to run Projectionist. Live channel normalization (ENG-009) is not in this stack.
+- **Playback tiers (decided 2026-11-21), cheapest first:** direct, remux, audio-only transcode, captions as text (ENG-005), source transcode, own video transcode (ENG-006, opt-in), pre-optimized copies. The planner records the tier, the reason, and the profile answer that chose them. Software video transcode is 1080p H.264 only, above a startup benchmark, with a low cap. The browser runtime profile is done: the web asks the browser at play time. Text captions are extracted ahead of play. ENG-011, the library playability report, is in the tree. Next, not started: ENG-012 audio → ENG-013 source tier → ENG-005 → ENG-014 → ENG-006 when the report says it is worth it. ENG-012, ENG-013, and ENG-014 are accepted and not started. Startup detection (core count, a one-time 1080p encode benchmark, Quick Sync or VAAPI, NVENC, and which encoders ffmpeg actually opens) lands with ENG-006 as a `playback_hardware` capability. No hardware is required to run Projectionist. Live channel normalization (ENG-009) is not in this stack.
 
 ## See also
 
