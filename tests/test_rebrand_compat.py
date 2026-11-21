@@ -12,8 +12,13 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from projectionist.config_store import Settings, load_merged_settings, save_settings
+from projectionist.dbfiles import AmbiguousDatabaseError
 from projectionist.envcompat import branded_env, resolve_env
 from projectionist.web.jobs import _resolve_db_path
+
+# 100-byte SQLite header. Opening sqlite3.connect on a missing path creates a
+# 0-byte file, which is not this.
+SQLITE_FILE = b"SQLite format 3\x00" + b"\x00" * 84
 
 
 class EnvCompatTests(unittest.TestCase):
@@ -69,33 +74,82 @@ class DbPathCompatTests(unittest.TestCase):
     def test_uses_projectionist_db_when_present(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "projectionist.db").write_bytes(b"")
+            (root / "projectionist.db").write_bytes(SQLITE_FILE)
             (root / "curatorx.db").write_bytes(b"")
-            self.assertEqual(_resolve_db_path(root), root / "projectionist.db")
+            with self.assertLogs("projectionist.dbfiles", level="WARNING") as logs:
+                resolved = _resolve_db_path(root)
+            self.assertEqual(resolved, root / "projectionist.db")
+            self.assertIn("curatorx.db", logs.output[0])
+            self.assertEqual((root / "curatorx.db").read_bytes(), b"")
 
     def test_opens_curatorx_db_without_rename(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             legacy = root / "curatorx.db"
-            legacy.write_bytes(b"legacy")
+            legacy.write_bytes(SQLITE_FILE)
             resolved = _resolve_db_path(root)
             self.assertEqual(resolved, legacy)
             self.assertTrue(legacy.exists())
             self.assertFalse((root / "projectionist.db").exists())
 
+    def test_skips_empty_projectionist_db_and_uses_legacy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            empty = root / "projectionist.db"
+            legacy = root / "curatorx.db"
+            empty.write_bytes(b"")
+            legacy.write_bytes(SQLITE_FILE)
+            with self.assertLogs("projectionist.dbfiles", level="WARNING") as logs:
+                resolved = _resolve_db_path(root)
+            self.assertEqual(resolved, legacy)
+            self.assertEqual(empty.read_bytes(), b"")
+            self.assertEqual(legacy.read_bytes(), SQLITE_FILE)
+            self.assertIn("projectionist.db", logs.output[0])
+            self.assertIn("empty or not a SQLite database", logs.output[0])
+
+    def test_skips_invalid_projectionist_db_and_uses_legacy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            invalid = root / "projectionist.db"
+            legacy = root / "curatorx.db"
+            invalid.write_bytes(b"not a database")
+            legacy.write_bytes(SQLITE_FILE)
+            with self.assertLogs("projectionist.dbfiles", level="WARNING") as logs:
+                resolved = _resolve_db_path(root)
+            self.assertEqual(resolved, legacy)
+            self.assertEqual(invalid.read_bytes(), b"not a database")
+            self.assertIn("projectionist.db", logs.output[0])
+
+    def test_refuses_to_start_when_two_real_databases_exist(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            canonical = root / "projectionist.db"
+            legacy = root / "curatorx.db"
+            canonical.write_bytes(SQLITE_FILE)
+            legacy.write_bytes(SQLITE_FILE)
+            with self.assertRaises(AmbiguousDatabaseError) as raised:
+                _resolve_db_path(root)
+            message = str(raised.exception)
+            self.assertIn("Refusing to start", message)
+            self.assertIn("projectionist.db", message)
+            self.assertIn("curatorx.db", message)
+            self.assertEqual(canonical.read_bytes(), SQLITE_FILE)
+            self.assertEqual(legacy.read_bytes(), SQLITE_FILE)
+
     def test_defaults_to_projectionist_db_when_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             self.assertEqual(_resolve_db_path(root), root / "projectionist.db")
+            self.assertFalse((root / "projectionist.db").exists())
 
     def test_adopts_mediacurator_db_once(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             ancient = root / "mediacurator.db"
-            ancient.write_bytes(b"ancient")
+            ancient.write_bytes(SQLITE_FILE)
             resolved = _resolve_db_path(root)
             self.assertEqual(resolved, root / "projectionist.db")
-            self.assertTrue(resolved.exists())
+            self.assertEqual(resolved.read_bytes(), SQLITE_FILE)
             self.assertFalse(ancient.exists())
 
 

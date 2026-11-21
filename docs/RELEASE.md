@@ -413,6 +413,7 @@ A follow-up `chore: refresh release-notes.json timestamp for vX.Y.Z` commit some
 □ 2. Merge PR → main (never direct-push/bypass); then tag vX.Y.Z on merged main; gh release create with Highlights
 □ 3. CA proof: pull Hub tag (Path B) — NOT host docker build (Path A)
 □ 4. Prod only if asked: ./rollout.sh X.Y.Z (pull-only)
+□ Before that rollout, check the production data dir for a stray empty database file (a 0-byte projectionist.db next to the real database). Move it aside. Do not delete a non-empty database.
 □ Spin down projectionist-qa (:8792) unless QA campaign still running — never touch prod :8788; never stop smartmap :8790
 □ Do NOT claim “X.Y.Z released” if Hub lacks :X.Y.Z
 ```
