@@ -17,7 +17,7 @@ from projectionist.engine.probe import ProbeResult, probe_file
 
 PathLookup = Callable[[str], Sequence[str]]
 IsFileFn = Callable[[str], bool]
-ProbeFn = Callable[..., ProbeResult]
+ProbeFn = Callable[..., Any]
 IdentityLookup = Callable[[str], dict[str, Any]]
 
 
@@ -69,7 +69,7 @@ class PlexMediaSource:
         self.mappings = list(mappings or [])
         self.path_lookup = path_lookup
         self.is_file = is_file or (lambda candidate: Path(candidate).is_file())
-        self.probe = probe or probe_file
+        self.probe: ProbeFn = probe if probe is not None else probe_file
         self.identity_lookup = identity_lookup or (lambda _key: {})
 
     def _exists(self, path: str) -> bool:

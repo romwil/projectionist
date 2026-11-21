@@ -121,8 +121,12 @@ def _float(value: Any) -> float:
 
 
 def _hdr(stream: Mapping[str, Any]) -> str:
-    for item in stream.get("side_data_list") or []:
-        label = str((item or {}).get("side_data_type") or "")
+    side = stream.get("side_data_list")
+    items = side if isinstance(side, list) else []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        label = str(item.get("side_data_type") or "")
         if "DOVI" in label.upper() or "Dolby Vision" in label:
             return "dolby-vision"
     transfer = str(stream.get("color_transfer") or "").lower()
@@ -134,7 +138,8 @@ def _hdr(stream: Mapping[str, Any]) -> str:
 
 
 def _language(stream: dict[str, Any]) -> str:
-    tags = stream.get("tags") if isinstance(stream.get("tags"), dict) else {}
+    raw_tags = stream.get("tags")
+    tags: dict[str, Any] = raw_tags if isinstance(raw_tags, dict) else {}
     raw = str(tags.get("language") or stream.get("language") or "").strip().lower()
     if raw in {"und", "unknown", "unk"}:
         return ""
@@ -142,7 +147,8 @@ def _language(stream: dict[str, Any]) -> str:
 
 
 def parse_ffprobe(payload: dict[str, Any]) -> ProbeResult:
-    fmt = payload.get("format") if isinstance(payload.get("format"), dict) else {}
+    raw_fmt = payload.get("format")
+    fmt: dict[str, Any] = raw_fmt if isinstance(raw_fmt, dict) else {}
     format_name = str(fmt.get("format_name") or "")
     streams: list[MediaStream] = []
     for raw in payload.get("streams") or []:
