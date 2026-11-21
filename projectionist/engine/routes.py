@@ -238,6 +238,16 @@ def open_playback_session(
         offset = int(payload.offset_ms)
     else:
         offset = int(playable.get("view_offset_ms") or 0)
+    from projectionist.engine.captions import caption_fallback_reason
+    from projectionist.library.subtitle_cache import title_subtitle_context
+
+    language = str(title_subtitle_context(_db(), asset.rating_key).get("original_language") or "")
+    force_reason = caption_fallback_reason(
+        asset,
+        title_language=language,
+        settings=_settings(),
+        data_dir=_dir(),
+    )
     session = open_engine_session(
         asset,
         profile,
@@ -246,6 +256,7 @@ def open_playback_session(
         duration_ms=int(playable.get("duration_ms") or 0),
         view_offset_ms=offset,
         data_dir=_dir(),
+        force_reason=force_reason,
     )
     return session.public()
 
@@ -310,6 +321,37 @@ def playback_session_media(session_id: str, token: str, asset_path: str):
     elif path.suffix == ".mp4":
         media_type = "video/mp4"
     return FileResponse(path, media_type=media_type, filename=path.name)
+
+
+class EngineSettingPayload(BaseModel):
+    play_through_projectionist: bool = False
+
+
+@router.get("/api/playback/engine-setting")
+def get_engine_setting(user=Depends(require_role("owner"))) -> dict[str, Any]:
+    del user
+    return {
+        "play_through_projectionist": bool(_settings().engine.play_through_projectionist),
+    }
+
+
+@router.put("/api/playback/engine-setting")
+def put_engine_setting(
+    payload: EngineSettingPayload,
+    user=Depends(require_role("owner")),
+) -> dict[str, Any]:
+    """Household switch for the web player. The next play picks it up. No restart."""
+    del user
+    from dataclasses import asdict
+
+    existing = _settings()
+    current = asdict(existing.engine)
+    current["play_through_projectionist"] = bool(payload.play_through_projectionist)
+    updated = Settings.from_mapping({**asdict(existing), "engine": current})
+    save_settings(_dir(), updated)
+    return {
+        "play_through_projectionist": bool(updated.engine.play_through_projectionist),
+    }
 
 
 def register_engine_routes(

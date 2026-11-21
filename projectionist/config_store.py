@@ -707,11 +707,18 @@ class EngineSettings:
     """
 
     path_mappings: list = field(default_factory=list)
+    # ENG-007. Off until the owner turns on Play through Projectionist.
+    play_through_projectionist: bool = False
 
     def __post_init__(self) -> None:
         from projectionist.engine.pathmap import salvage_mappings
 
         self.path_mappings = salvage_mappings(self.path_mappings)
+        flag = self.play_through_projectionist
+        if isinstance(flag, str):
+            self.play_through_projectionist = flag.strip().lower() in {"1", "true", "yes", "on"}
+        else:
+            self.play_through_projectionist = bool(flag)
 
 
 @dataclass

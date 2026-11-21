@@ -1283,6 +1283,10 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
             # EXP-006: hub, title, and search art URLs point at the cache route.
             # Same fact as capabilities.cached_art (1 when this is true).
             "cached_art": CACHED_ART_ENABLED,
+            # ENG-007. Off until the owner turns on Play through Projectionist.
+            "play_through_projectionist": bool(
+                getattr(getattr(settings, "engine", None), "play_through_projectionist", False)
+            ),
         },
         "setup_state": setup_state,
         "household_domain": str(getattr(settings, "household_domain", "") or ""),
