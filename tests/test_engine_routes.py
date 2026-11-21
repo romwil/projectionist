@@ -173,7 +173,13 @@ class EngineRouteTests(unittest.TestCase):
             from projectionist.engine.remux import write_master
 
             directory = Path(directory)
-            write_master(directory, kwargs.get("probe"), file_size=100, duration_ms=600_000)
+            write_master(
+                directory,
+                kwargs.get("probe"),
+                file_size=100,
+                duration_ms=int(kwargs.get("duration_ms") or 600_000),
+                captions=kwargs.get("captions"),
+            )
             av = directory / "av"
             av.mkdir(parents=True, exist_ok=True)
             (av / "stream.m3u8").write_text(
@@ -201,6 +207,7 @@ class EngineRouteTests(unittest.TestCase):
         master = self.client.get(body["master_url"])
         self.assertEqual(master.status_code, 200, master.text)
         self.assertIn("BANDWIDTH=", master.text)
+        self.assertNotIn("SUBTITLES", master.text)
         self.assertIn("#EXT-X-ENDLIST", self.client.get(body["master_url"].rsplit("/", 1)[0] + "/av/stream.m3u8").text)
         broken = body["master_url"].replace(body["master_url"].split("/")[5], "not-the-token")
         self.assertEqual(self.client.get(broken).status_code, 404)
@@ -227,3 +234,128 @@ class EngineRouteTests(unittest.TestCase):
         recorded = self.client.get(f"/api/playback/sessions/{fallback['session_id']}")
         self.assertEqual(recorded.status_code, 200)
         self.assertEqual(recorded.json()["reason"], fallback["reason"])
+
+    def _map_movie(self) -> None:
+        saved = self.client.put(
+            "/api/playback/path-mappings",
+            json={"mappings": [{"plex_prefix": "/data/media/movies", "container_prefix": str(self.data_dir)}]},
+        )
+        self.assertEqual(saved.status_code, 200, saved.text)
+
+    def _open_with_probe(self, probe: ProbeResult):
+        def fake_start(source, directory, **kwargs):
+            from projectionist.engine.remux import write_master
+
+            directory = Path(directory)
+            write_master(
+                directory,
+                kwargs.get("probe"),
+                file_size=100,
+                duration_ms=int(kwargs.get("duration_ms") or 600_000),
+                captions=kwargs.get("captions"),
+            )
+            av = directory / "av"
+            av.mkdir(parents=True, exist_ok=True)
+            (av / "stream.m3u8").write_text("#EXTM3U\n#EXT-X-ENDLIST\n", encoding="utf-8")
+            return None
+
+        with patch(
+            "projectionist.engine.routes.plex_part_paths",
+            return_value=["/data/media/movies/film.mkv"],
+        ), patch("projectionist.engine.source.probe_file", return_value=probe), patch(
+            "projectionist.engine.session.start_remux",
+            side_effect=fake_start,
+        ):
+            return self.client.post(
+                "/api/playback/sessions",
+                json={"rating_key": "121986", "profile": "apple-tv-4k-3"},
+            )
+
+    def test_household_webvtt_plays_through_the_engine(self) -> None:
+        from projectionist.engine.captions import CAPTION_FALLBACK_REASON
+
+        self._map_movie()
+        self.db.upsert_library_item(
+            {
+                "rating_key": "121986",
+                "media_type": "movie",
+                "title": "A Foreign Film",
+                "original_language": "ja",
+                "duration_ms": 600_000,
+            }
+        )
+        cache = self.data_dir / "subtitles" / "121986"
+        cache.mkdir(parents=True)
+        (cache / "en.srt").write_text(
+            "1\n00:00:01,500 --> 00:00:03,000\nHello from the house\n",
+            encoding="utf-8",
+        )
+        probe = _probe()
+        probe.streams.append(
+            MediaStream(
+                index=4,
+                codec_type="subtitle",
+                codec="hdmv_pgs_subtitle",
+                language="eng",
+                subtitle_kind="image",
+            )
+        )
+        opened = self._open_with_probe(probe)
+        self.assertEqual(opened.status_code, 200, opened.text)
+        body = opened.json()
+        self.assertEqual(body["plan"], "remux")
+        self.assertTrue(body["playable"])
+        self.assertNotIn(CAPTION_FALLBACK_REASON, body["reason"])
+        self.assertNotIn(str(self.media), opened.text)
+        master = self.client.get(body["master_url"])
+        self.assertEqual(master.status_code, 200, master.text)
+        self.assertIn('SUBTITLES="subs"', master.text)
+        self.assertIn('LANGUAGE="en"', master.text)
+        self.assertIn("DEFAULT=YES", master.text)
+        self.assertNotIn(str(self.media), master.text)
+        base = body["master_url"].rsplit("/", 1)[0]
+        playlist = self.client.get(f"{base}/subs/cached-en.m3u8")
+        self.assertEqual(playlist.status_code, 200, playlist.text)
+        self.assertIn("#EXT-X-PLAYLIST-TYPE:VOD", playlist.text)
+        self.assertIn("cached-en.vtt", playlist.text)
+        vtt = self.client.get(f"{base}/subs/cached-en.vtt")
+        self.assertEqual(vtt.status_code, 200, vtt.text)
+        self.assertIn("text/vtt", vtt.headers["content-type"])
+        self.assertTrue(vtt.text.startswith("WEBVTT"))
+        self.assertIn("Hello from the house", vtt.text)
+        self.assertIn("00:00:01.500 --> 00:00:03.000", vtt.text)
+        self.assertNotIn(str(self.media), vtt.text)
+
+    def test_picture_captions_record_a_plex_fallback(self) -> None:
+        from projectionist.engine.captions import CAPTION_FALLBACK_REASON
+
+        self._map_movie()
+        self.db.upsert_library_item(
+            {
+                "rating_key": "121986",
+                "media_type": "movie",
+                "title": "Pictures",
+                "original_language": "ja",
+                "duration_ms": 600_000,
+            }
+        )
+        probe = _probe()
+        probe.streams.append(
+            MediaStream(
+                index=4,
+                codec_type="subtitle",
+                codec="hdmv_pgs_subtitle",
+                language="eng",
+                subtitle_kind="image",
+            )
+        )
+        opened = self._open_with_probe(probe)
+        self.assertEqual(opened.status_code, 200, opened.text)
+        body = opened.json()
+        self.assertEqual(body["plan"], "plex-fallback")
+        self.assertFalse(body["playable"])
+        self.assertEqual(body["reason"], CAPTION_FALLBACK_REASON)
+        self.assertEqual(body["master_url"], "")
+        recorded = self.client.get(f"/api/playback/sessions/{body['session_id']}")
+        self.assertEqual(recorded.status_code, 200, recorded.text)
+        self.assertEqual(recorded.json()["reason"], CAPTION_FALLBACK_REASON)

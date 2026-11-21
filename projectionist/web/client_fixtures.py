@@ -21,12 +21,10 @@ from uuid import UUID
 
 from fastapi.testclient import TestClient
 
+from projectionist.theater.weather_channel.sources.almanac import moon_phase as _live_moon_phase
 from projectionist.web.client_contract import CLIENT_ROUTES
 
 FIXTURE_DIR = Path("docs/api/fixtures")
-# Chicago forecast fixture observation (2026-11-04T23:00, UTC-6). The moon is
-# computed from this instant so the weather example does not follow the wall clock.
-WEATHER_OBSERVED_AT = datetime(2026, 11, 5, 5, 0, tzinfo=timezone.utc)
 JPEG = b"\xff\xd8\xff" + b"\x00" * 16
 PLAYLIST = (
     "#EXTM3U\n"
@@ -37,6 +35,8 @@ PLAYLIST = (
     "#EXT-X-ENDLIST\n"
 )
 SESSION_ID = "00000000-0000-4000-8000-000000000001"
+# Moon age moves every day. The example almanac stays the one recorded here.
+FIXTURE_MOON_AT = datetime(2026, 11, 21, 3, 30, tzinfo=timezone.utc)
 PLEX = "http://127.0.0.1:32400"
 TOKEN = "server-token"
 FORBIDDEN = (TOKEN, "LEAKED", "/Users/", "/mnt/")
@@ -128,6 +128,10 @@ def _fake_fetch(url: str, *, headers: Any = None, timeout: int = 30, method: str
 
 async def _fake_art(*_args: Any, **_kwargs: Any):
     return JPEG, "image/jpeg", 'W/"heat-poster"'
+
+
+def _recorded_moon() -> dict[str, Any]:
+    return _live_moon_phase(FIXTURE_MOON_AT)
 
 
 def _weather_service(data_dir: Path):
@@ -224,11 +228,6 @@ def collect_client_fixtures() -> dict[str, dict[str, Any]]:
         def keep(method: str, path: str, response: Any, **extra: Any) -> None:
             recorded[f"{method} {path}"] = _envelope(method, path, response, **extra)
 
-        from projectionist.theater.weather_channel.sources.almanac import moon_phase as real_moon_phase
-
-        def moon_on_forecast_night(when=None, _real=real_moon_phase):
-            return _real(WEATHER_OBSERVED_AT if when is None else when)
-
         with (
             patch("projectionist.devices.pairing.time.time", return_value=1_700_000_000),
             patch("projectionist.devices.pairing.secrets.choice", side_effect=_choice),
@@ -246,7 +245,7 @@ def collect_client_fixtures() -> dict[str, dict[str, Any]]:
             ),
             patch(
                 "projectionist.theater.weather_channel.sources.almanac.moon_phase",
-                moon_on_forecast_night,
+                side_effect=lambda when=None: _recorded_moon(),
             ),
         ):
             keep("GET", "/api/health", client.get("/api/health"))

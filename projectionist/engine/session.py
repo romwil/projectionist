@@ -14,8 +14,9 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
 
+from projectionist.engine.captions import CaptionRendition
 from projectionist.engine.planner import plan_playback
 from projectionist.engine.profiles import DeviceProfile
 from projectionist.engine.remux import start_remux
@@ -128,6 +129,7 @@ def open_engine_session(
     runner: Any = None,
     ffmpeg: Optional[str] = None,
     force_reason: str = "",
+    captions: Optional[Sequence[CaptionRendition]] = None,
 ) -> EngineSession:
     planned = plan_playback(asset, profile)
     plan = str(planned["plan"])
@@ -156,15 +158,19 @@ def open_engine_session(
     )
     if playable:
         directory = Path(data_dir) / "engine" / "sessions" / session.session_id
+        media_duration_ms = session.duration_ms
+        if media_duration_ms <= 0 and asset.probe is not None and asset.probe.duration_s > 0:
+            media_duration_ms = int(round(asset.probe.duration_s * 1000))
         try:
             session.process = start_remux(
                 Path(str(asset.local_path)),
                 directory,
                 probe=asset.probe,
                 file_size=int(asset.probe.size if asset.probe else 0),
-                duration_ms=session.duration_ms,
+                duration_ms=media_duration_ms,
                 runner=runner,
                 ffmpeg=ffmpeg,
+                captions=list(captions or []),
             )
         except FileNotFoundError:
             session.plan = "plex-fallback"
