@@ -470,6 +470,7 @@ class RegistryInvariantTests(unittest.TestCase):
             {
                 "metadata_enrichment",
                 "subtitle_enrichment",
+                "caption_prep",
                 "plot_neighbors",
                 "semantic_embeddings",
                 "long_synopsis_enrichment",
@@ -498,6 +499,7 @@ class RegistryInvariantTests(unittest.TestCase):
             "long_synopsis_enrichment",
             # PERF-009
             "semantic_embeddings",
+            "caption_prep",
         }
         for name in must_be_off:
             self.assertTrue(reg[name].off_loop, f"{name} must not run on the web event loop")

@@ -348,6 +348,15 @@ async def lifespan(_app: FastAPI):
     register_scheduler_tasks(idle_scheduler)
     idle_scheduler.start(asyncio.get_event_loop())
     app.state.idle_scheduler = idle_scheduler
+    from projectionist.engine.caption_prep import install_caption_prep_kicker, note_caption_titles
+    from projectionist.library.continue_watching_progress import register_continue_watching_candidate
+
+    install_caption_prep_kicker(idle_scheduler, asyncio.get_event_loop())
+
+    def _queue_continue_watching_captions(rating_key: str) -> None:
+        note_caption_titles([rating_key], data_dir=DATA_DIR, reason="continue-watching")
+
+    register_continue_watching_candidate(_queue_continue_watching_captions)
     logger.info("Startup: idle task scheduler ready (%d tasks)", len(idle_scheduler._definitions))
 
     logger.info("Startup: starting watch live-session poller…")
@@ -1913,8 +1922,12 @@ def title_detail(
 
     if not title_allowed_for_user(dumped, user=user, settings=settings):
         raise HTTPException(status_code=404, detail="Title not available")
+    from projectionist.engine.caption_prep import note_caption_titles
     from projectionist.library.cached_art import point_cached_art
 
+    rating_key = str(dumped.get("rating_key") or "").strip()
+    if rating_key:
+        note_caption_titles([rating_key], data_dir=DATA_DIR, reason="title")
     return _sanitize_library_payload(point_cached_art(dumped, settings), user)
 
 

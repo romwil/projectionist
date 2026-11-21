@@ -69,4 +69,4 @@ The beta switch stays off in production until 1 is fixed. With it off, 1.42.0 is
 - Outbox: 2026-11-21-engine-opt-in-native.md
 - Needs the person: nothing
 - Not started: §2, caption extraction, ENG-011
-- Shipped after that note: findings §2. The web profile comes from the browser's codec checks, and the planner records the answer. Caption extraction and ENG-011 are still not started
+- Shipped after that note: findings §2. The web profile comes from the browser's codec checks, and the planner records the answer. Findings §3 then shipped as well: text captions are extracted ahead of Play. ENG-011 is still not started

@@ -1,9 +1,10 @@
 """WebVTT caption renditions for an engine session (ENG-004).
 
-The household subtitle cache comes first. An embedded text track is extracted
-only when that language is not already cached. Picture captions are left for
-ENG-005: a title that needs captions and has none the engine can turn into
-WebVTT stays on the Plex path, and the session records why.
+The household subtitle cache comes first. An embedded text track is used only
+when that language was already extracted to WebVTT ahead of Play. This request
+does not run ffmpeg: a large text track that is not ready yet stays on the
+Plex path, and the session says the captions are not ready yet. Picture
+captions are left for ENG-005 and keep their own fallback sentence.
 
 A title in the household language does not need captions, so a missing track
 does not force that fallback. Tracks we can build are still offered, with
@@ -12,15 +13,11 @@ none selected.
 
 from __future__ import annotations
 
-import logging
 import re
-import subprocess
-import tempfile
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Callable, Optional, Sequence
+from typing import Any, Optional, Sequence
 
-from projectionist.engine.probe import TEXT_SUBTITLE_CODECS, subtitle_kind
 from projectionist.engine.source import MediaAsset
 from projectionist.library.subtitle_cache import (
     MAX_SUBTITLE_BYTES,
@@ -34,17 +31,16 @@ from projectionist.library.subtitle_cache import (
     title_language_is_household,
 )
 
-logger = logging.getLogger(__name__)
-
 CAPTION_FALLBACK_REASON = (
     "These captions are not ready as WebVTT, so this title stays on the Plex path."
 )
+# Text exists, but the ahead-of-time job has not written WebVTT yet. This is
+# not a path-mapping failure, and it is not a picture-caption fallback.
+CAPTION_PENDING_REASON = (
+    "These captions are not ready yet, so this title stays on the Plex path."
+)
 
 _LANG_RE = re.compile(r"^[a-z]{2,3}$")
-_MAX_EMBEDDED = 8
-_EXTRACT_TIMEOUT_S = 20
-
-Extractor = Callable[[Path, int, Path], None]
 
 
 @dataclass(frozen=True)
@@ -64,14 +60,16 @@ def prepare_webvtt_renditions(
     title_language: str,
     settings: Any,
     data_dir: Path,
-    extractor: Optional[Extractor] = None,
 ) -> list[CaptionRendition]:
-    """Household cache first, then embedded text tracks the cache does not cover."""
+    """Household cache first, then text tracks already extracted ahead of Play.
+
+    Does not call ffmpeg. A text track with no WebVTT yet is simply absent.
+    """
     cached = _cached_renditions(asset, data_dir=data_dir, settings=settings)
     covered = {track.language for track in cached if track.language}
-    embedded = _embedded_renditions(asset, skip=covered, extractor=extractor)
+    prepared = _prepared_renditions(asset, data_dir=data_dir, skip=covered)
     return _mark_default(
-        cached + embedded,
+        cached + prepared,
         captions_on=title_language_is_household(title_language, settings) is not True,
         household=household_language(settings),
     )
@@ -106,6 +104,10 @@ def caption_fallback_reason(
         )
     if ready:
         return ""
+    from projectionist.engine.caption_prep import text_streams
+
+    if text_streams(asset):
+        return CAPTION_PENDING_REASON
     return CAPTION_FALLBACK_REASON
 
 
@@ -211,101 +213,33 @@ def _cached_renditions(asset: MediaAsset, *, data_dir: Path, settings: Any) -> l
     return renditions
 
 
-def _embedded_renditions(
+def _prepared_renditions(
     asset: MediaAsset,
     *,
+    data_dir: Path,
     skip: set[str],
-    extractor: Optional[Extractor],
 ) -> list[CaptionRendition]:
-    probe = asset.probe
-    if probe is None or not asset.local_path:
-        return []
-    source = Path(asset.local_path)
-    try:
-        if not source.is_file():
-            return []
-    except OSError:
-        return []
-    streams = []
-    for stream in probe.streams:
-        if stream.codec_type != "subtitle":
-            continue
-        kind = stream.subtitle_kind or subtitle_kind(stream.codec)
-        if kind != "text" and stream.codec not in TEXT_SUBTITLE_CODECS:
-            continue
-        if kind == "image":
-            continue
-        language = _normalize_language(stream.language)
-        if language and language in skip:
-            continue
-        streams.append(stream)
-        if len(streams) >= _MAX_EMBEDDED:
-            break
-    if not streams:
-        return []
-    extract = extractor or _ffmpeg_extract
+    """Text tracks extracted earlier. Missing files are not extracted here."""
+    from projectionist.engine.caption_prep import prepared_tracks
+
     renditions: list[CaptionRendition] = []
     seen = set(skip)
-    for stream in streams:
-        language = _normalize_language(stream.language)
+    for track in prepared_tracks(asset, data_dir=data_dir):
+        language = track.language
         if language and language in seen:
-            continue
-        webvtt = _extract_text(source, stream.index, extract)
-        if not webvtt:
             continue
         if language:
             seen.add(language)
         renditions.append(
             CaptionRendition(
-                track_id=f"s{int(stream.index)}",
+                track_id=f"s{int(track.index)}",
                 language=language,
                 name=_track_name(language),
                 default=False,
-                webvtt=webvtt,
+                webvtt=track.webvtt,
             )
         )
     return renditions
-
-
-def _extract_text(source: Path, index: int, extract: Extractor) -> str:
-    if index < 0:
-        return ""
-    try:
-        with tempfile.TemporaryDirectory(prefix="eng-caption-") as tmp:
-            dest = Path(tmp) / "track.vtt"
-            extract(source, int(index), dest)
-            return _as_webvtt(_read_limited(dest))
-    except Exception:  # noqa: BLE001 — one bad track must not fail the session
-        logger.debug("embedded caption extract failed index=%s", index, exc_info=True)
-        return ""
-
-
-def _ffmpeg_extract(source: Path, index: int, dest: Path) -> None:
-    from projectionist.library.episode_investigate.capabilities import resolve_ffmpeg
-
-    binary = resolve_ffmpeg()
-    if not binary:
-        return
-    try:
-        subprocess.run(
-            [
-                binary,
-                "-y",
-                "-i",
-                str(source),
-                "-map",
-                f"0:{int(index)}",
-                "-f",
-                "webvtt",
-                str(dest),
-            ],
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=_EXTRACT_TIMEOUT_S,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        logger.debug("embedded caption extract failed index=%s", index, exc_info=True)
 
 
 def _mark_default(

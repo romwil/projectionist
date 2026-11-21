@@ -229,6 +229,7 @@ def open_playback_session(
         offset = int(payload.offset_ms)
     else:
         offset = int(playable.get("view_offset_ms") or 0)
+    from projectionist.engine.caption_prep import has_unprepared_text, note_caption_titles
     from projectionist.engine.captions import caption_fallback_reason, prepare_webvtt_renditions
     from projectionist.library.subtitle_cache import title_subtitle_context
 
@@ -246,6 +247,8 @@ def open_playback_session(
         data_dir=_dir(),
         renditions=renditions,
     )
+    if has_unprepared_text(asset, data_dir=_dir()):
+        note_caption_titles([asset.rating_key], data_dir=_dir(), reason="play", force=True)
     session = open_engine_session(
         asset,
         profile,
