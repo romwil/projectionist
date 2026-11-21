@@ -6,6 +6,10 @@
 #
 # Canonical image: romwil/projectionist
 #
+# The image is built from the commit tag v<version> points at. The OCI label
+# org.opencontainers.image.revision is that full commit. The script exits if
+# the published label and the tag's commit differ.
+#
 # ALWAYS push Docker v2 schema 2 manifest lists (not OCI indexes with
 # attestations). Unraid Dockerman's update checker fails on OCI indexes
 # (shows "not available"); Force Update then recreates from the local tag.
@@ -56,8 +60,75 @@ fi
 IMAGE="romwil/projectionist"
 PLATFORMS="linux/amd64,linux/arm64"
 BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-VCS_REF="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 DATE_STAMP="$(date -u +%Y%m%d)"
+TAG_NAME="v${VERSION}"
+TMP_ROOT="${TMPDIR:-/tmp}"
+TMP_ROOT="${TMP_ROOT%/}"
+BUILD_PARENT=""
+BUILD_DIR=""
+
+cleanup_release_worktree() {
+  status=$?
+  case "${BUILD_PARENT}" in
+    "${TMP_ROOT}"/projectionist-release.*)
+      if [[ -n "${BUILD_DIR}" ]]; then
+        git worktree remove --force "${BUILD_DIR}" >/dev/null 2>&1 || true
+      fi
+      rm -rf "${BUILD_PARENT}"
+      git worktree prune >/dev/null 2>&1 || true
+      ;;
+  esac
+  exit "${status}"
+}
+trap cleanup_release_worktree EXIT
+
+# Peel annotated tags to the commit that will be published.
+if ! RELEASE_COMMIT="$(git rev-parse --verify --quiet "${TAG_NAME}^{commit}" 2>/dev/null)"; then
+  echo "Tag ${TAG_NAME} must already point at the commit to publish." >&2
+  echo "The image is built from that commit. Create the tag, then rerun this script." >&2
+  exit 1
+fi
+if [[ ! "${RELEASE_COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "Tag ${TAG_NAME} did not resolve to a commit (${RELEASE_COMMIT})." >&2
+  exit 1
+fi
+
+verify_published_revision() {
+  local ref="$1"
+  local expected="$2"
+  local tag_name="$3"
+  local media checked digests digest label
+  media="$(docker buildx imagetools inspect "${ref}" --format '{{.Manifest.MediaType}}')"
+  checked=0
+  case "${media}" in
+    *manifest.list*|*image.index*)
+      digests="$(docker buildx imagetools inspect "${ref}" --format '{{range .Manifest.Manifests}}{{.Digest}}{{"\n"}}{{end}}')"
+      while IFS= read -r digest; do
+        [[ -z "${digest}" ]] && continue
+        checked=$((checked + 1))
+        label="$(docker buildx imagetools inspect "${IMAGE}@${digest}" --format '{{index .Image.Config.Labels "org.opencontainers.image.revision"}}')"
+        if [[ "${label}" != "${expected}" ]]; then
+          echo "org.opencontainers.image.revision for ${IMAGE}@${digest} is '${label}', and ${tag_name} is ${expected}." >&2
+          echo "The image revision must match the tag." >&2
+          exit 1
+        fi
+      done <<< "${digests}"
+      ;;
+    *)
+      checked=1
+      label="$(docker buildx imagetools inspect "${ref}" --format '{{index .Image.Config.Labels "org.opencontainers.image.revision"}}')"
+      if [[ "${label}" != "${expected}" ]]; then
+        echo "org.opencontainers.image.revision for ${ref} is '${label}', and ${tag_name} is ${expected}." >&2
+        echo "The image revision must match the tag." >&2
+        exit 1
+      fi
+      ;;
+  esac
+  if [[ "${checked}" -eq 0 ]]; then
+    echo "No image manifest for ${ref}; cannot confirm org.opencontainers.image.revision." >&2
+    exit 1
+  fi
+}
 
 TAGS=(
   -t "${IMAGE}:${VERSION}"
@@ -72,14 +143,22 @@ fi
 echo "Page-speed gate before Hub publish (GitHub Actions does not block this script):"
 echo "  npm run test:release-perf"
 echo "Budgets: frontend/perf/baseline.json — docs/RELEASE.md"
-echo "Generating release notes from CHANGELOG.md (require ## [${VERSION}])"
-./scripts/generate-release-notes.sh --require-version "${VERSION}"
+
+# Build a clean worktree of the tagged commit so an earlier checkout, or
+# uncommitted files in this one, cannot become the image.
+BUILD_PARENT="$(mktemp -d "${TMP_ROOT}/projectionist-release.XXXXXX")"
+BUILD_DIR="${BUILD_PARENT}/tree"
+git worktree add --detach "${BUILD_DIR}" "${RELEASE_COMMIT}"
+
+echo "Generating release notes from ${TAG_NAME} (${RELEASE_COMMIT})"
+( cd "${BUILD_DIR}" && ./scripts/generate-release-notes.sh --require-version "${VERSION}" )
 
 echo "Writing version-stable dependency manifests (.docker-deps/)"
-./scripts/docker-dep-manifests.sh
+( cd "${BUILD_DIR}" && ./scripts/docker-dep-manifests.sh )
 
 echo "Building ${IMAGE}:${VERSION} (+ :${ALSO_LINE} :latest) for ${PLATFORMS}"
-echo "Build identity: version=${VERSION} created=${BUILD_DATE} revision=${VCS_REF}"
+echo "Source commit: ${TAG_NAME} ${RELEASE_COMMIT}"
+echo "Build identity: version=${VERSION} created=${BUILD_DATE} revision=${RELEASE_COMMIT}"
 echo "Flags: --provenance=false --sbom=false (Unraid-compatible Docker v2 manifests)"
 
 # buildx is always BuildKit; export for any nested classic docker and document intent.
@@ -92,10 +171,10 @@ docker buildx build \
   --sbom=false \
   --build-arg "PROJECTIONIST_VERSION=${VERSION}" \
   --build-arg "BUILD_DATE=${BUILD_DATE}" \
-  --build-arg "VCS_REF=${VCS_REF}" \
+  --build-arg "VCS_REF=${RELEASE_COMMIT}" \
   "${TAGS[@]}" \
   --push \
-  .
+  "${BUILD_DIR}"
 
 echo ""
 echo "=== Hub inspect (expect MediaType: docker.distribution.manifest.list.v2+json) ==="
@@ -118,6 +197,11 @@ if [[ "$DATE_TAG" -eq 1 ]]; then
       || docker buildx imagetools inspect "${ref}" | awk '/^Digest:/{print $2; exit}'
   done
 fi
+
+echo ""
+echo "=== Revision label (must match ${TAG_NAME}) ==="
+verify_published_revision "${IMAGE}:${VERSION}" "${RELEASE_COMMIT}" "${TAG_NAME}"
+echo "org.opencontainers.image.revision=${RELEASE_COMMIT}"
 
 echo ""
 echo "Unraid owners: Force Update can report TOTAL DATA PULLED: 0 B when the local"
