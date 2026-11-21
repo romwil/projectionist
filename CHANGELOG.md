@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- The web player builds its playback profile at play time from the browser's own codec checks: HEVC (including 10-bit), AV1, AC-3, and E-AC-3. The plan says which answer it used. A browser that cannot play HEVC still stays off that stream.
+
 ## [1.42.0] — 2026-11-21
 
 The server refuses an empty database file. Clients can see what this server supports. An owner can turn on Play through Projectionist, and a phone can finish sign-in with its own device credential.

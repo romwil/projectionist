@@ -54,21 +54,51 @@ def level_number(codec: str, raw: str) -> Optional[float]:
     return float(number)
 
 
-def _video_ok(stream: MediaStream, caps: list[VideoCapability]) -> bool:
+def stream_bit_depth(stream: MediaStream) -> int:
+    reported = int(getattr(stream, "bit_depth", 0) or 0)
+    if reported >= 8:
+        return reported
+    text = str(stream.profile or "").lower()
+    if "12" in text:
+        return 12
+    if "10" in text:
+        return 10
+    return 8
+
+
+def _video_decision(stream: MediaStream, caps: list[VideoCapability]) -> tuple[bool, str]:
+    """Which profile video row allowed this stream, or why none did."""
     codec = canonical_codec(stream.codec)
-    for cap in caps:
-        if canonical_codec(cap.codec) != codec:
-            continue
+    depth = stream_bit_depth(stream)
+    same = [cap for cap in caps if canonical_codec(cap.codec) == codec]
+    if not same:
+        return False, f"{codec} not in profile"
+    depth_limit = 0
+    for cap in same:
         limit = level_number(codec, cap.max_level)
         actual = level_number(codec, stream.level)
         if limit is not None and actual is not None and actual > limit + 0.05:
-            return False
-        return True
-    return False
+            continue
+        if cap.bit_depth and depth > cap.bit_depth:
+            depth_limit = max(depth_limit, cap.bit_depth)
+            continue
+        bits = f", {cap.bit_depth}-bit" if cap.bit_depth else ""
+        level = cap.max_level or "any level"
+        return True, f"{codec} up to {level}{bits}"
+    if depth_limit:
+        return False, f"{codec} {depth}-bit is above profile {codec} {depth_limit}-bit"
+    return False, f"{codec} level is above profile {codec} {same[0].max_level}"
 
 
-def _audio_ok(stream: MediaStream, profile: DeviceProfile) -> bool:
-    return canonical_codec(stream.codec) in {canonical_codec(name) for name in profile.audio}
+def _audio_decision(audios: list[MediaStream], profile: DeviceProfile) -> tuple[bool, str, Optional[MediaStream]]:
+    if not audios:
+        return True, "no audio", None
+    names = {canonical_codec(name) for name in profile.audio}
+    for stream in audios:
+        codec = canonical_codec(stream.codec)
+        if codec in names:
+            return True, codec, stream
+    return False, f"{canonical_codec(audios[0].codec)} not in profile", audios[0]
 
 
 def _pretty_codec(codec: str) -> str:
@@ -125,9 +155,15 @@ def _first(streams: list[MediaStream], codec_type: str) -> Optional[MediaStream]
 
 
 def plan_playback(asset: MediaAsset, profile: DeviceProfile) -> dict[str, object]:
-    """Record a plan and a reason. Never includes a file path."""
+    """Record a plan, the profile answer that chose it, and a reason. Never a file path."""
     captions = caption_inventory(asset.probe)
-    base = {"profile": profile.id, "captions": captions, "readable": bool(asset.readable)}
+    empty_answer = {"video": "", "audio": ""}
+    base = {
+        "profile": profile.id,
+        "captions": captions,
+        "readable": bool(asset.readable),
+        "profile_answer": empty_answer,
+    }
     if not asset.readable or asset.probe is None:
         reason = asset.reason or "Projectionist cannot read this file"
         return {**base, "plan": "plex-fallback", "reason": reason, "readable": False}
@@ -140,45 +176,52 @@ def plan_playback(asset: MediaAsset, profile: DeviceProfile) -> dict[str, object
             **base,
             "plan": "plex-fallback",
             "reason": "No video stream to play",
+            "profile_answer": {"video": "no video", "audio": ""},
         }
 
-    video_ok = _video_ok(video, profile.video)
-    playable_audio = next((stream for stream in audios if _audio_ok(stream, profile)), None)
+    video_ok, video_text = _video_decision(video, profile.video)
+    audio_ok, audio_text, playable_audio = _audio_decision(audios, profile)
     audio = playable_audio or (audios[0] if audios else None)
     video_label = _pretty_codec(video.codec)
     audio_label = _pretty_codec(audio.codec) if audio else "no audio"
     container = _container_label(probe.container)
     direct_ok = probe.container in _DIRECT_CONTAINERS and "mp4" in profile.containers
     remux_ok = "hls-fmp4" in profile.containers
+    answer = {"video": video_text, "audio": audio_text}
+    base = {**base, "profile_answer": answer}
 
-    if video_ok and (playable_audio is not None or audio is None) and direct_ok:
+    if video_ok and audio_ok and direct_ok:
         return {
             **base,
             "plan": "direct",
-            "reason": f"{container} container; {video_label} + {audio_label} playable on {profile.id}",
+            "reason": (
+                f"{container} container; {video_label} + {audio_label} playable on {profile.id} "
+                f"({video_text}; {audio_text})"
+            ),
         }
-    if video_ok and playable_audio is not None and remux_ok:
+    if video_ok and audio_ok and playable_audio is not None and remux_ok:
         return {
             **base,
             "plan": "remux",
             "reason": (
-                f"{container} container; {video_label} + {audio_label} playable on {profile.id}"
+                f"{container} container; {video_label} + {audio_label} playable on {profile.id} "
+                f"({video_text}; {audio_text})"
             ),
         }
-    if video_ok and audio is not None and playable_audio is None and remux_ok:
+    if video_ok and audio is not None and not audio_ok and remux_ok:
         return {
             **base,
             "plan": "audio",
             "reason": (
                 f"{video_label} video is playable on {profile.id}; "
-                f"{audio_label} audio is not, so the audio would be transcoded"
+                f"{audio_label} audio is not, so the audio would be transcoded ({audio_text})"
             ),
         }
     if not video_ok:
         return {
             **base,
             "plan": "full",
-            "reason": f"{video_label} video is not playable on {profile.id}",
+            "reason": f"{video_label} video is not playable on {profile.id} ({video_text})",
         }
     return {
         **base,

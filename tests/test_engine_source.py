@@ -182,6 +182,18 @@ class PublicMediaTests(unittest.TestCase):
             self.assertEqual(payload["container"], "mkv")
             self.assertEqual(payload["streams"][1]["codec"], "ac3")
 
+    def test_main_10_probe_records_ten_bit(self) -> None:
+        from projectionist.engine.probe import parse_ffprobe
+
+        payload = json.loads(json.dumps(_PROBE))
+        payload["streams"][0]["codec_name"] = "hevc"
+        payload["streams"][0]["profile"] = "Main 10"
+        payload["streams"][0]["pix_fmt"] = "yuv420p10le"
+        payload["streams"][0]["bits_per_raw_sample"] = "10"
+        video = parse_ffprobe(payload).streams[0]
+        self.assertEqual(video.codec, "hevc")
+        self.assertEqual(video.bit_depth, 10)
+
 
 class EngineSettingsRoundTripTests(unittest.TestCase):
     def test_path_mappings_survive_settings_load(self) -> None:

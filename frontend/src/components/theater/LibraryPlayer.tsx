@@ -15,7 +15,7 @@ import {
   stopEnginePlayback,
   stopLibraryPlayback,
 } from "../../api/client";
-import { browserPlaybackProfile, chooseWebPlayback } from "../../lib/enginePlayback";
+import { chooseWebPlayback, detectBrowserPlaybackProfile } from "../../lib/enginePlayback";
 import { isCompactPlayViewport, isPhonePlayViewport } from "../../lib/chatLayout.js";
 import { useTitleDetail } from "../../hooks/useTitleDetail";
 import EndCardRatingPrompt from "./EndCardRatingPrompt";
@@ -560,16 +560,8 @@ export default function LibraryPlayer({
         }
         const payload = await chooseWebPlayback({
           features: await getFeatures().catch(() => null),
-          openEngine: () => openEnginePlayback(key, {
-            profile: browserPlaybackProfile((type) => {
-              try {
-                const probe = document.createElement("video");
-                const answer = probe.canPlayType?.(type) || "";
-                return answer === "probably" || answer === "maybe";
-              } catch {
-                return false;
-              }
-            }),
+          openEngine: async () => openEnginePlayback(key, {
+            profile: await detectBrowserPlaybackProfile(),
             startOver,
           }),
           startPlex: () => startLibraryPlayback(key, { startOver }),
@@ -613,16 +605,8 @@ export default function LibraryPlayer({
       try {
         const payload = await chooseWebPlayback({
           features: await getFeatures().catch(() => null),
-          openEngine: () => openEnginePlayback(key, {
-            profile: browserPlaybackProfile((type) => {
-              try {
-                const probe = document.createElement("video");
-                const answer = probe.canPlayType?.(type) || "";
-                return answer === "probably" || answer === "maybe";
-              } catch {
-                return false;
-              }
-            }),
+          openEngine: async () => openEnginePlayback(key, {
+            profile: await detectBrowserPlaybackProfile(),
             startOver: false,
           }),
           startPlex: () => startLibraryPlayback(key, { startOver: false, rec: recRef.current }),
