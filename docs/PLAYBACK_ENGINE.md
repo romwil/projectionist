@@ -157,7 +157,7 @@ A client declares what it can decode; the planner never guesses from a user-agen
 
 ## Library playability report
 
-ENG-011 is a dry run. It runs only when the owner refreshes Settings → Playback. Opening Settings, starting the server, scanning the library, and the jobs-engine timer do not start it. The first result is the planner applied to the stream metadata Plex already returns: container, codecs, profile, level, and bit depth. Shares appear then. ffprobe confirms each file afterwards, one at a time and at low priority, and a restart continues instead of starting over. While that confirmation runs, the report says how many titles were planned from Plex metadata, how many ffprobe has confirmed, and that it is still running. Refresh can also send this browser’s profile, the same object a session already accepts. The report does not transcode, remux, or extract captions.
+ENG-011 is a dry run. It runs only when the owner refreshes Settings → Playback. Opening Settings, starting the server, scanning the library, and the jobs-engine timer do not start it. The first result is the planner applied to the stream metadata Plex already returns: container, codecs, profile, level, and bit depth. Shares appear then. ffprobe confirms each file afterwards, one at a time and at low priority, and a restart continues instead of starting over. While that confirmation runs, Settings polls progress only: how many titles were planned from Plex metadata, how many ffprobe has confirmed, the message, and each profile’s shares. Title names load one page at a time when an owner opens a tier (`profile` and `tier` on the same route). The file on disk still holds every title, so a restart can continue. A Play that needs ffprobe does not wait on that walk or on caption extraction, and it does not run at idle priority. Refresh can also send this browser’s profile, the same object a session already accepts. The report does not transcode, remux, or extract captions.
 
 For one title the row is the planner’s plan, the tier an owner should read, and the reason. Captions that are text but not WebVTT yet stay apart from picture captions. A video codec the profile cannot play is “ask the media source to transcode.” A file the engine cannot read is “not playable through the engine.”
 
@@ -174,13 +174,18 @@ For one title the row is the planner’s plan, the tier an owner should read, an
 Shares count those tiers. `hardware` says how many titles on that profile need a video transcode: “A GPU with Quick Sync would let N titles play without Plex.” Audio-only and picture captions are not in that count. Later tiers (audio transcode, source transcode as a served plan, OCR, pre-optimized copies, our own video transcode) are not started.
 
 ```bash
-# Owner: the last report. No file paths.
+# Owner: progress and shares, without every title row. No file paths.
 curl -s -H "Authorization: Bearer YOUR_OWNER_CREDENTIAL" \
-  "http://your-host:8788/api/playback/playability" \
+  "http://your-host:8788/api/playback/playability?view=progress" \
+  | python3 -m json.tool
+
+# One page of title names for a tier. `limit` is capped at 40.
+curl -s -H "Authorization: Bearer YOUR_OWNER_CREDENTIAL" \
+  "http://your-host:8788/api/playback/playability?profile=safari&tier=remux" \
   | python3 -m json.tool
 ```
 
-One title inside `profiles[].titles`:
+One title row. The saved report keeps it inside `profiles[].titles`. A title page returns the same fields:
 
 ```json
 {

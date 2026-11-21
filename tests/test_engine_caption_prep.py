@@ -301,6 +301,58 @@ class CaptionPrepTests(unittest.TestCase):
         self.assertEqual(items[0]["reason"], "play")
         self.assertNotEqual(items[-1]["rating_key"], "161755")
 
+    def test_a_nonzero_ffmpeg_exit_keeps_a_usable_cue(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            asset = _asset(root, text=True)
+
+            def fake_run(cmd, **kwargs):
+                del kwargs
+                Path(cmd[-1]).write_text(_VTT, encoding="utf-8")
+                return subprocess.CompletedProcess(cmd, 1)
+
+            with (
+                patch(
+                    "projectionist.library.episode_investigate.capabilities.resolve_ffmpeg",
+                    return_value="/usr/bin/ffmpeg",
+                ),
+                patch("projectionist.engine.caption_prep.subprocess.run", side_effect=fake_run),
+            ):
+                status = extract_text_captions(asset, data_dir=root)
+            renditions = prepare_webvtt_renditions(
+                asset, title_language="ja", settings=Settings(), data_dir=root
+            )
+            manifest = json.loads(
+                (root / "subtitles" / "161755" / "prepared.json").read_text(encoding="utf-8")
+            )
+        self.assertEqual(status, "ready")
+        self.assertEqual(manifest["status"], "ready")
+        self.assertEqual(renditions[0].track_id, "s2")
+        self.assertIn("Ready ahead of play", renditions[0].webvtt)
+
+    def test_a_nonzero_ffmpeg_exit_discards_a_webvtt_without_cues(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            asset = _asset(root, text=True)
+
+            def fake_run(cmd, **kwargs):
+                del kwargs
+                Path(cmd[-1]).write_text("WEBVTT\n\nnot a cue\n", encoding="utf-8")
+                return subprocess.CompletedProcess(cmd, 1)
+
+            with (
+                patch(
+                    "projectionist.library.episode_investigate.capabilities.resolve_ffmpeg",
+                    return_value="/usr/bin/ffmpeg",
+                ),
+                patch("projectionist.engine.caption_prep.subprocess.run", side_effect=fake_run),
+            ):
+                status = extract_text_captions(asset, data_dir=root)
+            stored = root / "subtitles" / "161755" / "prepared" / "s2.vtt"
+        self.assertEqual(status, "failed")
+        self.assertFalse(stored.exists())
+        self.assertEqual(prepared_tracks(asset, data_dir=root), [])
+
     def test_a_timed_out_extract_does_not_keep_a_partial_cue(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

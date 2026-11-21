@@ -154,6 +154,136 @@ class MediaSlotTests(unittest.TestCase):
         self.assertEqual(inflight["max"], 1)
 
 
+    def test_a_session_describe_does_not_block_on_the_caption_slot(self) -> None:
+        import threading
+
+        from projectionist.engine.media_slot import _SLOT
+        from projectionist.engine.routes import describe_title
+
+        held = threading.Event()
+        release = threading.Event()
+
+        def hold() -> None:
+            with _SLOT:
+                held.set()
+                release.wait(5)
+
+        locker = threading.Thread(target=hold)
+        locker.start()
+        self.assertTrue(held.wait(2))
+        seen: dict[str, object] = {}
+
+        def runner(cmd, **kwargs):
+            seen["cmd"] = list(cmd)
+            seen["timeout"] = kwargs.get("timeout")
+            completed = MagicMock()
+            completed.returncode = 0
+            completed.stdout = json.dumps(_PROBE)
+            completed.stderr = ""
+            return completed
+
+        done: dict[str, object] = {}
+
+        def work() -> None:
+            try:
+                with tempfile.TemporaryDirectory() as tmp:
+                    media = Path(tmp) / "film.mkv"
+                    media.write_bytes(b"mkv")
+                    with (
+                        patch(
+                            "projectionist.engine.routes.plex_part_paths",
+                            return_value=[str(media)],
+                        ),
+                        patch(
+                            "projectionist.library.episode_investigate.capabilities.resolve_ffprobe",
+                            return_value="ffprobe",
+                        ),
+                        patch("projectionist.engine.routes.subprocess.run", side_effect=runner),
+                    ):
+                        done["asset"] = describe_title(Settings(), None, Path(tmp), "161755")
+            except Exception as error:  # noqa: BLE001 — the assertion reports it
+                done["error"] = error
+            finally:
+                done["finished"] = True
+
+        worker = threading.Thread(target=work)
+        worker.start()
+        worker.join(1.5)
+        try:
+            self.assertTrue(done.get("finished"), "session probe blocked on the caption slot")
+            self.assertNotIn("error", done)
+            asset = done["asset"]
+            self.assertIsNotNone(getattr(asset, "probe", None))
+            command = list(seen["cmd"])  # type: ignore[arg-type]
+            self.assertEqual(command[0], "ffprobe")
+            self.assertNotIn("nice", command)
+            self.assertNotIn("ionice", command)
+            self.assertEqual(seen["timeout"], 60)
+        finally:
+            release.set()
+            worker.join(2)
+            locker.join(2)
+
+    def test_a_background_probe_waits_on_the_caption_slot(self) -> None:
+        import threading
+
+        from projectionist.engine.media_slot import _SLOT
+
+        held = threading.Event()
+        release = threading.Event()
+        calls = {"n": 0, "cmd": []}
+
+        def hold() -> None:
+            with _SLOT:
+                held.set()
+                release.wait(5)
+
+        def runner(cmd, **kwargs):
+            del kwargs
+            calls["n"] += 1
+            calls["cmd"] = list(cmd)
+            completed = MagicMock()
+            completed.returncode = 0
+            completed.stdout = json.dumps(_PROBE)
+            completed.stderr = ""
+            return completed
+
+        locker = threading.Thread(target=hold)
+        locker.start()
+        self.assertTrue(held.wait(2))
+
+        def which(name: str):
+            if name in {"nice", "ionice"}:
+                return f"/usr/bin/{name}"
+            return None
+
+        def work() -> None:
+            with tempfile.TemporaryDirectory() as tmp:
+                media = Path(tmp) / "film.mkv"
+                media.write_bytes(b"mkv")
+                with patch("projectionist.engine.media_slot.shutil.which", side_effect=which):
+                    probe_file(
+                        str(media),
+                        cache_dir=Path(tmp) / "cache",
+                        runner=runner,
+                        ffprobe="ffprobe",
+                        background=True,
+                    )
+
+        worker = threading.Thread(target=work)
+        worker.start()
+        worker.join(0.4)
+        try:
+            self.assertEqual(calls["n"], 0)
+            self.assertTrue(worker.is_alive())
+        finally:
+            release.set()
+            worker.join(2)
+            locker.join(2)
+        self.assertEqual(calls["n"], 1)
+        self.assertEqual(calls["cmd"][:6], ["nice", "-n", "19", "ionice", "-c", "3"])
+
+
 class PlexLookupReasonTests(unittest.TestCase):
     def test_a_timeout_is_not_described_as_a_missing_file(self) -> None:
         self.assertIn("timed out", plex_lookup_reason(TimeoutError("timed out")).lower())

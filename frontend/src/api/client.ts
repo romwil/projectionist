@@ -1136,8 +1136,20 @@ export async function putPlayThroughProjectionist(enabled: boolean) {
   });
 }
 
-export async function getPlayabilityReport() {
-  return api("/playback/playability");
+export async function getPlayabilityReport(options: { view?: "progress" } = {}) {
+  const suffix = options.view === "progress" ? "?view=progress" : "";
+  return api(`/playback/playability${suffix}`);
+}
+
+/** One page of title rows for a profile and tier. The poll does not use this. */
+export async function getPlayabilityTitles(profile: string, tier: string, offset = 0) {
+  const query = new URLSearchParams({
+    profile,
+    tier,
+    limit: "40",
+    offset: String(Math.max(0, Math.floor(offset) || 0)),
+  });
+  return api(`/playback/playability?${query}`);
 }
 
 /** Dry-run the library. `profile` is this browser's codec answer, when we have one. */

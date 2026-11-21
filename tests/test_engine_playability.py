@@ -464,7 +464,7 @@ class PlayabilityRouteTests(unittest.TestCase):
     def test_owner_refresh_lists_each_tier_and_get_reads_it_back(self) -> None:
         calls: list[str] = []
 
-        def locate(_settings, _db, _data_dir, rating_key: str):
+        def locate(_settings, _db, _data_dir, rating_key: str, **_extra: object):
             calls.append(rating_key)
             return self.assets[rating_key]
 
@@ -546,7 +546,7 @@ class PlayabilityRouteTests(unittest.TestCase):
         calls: list[str] = []
         started: list[object] = []
 
-        def locate(_settings, _db, _data_dir, rating_key: str):
+        def locate(_settings, _db, _data_dir, rating_key: str, **_extra: object):
             calls.append(rating_key)
             return self.assets[rating_key]
 
@@ -587,6 +587,70 @@ class PlayabilityRouteTests(unittest.TestCase):
             register(scheduler)
             state = next(row for row in scheduler.get_task_states() if row["name"] == "playability_report")
         self.assertFalse(state["enabled"])
+
+    def test_progress_read_does_not_include_the_full_title_lists(self) -> None:
+        import projectionist.engine.playability as playability
+
+        titles = [
+            {
+                "rating_key": f"title-{index}",
+                "title": f"Title {index}",
+                "tier": "remux",
+                "label": "Remux",
+                "reason": "MKV container",
+            }
+            for index in range(50)
+        ]
+        report = {
+            "generated_at": "2026-11-21T00:00:00+00:00",
+            "complete": False,
+            "running": True,
+            "phase": "ffprobe",
+            "planned_from_plex": 50,
+            "confirmed_by_ffprobe": 3,
+            "message": "Planned from Plex metadata. Confirming files in the background.",
+            "title_count": 50,
+            "profiles": [
+                {
+                    "profile": "safari",
+                    "title_count": 50,
+                    "shares": {"remux": {"count": 50, "share": 1, "label": "Remux"}},
+                    "top_reasons": [{"reason": "MKV container", "count": 50}],
+                    "titles": titles,
+                    "hardware": "A GPU with Quick Sync would let 0 titles play without Plex.",
+                }
+            ],
+        }
+        save_playability_report(self.data_dir, report)
+        playability._WALKING = True
+        try:
+            progress = self.client.get("/api/playback/playability", params={"view": "progress"})
+        finally:
+            playability._WALKING = False
+        self.assertEqual(progress.status_code, 200, progress.text)
+        body = progress.json()
+        blob = json.dumps(body)
+        self.assertNotIn("title-0", blob)
+        self.assertNotIn("title-49", blob)
+        self.assertNotIn("titles", body["profiles"][0])
+        self.assertTrue(body["running"])
+        self.assertEqual(body["planned_from_plex"], 50)
+        self.assertEqual(body["confirmed_by_ffprobe"], 3)
+        self.assertIn("Confirming", body["message"])
+        self.assertEqual(body["profiles"][0]["shares"]["remux"]["count"], 50)
+        page = self.client.get(
+            "/api/playback/playability",
+            params={"profile": "safari", "tier": "remux", "limit": 100, "offset": 0},
+        )
+        self.assertEqual(page.status_code, 200, page.text)
+        rows = page.json()["titles"]
+        self.assertEqual(len(rows), 40)
+        self.assertEqual(page.json()["total"], 50)
+        self.assertEqual(rows[0]["rating_key"], "title-0")
+        self.assertNotIn("title-40", {row["rating_key"] for row in rows})
+        saved = json.loads(report_path(self.data_dir).read_text(encoding="utf-8"))
+        self.assertEqual(len(saved["profiles"][0]["titles"]), 50)
+        self.assertTrue(saved["running"])
 
     def test_unknown_profile_name_is_rejected(self) -> None:
         refused = self.client.post("/api/playback/playability", json={"profile": "nope"})

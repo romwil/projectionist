@@ -477,12 +477,15 @@ def _ffmpeg_extract(source: Path, index: int, dest: Path) -> None:
         logger.debug("text caption extract failed index=%s", index, exc_info=True)
         _discard_partial(dest)
         raise
-    if getattr(completed, "returncode", 0) not in (0, None):
+    # ffmpeg often writes a finished WebVTT and still exits 1 because a later
+    # packet failed to demux. That file is a track. A timeout, an empty file,
+    # and a file with no cues are not.
+    if getattr(completed, "returncode", 0) not in (0, None) and not _usable_webvtt(dest):
         _discard_partial(dest)
 
 
 def _discard_partial(path: Path) -> None:
-    """A timed-out ffmpeg can leave cues in the dest file. Those are not a track."""
+    """Drop a timed-out, empty, or unusable extract. A usable WebVTT stays."""
     try:
         path.unlink(missing_ok=True)
     except OSError:

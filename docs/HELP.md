@@ -367,11 +367,11 @@ A line under each device says what a GPU would change, in the form “A GPU with
 
 ```bash
 curl -s -H "Authorization: Bearer YOUR_OWNER_CREDENTIAL" \
-  "http://your-host:8788/api/playback/playability" \
+  "http://your-host:8788/api/playback/playability?view=progress" \
   | python3 -m json.tool
 ```
 
-The report is not on a timer. While it runs, the same request includes how many titles were planned from Plex metadata, how many ffprobe has confirmed, and that it is still running. One title looks like this: a name, a tier such as `remux`, the label “Remux,” and the reason the planner recorded. There is no file path in the answer.
+The report is not on a timer. While it runs, that request includes how many titles were planned from Plex metadata, how many ffprobe has confirmed, each device’s shares, and whether it is still running. It does not include every title. Opening a tier loads a page of names. One title looks like this: a name, a tier such as `remux`, the label “Remux,” and the reason the planner recorded. There is no file path in the answer.
 
 ### Curator persona (Admin → Persona)
 
