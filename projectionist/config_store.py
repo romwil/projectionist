@@ -698,6 +698,23 @@ class TheaterSettings:
 
 
 @dataclass
+class EngineSettings:
+    """Playback engine (ENG-001).
+
+    ``path_mappings`` rewrite Plex ``Part.file`` prefixes onto mounts this
+    container can read. Invalid rows are dropped at load so a bad settings
+    file cannot take the household offline.
+    """
+
+    path_mappings: list = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        from projectionist.engine.pathmap import salvage_mappings
+
+        self.path_mappings = salvage_mappings(self.path_mappings)
+
+
+@dataclass
 class WeatherSettings:
     """Weather Channel narration (local TTS) and the optional Windy webcam key."""
 
@@ -723,6 +740,7 @@ NESTED_SETTINGS_TYPES.update(
         "theater": TheaterSettings,
         "acrcloud": AcrcloudSettings,
         "weather": WeatherSettings,
+        "engine": EngineSettings,
     }
 )
 
@@ -798,6 +816,7 @@ class Settings:
     theater: TheaterSettings = field(default_factory=TheaterSettings)
     acrcloud: AcrcloudSettings = field(default_factory=AcrcloudSettings)
     weather: WeatherSettings = field(default_factory=WeatherSettings)
+    engine: EngineSettings = field(default_factory=EngineSettings)
 
     def apply_to_environ(self) -> None:
         for env_name, field_name in ENV_TO_FIELD.items():

@@ -575,6 +575,25 @@ def build_setup_status(settings: Settings, db: Database | None = None) -> Dict[s
     }
 
 
+def preserve_engine_settings(
+    payload: Any,
+    existing: Settings,
+    merged: Dict[str, Any],
+) -> None:
+    """Keep engine path mappings when a settings PUT does not mention them.
+
+    The settings form does not edit the playback engine. A partial PUT must
+    not wipe the owner's path map back to the default empty list.
+    """
+    from dataclasses import asdict
+
+    fields_set = getattr(payload, "model_fields_set", set())
+    if "engine" not in fields_set:
+        engine = getattr(existing, "engine", None)
+        if engine is not None:
+            merged["engine"] = asdict(engine)
+
+
 def preserve_omitted_ask_delete_confirmation(
     payload: Any,
     existing: Settings,

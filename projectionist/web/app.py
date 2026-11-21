@@ -176,6 +176,7 @@ from projectionist.web.weekly_letter_routes import register_weekly_letter_routes
 from projectionist.web.mail_unsubscribe_routes import register_mail_unsubscribe_routes
 from projectionist.web.holidays_routes import register_holidays_routes
 from projectionist.web.live_channels_routes import register_live_channels_routes
+from projectionist.engine.routes import register_engine_routes
 from projectionist.web.playback_routes import register_playback_routes
 from projectionist.web.theater_delight_routes import register_theater_delight_routes
 from projectionist.web.investigate_routes import register_investigate_routes
@@ -1407,6 +1408,12 @@ register_playback_routes(
     settings_factory=_settings,
     db_factory=_db,
     safe_error_detail=_safe_error_detail,
+)
+register_engine_routes(
+    app,
+    settings_factory=_settings,
+    db_factory=_db,
+    data_dir=DATA_DIR,
 )
 register_theater_delight_routes(
     app,
