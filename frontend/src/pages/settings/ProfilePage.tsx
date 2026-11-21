@@ -12,6 +12,7 @@ import {
   startPlexPinLogin,
   uploadAuthAvatar,
 } from "../../api/client";
+import PlayabilityReport from "../../components/settings/PlayabilityReport";
 import SettingsPageHeader from "../../components/settings/SettingsPageHeader";
 import SettingsPanel from "../../components/settings/SettingsPanel";
 import WeatherLocationPicker from "../../components/weather/WeatherLocationPicker";
@@ -553,6 +554,7 @@ export default function ProfilePage() {
               When this is on, the next film or episode plays through Projectionist when the file can be remuxed. Captions stay on the usual path for now. Turning it off applies the next time you press play.
             </span>
           ) : null}
+          {user?.role === "owner" ? <PlayabilityReport /> : null}
         </SettingsPanel>
 
         <div className="settings-actions">

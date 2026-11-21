@@ -660,6 +660,43 @@
   margin-top: 3px;
 }
 
+.playability-report {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.playability-report h4,
+.playability-profile h5 {
+  margin: 0;
+}
+
+.playability-profile {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.playability-profile + .playability-profile {
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-3);
+}
+
+.playability-shares,
+.playability-reasons,
+.playability-titles {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.playability-titles {
+  max-height: 16rem;
+  overflow: auto;
+}
+
+.playability-titles li {
+  margin: 0.35rem 0;
+}
+
 .settings-footnote-list {
   margin: var(--space-4) 0 0;
   padding-left: 1.2rem;
