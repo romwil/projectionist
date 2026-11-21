@@ -482,6 +482,107 @@ class EngineRouteTests(unittest.TestCase):
             401,
         )
 
+    def test_device_credential_fetches_a_segment_with_the_path_token(self) -> None:
+        """AVPlayer loads an fMP4 segment with the path token alone. No cookie, no bearer."""
+        from projectionist.devices.native_login import issue_device_credential
+
+        self._map_movie()
+        self.db.upsert_plex_user(
+            user_id="owner-device",
+            display_name="Owner",
+            email=None,
+            plex_user_id="plex-device",
+            role="owner",
+        )
+        issued = issue_device_credential(
+            self.db, user_id="owner-device", kind="iphone", label="Living Room"
+        )
+        credential = issued["credential"]
+        settings_path = self.data_dir / "settings.json"
+        current = json.loads(settings_path.read_text(encoding="utf-8"))
+        features = dict(current.get("features") or {})
+        features["multi_user_enabled"] = True
+        current["features"] = features
+        settings_path.write_text(json.dumps(current), encoding="utf-8")
+        self.client.cookies.clear()
+        bearer = {"Authorization": f"Bearer {credential}"}
+
+        def fake_start(source, directory, **kwargs):
+            from projectionist.engine.remux import write_master
+
+            directory = Path(directory)
+            write_master(
+                directory,
+                kwargs.get("probe"),
+                file_size=100,
+                duration_ms=int(kwargs.get("duration_ms") or 600_000),
+                captions=kwargs.get("captions"),
+            )
+            av = directory / "av"
+            av.mkdir(parents=True, exist_ok=True)
+            (av / "init.mp4").write_bytes(b"fmp4-init")
+            (av / "seg_0000.m4s").write_bytes(b"fmp4-segment")
+            (av / "stream.m3u8").write_text(
+                "#EXTM3U\n"
+                '#EXT-X-MAP:URI="init.mp4"\n'
+                "#EXTINF:6.000,\n"
+                "seg_0000.m4s\n"
+                "#EXT-X-ENDLIST\n",
+                encoding="utf-8",
+            )
+            return None
+
+        self.assertEqual(
+            self.client.post(
+                "/api/playback/sessions",
+                json={"rating_key": "121986", "profile": "apple-tv-4k-3", "engine_opt_in": True},
+            ).status_code,
+            401,
+        )
+        with patch(
+            "projectionist.engine.routes.plex_part_paths",
+            return_value=["/data/media/movies/film.mkv"],
+        ), patch("projectionist.engine.source.probe_file", return_value=_probe()), patch(
+            "projectionist.engine.session.start_remux",
+            side_effect=fake_start,
+        ):
+            opened = self.client.post(
+                "/api/playback/sessions",
+                json={
+                    "rating_key": "121986",
+                    "profile": "apple-tv-4k-3",
+                    "engine_opt_in": True,
+                },
+                headers=bearer,
+            )
+        self.assertEqual(opened.status_code, 200, opened.text)
+        body = opened.json()
+        self.assertTrue(body["playable"], body)
+        base = body["master_url"].rsplit("/", 1)[0]
+        segment_url = f"{base}/av/seg_0000.m4s"
+        self.client.cookies.clear()
+        segment = self.client.get(segment_url)
+        self.assertEqual(segment.status_code, 200, segment.text)
+        self.assertEqual(segment.content, b"fmp4-segment")
+        self.assertIn("video/iso.segment", segment.headers.get("content-type", ""))
+        self.assertNotIn("curatorx_session", self.client.cookies)
+        wrong = segment_url.replace(segment_url.split("/")[5], "not-the-token")
+        rejected = self.client.get(wrong)
+        self.assertEqual(rejected.status_code, 404, rejected.text)
+        self.assertNotEqual(rejected.status_code, 401)
+        self.assertEqual(self.client.get("/api/auth/me").status_code, 401)
+        self.assertEqual(
+            self.client.get(f"/api/playback/sessions/{body['session_id']}").status_code,
+            401,
+        )
+        self.assertEqual(
+            self.client.post(
+                f"/api/playback/sessions/{body['session_id']}/progress",
+                json={"time_ms": 1, "duration_ms": 600000},
+            ).status_code,
+            401,
+        )
+
     def test_prepared_text_plays_without_extracting_during_the_session(self) -> None:
         from projectionist.engine.caption_prep import extract_text_captions
         from projectionist.engine.source import MediaAsset

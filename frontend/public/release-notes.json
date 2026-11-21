@@ -1,6 +1,44 @@
 {
-  "generated_at": "2026-11-21T16:13:03Z",
+  "generated_at": "2026-11-21T20:38:49Z",
   "releases": [
+    {
+      "version": "1.43.0",
+      "date": "2026-11-21",
+      "summary": "Play follows this browser. Text captions are ready before Play. Settings shows what each device can play, and a video segment loads from its link alone.",
+      "highlights": [
+        "**Playback follows this browser.** Play asks what this browser can decode, then picks a stream that fits.",
+        "**Captions are ready before Play.** Text captions are prepared ahead of time. A title whose captions are still being prepared stays on the usual path and says so.",
+        "**See what will play.** Settings shows the cheapest way each title can play on the devices in the house. Nothing is transcoded to find out.",
+        "**The picture loads from its link.** Once a play starts, the player fetches the video with that link alone. A wrong link is refused."
+      ],
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "An engine session opens only when the client sends `engine_opt_in`. The household switch does not force a client onto the engine. A client that does not opt in uses `POST /api/library/playback/start`.",
+            "The web player builds its playback profile at play time from the browser's own codec checks: HEVC (including 10-bit), AV1, AC-3, and E-AC-3. The plan says which answer it used. A browser that cannot play HEVC still stays off that stream.",
+            "Text captions are extracted to WebVTT ahead of Play. A track that is not ready yet records “These captions are not ready yet, so this title stays on the Plex path.” A picture-only track records “These captions are not ready as WebVTT, so this title stays on the Plex path.”",
+            "Settings → Playback is a dry-run of the existing planner across the library. It does not transcode."
+          ]
+        },
+        {
+          "title": "Fixed",
+          "bullets": [
+            "An engine media segment (the fMP4 `.m4s` the session serves) is accepted with the path token alone. No session cookie and no `Authorization` bearer. A wrong token stays 404. A device credential can still open the session. Progress, stop, and every other API path still need the member credential."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "`./scripts/patch-release.sh 1.43.0` lockstep + `frontend/public/release-notes.json`.",
+            "Page speed (`npm run test:release-perf`) before Hub publish.",
+            "CI on the release PR (required checks).",
+            "Hub image built from tag `v1.43.0`; `org.opencontainers.image.revision` matches that commit.",
+            "QA `:8792` is a Hub pull of `romwil/projectionist:1.43.0` (Path B). Prod stays on 1.40.1."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.42.0",
       "date": "2026-11-21",
