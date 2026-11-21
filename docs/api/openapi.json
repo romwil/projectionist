@@ -1,0 +1,2206 @@
+{
+  "components": {
+    "schemas": {
+      "AuthMeUpdatePayload": {
+        "properties": {
+          "apprise_urls": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apprise Urls"
+          },
+          "clear_weather_location": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clear Weather Location"
+          },
+          "default_page": {
+            "anyOf": [
+              {
+                "pattern": "^(auto|chat|explore)$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Page"
+          },
+          "email_muted_kinds": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 16,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Muted Kinds"
+          },
+          "newsletter_opt_in": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Newsletter Opt In"
+          },
+          "notification_email": {
+            "anyOf": [
+              {
+                "maxLength": 320,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notification Email"
+          },
+          "notify_channel_apprise": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notify Channel Apprise"
+          },
+          "notify_channel_email": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notify Channel Email"
+          },
+          "notify_channel_inbox": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notify Channel Inbox"
+          },
+          "nudge_opt_in": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nudge Opt In"
+          },
+          "preferred_name": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferred Name"
+          },
+          "ui_font_size": {
+            "anyOf": [
+              {
+                "pattern": "^(small|medium|large)$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ui Font Size"
+          },
+          "ui_theme": {
+            "anyOf": [
+              {
+                "pattern": "^(lights_up|lights_down|system)$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ui Theme"
+          },
+          "weather_lat": {
+            "anyOf": [
+              {
+                "maximum": 90.0,
+                "minimum": -90.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weather Lat"
+          },
+          "weather_lon": {
+            "anyOf": [
+              {
+                "maximum": 180.0,
+                "minimum": -180.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weather Lon"
+          },
+          "weather_place": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weather Place"
+          },
+          "year_in_review_opt_in": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year In Review Opt In"
+          }
+        },
+        "title": "AuthMeUpdatePayload",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "LiveChannelsTunePayload": {
+        "properties": {
+          "channel_id": {
+            "default": "",
+            "title": "Channel Id",
+            "type": "string"
+          }
+        },
+        "title": "LiveChannelsTunePayload",
+        "type": "object"
+      },
+      "PairIssuePayload": {
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "title": "PairIssuePayload",
+        "type": "object"
+      },
+      "PairRotatePayload": {
+        "properties": {
+          "pending_id": {
+            "default": "",
+            "title": "Pending Id",
+            "type": "string"
+          }
+        },
+        "title": "PairRotatePayload",
+        "type": "object"
+      },
+      "PlaybackProgressPayload": {
+        "properties": {
+          "duration_ms": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Duration Ms",
+            "type": "integer"
+          },
+          "state": {
+            "default": "playing",
+            "title": "State",
+            "type": "string"
+          },
+          "time_ms": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Time Ms",
+            "type": "integer"
+          }
+        },
+        "title": "PlaybackProgressPayload",
+        "type": "object"
+      },
+      "PlaybackSeekPayload": {
+        "properties": {
+          "offset_ms": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Offset Ms",
+            "type": "integer"
+          }
+        },
+        "title": "PlaybackSeekPayload",
+        "type": "object"
+      },
+      "PlaybackStartPayload": {
+        "properties": {
+          "rating_key": {
+            "default": "",
+            "title": "Rating Key",
+            "type": "string"
+          },
+          "rec": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rec"
+          },
+          "start_over": {
+            "default": false,
+            "title": "Start Over",
+            "type": "boolean"
+          }
+        },
+        "title": "PlaybackStartPayload",
+        "type": "object"
+      },
+      "PlaybackStopPayload": {
+        "properties": {
+          "duration_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "time_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Ms"
+          }
+        },
+        "title": "PlaybackStopPayload",
+        "type": "object"
+      },
+      "PlaybackSubtitlesPayload": {
+        "properties": {
+          "offset_ms": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Offset Ms",
+            "type": "integer"
+          },
+          "subtitle_stream_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subtitle Stream Id"
+          }
+        },
+        "title": "PlaybackSubtitlesPayload",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Routes a native client may call. Admin routes are not included. Regenerate with scripts/export-openapi.sh. PROJECTIONIST_EXPOSE_OPENAPI stays unset in production.",
+    "title": "Projectionist client API",
+    "version": "3"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/auth/me": {
+      "get": {
+        "operationId": "auth_me_api_auth_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Auth Me Api Auth Me Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Auth Me",
+        "tags": [
+          "auth",
+          "client"
+        ]
+      },
+      "patch": {
+        "description": "Self-service profile updates (preferred conversation name, UI prefs).",
+        "operationId": "patch_auth_me_api_auth_me_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthMeUpdatePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Patch Auth Me Api Auth Me Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Auth Me",
+        "tags": [
+          "auth",
+          "client"
+        ]
+      }
+    },
+    "/api/devices/me/intent": {
+      "get": {
+        "description": "The paired TV's bearer. One intent, then empty until the next throw.",
+        "operationId": "devices_my_intent_api_devices_me_intent_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Devices My Intent",
+        "tags": [
+          "client",
+          "devices"
+        ]
+      }
+    },
+    "/api/devices/pair/issue": {
+      "post": {
+        "description": "Unsigned TV. Short code, expiry in minutes, and a pending id. No credential.",
+        "operationId": "pair_issue_api_devices_pair_issue_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PairIssuePayload"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pair Issue",
+        "tags": [
+          "client",
+          "devices"
+        ]
+      }
+    },
+    "/api/devices/pair/pending/{pending_id}": {
+      "get": {
+        "description": "Pending, the credential once after claim, or issue-again.",
+        "operationId": "pair_pending_api_devices_pair_pending__pending_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pending_id",
+            "required": true,
+            "schema": {
+              "title": "Pending Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pair Pending",
+        "tags": [
+          "client",
+          "devices"
+        ]
+      }
+    },
+    "/api/devices/pair/rotate": {
+      "post": {
+        "description": "New code for this pending TV. The previous code is dead.",
+        "operationId": "pair_rotate_api_devices_pair_rotate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PairRotatePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pair Rotate",
+        "tags": [
+          "client",
+          "devices"
+        ]
+      }
+    },
+    "/api/features": {
+      "get": {
+        "operationId": "get_features_api_features_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Features Api Features Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Features",
+        "tags": [
+          "client"
+        ]
+      }
+    },
+    "/api/health": {
+      "get": {
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Health Api Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health",
+        "tags": [
+          "client"
+        ]
+      }
+    },
+    "/api/library/art/{media_type}/{item_id}": {
+      "get": {
+        "description": "Serve one cached poster or backdrop. The upstream URL stays on the server.",
+        "operationId": "library_cached_art_api_library_art__media_type___item_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "media_type",
+            "required": true,
+            "schema": {
+              "title": "Media Type",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "id_type",
+            "required": false,
+            "schema": {
+              "default": "rating_key",
+              "title": "Id Type",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "default": "poster",
+              "title": "Kind",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Library Cached Art",
+        "tags": [
+          "client",
+          "library"
+        ]
+      }
+    },
+    "/api/library/feeds/hub": {
+      "get": {
+        "description": "Single Explore home payload (rails + pulse) with a short server TTL cache.",
+        "operationId": "library_feed_explore_hub_api_library_feeds_hub_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "refresh",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Refresh",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Library Feed Explore Hub Api Library Feeds Hub Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Library Feed Explore Hub",
+        "tags": [
+          "client",
+          "library"
+        ]
+      }
+    },
+    "/api/library/feeds/tonight-table": {
+      "get": {
+        "description": "Explore Tonight's table \u2014 two unwatched under 2h plus one comfort.",
+        "operationId": "library_feed_tonight_table_api_library_feeds_tonight_table_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 3,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Library Feed Tonight Table Api Library Feeds Tonight Table Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Library Feed Tonight Table",
+        "tags": [
+          "client",
+          "library"
+        ]
+      }
+    },
+    "/api/library/playback/start": {
+      "post": {
+        "description": "Start a Plex universal HLS session for a movie or episode (show keys resolve).",
+        "operationId": "library_playback_start_api_library_playback_start_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaybackStartPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Library Playback Start Api Library Playback Start Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Library Playback Start",
+        "tags": [
+          "client",
+          "library-playback"
+        ]
+      }
+    },
+    "/api/library/playback/{session_id}/index.m3u8": {
+      "get": {
+        "description": "Auth\u2019d HLS master playlist (session cookie; no PMS leak).",
+        "operationId": "library_playback_master_api_library_playback__session_id__index_m3u8_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Library Playback Master",
+        "tags": [
+          "client",
+          "library-playback"
+        ]
+      }
+    },
+    "/api/library/playback/{session_id}/master.m3u8": {
+      "get": {
+        "description": "Auth\u2019d HLS master playlist (session cookie; no PMS leak).",
+        "operationId": "library_playback_master_api_library_playback__session_id__master_m3u8_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Library Playback Master",
+        "tags": [
+          "client",
+          "library-playback"
+        ]
+      }
+    },
+    "/api/library/playback/{session_id}/progress": {
+      "post": {
+        "description": "Throttled Plex timeline + local ``view_offset_ms``. No now-watching feed.",
+        "operationId": "library_playback_progress_api_library_playback__session_id__progress_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaybackProgressPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Library Playback Progress Api Library Playback  Session Id  Progress Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Library Playback Progress",
+        "tags": [
+          "client",
+          "library-playback"
+        ]
+      }
+    },
+    "/api/library/playback/{session_id}/seek": {
+      "post": {
+        "description": "Restart the Plex transcode at ``offset_ms`` (large VOD jumps).",
+        "operationId": "library_playback_seek_api_library_playback__session_id__seek_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaybackSeekPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Library Playback Seek Api Library Playback  Session Id  Seek Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Library Playback Seek",
+        "tags": [
+          "client",
+          "library-playback"
+        ]
+      }
+    },
+    "/api/library/playback/{session_id}/stop": {
+      "post": {
+        "description": "Stop the Plex transcode and write a final timeline.",
+        "operationId": "library_playback_stop_api_library_playback__session_id__stop_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PlaybackStopPayload"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Library Playback Stop Api Library Playback  Session Id  Stop Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Library Playback Stop",
+        "tags": [
+          "client",
+          "library-playback"
+        ]
+      }
+    },
+    "/api/library/playback/{session_id}/subtitles": {
+      "post": {
+        "description": "Restart the transcode with a last-resort Plex burn-in stream, or Off.",
+        "operationId": "library_playback_subtitles_api_library_playback__session_id__subtitles_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaybackSubtitlesPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Library Playback Subtitles Api Library Playback  Session Id  Subtitles Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Library Playback Subtitles",
+        "tags": [
+          "client",
+          "library-playback"
+        ]
+      }
+    },
+    "/api/library/playback/{session_id}/{path}": {
+      "get": {
+        "description": "Auth\u2019d HLS media playlist / segment proxy.",
+        "operationId": "library_playback_path_api_library_playback__session_id___path__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Library Playback Path",
+        "tags": [
+          "client",
+          "library-playback"
+        ]
+      }
+    },
+    "/api/library/query": {
+      "get": {
+        "operationId": "library_query_endpoint_api_library_query_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "media_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Media Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "year_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Year From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "year_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Year To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "genres",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Genres"
+            }
+          },
+          {
+            "in": "query",
+            "name": "directors",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Directors"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cast",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cast"
+            }
+          },
+          {
+            "in": "query",
+            "name": "keywords",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Keywords"
+            }
+          },
+          {
+            "in": "query",
+            "name": "motifs",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Motifs"
+            }
+          },
+          {
+            "in": "query",
+            "name": "themes",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Themes"
+            }
+          },
+          {
+            "in": "query",
+            "name": "countries",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Countries"
+            }
+          },
+          {
+            "in": "query",
+            "name": "content_ratings",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Content Ratings"
+            }
+          },
+          {
+            "in": "query",
+            "name": "collection_name",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Collection Name"
+            }
+          },
+          {
+            "in": "query",
+            "name": "original_language",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Original Language"
+            }
+          },
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Query"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fts_query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Fts Query"
+            }
+          },
+          {
+            "in": "query",
+            "name": "semantic_query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Semantic Query"
+            }
+          },
+          {
+            "in": "query",
+            "name": "unwatched_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Unwatched Only",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_view_count",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Min View Count"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_view_count",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Max View Count"
+            }
+          },
+          {
+            "in": "query",
+            "name": "stale_days",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Stale Days"
+            }
+          },
+          {
+            "in": "query",
+            "name": "recently_added_days",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Recently Added Days"
+            }
+          },
+          {
+            "in": "query",
+            "name": "added_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Added From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "added_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Added To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "last_viewed_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Last Viewed From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "last_viewed_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Last Viewed To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "runtime_min",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Runtime Min"
+            }
+          },
+          {
+            "in": "query",
+            "name": "runtime_max",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Runtime Max"
+            }
+          },
+          {
+            "in": "query",
+            "name": "vote_min",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Vote Min"
+            }
+          },
+          {
+            "in": "query",
+            "name": "vote_max",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Vote Max"
+            }
+          },
+          {
+            "in": "query",
+            "name": "file_size_min",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "File Size Min"
+            }
+          },
+          {
+            "in": "query",
+            "name": "file_size_max",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "File Size Max"
+            }
+          },
+          {
+            "in": "query",
+            "name": "in_radarr",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "In Radarr"
+            }
+          },
+          {
+            "in": "query",
+            "name": "in_sonarr",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "In Sonarr"
+            }
+          },
+          {
+            "in": "query",
+            "name": "missing_tmdb_id",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Missing Tmdb Id",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "in_progress_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "In Progress Only",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "title",
+              "title": "Sort",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort_dir",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "asc",
+                    "desc"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sort Dir"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Library Query Endpoint Api Library Query Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Library Query Endpoint",
+        "tags": [
+          "client",
+          "library"
+        ]
+      }
+    },
+    "/api/live-channels/guide": {
+      "get": {
+        "description": "Wider channel \u00d7 time guide for the Projectionist `/live` EPG (1\u201312 hours).\n\nStale-while-revalidate: the last good guide (including the copy kept across\na restart) is served immediately and Tunarr is refreshed in the background.\nA true cold start returns ``warming: true`` without waiting on Tunarr.",
+        "operationId": "live_channels_guide_endpoint_api_live_channels_guide_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "hours",
+            "required": false,
+            "schema": {
+              "default": 6.0,
+              "title": "Hours",
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Live Channels Guide Endpoint Api Live Channels Guide Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Live Channels Guide Endpoint",
+        "tags": [
+          "client",
+          "live-channels"
+        ]
+      }
+    },
+    "/api/live-channels/on-now": {
+      "get": {
+        "description": "Household-readable guide snapshot (channel name + now/next). Empty-safe.\n\nOwners and members may call this. Youth accounts filter rated titles via the\nexisting rating gate when Tunarr programs carry content ratings. Dual-watch\nCTA: Projectionist /live primary, Plex Live TV secondary.",
+        "operationId": "live_channels_on_now_endpoint_api_live_channels_on_now_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Live Channels On Now Endpoint Api Live Channels On Now Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Live Channels On Now Endpoint",
+        "tags": [
+          "client",
+          "live-channels"
+        ]
+      }
+    },
+    "/api/live-channels/tune": {
+      "post": {
+        "description": "Warm a station for Projectionist `/live` at the live edge (no start-over).\n\nChannel leave\u2192rejoin must not shift ``startTime`` / force-align into flex.\nBackground start-over after surfing away was landing Continuity filler while\nthe OSD still showed the mid-episode guide slot.",
+        "operationId": "live_channels_tune_endpoint_api_live_channels_tune_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LiveChannelsTunePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Live Channels Tune Endpoint Api Live Channels Tune Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Live Channels Tune Endpoint",
+        "tags": [
+          "client",
+          "live-channels"
+        ]
+      }
+    },
+    "/api/live/weather": {
+      "get": {
+        "description": "Weather Channel payload from the shared per-location cache.\n\nSaved profile coordinates skip geocoding. Only coordinates and the place\nlabel reach the weather service \u2014 never who is watching.",
+        "operationId": "live_weather_channel_api_live_weather_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Live Weather Channel",
+        "tags": [
+          "client",
+          "theater-delight"
+        ]
+      }
+    },
+    "/api/live/weather/audio/{name}": {
+      "get": {
+        "description": "A rendered voiceover. Shared by every viewer of that script.",
+        "operationId": "live_weather_audio_api_live_weather_audio__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Live Weather Audio",
+        "tags": [
+          "client",
+          "theater-delight"
+        ]
+      }
+    },
+    "/api/live/weather/image/{image_id}": {
+      "get": {
+        "description": "A radar, satellite, or webcam image the server fetched (viewers never call map hosts).",
+        "operationId": "live_weather_image_api_live_weather_image__image_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "image_id",
+            "required": true,
+            "schema": {
+              "title": "Image Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Live Weather Image",
+        "tags": [
+          "client",
+          "theater-delight"
+        ]
+      }
+    },
+    "/api/title/{media_type}/{item_id}": {
+      "get": {
+        "operationId": "title_detail_api_title__media_type___item_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "media_type",
+            "required": true,
+            "schema": {
+              "title": "Media Type",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "id_type",
+            "required": false,
+            "schema": {
+              "default": "tmdb",
+              "title": "Id Type",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "enrich",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Enrich",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Title Detail Api Title  Media Type   Item Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Title Detail",
+        "tags": [
+          "client"
+        ]
+      }
+    }
+  }
+}

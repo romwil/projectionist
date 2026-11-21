@@ -815,11 +815,23 @@ class UsersAuthMixin:
     def _open_connection(self) -> sqlite3.Connection:
         # timeout is seconds; check_same_thread=False allows FastAPI worker threads
         # to share Database instances (each call still gets its own connection).
-        conn = sqlite3.connect(
-            self.path,
-            timeout=SQLITE_BUSY_TIMEOUT_MS / 1000.0,
-            check_same_thread=False,
-        )
+        # A missing path is a new install: this connect creates the file, and
+        # schema migration writes it immediately. An existing file is opened
+        # with mode=rw so a diagnostic-style reopen cannot create a sibling.
+        if self.path.is_file():
+            from projectionist.dbfiles import open_existing_database
+
+            conn = open_existing_database(
+                self.path,
+                timeout=SQLITE_BUSY_TIMEOUT_MS / 1000.0,
+                check_same_thread=False,
+            )
+        else:
+            conn = sqlite3.connect(
+                self.path,
+                timeout=SQLITE_BUSY_TIMEOUT_MS / 1000.0,
+                check_same_thread=False,
+            )
         conn.row_factory = sqlite3.Row
         conn.execute(f"PRAGMA busy_timeout = {int(SQLITE_BUSY_TIMEOUT_MS)}")
         # WAL lets readers proceed while a writer commits; persistent on the DB file.

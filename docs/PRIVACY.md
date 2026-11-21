@@ -149,6 +149,8 @@ When someone opens the **Weather Channel** from Live:
 | **Voice model** | A one-time download of the voice files from GitHub (`github.com`, Kokoro) or Hugging Face (`huggingface.co`, Piper). Both redirect to their file CDNs. | The owner turns on Weather narration |
 | **Music** | Nothing. It plays from the owner's music folder. | A music folder is set |
 
+The weather boards show the ultraviolet index and the air-quality reading from the Open-Meteo air-quality host in the table above. That host was already in use. Showing the numbers does not send the library, or a member’s name, anywhere new. Local headlines stay a news search for the place name. An owner-chosen set of feeds is a later option and is not fetched.
+
 Weather services get coordinates and place names, never who is watching. Your browser loads maps, webcam stills, and voice audio from Projectionist, not from those services. One cache serves everyone watching the same place. Nothing is fetched for a place nobody is watching, and nothing at all while the channel is off. If narration is off or the voice fails, the channel shows captions instead; it does not use your browser's voice.
 
 A place you save is stored on your profile and reused, so it isn't looked up again.
@@ -205,7 +207,7 @@ A backup holds **everyone's** chats, memory, and viewing, plus your encrypted ke
 
 ```bash
 # List on-box snapshots (Docker)
-docker exec projectionist python -m projectionist.backups list
+docker exec -u projectionist projectionist python -m projectionist.backups list
 
 # Restore: stop the app first, then run the restore in a one-off container
 docker stop projectionist

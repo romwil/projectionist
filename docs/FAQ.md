@@ -54,6 +54,8 @@ Everything lives under `/config` (`DATA_DIR`) on the owner's disk:
 |------|----------|
 | `settings.json` | Connections, feature flags, onboarding |
 | `projectionist.db` | Library index, chat, persona, checkpoints (opens legacy `curatorx.db` if the new file is absent) |
+
+**Empty file trap (accepted fix, not shipped).** If `projectionist.db` is present but empty, or is not a real SQLite database, today’s server still prefers it. That hides a good `curatorx.db` beside it and the server will not start. On QA this was a 0-byte, root-owned file. Removing only that empty file fixed startup. Do not delete the large database. The accepted fix skips an empty or invalid candidate, logs which file was skipped, and refuses to start when two real database files are both present. It is not in a release yet. Before the next production rollout, check the data directory for a stray empty database file.
 | `jobs_state.json` | Durable sync job history |
 
 Back up the whole directory before major changes:

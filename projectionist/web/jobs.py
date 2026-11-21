@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
 from projectionist.config_store import Settings, load_merged_settings
+from projectionist.dbfiles import resolve_database_path
 from projectionist.library.db import Database
 from projectionist.library.query import refresh_library_overview_cache
 from projectionist.library.sync import sync_library
@@ -128,23 +129,14 @@ def _job_from_persist_dict(raw: Dict[str, object]) -> Job:
 
 
 def _resolve_db_path(data_dir: Path) -> Path:
-    """Prefer projectionist.db; open curatorx.db if present; adopt mediacurator.db once.
+    """Open the one real database. See ``projectionist.dbfiles``.
 
     Existing CuratorX installs keep using ``curatorx.db`` without rename/copy.
-    Brand-new installs create ``projectionist.db``. The ancient ``mediacurator.db``
-    filename is still adopted once into the canonical Projectionist name.
+    Brand-new installs create ``projectionist.db`` later, when the schema is
+    written. An empty or invalid ``projectionist.db`` does not hide the legacy
+    file. Two real databases refuse to start.
     """
-    canonical = data_dir / "projectionist.db"
-    curatorx_legacy = data_dir / "curatorx.db"
-    ancient = data_dir / "mediacurator.db"
-    if canonical.exists():
-        return canonical
-    if curatorx_legacy.exists():
-        return curatorx_legacy
-    if ancient.exists():
-        ancient.rename(canonical)
-        return canonical
-    return canonical
+    return resolve_database_path(data_dir)
 
 
 class JobManager:

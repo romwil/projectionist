@@ -18,7 +18,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import sqlite3
 import tempfile
 import threading
 import time
@@ -102,7 +101,9 @@ def apply_erasures(
     """
     applied = 0
     rows = 0
-    conn = sqlite3.connect(str(db_path))
+    from projectionist.dbfiles import open_existing_database
+
+    conn = open_existing_database(db_path, timeout=30.0)
     try:
         conn.execute("PRAGMA foreign_keys=ON")
         conn.execute("PRAGMA secure_delete=ON")

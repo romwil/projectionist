@@ -36,6 +36,21 @@ The shipped path, for reference (`projectionist/library/playback.py`):
 
 This path stays as the **Plex fallback plan** (below) until the engine covers every case it does.
 
+### Known defect: Safari stops after one burst (QA 1.41.1)
+
+Seen on QA 1.41.1, on this Plex path, which the web keeps until ENG-007 is switched on. The master playlist advertised `BANDWIDTH=3410779` (the file’s average bitrate plus 25%). Safari fetched `00000.ts` through `00009.ts` and then stopped. Several segments still run at about 4.7–5.1 Mbps, above that advertisement. In HLS, `BANDWIDTH` is the peak segment bitrate and `AVERAGE-BANDWIDTH` is the average, so the advertised `BANDWIDTH` is still below the peak.
+
+Ten segments is about a normal Safari read-ahead. The stall is likely the *next* request failing, not Safari deciding to stop. **Investigate before changing the playlist:**
+
+1. Reproduce on QA in Safari and keep the network log through the moment playback stops.
+2. Find the first segment request after the burst. Record its status, timing, and body. Compare that moment with Chrome (hls.js), which plays through.
+3. Check whether the Plex transcode session is still alive then. Look at session timeouts or missing pings while Safari is idle, the proxy’s upstream timeout, and segments that are not transcoded yet.
+4. Play the same title in Safari on production 1.40.1, so the comparison says whether 1.41.1 is worse, the same, or better.
+
+**Then, after that cause is written down:** set `BANDWIDTH` from the measured peak segment bitrate plus a margin, keep `AVERAGE-BANDWIDTH` as the average, and fix whatever stops the stream after the burst. Add a regression test where one can be written. **Done when:** a feature film plays in Safari on QA for 15 minutes, with seeking, in a fresh session.
+
+Not started. This record does not change the playlist.
+
 ---
 
 ## The target engine

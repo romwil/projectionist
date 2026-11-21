@@ -240,7 +240,7 @@ docker pull romwil/projectionist:latest
 
 ```bash
 docker images romwil/projectionist --digests
-docker exec projectionist cat /app/.build-info
+docker exec -u projectionist projectionist cat /app/.build-info
 docker logs projectionist 2>&1 | grep -m1 'Projectionist startup'
 docker buildx imagetools inspect romwil/projectionist:latest | head -5
 ```
@@ -312,7 +312,7 @@ SQLite uses **WAL** + `busy_timeout=30s` + `synchronous=NORMAL` so the UI can re
 
 Copying files while the container is running can capture a torn SQLite database: WAL mode keeps recent commits in `*-wal` / `*-shm` sidecars, so a naive `cp` of only `*.db` may miss or corrupt data.
 
-**Automatic — daily on-box snapshot.** The **Household backup** scheduled task writes `/config/backups/projectionist-auto-<timestamp>.zip` once a day: `settings.json` plus a consistent SQLite copy taken with SQLite's online backup. It keeps the newest seven and uploads nothing. **Admin → Overview → Needs attention** warns when the task is off or the newest snapshot is more than three days old. The snapshot sits on the same disk as the data, so copy `/config/backups` somewhere else for disk-failure protection.
+**Automatic — daily on-box snapshot.** The **Household backup** scheduled task writes `/config/backups/projectionist-auto-<timestamp>.zip` once a day: `settings.json` plus a consistent SQLite copy taken with SQLite's online backup. It keeps the newest seven and uploads nothing. **Admin → Overview → Needs attention** warns when the task is off or the newest snapshot is more than three days old. The snapshot sits on the same disk as the data, so copy `/config/backups` somewhere else for disk-failure protection. Any `docker exec` that opens the database uses `-u projectionist` (or `-u 1000`). `docker exec` otherwise runs as root, and opening a missing database path creates a 0-byte file.
 
 ```bash
 # List snapshots, or take one now (runs as the app user)
@@ -335,10 +335,12 @@ docker start projectionist
 # From the host, with the config directory mounted (Unraid example):
 CONFIG=/mnt/user/appdata/projectionist/config
 mkdir -p "$CONFIG/backups"
-# Prefer projectionist.db; fall back to legacy curatorx.db.
+# Prefer a non-empty projectionist.db; otherwise the legacy curatorx.db.
+# sqlite3 creates a database when the path is missing, and a 0-byte file is
+# not the household database. mode=ro refuses to create one.
 DB="$CONFIG/projectionist.db"
-[ -f "$DB" ] || DB="$CONFIG/curatorx.db"
-sqlite3 "$DB" ".backup '$CONFIG/backups/projectionist-$(date +%Y%m%d).db'"
+if [ ! -s "$DB" ]; then DB="$CONFIG/curatorx.db"; fi
+sqlite3 "file:${DB}?mode=ro" ".backup '$CONFIG/backups/projectionist-$(date +%Y%m%d).db'"
 cp -a "$CONFIG/settings.json" "$CONFIG/backups/settings-$(date +%Y%m%d).json"
 # If you set PROJECTIONIST_SECRETS_KEY, back that env/secret up with the volume —
 # ciphertext in settings.json is useless without the key.
