@@ -40,7 +40,7 @@ curl -s -H "Authorization: Bearer YOUR_DEVICE_CREDENTIAL" \
 
 ## Capabilities
 
-`GET /api/features` is already public. *Proposed (NAT-001):* it gains a `capabilities` map and an `api_contract` number:
+`GET /api/features` is public. It carries `api_contract` and a `capabilities` map on every response, including the stripped payload a client reads before anyone signs in (NAT-001). The signed-in payload still includes `features.cached_art`.
 
 ```jsonc
 {
@@ -55,13 +55,20 @@ curl -s -H "Authorization: Bearer YOUR_DEVICE_CREDENTIAL" \
     "tracks": 0,             // TRK-003
     "native_sign_in": 0,     // NAT-002 ships → 1
     "push": 0,               // NAT-006
-    "approvals": 0           // NAT-006
+    "approvals": 0,          // NAT-006
+    "cached_art": 1          // same fact as features.cached_art
   }
 }
 ```
 
-- A capability number is that feature’s **contract version**: `0` absent, `1` first contract, `2` a breaking revision. Additive fields do not bump it.
+```bash
+curl -s http://your-host:8788/api/features | python3 -m json.tool
+```
+
+- A capability number is that feature’s **contract version**: `0` absent, `1` first contract, `2` a breaking revision. Additive fields do not bump it. `api_contract` is `3`, the first published number. Clients branch on these numbers, not on the server version string.
+- `capabilities.cached_art` is `1` while `features.cached_art` is true and `0` when that flag is off. The boolean stays on the signed-in payload only, where EXP-006 put it. The number is on the public payload too, so a client can know before sign-in.
 - Clients turn features on by capability. A client facing an older server shows the honest line (*“This Projectionist doesn’t support handheld captions yet.”*) rather than failing.
+- **Honest limit.** A `0` means this server knows the name and does not offer that contract yet. It is not a hint that the feature is about to appear.
 
 ---
 
@@ -92,7 +99,7 @@ Native clients ship through app stores on their own clocks, so the API they depe
 
 | ID | Item | Depends on |
 |----|------|------------|
-| NAT-001 | Capability manifest + `api_contract` on `GET /api/features` | — |
+| NAT-001 | Capability manifest + `api_contract` on `GET /api/features` (done: contract 3, map above) | — |
 | NAT-002 | Handheld device credentials for every web sign-in path (Plex PIN, local password, OIDC, invite redeem, request access). A native client sends *proposed* `client: {kind, label}` and receives a device credential once instead of `curatorx_session`. Plex PIN nonce is client-held, not a cookie. OIDC uses an allowlisted custom-scheme redirect, PKCE, and a short-lived single-use code exchanged for the credential (the credential never appears in a URL). Invite `validate` stays public and returns only the inviter display name, role, and expiry. The web Join page offers an open-in-app link carrying the base URL and invite token. `native_sign_in: 1` and a public list of enabled methods ship with it. Security-sensitive: design → plan → build | pairing (local work), NAT-001 |
 | NAT-003 | OpenAPI snapshot + client-facing route tags + CI drift check | — |
 | NAT-004 | Response fixtures for client-facing routes | NAT-003 |

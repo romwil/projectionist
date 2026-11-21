@@ -56,7 +56,7 @@ Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` ·
 | TRK-008 | “Your edition is ready” notifications | proposed | [TRACKS](../TRACKS.md#roadmap-items) |
 | TRK-009 | Series studies | proposed | [TRACKS](../TRACKS.md#roadmap-items) |
 | TRK-010 | Web overlay renderer | proposed | [TRACKS](../TRACKS.md#roadmap-items) |
-| NAT-001 | Capability manifest + `api_contract` | proposed | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
+| NAT-001 | Capability manifest + `api_contract` | done | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
 | NAT-002 | Handheld device credentials for every web sign-in path | accepted | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
 | NAT-003 | OpenAPI snapshot + client route tags + CI drift check | proposed | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
 | NAT-004 | Response fixtures | proposed | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
@@ -98,6 +98,7 @@ SES-001 and NAT-002 describe the same work from two sides; build them as one cha
 | 2026-11-20 | **Native handhelds get every web sign-in path** (Plex, local password, OIDC, invite redeem, request access), ending in a device credential. The pair-code stays the secondary path. NAT-002 and SES-001 are accepted |
 | 2026-11-20 | **Push is a priority and includes security.** Payloads stay content-free. NAT-006 is accepted: device sign-in approval, Youth join on the same object, and a new-device notice |
 | 2026-11-20 | **The web takes engine sessions as ENG-007, immediately after ENG-003**, behind *Play through Projectionist* (off by default). Apple clients still adopt ENG-003 first. Captions fall back to the Plex path until ENG-004 |
+| 2026-11-20 | **NAT-001** publishes `api_contract` 3 and the capability map on every `GET /api/features`. Shipped keys are `device_pairing` 1, `throw` 1, and `cached_art` 1 (the same fact as `features.cached_art`). Accepted keys stay at 0: `native_sign_in`, `push`, `approvals`, plus the engine, session, timeline, and track names |
 | 2026-11-19 | **Lane A remux spike:** H.264+AC-3 fMP4 HLS (`-c copy`) + household WebVTT works on Safari/WebKit and tvOS AVPlayer (seek without restart; captions selectable). Desktop Chrome/hls.js rejects AC-3 — planner must audio-transcode for those profiles. Findings: [engine-spike-findings](../superpowers/specs/2026-11-19-engine-spike-findings.md). Spike code stays on `spike/engine-remux` (not merged) |
 
 ## Superseded review rows (carry-forward)
