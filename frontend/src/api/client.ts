@@ -1097,6 +1097,42 @@ export async function startLibraryPlayback(ratingKey: string, { startOver = fals
   });
 }
 
+/** Engine session. The web uses this only when Play through Projectionist is on. */
+export async function openEnginePlayback(ratingKey: string, { profile = null, startOver = false }: JsonObject = {}) {
+  return api("/playback/sessions", {
+    method: "POST",
+    body: JSON.stringify({
+      rating_key: String(ratingKey || ""),
+      profile: profile || "safari",
+      start_over: Boolean(startOver),
+    }),
+  });
+}
+
+export async function progressEnginePlayback(sessionId: string, payload: JsonObject) {
+  return api(`/playback/sessions/${encodeURIComponent(sessionId)}/progress`, {
+    method: "POST",
+    body: JSON.stringify({
+      time_ms: Math.max(0, Math.floor(Number(payload?.time_ms) || 0)),
+      duration_ms: Math.max(0, Math.floor(Number(payload?.duration_ms) || 0)),
+    }),
+  });
+}
+
+export async function stopEnginePlayback(sessionId: string) {
+  return api(`/playback/sessions/${encodeURIComponent(sessionId)}/stop`, {
+    method: "POST",
+    body: "{}",
+  });
+}
+
+export async function putPlayThroughProjectionist(enabled: boolean) {
+  return api("/playback/engine-setting", {
+    method: "PUT",
+    body: JSON.stringify({ play_through_projectionist: Boolean(enabled) }),
+  });
+}
+
 export async function seekLibraryPlayback(sessionId: string, offsetMs: number) {
   return api(`/library/playback/${encodeURIComponent(sessionId)}/seek`, {
     method: "POST",

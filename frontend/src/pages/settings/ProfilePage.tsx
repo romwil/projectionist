@@ -7,6 +7,7 @@ import {
   linkPlexAccount,
   patchAuthMe,
   pollPlexPinLogin,
+  putPlayThroughProjectionist,
   signOutEverywhere,
   startPlexPinLogin,
   uploadAuthAvatar,
@@ -46,6 +47,7 @@ export default function ProfilePage() {
   const [pauseWhenBackgrounded, setPauseWhenBackgrounded] = useState(() =>
     loadPauseWhenBackgrounded(),
   );
+  const [playThrough, setPlayThrough] = useState(false);
   const [status, setStatus] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -70,6 +72,16 @@ export default function ProfilePage() {
   const [defaultPage, setDefaultPage] = useState("explore");
   const [llmConfigured, setLlmConfigured] = useState(true);
   const [engagement, setEngagement] = useState<any>({ loading: true, data: null, error: "" });
+
+  useEffect(() => {
+    getFeatures()
+      .then((features) => {
+        setPlayThrough(Boolean(features?.features?.play_through_projectionist));
+      })
+      .catch(() => {
+        setPlayThrough(false);
+      });
+  }, []);
 
   useEffect(() => {
     getAuthMe()
@@ -513,6 +525,34 @@ export default function ProfilePage() {
           <span className="field-help">
             Stored in this browser only (`projectionist.pause_when_backgrounded`). Off by default.
           </span>
+          {user?.role === "owner" ? (
+            <label className="settings-toggle-row">
+              <input
+                type="checkbox"
+                checked={playThrough}
+                data-testid="play-through-projectionist"
+                onChange={async (event) => {
+                  const next = event.target.checked;
+                  setPlayThrough(next);
+                  try {
+                    await putPlayThroughProjectionist(next);
+                  } catch (error) {
+                    setPlayThrough(!next);
+                    setStatus({
+                      type: "error",
+                      message: (error as any)?.message || "Couldn’t save playback.",
+                    });
+                  }
+                }}
+              />
+              <span>Play through Projectionist (beta)</span>
+            </label>
+          ) : null}
+          {user?.role === "owner" ? (
+            <span className="field-help">
+              When this is on, the next film or episode plays through Projectionist when the file can be remuxed. Captions stay on the usual path for now. Turning it off applies the next time you press play.
+            </span>
+          ) : null}
         </SettingsPanel>
 
         <div className="settings-actions">
