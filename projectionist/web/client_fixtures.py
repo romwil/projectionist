@@ -33,7 +33,7 @@ PLAYLIST = (
     "#EXT-X-ENDLIST\n"
 )
 SESSION_ID = "00000000-0000-4000-8000-000000000001"
-PLEX = "http://plex.household:32400"
+PLEX = "http://127.0.0.1:32400"
 TOKEN = "server-token"
 FORBIDDEN = (TOKEN, "LEAKED", "/Users/", "/mnt/")
 
@@ -145,13 +145,21 @@ def collect_client_fixtures() -> dict[str, dict[str, Any]]:
     _CODE_LETTERS = iter("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
     tmp = tempfile.TemporaryDirectory()
     data_dir = Path(tmp.name)
-    previous = {key: os.environ.get(key) for key in (
-        "DATA_DIR",
-        "PROJECTIONIST_SKIP_DOTENV",
-        "LLM_PROVIDER",
-        "PROJECTIONIST_SESSION_SECRET",
-        "PROJECTIONIST_SETUP_STATE",
-    )}
+    saved_env = dict(os.environ)
+    keep = {
+        "PATH",
+        "HOME",
+        "USER",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "TMPDIR",
+        "PYTHONPATH",
+        "VIRTUAL_ENV",
+        "PYTHONDONTWRITEBYTECODE",
+    }
+    os.environ.clear()
+    os.environ.update({key: value for key, value in saved_env.items() if key in keep})
     os.environ["DATA_DIR"] = str(data_dir)
     os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
     os.environ["LLM_PROVIDER"] = "ollama"
@@ -169,11 +177,13 @@ def collect_client_fixtures() -> dict[str, dict[str, Any]]:
             ),
             encoding="utf-8",
         )
+        from projectionist.circuit_breaker import reset_host_circuits
+        from projectionist.library.playback import reset_playback_sessions
         from projectionist.web.auth import clear_pin_bindings
         from projectionist.web.rate_limit import clear_rate_limits
         from projectionist.web.session_tokens import clear_session_secret_cache
-        from projectionist.library.playback import reset_playback_sessions
 
+        reset_host_circuits()
         clear_session_secret_cache()
         clear_rate_limits()
         clear_pin_bindings()
@@ -404,11 +414,8 @@ def collect_client_fixtures() -> dict[str, dict[str, Any]]:
         return recorded
     finally:
         tmp.cleanup()
-        for key, value in previous.items():
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
+        os.environ.clear()
+        os.environ.update(saved_env)
 
 
 def render_fixture_files(recorded: dict[str, dict[str, Any]]) -> dict[str, str]:
@@ -446,10 +453,15 @@ def main(argv: list[str] | None = None) -> int:
     if check:
         current = read_fixture_files()
         if current != rendered:
+            changed = sorted(
+                name for name in set(current) & set(rendered) if current[name] != rendered[name]
+            )
             sys.stderr.write(
                 "docs/api/fixtures does not match the client routes.\n"
                 "Regenerate with scripts/export-fixtures.sh\n"
             )
+            if changed:
+                sys.stderr.write("Changed: " + ", ".join(changed) + "\n")
             return 1
         return 0
     FIXTURE_DIR.mkdir(parents=True, exist_ok=True)
