@@ -1,0 +1,61 @@
+{
+  "body": {
+    "has_more": false,
+    "items": [
+      {
+        "added_at": null,
+        "backdrop_url": "/api/library/art/movie/949?id_type=tmdb&kind=backdrop",
+        "cast": [],
+        "collection_name": "",
+        "completion_confidence": {
+          "certain": 0,
+          "likely": 0,
+          "plex_event_only": 0
+        },
+        "completion_timeline": [],
+        "content_rating": "R",
+        "countries": [],
+        "directors": [],
+        "duration_ms": 10200000,
+        "file_size": 0,
+        "genres": [],
+        "id": 1,
+        "in_radarr": false,
+        "in_sonarr": false,
+        "keywords": [],
+        "last_tracked_completion_at": null,
+        "last_viewed_at": null,
+        "logical_viewings": 0,
+        "media_type": "movie",
+        "original_language": "",
+        "plex_played_event_count": 0,
+        "poster_url": "/api/library/art/movie/949?id_type=tmdb&kind=poster",
+        "rating_key": "movie-1",
+        "runtime_minutes": null,
+        "sittings_observed": 0,
+        "title": "Heat",
+        "tmdb_id": 949,
+        "total_episode_count": 0,
+        "tracked_completions": 0,
+        "tracker_coverage": "none",
+        "tvdb_id": null,
+        "unwatched_episode_count": 0,
+        "view_count": 0,
+        "view_offset_ms": 0,
+        "vote_average": null,
+        "year": 1995
+      }
+    ],
+    "offset": 0,
+    "plot_match_mode": "hybrid",
+    "returned": 1,
+    "total_matched": 1
+  },
+  "content_type": "application/json",
+  "method": "GET",
+  "path": "/api/library/query",
+  "query": {
+    "query": "Heat"
+  },
+  "status": 200
+}

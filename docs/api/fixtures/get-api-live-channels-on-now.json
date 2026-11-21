@@ -1,0 +1,20 @@
+{
+  "body": {
+    "cached": false,
+    "channels": [],
+    "count": 0,
+    "enabled": false,
+    "error": "",
+    "generated_at": 1700000000,
+    "plex_hint": "Watch here or in Plex Live TV \u2014 same stations, both first-class.",
+    "ready": false,
+    "reason": "live_channels_disabled",
+    "stale": false,
+    "warming": false,
+    "watch_hint": "Watch here or in Plex Live TV \u2014 same stations, both first-class."
+  },
+  "content_type": "application/json",
+  "method": "GET",
+  "path": "/api/live-channels/on-now",
+  "status": 200
+}

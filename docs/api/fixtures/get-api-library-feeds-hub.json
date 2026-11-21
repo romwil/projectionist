@@ -1,0 +1,119 @@
+{
+  "body": {
+    "cached": false,
+    "feed": "explore-hub",
+    "generated_at": 1700000000,
+    "health": {},
+    "overview": {},
+    "rail_limit": 50,
+    "rails": {
+      "afterglow": {
+        "days": 14,
+        "dialogue_band": null,
+        "feed": "afterglow",
+        "items": [],
+        "limit": 50,
+        "note": "No recent finishes waiting for a take \u2014 watch something, then come back while it's still warm.",
+        "total": 0
+      },
+      "continue_watching": {
+        "feed": "continue-watching",
+        "items": [],
+        "note": null,
+        "pending": true,
+        "total": 0
+      },
+      "director_spotlight": {
+        "feed": "director-spotlight",
+        "items": [],
+        "note": null,
+        "pending": true,
+        "total": 0
+      },
+      "for_you": {
+        "empty": true,
+        "feed": "for-you",
+        "items": [],
+        "limit": 50,
+        "mode": "watched_bridge",
+        "note": "No named link to something you finished yet. Finish a title, or give the household a bit more time to learn links.",
+        "total": 0
+      },
+      "genre_spotlight": {
+        "feed": "genre-spotlight",
+        "items": [],
+        "note": null,
+        "pending": true,
+        "total": 0
+      },
+      "on_this_day": {
+        "feed": "on-this-day",
+        "items": [],
+        "note": null,
+        "pending": true,
+        "total": 0
+      },
+      "recent_releases": {
+        "days": 90,
+        "feed": "recent-releases",
+        "has_more": false,
+        "items": [],
+        "limit": 50,
+        "media_type": null,
+        "note": "No release_date/first_air_date enriched yet \u2014 run library sync or metadata_enrichment.",
+        "offset": 0,
+        "total": 0
+      },
+      "recently_added": {
+        "days": 30,
+        "feed": "recently-added",
+        "has_more": false,
+        "items": [],
+        "limit": 50,
+        "media_type": null,
+        "note": "No titles added in this window \u2014 or library sync has not recorded added_at yet.",
+        "offset": 0,
+        "total": 0
+      },
+      "recently_added_episodes": {
+        "days": 30,
+        "feed": "recently-added-episodes",
+        "has_more": false,
+        "items": [],
+        "limit": 50,
+        "note": "No episodes added in this window \u2014 or episode sync has not recorded arrivals yet.",
+        "offset": 0,
+        "total": 0
+      },
+      "revisit_these": {
+        "feed": "revisit-these",
+        "idle_days": 60,
+        "items": [],
+        "limit": 20,
+        "note": "No partially watched shows idle for over two months \u2014 or episode progress has not been synced yet.",
+        "total": 0
+      },
+      "seasonal_spotlight": {
+        "feed": "seasonal-spotlight",
+        "items": [],
+        "note": null,
+        "pending": true,
+        "total": 0
+      },
+      "unfinished": {
+        "feed": "unfinished",
+        "idle_days": 60,
+        "items": [],
+        "limit": 50,
+        "note": "Nothing leftover to finish right now \u2014 leftover runtime lives here, not titles idle for two months.",
+        "total": 0
+      }
+    },
+    "stale": true,
+    "warming": true
+  },
+  "content_type": "application/json",
+  "method": "GET",
+  "path": "/api/library/feeds/hub",
+  "status": 200
+}

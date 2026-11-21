@@ -1,0 +1,9 @@
+{
+  "body_base64": "AAFzZWdtZW50",
+  "byte_length": 9,
+  "content_type": "video/mp2t",
+  "example_path": "/api/library/playback/00000000-0000-4000-8000-000000000001/segment0.ts",
+  "method": "GET",
+  "path": "/api/library/playback/{session_id}/{path:path}",
+  "status": 200
+}

@@ -1,0 +1,10 @@
+{
+  "body": {
+    "detail": "That voiceover isn\u2019t rendered."
+  },
+  "content_type": "application/json",
+  "example_path": "/api/live/weather/audio/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.opus",
+  "method": "GET",
+  "path": "/api/live/weather/audio/{name}",
+  "status": 404
+}

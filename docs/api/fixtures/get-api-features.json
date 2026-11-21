@@ -1,0 +1,99 @@
+{
+  "body": {
+    "api_contract": 3,
+    "arr": {
+      "radarr_configured": false,
+      "sonarr_configured": false
+    },
+    "auth": {
+      "local_login_enabled": false,
+      "mode": "disabled",
+      "oidc_enabled": false,
+      "oidc_provider_name": "SSO",
+      "plex_login_enabled": true
+    },
+    "auth_methods": [
+      "plex"
+    ],
+    "authenticated": true,
+    "capabilities": {
+      "approvals": 0,
+      "cached_art": 1,
+      "caption_tracks": 0,
+      "device_pairing": 1,
+      "native_sign_in": 0,
+      "playback_engine": 0,
+      "push": 0,
+      "shared_sessions": 0,
+      "throw": 1,
+      "timeline": 0,
+      "tracks": 0
+    },
+    "features": {
+      "access_requests_enabled": true,
+      "cached_art": true,
+      "household_profile": "private",
+      "invite_only": true,
+      "live_channels_enabled": false,
+      "live_channels_ready": false,
+      "llm_configured": true,
+      "multi_user_enabled": false,
+      "open_auto_provision": false,
+      "plex_collections_enabled": false,
+      "seerr_enabled": false,
+      "trust_proxy_headers": false
+    },
+    "household_domain": "",
+    "notifications": {
+      "channels": [
+        {
+          "available": true,
+          "help": "Always available inside Projectionist.",
+          "id": "inbox",
+          "label": "In-app inbox",
+          "requires_owner": false
+        },
+        {
+          "available": false,
+          "help": "Requires the owner to configure Admin \u2192 Mail (SMTP or Resend).",
+          "id": "email",
+          "label": "Email alerts",
+          "requires_owner": true
+        },
+        {
+          "available": true,
+          "help": "Members receive the household destinations the owner sets up under Admin \u2192 Mail. Only the owner can add Apprise URLs.",
+          "id": "apprise",
+          "label": "Apprise (Discord, Telegram, push, \u2026)",
+          "owner_configured": false,
+          "requires_owner": false
+        }
+      ],
+      "mail_configured": false
+    },
+    "request_path": "arr",
+    "seerr": {
+      "link_on_login": true,
+      "require_linked_user_for_requests": false
+    },
+    "setup_state": "active",
+    "user": {
+      "avatar_url": null,
+      "default_page": "explore",
+      "display_name": "Owner",
+      "id": "bootstrap-owner",
+      "is_youth": false,
+      "preferred_name": null,
+      "role": "owner",
+      "seerr_user_id": null
+    },
+    "youth": {
+      "gate_active": false,
+      "max_content_rating": "PG-13"
+    }
+  },
+  "content_type": "application/json",
+  "method": "GET",
+  "path": "/api/features",
+  "status": 200
+}

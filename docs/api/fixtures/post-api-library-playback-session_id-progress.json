@@ -1,0 +1,11 @@
+{
+  "body": {
+    "ok": true,
+    "throttled": false
+  },
+  "content_type": "application/json",
+  "example_path": "/api/library/playback/00000000-0000-4000-8000-000000000001/progress",
+  "method": "POST",
+  "path": "/api/library/playback/{session_id}/progress",
+  "status": 200
+}
