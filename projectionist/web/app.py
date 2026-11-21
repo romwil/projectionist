@@ -4072,3 +4072,8 @@ def dismiss_review_prompt(
 
 
 register_watch_tracker_routes(app, db_factory=_db)
+
+# NAT-003: tag client routes only after every router is mounted.
+from projectionist.web.client_contract import tag_client_routes
+
+tag_client_routes(app)
