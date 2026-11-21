@@ -2,9 +2,27 @@
 
 ## [Unreleased]
 
+## [1.41.2] — 2026-11-21
+
+An empty database file no longer hides the real library, and Safari playback advertises the measured peak so the opening burst does not stop the stream.
+
+### Highlights
+- **The real library stays.** An empty database file no longer hides the one that holds your household.
+- **Safari keeps the opening burst.** Playback advertises the measured peak, so the first rush of video does not stop the stream.
+
 ### Added
 - NAT-001: `GET /api/features` includes `api_contract` and a `capabilities` map on the public and signed-in payloads. Signed-in responses still include `features.cached_art`, and `capabilities.cached_art` follows that flag.
 - NAT-003: client-facing routes are tagged `client`. `scripts/export-openapi.sh` writes `docs/api/openapi.json`, and CI fails when that snapshot is stale. `/openapi.json` stays off in production.
+
+### Fixed
+- Startup skips an empty or invalid database file and opens the real one. Two real databases refuse to start, and nothing is deleted. The entrypoint chowns stray files under `/config` that are not uid 1000. Diagnostic opens use `mode=rw`, so a missing file is not created. Runbooks use `docker exec -u projectionist`.
+- Master playlist `BANDWIDTH` is the measured peak segment bitrate plus 10 percent. `AVERAGE-BANDWIDTH` is the container average. Plex start parameters are unchanged.
+
+### Verification
+- `./scripts/patch-release.sh 1.41.2` lockstep + `frontend/public/release-notes.json`.
+- Page speed (`npm run test:release-perf`) before Hub publish.
+- CI on the release PR (required checks).
+- QA `:8792` is a Hub pull of `romwil/projectionist:1.41.2` (Path B). Prod stays on 1.40.1.
 
 ## [1.41.1] — 2026-11-20
 

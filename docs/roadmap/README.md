@@ -84,12 +84,12 @@ Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` ·
 
 ## Known defects (not roadmap items)
 
-Bugs stay off the item list. These two are accepted work, highest priority before the next production rollout, and they are not started.
+Bugs stay off the item list. Both of these shipped in 1.41.2.
 
 | Defect | Status | Owning doc |
 |--------|--------|------------|
-| An empty or invalid `projectionist.db` hides the real database and can stop startup. Skip that file, log the skip, and refuse to start when two real databases are present. Do not delete or overwrite anything automatically | Accepted fix, not started. The fix also adds a pre-rollout check to `docs/RELEASE.md` | [DATA_MODEL](../DATA_MODEL.md#which-database-file-opens) |
-| Safari on the Plex path stops after one burst (QA 1.41.1). Investigate the next request before changing the playlist. Then set `BANDWIDTH` from the measured peak, keep `AVERAGE-BANDWIDTH` as the average, and fix whatever stops the stream | Accepted, investigate first. Not started | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#known-defect-safari-stops-after-one-burst-qa-1411) |
+| An empty or invalid `projectionist.db` hides the real database and can stop startup. Skip that file, log the skip, and refuse to start when two real databases are present. Do not delete or overwrite anything automatically | Shipped in 1.41.2. The pre-rollout check is in `docs/RELEASE.md` | [DATA_MODEL](../DATA_MODEL.md#which-database-file-opens) |
+| Safari on the Plex path stops after one burst (QA 1.41.1). `BANDWIDTH` is the measured peak plus 10 percent. `AVERAGE-BANDWIDTH` is the container average | Shipped in 1.41.2. A 15-minute Safari watch is still the proof the stall is gone | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#known-defect-safari-stops-after-one-burst-qa-1411) |
 
 SES-001 and NAT-002 describe the same work from two sides; build them as one change.
 
