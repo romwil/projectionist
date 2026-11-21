@@ -19,7 +19,11 @@ from projectionist.engine.playability import (
     build_playability_report,
     hardware_sentence,
     library_titles,
+    merge_playability_reports,
     profiles_for_report,
+    report_path,
+    run_library_report,
+    save_playability_report,
 )
 from projectionist.engine.probe import MediaStream, ProbeResult
 from projectionist.engine.profiles import SAFARI, profile_from_mapping
@@ -212,6 +216,178 @@ class PlayabilityReportTests(unittest.TestCase):
         self.assertIn("safari", ids)
         web = next(profile for profile in profiles if profile.id == "web")
         self.assertEqual(web.video[0].max_level, "4.0")
+
+
+class PlayabilityInterruptTests(unittest.TestCase):
+    def test_interrupted_walk_does_not_replace_the_saved_snapshot(self) -> None:
+        previous = {
+            "generated_at": "2026-11-21T00:00:00+00:00",
+            "complete": True,
+            "message": "Ready.",
+            "title_count": 2,
+            "profiles": [
+                {
+                    "profile": "safari",
+                    "title_count": 2,
+                    "titles": [{"rating_key": "alpha"}, {"rating_key": "beta"}],
+                },
+                {
+                    "profile": "chrome",
+                    "title_count": 2,
+                    "titles": [{"rating_key": "alpha"}, {"rating_key": "beta"}],
+                },
+                {
+                    "profile": "web",
+                    "title_count": 2,
+                    "titles": [{"rating_key": "alpha"}, {"rating_key": "beta"}],
+                },
+            ],
+        }
+        checks = {"n": 0}
+
+        def should_stop() -> bool:
+            checks["n"] += 1
+            return checks["n"] > 1
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db = Database(root / "projectionist.db")
+            db.upsert_library_item(
+                {"rating_key": "alpha", "media_type": "movie", "title": "Alpha", "original_language": "en"}
+            )
+            db.upsert_library_item(
+                {"rating_key": "beta", "media_type": "movie", "title": "Beta", "original_language": "en"}
+            )
+            save_playability_report(root, previous)
+            path = report_path(root)
+            before = path.read_text(encoding="utf-8")
+            result = run_library_report(
+                db,
+                Settings(),
+                root,
+                locate=lambda key: _asset(key, "mp4", "h264", "aac"),
+                should_stop=should_stop,
+            )
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(path.read_text(encoding="utf-8"), before)
+        counts = {row["profile"]: row["title_count"] for row in saved["profiles"]}
+        self.assertEqual(saved["complete"], True)
+        self.assertEqual(saved["title_count"], 2)
+        self.assertEqual(counts, {"safari": 2, "chrome": 2, "web": 2})
+        self.assertEqual(result["title_count"], 2)
+        self.assertEqual(
+            {row["profile"]: row["title_count"] for row in result["profiles"]},
+            counts,
+        )
+
+    def test_merge_ignores_a_truncated_walk(self) -> None:
+        previous = {
+            "generated_at": "2026-11-21T00:00:00+00:00",
+            "complete": True,
+            "message": "Ready.",
+            "title_count": 2,
+            "profiles": [
+                {"profile": "safari", "title_count": 2, "titles": [{"rating_key": "alpha"}, {"rating_key": "beta"}]},
+                {"profile": "web", "title_count": 2, "titles": [{"rating_key": "alpha"}, {"rating_key": "beta"}]},
+            ],
+        }
+        fresh = {
+            "generated_at": "2026-11-21T01:00:00+00:00",
+            "complete": False,
+            "message": "The walk stopped early. Refresh to finish the library.",
+            "title_count": 1,
+            "profiles": [
+                {"profile": "safari", "title_count": 1, "titles": [{"rating_key": "alpha"}]},
+                {"profile": "chrome", "title_count": 1, "titles": [{"rating_key": "alpha"}]},
+            ],
+        }
+        merged = merge_playability_reports(previous, fresh)
+        counts = {row["profile"]: row["title_count"] for row in merged["profiles"]}
+        self.assertEqual(merged["complete"], True)
+        self.assertEqual(merged["title_count"], 2)
+        self.assertEqual(counts, {"safari": 2, "web": 2})
+
+    def test_interrupted_walk_does_not_create_a_partial_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db = Database(root / "projectionist.db")
+            db.upsert_library_item(
+                {"rating_key": "alpha", "media_type": "movie", "title": "Alpha", "original_language": "en"}
+            )
+            run_library_report(
+                db,
+                Settings(),
+                root,
+                locate=lambda key: _asset(key, "mp4", "h264", "aac"),
+                should_stop=lambda: True,
+            )
+            self.assertFalse(report_path(root).exists())
+
+    def test_finished_walk_refreshes_named_profiles_and_keeps_the_browser_row(self) -> None:
+        previous = {
+            "generated_at": "2026-11-21T00:00:00+00:00",
+            "complete": True,
+            "message": "Ready.",
+            "title_count": 1,
+            "profiles": [
+                {"profile": "web", "title_count": 2, "titles": [{"rating_key": "alpha"}, {"rating_key": "beta"}]},
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db = Database(root / "projectionist.db")
+            db.upsert_library_item(
+                {"rating_key": "alpha", "media_type": "movie", "title": "Alpha", "original_language": "en"}
+            )
+            db.upsert_library_item(
+                {"rating_key": "beta", "media_type": "movie", "title": "Beta", "original_language": "en"}
+            )
+            save_playability_report(root, previous)
+            result = run_library_report(
+                db,
+                Settings(),
+                root,
+                locate=lambda key: _asset(key, "mp4", "h264", "aac"),
+                profiles=profiles_for_report("safari"),
+                should_stop=lambda: False,
+            )
+        counts = {row["profile"]: row["title_count"] for row in result["profiles"]}
+        self.assertEqual(result["complete"], True)
+        self.assertEqual(result["title_count"], 2)
+        self.assertEqual(counts["safari"], 2)
+        self.assertEqual(counts["web"], 2)
+        self.assertEqual(len(result["profiles"][0]["titles"]), 2)
+
+    def test_two_savers_do_not_share_one_temp_file(self) -> None:
+        import threading
+
+        from projectionist.engine.playability import empty_playability_report, load_playability_report
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            errors: list[BaseException] = []
+
+            def write(marker: str) -> None:
+                try:
+                    report = empty_playability_report(message=marker)
+                    report["complete"] = True
+                    report["profiles"] = [{"profile": "safari", "title_count": 1, "titles": []}]
+                    for _ in range(40):
+                        save_playability_report(root, report)
+                except BaseException as exc:  # noqa: BLE001 — the assertion is the failure
+                    errors.append(exc)
+
+            threads = [threading.Thread(target=write, args=(label,)) for label in ("one", "two")]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+            saved = load_playability_report(root)
+            leftovers = list((root / "engine").glob("*.tmp"))
+        self.assertEqual(errors, [])
+        self.assertIn(saved["message"], {"one", "two"})
+        self.assertEqual(saved["profiles"][0]["profile"], "safari")
+        self.assertEqual(leftovers, [])
 
 
 class PlayabilityRouteTests(unittest.TestCase):

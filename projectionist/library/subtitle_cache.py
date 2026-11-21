@@ -59,6 +59,15 @@ _ISO2 = {
     "rus": "ru", "nld": "nl", "dut": "nl", "swe": "sv", "nor": "no", "dan": "da",
     "fin": "fi", "pol": "pl", "tur": "tr", "ara": "ar", "heb": "he", "hin": "hi",
     "ell": "el", "gre": "el", "ces": "cs", "cze": "cs", "hun": "hu", "tha": "th",
+    # ffprobe writes 639-2. OpenSubtitles stores 639-1. Same language, one row.
+    "ukr": "uk", "hrv": "hr", "vie": "vi", "ind": "id", "in": "id",
+    "ron": "ro", "rum": "ro", "bul": "bg", "cat": "ca",
+    "slk": "sk", "slo": "sk", "slv": "sl", "srp": "sr", "scc": "sr",
+    "fas": "fa", "per": "fa", "msa": "ms", "may": "ms",
+    "sqi": "sq", "alb": "sq", "isl": "is", "ice": "is", "est": "et",
+    "lav": "lv", "lit": "lt", "afr": "af", "eus": "eu", "baq": "eu",
+    "kat": "ka", "geo": "ka", "hye": "hy", "arm": "hy", "bos": "bs",
+    "mkd": "mk", "mac": "mk", "fil": "tl", "tgl": "tl",
 }
 
 
@@ -192,6 +201,12 @@ _LANGUAGE_NAMES = {
     "nl": "Dutch", "sv": "Swedish", "no": "Norwegian", "da": "Danish", "fi": "Finnish",
     "pl": "Polish", "tr": "Turkish", "ar": "Arabic", "he": "Hebrew", "hi": "Hindi",
     "el": "Greek", "cs": "Czech", "hu": "Hungarian", "th": "Thai",
+    "uk": "Ukrainian", "hr": "Croatian", "vi": "Vietnamese", "id": "Indonesian",
+    "ro": "Romanian", "bg": "Bulgarian", "ca": "Catalan", "sk": "Slovak",
+    "sl": "Slovenian", "sr": "Serbian", "fa": "Persian", "ms": "Malay",
+    "sq": "Albanian", "is": "Icelandic", "et": "Estonian", "lv": "Latvian",
+    "lt": "Lithuanian", "af": "Afrikaans", "eu": "Basque", "ka": "Georgian",
+    "hy": "Armenian", "bs": "Bosnian", "mk": "Macedonian", "tl": "Filipino",
 }
 
 

@@ -21,7 +21,8 @@ const VIDEO_PROBES: VideoProbe[] = [
   { codec: "hevc", max_level: "3.1", bit_depth: 10, type: 'video/mp4; codecs="hvc1.2.4.L93.B0"' },
   { codec: "hevc", max_level: "5.1", bit_depth: 8, type: 'video/mp4; codecs="hvc1.1.6.L153.B0"' },
   { codec: "hevc", max_level: "5.1", bit_depth: 8, type: 'video/mp4; codecs="hev1.1.6.L153.B0"' },
-  { codec: "hevc", max_level: "5.1", bit_depth: 8, type: 'video/mp4; codecs="hvc1"' },
+  // A bare hvc1 / hev1 yes does not name a level or a bit depth. Recording it
+  // as Main 5.1 would remux a file this check never proved.
   { codec: "hevc", max_level: "4.0", bit_depth: 8, type: 'video/mp4; codecs="hvc1.1.6.L120.90"' },
   { codec: "hevc", max_level: "3.1", bit_depth: 8, type: 'video/mp4; codecs="hvc1.1.6.L93.B0"' },
   { codec: "hevc", max_level: "3.1", bit_depth: 8, type: 'video/mp4; codecs="hev1.1.6.L93.B0"' },
@@ -45,22 +46,28 @@ function checkedTypes() {
   return [...new Set([...VIDEO_PROBES.map((probe) => probe.type), AC3, EAC3])];
 }
 
-/** Profile from one runtime answer per codec. Never a user-agent guess. */
+/** One row per codec and bit depth. A 10-bit yes must not hide an 8-bit yes. */
 export function browserPlaybackProfile(canPlay: CanPlay): WebPlaybackProfile {
   const supported = VIDEO_PROBES.filter((probe) => canPlay(probe.type));
   const video: WebPlaybackProfile["video"] = [];
   for (const codec of ["hevc", "av1", "h264"]) {
     const rows = supported.filter((probe) => probe.codec === codec);
     if (!rows.length) continue;
-    const maxBits = Math.max(...rows.map((row) => row.bit_depth ?? 0));
-    const atBits = rows.filter((row) => (row.bit_depth ?? 0) === maxBits);
-    const maxLevel = atBits.reduce(
-      (best, row) => (levelValue(row.max_level) > levelValue(best) ? row.max_level : best),
-      atBits[0].max_level,
-    );
-    const entry: WebPlaybackProfile["video"][number] = { codec, max_level: maxLevel };
-    if (codec !== "h264") entry.bit_depth = maxBits || 8;
-    video.push(entry);
+    const depths: number[] = [];
+    for (const row of rows) {
+      const depth = row.bit_depth ?? 0;
+      if (!depths.includes(depth)) depths.push(depth);
+    }
+    for (const depth of depths) {
+      const atBits = rows.filter((row) => (row.bit_depth ?? 0) === depth);
+      const maxLevel = atBits.reduce(
+        (best, row) => (levelValue(row.max_level) > levelValue(best) ? row.max_level : best),
+        atBits[0].max_level,
+      );
+      const entry: WebPlaybackProfile["video"][number] = { codec, max_level: maxLevel };
+      if (codec !== "h264" && depth) entry.bit_depth = depth;
+      video.push(entry);
+    }
   }
   if (!video.length) video.push({ codec: "h264", max_level: "5.2" });
   const audio = ["aac"];

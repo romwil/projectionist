@@ -69,11 +69,15 @@ class PreparedCaption:
     webvtt: str
 
 
+# No language tag. Several of these in one file are different tracks, not one language.
+_UNTAGGED = frozenset({"und", "undetermined", "unknown", "un", "zxx", "mul"})
+
+
 def caption_language(raw: str) -> str:
     code = iso2(raw)
-    if _LANG_RE.fullmatch(code):
-        return code
-    return ""
+    if code in _UNTAGGED or not _LANG_RE.fullmatch(code):
+        return ""
+    return code
 
 
 def text_streams(asset: MediaAsset) -> list[Any]:
@@ -310,16 +314,22 @@ def has_unprepared_text(asset: MediaAsset, *, data_dir: Path) -> bool:
     covered = {str(item) for item in (manifest.get("covered_languages") or [])}
     have: set[int] = set()
     for raw in manifest.get("tracks") or []:
-        if isinstance(raw, dict):
-            value = raw.get("index")
-            if value is None:
-                continue
-            try:
-                have.add(int(value))
-            except (TypeError, ValueError):
-                continue
+        if not isinstance(raw, dict):
+            continue
+        language = caption_language(str(raw.get("language") or ""))
+        if language:
+            covered.add(language)
+        value = raw.get("index")
+        if value is None:
+            continue
+        try:
+            have.add(int(value))
+        except (TypeError, ValueError):
+            continue
     for stream in streams:
         language = caption_language(str(getattr(stream, "language", "") or ""))
+        # One prepared track covers every stream of that language. Extract keeps
+        # only the first. A stream with no language is covered only by its index.
         if language and language in covered:
             continue
         if int(getattr(stream, "index", -1)) in have:
@@ -377,14 +387,18 @@ def extract_text_captions(
             break
     extract = extractor or _ffmpeg_extract
     tracks: list[dict[str, Any]] = []
+    written: set[str] = set()
     for stream in todo:
         index = int(getattr(stream, "index", -1))
+        language = caption_language(str(getattr(stream, "language", "") or ""))
         webvtt = _capture(source, index, extract)
         if not webvtt:
             continue
         if not _write_vtt(data_dir, asset.rating_key, index, webvtt):
             continue
-        tracks.append({"index": index, "language": caption_language(str(getattr(stream, "language", "") or ""))})
+        tracks.append({"index": index, "language": language})
+        if language:
+            written.add(language)
     if todo and not tracks:
         return "failed"
     _write_manifest(
@@ -392,7 +406,7 @@ def extract_text_captions(
         asset.rating_key,
         status="ready",
         tracks=tracks,
-        covered=sorted(covered),
+        covered=sorted(covered | written),
         fingerprint=fingerprint,
     )
     return "ready"
@@ -441,7 +455,7 @@ def _ffmpeg_extract(source: Path, index: int, dest: Path) -> None:
     if not binary:
         return
     try:
-        run_media_tool(
+        completed = run_media_tool(
             [
                 binary,
                 "-y",
@@ -461,6 +475,18 @@ def _ffmpeg_extract(source: Path, index: int, dest: Path) -> None:
         )
     except (OSError, subprocess.TimeoutExpired):
         logger.debug("text caption extract failed index=%s", index, exc_info=True)
+        _discard_partial(dest)
+        raise
+    if getattr(completed, "returncode", 0) not in (0, None):
+        _discard_partial(dest)
+
+
+def _discard_partial(path: Path) -> None:
+    """A timed-out ffmpeg can leave cues in the dest file. Those are not a track."""
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        logger.debug("could not discard a partial caption extract", exc_info=True)
 
 
 def _capture(source: Path, index: int, extract: Extractor) -> str:

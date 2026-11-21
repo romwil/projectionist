@@ -16,6 +16,7 @@ from projectionist.engine.caption_prep import (
     enqueue_caption_prep,
     enqueue_recent_arrivals,
     extract_text_captions,
+    has_unprepared_text,
     note_caption_titles,
     prepared_tracks,
 )
@@ -299,3 +300,93 @@ class CaptionPrepTests(unittest.TestCase):
         self.assertEqual(items[0]["rating_key"], "161755")
         self.assertEqual(items[0]["reason"], "play")
         self.assertNotEqual(items[-1]["rating_key"], "161755")
+
+    def test_a_timed_out_extract_does_not_keep_a_partial_cue(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            asset = _asset(root, text=True)
+
+            def fake_run(cmd, **kwargs):
+                Path(cmd[-1]).write_text(_VTT, encoding="utf-8")
+                raise subprocess.TimeoutExpired(cmd, timeout=kwargs.get("timeout") or 1)
+
+            with patch(
+                "projectionist.library.episode_investigate.capabilities.resolve_ffmpeg",
+                return_value="/usr/bin/ffmpeg",
+            ), patch("projectionist.engine.caption_prep.subprocess.run", side_effect=fake_run):
+                status = extract_text_captions(asset, data_dir=root)
+            manifest = root / "subtitles" / "161755" / "prepared.json"
+            stored = root / "subtitles" / "161755" / "prepared" / "s2.vtt"
+            self.assertEqual(status, "failed")
+            self.assertEqual(prepared_tracks(asset, data_dir=root), [])
+            self.assertFalse(stored.exists())
+            if manifest.is_file():
+                saved = json.loads(manifest.read_text(encoding="utf-8"))
+                self.assertNotEqual(saved.get("status"), "ready")
+            self.assertTrue(has_unprepared_text(asset, data_dir=root))
+
+    def test_one_prepared_english_track_covers_the_other_english_stream(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            media = root / "film.mkv"
+            media.write_bytes(b"mkv")
+            english = [
+                MediaStream(index=0, codec_type="video", codec="h264"),
+                MediaStream(index=1, codec_type="audio", codec="aac"),
+                MediaStream(
+                    index=2, codec_type="subtitle", codec="subrip", language="eng", subtitle_kind="text"
+                ),
+                MediaStream(
+                    index=3, codec_type="subtitle", codec="subrip", language="en", subtitle_kind="text"
+                ),
+            ]
+            asset = MediaAsset(
+                rating_key="161755",
+                readable=True,
+                local_path=str(media),
+                probe=ProbeResult("mkv", "matroska", 600.0, 1, media.stat().st_size, english),
+            )
+            calls: list[int] = []
+
+            def extract(source: Path, index: int, dest: Path) -> None:
+                del source
+                calls.append(index)
+                dest.write_text(_VTT, encoding="utf-8")
+
+            self.assertEqual(extract_text_captions(asset, data_dir=root, extractor=extract), "ready")
+            self.assertEqual(calls, [2])
+            self.assertFalse(has_unprepared_text(asset, data_dir=root))
+            self.assertEqual(extract_text_captions(asset, data_dir=root, extractor=extract), "ready")
+            self.assertEqual(calls, [2])
+
+            uncovered = MediaAsset(
+                rating_key="161755",
+                readable=True,
+                local_path=str(media),
+                probe=ProbeResult(
+                    "mkv",
+                    "matroska",
+                    600.0,
+                    1,
+                    media.stat().st_size,
+                    english
+                    + [
+                        MediaStream(
+                            index=4,
+                            codec_type="subtitle",
+                            codec="subrip",
+                            language="jpn",
+                            subtitle_kind="text",
+                        )
+                    ],
+                ),
+            )
+            self.assertTrue(has_unprepared_text(uncovered, data_dir=root))
+            media.write_bytes(b"mkv-replaced")
+            stale = MediaAsset(
+                rating_key="161755",
+                readable=True,
+                local_path=str(media),
+                probe=ProbeResult("mkv", "matroska", 600.0, 1, media.stat().st_size, english),
+            )
+            self.assertTrue(has_unprepared_text(stale, data_dir=root))

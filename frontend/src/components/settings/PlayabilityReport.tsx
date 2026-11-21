@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getPlayabilityReport, refreshPlayabilityReport } from "../../api/client";
 import { detectBrowserPlaybackProfile } from "../../lib/enginePlayback";
+import { playabilityNotice } from "../../lib/playabilityNotice";
 
 const TIER_ORDER = [
   "direct",
@@ -38,6 +39,7 @@ type ProfileReport = {
 type PlayabilityReportBody = {
   message?: string;
   title_count?: number;
+  complete?: boolean;
   running?: boolean;
   planned_from_plex?: number;
   confirmed_by_ffprobe?: number;
@@ -112,6 +114,7 @@ export default function PlayabilityReport() {
 
   const profiles = report?.profiles || [];
   const loading = report === null && !error;
+  const notice = error ? "" : playabilityNotice(report);
 
   return (
     <div className="playability-report" data-testid="playability-report">
@@ -146,9 +149,14 @@ export default function PlayabilityReport() {
           {report.confirmed_by_ffprobe || 0}.{report.running ? " Still running." : ""}
         </p>
       ) : null}
-      {!error && report && profiles.length === 0 ? (
+      {notice && profiles.length === 0 ? (
         <p className="status status-secondary" data-testid="playability-empty">
-          {report.message || "No playability report yet. Refresh to walk the library."}
+          {notice}
+        </p>
+      ) : null}
+      {notice && profiles.length > 0 ? (
+        <p className="status status-secondary" data-testid="playability-stopped">
+          {notice}
         </p>
       ) : null}
       {profiles.map((profile) => {

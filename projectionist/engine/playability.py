@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import tempfile
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -387,15 +389,43 @@ def load_playability_report(data_dir: Path) -> dict[str, Any]:
 
 
 def save_playability_report(data_dir: Path, report: Mapping[str, Any]) -> None:
+    """Write the report atomically. Each caller gets its own temp file.
+
+    ``request_owner_report`` already refuses a second walker, and the scheduled
+    task does not save. This helper can still be called from more than one
+    thread, so the temp name is not a single ``playability.json.tmp``.
+    """
     path = report_path(data_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(".json.tmp")
-    temporary.write_text(json.dumps(dict(report), indent=2), encoding="utf-8")
-    temporary.replace(path)
+    descriptor, name = tempfile.mkstemp(
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        dir=path.parent,
+    )
+    temporary = Path(name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(dict(report), indent=2))
+        temporary.replace(path)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
 
 
-def merge_playability_reports(previous: Mapping[str, Any], fresh: Mapping[str, Any]) -> dict[str, Any]:
-    """Keep profiles this run did not refresh, such as a browser profile from Settings."""
+def merge_playability_reports(
+    previous: Mapping[str, Any], fresh: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Keep profiles this run did not refresh, such as a browser profile from Settings.
+
+    A walk that stopped early is not a refresh. Its prefix must not replace
+    named profiles while a browser row this run left alone keeps another title count.
+    """
+    if not fresh.get("complete"):
+        copied = dict(previous)
+        copied["profiles"] = [
+            dict(row) if isinstance(row, dict) else row for row in (previous.get("profiles") or [])
+        ]
+        return copied
     by_id: dict[str, dict[str, Any]] = {}
     for row in previous.get("profiles") or []:
         if isinstance(row, dict) and row.get("profile"):
@@ -438,7 +468,11 @@ def run_library_report(
     should_stop: Optional[StopFn] = None,
     merge: bool = True,
 ) -> dict[str, Any]:
-    """Walk the library once, plan every requested profile, and store the report."""
+    """Walk the library once, plan every requested profile, and store the report.
+
+    A stop leaves the saved report unchanged. Titles visited so far are not
+    a new snapshot.
+    """
     chosen = list(profiles) if profiles is not None else named_profiles()
     titles = library_titles(db)
     kept: list[LibraryTitle] = []
@@ -457,13 +491,20 @@ def run_library_report(
             asset = _unread(item.rating_key)
         assets[item.rating_key] = asset
         kept.append(item)
+    if stopped:
+        logger.info(
+            "playability walk stopped after %s of %s titles; the saved report stays",
+            len(kept),
+            len(titles),
+        )
+        return load_playability_report(Path(data_dir))
     report = build_playability_report(
         kept,
         assets,
         chosen,
         settings=settings,
         data_dir=Path(data_dir),
-        complete=not stopped,
+        complete=True,
     )
     if merge:
         report = merge_playability_reports(load_playability_report(data_dir), report)

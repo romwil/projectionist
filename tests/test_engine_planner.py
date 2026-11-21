@@ -133,6 +133,27 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(eight_bit["plan"], "full")
         self.assertEqual(eight_bit["profile_answer"]["video"], "hevc 10-bit is above profile hevc 8-bit")
 
+    def test_an_8_bit_level_is_not_hidden_by_a_lower_10_bit_row(self) -> None:
+        eight = _av("mkv", "hevc", "aac", level="153")
+        eight.probe.streams[0].bit_depth = 8
+        both = _web(
+            [
+                VideoCapability("hevc", "4.0", bit_depth=10),
+                VideoCapability("hevc", "5.1", bit_depth=8),
+                VideoCapability("h264", "5.2"),
+            ],
+            ["aac"],
+        )
+        self.assertEqual(plan_playback(eight, both)["plan"], "remux")
+        only_ten = _web(
+            [VideoCapability("hevc", "4.0", bit_depth=10), VideoCapability("h264", "5.2")],
+            ["aac"],
+        )
+        self.assertEqual(plan_playback(eight, only_ten)["plan"], "full")
+        high_ten = _av("mkv", "hevc", "aac", level="153")
+        high_ten.probe.streams[0].bit_depth = 10
+        self.assertEqual(plan_playback(high_ten, both)["plan"], "full")
+
     def test_web_profile_remuxes_eac3_only_when_the_browser_lists_it(self) -> None:
         episode = _av("mkv", "h264", "eac3", level="41")
         refused = plan_playback(episode, _web([VideoCapability("h264", "5.2")], ["aac"]))
