@@ -39,6 +39,7 @@
       "llm_configured": true,
       "multi_user_enabled": false,
       "open_auto_provision": false,
+      "play_through_projectionist": false,
       "plex_collections_enabled": false,
       "seerr_enabled": false,
       "trust_proxy_headers": false

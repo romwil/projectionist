@@ -27,7 +27,7 @@ Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` ·
 | ENG-004 | WebVTT caption renditions (household cache first) | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-005 | Image-caption OCR job | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-006 | Audio + full transcode plans; hardware encode; concurrency | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
-| ENG-007 | Web player on engine sessions, right after ENG-003, behind an off-by-default setting | accepted | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
+| ENG-007 | Web player on engine sessions, right after ENG-003, behind an off-by-default setting | done | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-008 | Scrub thumbnails | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-009 | Live Channels on engine sessions (ARCH-007 facade; PRD-007 freeze) | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-010 | Jellyfin media source | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
@@ -114,6 +114,7 @@ SES-001 and NAT-002 describe the same work from two sides; build them as one cha
 | 2026-11-20 | **QA 1.41.1 defects, recorded and not fixed.** An empty `projectionist.db` must not hide the real database; that fix lands before the next production rollout, including its `docs/RELEASE.md` checklist line (the fix lane writes that line). Safari on the Plex path still stops after one burst; the cause is written down before the playlist changes again |
 | 2026-11-20 | **NAT-001** publishes `api_contract` 3 and the capability map on every `GET /api/features`. Shipped keys are `device_pairing` 1, `throw` 1, and `cached_art` 1 (the same fact as `features.cached_art`). Accepted keys stay at 0: `native_sign_in`, `push`, `approvals`, plus the engine, session, timeline, and track names |
 | 2026-11-20 | **NAT-003** tags the routes a native client may call and checks `docs/api/openapi.json` in CI. Admin routes, device claim, and device revoke stay out of that set |
+| 2026-11-20 | **Play through Projectionist** is the household switch `features.play_through_projectionist`, off by default. The owner sets it with `PUT /api/playback/engine-setting`. The web player uses an engine session only while it is on |
 | 2026-11-20 | **NAT-004** records one example response per client route under `docs/api/fixtures/` and checks it in CI |
 | 2026-11-20 | **NAT-002** lets every web sign-in path end in a device credential. `native_sign_in` is 1. `sign_in` on `GET /api/features` lists the methods this household has turned on. The pair-code stays the secondary path |
 | 2026-11-20 | **ENG-001** reads a title through a Plex media source: owner path mappings, cached ffprobe, and `GET /api/playback/media/{rating_key}` with no file paths in the response |

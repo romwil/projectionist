@@ -5,12 +5,17 @@ import {
   downloadLibraryItemSubtitles,
   fetchNextPreroll,
   getLibraryItemSubtitles,
+  getFeatures,
+  openEnginePlayback,
+  progressEnginePlayback,
   progressLibraryPlayback,
   seekLibraryPlayback,
   setLibraryPlaybackSubtitles,
   startLibraryPlayback,
+  stopEnginePlayback,
   stopLibraryPlayback,
 } from "../../api/client";
+import { browserPlaybackProfile, chooseWebPlayback } from "../../lib/enginePlayback";
 import { isCompactPlayViewport, isPhonePlayViewport } from "../../lib/chatLayout.js";
 import { useTitleDetail } from "../../hooks/useTitleDetail";
 import EndCardRatingPrompt from "./EndCardRatingPrompt";
@@ -427,16 +432,39 @@ export default function LibraryPlayer({
         originMs: seekTimelineOriginRef.current,
       });
       const durationMs = (extra as any).duration_ms ?? Math.round((video?.duration || 0) * 1000);
-      await stopLibraryPlayback(current.session_id, {
-        time_ms: timeMs,
-        duration_ms: durationMs,
-      });
+      if (current.engine) {
+        await progressEnginePlayback(current.session_id, { time_ms: timeMs, duration_ms: durationMs });
+        await stopEnginePlayback(current.session_id);
+      } else {
+        await stopLibraryPlayback(current.session_id, {
+          time_ms: timeMs,
+          duration_ms: durationMs,
+        });
+      }
       rememberPlayedProgress(current, timeMs, durationMs);
     } catch {
       // Best-effort — unmount / hide still tears down local state.
     }
     if (sessionRef.current === current) sessionRef.current = null;
   }, []);
+
+  useEffect(() => {
+    if (!session?.engine) return undefined;
+    const target = Number(session.view_offset_ms) || 0;
+    if (target < 1500) return undefined;
+    const video = videoRef.current;
+    if (!video) return undefined;
+    const apply = () => {
+      try {
+        video.currentTime = target / 1000;
+      } catch {
+        // The playlist will accept the seek once metadata arrives.
+      }
+    };
+    if (video.readyState >= 1) apply();
+    else video.addEventListener("loadedmetadata", apply);
+    return () => video.removeEventListener("loadedmetadata", apply);
+  }, [session?.engine, session?.session_id, session?.view_offset_ms]);
 
   const handlePlayerStatus = useCallback((next: any) => {
     setStatus(next);
@@ -530,7 +558,22 @@ export default function LibraryPlayer({
           }
           sessionRef.current = null;
         }
-        const payload = await startLibraryPlayback(key, { startOver });
+        const payload = await chooseWebPlayback({
+          features: await getFeatures().catch(() => null),
+          openEngine: () => openEnginePlayback(key, {
+            profile: browserPlaybackProfile((type) => {
+              try {
+                const probe = document.createElement("video");
+                const answer = probe.canPlayType?.(type) || "";
+                return answer === "probably" || answer === "maybe";
+              } catch {
+                return false;
+              }
+            }),
+            startOver,
+          }),
+          startPlex: () => startLibraryPlayback(key, { startOver }),
+        });
         sessionRef.current = payload;
         setSession(payload);
         seekTimelineOriginRef.current = 0;
@@ -568,7 +611,22 @@ export default function LibraryPlayer({
     (async () => {
       if (cancelled) return;
       try {
-        const payload = await startLibraryPlayback(key, { startOver: false, rec: recRef.current });
+        const payload = await chooseWebPlayback({
+          features: await getFeatures().catch(() => null),
+          openEngine: () => openEnginePlayback(key, {
+            profile: browserPlaybackProfile((type) => {
+              try {
+                const probe = document.createElement("video");
+                const answer = probe.canPlayType?.(type) || "";
+                return answer === "probably" || answer === "maybe";
+              } catch {
+                return false;
+              }
+            }),
+            startOver: false,
+          }),
+          startPlex: () => startLibraryPlayback(key, { startOver: false, rec: recRef.current }),
+        });
         if (cancelled) {
           try {
             await stopLibraryPlayback(payload.session_id, {});
@@ -588,7 +646,7 @@ export default function LibraryPlayer({
           const target = Math.max(0, Math.floor(Number(continueAt) || 0));
           let active = payload;
           const plexOffset = Number(payload.view_offset_ms) || 0;
-          if (payload.session_id && Math.abs(plexOffset - target) > 1500) {
+          if (!payload.engine && payload.session_id && Math.abs(plexOffset - target) > 1500) {
             try {
               active = await seekLibraryPlayback(payload.session_id, target);
             } catch {
@@ -784,7 +842,8 @@ export default function LibraryPlayer({
     });
     const reportedDuration = Math.round((video?.duration || durationMs / 1000 || 0) * 1000);
     try {
-      await progressLibraryPlayback(current.session_id, {
+      const report = current.engine ? progressEnginePlayback : progressLibraryPlayback;
+      await report(current.session_id, {
         state,
         time_ms: timeMs,
         duration_ms: reportedDuration,
@@ -999,12 +1058,24 @@ export default function LibraryPlayer({
     }
   }
 
-  /** Local currentTime when buffered; otherwise Plex session restart at offset. */
+  /** Local currentTime when the engine playlist can seek, or when the point is buffered. */
   function seekToOffsetMs(offsetMs: any) {
     const video = videoRef.current;
     const durationS = video?.duration || durationMs / 1000;
     const target = clampTime(offsetMs / 1000, durationS);
     const targetMs = Math.round(target * 1000);
+    if (sessionRef.current?.engine && video) {
+      try {
+        video.currentTime = target;
+      } catch {
+        // Metadata may not be ready yet. The VOD playlist still seeks once it is.
+      }
+      setNowMs(playheadMsFromMedia({
+        currentTimeSec: target,
+        originMs: seekTimelineOriginRef.current,
+      }));
+      return;
+    }
     if (video && canLocalSeekTo(video, target) && !seekReloadArmedRef.current) {
       if (seekRestartTimerRef.current) {
         window.clearTimeout(seekRestartTimerRef.current);
