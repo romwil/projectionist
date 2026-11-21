@@ -2,8 +2,30 @@
 
 ## [Unreleased]
 
+## [1.42.0] — 2026-11-21
+
+The server refuses an empty database file. Clients can see what this server supports. An owner can turn on Play through Projectionist, and a phone can finish sign-in with its own device credential.
+
+### Highlights
+- **The real library stays.** The server refuses an empty database file, so it cannot hide the one that holds your household.
+- **Clients can see what this server supports.** A client can tell which parts of this server are on.
+- **Play through Projectionist is a choice.** An owner can turn it on. It stays off until they do. Text captions play with the film. A picture-only track stays on the usual path, and the session says why.
+- **A phone finishes sign-in on the device.** Plex, a local password, single sign-on, or an invite ends in that phone's own credential.
+
 ### Added
+- ENG-007: Play through Projectionist (`features.play_through_projectionist`) is off by default. The owner turns it on from Profile. The next play uses an engine session, with no restart.
+- ENG-004: text captions play through the engine as WebVTT. A household subtitle file comes first, then an embedded text track. A title that needs captions and has only a picture track stays on the Plex path, and the session records why.
 - NAT-002: a phone or tablet can finish Plex, a local password, single sign-on, or an invite with its own device credential instead of a browser cookie. `capabilities.native_sign_in` is 1. `sign_in` on `GET /api/features` lists the methods this household has turned on.
+
+### Changed
+- The Hub image is built from the commit tag `vX.Y.Z` points at. `org.opencontainers.image.revision` is that commit. Publish fails if a published manifest's label differs.
+
+### Verification
+- `./scripts/patch-release.sh 1.42.0` lockstep + `frontend/public/release-notes.json`.
+- Page speed (`npm run test:release-perf`) before Hub publish.
+- CI on the release PR (required checks).
+- Hub image built from tag `v1.42.0`; `org.opencontainers.image.revision` matches that commit.
+- QA `:8792` is a Hub pull of `romwil/projectionist:1.42.0` (Path B). Prod stays on 1.40.1.
 
 ## [1.41.2] — 2026-11-21
 
