@@ -51,6 +51,9 @@ jobs:
       - name: Install Python package
         run: pip install ".[web,dev,mcp]"
 
+      - name: Client OpenAPI snapshot
+        run: ./scripts/check-openapi.sh
+
       - name: Install and build frontend
         run: |
           cd frontend
