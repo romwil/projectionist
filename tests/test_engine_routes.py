@@ -197,7 +197,7 @@ class EngineRouteTests(unittest.TestCase):
         ):
             opened = self.client.post(
                 "/api/playback/sessions",
-                json={"rating_key": "121986", "profile": "apple-tv-4k-3"},
+                json={"rating_key": "121986", "profile": "apple-tv-4k-3", "engine_opt_in": True},
             )
         self.assertEqual(opened.status_code, 200, opened.text)
         body = opened.json()
@@ -224,7 +224,7 @@ class EngineRouteTests(unittest.TestCase):
         ), patch("projectionist.engine.source.probe_file", return_value=_probe()):
             chrome = self.client.post(
                 "/api/playback/sessions",
-                json={"rating_key": "121986", "profile": "chrome"},
+                json={"rating_key": "121986", "profile": "chrome", "engine_opt_in": True},
             )
         self.assertEqual(chrome.status_code, 200, chrome.text)
         fallback = chrome.json()
@@ -268,7 +268,7 @@ class EngineRouteTests(unittest.TestCase):
         ):
             return self.client.post(
                 "/api/playback/sessions",
-                json={"rating_key": "121986", "profile": "apple-tv-4k-3"},
+                json={"rating_key": "121986", "profile": "apple-tv-4k-3", "engine_opt_in": True},
             )
 
     def test_household_webvtt_plays_through_the_engine(self) -> None:
@@ -359,3 +359,125 @@ class EngineRouteTests(unittest.TestCase):
         recorded = self.client.get(f"/api/playback/sessions/{body['session_id']}")
         self.assertEqual(recorded.status_code, 200, recorded.text)
         self.assertEqual(recorded.json()["reason"], CAPTION_FALLBACK_REASON)
+
+    def test_missing_opt_in_stays_on_the_library_path(self) -> None:
+        from projectionist.engine.session import OPT_IN_REASON
+
+        self._map_movie()
+        with patch("projectionist.engine.session.start_remux") as remux:
+            opened = self.client.post(
+                "/api/playback/sessions",
+                json={"rating_key": "121986", "profile": "apple-tv-4k-3"},
+            )
+        self.assertEqual(opened.status_code, 200, opened.text)
+        body = opened.json()
+        self.assertEqual(body["plan"], "library")
+        self.assertFalse(body["playable"])
+        self.assertEqual(body["master_url"], "")
+        self.assertEqual(body["session_id"], "")
+        self.assertEqual(body["reason"], OPT_IN_REASON)
+        self.assertNotIn(str(self.media), opened.text)
+        remux.assert_not_called()
+
+    def test_device_credential_plays_a_header_free_playlist(self) -> None:
+        """A paired device has no session cookie. The playlist token is the credential."""
+        from projectionist.devices.native_login import issue_device_credential
+        from projectionist.engine.session import OPT_IN_REASON
+
+        self._map_movie()
+        self.db.upsert_plex_user(
+            user_id="owner-device",
+            display_name="Owner",
+            email=None,
+            plex_user_id="plex-device",
+            role="owner",
+        )
+        issued = issue_device_credential(
+            self.db, user_id="owner-device", kind="iphone", label="Phone"
+        )
+        credential = issued["credential"]
+        settings_path = self.data_dir / "settings.json"
+        current = json.loads(settings_path.read_text(encoding="utf-8"))
+        features = dict(current.get("features") or {})
+        features["multi_user_enabled"] = True
+        current["features"] = features
+        settings_path.write_text(json.dumps(current), encoding="utf-8")
+        self.client.cookies.clear()
+        bearer = {"Authorization": f"Bearer {credential}"}
+
+        with patch("projectionist.engine.session.start_remux") as remux:
+            declined = self.client.post(
+                "/api/playback/sessions",
+                json={"rating_key": "121986", "profile": "apple-tv-4k-3"},
+                headers=bearer,
+            )
+        self.assertEqual(declined.status_code, 200, declined.text)
+        self.assertEqual(declined.json()["plan"], "library")
+        self.assertFalse(declined.json()["playable"])
+        self.assertEqual(declined.json()["reason"], OPT_IN_REASON)
+        remux.assert_not_called()
+        self.assertEqual(
+            self.client.post(
+                "/api/playback/sessions",
+                json={"rating_key": "121986", "engine_opt_in": True},
+            ).status_code,
+            401,
+        )
+
+        def fake_start(source, directory, **kwargs):
+            from projectionist.engine.remux import write_master
+
+            directory = Path(directory)
+            write_master(
+                directory,
+                kwargs.get("probe"),
+                file_size=100,
+                duration_ms=int(kwargs.get("duration_ms") or 600_000),
+                captions=kwargs.get("captions"),
+            )
+            av = directory / "av"
+            av.mkdir(parents=True, exist_ok=True)
+            (av / "stream.m3u8").write_text("#EXTM3U\n#EXT-X-ENDLIST\n", encoding="utf-8")
+            return None
+
+        with patch(
+            "projectionist.engine.routes.plex_part_paths",
+            return_value=["/data/media/movies/film.mkv"],
+        ), patch("projectionist.engine.source.probe_file", return_value=_probe()), patch(
+            "projectionist.engine.session.start_remux",
+            side_effect=fake_start,
+        ):
+            opened = self.client.post(
+                "/api/playback/sessions",
+                json={
+                    "rating_key": "121986",
+                    "profile": "apple-tv-4k-3",
+                    "engine_opt_in": True,
+                },
+                headers=bearer,
+            )
+        self.assertEqual(opened.status_code, 200, opened.text)
+        body = opened.json()
+        self.assertTrue(body["playable"], body)
+        self.assertTrue(body["master_url"])
+        self.client.cookies.clear()
+        playlist = self.client.get(body["master_url"])
+        self.assertEqual(playlist.status_code, 200, playlist.text)
+        self.assertIn("#EXTM3U", playlist.text)
+        with_bearer = self.client.get(body["master_url"], headers=bearer)
+        self.assertEqual(with_bearer.status_code, 200, with_bearer.text)
+        wrong = body["master_url"].replace(body["master_url"].split("/")[5], "not-the-token")
+        rejected = self.client.get(wrong)
+        self.assertEqual(rejected.status_code, 404, rejected.text)
+        self.assertNotEqual(rejected.status_code, 401)
+        self.assertEqual(
+            self.client.get(f"/api/playback/sessions/{body['session_id']}").status_code,
+            401,
+        )
+        self.assertEqual(
+            self.client.post(
+                f"/api/playback/sessions/{body['session_id']}/progress",
+                json={"time_ms": 1, "duration_ms": 600000},
+            ).status_code,
+            401,
+        )

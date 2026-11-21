@@ -459,6 +459,16 @@ class ApiAuthzTests(unittest.TestCase):
         self.assertEqual(PUBLIC_HANDSHAKE_EXACT, documented)
         self.assertTrue(is_public_handshake("GET", "/api/auth/plex/pin/42"))
         self.assertTrue(is_public_handshake("GET", "/api/devices/pair/pending/abcDEF_123-pending"))
+        self.assertTrue(
+            is_public_handshake(
+                "GET",
+                "/api/playback/sessions/11111111-1111-1111-1111-111111111111/tok/master.m3u8",
+            )
+        )
+        self.assertFalse(is_public_handshake("POST", "/api/playback/sessions"))
+        self.assertFalse(
+            is_public_handshake("GET", "/api/playback/sessions/11111111-1111-1111-1111-111111111111")
+        )
         self.assertFalse(is_public_handshake("POST", "/api/devices/pair/claim"))
         self.assertFalse(is_public_handshake("GET", "/api/devices"))
         self.assertFalse(is_public_handshake("GET", "/api/auth/me"))
@@ -483,6 +493,12 @@ class ApiAuthzTests(unittest.TestCase):
         pending = self.client.get("/api/devices/pair/pending/not-a-real-pending-id")
         self.assertNotEqual(pending.status_code, 401)
         self.assertEqual(pending.status_code, 410)
+        guessed_playlist = self.client.get(
+            "/api/playback/sessions/11111111-1111-1111-1111-111111111111/not-the-token/master.m3u8"
+        )
+        self.assertNotEqual(guessed_playlist.status_code, 401)
+        self.assertEqual(guessed_playlist.status_code, 404)
+        self.assertEqual(self.client.post("/api/playback/sessions", json={}).status_code, 401)
         self.assertEqual(pending.json()["status"], "issue_again")
 
         self.assertEqual(self.client.get("/api/auth/me").status_code, 401)

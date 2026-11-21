@@ -8,7 +8,7 @@ Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` ·
 
 ## Sequencing
 
-1. **ENG** — the playback engine. Lane order: ENG-001 → ENG-002 → ENG-003 → **ENG-007** → ENG-004 → the rest. ENG-007 is off until the household turns on *Play through Projectionist*
+1. **ENG** — the playback engine. Shipped through ENG-007 and ENG-004. Next, not started: the browser runtime profile (ENG-007 follow-up), text captions ahead of play (ENG-004 follow-up), then ENG-011 → ENG-012 → ENG-013 → ENG-005 → ENG-014 → ENG-006. Engine sessions are opt-in (`engine_opt_in`). Play through Projectionist stays off until an owner turns it on
 2. **SES** — shared sessions (extends the Apple TV pairing + throw work)
 3. **TML** — the timeline layer
 4. **TRK** — tracks: Moments, Booth Notes, Class / Study
@@ -24,13 +24,17 @@ Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` ·
 | ENG-001 | Media source interface + Plex path mapping + cached ffprobe | done | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-002 | Planner with recorded reason; dry-run plan endpoint | done | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-003 | Session API with device profiles; VOD fMP4 HLS remux | done | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
-| ENG-004 | WebVTT caption renditions (household cache first) | done | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
+| ENG-004 | WebVTT caption renditions (household cache first). Ahead-of-time extraction is accepted and not started | done | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-005 | Image-caption OCR job | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
-| ENG-006 | Audio + full transcode plans; hardware encode; concurrency | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
-| ENG-007 | Web player on engine sessions, right after ENG-003, behind an off-by-default setting | done | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
+| ENG-006 | Own video transcode: software 1080p H.264 above a benchmark, plus VAAPI/NVENC. Waits on ENG-011 | accepted | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
+| ENG-007 | Web player on engine sessions, behind an off-by-default setting. Runtime browser profile is accepted and not started | done | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-008 | Scrub thumbnails | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-009 | Live Channels on engine sessions (ARCH-007 facade; PRD-007 freeze) | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-010 | Jellyfin media source | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
+| ENG-011 | Library playability report for each device profile | accepted | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
+| ENG-012 | Audio-only transcode tier | accepted | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
+| ENG-013 | Source-transcode tier (today’s Plex fallback, with a reason) | accepted | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
+| ENG-014 | Pre-optimized versions inside a disk budget | accepted | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | SES-001 | Device credentials for every handheld sign-in path (same work as NAT-002) | done | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
 | SES-002 | Rooms registry + visibility | proposed | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
 | SES-003 | Session object (owner, screen, position, level) | proposed | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
@@ -90,6 +94,7 @@ Bugs stay off the item list. Both of these shipped in 1.41.2.
 |--------|--------|------------|
 | An empty or invalid `projectionist.db` hides the real database and can stop startup. Skip that file, log the skip, and refuse to start when two real databases are present. Do not delete or overwrite anything automatically | Shipped in 1.41.2. The pre-rollout check is in `docs/RELEASE.md` | [DATA_MODEL](../DATA_MODEL.md#which-database-file-opens) |
 | Safari on the Plex path stops after one burst (QA 1.41.1). `BANDWIDTH` is the measured peak plus 10 percent. `AVERAGE-BANDWIDTH` is the container average | Shipped in 1.41.2. A 15-minute Safari watch is still the proof the stall is gone | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#known-defect-safari-stops-after-one-burst-qa-1411) |
+| QA 1.42.0: a device credential opened an engine session, then the header-free playlist returned 401 because the household gate ignored the path token. The preroll played. The film did not | Fixed on main. Not in the 1.42.0 image. Clients must send `engine_opt_in` | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#playlist-401-on-a-device-credential-2026-11-21) |
 
 SES-001 and NAT-002 describe the same work from two sides; build them as one change.
 
@@ -119,6 +124,8 @@ SES-001 and NAT-002 describe the same work from two sides; build them as one cha
 | 2026-11-20 | **NAT-002** lets every web sign-in path end in a device credential. `native_sign_in` is 1. `sign_in` on `GET /api/features` lists the methods this household has turned on. The pair-code stays the secondary path |
 | 2026-11-20 | **ENG-001** reads a title through a Plex media source: owner path mappings, cached ffprobe, and `GET /api/playback/media/{rating_key}` with no file paths in the response |
 | 2026-11-21 | **ENG-004** puts household subtitle files into the engine master playlist as WebVTT. A title that can be captioned that way plays through the engine and does not record a caption fallback. Picture captions still use the Plex path until ENG-005 |
+| 2026-11-21 | **Engine sessions are opt-in.** `POST /api/playback/sessions` returns a library plan unless the client sends `engine_opt_in`. `playback_engine` means the server can. The QA 1.42.0 playlist 401 was the household gate rejecting a header-free playlist URL that a device credential had opened. That URL now checks the path token. Not in the 1.42.0 image |
+| 2026-11-21 | **Playback tiers, cheapest first:** direct, remux, audio-only, captions as text, source transcode, own video transcode, pre-optimized copies. ENG-011 through ENG-014 are accepted. ENG-006 is re-scoped and waits on the report. The browser profile and ahead-of-time text captions are accepted follow-ups. None of that follow-up work is started |
 | 2026-11-19 | **Lane A remux spike:** H.264+AC-3 fMP4 HLS (`-c copy`) + household WebVTT works on Safari/WebKit and tvOS AVPlayer (seek without restart; captions selectable). Desktop Chrome/hls.js rejects AC-3 — planner must audio-transcode for those profiles. Findings: [engine-spike-findings](../superpowers/specs/2026-11-19-engine-spike-findings.md). Spike code stays on `spike/engine-remux` (not merged) |
 
 ## Superseded review rows (carry-forward)

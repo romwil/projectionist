@@ -76,6 +76,10 @@ PUBLIC_HANDSHAKE_EXACT = frozenset(
 )
 # Pending poll is a capability URL (unguessable id), same shape as the Plex PIN poll.
 DEVICE_PAIR_PENDING_PATH = re.compile(r"^/api/devices/pair/pending/[A-Za-z0-9_-]+$")
+# Playlist and segment URLs carry the session token in the path. Opening a
+# session still needs a member credential. A missing or wrong token is 404
+# from the route, not an anonymous library read.
+ENGINE_SESSION_MEDIA_PATH = re.compile(r"^/api/playback/sessions/[^/]+/[^/]+/.+")
 PLEX_PIN_POLL_PATH = re.compile(r"^/api/auth/plex/pin/\d+$")
 PLEX_PIN_NONCE_COOKIE = "plex_pin_nonce"
 PLEX_PIN_NONCE_HEADER = "x-projectionist-pin-nonce"
@@ -462,6 +466,8 @@ def is_public_handshake(method: str, path: str) -> bool:
     if key[0] == "GET" and PLEX_PIN_POLL_PATH.match(cleaned):
         return True
     if key[0] == "GET" and DEVICE_PAIR_PENDING_PATH.match(cleaned):
+        return True
+    if key[0] == "GET" and ENGINE_SESSION_MEDIA_PATH.match(cleaned):
         return True
     if cleaned.startswith("/api/webhooks/"):
         return True
