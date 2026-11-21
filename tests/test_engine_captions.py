@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from projectionist.config_store import Settings
+from projectionist.engine.caption_prep import PREP_TIMEOUT_S, extract_text_captions
 from projectionist.engine.captions import (
     CAPTION_FALLBACK_REASON,
+    CAPTION_PENDING_REASON,
     CaptionRendition,
     caption_fallback_reason,
     prepare_webvtt_renditions,
@@ -83,7 +84,8 @@ class CaptionFallbackTests(unittest.TestCase):
                 settings=Settings(),
                 data_dir=Path(tmp),
             )
-        self.assertEqual(reason, CAPTION_FALLBACK_REASON)
+        self.assertEqual(reason, CAPTION_PENDING_REASON)
+        self.assertNotIn("path mapping", reason)
 
     def test_picture_captions_stay_on_plex(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -148,7 +150,7 @@ class CaptionFallbackTests(unittest.TestCase):
         self.assertEqual(len(renditions), 1)
         self.assertFalse(renditions[0].default)
 
-    def test_embedded_text_is_used_when_the_cache_lacks_that_language(self) -> None:
+    def test_prepared_text_is_served_without_the_play_deadline(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             media = root / "film.mkv"
@@ -164,28 +166,37 @@ class CaptionFallbackTests(unittest.TestCase):
                     encoding="utf-8",
                 )
 
-            renditions = prepare_webvtt_renditions(
-                _asset(text=True, local_path=str(media)),
-                title_language="ja",
-                settings=Settings(),
-                data_dir=root,
-                extractor=extract,
-            )
-            reason = caption_fallback_reason(
-                _asset(text=True, local_path=str(media)),
-                title_language="ja",
-                settings=Settings(),
-                data_dir=root,
-                renditions=renditions,
-            )
+            asset = _asset(text=True, local_path=str(media))
+            status = extract_text_captions(asset, data_dir=root, extractor=extract)
+            with patch(
+                "projectionist.engine.caption_prep.subprocess.run",
+                side_effect=AssertionError("play must not extract captions"),
+            ):
+                renditions = prepare_webvtt_renditions(
+                    asset,
+                    title_language="ja",
+                    settings=Settings(),
+                    data_dir=root,
+                )
+                reason = caption_fallback_reason(
+                    asset,
+                    title_language="ja",
+                    settings=Settings(),
+                    data_dir=root,
+                    renditions=renditions,
+                )
+        self.assertEqual(status, "ready")
         self.assertEqual(seen, [3])
+        self.assertGreaterEqual(PREP_TIMEOUT_S, 600)
+        self.assertNotEqual(PREP_TIMEOUT_S, 20)
         self.assertEqual(reason, "")
         self.assertEqual([item.language for item in renditions], ["en", "fr"])
         self.assertEqual(renditions[1].track_id, "s3")
         self.assertEqual(renditions[1].name, "French")
         self.assertFalse(renditions[1].default)
+        self.assertIn("Depuis le fichier", renditions[1].webvtt)
 
-    def test_failed_embedded_extract_keeps_the_plex_fallback(self) -> None:
+    def test_text_not_ready_records_a_caption_fallback_not_a_path_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             media = root / "film.mkv"
@@ -194,22 +205,26 @@ class CaptionFallbackTests(unittest.TestCase):
             def extract(source: Path, index: int, dest: Path) -> None:
                 return
 
+            asset = _asset(text=True, local_path=str(media))
+            status = extract_text_captions(asset, data_dir=root, extractor=extract)
             renditions = prepare_webvtt_renditions(
-                _asset(text=True, local_path=str(media)),
+                asset,
                 title_language="ja",
                 settings=Settings(),
                 data_dir=root,
-                extractor=extract,
             )
             reason = caption_fallback_reason(
-                _asset(text=True, local_path=str(media)),
+                asset,
                 title_language="ja",
                 settings=Settings(),
                 data_dir=root,
                 renditions=renditions,
             )
+        self.assertEqual(status, "failed")
         self.assertEqual(renditions, [])
-        self.assertEqual(reason, CAPTION_FALLBACK_REASON)
+        self.assertEqual(reason, CAPTION_PENDING_REASON)
+        self.assertNotEqual(reason, CAPTION_FALLBACK_REASON)
+        self.assertNotIn("path mapping", reason)
 
     def test_unreadable_title_does_not_record_a_caption_fallback(self) -> None:
         asset = MediaAsset(rating_key="121986", readable=False, reason="No path mapping for this file")
@@ -243,92 +258,42 @@ class CaptionFallbackTests(unittest.TestCase):
             def extract(source: Path, index: int, dest: Path) -> None:
                 raise RuntimeError("ffmpeg broke")
 
+            asset = _asset(text=True, local_path=str(media))
+            status = extract_text_captions(asset, data_dir=root, extractor=extract)
             renditions = prepare_webvtt_renditions(
-                _asset(text=True, local_path=str(media)),
+                asset,
                 title_language="ja",
                 settings=Settings(),
                 data_dir=root,
-                extractor=extract,
             )
+        self.assertEqual(status, "failed")
         self.assertEqual(renditions, [])
 
-    def test_default_extractor_reads_the_webvtt_ffmpeg_writes(self) -> None:
+    def test_unprepared_text_does_not_call_ffmpeg_at_play(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             media = root / "film.mkv"
             media.write_bytes(b"mkv")
-
-            def fake_run(cmd, **kwargs):
-                self.assertEqual(cmd[0], "/usr/bin/ffmpeg")
-                self.assertEqual(cmd[1:5], ["-y", "-i", str(media), "-map"])
-                self.assertTrue(str(cmd[5]).startswith("0:"))
-                self.assertEqual(cmd[6:8], ["-f", "webvtt"])
-                self.assertNotIn("shell", kwargs)
-                Path(cmd[-1]).write_text(
-                    "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nEmbedded\n",
-                    encoding="utf-8",
-                )
-                return subprocess.CompletedProcess(cmd, 0)
-
+            asset = _asset(text=True, local_path=str(media))
             with patch(
-                "projectionist.library.episode_investigate.capabilities.resolve_ffmpeg",
-                return_value="/usr/bin/ffmpeg",
-            ), patch("projectionist.engine.captions.subprocess.run", side_effect=fake_run):
-                renditions = prepare_webvtt_renditions(
-                    _asset(text=True, local_path=str(media)),
-                    title_language="ja",
-                    settings=Settings(),
-                    data_dir=root,
-                )
-        self.assertEqual([item.track_id for item in renditions], ["s2", "s3"])
-        self.assertIn("Embedded", renditions[0].webvtt)
-        self.assertTrue(renditions[0].default)
-
-    def test_a_stuck_ffmpeg_does_not_raise(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            media = root / "film.mkv"
-            media.write_bytes(b"mkv")
-
-            def fake_run(cmd, **kwargs):
-                raise subprocess.TimeoutExpired(cmd, timeout=20)
-
-            with patch(
-                "projectionist.library.episode_investigate.capabilities.resolve_ffmpeg",
-                return_value="/usr/bin/ffmpeg",
-            ), patch("projectionist.engine.captions.subprocess.run", side_effect=fake_run):
-                renditions = prepare_webvtt_renditions(
-                    _asset(text=True, local_path=str(media)),
-                    title_language="ja",
-                    settings=Settings(),
-                    data_dir=root,
-                )
-        self.assertEqual(renditions, [])
-
-    def test_missing_ffmpeg_keeps_picture_and_unextracted_text_on_plex(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            media = root / "film.mkv"
-            media.write_bytes(b"mkv")
-            with patch(
-                "projectionist.library.episode_investigate.capabilities.resolve_ffmpeg",
-                return_value=None,
+                "projectionist.engine.caption_prep.subprocess.run",
+                side_effect=AssertionError("play must not extract captions"),
             ):
                 renditions = prepare_webvtt_renditions(
-                    _asset(text=True, local_path=str(media)),
+                    asset,
                     title_language="ja",
                     settings=Settings(),
                     data_dir=root,
                 )
                 reason = caption_fallback_reason(
-                    _asset(text=True, local_path=str(media)),
+                    asset,
                     title_language="ja",
                     settings=Settings(),
                     data_dir=root,
                     renditions=renditions,
                 )
         self.assertEqual(renditions, [])
-        self.assertEqual(reason, CAPTION_FALLBACK_REASON)
+        self.assertEqual(reason, CAPTION_PENDING_REASON)
 
     def test_setting_defaults_off(self) -> None:
         self.assertFalse(Settings().engine.play_through_projectionist)
@@ -430,6 +395,95 @@ class CaptionPlaylistTests(unittest.TestCase):
             playlist = (session.directory / "subs" / "cached-en.m3u8").read_text(encoding="utf-8")
             self.assertIn("#EXT-X-TARGETDURATION:600", playlist)
             self.assertIn("#EXTINF:600.000,", playlist)
+
+    def test_prepared_text_opens_an_engine_session(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            media = root / "film.mkv"
+            media.write_bytes(b"mkv")
+            asset = _asset(text=True, local_path=str(media))
+
+            def extract(source: Path, index: int, dest: Path) -> None:
+                dest.write_text(
+                    "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nFrom the file\n",
+                    encoding="utf-8",
+                )
+
+            self.assertEqual(extract_text_captions(asset, data_dir=root, extractor=extract), "ready")
+            renditions = prepare_webvtt_renditions(
+                asset, title_language="ja", settings=Settings(), data_dir=root
+            )
+            reason = caption_fallback_reason(
+                asset,
+                title_language="ja",
+                settings=Settings(),
+                data_dir=root,
+                renditions=renditions,
+            )
+
+            def runner(cmd, cwd):
+                (Path(cwd) / "stream.m3u8").write_text("#EXTM3U\n#EXT-X-ENDLIST\n", encoding="utf-8")
+
+            with patch(
+                "projectionist.engine.caption_prep.subprocess.run",
+                side_effect=AssertionError("play must not extract captions"),
+            ):
+                session = open_engine_session(
+                    asset,
+                    APPLE_TV_4K,
+                    user_id="owner",
+                    title="Zatoichi",
+                    duration_ms=600_000,
+                    view_offset_ms=0,
+                    data_dir=root,
+                    runner=runner,
+                    ffmpeg="ffmpeg",
+                    force_reason=reason,
+                    captions=[] if reason else renditions,
+                )
+            self.assertEqual(reason, "")
+            self.assertEqual(session.plan, "remux")
+            self.assertTrue(session.playable)
+            assert session.directory is not None
+            vtt = (session.directory / "subs" / "s2.vtt").read_text(encoding="utf-8")
+            self.assertIn("From the file", vtt)
+
+    def test_text_not_ready_does_not_start_a_remux(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            media = root / "film.mkv"
+            media.write_bytes(b"mkv")
+            asset = _asset(text=True, local_path=str(media))
+            renditions = prepare_webvtt_renditions(
+                asset, title_language="ja", settings=Settings(), data_dir=root
+            )
+            reason = caption_fallback_reason(
+                asset,
+                title_language="ja",
+                settings=Settings(),
+                data_dir=root,
+                renditions=renditions,
+            )
+
+            def runner(cmd, cwd):
+                raise AssertionError("captions that are not ready stay on the Plex path")
+
+            session = open_engine_session(
+                asset,
+                APPLE_TV_4K,
+                user_id="owner",
+                title="Zatoichi",
+                duration_ms=600_000,
+                view_offset_ms=0,
+                data_dir=root,
+                runner=runner,
+                force_reason=reason,
+                captions=[] if reason else renditions,
+            )
+            self.assertEqual(session.plan, "plex-fallback")
+            self.assertFalse(session.playable)
+            self.assertEqual(session.reason, CAPTION_PENDING_REASON)
+            self.assertNotEqual(session.reason, CAPTION_FALLBACK_REASON)
 
     def test_picture_captions_do_not_start_a_remux(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

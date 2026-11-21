@@ -23,12 +23,19 @@ _LOCK = threading.Lock()
 # (db path, rating key) -> note
 _NOTES: Dict[tuple[str, str], Dict[str, Any]] = {}
 _REFRESHERS: list[Callable[[Any], None]] = []
+_CANDIDATES: list[Callable[[str], None]] = []
 
 
 def register_continue_watching_refresh(callback: Callable[[Any], None]) -> None:
     """Explore hub registers a background on-deck refresh. One callback."""
     if callback not in _REFRESHERS:
         _REFRESHERS.append(callback)
+
+
+def register_continue_watching_candidate(callback: Callable[[str], None]) -> None:
+    """A title just entered or moved on Continue Watching. One callback."""
+    _CANDIDATES.clear()
+    _CANDIDATES.append(callback)
 
 
 def clear_continue_watching_progress_notes() -> None:
@@ -84,6 +91,11 @@ def note_playback_progress(
             callback(db)
         except Exception:  # noqa: BLE001 — rail refresh must not break playback
             logger.debug("continue watching refresh failed", exc_info=True)
+    for callback in list(_CANDIDATES):
+        try:
+            callback(key)
+        except Exception:  # noqa: BLE001 — caption prep must not break playback
+            logger.debug("continue watching caption prep failed", exc_info=True)
 
 
 def _drop_expired_locked(now: Optional[float] = None) -> None:

@@ -481,3 +481,96 @@ class EngineRouteTests(unittest.TestCase):
             ).status_code,
             401,
         )
+
+    def test_prepared_text_plays_without_extracting_during_the_session(self) -> None:
+        from projectionist.engine.caption_prep import extract_text_captions
+        from projectionist.engine.source import MediaAsset
+
+        self._map_movie()
+        self.db.upsert_library_item(
+            {
+                "rating_key": "121986",
+                "media_type": "movie",
+                "title": "Adventures of Zatoichi",
+                "original_language": "ja",
+                "duration_ms": 600_000,
+            }
+        )
+        probe = _probe()
+        probe.streams.append(
+            MediaStream(index=2, codec_type="subtitle", codec="subrip", language="eng", subtitle_kind="text")
+        )
+        asset = MediaAsset(
+            rating_key="121986",
+            readable=True,
+            local_path=str(self.media),
+            probe=probe,
+        )
+
+        def extract(source: Path, index: int, dest: Path) -> None:
+            dest.write_text(
+                "WEBVTT\n\n00:00:04.000 --> 00:00:05.000\nAlready WebVTT\n",
+                encoding="utf-8",
+            )
+
+        self.assertEqual(extract_text_captions(asset, data_dir=self.data_dir, extractor=extract), "ready")
+        with patch(
+            "projectionist.engine.caption_prep.subprocess.run",
+            side_effect=AssertionError("play must not extract captions"),
+        ):
+            opened = self._open_with_probe(probe)
+        self.assertEqual(opened.status_code, 200, opened.text)
+        body = opened.json()
+        self.assertEqual(body["plan"], "remux", body)
+        self.assertTrue(body["playable"])
+        base = body["master_url"].rsplit("/", 1)[0]
+        vtt = self.client.get(f"{base}/subs/s2.vtt")
+        self.assertEqual(vtt.status_code, 200, vtt.text)
+        self.assertIn("Already WebVTT", vtt.text)
+
+    def test_text_not_ready_records_the_caption_fallback_and_queues_prep(self) -> None:
+        from projectionist.engine.captions import CAPTION_PENDING_REASON
+
+        self._map_movie()
+        self.db.upsert_library_item(
+            {
+                "rating_key": "121986",
+                "media_type": "movie",
+                "title": "Adventures of Zatoichi",
+                "original_language": "ja",
+                "duration_ms": 600_000,
+            }
+        )
+        probe = _probe()
+        probe.streams.append(
+            MediaStream(index=2, codec_type="subtitle", codec="subrip", language="eng", subtitle_kind="text")
+        )
+        calls = {"remux": 0}
+
+        def fake_start(source, directory, **kwargs):
+            calls["remux"] += 1
+            raise AssertionError("captions that are not ready must not remux")
+
+        with patch(
+            "projectionist.engine.routes.plex_part_paths",
+            return_value=["/data/media/movies/film.mkv"],
+        ), patch("projectionist.engine.source.probe_file", return_value=probe), patch(
+            "projectionist.engine.session.start_remux",
+            side_effect=fake_start,
+        ), patch(
+            "projectionist.engine.caption_prep.subprocess.run",
+            side_effect=AssertionError("play must not extract captions"),
+        ):
+            opened = self.client.post(
+                "/api/playback/sessions",
+                json={"rating_key": "121986", "profile": "apple-tv-4k-3", "engine_opt_in": True},
+            )
+        self.assertEqual(opened.status_code, 200, opened.text)
+        body = opened.json()
+        self.assertEqual(body["plan"], "plex-fallback")
+        self.assertFalse(body["playable"])
+        self.assertEqual(body["reason"], CAPTION_PENDING_REASON)
+        self.assertEqual(calls["remux"], 0)
+        queued = json.loads((self.data_dir / "caption_prep_queue.json").read_text(encoding="utf-8"))
+        self.assertEqual(queued["items"][0]["rating_key"], "121986")
+        self.assertEqual(queued["items"][0]["reason"], "play")

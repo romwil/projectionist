@@ -102,6 +102,25 @@ def _safe_error_detail(error: Exception, context: str = "") -> str:
     return _safe_error_detail_fn(error, context)
 
 
+def _note_caption_titles(items: Any, *, reason: str) -> None:
+    """Queue text-caption extraction for titles a person is about to play."""
+    from projectionist.engine.caption_prep import note_caption_titles
+
+    keys: list[str] = []
+    rows = items if isinstance(items, list) else [items]
+    for item in rows:
+        if isinstance(item, str):
+            key = item.strip()
+        elif isinstance(item, dict):
+            key = str(item.get("play_rating_key") or item.get("rating_key") or "").strip()
+        else:
+            continue
+        if key and key not in keys:
+            keys.append(key)
+    if keys:
+        note_caption_titles(keys, reason=reason)
+
+
 def _scoped_user_id(user) -> Optional[str]:
     """Return user.id when multi-user partitioning is active, else None."""
     if _settings().features.multi_user_enabled:
@@ -1065,10 +1084,9 @@ def library_feed_continue_watching(
             movie_section=settings.plex_movie_section or None,
             tv_section=settings.plex_tv_section or None,
         )
-    return _sanitize_library_payload(
-        feed_continue_watching(_db(), limit=limit, plex_client=plex_client),
-        user,
-    )
+    payload = feed_continue_watching(_db(), limit=limit, plex_client=plex_client)
+    _note_caption_titles(payload.get("items"), reason="continue-watching")
+    return _sanitize_library_payload(payload, user)
 
 
 @router.get("/api/library/feeds/unfinished")
@@ -1126,16 +1144,15 @@ def library_feed_for_you(
     user_id = str(user.id) if multi_user and getattr(user, "id", None) else (
         str(getattr(user, "id", None) or "bootstrap-owner")
     )
-    return _sanitize_library_payload(
-        feed_for_you(
-            _db(),
-            limit=limit,
-            user_id=user_id,
-            multi_user_enabled=multi_user,
-            youth_max_rating=youth_max_for_user(user, settings),
-        ),
-        user,
+    payload = feed_for_you(
+        _db(),
+        limit=limit,
+        user_id=user_id,
+        multi_user_enabled=multi_user,
+        youth_max_rating=youth_max_for_user(user, settings),
     )
+    _note_caption_titles(payload.get("items"), reason="for-you")
+    return _sanitize_library_payload(payload, user)
 
 
 @router.get("/api/library/feeds/pick-for-me")
@@ -1720,6 +1737,7 @@ def library_tv_episode_detail_endpoint(
     payload = get_episode_detail(_db(), rating_key)
     if payload.get("error"):
         raise HTTPException(status_code=404, detail=str(payload["error"]))
+    _note_caption_titles([rating_key], reason="title")
     return _sanitize_library_payload(payload, user)
 
 

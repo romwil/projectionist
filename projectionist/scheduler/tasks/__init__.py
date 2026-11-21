@@ -43,6 +43,7 @@ def register_all(scheduler: IdleScheduler) -> None:
         purge_candidates,
         semantic_embeddings,
         subtitle_enrichment,
+        caption_prep,
         summary_motifs,
         taste_refresh,
         title_relations_refresh,
@@ -72,6 +73,7 @@ def register_all(scheduler: IdleScheduler) -> None:
     entity_memory_enrichment.register(scheduler)
     metadata_enrichment.register(scheduler)
     subtitle_enrichment.register(scheduler)
+    caption_prep.register(scheduler)
     plot_neighbors.register(scheduler)
     summary_motifs.register(scheduler)
     llm_logline_enrichment.register(scheduler)

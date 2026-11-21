@@ -16,6 +16,7 @@ export const TASK_LABELS: Record<string, any> = {
   purge_candidates: "Purge candidates",
   semantic_embeddings: "Plot similarity index",
   subtitle_enrichment: "Save subtitles",
+  caption_prep: "Prepare text captions",
   summary_motifs: "Find plot patterns",
   taste_refresh: "Taste refresh",
   title_relations_refresh: "Refresh title connections",

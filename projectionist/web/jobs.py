@@ -371,6 +371,13 @@ class JobManager:
                 result.get("shows"),
                 live_refresh.get("count_refreshed") if live_refresh else None,
             )
+            try:
+                from projectionist.engine.caption_prep import enqueue_recent_arrivals, kick_caption_prep
+
+                enqueue_recent_arrivals(self.db, data_dir=self.data_dir)
+                kick_caption_prep()
+            except Exception:  # noqa: BLE001 — a scan still finishes if caption prep cannot queue
+                logger.debug("caption prep after library sync failed", exc_info=True)
         except Exception as error:  # noqa: BLE001
             logger.exception("Library sync failed job_id=%s: %s", job_id, error)
             self._progress_log_at.pop(job_id, None)
