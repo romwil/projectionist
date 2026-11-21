@@ -13,6 +13,7 @@ import importlib
 import json
 import os
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -20,6 +21,7 @@ from uuid import UUID
 
 from fastapi.testclient import TestClient
 
+from projectionist.theater.weather_channel.sources.almanac import moon_phase as _live_moon_phase
 from projectionist.web.client_contract import CLIENT_ROUTES
 
 FIXTURE_DIR = Path("docs/api/fixtures")
@@ -33,6 +35,8 @@ PLAYLIST = (
     "#EXT-X-ENDLIST\n"
 )
 SESSION_ID = "00000000-0000-4000-8000-000000000001"
+# Moon age moves every day. The example almanac stays the one recorded here.
+FIXTURE_MOON_AT = datetime(2026, 11, 21, 3, 30, tzinfo=timezone.utc)
 PLEX = "http://127.0.0.1:32400"
 TOKEN = "server-token"
 FORBIDDEN = (TOKEN, "LEAKED", "/Users/", "/mnt/")
@@ -124,6 +128,10 @@ def _fake_fetch(url: str, *, headers: Any = None, timeout: int = 30, method: str
 
 async def _fake_art(*_args: Any, **_kwargs: Any):
     return JPEG, "image/jpeg", 'W/"heat-poster"'
+
+
+def _recorded_moon() -> dict[str, Any]:
+    return _live_moon_phase(FIXTURE_MOON_AT)
 
 
 def _weather_service(data_dir: Path):
@@ -234,6 +242,10 @@ def collect_client_fixtures() -> dict[str, dict[str, Any]]:
             patch(
                 "projectionist.web.theater_delight_routes.get_weather_service",
                 return_value=weather,
+            ),
+            patch(
+                "projectionist.theater.weather_channel.sources.almanac.moon_phase",
+                side_effect=lambda when=None: _recorded_moon(),
             ),
         ):
             keep("GET", "/api/health", client.get("/api/health"))
