@@ -13,7 +13,8 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Mapping, Optional, Tuple
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qsl, quote, urlencode, urljoin, urlparse
 from urllib.request import Request, urlopen
@@ -493,6 +494,95 @@ def fetch_plex_bytes(
         raise PlaybackError("Plex is unreachable.", status_code=502) from error
 
 
+def fetch_plex_content_length(
+    url: str,
+    *,
+    headers: Optional[Mapping[str, str]] = None,
+    timeout: int = 10,
+) -> Optional[int]:
+    """HEAD ``url`` and return Content-Length. Does not download the segment."""
+    request = Request(url, method="HEAD")
+    for key, value in (headers or {}).items():
+        if value:
+            request.add_header(key, value)
+    try:
+        with urlopen(request, timeout=max(5, int(timeout or 10))) as response:
+            raw = response.headers.get("Content-Length")
+    except (HTTPError, URLError, TimeoutError, OSError):
+        return None
+    try:
+        size = int(str(raw or "").strip() or "0")
+    except ValueError:
+        return None
+    return size if size > 0 else None
+
+
+def _playlist_segments(body: str) -> List[Tuple[float, str]]:
+    segments: List[Tuple[float, str]] = []
+    duration: Optional[float] = None
+    for raw in str(body or "").splitlines():
+        line = raw.strip()
+        match = _EXTINF_RE.match(line)
+        if match:
+            try:
+                duration = float(match.group(1))
+            except ValueError:
+                duration = None
+            continue
+        if duration is None or not line or line.startswith("#"):
+            continue
+        segments.append((duration, line))
+        duration = None
+    return segments
+
+
+def _segment_url(playlist_url: str, ref: str) -> str:
+    text = str(ref or "").strip()
+    if text.startswith(("http://", "https://")):
+        return strip_secret_query(text)
+    base = playlist_url.rsplit("/", 1)[0]
+    return urljoin(f"{base}/", text)
+
+
+def measured_peak_bps(
+    playlist: str,
+    playlist_url: str,
+    *,
+    headers: Optional[Mapping[str, str]] = None,
+    length_of: Optional[Callable[[str], Optional[int]]] = None,
+) -> Optional[int]:
+    """HEAD each media segment and return the peak bitrate plus margin.
+
+    ``length_of`` replaces the Plex HEAD in tests. A segment with no
+    Content-Length is skipped. This does not change Plex's start parameters.
+    """
+    pairs = _playlist_segments(playlist)
+    if not pairs:
+        return None
+
+    def _default_length(url: str) -> Optional[int]:
+        return fetch_plex_content_length(url, headers=headers, timeout=10)
+
+    reader = length_of or _default_length
+    measured: List[Tuple[int, float]] = []
+    workers = max(1, min(16, len(pairs)))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {
+            pool.submit(reader, _segment_url(playlist_url, ref)): duration
+            for duration, ref in pairs
+        }
+        for future in as_completed(futures):
+            duration = futures[future]
+            try:
+                size = future.result()
+            except Exception:  # noqa: BLE001 — one segment must not hide the rest
+                logger.debug("segment size probe failed", exc_info=True)
+                continue
+            if size:
+                measured.append((int(size), duration))
+    return variant_peak_bps(measured)
+
+
 def _proxy_uri_for_plex(
     uri: str,
     *,
@@ -548,11 +638,18 @@ def _proxy_uri_for_plex(
     return f"{proxy_root}/{joined.lstrip('/')}"
 
 
-def variant_bandwidth_bps(file_size_bytes: int, duration_ms: int) -> Optional[int]:
-    """Bits per second for a master variant: container bitrate plus 25% headroom.
+# Safari stops requesting the next segment when a segment's bitrate is above
+# the variant BANDWIDTH. Ten percent over the measured peak keeps a segment
+# that lands just above the sample from tripping that check.
+PEAK_BANDWIDTH_MARGIN = 1.1
+_EXTINF_RE = re.compile(r"^#EXTINF:([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE)
+
+
+def variant_average_bps(file_size_bytes: int, duration_ms: int) -> Optional[int]:
+    """Container average bitrate. This is HLS ``AVERAGE-BANDWIDTH``.
 
     ``file_size`` and ``duration_ms`` are the item's own numbers. Returns None
-    when either is missing so the rewrite leaves Plex's BANDWIDTH unchanged.
+    when either is missing so the rewrite leaves Plex's tags unchanged.
     """
     size = int(file_size_bytes or 0)
     duration = int(duration_ms or 0)
@@ -561,35 +658,69 @@ def variant_bandwidth_bps(file_size_bytes: int, duration_ms: int) -> Optional[in
     seconds = duration / 1000.0
     if seconds <= 0:
         return None
-    average = (size * 8) / seconds
-    return max(1, int(round(average * 1.25)))
+    return max(1, int(round((size * 8) / seconds)))
+
+
+def variant_bandwidth_bps(file_size_bytes: int, duration_ms: int) -> Optional[int]:
+    """Average bitrate of the file. ``BANDWIDTH`` uses :func:`variant_peak_bps`."""
+    return variant_average_bps(file_size_bytes, duration_ms)
+
+
+def variant_peak_bps(
+    segments: Sequence[Tuple[int, float]],
+    *,
+    margin: float = PEAK_BANDWIDTH_MARGIN,
+) -> Optional[int]:
+    """HLS ``BANDWIDTH``: the highest measured segment bitrate, plus ``margin``.
+
+    Each pair is ``(size_bytes, duration_seconds)``. A missing or empty sample
+    returns None so the caller does not invent a peak.
+    """
+    rates: List[float] = []
+    for size, seconds in segments:
+        try:
+            nbytes = int(size)
+            span = float(seconds)
+        except (TypeError, ValueError):
+            continue
+        if nbytes <= 0 or span <= 0:
+            continue
+        rates.append((nbytes * 8) / span)
+    if not rates:
+        return None
+    return max(1, int(round(max(rates) * float(margin))))
 
 
 _STREAM_INF_BANDWIDTH = re.compile(r"(?<!AVERAGE-)BANDWIDTH=\d+", re.IGNORECASE)
 _STREAM_INF_AVERAGE = re.compile(r"AVERAGE-BANDWIDTH=\d+", re.IGNORECASE)
 
 
-def _with_variant_bandwidth(line: str, bandwidth: int) -> str:
-    """Set BANDWIDTH and AVERAGE-BANDWIDTH on one master variant line."""
+def _with_variant_bandwidth(
+    line: str,
+    bandwidth: int,
+    average: Optional[int] = None,
+) -> str:
+    """Set ``BANDWIDTH`` (peak) and ``AVERAGE-BANDWIDTH`` (average) on one variant."""
     if "EXT-X-STREAM-INF" not in line.upper():
         return line
-    value = str(int(bandwidth))
+    peak = str(int(bandwidth))
+    mean = str(int(bandwidth if average is None else average))
     if _STREAM_INF_BANDWIDTH.search(line):
-        line = _STREAM_INF_BANDWIDTH.sub(f"BANDWIDTH={value}", line, count=1)
+        line = _STREAM_INF_BANDWIDTH.sub(f"BANDWIDTH={peak}", line, count=1)
     else:
         line = re.sub(
             r"(#EXT-X-STREAM-INF:)",
-            rf"\1BANDWIDTH={value},",
+            rf"\1BANDWIDTH={peak},",
             line,
             count=1,
             flags=re.IGNORECASE,
         )
     if _STREAM_INF_AVERAGE.search(line):
-        line = _STREAM_INF_AVERAGE.sub(f"AVERAGE-BANDWIDTH={value}", line, count=1)
+        line = _STREAM_INF_AVERAGE.sub(f"AVERAGE-BANDWIDTH={mean}", line, count=1)
     else:
         line = line.replace(
-            f"BANDWIDTH={value}",
-            f"BANDWIDTH={value},AVERAGE-BANDWIDTH={value}",
+            f"BANDWIDTH={peak}",
+            f"BANDWIDTH={peak},AVERAGE-BANDWIDTH={mean}",
             1,
         )
     return line
@@ -602,11 +733,13 @@ def rewrite_plex_hls_playlist(
     plex_base: str,
     playlist_path: str,
     variant_bandwidth: Optional[int] = None,
+    variant_average: Optional[int] = None,
 ) -> str:
     """Rewrite playlist URIs onto the Projectionist proxy; strip PMS host + token.
 
-    ``variant_bandwidth`` is applied only to ``#EXT-X-STREAM-INF`` lines. The
-    caller passes it for the master playlist. Media playlists are left alone.
+    ``variant_bandwidth`` is the peak (HLS ``BANDWIDTH``) and ``variant_average``
+    is the container average (``AVERAGE-BANDWIDTH``). Both apply only to
+    ``#EXT-X-STREAM-INF`` lines. Media playlists are left alone.
     """
     source = str(body or "")
     out_lines = []
@@ -617,7 +750,9 @@ def rewrite_plex_hls_playlist(
             continue
         if stripped.startswith("#"):
             if variant_bandwidth is not None:
-                line = _with_variant_bandwidth(line, variant_bandwidth)
+                line = _with_variant_bandwidth(
+                    line, variant_bandwidth, average=variant_average
+                )
                 stripped = line.strip()
             if "URI=" in stripped:
 
@@ -1082,6 +1217,31 @@ def stop_playback(
     return {"ok": True}
 
 
+def _master_peak_bps(session: PlaybackSession, fetch: FetchFn) -> Optional[int]:
+    """Measure segment peaks for the session the master request just started.
+
+    The media playlist GET is not another universal start, so Plex's start
+    parameters stay as they are. A failed probe leaves BANDWIDTH unchanged.
+    """
+    base = str(session.plex_base or "").strip().rstrip("/")
+    media_url = (
+        f"{base}/video/:/transcode/universal/session/{session.session_id}/base/index.m3u8"
+    )
+    headers = plex_identity_headers(session.token)
+    try:
+        body, _content_type, status, _final = fetch(media_url, headers=headers, timeout=30)
+    except PlaybackError:
+        logger.warning("Could not read the media playlist to measure segment peaks")
+        return None
+    if int(status or 0) != 200 or not body:
+        return None
+    return measured_peak_bps(
+        body.decode("utf-8", errors="replace"),
+        media_url,
+        headers=headers,
+    )
+
+
 def proxy_session_asset(
     session: PlaybackSession,
     relative_path: str,
@@ -1091,6 +1251,7 @@ def proxy_session_asset(
     fetch = fetch or fetch_plex_bytes
     path = validate_playback_path(relative_path)
     variant_bandwidth = None
+    variant_average = None
     if path in {"index.m3u8", "master.m3u8"}:
         url = universal_start_url(
             session.plex_base,
@@ -1099,7 +1260,12 @@ def proxy_session_asset(
             offset_seconds=session.last_offset_s,
         )
         rewrite_base = UNIVERSAL_HLS_MASTER
-        variant_bandwidth = variant_bandwidth_bps(session.file_size, session.duration_ms)
+        variant_average = variant_average_bps(session.file_size, session.duration_ms)
+        measured = _master_peak_bps(session, fetch)
+        if measured is not None and variant_average is not None:
+            variant_bandwidth = max(measured, variant_average)
+        else:
+            variant_bandwidth = measured
     else:
         base = session.plex_base.rstrip("/")
         upstream = plex_fetch_path(path)
@@ -1122,6 +1288,7 @@ def proxy_session_asset(
             plex_base=session.plex_base,
             playlist_path=rewrite_base,
             variant_bandwidth=variant_bandwidth,
+            variant_average=variant_average,
         )
         return {
             "body": rewritten.encode("utf-8"),
