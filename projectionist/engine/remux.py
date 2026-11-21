@@ -2,16 +2,23 @@
 
 The master playlist is ours, so BANDWIDTH follows the file instead of a
 guessed ladder. ffmpeg writes the media playlist and segments beside it.
+WebVTT captions, when the session has them, are a SUBTITLES group: one
+file and a one-segment VOD playlist per rendition.
 """
 
 from __future__ import annotations
 
+import math
+import re
 import subprocess
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Optional, Sequence
 
+from projectionist.engine.captions import CaptionRendition
 from projectionist.engine.probe import ProbeResult
 from projectionist.library.playback import variant_bandwidth_bps
+
+_TRACK_ID = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
 
 Runner = Callable[..., object]
 
@@ -50,8 +57,77 @@ def _codecs(probe: Optional[ProbeResult]) -> str:
     return ",".join(names)
 
 
-def write_master(directory: Path, probe: Optional[ProbeResult], *, file_size: int, duration_ms: int) -> Path:
+def _attr(value: str) -> str:
+    return str(value or "").replace("\\", "").replace('"', "").replace("\n", " ").replace(",", " ")
+
+
+def _media_line(track: CaptionRendition) -> str:
+    default = "YES" if track.default else "NO"
+    attrs = [
+        "TYPE=SUBTITLES",
+        'GROUP-ID="subs"',
+        f'NAME="{_attr(track.name) or "Captions"}"',
+        f"DEFAULT={default}",
+        f"AUTOSELECT={default}",
+        "FORCED=NO",
+    ]
+    if track.language:
+        attrs.append(f'LANGUAGE="{_attr(track.language)}"')
+    attrs.append(f'URI="subs/{track.track_id}.m3u8"')
+    return "#EXT-X-MEDIA:" + ",".join(attrs)
+
+
+def write_caption_renditions(
+    directory: Path,
+    captions: Sequence[CaptionRendition],
+    *,
+    duration_ms: int,
+) -> list[str]:
+    """Write one WebVTT and a one-segment VOD playlist per rendition.
+
+    Returns the master ``EXT-X-MEDIA`` lines. A track id that is not a plain
+    token is skipped, so a rendition cannot escape ``subs/``.
+    """
+    lines: list[str] = []
+    seconds = max(float(duration_ms or 0) / 1000.0, 1.0)
+    target = max(1, math.ceil(seconds - 1e-9))
+    subs = directory / "subs"
+    for track in captions:
+        if not _TRACK_ID.fullmatch(track.track_id):
+            continue
+        body = str(track.webvtt or "")
+        if "-->" not in body:
+            continue
+        subs.mkdir(parents=True, exist_ok=True)
+        (subs / f"{track.track_id}.vtt").write_text(body if body.endswith("\n") else body + "\n", encoding="utf-8")
+        playlist = "\n".join(
+            [
+                "#EXTM3U",
+                "#EXT-X-VERSION:3",
+                f"#EXT-X-TARGETDURATION:{target}",
+                "#EXT-X-MEDIA-SEQUENCE:0",
+                "#EXT-X-PLAYLIST-TYPE:VOD",
+                f"#EXTINF:{seconds:.3f},",
+                f"{track.track_id}.vtt",
+                "#EXT-X-ENDLIST",
+                "",
+            ]
+        )
+        (subs / f"{track.track_id}.m3u8").write_text(playlist, encoding="utf-8")
+        lines.append(_media_line(track))
+    return lines
+
+
+def write_master(
+    directory: Path,
+    probe: Optional[ProbeResult],
+    *,
+    file_size: int,
+    duration_ms: int,
+    captions: Optional[Sequence[CaptionRendition]] = None,
+) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
+    media_lines = write_caption_renditions(directory, list(captions or []), duration_ms=duration_ms)
     bandwidth = bandwidth_bps(probe, file_size=file_size, duration_ms=duration_ms)
     extras = [f"BANDWIDTH={bandwidth}", f"AVERAGE-BANDWIDTH={bandwidth}"]
     codecs = _codecs(probe)
@@ -60,6 +136,8 @@ def write_master(directory: Path, probe: Optional[ProbeResult], *, file_size: in
     video = next((item for item in (probe.streams if probe else []) if item.codec_type == "video"), None)
     if video and video.width and video.height:
         extras.append(f"RESOLUTION={video.width}x{video.height}")
+    if media_lines:
+        extras.append('SUBTITLES="subs"')
     line = "#EXT-X-STREAM-INF:" + ",".join(extras)
     path = directory / "master.m3u8"
     path.write_text(
@@ -67,6 +145,7 @@ def write_master(directory: Path, probe: Optional[ProbeResult], *, file_size: in
             [
                 "#EXTM3U",
                 "#EXT-X-VERSION:7",
+                *media_lines,
                 line,
                 "av/stream.m3u8",
                 "",
@@ -114,11 +193,18 @@ def start_remux(
     duration_ms: int,
     runner: Optional[Runner] = None,
     ffmpeg: Optional[str] = None,
+    captions: Optional[Sequence[CaptionRendition]] = None,
 ) -> Optional[subprocess.Popen]:
     """Write the master playlist and start a copy remux. ``runner`` replaces ffmpeg in tests."""
     av = directory / "av"
     av.mkdir(parents=True, exist_ok=True)
-    write_master(directory, probe, file_size=file_size, duration_ms=duration_ms)
+    write_master(
+        directory,
+        probe,
+        file_size=file_size,
+        duration_ms=duration_ms,
+        captions=captions,
+    )
     binary = ffmpeg
     if not binary and runner is None:
         from projectionist.library.episode_investigate.capabilities import resolve_ffmpeg
