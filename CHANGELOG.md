@@ -2,8 +2,30 @@
 
 ## [Unreleased]
 
+## [1.41.1] — 2026-11-20
+
+Posters come from Projectionist, web playback keeps a fuller buffer, and member screens read in plain language.
+
+### Highlights
+- **Art shows up.** Posters and backdrops on Explore, a title, and search come from this server, so a shelf is not a row of empty frames.
+- **Playback keeps up.** The stream tells the player a bitrate the picture can hold, so web playback stalls less.
+- **Recommendations sound like a person.** For you lines are full sentences, and member screens drop internal words.
+
+### Added
+- EXP-006: `GET /api/library/art/{media_type}/{item_id}` serves a cached poster or backdrop to a signed-in client. Hub, title, and search set `poster_url` and `backdrop_url` to that route. `features.cached_art` is the gate. The server fetches HTTPS art from `image.tmdb.org`, `artworks.thetvdb.com`, or `assets.fanart.tv`, or a library thumb from the configured Plex server. The Plex token stays on the server.
+
 ### Changed
-- EXP-006: hub, title, and search art points at an authenticated cache. Projectionist fetches the poster and backdrop; the Plex token stays on the server.
+- EXP-004: For you *why* lines use curator-voice templates and a quality gate that refuses fragments.
+- EXP-005: member and Youth surfaces drop internal vocabulary; one assistant name.
+
+### Fixed
+- Master playlist `BANDWIDTH` and `AVERAGE-BANDWIDTH` follow the file's real bitrate plus 25% headroom. Plex request parameters are unchanged.
+
+### Verification
+- `./scripts/patch-release.sh 1.41.1` lockstep + `frontend/public/release-notes.json`.
+- Page speed (`npm run test:release-perf`) before Hub publish.
+- CI on the release PR (required checks).
+- QA `:8792` is a Hub pull of `romwil/projectionist:1.41.1` (Path B). Prod stays on the previous image.
 
 ## [1.41.0] — 2026-11-19
 
