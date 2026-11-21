@@ -142,7 +142,7 @@ When someone opens the **Weather Channel** from Live:
 | **Alerts (US only)** | The coordinates to the National Weather Service (`api.weather.gov`) | Every 5 minutes while someone watches a US place |
 | **Radar and satellite** | A map box around the coordinates to Iowa Environmental Mesonet (`mesonet.agron.iastate.edu`) and NOAA (`cdn.star.nesdis.noaa.gov`) for US places, or to RainViewer (`api.rainviewer.com`, `tilecache.rainviewer.com`) elsewhere | Every 10 minutes while someone watches |
 | **Webcams** | The coordinates to Windy (`api.windy.com`, images from `imgproxy.windy.com`) | Only when the owner adds a Windy key |
-| **Headlines** | The city name (local search) or the country (front page) to Google News (`news.google.com`). The world feed from BBC (`feeds.bbci.co.uk`) gets nothing about the place. | Every 30 minutes while someone watches |
+| **Headlines** | The city name (local search) or the country (front page) to Google News (`news.google.com`). The world feed from BBC (`feeds.bbci.co.uk`) gets nothing about the place. EXP-015: the owner can turn headlines off, and a Youth session hides them unless the owner allows them. Either stop also stops these fetches. | Every 30 minutes while someone watches, and only while headlines are on for that viewer |
 | **Voiceover scripts** | The weather data and the place name to the household model (the LLM in Configuration) | When the data changes, if a model is set |
 | **Headline recap** | Only the fetched headline titles and their sources to the household model | When headlines change, if a model is set |
 | **Voice** | Nothing. Speech is rendered on the server by a local voice model. | Weather narration is on |

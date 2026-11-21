@@ -25,7 +25,7 @@ Jump to: [Principles](#principles) · [Sign-in](#signing-in) · [Capabilities](#
 | Device kind | How it signs in | Status |
 |-------------|-----------------|--------|
 | **TV** (Apple TV) | Shows a code (`XXXX-XXXX`, no 0/O/1/I, 5-minute lifetime); a signed-in web member enters it; the TV polls and receives its credential once | Built (local work: `POST /api/devices/pair/issue`, `…/rotate`, `GET …/pending/{id}`, `POST …/claim`, `POST /api/devices/{id}/revoke`) |
-| **Handheld** (iPhone, iPad, Mac) | Native sign-in with the methods the household already offers — Plex PIN (system web auth sheet), local password, OIDC — exchanged for a device credential instead of a cookie | Proposed (NAT-002 / SES-001) |
+| **Handheld** (iPhone, iPad, Mac) | Every web sign-in path — Plex PIN, local password, OIDC, redeeming an invite, and requesting access — can end in a device credential instead of a cookie. The TV-style code stays as a secondary path | Accepted (NAT-002 / SES-001) |
 | **Handheld via TV** | Scan a QR on a paired TV to sign a phone in as the same member, then confirm on the phone | Proposed, optional |
 
 Every credential is sent as `Authorization: Bearer <credential>`; the server stores only a hash (`hash_secret` in `devices/pairing.py`). Members see and revoke their devices in **Settings → Apple TV** today; *proposed:* that page becomes **Settings → Devices** for every kind.
@@ -52,7 +52,10 @@ curl -s -H "Authorization: Bearer YOUR_DEVICE_CREDENTIAL" \
     "caption_tracks": 0,     // ENG-004
     "shared_sessions": 0,    // SES-004
     "timeline": 0,           // TML-005
-    "tracks": 0              // TRK-003
+    "tracks": 0,             // TRK-003
+    "native_sign_in": 0,     // NAT-002 ships → 1
+    "push": 0,               // NAT-006
+    "approvals": 0           // NAT-006
   }
 }
 ```
@@ -90,11 +93,11 @@ Native clients ship through app stores on their own clocks, so the API they depe
 | ID | Item | Depends on |
 |----|------|------------|
 | NAT-001 | Capability manifest + `api_contract` on `GET /api/features` | — |
-| NAT-002 | Handheld device credentials via native sign-in (Plex PIN / local / OIDC) | pairing (local work) |
+| NAT-002 | Handheld device credentials for every web sign-in path (Plex PIN, local password, OIDC, invite redeem, request access). A native client sends *proposed* `client: {kind, label}` and receives a device credential once instead of `curatorx_session`. Plex PIN nonce is client-held, not a cookie. OIDC uses an allowlisted custom-scheme redirect, PKCE, and a short-lived single-use code exchanged for the credential (the credential never appears in a URL). Invite `validate` stays public and returns only the inviter display name, role, and expiry. The web Join page offers an open-in-app link carrying the base URL and invite token. `native_sign_in: 1` and a public list of enabled methods ship with it. Security-sensitive: design → plan → build | pairing (local work), NAT-001 |
 | NAT-003 | OpenAPI snapshot + client-facing route tags + CI drift check | — |
 | NAT-004 | Response fixtures for client-facing routes | NAT-003 |
 | NAT-005 | **Settings → Devices** — store and return device **kind** (`tv` / `iphone` / `ipad`) on claim and list; rename Settings → Apple TV to Devices; page title, empty state, and claim confirmation speak the kind (not always “Apple TV”). Handhelds may use the existing code flow before NAT-002. Waiting client: APL-016 | pairing (shipped) |
-| NAT-006 | Push registration for native clients (APNs token per device). APNs needs the app publisher’s key, so a self-hosted server pushes through the publisher’s relay; *proposed:* pushes are **content-free** (“Something is ready in Projectionist”) and the app fetches the detail from the household server, so no title ever crosses the relay. Ship PRIV-026 panel the same day. Deep links need ARCH-010 SPA fallbacks | NAT-002, ARCH-010 |
+| NAT-006 | Push registration (APNs token per device; revoke drops the token) through the publisher relay, because a self-hosted server does not hold the publisher key. Payloads are content-free: `approval_needed`, `something_ready`, or `security_notice`, plus an opaque id. The client fetches the detail. Approval object covers device sign-in (a phone may approve a pair code; the code path stays the fallback; *proposed:* the issuing device names the member first) and Youth join (SES-009). Approvals expire, are single-use, are audited, and re-check authorization. A new device on any NAT-002 path sends `security_notice` to the member’s other devices. Per-member notification preferences. Capabilities `push: 1` and `approvals: 1`. If the relay is down, the same approvals still work in the app and on the web. Ship PRIV-026 the same day. Deep links need ARCH-010 | NAT-002, ARCH-010 |
 
 ## See also
 

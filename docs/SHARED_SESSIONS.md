@@ -88,7 +88,7 @@ A guest (or the owner) can read captions on their own device while the room watc
 
 | ID | Item | Depends on |
 |----|------|------------|
-| SES-001 | Device credentials for phones and tablets (generalize Apple TV pairing: `kind = tv / handheld / browser`); native sign-in on handhelds | pairing (local work) |
+| SES-001 | Device credentials for phones and tablets. Every web sign-in path (Plex, local password, OIDC, invite redeem, request access) can end in a device credential. Same work as NAT-002 | pairing (local work) |
 | SES-002 | Rooms registry (named screens per household) + visibility rules | SES-001 |
 | SES-003 | Session object (owner, screen, position, level) on top of engine sessions | ENG-003 |
 | SES-004 | Realtime channel (`/api/sessions/{id}/live`), command authorization, clock model | SES-003 |

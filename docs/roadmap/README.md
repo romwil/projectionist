@@ -8,12 +8,12 @@ Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` ·
 
 ## Sequencing
 
-1. **ENG** — the playback engine (everything stands on it)
+1. **ENG** — the playback engine. Lane order: ENG-001 → ENG-002 → ENG-003 → **ENG-007** → ENG-004 → the rest. ENG-007 is off until the household turns on *Play through Projectionist*
 2. **SES** — shared sessions (extends the Apple TV pairing + throw work)
 3. **TML** — the timeline layer
 4. **TRK** — tracks: Moments, Booth Notes, Class / Study
 5. **NAT** — the client contract, threaded through 1–4 as each capability ships
-6. **EXP** — experience convergence (parallel). Lane B’s next item is **EXP-001** (design tokens). EXP-013, EXP-004, EXP-005, and EXP-006 are done
+6. **EXP** — experience convergence (parallel). Lane B’s next item is **EXP-001** (design tokens). EXP-013, EXP-004, EXP-005, and EXP-006 are done. EXP-014, EXP-015, and EXP-016 are accepted
 
 ## Board
 
@@ -25,11 +25,11 @@ Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` ·
 | ENG-004 | WebVTT caption renditions (household cache first) | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-005 | Image-caption OCR job | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-006 | Audio + full transcode plans; hardware encode; concurrency | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
-| ENG-007 | Web player adoption | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
+| ENG-007 | Web player on engine sessions, right after ENG-003, behind an off-by-default setting | accepted | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-008 | Scrub thumbnails | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-009 | Live Channels on engine sessions (ARCH-007 facade; PRD-007 freeze) | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-010 | Jellyfin media source | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
-| SES-001 | Device credentials for handhelds; native sign-in | proposed | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
+| SES-001 | Device credentials for every handheld sign-in path (same work as NAT-002) | accepted | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
 | SES-002 | Rooms registry + visibility | proposed | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
 | SES-003 | Session object (owner, screen, position, level) | proposed | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
 | SES-004 | Realtime channel + command authorization + clock | proposed | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
@@ -57,11 +57,11 @@ Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` ·
 | TRK-009 | Series studies | proposed | [TRACKS](../TRACKS.md#roadmap-items) |
 | TRK-010 | Web overlay renderer | proposed | [TRACKS](../TRACKS.md#roadmap-items) |
 | NAT-001 | Capability manifest + `api_contract` | proposed | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
-| NAT-002 | Handheld device credentials via native sign-in | proposed | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
+| NAT-002 | Handheld device credentials for every web sign-in path | accepted | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
 | NAT-003 | OpenAPI snapshot + client route tags + CI drift check | proposed | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
 | NAT-004 | Response fixtures | proposed | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
 | NAT-005 | Settings → Devices + device kind on claim/list | proposed | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
-| NAT-006 | Content-free push via publisher relay | proposed | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
+| NAT-006 | Content-free push, including security approvals | accepted | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
 | EXP-001 | Design tokens as source of truth | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | EXP-002 | One navigation model | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | EXP-003 | Explore, cinema-first | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
@@ -75,6 +75,9 @@ Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` ·
 | EXP-011 | Design gallery | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | EXP-012 | Title detail keeps navigation | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | EXP-013 | Explore is the default home | done | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| EXP-014 | Weather boards on the web, every width | accepted | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| EXP-015 | Weather headline controls, including Youth | accepted | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| EXP-016 | Poster depth on the web: light, edge, generated placeholders | accepted | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 
 SES-001 and NAT-002 describe the same work from two sides; build them as one change.
 
@@ -92,6 +95,9 @@ SES-001 and NAT-002 describe the same work from two sides; build them as one cha
 | 2026-11-20 | **Apple clients adopt ENG-003 engine sessions before the web.** The web player stays on the Plex universal path until ENG-007. Spike code stays off `main` |
 | 2026-11-20 | **EXP-006 moves to the front of Lane B.** EXP-013, EXP-005, and EXP-004 are done, so cached art is the next experience item, ahead of EXP-001 |
 | 2026-11-20 | **EXP-006 ships** `GET /api/library/art/{media_type}/{item_id}`. Hub, title, and search `poster_url` / `backdrop_url` point at it. The server fetches under the SEC-013 allowlist. `features.cached_art` is the client gate |
+| 2026-11-20 | **Native handhelds get every web sign-in path** (Plex, local password, OIDC, invite redeem, request access), ending in a device credential. The pair-code stays the secondary path. NAT-002 and SES-001 are accepted |
+| 2026-11-20 | **Push is a priority and includes security.** Payloads stay content-free. NAT-006 is accepted: device sign-in approval, Youth join on the same object, and a new-device notice |
+| 2026-11-20 | **The web takes engine sessions as ENG-007, immediately after ENG-003**, behind *Play through Projectionist* (off by default). Apple clients still adopt ENG-003 first. Captions fall back to the Plex path until ENG-004 |
 | 2026-11-19 | **Lane A remux spike:** H.264+AC-3 fMP4 HLS (`-c copy`) + household WebVTT works on Safari/WebKit and tvOS AVPlayer (seek without restart; captions selectable). Desktop Chrome/hls.js rejects AC-3 — planner must audio-transcode for those profiles. Findings: [engine-spike-findings](../superpowers/specs/2026-11-19-engine-spike-findings.md). Spike code stays on `spike/engine-remux` (not merged) |
 
 ## Superseded review rows (carry-forward)

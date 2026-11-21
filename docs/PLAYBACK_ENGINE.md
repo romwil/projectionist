@@ -186,14 +186,14 @@ The web app benefits as much as any native client:
 | ENG-004 | WebVTT caption renditions in the master playlist (household cache first) | ENG-003 |
 | ENG-005 | Image-caption OCR job (jobs engine, cached, labeled) | ENG-004 |
 | ENG-006 | Audio + full transcode plans; hardware encode opt-in; concurrency limits | ENG-003 |
-| ENG-007 | Web player adoption (hls.js on engine sessions; native text tracks + styling layer) | ENG-004 |
+| ENG-007 | Web player adoption, immediately after ENG-003, behind a per-household setting that is off by default (*Play through Projectionist*). The web keeps its own fullscreen chrome. Captions fall back to the Plex path until ENG-004. A plan the engine cannot remux falls back to Plex and records the reason. Turning the setting off returns the next play to the Plex path | ENG-003 |
 | ENG-008 | Scrub thumbnails (trickplay image sprites / I-frame playlist) | ENG-003 |
 | ENG-009 | Live Channels on engine sessions (same stations, new stream). Build as the Live facade ARCH-007 asked for; PRD-007 freeze still holds (no new channel types) | ENG-003; ARCH-007 |
 | ENG-010 | Jellyfin media source | ENG-001 |
 
 ## Open decisions
 
-- **Client order (decided 2026-11-20):** Apple clients adopt ENG-003 engine sessions before the web does. The web player stays on the Plex universal path until ENG-007.
+- **Client order (decided 2026-11-20, re-sequenced the same day):** Apple clients adopt ENG-003 first. The web follows immediately as ENG-007, behind a household setting that is off by default, not after the rest of the engine series. Until that setting is on, the web stays on the Plex path.
 - **Path naming:** keep `/api/library/playback/*` and switch its backend, or introduce `/api/playback/sessions/*` and deprecate the old routes after ENG-007. *Proposed:* new namespace, old routes stay as the Plex fallback until parity. **Spike (2026-11-19):** path-token session URLs under a new namespace worked for Safari/WebKit and tvOS `AVPlayer` without `Authorization` headers — keeps the proposed ENG-003 shape.
 - **Segment cache:** on-the-fly remux per session vs. a short-lived on-disk segment cache under `DATA_DIR` shared by concurrent viewers. *Proposed:* on-the-fly first; cache only if measurements demand it. **Spike:** serving a pre-built `-c copy` fMP4 package was ~0% CPU idle; no evidence yet that remux needs a shared disk cache for single-viewer Apple playback.
 - **HDR on the web:** whether to tone-map or refuse HDR → SDR on browsers without HDR support.
