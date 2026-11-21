@@ -139,3 +139,22 @@ class EngineRouteTests(unittest.TestCase):
         self.assertEqual(partial.status_code, 200, partial.text)
         listed = self.client.get("/api/playback/path-mappings")
         self.assertEqual(listed.json()["mappings"][0]["plex_prefix"], "/plex/movies")
+
+    def test_plan_names_a_remux_without_a_file_path(self) -> None:
+        saved = self.client.put(
+            "/api/playback/path-mappings",
+            json={"mappings": [{"plex_prefix": "/data/media/movies", "container_prefix": str(self.data_dir)}]},
+        )
+        self.assertEqual(saved.status_code, 200, saved.text)
+        with patch(
+            "projectionist.engine.routes.plex_part_paths",
+            return_value=["/data/media/movies/film.mkv"],
+        ), patch("projectionist.engine.source.probe_file", return_value=_probe()):
+            plan = self.client.get("/api/playback/plan", params={"rating_key": "121986", "profile": "apple-tv-4k-3"})
+        self.assertEqual(plan.status_code, 200, plan.text)
+        body = plan.json()
+        self.assertEqual(body["plan"], "remux")
+        self.assertNotIn(str(self.media), plan.text)
+        self.assertNotIn("/data/media", plan.text)
+        unknown = self.client.get("/api/playback/plan", params={"rating_key": "121986", "profile": "nope"})
+        self.assertEqual(unknown.status_code, 400)

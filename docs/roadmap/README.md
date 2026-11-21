@@ -22,7 +22,7 @@ Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` ·
 | ID | Title | Status | Owning doc |
 |----|-------|--------|------------|
 | ENG-001 | Media source interface + Plex path mapping + cached ffprobe | done | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
-| ENG-002 | Planner with recorded reason; dry-run plan endpoint | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
+| ENG-002 | Planner with recorded reason; dry-run plan endpoint | done | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-003 | Session API with device profiles; VOD fMP4 HLS remux | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-004 | WebVTT caption renditions (household cache first) | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-005 | Image-caption OCR job | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |

@@ -1,0 +1,83 @@
+"""Named device profiles. The planner never guesses from a user-agent string.
+
+ENG-003 accepts the same shape in a session body. A name here is the dry-run
+shortcut for ``GET /api/playback/plan``.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Optional
+
+
+@dataclass
+class VideoCapability:
+    codec: str
+    max_level: str = ""
+    hdr: list[str] = field(default_factory=list)
+
+
+@dataclass
+class DeviceProfile:
+    id: str
+    containers: list[str]
+    video: list[VideoCapability]
+    audio: list[str]
+    captions: list[str] = field(default_factory=lambda: ["webvtt"])
+    max_bitrate_kbps: Optional[int] = None
+
+    def as_public(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "containers": list(self.containers),
+            "video": [
+                {"codec": item.codec, "max_level": item.max_level, "hdr": list(item.hdr)}
+                for item in self.video
+            ],
+            "audio": list(self.audio),
+            "captions": list(self.captions),
+            "max_bitrate_kbps": self.max_bitrate_kbps,
+        }
+
+
+def _video(*rows: tuple[str, str]) -> list[VideoCapability]:
+    return [VideoCapability(codec=codec, max_level=level) for codec, level in rows]
+
+
+APPLE_TV_4K = DeviceProfile(
+    id="apple-tv-4k-3",
+    containers=["mp4", "hls-fmp4", "hls-ts"],
+    video=[
+        VideoCapability("hevc", "5.1", ["hdr10", "dolby-vision"]),
+        VideoCapability("h264", "5.2"),
+    ],
+    audio=["aac", "ac3", "eac3", "alac", "flac"],
+)
+
+SAFARI = DeviceProfile(
+    id="safari",
+    containers=["mp4", "hls-fmp4"],
+    video=_video(("hevc", "5.1"), ("h264", "5.2")),
+    audio=["aac", "ac3", "eac3", "alac", "flac", "mp3"],
+)
+
+CHROME = DeviceProfile(
+    id="chrome",
+    containers=["mp4", "hls-fmp4"],
+    video=_video(("h264", "5.2")),
+    audio=["aac", "mp3", "opus", "flac"],
+)
+
+_NAMED = {
+    APPLE_TV_4K.id: APPLE_TV_4K,
+    SAFARI.id: SAFARI,
+    CHROME.id: CHROME,
+}
+
+
+def named_profile(name: str) -> Optional[DeviceProfile]:
+    return _NAMED.get(str(name or "").strip().lower())
+
+
+def known_profile_ids() -> list[str]:
+    return list(_NAMED)
