@@ -39,7 +39,7 @@ Port-forwarding or exposing `8788` (or a reverse proxy without auth) used to exp
 
 ### Public household perimeter (ACTIVE_MODE)
 
-There is **no** `/api/auth/` prefix leak. Ingress matches **explicit method+path pairs** in `PUBLIC_HANDSHAKE_EXACT` (`projectionist/web/auth.py`). If a route is not on this list, it needs a session.
+There is **no** `/api/auth/` prefix leak. Ingress matches **explicit method+path pairs** in `PUBLIC_HANDSHAKE_EXACT` (`projectionist/web/auth.py`), plus two pattern matches: the pair-code poll and an engine playlist URL. If a route is not one of those, it needs a session.
 
 **Exhaustive unauthenticated handshake:**
 
@@ -64,6 +64,7 @@ There is **no** `/api/auth/` prefix leak. Ingress matches **explicit method+path
 | `POST` | `/api/devices/pair/issue` | Apple TV sign-in code. Short code, expiry, pending id. No library data, no device credential. Rate limited |
 | `POST` | `/api/devices/pair/rotate` | New code for a pending id. The previous code dies. Unknown or already claimed: tell the TV to issue again |
 | `GET` | `/api/devices/pair/pending/{id}` | Pattern match, like the Plex PIN poll. Pending, or the device credential **once** after claim. Not a library read |
+| `GET` | `/api/playback/sessions/{id}/{token}/…` | Pattern match. The token in the path is the credential for that session's playlist and segments. Opening the session, progress, and stop still need a member credential. A missing or wrong token is **404**, not a library listing |
 
 Not public: `GET /api/auth/me`, `POST /api/auth/local/register`, `GET /api/guest/tour` (404), whole `/api/auth/` prefix, setup wizard endpoints after ACTIVE_MODE (404). `/api/webhooks/*` stays **secret-gated** (S8). `/mcp` stays **API-key-gated** — do not publish MCP on the WAN hostname.
 

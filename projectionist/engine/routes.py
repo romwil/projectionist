@@ -167,6 +167,9 @@ class PlaybackSessionPayload(BaseModel):
     profile: Any = "apple-tv-4k-3"
     start_over: bool = False
     offset_ms: Optional[int] = None
+    # Clients that can play an engine playlist set this. Everyone else gets
+    # the library path, including when the household switch is on.
+    engine_opt_in: bool = False
 
 
 class PlaybackProgressBody(BaseModel):
@@ -215,14 +218,24 @@ def open_playback_session(
     payload: PlaybackSessionPayload,
     user=Depends(get_current_user_dep),
 ) -> dict[str, Any]:
-    """Open an engine session. Remux and direct plans get a token URL. Other plans record why."""
-    from projectionist.engine.session import assert_session_allowed, open_engine_session
+    """Open an engine session. Remux and direct plans get a token URL. Other plans record why.
+
+    A client that does not set ``engine_opt_in`` gets the library path. No probe,
+    no remux, and no playlist URL.
+    """
+    from projectionist.engine.session import (
+        assert_session_allowed,
+        declined_engine_session,
+        open_engine_session,
+    )
     from projectionist.library.playback import YouthBlockedError, resolve_playable_item
 
     try:
         key = validate_rating_key(payload.rating_key)
     except PlaybackError as error:
         raise HTTPException(status_code=error.status_code, detail=error.message) from error
+    if not payload.engine_opt_in:
+        return declined_engine_session(key)
     profile = _profile_from_body(payload.profile)
     try:
         playable = resolve_playable_item(_db(), key)

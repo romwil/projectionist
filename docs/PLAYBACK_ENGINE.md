@@ -2,11 +2,11 @@
 
 How Projectionist plays a title from your library: one stream engine, owned by Projectionist, shared by every client — the web app, native apps, and anything that speaks the API. Plex is the first **media source**, not the player.
 
-**Status:** ENG-001 through ENG-004 and ENG-007 are in the tree. The web player uses an engine session only when the owner turns on Play through Projectionist. That household switch is `features.play_through_projectionist` (also `PUT /api/playback/engine-setting`) and it is off by default. Turning it off changes the next play, with no restart. When the engine can turn a title's captions into WebVTT — the household subtitle file first, then an embedded text track — that title plays through the engine and the session does not record a caption fallback. Picture captions still stay on the Plex path until ENG-005, and the session records why. A plan the engine cannot remux does the same. Fullscreen controls stay the web player's. Item IDs (`ENG-…`) are tracked in [docs/roadmap/](roadmap/README.md).
+**Status:** ENG-001 through ENG-004 and ENG-007 are in the tree. The web player uses an engine session only when the owner turns on Play through Projectionist. That household switch is `features.play_through_projectionist` (also `PUT /api/playback/engine-setting`) and it is off by default. Turning it off changes the next play, with no restart. An engine session is also opt-in on the request: `POST /api/playback/sessions` starts a remux only when `engine_opt_in` is true. `playback_engine` on `GET /api/features` means this server can. It does not mean a client must. When the engine can turn a title's captions into WebVTT — the household subtitle file first, then an embedded text track — that title plays through the engine and the session does not record a caption fallback. Picture captions still stay on the Plex path until ENG-005, and the session records why. A plan the engine cannot remux does the same. Fullscreen controls stay the web player's. Item IDs (`ENG-…`) are tracked in [docs/roadmap/](roadmap/README.md).
 **Audience:** Developers / contributors, owners for the honest limits.
 **Related:** [SHARED_SESSIONS.md](SHARED_SESSIONS.md) · [TIMELINE.md](TIMELINE.md) · [TRACKS.md](TRACKS.md) · [NATIVE_CLIENTS.md](NATIVE_CLIENTS.md) · [ARCHITECTURE.md](ARCHITECTURE.md)
 
-Jump to: [Why](#why-own-the-stream) · [Today](#today-the-plex-transcode-path) · [Target](#the-target-engine) · [Stream plans](#stream-plans) · [Captions](#captions) · [Devices](#device-profiles) · [Sources](#media-sources) · [Limits](#honest-limits) · [Items](#roadmap-items) · [Open decisions](#open-decisions)
+Jump to: [Why](#why-own-the-stream) · [Today](#today-the-plex-transcode-path) · [Target](#the-target-engine) · [Stream plans](#stream-plans) · [Captions](#captions) · [Devices](#device-profiles) · [Sources](#media-sources) · [QA baseline](#qa-baseline-2026-11-21) · [Playlist 401](#playlist-401-on-a-device-credential-2026-11-21) · [Limits](#honest-limits) · [Items](#roadmap-items) · [Open decisions](#open-decisions)
 
 ---
 
@@ -51,8 +51,9 @@ The write-up is `docs/specs/2026-11-20-safari-playback-stall.md`. Safari stops r
 ```
              ┌────────────────────────────────────────────────┐
  client ───► │ POST /api/playback/sessions                     │
- (+ device   │   title, start offset, device profile           │
-  profile)   └───────────────┬────────────────────────────────┘
+ (+ device   │   title, start offset, device profile,          │
+  profile,   │   engine_opt_in                                 │
+  opt-in)    └───────────────┬────────────────────────────────┘
                              ▼
                  ┌───────────────────────┐
                  │ Planner               │  probe (ffprobe, cached per file)
@@ -66,7 +67,7 @@ The write-up is `docs/specs/2026-11-20-safari-playback-stall.md`. Safari stops r
    │              │  HLS)           │  encode audio)    │  HW if present)│
    └──────────────┴─────────────────┴───────────────────┴────────────────┘
                             ▼
-      /api/playback/sessions/{id}/master.m3u8
+      /api/playback/sessions/{id}/{token}/master.m3u8
         ├─ video rendition(s)
         ├─ audio renditions (languages, commentary)
         └─ SUBTITLES group: WebVTT renditions (text + OCR’d image tracks)
@@ -78,7 +79,8 @@ Principles:
 - **A real VOD playlist.** Segments are planned from the file’s keyframes up front, so the playlist covers the whole title. Seeking is the client’s job inside a complete playlist, not a server restart.
 - **Captions are tracks.** Every usable caption is a WebVTT rendition in the master playlist’s `SUBTITLES` group. Players switch them natively; the system player keeps them in fullscreen and picture-in-picture.
 - **The token boundary holds.** Clients only ever see `/api/playback/sessions/{id}/…`. No file paths, Plex tokens, or source URLs cross the API — the same rule `library_privacy.py` enforces for browse.
-- **Session URLs work without headers.** Playlist and segment URLs carry a short-lived, unguessable session token in the path, scoped to one session. Starting a session needs the member’s credential; fetching its segments does not need an `Authorization` header — because AirPlay receivers, picture-in-picture, and some system players cannot send one.
+- **Session URLs work without headers.** Playlist and segment URLs carry a short-lived, unguessable session token in the path, scoped to one session. Starting a session needs the member’s credential and `engine_opt_in: true`. Fetching its segments does not need an `Authorization` header — AirPlay receivers, picture-in-picture, and some system players cannot send one. When the household has accounts, the gate lets that playlist path through and the route checks the token. A wrong token is 404. Progress and stop still need the member credential.
+- **Opt-in is the client’s choice.** `playback_engine` means this server can open an engine session. A request without `engine_opt_in` gets `plan: "library"`, `playable: false`, and an empty `master_url`, whatever the household switch says. The client then uses `POST /api/library/playback/start`. The web sends the opt-in only from Play through Projectionist.
 - **Source-agnostic.** The planner asks a **media source** for a readable file and its streams. Plex is one source; a local path map is another; Jellyfin can be a third.
 
 ---
@@ -133,6 +135,7 @@ A client declares what it can decode; the planner never guesses from a user-agen
 ```jsonc
 // Sent with POST /api/playback/sessions (ENG-003)
 {
+  "engine_opt_in": true,             // without this, the answer is the library path
   "profile": {
     "id": "apple-tv-4k-3",           // stable name, or "custom"
     "containers": ["mp4", "hls-fmp4", "hls-ts"],
@@ -188,6 +191,34 @@ The web app benefits as much as any native client:
 
 ---
 
+## QA baseline (2026-11-21)
+
+First playability sample on QA, image `romwil/projectionist:1.42.0`, digest `sha256:ddc59f71969e1d9d682d9cf5305dad7a79fbe60959432fe49e6cdd04d52e02a0`, revision `6f5f9256`. The library was mounted read-only at the same container paths production uses: movies `/movies`, television `/tv`, preroll `/preroll`. The owner path map was `/data/media/movies` → `/movies`, `/data/media/tv` → `/tv`, `/data/media/preroll` → `/preroll`. Production mounts were not changed. Play through Projectionist was on for the owner only, then turned off.
+
+| Client | Title | Container / codec | Plan | Result |
+|---|---|---|---|---|
+| Chrome | Purgatory | MP4, H.264, AAC | direct | Resumed near 7:30. Seek past the buffer (about 10:23 to 25:23) played. Pause and resume worked. Still the engine path after 18 minutes. |
+| Safari | Purgatory | MP4, H.264, AAC | direct | After reload, resumed at 25:55. One far seek waited until the full playlist was present (933 segments). The next seek, to about 53:20, played. Pause and resume worked. 15 minutes 49 seconds after that seek. |
+| Chrome and Safari | The Swan Princess: Escape from Castle Mountain | MKV, H.264, AAC | remux | Playable session. |
+| Chrome and Safari | Mulholland Drive | MKV, HEVC | full | Not playable. HEVC is above what the web profile accepts. |
+| Chrome and Safari | Peep Show “Local Zero” | MKV, H.264, AAC | remux | Playable, and the session wrote a WebVTT rendition. |
+| Chrome profile | The Dick Van Dyke Show S3E16 | MKV, H.264, E-AC-3 | audio | Not playable. E-AC-3 would have to be transcoded. |
+| Safari profile | The Dick Van Dyke Show S3E16 | MKV, H.264, E-AC-3 | remux | Playable, with a WebVTT rendition. |
+| Chrome and Safari | Adventures of Zatoichi | MKV, English SubRip | plex-fallback | Captions were not ready as WebVTT within 20 seconds. |
+| Chrome and Safari | 13 Assassins | picture captions only | plex-fallback | Captions are not ready as WebVTT. |
+
+Apple TV, same run: an engine session opened, the playlist returned 401, and playback did not fall back to the library session. That 401 is the next section. This table is the failure, recorded before the fix.
+
+Direct MP4 H.264/AAC, MKV H.264/AAC remux, and WebVTT for a text caption all stay. Every case the engine cannot serve falls back to Plex and records the reason. That part of the run is the baseline to keep.
+
+## Playlist 401 on a device credential (2026-11-21)
+
+On that QA image, with `playback_engine` at 1 and accounts turned on, a paired Apple TV opened an engine session for *Purgatory*. `POST /api/playback/sessions` returned 200. The playlist request then returned 401 twice. The preroll played. The film did not. The app did not open a library session.
+
+The post succeeded because the household gate accepts `Authorization: Bearer` with the device credential. The session’s `master_url` is `/api/playback/sessions/{id}/{token}/master.m3u8`. The playlist route (`playback_session_media`) authenticates that path token with `session_for_token` and does not read `Authorization`. The player requested the URL with neither the device bearer nor a `curatorx_session` cookie. That is the header-free shape AirPlay and picture-in-picture need. With accounts on, `multi_user_api_auth_middleware` still required a bearer or a session cookie for every `/api/` path that was not a public handshake, and this playlist path was not one, so the gate returned 401 `Authentication required` before the route could check the token. A wrong path token would have been 404 from the route, not 401. The player retried the playlist, which is the second 401. The preroll is a separate library request that sends the device bearer, so the gate allowed it. The app had already accepted the playable engine session, so a later playlist failure did not start library playback. Chrome and Safari on the same run played, because the video element sends the session cookie and that cookie satisfies the same gate. Single-owner mode never applies the gate.
+
+The fix on main, not in the 1.42.0 image: a client gets a playable engine session only when it sends `engine_opt_in: true`. The playlist path is now a handshake pattern, the route still rejects a bad token with 404, and a device credential can fetch the playlist with no `Authorization` header. A test opens a session with a device credential and reads that URL with no header and no cookie. Progress, stop, and opening a session stay behind the member credential.
+
 ## Honest limits
 
 - **Browsers decode less than Apple devices.** Desktop Chrome and Firefox commonly lack HEVC and AC-3 / E-AC-3 / DTS; those titles will audio-transcode or full-transcode on the web.
@@ -206,10 +237,14 @@ The web app benefits as much as any native client:
 | ENG-001 | Media source interface + Plex path mapping + cached `ffprobe` | — |
 | ENG-002 | Planner (`direct` / `remux` / `audio` / `full` / `plex-fallback`) with recorded reason; dry-run `GET /api/playback/plan` | ENG-001 |
 | ENG-003 | Session API `POST /api/playback/sessions` with device profiles; VOD fMP4 HLS remux; session-scoped segment URLs. *Proposed:* attribution for “evenings that started from a Projectionist pick” (PRD-005 north star) rides owned playback | ENG-002 |
-| ENG-004 | WebVTT caption renditions in the master playlist (household cache first) | ENG-003 |
-| ENG-005 | Image-caption OCR job (jobs engine, cached, labeled) | ENG-004 |
-| ENG-006 | Audio + full transcode plans; hardware encode opt-in; concurrency limits | ENG-003 |
-| ENG-007 | Web player adoption, immediately after ENG-003, behind a per-household setting that is off by default (*Play through Projectionist*). The web keeps its own fullscreen chrome. Captions fall back to the Plex path until ENG-004. A plan the engine cannot remux falls back to Plex and records the reason. Turning the setting off returns the next play to the Plex path | ENG-003 |
+| ENG-004 | WebVTT caption renditions in the master playlist (household cache first). **Accepted follow-up, not started:** extract text subtitle streams to WebVTT ahead of play (library scan, a new arrival, Continue Watching, For you, or the title page) so a large file does not miss the play-time limit. A track that is not ready keeps today’s Plex fallback, and the next play uses the cache. The playability report counts “captions pending” apart from “captions need OCR” | ENG-003 |
+| ENG-005 | Image-caption OCR job (jobs engine, cached, labeled). Tier 4 in the playback stack. Unchanged by the 2026-11-21 findings: picture captions stay on the Plex path until this exists | ENG-004 |
+| ENG-006 | Own video transcode, re-scoped 2026-11-21. (a) Software 1080p H.264 on CPU-rich servers, only after the owner opts in and a startup benchmark clears a threshold, with a low concurrency cap. 4K, HEVC/AV1 output, and HDR tone-mapping in software are never chosen. (b) Hardware VAAPI/QSV and NVENC when an encoder test-open succeeds. Both wait until ENG-011 shows enough titles need them. (a) can be tested on a 2× Xeon E5-2630 v3, 32 threads, no GPU. (b) waits for a GPU box | ENG-003, ENG-011 |
+| ENG-007 | Web player adoption, behind *Play through Projectionist* (off by default). The web sends `engine_opt_in: true` with the session. **Accepted follow-up, not started:** build the profile from `MediaSource.isTypeSupported` / `MediaCapabilities.decodingInfo` for HEVC (`hvc1`), AV1, E-AC-3, AC-3, and 10-bit, and record which answer drove the plan. *Mulholland Drive* should plan `remux` where that check reports HEVC, and fall back where it does not | ENG-003 |
+| ENG-011 | Library playability report. A job dry-runs the planner across the library for each device profile, using the cached probe. The owner sees, under Settings → Playback, the share that is direct, remux, audio-only, needs OCR, or needs a video transcode, plus the top reasons, the titles, and what hardware would change | ENG-001, ENG-002 |
+| ENG-012 | Audio-only transcode tier. Copy the video, convert the audio to the device profile’s target, serve segments like a remux, and cap how many run at once. A DTS or TrueHD film plays in Safari and on an Apple TV profile with the video untouched. The Chrome E-AC-3 row in the QA baseline is the first web case | ENG-003, ENG-011 |
+| ENG-013 | Source-transcode tier. Today’s Plex fallback becomes a planned tier with a reason, behind the media-source interface, so a later source can provide it. Members see the same playback | ENG-003 |
+| ENG-014 | Pre-optimized versions. An owner-triggered or scheduled job makes compatible copies for chosen titles, or for everything the report says needs a video transcode, inside a disk budget. The planner prefers those copies and plays them as direct or remux | ENG-011, ENG-012 |
 | ENG-008 | Scrub thumbnails (trickplay image sprites / I-frame playlist) | ENG-003 |
 | ENG-009 | Live Channels on engine sessions (same stations, new stream). Build as the Live facade ARCH-007 asked for; PRD-007 freeze still holds (no new channel types) | ENG-003; ARCH-007 |
 | ENG-010 | Jellyfin media source | ENG-001 |
@@ -223,6 +258,8 @@ The web app benefits as much as any native client:
 - **Browser audio vs remux (ENG-002 / ENG-006):** *3 Ninjas* H.264+AC-3 remux played on Apple clients and was **rejected** by desktop Chromium/hls.js (`manifestIncompatibleCodecsError`). *Proposed:* treat AC-3/E-AC-3 remux as Apple-profile; browser profiles that lack those codecs get **audio transcode** (or an AAC rendition) before the web player adopts the engine.
 - **Caption packaging (ENG-004):** a household `DATA_DIR/subtitles/{rating_key}/{lang}.srt` is one WebVTT file plus a one-segment VOD subtitle playlist in the master `SUBTITLES` group. Embedded text tracks are extracted the same way when that language is not already in the cache. Segmenting the VTT waits until a client requires it. Picture captions stay on the Plex path until ENG-005. The spike showed that shape is selectable in WebKit and tvOS AVPlayer.
 - **Spike evidence:** [2026-11-19-engine-spike-findings.md](superpowers/specs/2026-11-19-engine-spike-findings.md) (throwaway code on `spike/engine-remux`, not merged).
+- **Opt-in (decided 2026-11-21):** an engine session is only for a client that sends `engine_opt_in`. The capability is “this server can.” The household switch does not force a client onto the engine. Playlist URLs stay header-free, and a device credential can fetch them.
+- **Playback tiers (decided 2026-11-21), cheapest first:** direct, remux, audio-only transcode, captions as text (ENG-005), source transcode, own video transcode (ENG-006, opt-in), pre-optimized copies. The planner records the tier and the reason. Software video transcode is 1080p H.264 only, above a startup benchmark, with a low cap. Build order after the opt-in fix: browser runtime profile (ENG-007 follow-up) → text captions ahead of play (ENG-004 follow-up) → ENG-011 report → ENG-012 audio → ENG-013 source tier → ENG-005 → ENG-014 → ENG-006 when the report says it is worth it. ENG-011, ENG-012, ENG-013, ENG-014, and the two follow-ups are accepted and not started. Startup detection (core count, a one-time 1080p encode benchmark, Quick Sync or VAAPI, NVENC, and which encoders ffmpeg actually opens) lands with ENG-006 as a `playback_hardware` capability. No hardware is required to run Projectionist. Live channel normalization (ENG-009) is not in this stack.
 
 ## See also
 

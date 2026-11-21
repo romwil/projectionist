@@ -1097,7 +1097,9 @@ export async function startLibraryPlayback(ratingKey: string, { startOver = fals
   });
 }
 
-/** Engine session. The web uses this only when Play through Projectionist is on. */
+/** Engine session. The web uses this only when Play through Projectionist is on.
+ * Calling it is the opt-in. Clients that omit `engine_opt_in` stay on the library path.
+ */
 export async function openEnginePlayback(ratingKey: string, { profile = null, startOver = false }: JsonObject = {}) {
   return api("/playback/sessions", {
     method: "POST",
@@ -1105,6 +1107,7 @@ export async function openEnginePlayback(ratingKey: string, { profile = null, st
       rating_key: String(ratingKey || ""),
       profile: profile || "safari",
       start_over: Boolean(startOver),
+      engine_opt_in: true,
     }),
   });
 }

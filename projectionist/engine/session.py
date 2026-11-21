@@ -1,9 +1,10 @@
 """Engine playback sessions.
 
 Opening a session records the plan. A remux or direct plan starts an fMP4
-HLS copy. Anything else stays on the record so the caller can fall back to
-Plex and say why. Playlist and segment URLs carry the session token; they
-do not require an Authorization header.
+HLS copy only when the client sets ``engine_opt_in``. Anything else stays on
+the library path. Playlist and segment URLs carry the session token; they
+do not require an Authorization header. The household gate allows those
+URLs through and the route checks the token.
 """
 
 from __future__ import annotations
@@ -25,6 +26,28 @@ from projectionist.library.playback import PlaybackError, YouthBlockedError
 
 _LOCK = threading.Lock()
 _SESSIONS: dict[str, "EngineSession"] = {}
+
+# A client that did not ask for an engine session stays on the library path.
+# The capability means this server can open one. It does not mean the client must.
+OPT_IN_REASON = (
+    "This client did not opt in to an engine session, so playback stays on the library path."
+)
+
+
+def declined_engine_session(rating_key: str) -> dict[str, Any]:
+    """Library-path answer. No remux, no playlist URL, no session to resume."""
+    return {
+        "session_id": "",
+        "rating_key": rating_key,
+        "plan": "library",
+        "reason": OPT_IN_REASON,
+        "playable": False,
+        "master_url": "",
+        "title": "",
+        "duration_ms": 0,
+        "view_offset_ms": 0,
+        "profile": "",
+    }
 
 
 @dataclass
