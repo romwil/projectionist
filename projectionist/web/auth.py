@@ -1548,7 +1548,8 @@ def _begin_native_oidc_exchange(*, state: str, idp_code: str, state_data: Dict[s
     """Hold the IdP code and hand the app a single-use code on the allowlisted scheme."""
     raw = secrets.token_urlsafe(32)
     digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
-    native = state_data.get("native") if isinstance(state_data.get("native"), dict) else {}
+    native_raw = state_data.get("native")
+    native = native_raw if isinstance(native_raw, dict) else {}
     record = {
         "expires_at": time.time() + OIDC_EXCHANGE_TTL_SECONDS,
         "idp_code": str(idp_code),
@@ -1687,7 +1688,8 @@ def exchange_native_oidc(
     expected = str(record.get("code_challenge") or "")
     if not _hmac.compare_digest(_pkce_s256(verifier), expected):
         raise HTTPException(status_code=401, detail="That sign-in code is no longer valid")
-    native = record.get("native") if isinstance(record.get("native"), dict) else {}
+    native_raw = record.get("native")
+    native = native_raw if isinstance(native_raw, dict) else {}
     if str(native.get("kind") or "") != client["kind"]:
         raise HTTPException(status_code=401, detail="That sign-in code is no longer valid")
     return _complete_oidc_login(

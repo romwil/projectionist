@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- NAT-002: a phone or tablet can finish Plex, a local password, single sign-on, or an invite with its own device credential instead of a browser cookie. `capabilities.native_sign_in` is 1. `sign_in` on `GET /api/features` lists the methods this household has turned on.
+
 ## [1.41.2] — 2026-11-21
 
 An empty database file no longer hides the real library, and Safari playback advertises the measured peak so the opening burst does not stop the stream.
@@ -11,7 +14,6 @@ An empty database file no longer hides the real library, and Safari playback adv
 - **Safari keeps the opening burst.** Playback advertises the measured peak, so the first rush of video does not stop the stream.
 
 ### Added
-- NAT-002: a phone or tablet can finish Plex, a local password, single sign-on, or an invite with its own device credential instead of a browser cookie. `capabilities.native_sign_in` is 1. `sign_in` on `GET /api/features` lists the methods this household has turned on.
 - NAT-001: `GET /api/features` includes `api_contract` and a `capabilities` map on the public and signed-in payloads. Signed-in responses still include `features.cached_art`, and `capabilities.cached_art` follows that flag.
 - NAT-003: client-facing routes are tagged `client`. `scripts/export-openapi.sh` writes `docs/api/openapi.json`, and CI fails when that snapshot is stale. `/openapi.json` stays off in production.
 - NAT-004: `docs/api/fixtures/` records an example response for each client route. CI fails when a fresh recording does not match.
