@@ -4,19 +4,22 @@ Opening SQLite on a path that does not exist (``sqlite3.connect``, or the
 ``sqlite3`` CLI) creates a 0-byte file before any page is written. A query
 against that empty file still leaves it at 0 bytes. ``docker exec`` runs as
 root and does not go through the entrypoint, so that 0-byte file is
-``root:root`` mode 644. The entrypoint skips ``chown`` when ``/config`` is
-already uid 1000, and the app user then cannot write it
-(``attempt to write a readonly database``).
+``root:root`` mode 644. When ``/config`` is already uid 1000 the entrypoint
+does not rewrite the tree; it chowns only the stray file and names it.
 
-This module only reads headers. It never creates, deletes, or overwrites a
-file. An empty or non-SQLite candidate is skipped with a warning. Two real
-databases refuse startup instead of guessing.
+This module only reads headers when choosing a file. It never creates,
+deletes, or overwrites one. An empty or non-SQLite candidate is skipped with
+a warning. Two real databases refuse startup instead of guessing.
+``open_existing_database`` opens a file that is already there with
+``mode=rw``, which does not create a missing path.
 """
 
 from __future__ import annotations
 
 import logging
+import sqlite3
 from pathlib import Path
+from urllib.parse import quote
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +32,30 @@ SQLITE_HEADER_BYTES = 100
 
 class AmbiguousDatabaseError(RuntimeError):
     """The data directory holds more than one real SQLite database."""
+
+
+def open_existing_database(
+    path: Path,
+    *,
+    timeout: float,
+    check_same_thread: bool = True,
+) -> sqlite3.Connection:
+    """Open ``path`` read-write. A missing path raises and is not created.
+
+    The default ``sqlite3.connect(path)`` uses ``mode=rwc`` and creates a
+    0-byte file before any page is written. ``mode=rw`` refuses a path that
+    is not already a file, which is what a diagnostic one-liner needs.
+    """
+    path = Path(path)
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    quoted = quote(path.resolve().as_posix(), safe="/")
+    return sqlite3.connect(
+        f"file:{quoted}?mode=rw",
+        uri=True,
+        timeout=timeout,
+        check_same_thread=check_same_thread,
+    )
 
 
 def is_usable_sqlite(path: Path) -> bool:

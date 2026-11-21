@@ -205,7 +205,7 @@ A backup holds **everyone's** chats, memory, and viewing, plus your encrypted ke
 
 ```bash
 # List on-box snapshots (Docker)
-docker exec projectionist python -m projectionist.backups list
+docker exec -u projectionist projectionist python -m projectionist.backups list
 
 # Restore: stop the app first, then run the restore in a one-off container
 docker stop projectionist

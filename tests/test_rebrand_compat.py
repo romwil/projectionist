@@ -12,7 +12,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from projectionist.config_store import Settings, load_merged_settings, save_settings
-from projectionist.dbfiles import AmbiguousDatabaseError
+from projectionist.dbfiles import AmbiguousDatabaseError, open_existing_database
 from projectionist.envcompat import branded_env, resolve_env
 from projectionist.web.jobs import _resolve_db_path
 
@@ -151,6 +151,38 @@ class DbPathCompatTests(unittest.TestCase):
             self.assertEqual(resolved, root / "projectionist.db")
             self.assertEqual(resolved.read_bytes(), SQLITE_FILE)
             self.assertFalse(ancient.exists())
+
+    def test_open_existing_database_does_not_create_a_missing_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = Path(tmp) / "projectionist.db"
+            with self.assertRaises(FileNotFoundError):
+                open_existing_database(missing, timeout=1.0)
+            self.assertFalse(missing.exists())
+
+    def test_open_existing_database_can_write_a_file_that_is_already_there(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "curatorx.db"
+            import sqlite3
+
+            seed = sqlite3.connect(path)
+            seed.execute("CREATE TABLE seed (id INTEGER)")
+            seed.commit()
+            seed.close()
+            self.assertGreater(path.stat().st_size, 0)
+            conn = open_existing_database(path, timeout=1.0)
+            try:
+                conn.execute("CREATE TABLE diagnostic (id INTEGER)")
+                conn.commit()
+            finally:
+                conn.close()
+            again = open_existing_database(path, timeout=1.0)
+            try:
+                row = again.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='diagnostic'"
+                ).fetchone()
+            finally:
+                again.close()
+            self.assertIsNotNone(row)
 
 
 class WebhookHeaderCompatTests(unittest.TestCase):
