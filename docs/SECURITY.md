@@ -39,7 +39,7 @@ Port-forwarding or exposing `8788` (or a reverse proxy without auth) used to exp
 
 ### Public household perimeter (ACTIVE_MODE)
 
-There is **no** `/api/auth/` prefix leak. Ingress matches **explicit method+path pairs** in `PUBLIC_HANDSHAKE_EXACT` (`projectionist/web/auth.py`), plus two pattern matches: the pair-code poll and an engine playlist URL. If a route is not one of those, it needs a session.
+There is **no** `/api/auth/` prefix leak. Ingress matches **explicit method+path pairs** in `PUBLIC_HANDSHAKE_EXACT` (`projectionist/web/auth.py`), plus pattern matches: the pair-code poll, and engine playlist and segment URLs. If a route is not one of those, it needs a session.
 
 **Exhaustive unauthenticated handshake:**
 

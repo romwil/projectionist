@@ -465,6 +465,12 @@ class ApiAuthzTests(unittest.TestCase):
                 "/api/playback/sessions/11111111-1111-1111-1111-111111111111/tok/master.m3u8",
             )
         )
+        self.assertTrue(
+            is_public_handshake(
+                "GET",
+                "/api/playback/sessions/11111111-1111-1111-1111-111111111111/tok/av/seg_0000.m4s",
+            )
+        )
         self.assertFalse(is_public_handshake("POST", "/api/playback/sessions"))
         self.assertFalse(
             is_public_handshake("GET", "/api/playback/sessions/11111111-1111-1111-1111-111111111111")
@@ -498,6 +504,11 @@ class ApiAuthzTests(unittest.TestCase):
         )
         self.assertNotEqual(guessed_playlist.status_code, 401)
         self.assertEqual(guessed_playlist.status_code, 404)
+        guessed_segment = self.client.get(
+            "/api/playback/sessions/11111111-1111-1111-1111-111111111111/not-the-token/av/seg_0000.m4s"
+        )
+        self.assertNotEqual(guessed_segment.status_code, 401)
+        self.assertEqual(guessed_segment.status_code, 404)
         self.assertEqual(self.client.post("/api/playback/sessions", json={}).status_code, 401)
         self.assertEqual(pending.json()["status"], "issue_again")
 
