@@ -1,0 +1,9 @@
+{
+  "body": {
+    "detail": "Local registration is disabled. Ask the household admin for a join link."
+  },
+  "content_type": "application/json",
+  "method": "POST",
+  "path": "/api/auth/local/register",
+  "status": 403
+}

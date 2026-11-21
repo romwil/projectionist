@@ -12,6 +12,7 @@ middleware is method-agnostic.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac as _hmac
 import logging
@@ -21,6 +22,7 @@ import secrets
 import threading
 import time
 from dataclasses import dataclass
+from urllib.parse import quote, urlencode
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, Optional
 
@@ -63,7 +65,9 @@ PUBLIC_HANDSHAKE_EXACT = frozenset(
         ("POST", "/api/auth/plex"),
         ("POST", "/api/auth/logout"),
         ("GET", "/api/auth/oidc/authorize"),
+        ("POST", "/api/auth/oidc/authorize"),
         ("GET", "/api/auth/oidc/callback"),
+        ("POST", "/api/auth/oidc/exchange"),
         ("GET", "/api/mail/unsubscribe"),
         ("POST", "/api/mail/unsubscribe"),
         ("POST", "/api/devices/pair/issue"),
@@ -74,13 +78,20 @@ PUBLIC_HANDSHAKE_EXACT = frozenset(
 DEVICE_PAIR_PENDING_PATH = re.compile(r"^/api/devices/pair/pending/[A-Za-z0-9_-]+$")
 PLEX_PIN_POLL_PATH = re.compile(r"^/api/auth/plex/pin/\d+$")
 PLEX_PIN_NONCE_COOKIE = "plex_pin_nonce"
+PLEX_PIN_NONCE_HEADER = "x-projectionist-pin-nonce"
 PLEX_PIN_NONCE_TTL_SECONDS = 1800
+OIDC_EXCHANGE_TTL_SECONDS = 120
+NATIVE_OIDC_APP_REDIRECT = "projectionist://auth/callback"
+_PKCE_CHALLENGE_RE = re.compile(r"^[A-Za-z0-9_-]{43,128}$")
+_PKCE_VERIFIER_RE = re.compile(r"^[A-Za-z0-9._~-]{43,128}$")
 JOIN_LINK_DETAIL = (
     "An invite is required to join this household. Ask the household admin for a join link."
 )
 
 _pin_bindings_lock = threading.Lock()
 _pin_bindings: Dict[str, Dict[str, Any]] = {}
+_oidc_exchange_lock = threading.Lock()
+_oidc_exchanges: Dict[str, Dict[str, Any]] = {}
 
 logger = logging.getLogger(__name__)
 
@@ -754,13 +765,24 @@ def _purge_expired_pin_bindings() -> None:
             _pin_bindings.pop(key, None)
 
 
+def _presented_pin_nonce(request: Request) -> str:
+    """Cookie for the browser, header for a native client. They must agree if both are sent."""
+    header = (request.headers.get(PLEX_PIN_NONCE_HEADER) or "").strip()
+    cookie = (request.cookies.get(PLEX_PIN_NONCE_COOKIE) or "").strip()
+    if header and cookie and not _hmac.compare_digest(header, cookie):
+        raise HTTPException(status_code=401, detail="Plex PIN session does not match")
+    return header or cookie
+
+
 def _bind_pin_nonce(
     pin_id: int,
     response: Response,
     request: Request,
     *,
     invite_token: Optional[str] = None,
-) -> None:
+    native: Optional[Dict[str, str]] = None,
+) -> str:
+    """Bind a server-generated nonce. Native callers get it back in the body, not a cookie."""
     _purge_expired_pin_bindings()
     nonce = secrets.token_urlsafe(32)
     binding: Dict[str, Any] = {
@@ -771,8 +793,12 @@ def _bind_pin_nonce(
     cleaned_invite = str(invite_token or "").strip()
     if cleaned_invite:
         binding["invite_token"] = cleaned_invite
+    if native is not None:
+        binding["native"] = {"kind": native["kind"], "label": native["label"]}
     with _pin_bindings_lock:
         _pin_bindings[nonce] = binding
+    if native is not None:
+        return nonce
     response.set_cookie(
         key=PLEX_PIN_NONCE_COOKIE,
         value=nonce,
@@ -782,11 +808,12 @@ def _bind_pin_nonce(
         path="/",
         secure=_cookie_should_be_secure(request),
     )
+    return nonce
 
 
 def _require_pin_nonce(pin_id: int, request: Request, *, consume: bool = False) -> Optional[str]:
     """Validate PIN nonce; return optional invite_token stored on the binding."""
-    nonce = (request.cookies.get(PLEX_PIN_NONCE_COOKIE) or "").strip()
+    nonce = _presented_pin_nonce(request)
     if not nonce:
         raise HTTPException(status_code=401, detail="Plex PIN session cookie missing")
     _purge_expired_pin_bindings()
@@ -818,11 +845,31 @@ def clear_pin_bindings() -> None:
         _pin_bindings.clear()
 
 
+def native_client_for_pin(pin_id: int, request: Request) -> Optional[Dict[str, str]]:
+    """The native client bound to this PIN, if the caller is holding that nonce."""
+    nonce = _presented_pin_nonce(request)
+    if not nonce:
+        return None
+    with _pin_bindings_lock:
+        binding = _pin_bindings.get(nonce)
+        if binding is None or int(binding.get("pin_id") or -1) != int(pin_id):
+            return None
+        native = binding.get("native")
+    if not isinstance(native, dict):
+        return None
+    kind = str(native.get("kind") or "")
+    label = str(native.get("label") or "")
+    if not kind:
+        return None
+    return {"kind": kind, "label": label}
+
+
 def start_plex_pin_login(
     request: Request,
     response: Response,
     *,
     invite_token: Optional[str] = None,
+    native: Optional[Dict[str, str]] = None,
 ) -> dict[str, object]:
     """Create a plex.tv PIN and auth URL for Overseerr-style sign-in."""
     enforce_rate_limit(request, bucket="auth_plex_pin_start", limit=10, window_seconds=60)
@@ -833,14 +880,19 @@ def start_plex_pin_login(
         raise HTTPException(
             status_code=502, detail=f"Could not start Plex login: {error}"
         ) from error
-    _bind_pin_nonce(int(pin["id"]), response, request, invite_token=invite_token)
-    return {
+    nonce = _bind_pin_nonce(
+        int(pin["id"]), response, request, invite_token=invite_token, native=native
+    )
+    payload: Dict[str, object] = {
         "id": pin["id"],
         "code": pin["code"],
         "auth_url": pin["auth_url"],
         "expires_in": pin.get("expires_in"),
         "expires_at": pin.get("expires_at"),
     }
+    if native is not None:
+        payload["pin_nonce"] = nonce
+    return payload
 
 
 def _plex_pin_check_still_pending(error: BaseException) -> bool:
@@ -1464,12 +1516,64 @@ def clear_oidc_states() -> None:
     """Test helper."""
     with _oidc_state_lock:
         _oidc_states.clear()
+    with _oidc_exchange_lock:
+        _oidc_exchanges.clear()
+
+
+@dataclass(frozen=True)
+class NativeOidcRedirect:
+    """Browser handoff to the allowlisted app scheme. The credential is not in the URL."""
+
+    location: str
+
+
+def _pkce_s256(verifier: str) -> str:
+    digest = hashlib.sha256(verifier.encode("ascii")).digest()
+    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+
+
+def _purge_expired_oidc_exchanges() -> None:
+    now = time.time()
+    with _oidc_exchange_lock:
+        expired = [
+            key
+            for key, value in _oidc_exchanges.items()
+            if float(value.get("expires_at", 0)) < now
+        ]
+        for key in expired:
+            _oidc_exchanges.pop(key, None)
+
+
+def _begin_native_oidc_exchange(*, state: str, idp_code: str, state_data: Dict[str, Any]) -> NativeOidcRedirect:
+    """Hold the IdP code and hand the app a single-use code on the allowlisted scheme."""
+    raw = secrets.token_urlsafe(32)
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    native_raw = state_data.get("native")
+    native = native_raw if isinstance(native_raw, dict) else {}
+    record = {
+        "expires_at": time.time() + OIDC_EXCHANGE_TTL_SECONDS,
+        "idp_code": str(idp_code),
+        "code_challenge": str(state_data.get("code_challenge") or ""),
+        "native": {"kind": str(native.get("kind") or ""), "label": str(native.get("label") or "")},
+        "invite_token": state_data.get("invite_token"),
+        "owner_claim_digest": str(state_data.get("owner_claim_digest") or ""),
+        "token_endpoint": state_data.get("token_endpoint", ""),
+        "userinfo_endpoint": state_data.get("userinfo_endpoint", ""),
+    }
+    _purge_expired_oidc_exchanges()
+    with _oidc_exchange_lock:
+        _oidc_exchanges[digest] = record
+    location = NATIVE_OIDC_APP_REDIRECT + "?" + urlencode({"code": raw, "state": state})
+    return NativeOidcRedirect(location)
 
 
 def start_oidc_authorize(
     request: Request,
     *,
     invite_token: Optional[str] = None,
+    native: Optional[Dict[str, str]] = None,
+    code_challenge: Optional[str] = None,
+    code_challenge_method: Optional[str] = None,
 ) -> dict[str, str]:
     """Build the OIDC authorization redirect URL with a CSRF state parameter."""
     enforce_rate_limit(request, bucket="auth_oidc_start", limit=10, window_seconds=60)
@@ -1498,6 +1602,16 @@ def start_oidc_authorize(
     cleaned_invite = str(invite_token or "").strip()
     if cleaned_invite:
         state_payload["invite_token"] = cleaned_invite
+    if native is not None:
+        method = str(code_challenge_method or "").strip() or "S256"
+        challenge = str(code_challenge or "").strip()
+        if method != "S256" or _PKCE_CHALLENGE_RE.fullmatch(challenge) is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Native sign-in requires PKCE S256 (code_challenge)",
+            )
+        state_payload["native"] = {"kind": native["kind"], "label": native["label"]}
+        state_payload["code_challenge"] = challenge
     from projectionist.web.owner_claim import presented_claim_digest
 
     state_payload["owner_claim_digest"] = presented_claim_digest(request)
@@ -1507,11 +1621,16 @@ def start_oidc_authorize(
     redirect_uri = settings.auth.oidc_redirect_uri or ""
     params = (
         f"?response_type=code"
-        f"&client_id={settings.auth.oidc_client_id}"
-        f"&redirect_uri={redirect_uri}"
+        f"&client_id={quote(str(settings.auth.oidc_client_id), safe='')}"
+        f"&redirect_uri={quote(redirect_uri, safe='')}"
         f"&scope=openid%20profile%20email"
-        f"&state={state}"
+        f"&state={quote(state, safe='')}"
     )
+    if native is not None:
+        params += (
+            f"&code_challenge={quote(str(state_payload['code_challenge']), safe='')}"
+            f"&code_challenge_method=S256"
+        )
     return {"authorize_url": authorization_endpoint + params, "state": state}
 
 
@@ -1521,10 +1640,10 @@ def handle_oidc_callback(
     state: str,
     db: Database,
     request: Request,
-) -> CurrentUser:
-    """Exchange the authorization code for tokens, resolve user identity."""
+) -> CurrentUser | NativeOidcRedirect:
+    """Exchange the authorization code for tokens, or hand a native client a one-time code."""
     enforce_rate_limit(request, bucket="auth_oidc_callback", limit=10, window_seconds=60)
-    settings = _ensure_oidc_enabled()
+    _ensure_oidc_enabled()
 
     _purge_expired_oidc_states()
     with _oidc_state_lock:
@@ -1533,6 +1652,65 @@ def handle_oidc_callback(
     if state_data is None:
         raise HTTPException(status_code=401, detail="Invalid or expired OIDC state")
 
+    if state_data.get("native"):
+        if not str(state_data.get("token_endpoint") or "").strip():
+            raise HTTPException(status_code=502, detail="OIDC token endpoint unknown")
+        if not str(code or "").strip():
+            raise HTTPException(status_code=400, detail="OIDC callback is missing a code")
+        return _begin_native_oidc_exchange(state=state, idp_code=code, state_data=state_data)
+
+    return _complete_oidc_login(code=code, state_data=state_data, db=db, request=request)
+
+
+def exchange_native_oidc(
+    *,
+    code: str,
+    code_verifier: str,
+    client: Dict[str, str],
+    db: Database,
+    request: Request,
+) -> CurrentUser:
+    """Turn a single-use app code plus PKCE verifier into a household user.
+
+    The caller mints the device credential. This function does not set a cookie.
+    """
+    enforce_rate_limit(request, bucket="auth_oidc_exchange", limit=10, window_seconds=60)
+    _ensure_oidc_enabled()
+    verifier = str(code_verifier or "")
+    if _PKCE_VERIFIER_RE.fullmatch(verifier) is None:
+        raise HTTPException(status_code=401, detail="That sign-in code is no longer valid")
+    digest = hashlib.sha256(str(code or "").encode("utf-8")).hexdigest()
+    _purge_expired_oidc_exchanges()
+    with _oidc_exchange_lock:
+        record = _oidc_exchanges.pop(digest, None)
+    if record is None or float(record.get("expires_at") or 0) < time.time():
+        raise HTTPException(status_code=401, detail="That sign-in code is no longer valid")
+    expected = str(record.get("code_challenge") or "")
+    if not _hmac.compare_digest(_pkce_s256(verifier), expected):
+        raise HTTPException(status_code=401, detail="That sign-in code is no longer valid")
+    native_raw = record.get("native")
+    native = native_raw if isinstance(native_raw, dict) else {}
+    if str(native.get("kind") or "") != client["kind"]:
+        raise HTTPException(status_code=401, detail="That sign-in code is no longer valid")
+    return _complete_oidc_login(
+        code=str(record.get("idp_code") or ""),
+        state_data=record,
+        db=db,
+        request=request,
+        code_verifier=verifier,
+    )
+
+
+def _complete_oidc_login(
+    *,
+    code: str,
+    state_data: Dict[str, Any],
+    db: Database,
+    request: Request,
+    code_verifier: Optional[str] = None,
+) -> CurrentUser:
+    """Exchange an IdP code and resolve the household user. No session cookie."""
+    settings = _ensure_oidc_enabled()
     token_endpoint = state_data.get("token_endpoint", "")
     userinfo_endpoint = state_data.get("userinfo_endpoint", "")
     invite_token = str(state_data.get("invite_token") or "").strip() or None
@@ -1541,16 +1719,19 @@ def handle_oidc_callback(
         raise HTTPException(status_code=502, detail="OIDC token endpoint unknown")
 
     redirect_uri = settings.auth.oidc_redirect_uri or ""
+    token_form = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": redirect_uri,
+        "client_id": settings.auth.oidc_client_id,
+        "client_secret": settings.auth.oidc_client_secret,
+    }
+    if code_verifier:
+        token_form["code_verifier"] = code_verifier
     try:
         token_resp = httpx.post(
             token_endpoint,
-            data={
-                "grant_type": "authorization_code",
-                "code": code,
-                "redirect_uri": redirect_uri,
-                "client_id": settings.auth.oidc_client_id,
-                "client_secret": settings.auth.oidc_client_secret,
-            },
+            data=token_form,
             timeout=10,
         )
         token_resp.raise_for_status()
@@ -1643,6 +1824,16 @@ def handle_oidc_callback(
         role="member",
     )
     return row_to_current_user_from_dict(user_row)
+
+
+def sign_in_public(settings: Settings) -> Dict[str, Any]:
+    """Methods a sign-in screen may offer before anyone is signed in."""
+    return {
+        "methods": available_auth_methods(settings),
+        "access_requests_open": bool(
+            getattr(settings.features, "access_requests_enabled", True)
+        ),
+    }
 
 
 def available_auth_methods(settings: Settings) -> List[str]:

@@ -359,7 +359,7 @@ STORES: Tuple[PersonalStore, ...] = (
         subject_cols=("user_id",),
         erase="activity",
         secret_cols=("credential_hash",),
-        covers_cols=("label",),
+        covers_cols=("label", "kind"),
     ),
     PersonalStore(
         table="user_notifications",

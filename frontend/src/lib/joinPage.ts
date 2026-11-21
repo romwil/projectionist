@@ -8,6 +8,18 @@ export function joinMethods(installMethods: string[], inviteMethods: string[] | 
   return { plex: on("plex"), oidc: on("oidc"), local: on("local") };
 }
 
+/**
+ * Open this household's invite in a native app.
+ * Universal links cannot cover every self-hosted domain, so the link is the
+ * app's custom scheme plus the server base URL and the same invite token.
+ */
+export function openInAppUrl(base: string, token: string): string {
+  const params = new URLSearchParams();
+  params.set("base", base);
+  params.set("token", token);
+  return `projectionist://join?${params.toString()}`;
+}
+
 /** Only a username and password: open the form right away instead of a "fallback" toggle. */
 export function isLocalOnlyJoin(methods: JoinMethods): boolean {
   return methods.local && !methods.plex && !methods.oidc;

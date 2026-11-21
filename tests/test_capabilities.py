@@ -25,6 +25,7 @@ SHIPPED = {
     "device_pairing": 1,
     "throw": 1,
     "playback_engine": 1,
+    "native_sign_in": 1,
     "cached_art": 1 if CACHED_ART_ENABLED else 0,
 }
 ACCEPTED_NOT_SHIPPED = {
@@ -32,7 +33,6 @@ ACCEPTED_NOT_SHIPPED = {
     "shared_sessions": 0,
     "timeline": 0,
     "tracks": 0,
-    "native_sign_in": 0,
     "push": 0,
     "approvals": 0,
 }

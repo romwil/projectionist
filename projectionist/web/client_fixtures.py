@@ -238,6 +238,97 @@ def collect_client_fixtures() -> dict[str, dict[str, Any]]:
         ):
             keep("GET", "/api/health", client.get("/api/health"))
             keep("GET", "/api/features", client.get("/api/features"))
+            # Sign-in routes in this household are not turned on. The example is
+            # that answer, so the file never holds a device credential or a PIN nonce.
+            keep(
+                "POST",
+                "/api/auth/plex/pin",
+                client.post("/api/auth/plex/pin", json={}),
+            )
+            keep(
+                "GET",
+                "/api/auth/plex/pin/{pin_id}",
+                client.get("/api/auth/plex/pin/1"),
+                example_path="/api/auth/plex/pin/1",
+            )
+            keep(
+                "POST",
+                "/api/auth/plex",
+                client.post("/api/auth/plex", json={"auth_token": "not-a-token"}),
+            )
+            keep(
+                "POST",
+                "/api/auth/local/login",
+                client.post(
+                    "/api/auth/local/login",
+                    json={"username": "member", "password": "password123"},
+                ),
+            )
+            keep(
+                "POST",
+                "/api/auth/local/register",
+                client.post(
+                    "/api/auth/local/register",
+                    json={"username": "member", "password": "password123"},
+                ),
+            )
+            keep("GET", "/api/auth/oidc/authorize", client.get("/api/auth/oidc/authorize"))
+            keep(
+                "POST",
+                "/api/auth/oidc/authorize",
+                client.post(
+                    "/api/auth/oidc/authorize",
+                    json={
+                        "client": {"kind": "iphone", "label": "Phone"},
+                        "code_challenge": "a" * 43,
+                        "code_challenge_method": "S256",
+                    },
+                ),
+            )
+            keep(
+                "GET",
+                "/api/auth/oidc/callback",
+                client.get("/api/auth/oidc/callback", params={"code": "none", "state": "none"}),
+                query={"code": "none", "state": "none"},
+            )
+            keep(
+                "POST",
+                "/api/auth/oidc/exchange",
+                client.post(
+                    "/api/auth/oidc/exchange",
+                    json={
+                        "code": "a" * 32,
+                        "code_verifier": "b" * 43,
+                        "client": {"kind": "iphone", "label": "Phone"},
+                    },
+                ),
+            )
+            keep(
+                "GET",
+                "/api/invites/validate",
+                client.get("/api/invites/validate", params={"token": "not-an-invite"}),
+                query={"token": "not-an-invite"},
+            )
+            keep(
+                "POST",
+                "/api/invites/redeem/local",
+                client.post(
+                    "/api/invites/redeem/local",
+                    json={
+                        "token": "not-an-invite",
+                        "username": "member",
+                        "password": "password123",
+                    },
+                ),
+            )
+            keep(
+                "POST",
+                "/api/access-requests",
+                client.post(
+                    "/api/access-requests",
+                    json={"display_name": "Neighbor", "message": "Could I join?"},
+                ),
+            )
             keep("GET", "/api/auth/me", client.get("/api/auth/me"))
             keep(
                 "PATCH",

@@ -1,0 +1,10 @@
+{
+  "body": {
+    "detail": "Multi-user auth is not enabled"
+  },
+  "content_type": "application/json",
+  "example_path": "/api/auth/plex/pin/1",
+  "method": "GET",
+  "path": "/api/auth/plex/pin/{pin_id}",
+  "status": 400
+}

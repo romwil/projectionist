@@ -1,0 +1,13 @@
+{
+  "body": {
+    "request": {
+      "created_at": 1700000000,
+      "id": "00000000000040008000000000000001",
+      "status": "pending"
+    }
+  },
+  "content_type": "application/json",
+  "method": "POST",
+  "path": "/api/access-requests",
+  "status": 200
+}

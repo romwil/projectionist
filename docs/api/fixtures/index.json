@@ -6,6 +6,21 @@
   },
   {
     "method": "GET",
+    "path": "/api/auth/oidc/authorize",
+    "file": "get-api-auth-oidc-authorize.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/auth/oidc/callback",
+    "file": "get-api-auth-oidc-callback.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/auth/plex/pin/{pin_id}",
+    "file": "get-api-auth-plex-pin-pin_id.json"
+  },
+  {
+    "method": "GET",
     "path": "/api/devices/me/intent",
     "file": "get-api-devices-me-intent.json"
   },
@@ -23,6 +38,11 @@
     "method": "GET",
     "path": "/api/health",
     "file": "get-api-health.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/invites/validate",
+    "file": "get-api-invites-validate.json"
   },
   {
     "method": "GET",
@@ -96,6 +116,41 @@
   },
   {
     "method": "POST",
+    "path": "/api/access-requests",
+    "file": "post-api-access-requests.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/local/login",
+    "file": "post-api-auth-local-login.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/local/register",
+    "file": "post-api-auth-local-register.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/oidc/authorize",
+    "file": "post-api-auth-oidc-authorize.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/oidc/exchange",
+    "file": "post-api-auth-oidc-exchange.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/plex",
+    "file": "post-api-auth-plex.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/plex/pin",
+    "file": "post-api-auth-plex-pin.json"
+  },
+  {
+    "method": "POST",
     "path": "/api/devices/pair/issue",
     "file": "post-api-devices-pair-issue.json"
   },
@@ -103,6 +158,11 @@
     "method": "POST",
     "path": "/api/devices/pair/rotate",
     "file": "post-api-devices-pair-rotate.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/invites/redeem/local",
+    "file": "post-api-invites-redeem-local.json"
   },
   {
     "method": "POST",

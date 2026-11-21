@@ -28,7 +28,7 @@ def client_capabilities() -> dict[str, int]:
         "shared_sessions": 0,  # SES-004
         "timeline": 0,  # TML-005
         "tracks": 0,  # TRK-003
-        "native_sign_in": 0,  # NAT-002, accepted, not shipped
+        "native_sign_in": 1,  # NAT-002 device credential on every web sign-in path
         "push": 0,  # NAT-006, accepted, not shipped
         "approvals": 0,  # NAT-006, accepted, not shipped
         "cached_art": 1 if CACHED_ART_ENABLED else 0,

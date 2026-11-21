@@ -21,7 +21,7 @@
       "cached_art": 1,
       "caption_tracks": 0,
       "device_pairing": 1,
-      "native_sign_in": 0,
+      "native_sign_in": 1,
       "playback_engine": 1,
       "push": 0,
       "shared_sessions": 0,
@@ -78,6 +78,12 @@
       "require_linked_user_for_requests": false
     },
     "setup_state": "active",
+    "sign_in": {
+      "access_requests_open": true,
+      "methods": [
+        "plex"
+      ]
+    },
     "user": {
       "avatar_url": null,
       "default_page": "explore",

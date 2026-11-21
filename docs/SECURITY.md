@@ -48,14 +48,16 @@ There is **no** `/api/auth/` prefix leak. Ingress matches **explicit method+path
 | `GET` | `/api/health` | Liveness |
 | `GET` | `/api/features` | Stripped flags (no guest/tour). Also `api_contract` and `capabilities` — names and numbers only, no household secrets |
 | `POST` | `/api/access-requests` | Queue only; **3 / IP / hour**; honeypot below |
-| `GET` | `/api/invites/validate` | HMAC-verified token; fail closed |
-| `POST` | `/api/invites/redeem/local` | Local fallback on the same invite |
-| `POST` | `/api/auth/local/login` | Existing local users only |
-| `POST` | `/api/auth/plex/pin` | Start PIN; nonce cookie |
-| `GET` | `/api/auth/plex/pin/{id}` | Default poll (login/join) completes the household session (cookie + user) even with a leftover cookie. `?peek=1` (Link Plex / ProfilePage) never binds; bind is `POST /api/auth/plex/link`. New Plex identity without invite → **403** |
-| `POST` | `/api/auth/plex` | Existing Plex users; new identity without invite → **403** join-link copy |
-| `GET` | `/api/auth/oidc/authorize` | If OIDC enabled |
-| `GET` | `/api/auth/oidc/callback` | If OIDC enabled |
+| `GET` | `/api/invites/validate` | HMAC-verified token; fail closed. Returns the inviter’s display name, role, expiry, Youth flag, and allowed methods — not another member’s email |
+| `POST` | `/api/invites/redeem/local` | Local fallback on the same invite. A `client` object returns a device credential instead of a cookie |
+| `POST` | `/api/auth/local/login` | Existing local users only. A `client` object returns a device credential instead of a cookie |
+| `POST` | `/api/auth/plex/pin` | Start PIN. Browser gets a nonce cookie. A `client` object gets `pin_nonce` in the body and no cookie |
+| `GET` | `/api/auth/plex/pin/{id}` | Default poll (login/join) completes the household session (cookie + user) even with a leftover cookie. Native callers send `X-Projectionist-Pin-Nonce` and receive a device credential once. `?peek=1` (Link Plex / ProfilePage) never binds; bind is `POST /api/auth/plex/link`. New Plex identity without invite → **403** |
+| `POST` | `/api/auth/plex` | Existing Plex users; new identity without invite → **403** join-link copy. A `client` object returns a device credential instead of a cookie |
+| `GET` | `/api/auth/oidc/authorize` | If OIDC enabled. Browser start |
+| `POST` | `/api/auth/oidc/authorize` | If OIDC enabled. Native start: PKCE S256, `client` required. The provider redirect stays the configured server callback |
+| `GET` | `/api/auth/oidc/callback` | If OIDC enabled. Native state answers 302 to `projectionist://auth/callback` with a single-use code, never the credential |
+| `POST` | `/api/auth/oidc/exchange` | If OIDC enabled. Exchanges that code plus the PKCE verifier for a device credential. Single-use, two minutes |
 | `POST` | `/api/auth/logout` | Clears cookie |
 | `GET` | `/api/mail/unsubscribe` | Signed one-click token (GRO-008); shows a confirm button, changes nothing |
 | `POST` | `/api/mail/unsubscribe` | RFC 8058 one-click: turns off one program's email for one person; rejected after "Delete my data" or for another person; security-logged |
@@ -105,7 +107,7 @@ See [MCP.md](MCP.md) and [PRIVACY.md](PRIVACY.md).
 | **S1** | Critical | Control-plane routes historically lacked session deps. | With `multi_user_enabled=true`, unauthenticated `curl` to settings/chat/sync/confirm. | **Mitigated** | Explicit handshake allowlist; wildcard `/api/auth/` is gone. Single-owner remains LAN-open unless the WAN interlock sees a public client IP. |
 | **S2** | Critical | Session secret fell back to a public dev default. | Forge `curatorx_session` cookies for any `user_id`. | **Mitigated** | Auto-generated DATA_DIR secret + refuse enable on public default; still set `PROJECTIONIST_SESSION_SECRET` in production. |
 | **S3** | Critical | App binds `0.0.0.0:8788` in Docker / Unraid packaging. | Reach the control plane from any host interface / accidental WAN map. | **Open** | Do not port-forward bare 8788; bind/firewall to LAN or put behind an authenticated reverse proxy. |
-| **S4** | High | Plex PIN create/poll without binding / rate limits. | Create/poll unbound PINs; race another client’s PIN once authorized. | **Mitigated** | PIN nonce cookie + per-IP rate limits; residual race risk on shared browser profiles. |
+| **S4** | High | Plex PIN create/poll without binding / rate limits. | Create/poll unbound PINs; race another client’s PIN once authorized. | **Mitigated** | PIN nonce is a cookie for the browser and a response field the native client sends back as `X-Projectionist-Pin-Nonce`. Per-IP rate limits. Residual race risk on shared browser profiles. |
 | **S5** | High | Setup tests filled secrets and fetched operator URLs (SSRF). | Hit link-local/metadata URLs with attached saved tokens. | **Mitigated** | Owner-gated + host-matched secrets + link-local/metadata blocks; private LAN targets still allowed for *arr. |
 | **S6** | High | Chat threads not filtered by `user_id`. | Read/delete another user’s messages. | **Mitigated** | Chat threads scoped by `user_id` when multi-user is on. |
 | **S7** | High | Pending *arr confirms by opaque token only. | Steal/guess a confirmation token and confirm writes. | **Mitigated** | Pending actions store `user_id`; confirm pops only matching tokens. |
