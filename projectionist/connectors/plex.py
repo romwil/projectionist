@@ -278,6 +278,120 @@ def _plex_part_size(raw: Any) -> int:
         return 0
 
 
+_PLEX_STREAM_TYPES = {"1": "video", "2": "audio", "3": "subtitle"}
+_PLEX_SUBTITLE_CODECS = {
+    "srt": "subrip",
+    "subrip": "subrip",
+    "ass": "ass",
+    "ssa": "ssa",
+    "pgs": "hdmv_pgs_subtitle",
+    "pgssub": "hdmv_pgs_subtitle",
+    "vobsub": "dvd_subtitle",
+    "mov_text": "mov_text",
+    "webvtt": "webvtt",
+    "text": "text",
+}
+
+
+def _plex_int(raw: Any) -> int:
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _plex_stream(element) -> Optional[Dict[str, Any]]:
+    kind = _PLEX_STREAM_TYPES.get(str(element.attrib.get("streamType") or ""))
+    if kind is None:
+        return None
+    codec = str(element.attrib.get("codec") or "").strip().lower()
+    if kind == "subtitle":
+        codec = _PLEX_SUBTITLE_CODECS.get(codec, codec)
+    if not codec:
+        return None
+    profile = str(element.attrib.get("profile") or "")
+    bit_depth = _plex_int(element.attrib.get("bitDepth"))
+    if kind == "video" and bit_depth < 8 and "10" in profile.lower():
+        bit_depth = 10
+    language = str(
+        element.attrib.get("languageCode") or element.attrib.get("languageTag") or ""
+    ).strip().lower()
+    return {
+        "index": _plex_int(element.attrib.get("index") or element.attrib.get("id")),
+        "codec_type": kind,
+        "codec": codec,
+        "profile": profile,
+        "level": str(element.attrib.get("level") or ""),
+        "bit_depth": bit_depth,
+        "channels": _plex_int(element.attrib.get("channels") or element.attrib.get("audioChannels")),
+        "language": language,
+    }
+
+
+def title_streams_from_element(element) -> Optional[Dict[str, Any]]:
+    """Container, codecs, profile, level, and bit depth already on a Plex Video.
+
+    The library listing includes this on ``Media`` / ``Stream``. No ffprobe.
+    """
+    rating_key = str(element.attrib.get("ratingKey") or "").strip()
+    if not rating_key:
+        return None
+    media = element.find("Media")
+    if media is None:
+        medias = element.findall(".//Media")
+        media = medias[0] if medias else None
+    if media is None:
+        return None
+    container = str(media.attrib.get("container") or "").strip().lower()
+    streams: List[Dict[str, Any]] = []
+    parts = media.findall("Part") or media.findall(".//Part")
+    for part in parts:
+        if not container:
+            container = str(part.attrib.get("container") or "").strip().lower()
+        for stream in part.findall("Stream"):
+            parsed = _plex_stream(stream)
+            if parsed is not None:
+                streams.append(parsed)
+    if not streams:
+        video = str(media.attrib.get("videoCodec") or "").strip().lower()
+        audio = str(media.attrib.get("audioCodec") or "").strip().lower()
+        profile = str(media.attrib.get("videoProfile") or "")
+        if video:
+            streams.append(
+                {
+                    "index": 0,
+                    "codec_type": "video",
+                    "codec": video,
+                    "profile": profile,
+                    "level": "",
+                    "bit_depth": 10 if "10" in profile.lower() else 0,
+                    "channels": 0,
+                    "language": "",
+                }
+            )
+        if audio:
+            streams.append(
+                {
+                    "index": 1,
+                    "codec_type": "audio",
+                    "codec": audio,
+                    "profile": "",
+                    "level": "",
+                    "bit_depth": 0,
+                    "channels": _plex_int(media.attrib.get("audioChannels")),
+                    "language": "",
+                }
+            )
+    if not streams:
+        return None
+    return {
+        "rating_key": rating_key,
+        "title": str(element.attrib.get("title") or ""),
+        "container": container or "mkv",
+        "streams": streams,
+    }
+
+
 def _plex_media_parts(root) -> List[Dict[str, Any]]:
     """Part file path + size + parent Media id from a metadata XML tree."""
     parts: List[Dict[str, Any]] = []
@@ -834,6 +948,70 @@ class PlexClient:
             for part in self.media_file_parts(rating_key, include_leaves=include_leaves)
             if part.get("file")
         ]
+
+    def playback_stream_catalog(self, *, page_size: int = 500) -> List[Dict[str, Any]]:
+        """Stream metadata for movies and episodes, from the library listing.
+
+        One page is one Plex request. The caller plans from this before ffprobe.
+        """
+        found: List[Dict[str, Any]] = []
+        seen: set[str] = set()
+        sections: List[tuple[str, int]] = []
+        if self.movie_section:
+            sections.append((self.movie_section, 1))
+        else:
+            try:
+                sections.append((self._find_section_key("movie"), 1))
+            except Exception:
+                pass
+        if self.tv_section:
+            sections.append((self.tv_section, 4))
+        else:
+            try:
+                sections.append((self._find_section_key("show"), 4))
+            except Exception:
+                pass
+        for section_key, plex_type in sections:
+            found.extend(
+                self._page_title_streams(
+                    section_key, plex_type=plex_type, page_size=page_size, seen=seen
+                )
+            )
+        return found
+
+    def _page_title_streams(
+        self,
+        section_key: str,
+        *,
+        plex_type: int,
+        page_size: int,
+        seen: set[str],
+    ) -> List[Dict[str, Any]]:
+        rows: List[Dict[str, Any]] = []
+        start = 0
+        while True:
+            root = self._request_xml(
+                f"/library/sections/{urllib.parse.quote(str(section_key))}/all"
+                f"?type={int(plex_type)}"
+                f"&X-Plex-Container-Start={start}"
+                f"&X-Plex-Container-Size={int(page_size)}"
+            )
+            elements = root.findall(".//Video")
+            if not elements:
+                break
+            for element in elements:
+                row = title_streams_from_element(element)
+                if row is None:
+                    continue
+                key = str(row["rating_key"])
+                if key in seen:
+                    continue
+                seen.add(key)
+                rows.append(row)
+            start += len(elements)
+            if len(elements) < page_size:
+                break
+        return rows
 
     def delete_metadata(self, rating_key: str) -> None:
         """Remove a library item from Plex (metadata only; does not delete disk files)."""

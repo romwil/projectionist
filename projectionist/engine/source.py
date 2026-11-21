@@ -15,6 +15,15 @@ from typing import Any, Callable, Optional, Sequence
 from projectionist.engine.pathmap import map_plex_path
 from projectionist.engine.probe import ProbeResult, probe_file
 
+
+def plex_lookup_reason(error: BaseException) -> str:
+    """Name a failed Plex lookup. A timeout is not an empty Media/Part list."""
+    text = str(error or "").lower()
+    if "timeout" in text or "timed out" in text or "circuit open" in text:
+        return "Plex timed out before it reported a file for this title"
+    return "Plex did not report a file for this title"
+
+
 PathLookup = Callable[[str], Sequence[str]]
 IsFileFn = Callable[[str], bool]
 ProbeFn = Callable[..., Any]
@@ -86,11 +95,11 @@ class PlexMediaSource:
             identity = {}
         try:
             paths = [str(item).strip() for item in (self.path_lookup(key) or []) if str(item).strip()]
-        except Exception:  # noqa: BLE001 — Plex failures become an unread file
+        except Exception as error:  # noqa: BLE001 — Plex failures become an unread file
             return MediaAsset(
                 rating_key=key,
                 readable=False,
-                reason="Plex did not report a file for this title",
+                reason=plex_lookup_reason(error),
                 identity=identity,
             )
         if not paths:

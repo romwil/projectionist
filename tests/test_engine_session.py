@@ -123,3 +123,45 @@ class EngineSessionTests(unittest.TestCase):
             self.assertFalse(session.playable)
             self.assertEqual(session.master_url(), "")
             self.assertIn("AC-3", session.reason)
+
+    def test_full_plan_is_not_an_engine_playlist(self) -> None:
+        import tempfile
+
+        from projectionist.engine.profiles import profile_from_mapping
+
+        with tempfile.TemporaryDirectory() as tmp:
+            media = Path(tmp) / "film.mkv"
+            media.write_bytes(b"mkv")
+            asset = _asset("aac")
+            asset.local_path = str(media)
+            asset.probe.streams[0].codec = "hevc"
+            asset.probe.streams[0].level = "186"
+            asset.probe.streams[0].bit_depth = 10
+            profile = profile_from_mapping(
+                {
+                    "id": "web",
+                    "containers": ["mp4", "hls-fmp4"],
+                    "video": [{"codec": "hevc", "max_level": "5.1", "bit_depth": 10}, {"codec": "h264", "max_level": "5.2"}],
+                    "audio": ["aac", "ac3", "eac3"],
+                    "captions": ["webvtt"],
+                }
+            )
+
+            def runner(cmd, cwd):
+                raise AssertionError("a full plan must not start an engine playlist")
+
+            session = open_engine_session(
+                asset,
+                profile,
+                user_id="owner",
+                title="Mulholland Drive",
+                duration_ms=8_820_000,
+                view_offset_ms=0,
+                data_dir=Path(tmp),
+                runner=runner,
+                ffmpeg="ffmpeg",
+            )
+            self.assertEqual(session.plan, "full")
+            self.assertFalse(session.playable)
+            self.assertEqual(session.master_url(), "")
+            self.assertIn("hevc level is above profile hevc 5.1", session.reason)

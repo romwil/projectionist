@@ -16,6 +16,7 @@ from projectionist.engine.caption_prep import (
     enqueue_caption_prep,
     enqueue_recent_arrivals,
     extract_text_captions,
+    has_unprepared_text,
     note_caption_titles,
     prepared_tracks,
 )
@@ -75,10 +76,10 @@ class CaptionPrepTests(unittest.TestCase):
             media = Path(str(asset.local_path))
 
             def fake_run(cmd, **kwargs):
-                self.assertEqual(cmd[0], "/usr/bin/ffmpeg")
-                self.assertEqual(cmd[1:5], ["-y", "-i", str(media), "-map"])
-                self.assertEqual(cmd[5], "0:2")
-                self.assertEqual(cmd[6:8], ["-f", "webvtt"])
+                binary_at = cmd.index("/usr/bin/ffmpeg")
+                self.assertEqual(cmd[binary_at + 1 : binary_at + 5], ["-y", "-i", str(media), "-map"])
+                self.assertEqual(cmd[binary_at + 5], "0:2")
+                self.assertEqual(cmd[binary_at + 6 : binary_at + 8], ["-f", "webvtt"])
                 self.assertGreaterEqual(kwargs["timeout"], 600)
                 self.assertNotEqual(kwargs["timeout"], 20)
                 self.assertEqual(kwargs["timeout"], PREP_TIMEOUT_S)
@@ -260,3 +261,132 @@ class CaptionPrepTests(unittest.TestCase):
         self.assertIn("66167", added)
         self.assertIn("local-zero", added)
         self.assertNotIn("show-1", added)
+
+    def test_a_library_scan_does_not_queue_titles_that_are_not_new(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db = Database(root / "projectionist.db")
+            old = int(time.time()) - 40 * 24 * 3600
+            show_id = db.upsert_library_item(
+                {"rating_key": "show-old", "media_type": "show", "title": "Old Show", "added_at": old}
+            )
+            db.upsert_library_item(
+                {"rating_key": "134335", "media_type": "movie", "title": "Mulholland Drive", "added_at": old}
+            )
+            db.upsert_library_episode(
+                {
+                    "show_item_id": show_id,
+                    "rating_key": "229258",
+                    "season_number": 3,
+                    "episode_number": 16,
+                    "title": "The Lady and the Tiger and the Lawyer",
+                    "added_at": old,
+                }
+            )
+            added = enqueue_recent_arrivals(db, data_dir=root, limit=40)
+            queued = json.loads((root / "caption_prep_queue.json").read_text(encoding="utf-8")) if (root / "caption_prep_queue.json").is_file() else {"items": []}
+        self.assertEqual(added, [])
+        self.assertEqual(queued["items"], [])
+
+    def test_a_playing_title_is_not_stuck_behind_the_arrival_backlog(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            enqueue_caption_prep([str(index) for index in range(1, 201)], data_dir=root, reason="arrival")
+            moved = note_caption_titles(["161755"], data_dir=root, reason="play", force=True)
+            queued = json.loads((root / "caption_prep_queue.json").read_text(encoding="utf-8"))
+        self.assertEqual(moved, None)
+        items = queued["items"]
+        self.assertLessEqual(len(items), 200)
+        self.assertEqual(items[0]["rating_key"], "161755")
+        self.assertEqual(items[0]["reason"], "play")
+        self.assertNotEqual(items[-1]["rating_key"], "161755")
+
+    def test_a_timed_out_extract_does_not_keep_a_partial_cue(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            asset = _asset(root, text=True)
+
+            def fake_run(cmd, **kwargs):
+                Path(cmd[-1]).write_text(_VTT, encoding="utf-8")
+                raise subprocess.TimeoutExpired(cmd, timeout=kwargs.get("timeout") or 1)
+
+            with patch(
+                "projectionist.library.episode_investigate.capabilities.resolve_ffmpeg",
+                return_value="/usr/bin/ffmpeg",
+            ), patch("projectionist.engine.caption_prep.subprocess.run", side_effect=fake_run):
+                status = extract_text_captions(asset, data_dir=root)
+            manifest = root / "subtitles" / "161755" / "prepared.json"
+            stored = root / "subtitles" / "161755" / "prepared" / "s2.vtt"
+            self.assertEqual(status, "failed")
+            self.assertEqual(prepared_tracks(asset, data_dir=root), [])
+            self.assertFalse(stored.exists())
+            if manifest.is_file():
+                saved = json.loads(manifest.read_text(encoding="utf-8"))
+                self.assertNotEqual(saved.get("status"), "ready")
+            self.assertTrue(has_unprepared_text(asset, data_dir=root))
+
+    def test_one_prepared_english_track_covers_the_other_english_stream(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            media = root / "film.mkv"
+            media.write_bytes(b"mkv")
+            english = [
+                MediaStream(index=0, codec_type="video", codec="h264"),
+                MediaStream(index=1, codec_type="audio", codec="aac"),
+                MediaStream(
+                    index=2, codec_type="subtitle", codec="subrip", language="eng", subtitle_kind="text"
+                ),
+                MediaStream(
+                    index=3, codec_type="subtitle", codec="subrip", language="en", subtitle_kind="text"
+                ),
+            ]
+            asset = MediaAsset(
+                rating_key="161755",
+                readable=True,
+                local_path=str(media),
+                probe=ProbeResult("mkv", "matroska", 600.0, 1, media.stat().st_size, english),
+            )
+            calls: list[int] = []
+
+            def extract(source: Path, index: int, dest: Path) -> None:
+                del source
+                calls.append(index)
+                dest.write_text(_VTT, encoding="utf-8")
+
+            self.assertEqual(extract_text_captions(asset, data_dir=root, extractor=extract), "ready")
+            self.assertEqual(calls, [2])
+            self.assertFalse(has_unprepared_text(asset, data_dir=root))
+            self.assertEqual(extract_text_captions(asset, data_dir=root, extractor=extract), "ready")
+            self.assertEqual(calls, [2])
+
+            uncovered = MediaAsset(
+                rating_key="161755",
+                readable=True,
+                local_path=str(media),
+                probe=ProbeResult(
+                    "mkv",
+                    "matroska",
+                    600.0,
+                    1,
+                    media.stat().st_size,
+                    english
+                    + [
+                        MediaStream(
+                            index=4,
+                            codec_type="subtitle",
+                            codec="subrip",
+                            language="jpn",
+                            subtitle_kind="text",
+                        )
+                    ],
+                ),
+            )
+            self.assertTrue(has_unprepared_text(uncovered, data_dir=root))
+            media.write_bytes(b"mkv-replaced")
+            stale = MediaAsset(
+                rating_key="161755",
+                readable=True,
+                local_path=str(media),
+                probe=ProbeResult("mkv", "matroska", 600.0, 1, media.stat().st_size, english),
+            )
+            self.assertTrue(has_unprepared_text(stale, data_dir=root))

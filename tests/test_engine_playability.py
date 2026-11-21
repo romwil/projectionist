@@ -19,7 +19,11 @@ from projectionist.engine.playability import (
     build_playability_report,
     hardware_sentence,
     library_titles,
+    merge_playability_reports,
     profiles_for_report,
+    report_path,
+    run_library_report,
+    save_playability_report,
 )
 from projectionist.engine.probe import MediaStream, ProbeResult
 from projectionist.engine.profiles import SAFARI, profile_from_mapping
@@ -214,6 +218,178 @@ class PlayabilityReportTests(unittest.TestCase):
         self.assertEqual(web.video[0].max_level, "4.0")
 
 
+class PlayabilityInterruptTests(unittest.TestCase):
+    def test_interrupted_walk_does_not_replace_the_saved_snapshot(self) -> None:
+        previous = {
+            "generated_at": "2026-11-21T00:00:00+00:00",
+            "complete": True,
+            "message": "Ready.",
+            "title_count": 2,
+            "profiles": [
+                {
+                    "profile": "safari",
+                    "title_count": 2,
+                    "titles": [{"rating_key": "alpha"}, {"rating_key": "beta"}],
+                },
+                {
+                    "profile": "chrome",
+                    "title_count": 2,
+                    "titles": [{"rating_key": "alpha"}, {"rating_key": "beta"}],
+                },
+                {
+                    "profile": "web",
+                    "title_count": 2,
+                    "titles": [{"rating_key": "alpha"}, {"rating_key": "beta"}],
+                },
+            ],
+        }
+        checks = {"n": 0}
+
+        def should_stop() -> bool:
+            checks["n"] += 1
+            return checks["n"] > 1
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db = Database(root / "projectionist.db")
+            db.upsert_library_item(
+                {"rating_key": "alpha", "media_type": "movie", "title": "Alpha", "original_language": "en"}
+            )
+            db.upsert_library_item(
+                {"rating_key": "beta", "media_type": "movie", "title": "Beta", "original_language": "en"}
+            )
+            save_playability_report(root, previous)
+            path = report_path(root)
+            before = path.read_text(encoding="utf-8")
+            result = run_library_report(
+                db,
+                Settings(),
+                root,
+                locate=lambda key: _asset(key, "mp4", "h264", "aac"),
+                should_stop=should_stop,
+            )
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(path.read_text(encoding="utf-8"), before)
+        counts = {row["profile"]: row["title_count"] for row in saved["profiles"]}
+        self.assertEqual(saved["complete"], True)
+        self.assertEqual(saved["title_count"], 2)
+        self.assertEqual(counts, {"safari": 2, "chrome": 2, "web": 2})
+        self.assertEqual(result["title_count"], 2)
+        self.assertEqual(
+            {row["profile"]: row["title_count"] for row in result["profiles"]},
+            counts,
+        )
+
+    def test_merge_ignores_a_truncated_walk(self) -> None:
+        previous = {
+            "generated_at": "2026-11-21T00:00:00+00:00",
+            "complete": True,
+            "message": "Ready.",
+            "title_count": 2,
+            "profiles": [
+                {"profile": "safari", "title_count": 2, "titles": [{"rating_key": "alpha"}, {"rating_key": "beta"}]},
+                {"profile": "web", "title_count": 2, "titles": [{"rating_key": "alpha"}, {"rating_key": "beta"}]},
+            ],
+        }
+        fresh = {
+            "generated_at": "2026-11-21T01:00:00+00:00",
+            "complete": False,
+            "message": "The walk stopped early. Refresh to finish the library.",
+            "title_count": 1,
+            "profiles": [
+                {"profile": "safari", "title_count": 1, "titles": [{"rating_key": "alpha"}]},
+                {"profile": "chrome", "title_count": 1, "titles": [{"rating_key": "alpha"}]},
+            ],
+        }
+        merged = merge_playability_reports(previous, fresh)
+        counts = {row["profile"]: row["title_count"] for row in merged["profiles"]}
+        self.assertEqual(merged["complete"], True)
+        self.assertEqual(merged["title_count"], 2)
+        self.assertEqual(counts, {"safari": 2, "web": 2})
+
+    def test_interrupted_walk_does_not_create_a_partial_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db = Database(root / "projectionist.db")
+            db.upsert_library_item(
+                {"rating_key": "alpha", "media_type": "movie", "title": "Alpha", "original_language": "en"}
+            )
+            run_library_report(
+                db,
+                Settings(),
+                root,
+                locate=lambda key: _asset(key, "mp4", "h264", "aac"),
+                should_stop=lambda: True,
+            )
+            self.assertFalse(report_path(root).exists())
+
+    def test_finished_walk_refreshes_named_profiles_and_keeps_the_browser_row(self) -> None:
+        previous = {
+            "generated_at": "2026-11-21T00:00:00+00:00",
+            "complete": True,
+            "message": "Ready.",
+            "title_count": 1,
+            "profiles": [
+                {"profile": "web", "title_count": 2, "titles": [{"rating_key": "alpha"}, {"rating_key": "beta"}]},
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db = Database(root / "projectionist.db")
+            db.upsert_library_item(
+                {"rating_key": "alpha", "media_type": "movie", "title": "Alpha", "original_language": "en"}
+            )
+            db.upsert_library_item(
+                {"rating_key": "beta", "media_type": "movie", "title": "Beta", "original_language": "en"}
+            )
+            save_playability_report(root, previous)
+            result = run_library_report(
+                db,
+                Settings(),
+                root,
+                locate=lambda key: _asset(key, "mp4", "h264", "aac"),
+                profiles=profiles_for_report("safari"),
+                should_stop=lambda: False,
+            )
+        counts = {row["profile"]: row["title_count"] for row in result["profiles"]}
+        self.assertEqual(result["complete"], True)
+        self.assertEqual(result["title_count"], 2)
+        self.assertEqual(counts["safari"], 2)
+        self.assertEqual(counts["web"], 2)
+        self.assertEqual(len(result["profiles"][0]["titles"]), 2)
+
+    def test_two_savers_do_not_share_one_temp_file(self) -> None:
+        import threading
+
+        from projectionist.engine.playability import empty_playability_report, load_playability_report
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            errors: list[BaseException] = []
+
+            def write(marker: str) -> None:
+                try:
+                    report = empty_playability_report(message=marker)
+                    report["complete"] = True
+                    report["profiles"] = [{"profile": "safari", "title_count": 1, "titles": []}]
+                    for _ in range(40):
+                        save_playability_report(root, report)
+                except BaseException as exc:  # noqa: BLE001 — the assertion is the failure
+                    errors.append(exc)
+
+            threads = [threading.Thread(target=write, args=(label,)) for label in ("one", "two")]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+            saved = load_playability_report(root)
+            leftovers = list((root / "engine").glob("*.tmp"))
+        self.assertEqual(errors, [])
+        self.assertIn(saved["message"], {"one", "two"})
+        self.assertEqual(saved["profiles"][0]["profile"], "safari")
+        self.assertEqual(leftovers, [])
+
+
 class PlayabilityRouteTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
@@ -292,7 +468,40 @@ class PlayabilityRouteTests(unittest.TestCase):
             calls.append(rating_key)
             return self.assets[rating_key]
 
-        with patch("projectionist.engine.routes.describe_title", side_effect=locate):
+        def catalog(_settings):
+            rows = []
+            for key, asset in self.assets.items():
+                probe = asset.probe
+                rows.append(
+                    {
+                        "rating_key": key,
+                        "title": key,
+                        "container": probe.container if probe else "",
+                        "streams": [
+                            {
+                                "index": stream.index,
+                                "codec_type": stream.codec_type,
+                                "codec": stream.codec,
+                                "language": stream.language,
+                                "channels": stream.channels,
+                                "profile": stream.profile,
+                                "level": stream.level,
+                                "bit_depth": stream.bit_depth,
+                            }
+                            for stream in (probe.streams if probe else [])
+                        ],
+                    }
+                )
+            return rows
+
+        def inline(target):
+            target()
+
+        with (
+            patch("projectionist.engine.routes.describe_title", side_effect=locate),
+            patch("projectionist.engine.playability.plex_stream_catalog", catalog),
+            patch("projectionist.engine.playability.spawn_walk", inline),
+        ):
             empty = self.client.get("/api/playback/playability")
             self.assertEqual(empty.status_code, 200)
             self.assertEqual(empty.json()["profiles"], [])
@@ -311,6 +520,9 @@ class PlayabilityRouteTests(unittest.TestCase):
         self.assertEqual(refreshed.status_code, 200, refreshed.text)
         body = refreshed.json()
         self.assertEqual(sorted(calls), ["direct", "pending", "picture", "remux"])
+        self.assertEqual(body["planned_from_plex"], 4)
+        self.assertEqual(body["confirmed_by_ffprobe"], 4)
+        self.assertFalse(body["running"])
         self.assertNotIn("/secret", json.dumps(body))
         ids = [row["profile"] for row in body["profiles"]]
         self.assertIn("web", ids)
@@ -327,6 +539,54 @@ class PlayabilityRouteTests(unittest.TestCase):
             {row["rating_key"] for row in again.json()["profiles"][0]["titles"]},
             {"direct", "remux", "pending", "picture"},
         )
+
+    def test_refresh_does_not_probe_until_the_walk_runs_and_does_not_start_a_second_one(self) -> None:
+        import projectionist.engine.playability as playability
+
+        calls: list[str] = []
+        started: list[object] = []
+
+        def locate(_settings, _db, _data_dir, rating_key: str):
+            calls.append(rating_key)
+            return self.assets[rating_key]
+
+        def spawn(target):
+            started.append(target)
+
+        try:
+            with (
+                patch("projectionist.engine.routes.describe_title", side_effect=locate),
+                patch("projectionist.engine.playability.spawn_walk", spawn),
+            ):
+                opened = self.client.get("/api/playback/playability")
+                self.assertEqual(opened.status_code, 200)
+                self.assertFalse(opened.json()["running"])
+                self.assertEqual(calls, [])
+                first = self.client.post("/api/playback/playability", json={})
+                second = self.client.post("/api/playback/playability", json={})
+            self.assertEqual(first.status_code, 200, first.text)
+            self.assertTrue(first.json()["running"])
+            self.assertTrue(second.json()["running"])
+            self.assertEqual(len(started), 1)
+            self.assertEqual(calls, [])
+        finally:
+            playability._WALKING = False
+
+    def test_scheduled_playability_task_does_not_walk(self) -> None:
+        import asyncio
+
+        from projectionist.library.db import Database
+        from projectionist.scheduler.engine import IdleScheduler
+        from projectionist.scheduler.tasks.playability_report import register
+        from projectionist.scheduler.tasks.playability_report import run as scheduled
+
+        result = asyncio.run(scheduled(None, Settings(), lambda: False))
+        self.assertEqual(result, {"status": "skipped", "processed": 0, "has_more": False})
+        with tempfile.TemporaryDirectory() as tmp:
+            scheduler = IdleScheduler(Database(Path(tmp) / "projectionist.db"), Path(tmp))
+            register(scheduler)
+            state = next(row for row in scheduler.get_task_states() if row["name"] == "playability_report")
+        self.assertFalse(state["enabled"])
 
     def test_unknown_profile_name_is_rejected(self) -> None:
         refused = self.client.post("/api/playback/playability", json={"profile": "nope"})

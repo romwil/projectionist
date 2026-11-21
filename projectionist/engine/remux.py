@@ -61,12 +61,23 @@ def _attr(value: str) -> str:
     return str(value or "").replace("\\", "").replace('"', "").replace("\n", " ").replace(",", " ")
 
 
-def _media_line(track: CaptionRendition) -> str:
+def _unique_name(name: str, used: set[str]) -> str:
+    base = _attr(name) or "Captions"
+    candidate = base
+    number = 2
+    while candidate in used:
+        candidate = f"{base} {number}"
+        number += 1
+    used.add(candidate)
+    return candidate
+
+
+def _media_line(track: CaptionRendition, *, name: str) -> str:
     default = "YES" if track.default else "NO"
     attrs = [
         "TYPE=SUBTITLES",
         'GROUP-ID="subs"',
-        f'NAME="{_attr(track.name) or "Captions"}"',
+        f'NAME="{name}"',
         f"DEFAULT={default}",
         f"AUTOSELECT={default}",
         "FORCED=NO",
@@ -92,6 +103,7 @@ def write_caption_renditions(
     seconds = max(float(duration_ms or 0) / 1000.0, 1.0)
     target = max(1, math.ceil(seconds - 1e-9))
     subs = directory / "subs"
+    used_names: set[str] = set()
     for track in captions:
         if not _TRACK_ID.fullmatch(track.track_id):
             continue
@@ -114,7 +126,7 @@ def write_caption_renditions(
             ]
         )
         (subs / f"{track.track_id}.m3u8").write_text(playlist, encoding="utf-8")
-        lines.append(_media_line(track))
+        lines.append(_media_line(track, name=_unique_name(track.name, used_names)))
     return lines
 
 

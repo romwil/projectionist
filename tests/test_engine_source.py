@@ -6,12 +6,12 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from projectionist.config_store import EngineSettings, Settings
 from projectionist.engine.pathmap import PathMapError, map_plex_path, normalize_mappings
 from projectionist.engine.probe import probe_file
-from projectionist.engine.source import PlexMediaSource, public_media
+from projectionist.engine.source import PlexMediaSource, plex_lookup_reason, public_media
 
 
 _PROBE = {
@@ -115,6 +115,81 @@ class PathMapTests(unittest.TestCase):
         asset = source.locate("1")
         self.assertFalse(asset.readable)
         self.assertIsNone(asset.local_path)
+
+
+class MediaSlotTests(unittest.TestCase):
+    def test_ffprobe_and_ffmpeg_share_one_low_priority_slot(self) -> None:
+        import threading
+        import time
+
+        from projectionist.engine.media_slot import media_command, run_media_tool
+
+        def which(name: str):
+            if name in {"nice", "ionice"}:
+                return f"/usr/bin/{name}"
+            return None
+
+        with patch("projectionist.engine.media_slot.shutil.which", side_effect=which):
+            command = media_command(["ffprobe", "-v", "error"])
+        self.assertEqual(command[:6], ["nice", "-n", "19", "ionice", "-c", "3"])
+        self.assertEqual(command[6], "ffprobe")
+        inflight = {"n": 0, "max": 0}
+
+        def runner(cmd, **kwargs):
+            del cmd, kwargs
+            inflight["n"] += 1
+            inflight["max"] = max(inflight["max"], inflight["n"])
+            time.sleep(0.05)
+            inflight["n"] -= 1
+            return "ok"
+
+        threads = [
+            threading.Thread(target=lambda: run_media_tool(["ffprobe"], runner))
+            for _ in range(2)
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(inflight["max"], 1)
+
+
+class PlexLookupReasonTests(unittest.TestCase):
+    def test_a_timeout_is_not_described_as_a_missing_file(self) -> None:
+        self.assertIn("timed out", plex_lookup_reason(TimeoutError("timed out")).lower())
+        self.assertIn(
+            "timed out",
+            plex_lookup_reason(RuntimeError("Timeout requesting http://plex/library/metadata/229258")).lower(),
+        )
+        self.assertIn(
+            "timed out",
+            plex_lookup_reason(RuntimeError("Circuit open for 10.10.1.200:32400; retry in 36s")).lower(),
+        )
+        self.assertNotIn("did not report a file", plex_lookup_reason(TimeoutError("timed out")).lower())
+
+    def test_an_empty_part_list_stays_a_missing_file(self) -> None:
+        source = PlexMediaSource(
+            mappings=[],
+            path_lookup=lambda key: [],
+            is_file=lambda path: False,
+            probe=lambda path, **kwargs: None,
+        )
+        asset = source.locate("229258")
+        self.assertFalse(asset.readable)
+        self.assertIn("did not report a file", asset.reason.lower())
+        self.assertNotIn("timed out", asset.reason.lower())
+
+        def explode(key: str):
+            raise RuntimeError("Timeout requesting http://plex/library/metadata/229258")
+
+        timed = PlexMediaSource(
+            mappings=[],
+            path_lookup=explode,
+            is_file=lambda path: False,
+            probe=lambda path, **kwargs: None,
+        ).locate("229258")
+        self.assertIn("timed out", timed.reason.lower())
+        self.assertNotIn("did not report a file", timed.reason.lower())
 
 
 class ProbeCacheTests(unittest.TestCase):

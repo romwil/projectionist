@@ -13,7 +13,6 @@ none selected.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Optional, Sequence
@@ -27,7 +26,6 @@ from projectionist.library.subtitle_cache import (
     household_language,
     household_languages,
     is_usable_subtitle_text,
-    iso2,
     title_language_is_household,
 )
 
@@ -36,11 +34,7 @@ CAPTION_FALLBACK_REASON = (
 )
 # Text exists, but the ahead-of-time job has not written WebVTT yet. This is
 # not a path-mapping failure, and it is not a picture-caption fallback.
-CAPTION_PENDING_REASON = (
-    "These captions are not ready yet, so this title stays on the Plex path."
-)
-
-_LANG_RE = re.compile(r"^[a-z]{2,3}$")
+CAPTION_PENDING_REASON = "These captions are not ready yet, so this title stays on the Plex path."
 
 
 @dataclass(frozen=True)
@@ -69,7 +63,7 @@ def prepare_webvtt_renditions(
     covered = {track.language for track in cached if track.language}
     prepared = _prepared_renditions(asset, data_dir=data_dir, skip=covered)
     return _mark_default(
-        cached + prepared,
+        _distinct_names(cached + prepared),
         captions_on=title_language_is_household(title_language, settings) is not True,
         household=household_language(settings),
     )
@@ -141,11 +135,26 @@ def _track_name(language: str) -> str:
     return label or language.upper()
 
 
+def _distinct_names(tracks: Sequence[CaptionRendition]) -> list[CaptionRendition]:
+    """HLS drops a second SUBTITLES rendition that reuses NAME. Untagged tracks share one label."""
+    used: set[str] = set()
+    named: list[CaptionRendition] = []
+    for track in tracks:
+        base = _track_name(track.language) or "Captions"
+        candidate = base
+        number = 2
+        while candidate in used:
+            candidate = f"{base} {number}"
+            number += 1
+        used.add(candidate)
+        named.append(track if candidate == track.name else replace(track, name=candidate))
+    return named
+
+
 def _normalize_language(raw: str) -> str:
-    code = iso2(raw)
-    if _LANG_RE.fullmatch(code):
-        return code
-    return ""
+    from projectionist.engine.caption_prep import caption_language
+
+    return caption_language(raw)
 
 
 def _read_limited(path: Path) -> str:

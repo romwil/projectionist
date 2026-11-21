@@ -361,7 +361,7 @@ Owners (or single-workspace installs with no login) also configure sync and idle
 
 ### Library playability (Settings → Playback)
 
-**Settings → Playback** includes **Library playability** for the owner. **Refresh report** walks the movies and episodes and says, for each one, the cheapest way it would play on Apple TV, Safari, Chrome, and this browser: serve the file, remux, audio-only, captions that are not ready yet, picture captions, ask the media source to transcode, or not playable through the engine. The walk uses the probe Projectionist already cached. It does not transcode, and it does not change the next Play.
+**Settings → Playback** includes **Library playability** for the owner. It does not start when you open Settings, when the server starts, or when the library is scanned. **Refresh report** plans from the stream list Plex already has (container, codecs, profile, level, bit depth) and shows those shares while it is still running. ffprobe then confirms the files in the background, one at a time. The tiers are serve the file, remux, audio-only, captions that are not ready yet, picture captions, ask the media source to transcode, or not playable through the engine. It does not transcode, and it does not change the next Play.
 
 A line under each device says what a GPU would change, in the form “A GPU with Quick Sync would let N titles play without Plex.” N is only the titles whose video that device cannot play. Audio-only and picture captions are counted on their own.
 
@@ -371,7 +371,7 @@ curl -s -H "Authorization: Bearer YOUR_OWNER_CREDENTIAL" \
   | python3 -m json.tool
 ```
 
-The jobs engine also writes that report on its own schedule. One title looks like this: a name, a tier such as `remux`, the label “Remux,” and the reason the planner recorded. There is no file path in the answer.
+The report is not on a timer. While it runs, the same request includes how many titles were planned from Plex metadata, how many ffprobe has confirmed, and that it is still running. One title looks like this: a name, a tier such as `remux`, the label “Remux,” and the reason the planner recorded. There is no file path in the answer.
 
 ### Curator persona (Admin → Persona)
 

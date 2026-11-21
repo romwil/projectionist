@@ -22,6 +22,34 @@ from projectionist.library.subtitles import (
 )
 
 
+class PlexStreamCatalogTests(unittest.TestCase):
+    def test_a_listing_keeps_container_codec_profile_level_and_bit_depth(self) -> None:
+        import xml.etree.ElementTree as ET
+
+        from projectionist.connectors.plex import title_streams_from_element
+
+        element = ET.fromstring(
+            """
+            <Video ratingKey="134335" title="Mulholland Drive">
+              <Media container="mkv">
+                <Part>
+                  <Stream streamType="1" codec="hevc" profile="Main 10" level="186" bitDepth="10" index="0" />
+                  <Stream streamType="2" codec="dts" channels="6" index="1" />
+                  <Stream streamType="3" codec="srt" languageCode="eng" index="2" />
+                </Part>
+              </Media>
+            </Video>
+            """
+        )
+        row = title_streams_from_element(element)
+        self.assertEqual(row["rating_key"], "134335")
+        self.assertEqual(row["container"], "mkv")
+        self.assertEqual(row["streams"][0]["level"], "186")
+        self.assertEqual(row["streams"][0]["bit_depth"], 10)
+        self.assertEqual(row["streams"][0]["profile"], "Main 10")
+        self.assertEqual(row["streams"][2]["codec"], "subrip")
+
+
 class PlexSubtitleClientTests(unittest.TestCase):
     def _client(self) -> PlexClient:
         return PlexClient("http://plex.test:32400", "token")

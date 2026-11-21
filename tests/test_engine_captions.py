@@ -545,3 +545,100 @@ class CaptionPlaylistTests(unittest.TestCase):
             self.assertNotIn("SUBTITLES", master)
             self.assertFalse(leaked.exists())
             self.assertFalse((root / "secret.vtt").exists())
+
+    def test_two_untagged_text_tracks_keep_distinct_playlist_names(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            media = root / "film.mkv"
+            media.write_bytes(b"mkv")
+            streams = [
+                MediaStream(index=0, codec_type="video", codec="h264", level="41", width=1920, height=1080),
+                MediaStream(index=1, codec_type="audio", codec="aac"),
+                MediaStream(
+                    index=2, codec_type="subtitle", codec="subrip", language="und", subtitle_kind="text"
+                ),
+                MediaStream(
+                    index=3, codec_type="subtitle", codec="subrip", language="", subtitle_kind="text"
+                ),
+            ]
+            asset = MediaAsset(
+                rating_key="121986",
+                readable=True,
+                local_path=str(media),
+                probe=ProbeResult("mkv", "matroska", 600.0, 1, media.stat().st_size, streams),
+            )
+
+            def extract(source: Path, index: int, dest: Path) -> None:
+                del source, index
+                dest.write_text("WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nTrack\n", encoding="utf-8")
+
+            self.assertEqual(extract_text_captions(asset, data_dir=root, extractor=extract), "ready")
+            renditions = prepare_webvtt_renditions(
+                asset, title_language="ja", settings=Settings(), data_dir=root
+            )
+            self.assertEqual(len(renditions), 2)
+            self.assertEqual({item.language for item in renditions}, {""})
+            master = write_master(
+                root / "session",
+                asset.probe,
+                file_size=100,
+                duration_ms=1000,
+                captions=renditions,
+            )
+            text = master.read_text(encoding="utf-8")
+            media_lines = [line for line in text.splitlines() if line.startswith("#EXT-X-MEDIA:")]
+            names = {line.split('NAME="', 1)[1].split('"', 1)[0] for line in media_lines}
+        self.assertEqual(len(media_lines), 2)
+        self.assertEqual(len(names), 2)
+        self.assertNotIn('LANGUAGE="und"', text)
+        self.assertNotIn("LANGUAGE=", text)
+
+    def test_cached_ukrainian_covers_an_embedded_ukr_track(self) -> None:
+        from projectionist.library.subtitle_cache import iso2
+
+        self.assertEqual(iso2("ukr"), "uk")
+        self.assertEqual(iso2("hrv"), "hr")
+        self.assertEqual(iso2("vie"), "vi")
+        self.assertEqual(iso2("ind"), "id")
+        self.assertEqual(iso2("ron"), "ro")
+        self.assertEqual(iso2("rum"), "ro")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            media = root / "film.mkv"
+            media.write_bytes(b"mkv")
+            _write_cache(root, "uk")
+            asset = MediaAsset(
+                rating_key="121986",
+                readable=True,
+                local_path=str(media),
+                probe=ProbeResult(
+                    "mkv",
+                    "matroska",
+                    600.0,
+                    1,
+                    media.stat().st_size,
+                    [
+                        MediaStream(index=0, codec_type="video", codec="h264", level="41"),
+                        MediaStream(index=1, codec_type="audio", codec="aac"),
+                        MediaStream(
+                            index=2,
+                            codec_type="subtitle",
+                            codec="subrip",
+                            language="ukr",
+                            subtitle_kind="text",
+                        ),
+                    ],
+                ),
+            )
+
+            def extract(source: Path, index: int, dest: Path) -> None:
+                del source, index, dest
+                raise AssertionError("the cached Ukrainian track already covers ukr")
+
+            status = extract_text_captions(asset, data_dir=root, extractor=extract)
+            renditions = prepare_webvtt_renditions(
+                asset, title_language="ja", settings=Settings(), data_dir=root
+            )
+        self.assertEqual(status, "ready")
+        self.assertEqual([item.language for item in renditions], ["uk"])
+        self.assertEqual(renditions[0].track_id, "cached-uk")
