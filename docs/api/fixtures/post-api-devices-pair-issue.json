@@ -1,0 +1,13 @@
+{
+  "body": {
+    "code": "ABCD-EFGH",
+    "expires_at": 1700000300,
+    "expires_in_minutes": 5,
+    "pending_id": "pending-fixture-1",
+    "status": "pending"
+  },
+  "content_type": "application/json",
+  "method": "POST",
+  "path": "/api/devices/pair/issue",
+  "status": 200
+}

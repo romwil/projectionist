@@ -1,0 +1,13 @@
+{
+  "body_base64": "/9j/AAAAAAAAAAAAAAAAAAAAAA==",
+  "byte_length": 19,
+  "content_type": "image/jpeg",
+  "example_path": "/api/library/art/movie/949",
+  "method": "GET",
+  "path": "/api/library/art/{media_type}/{item_id}",
+  "query": {
+    "id_type": "tmdb",
+    "kind": "poster"
+  },
+  "status": 200
+}

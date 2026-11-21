@@ -5,6 +5,7 @@
 ### Added
 - NAT-001: `GET /api/features` includes `api_contract` and a `capabilities` map on the public and signed-in payloads. Signed-in responses still include `features.cached_art`, and `capabilities.cached_art` follows that flag.
 - NAT-003: client-facing routes are tagged `client`. `scripts/export-openapi.sh` writes `docs/api/openapi.json`, and CI fails when that snapshot is stale. `/openapi.json` stays off in production.
+- NAT-004: `docs/api/fixtures/` records an example response for each client route. CI fails when a fresh recording does not match.
 
 ## [1.41.1] — 2026-11-20
 

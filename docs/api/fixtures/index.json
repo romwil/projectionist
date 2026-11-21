@@ -1,0 +1,137 @@
+[
+  {
+    "method": "GET",
+    "path": "/api/auth/me",
+    "file": "get-api-auth-me.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/devices/me/intent",
+    "file": "get-api-devices-me-intent.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/devices/pair/pending/{pending_id}",
+    "file": "get-api-devices-pair-pending-pending_id.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/features",
+    "file": "get-api-features.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/health",
+    "file": "get-api-health.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/library/art/{media_type}/{item_id}",
+    "file": "get-api-library-art-media_type-item_id.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/library/feeds/hub",
+    "file": "get-api-library-feeds-hub.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/library/feeds/tonight-table",
+    "file": "get-api-library-feeds-tonight-table.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/library/playback/{session_id}/index.m3u8",
+    "file": "get-api-library-playback-session_id-index.m3u8.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/library/playback/{session_id}/master.m3u8",
+    "file": "get-api-library-playback-session_id-master.m3u8.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/library/playback/{session_id}/{path:path}",
+    "file": "get-api-library-playback-session_id-path-path.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/library/query",
+    "file": "get-api-library-query.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/live-channels/guide",
+    "file": "get-api-live-channels-guide.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/live-channels/on-now",
+    "file": "get-api-live-channels-on-now.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/live/weather",
+    "file": "get-api-live-weather.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/live/weather/audio/{name}",
+    "file": "get-api-live-weather-audio-name.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/live/weather/image/{image_id}",
+    "file": "get-api-live-weather-image-image_id.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/title/{media_type}/{item_id}",
+    "file": "get-api-title-media_type-item_id.json"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/auth/me",
+    "file": "patch-api-auth-me.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/devices/pair/issue",
+    "file": "post-api-devices-pair-issue.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/devices/pair/rotate",
+    "file": "post-api-devices-pair-rotate.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/library/playback/start",
+    "file": "post-api-library-playback-start.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/library/playback/{session_id}/progress",
+    "file": "post-api-library-playback-session_id-progress.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/library/playback/{session_id}/seek",
+    "file": "post-api-library-playback-session_id-seek.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/library/playback/{session_id}/stop",
+    "file": "post-api-library-playback-session_id-stop.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/library/playback/{session_id}/subtitles",
+    "file": "post-api-library-playback-session_id-subtitles.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/live-channels/tune",
+    "file": "post-api-live-channels-tune.json"
+  }
+]
