@@ -238,15 +238,22 @@ def open_playback_session(
         offset = int(payload.offset_ms)
     else:
         offset = int(playable.get("view_offset_ms") or 0)
-    from projectionist.engine.captions import caption_fallback_reason
+    from projectionist.engine.captions import caption_fallback_reason, prepare_webvtt_renditions
     from projectionist.library.subtitle_cache import title_subtitle_context
 
     language = str(title_subtitle_context(_db(), asset.rating_key).get("original_language") or "")
+    renditions = prepare_webvtt_renditions(
+        asset,
+        title_language=language,
+        settings=_settings(),
+        data_dir=_dir(),
+    )
     force_reason = caption_fallback_reason(
         asset,
         title_language=language,
         settings=_settings(),
         data_dir=_dir(),
+        renditions=renditions,
     )
     session = open_engine_session(
         asset,
@@ -257,6 +264,7 @@ def open_playback_session(
         view_offset_ms=offset,
         data_dir=_dir(),
         force_reason=force_reason,
+        captions=[] if force_reason else renditions,
     )
     return session.public()
 
@@ -320,6 +328,8 @@ def playback_session_media(session_id: str, token: str, asset_path: str):
         media_type = "video/iso.segment"
     elif path.suffix == ".mp4":
         media_type = "video/mp4"
+    elif path.suffix == ".vtt":
+        media_type = "text/vtt"
     return FileResponse(path, media_type=media_type, filename=path.name)
 
 

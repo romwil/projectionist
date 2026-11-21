@@ -2,7 +2,7 @@
 
 How Projectionist plays a title from your library: one stream engine, owned by Projectionist, shared by every client — the web app, native apps, and anything that speaks the API. Plex is the first **media source**, not the player.
 
-**Status:** ENG-001 through ENG-003 and ENG-007 are in the tree. The web player uses an engine session only when the owner turns on Play through Projectionist. That household switch is `features.play_through_projectionist` (also `PUT /api/playback/engine-setting`) and it is off by default. Turning it off changes the next play, with no restart. Until ENG-004, a title that needs captions stays on the Plex path and the session records why. A plan the engine cannot remux does the same. Fullscreen controls stay the web player's. Item IDs (`ENG-…`) are tracked in [docs/roadmap/](roadmap/README.md).
+**Status:** ENG-001 through ENG-004 and ENG-007 are in the tree. The web player uses an engine session only when the owner turns on Play through Projectionist. That household switch is `features.play_through_projectionist` (also `PUT /api/playback/engine-setting`) and it is off by default. Turning it off changes the next play, with no restart. When the engine can turn a title's captions into WebVTT — the household subtitle file first, then an embedded text track — that title plays through the engine and the session does not record a caption fallback. Picture captions still stay on the Plex path until ENG-005, and the session records why. A plan the engine cannot remux does the same. Fullscreen controls stay the web player's. Item IDs (`ENG-…`) are tracked in [docs/roadmap/](roadmap/README.md).
 **Audience:** Developers / contributors, owners for the honest limits.
 **Related:** [SHARED_SESSIONS.md](SHARED_SESSIONS.md) · [TIMELINE.md](TIMELINE.md) · [TRACKS.md](TRACKS.md) · [NATIVE_CLIENTS.md](NATIVE_CLIENTS.md) · [ARCHITECTURE.md](ARCHITECTURE.md)
 
@@ -120,6 +120,8 @@ One caption model for every client:
 3. **Image tracks** (PGS / VobSub / DVB) are converted to text once by an **OCR job** (jobs engine, off the request loop), cached beside the household file, and then behave like any text track. Until the job finishes, the track is listed with `ready: false` and the client offers the honest line: *“These captions are being prepared.”* Burn-in remains a last resort for a viewer who needs that track immediately.
 4. **Timing offset** is a per-viewer client setting (the web’s existing delay control). The server never rewrites cue times per person.
 
+ENG-004 ships the text half of that model. A file at `DATA_DIR/subtitles/{rating_key}/{language}.srt` becomes one WebVTT rendition in the master playlist’s `SUBTITLES` group, ahead of any embedded text track in a language the cache already covers. The playlist is a single VTT inside a one-segment VOD subtitle playlist. An embedded text track (SRT, ASS, mov_text, WebVTT) is extracted to WebVTT when the cache does not already have that language. Picture tracks are not converted here. A title that needs captions and has only those still uses the Plex path, and the session records why.
+
 Why it matters: captions you can switch in the system player, in fullscreen, in picture-in-picture, on a phone in your hand ([SHARED_SESSIONS.md](SHARED_SESSIONS.md#handheld-captions)), and as a time-coded text source for the curator ([TIMELINE.md](TIMELINE.md)).
 
 ---
@@ -219,7 +221,7 @@ The web app benefits as much as any native client:
 - **Segment cache:** on-the-fly remux per session vs. a short-lived on-disk segment cache under `DATA_DIR` shared by concurrent viewers. *Proposed:* on-the-fly first; cache only if measurements demand it. **Spike:** serving a pre-built `-c copy` fMP4 package was ~0% CPU idle; no evidence yet that remux needs a shared disk cache for single-viewer Apple playback.
 - **HDR on the web:** whether to tone-map or refuse HDR → SDR on browsers without HDR support.
 - **Browser audio vs remux (ENG-002 / ENG-006):** *3 Ninjas* H.264+AC-3 remux played on Apple clients and was **rejected** by desktop Chromium/hls.js (`manifestIncompatibleCodecsError`). *Proposed:* treat AC-3/E-AC-3 remux as Apple-profile; browser profiles that lack those codecs get **audio transcode** (or an AAC rendition) before the web player adopts the engine.
-- **Caption packaging (ENG-004):** household `DATA_DIR/subtitles/{rating_key}/{lang}.srt` → WebVTT in a master `SUBTITLES` group was selectable in WebKit and tvOS AVPlayer. *Proposed:* ship a single VTT (or coarse VOD subtitle playlist) first; segment VTT only if a client requires it.
+- **Caption packaging (ENG-004):** a household `DATA_DIR/subtitles/{rating_key}/{lang}.srt` is one WebVTT file plus a one-segment VOD subtitle playlist in the master `SUBTITLES` group. Embedded text tracks are extracted the same way when that language is not already in the cache. Segmenting the VTT waits until a client requires it. Picture captions stay on the Plex path until ENG-005. The spike showed that shape is selectable in WebKit and tvOS AVPlayer.
 - **Spike evidence:** [2026-11-19-engine-spike-findings.md](superpowers/specs/2026-11-19-engine-spike-findings.md) (throwaway code on `spike/engine-remux`, not merged).
 
 ## See also
