@@ -292,7 +292,40 @@ class PlayabilityRouteTests(unittest.TestCase):
             calls.append(rating_key)
             return self.assets[rating_key]
 
-        with patch("projectionist.engine.routes.describe_title", side_effect=locate):
+        def catalog(_settings):
+            rows = []
+            for key, asset in self.assets.items():
+                probe = asset.probe
+                rows.append(
+                    {
+                        "rating_key": key,
+                        "title": key,
+                        "container": probe.container if probe else "",
+                        "streams": [
+                            {
+                                "index": stream.index,
+                                "codec_type": stream.codec_type,
+                                "codec": stream.codec,
+                                "language": stream.language,
+                                "channels": stream.channels,
+                                "profile": stream.profile,
+                                "level": stream.level,
+                                "bit_depth": stream.bit_depth,
+                            }
+                            for stream in (probe.streams if probe else [])
+                        ],
+                    }
+                )
+            return rows
+
+        def inline(target):
+            target()
+
+        with (
+            patch("projectionist.engine.routes.describe_title", side_effect=locate),
+            patch("projectionist.engine.playability.plex_stream_catalog", catalog),
+            patch("projectionist.engine.playability.spawn_walk", inline),
+        ):
             empty = self.client.get("/api/playback/playability")
             self.assertEqual(empty.status_code, 200)
             self.assertEqual(empty.json()["profiles"], [])
@@ -311,6 +344,9 @@ class PlayabilityRouteTests(unittest.TestCase):
         self.assertEqual(refreshed.status_code, 200, refreshed.text)
         body = refreshed.json()
         self.assertEqual(sorted(calls), ["direct", "pending", "picture", "remux"])
+        self.assertEqual(body["planned_from_plex"], 4)
+        self.assertEqual(body["confirmed_by_ffprobe"], 4)
+        self.assertFalse(body["running"])
         self.assertNotIn("/secret", json.dumps(body))
         ids = [row["profile"] for row in body["profiles"]]
         self.assertIn("web", ids)
@@ -327,6 +363,54 @@ class PlayabilityRouteTests(unittest.TestCase):
             {row["rating_key"] for row in again.json()["profiles"][0]["titles"]},
             {"direct", "remux", "pending", "picture"},
         )
+
+    def test_refresh_does_not_probe_until_the_walk_runs_and_does_not_start_a_second_one(self) -> None:
+        import projectionist.engine.playability as playability
+
+        calls: list[str] = []
+        started: list[object] = []
+
+        def locate(_settings, _db, _data_dir, rating_key: str):
+            calls.append(rating_key)
+            return self.assets[rating_key]
+
+        def spawn(target):
+            started.append(target)
+
+        try:
+            with (
+                patch("projectionist.engine.routes.describe_title", side_effect=locate),
+                patch("projectionist.engine.playability.spawn_walk", spawn),
+            ):
+                opened = self.client.get("/api/playback/playability")
+                self.assertEqual(opened.status_code, 200)
+                self.assertFalse(opened.json()["running"])
+                self.assertEqual(calls, [])
+                first = self.client.post("/api/playback/playability", json={})
+                second = self.client.post("/api/playback/playability", json={})
+            self.assertEqual(first.status_code, 200, first.text)
+            self.assertTrue(first.json()["running"])
+            self.assertTrue(second.json()["running"])
+            self.assertEqual(len(started), 1)
+            self.assertEqual(calls, [])
+        finally:
+            playability._WALKING = False
+
+    def test_scheduled_playability_task_does_not_walk(self) -> None:
+        import asyncio
+
+        from projectionist.library.db import Database
+        from projectionist.scheduler.engine import IdleScheduler
+        from projectionist.scheduler.tasks.playability_report import register
+        from projectionist.scheduler.tasks.playability_report import run as scheduled
+
+        result = asyncio.run(scheduled(None, Settings(), lambda: False))
+        self.assertEqual(result, {"status": "skipped", "processed": 0, "has_more": False})
+        with tempfile.TemporaryDirectory() as tmp:
+            scheduler = IdleScheduler(Database(Path(tmp) / "projectionist.db"), Path(tmp))
+            register(scheduler)
+            state = next(row for row in scheduler.get_task_states() if row["name"] == "playability_report")
+        self.assertFalse(state["enabled"])
 
     def test_unknown_profile_name_is_rejected(self) -> None:
         refused = self.client.post("/api/playback/playability", json={"profile": "nope"})

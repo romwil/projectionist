@@ -63,6 +63,32 @@ test("a playable remux uses the engine master and keeps the Plex path for captio
   assert.equal(engineSessionForPlayer({ playable: false, plan: "audio", master_url: "" }), null);
 });
 
+test("a full plan and an audio plan start library playback", async () => {
+  for (const plan of ["full", "audio"]) {
+    let plex = 0;
+    const played = await chooseWebPlayback({
+      features: { features: { play_through_projectionist: true } },
+      openEngine: async () => ({
+        playable: true,
+        master_url: "/api/playback/sessions/s/token/master.m3u8",
+        plan,
+        session_id: "s",
+        reason:
+          plan === "full"
+            ? "HEVC video is not playable on web (hevc level is above profile hevc 5.1)"
+            : "H.264 video is playable on web; E-AC-3 audio is not, so the audio would be transcoded (eac3 not in profile)",
+      }),
+      startPlex: async () => {
+        plex += 1;
+        return { stream_url: "/plex", engine: false };
+      },
+    });
+    assert.equal(plex, 1);
+    assert.equal(played.stream_url, "/plex");
+    assert.equal(played.engine, false);
+  }
+});
+
 test("the profile lists HEVC, AV1, AC-3, E-AC-3, and 10-bit only when the check says yes", () => {
   const safari = browserPlaybackProfile(
     (type) =>

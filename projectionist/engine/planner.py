@@ -34,24 +34,30 @@ def canonical_codec(name: str) -> str:
 
 
 def level_number(codec: str, raw: str) -> Optional[float]:
-    """Normalize ffprobe level and profile max_level onto one scale (4.1 → 4.1)."""
+    """Normalize ffprobe level_idc and a profile's major.minor onto one scale.
+
+    ffprobe reports HEVC ``level`` as level_idc (153 is 5.1, 186 is 6.2). The
+    browser profile says ``5.1``. A dotted value below the idc threshold is
+    already major.minor. A value at or above that threshold is the integer
+    code, including when it was stringified as ``153.0``.
+    """
     text = str(raw or "").strip()
     if not text or text in {"0", "-99", "unknown"}:
         return None
     try:
-        if "." in text:
-            return float(text)
-        number = int(text)
+        number = float(text)
     except ValueError:
         return None
     if number <= 0:
         return None
     kind = canonical_codec(codec)
+    # HEVC level_idc = major * 30 + minor. 5.1 → 153. H.264 is major * 10.
+    # "5.1" is already on the major.minor scale and stays below the threshold.
     if kind == "hevc" and number >= 30:
         return number / 30.0
     if kind == "h264" and number >= 10:
         return number / 10.0
-    return float(number)
+    return number
 
 
 def stream_bit_depth(stream: MediaStream) -> int:

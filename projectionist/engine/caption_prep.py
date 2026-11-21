@@ -3,8 +3,9 @@
 A playback request used to run ffmpeg with a 20-second limit. A text track
 inside a large file can take longer than that to read, and the session then
 fell back to Plex even though the captions are text. This work runs on the
-jobs engine instead: a library scan, a new arrival, Continue Watching, For you,
-the title page, or a play that finds the track not ready yet.
+jobs engine instead: a new arrival, Continue Watching, For you,
+the title page, or a play that finds the track not ready yet. A library scan
+does not enqueue the whole library.
 
 Ready WebVTT is cached next to the household subtitle file. Picture captions
 are recorded and left alone (ENG-005). The play request never waits on ffmpeg.
@@ -43,6 +44,8 @@ QUEUE_NAME = "caption_prep_queue.json"
 MANIFEST_NAME = "prepared.json"
 _MAX_TRACKS = 8
 _QUEUE_LIMIT = 200
+# A title someone opened or pressed Play on is extracted before arrivals.
+_PRIORITY_REASONS = frozenset({"play", "title"})
 _ARRIVAL_LOOKBACK_S = 14 * 24 * 3600
 _ARRIVAL_SCAN = 200
 _RETRY_S = 10 * 60
@@ -165,8 +168,13 @@ def enqueue_caption_prep(
     reason: str,
     force: bool = False,
 ) -> list[str]:
-    """Queue rating keys that are not already WebVTT. ``force`` retries a stale file."""
+    """Queue rating keys that are not already WebVTT. ``force`` retries a stale file.
+
+    Play and the title page go to the front. A full queue drops an arrival
+    from the back so the title someone is watching is not last.
+    """
     added: list[str] = []
+    priority = reason in _PRIORITY_REASONS or force
     with _LOCK:
         items = _read_queue(data_dir)
         known = {str(item.get("rating_key") or "") for item in items}
@@ -175,24 +183,36 @@ def enqueue_caption_prep(
             if not key:
                 continue
             if key in known:
-                if force:
-                    for item in items:
-                        if str(item.get("rating_key") or "") == key:
-                            item["not_before"] = 0
-                            item["reason"] = reason or str(item.get("reason") or "")
+                if priority:
+                    items = [item for item in items if str(item.get("rating_key") or "") != key]
+                    items.insert(0, {"rating_key": key, "reason": reason, "not_before": 0})
                     added.append(key)
                 continue
             if not force and _settled(data_dir, key):
                 continue
             if len(items) >= _QUEUE_LIMIT:
-                if not force:
+                if not priority:
                     break
-                items.pop(0)
-            items.append({"rating_key": key, "reason": reason, "not_before": 0})
+                _drop_backlog(items)
+            entry = {"rating_key": key, "reason": reason, "not_before": 0}
+            if priority:
+                items.insert(0, entry)
+            else:
+                items.append(entry)
             known.add(key)
             added.append(key)
         _write_queue(data_dir, items)
     return added
+
+
+def _drop_backlog(items: list[dict[str, Any]]) -> None:
+    """Remove one non-priority row from the back. The front is who is watching."""
+    for index in range(len(items) - 1, -1, -1):
+        if str(items[index].get("reason") or "") not in _PRIORITY_REASONS:
+            items.pop(index)
+            return
+    if items:
+        items.pop()
 
 
 def enqueue_recent_arrivals(db: Any, *, data_dir: Path, limit: int = 40) -> list[str]:
@@ -414,13 +434,14 @@ def drain_caption_queue(
 
 
 def _ffmpeg_extract(source: Path, index: int, dest: Path) -> None:
+    from projectionist.engine.media_slot import run_media_tool
     from projectionist.library.episode_investigate.capabilities import resolve_ffmpeg
 
     binary = resolve_ffmpeg()
     if not binary:
         return
     try:
-        subprocess.run(
+        run_media_tool(
             [
                 binary,
                 "-y",
@@ -432,6 +453,7 @@ def _ffmpeg_extract(source: Path, index: int, dest: Path) -> None:
                 "webvtt",
                 str(dest),
             ],
+            subprocess.run,
             check=False,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,

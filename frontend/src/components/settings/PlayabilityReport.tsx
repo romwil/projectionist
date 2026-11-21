@@ -20,7 +20,13 @@ const PROFILE_LABELS: Record<string, string> = {
 };
 
 type Share = { count?: number; share?: number; label?: string };
-type TitleRow = { rating_key?: string; title?: string; tier?: string; label?: string; reason?: string };
+type TitleRow = {
+  rating_key?: string;
+  title?: string;
+  tier?: string;
+  label?: string;
+  reason?: string;
+};
 type ProfileReport = {
   profile?: string;
   title_count?: number;
@@ -32,6 +38,9 @@ type ProfileReport = {
 type PlayabilityReportBody = {
   message?: string;
   title_count?: number;
+  running?: boolean;
+  planned_from_plex?: number;
+  confirmed_by_ffprobe?: number;
   profiles?: ProfileReport[];
 };
 
@@ -62,6 +71,24 @@ export default function PlayabilityReport() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!report?.running) return undefined;
+    let live = true;
+    const timer = window.setInterval(() => {
+      getPlayabilityReport()
+        .then((payload) => {
+          if (live) setReport(payload as PlayabilityReportBody);
+        })
+        .catch(() => {
+          // The next tick tries again. Opening this page did not start the walk.
+        });
+    }, 3000);
+    return () => {
+      live = false;
+      window.clearInterval(timer);
+    };
+  }, [report?.running]);
+
   async function refresh() {
     setBusy(true);
     setError("");
@@ -75,7 +102,9 @@ export default function PlayabilityReport() {
       const next = await refreshPlayabilityReport(profile);
       setReport(next as PlayabilityReportBody);
     } catch (err) {
-      setError((err as { message?: string })?.message || "Couldn’t refresh the playability report.");
+      setError(
+        (err as { message?: string })?.message || "Couldn’t refresh the playability report.",
+      );
     } finally {
       setBusy(false);
     }
@@ -90,9 +119,15 @@ export default function PlayabilityReport() {
       <p className="field-help">
         Which tier would play each title: serve the file, remux, audio-only, captions that are not
         ready yet, picture captions, ask the media source to transcode, or not playable through the
-        engine. Refresh walks the library with the cached probe. It does not transcode.
+        engine. Refresh plans from the stream metadata Plex already has, then confirms with ffprobe
+        in the background. It does not start on its own, and it does not transcode.
       </p>
-      <button type="button" data-testid="playability-refresh" disabled={busy} onClick={() => void refresh()}>
+      <button
+        type="button"
+        data-testid="playability-refresh"
+        disabled={busy}
+        onClick={() => void refresh()}
+      >
         {busy ? "Checking the library…" : "Refresh report"}
       </button>
       {loading ? (
@@ -103,6 +138,12 @@ export default function PlayabilityReport() {
       {error ? (
         <p className="status status-error" data-testid="playability-error">
           {error}
+        </p>
+      ) : null}
+      {report && (report.running || report.planned_from_plex || report.confirmed_by_ffprobe) ? (
+        <p className="field-help" data-testid="playability-progress">
+          Planned from Plex metadata: {report.planned_from_plex || 0} titles. Confirmed by ffprobe:{" "}
+          {report.confirmed_by_ffprobe || 0}.{report.running ? " Still running." : ""}
         </p>
       ) : null}
       {!error && report && profiles.length === 0 ? (
@@ -123,7 +164,7 @@ export default function PlayabilityReport() {
                 const share = shares[tier];
                 if (!share) return null;
                 const count = Number(share.count || 0);
-                const rows = titles.filter((row) => row.tier === tier);
+                const rows = titles.filter((row) => row.tier === tier).slice(0, 40);
                 return (
                   <li key={tier}>
                     {count > 0 && rows.length ? (
@@ -133,7 +174,10 @@ export default function PlayabilityReport() {
                         </summary>
                         <ul className="playability-titles">
                           {rows.map((row) => (
-                            <li key={row.rating_key} data-testid={`playability-title-${row.rating_key}`}>
+                            <li
+                              key={row.rating_key}
+                              data-testid={`playability-title-${row.rating_key}`}
+                            >
                               <strong>{row.title || row.rating_key}</strong>
                               <span className="field-help">{row.reason}</span>
                             </li>

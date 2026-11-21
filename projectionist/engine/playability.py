@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,6 +23,7 @@ from projectionist.engine.captions import (
     caption_fallback_reason,
 )
 from projectionist.engine.planner import plan_playback
+from projectionist.engine.probe import MediaStream, ProbeResult, subtitle_kind
 from projectionist.engine.profiles import (
     DeviceProfile,
     known_profile_ids,
@@ -84,6 +86,10 @@ def empty_playability_report(*, message: str = "") -> dict[str, Any]:
     return {
         "generated_at": None,
         "complete": False,
+        "running": False,
+        "phase": "idle",
+        "planned_from_plex": 0,
+        "confirmed_by_ffprobe": 0,
         "message": message or "No playability report yet. Refresh to walk the library.",
         "title_count": 0,
         "profiles": [],
@@ -371,6 +377,12 @@ def load_playability_report(data_dir: Path) -> dict[str, Any]:
         return empty_playability_report(
             message="The saved playability report could not be read. Refresh to walk the library."
         )
+    if _WALKING:
+        loaded = dict(loaded)
+        loaded["running"] = True
+    elif loaded.get("running"):
+        loaded = dict(loaded)
+        loaded["running"] = False
     return loaded
 
 
@@ -457,3 +469,336 @@ def run_library_report(
         report = merge_playability_reports(load_playability_report(data_dir), report)
     save_playability_report(data_dir, report)
     return report
+
+
+_WALK_LOCK = threading.Lock()
+_WALKING = False
+
+
+def _default_spawn(target: Callable[[], None]) -> None:
+    threading.Thread(target=target, name="playability-report", daemon=True).start()
+
+
+spawn_walk = _default_spawn
+
+
+def _timeout_text(text: str) -> bool:
+    folded = str(text or "").lower()
+    return "timeout" in folded or "timed out" in folded or "circuit open" in folded
+
+
+def asset_from_plex_row(row: Mapping[str, Any]) -> MediaAsset:
+    """A planner asset from Plex stream metadata. No file path and no ffprobe."""
+    streams: list[MediaStream] = []
+    for index, raw in enumerate(row.get("streams") or []):
+        if not isinstance(raw, dict):
+            continue
+        kind = str(raw.get("codec_type") or "")
+        codec = str(raw.get("codec") or "")
+        raw_index = raw.get("index")
+        try:
+            stream_index = int(raw_index) if raw_index is not None else index
+        except (TypeError, ValueError):
+            stream_index = index
+        streams.append(
+            MediaStream(
+                index=stream_index,
+                codec_type=kind,
+                codec=codec,
+                language=str(raw.get("language") or ""),
+                channels=int(raw.get("channels") or 0),
+                profile=str(raw.get("profile") or ""),
+                level=str(raw.get("level") or ""),
+                bit_depth=int(raw.get("bit_depth") or 0),
+                subtitle_kind=subtitle_kind(codec) if kind == "subtitle" else "",
+            )
+        )
+    container = str(row.get("container") or "")
+    return MediaAsset(
+        rating_key=str(row.get("rating_key") or ""),
+        readable=True,
+        probe=ProbeResult(
+            container=container,
+            format_name=container,
+            duration_s=0,
+            bitrate=0,
+            size=0,
+            streams=streams,
+        ),
+    )
+
+
+def plex_stream_catalog(settings: Any) -> list[dict[str, Any]]:
+    """The library's stream list from Plex. Tests replace this."""
+    url = str(getattr(settings, "plex_url", "") or "").strip()
+    token = str(getattr(settings, "plex_token", "") or "").strip()
+    if not url or not token:
+        return []
+    from projectionist.connectors.plex import PlexClient
+
+    client = PlexClient(
+        url,
+        token,
+        timeout=30,
+        movie_section=str(getattr(settings, "plex_movie_section", "") or "") or None,
+        tv_section=str(getattr(settings, "plex_tv_section", "") or "") or None,
+    )
+    return list(client.playback_stream_catalog())
+
+
+def _mark_unconfirmed(report: dict[str, Any]) -> None:
+    for block in report.get("profiles") or []:
+        if not isinstance(block, dict):
+            continue
+        for row in block.get("titles") or []:
+            if isinstance(row, dict):
+                row["confirmed"] = False
+
+
+def _confirmed_keys(report: Mapping[str, Any]) -> set[str]:
+    profiles = report.get("profiles") or []
+    if not profiles or not isinstance(profiles[0], dict):
+        return set()
+    found: set[str] = set()
+    for row in profiles[0].get("titles") or []:
+        if isinstance(row, dict) and row.get("confirmed"):
+            found.add(str(row.get("rating_key") or ""))
+    found.discard("")
+    return found
+
+
+def _apply_confirmed_title(
+    report: dict[str, Any],
+    rating_key: str,
+    classified: Mapping[str, dict[str, Any]],
+) -> None:
+    for block in report.get("profiles") or []:
+        if not isinstance(block, dict):
+            continue
+        profile_id = str(block.get("profile") or "")
+        incoming = classified.get(profile_id)
+        if incoming is None:
+            continue
+        rows: list[dict[str, Any]] = []
+        replaced = False
+        for row in block.get("titles") or []:
+            if isinstance(row, dict) and str(row.get("rating_key") or "") == rating_key:
+                rows.append(dict(incoming))
+                replaced = True
+            elif isinstance(row, dict):
+                rows.append(row)
+        if not replaced:
+            rows.append(dict(incoming))
+        shares = _shares(rows)
+        block["titles"] = rows
+        block["shares"] = shares
+        block["top_reasons"] = _top_reasons(rows)
+        block["title_count"] = len(rows)
+        block["hardware"] = hardware_sentence(int(shares[TIER_SOURCE]["count"]))
+    report["confirmed_by_ffprobe"] = len(_confirmed_keys(report))
+    report["title_count"] = max(
+        (int(block.get("title_count") or 0) for block in report.get("profiles") or [] if isinstance(block, dict)),
+        default=0,
+    )
+
+
+def _run_owner_report(
+    db: Any,
+    settings: Any,
+    data_dir: Path,
+    *,
+    profiles: Sequence[DeviceProfile],
+    locate: LocateFn,
+    catalog: Callable[[Any], Sequence[Mapping[str, Any]]],
+    should_stop: Optional[StopFn] = None,
+) -> dict[str, Any]:
+    """Plan from Plex metadata, save that, then confirm with one ffprobe at a time."""
+    root = Path(data_dir)
+    current = load_playability_report(root)
+    resume = bool(current.get("planned_from_plex")) and not current.get("complete")
+    chosen = list(profiles)
+    if resume and current.get("profile_specs"):
+        chosen = [profile_from_mapping(spec) for spec in current["profile_specs"] if isinstance(spec, dict)]
+    report = dict(current) if resume else empty_playability_report()
+    report["running"] = True
+    report["phase"] = "plex-metadata" if not resume else "ffprobe"
+    save_playability_report(root, report)
+    if not resume:
+        try:
+            rows = list(catalog(settings))
+        except Exception as error:  # noqa: BLE001 — the owner can refresh
+            logger.exception("playability catalog failed")
+            message = (
+                "Plex timed out before the stream list was ready. Refresh to try again."
+                if _timeout_text(str(error))
+                else "The playability report could not read Plex's stream list. Refresh to try again."
+            )
+            failed = empty_playability_report(message=message)
+            failed["running"] = False
+            save_playability_report(root, failed)
+            return failed
+        names = {item.rating_key: item for item in library_titles(db)}
+        titles: list[LibraryTitle] = []
+        assets: dict[str, MediaAsset] = {}
+        for row in rows:
+            key = str(row.get("rating_key") or "")
+            if not key:
+                continue
+            known = names.get(key)
+            titles.append(
+                LibraryTitle(
+                    rating_key=key,
+                    title=known.title if known is not None else str(row.get("title") or ""),
+                    title_language=known.title_language if known is not None else "",
+                )
+            )
+            assets[key] = asset_from_plex_row(row)
+        if not titles:
+            empty = empty_playability_report(
+                message="Plex did not return stream metadata. Refresh to try again."
+            )
+            empty["running"] = False
+            save_playability_report(root, empty)
+            return empty
+        report = build_playability_report(
+            titles,
+            assets,
+            chosen,
+            settings=settings,
+            data_dir=root,
+            complete=False,
+            message="Planned from Plex metadata. Confirming files in the background.",
+        )
+        _mark_unconfirmed(report)
+        report["running"] = True
+        report["phase"] = "ffprobe"
+        report["planned_from_plex"] = len(titles)
+        report["confirmed_by_ffprobe"] = 0
+        report["profile_specs"] = [profile.as_public() for profile in chosen]
+        save_playability_report(root, report)
+    else:
+        report["running"] = True
+        report["phase"] = "ffprobe"
+        report["message"] = "Confirming files in the background."
+        save_playability_report(root, report)
+
+    done = _confirmed_keys(report)
+    order = library_titles(db)
+    known_keys = {item.rating_key for item in order}
+    for block in report.get("profiles") or []:
+        if not isinstance(block, dict):
+            continue
+        for row in block.get("titles") or []:
+            if not isinstance(row, dict):
+                continue
+            key = str(row.get("rating_key") or "")
+            if key and key not in known_keys:
+                order.append(LibraryTitle(rating_key=key, title=str(row.get("title") or ""), title_language=""))
+                known_keys.add(key)
+        break
+    stopped = False
+    paused = False
+    since_save = 0
+    for item in order:
+        if should_stop is not None and should_stop():
+            stopped = True
+            break
+        if item.rating_key in done:
+            continue
+        try:
+            asset = locate(item.rating_key)
+        except Exception:  # noqa: BLE001 — one title must not sink the report
+            logger.exception("playability confirm failed for %s", item.rating_key)
+            asset = _unread(item.rating_key)
+        if asset is None:
+            asset = _unread(item.rating_key)
+        if _timeout_text(asset.reason):
+            paused = True
+            report["message"] = "Confirmation paused because Plex timed out. Refresh to continue."
+            break
+        classified: dict[str, dict[str, Any]] = {}
+        for profile in chosen:
+            row = classify_title(
+                asset,
+                profile,
+                title=item.title,
+                title_language=item.title_language,
+                settings=settings,
+                data_dir=root,
+            )
+            row["confirmed"] = True
+            classified[profile.id] = row
+        _apply_confirmed_title(report, item.rating_key, classified)
+        done.add(item.rating_key)
+        since_save += 1
+        if since_save >= 20:
+            save_playability_report(root, report)
+            since_save = 0
+    report["running"] = False
+    report["confirmed_by_ffprobe"] = len(_confirmed_keys(report))
+    if paused or stopped:
+        report["complete"] = False
+        report["phase"] = "ffprobe"
+        if stopped and not paused:
+            report["message"] = "The walk stopped early. Refresh to continue."
+    else:
+        report["complete"] = True
+        report["phase"] = "idle"
+        planned = int(report.get("planned_from_plex") or 0)
+        confirmed = int(report.get("confirmed_by_ffprobe") or 0)
+        report["message"] = (
+            f"Planned {planned} titles from Plex metadata. "
+            f"Confirmed {confirmed} with ffprobe."
+        )
+    save_playability_report(root, report)
+    return report
+
+
+def request_owner_report(
+    db: Any,
+    settings: Any,
+    data_dir: Path,
+    *,
+    profiles: Sequence[DeviceProfile],
+    locate: LocateFn,
+    catalog: Optional[Callable[[Any], Sequence[Mapping[str, Any]]]] = None,
+    should_stop: Optional[StopFn] = None,
+) -> dict[str, Any]:
+    """Start the owner walk if one is not already running, and return what we have.
+
+    The response does not wait for ffprobe. A second request does not start
+    another walker.
+    """
+    global _WALKING
+    root = Path(data_dir)
+    source = catalog or plex_stream_catalog
+    with _WALK_LOCK:
+        if _WALKING:
+            current = load_playability_report(root)
+            current["running"] = True
+            return current
+        _WALKING = True
+
+    def _target() -> None:
+        global _WALKING
+        try:
+            _run_owner_report(
+                db,
+                settings,
+                root,
+                profiles=profiles,
+                locate=locate,
+                catalog=source,
+                should_stop=should_stop,
+            )
+        finally:
+            with _WALK_LOCK:
+                _WALKING = False
+
+    spawn_walk(_target)
+    current = load_playability_report(root)
+    if _WALKING:
+        current["running"] = True
+        if not current.get("message"):
+            current["message"] = "The playability report is starting."
+    return current

@@ -1,21 +1,18 @@
-"""Jobs-engine task: dry-run the playback planner across the library.
+"""Jobs-engine slot for the library playability report.
 
-The report records which tier would play each title. It does not transcode,
-remux, or extract captions. Cached probes from the media source are enough.
+The walk runs only when the owner refreshes Settings → Playback. This task
+stays registered so an older install can be turned off, and it does not walk
+the library on startup, on a timer, or when Settings is opened.
 """
 
 from __future__ import annotations
 
-import logging
-import os
 from typing import Any, Callable, Dict
 
 from projectionist.config_store import Settings
-from projectionist.engine.playability import TASK_NAME, run_library_report
+from projectionist.engine.playability import TASK_NAME
 from projectionist.library.db import Database
 from projectionist.scheduler.engine import IdleScheduler, TaskDefinition
-
-logger = logging.getLogger(__name__)
 
 INTERVAL_SECONDS = 12 * 60 * 60
 TIMEOUT_SECONDS = 30 * 60
@@ -24,35 +21,10 @@ TIMEOUT_SECONDS = 30 * 60
 async def run(
     db: Database, settings: Settings, should_stop: Callable[[], bool]
 ) -> Dict[str, Any]:
-    if os.environ.get("PYTEST_CURRENT_TEST"):
-        # Page-view tests must not open Plex or walk the library from this task.
-        return {"status": "skipped", "processed": 0, "has_more": False}
-    from projectionist.engine.routes import describe_title
-    from projectionist.logging_config import resolve_data_dir
-
-    data_dir = getattr(run, "data_dir", None) or resolve_data_dir()
-
-    def locate(rating_key: str):
-        return describe_title(settings, db, data_dir, rating_key)
-
-    report = run_library_report(
-        db,
-        settings,
-        data_dir,
-        locate=locate,
-        should_stop=should_stop,
-    )
-    count = int(report.get("title_count") or 0)
-    logger.info(
-        "Playability report titles=%s complete=%s",
-        count,
-        report.get("complete"),
-    )
-    return {
-        "status": "completed" if report.get("complete") else "interrupted",
-        "processed": count,
-        "has_more": not bool(report.get("complete")),
-    }
+    del db, settings, should_stop
+    # The owner starts this from Settings. A schedule, a startup, and a library
+    # scan must not walk the library.
+    return {"status": "skipped", "processed": 0, "has_more": False}
 
 
 def register(scheduler: IdleScheduler) -> None:
@@ -61,15 +33,17 @@ def register(scheduler: IdleScheduler) -> None:
         TaskDefinition(
             name=TASK_NAME,
             run_interval_seconds=INTERVAL_SECONDS,
-            enabled=True,
+            enabled=False,
             timeout_seconds=TIMEOUT_SECONDS,
             run_fn=run,
             off_loop=True,
             description=(
-                "Walks the library and records which tier would play each title: "
-                "serve the file, remux, audio-only, captions that are not ready yet, "
-                "picture captions, ask the media source to transcode, or not playable "
-                "through the engine. It uses the cached probe and does not transcode."
+                "Records which tier would play each title. It runs only when the "
+                "owner refreshes Settings → Playback. It does not start on a timer, "
+                "at startup, or when the library is scanned, and it does not transcode."
             ),
         )
     )
+    # An install that already stored this task as enabled keeps that row.
+    # Turn it off on startup so the timer cannot walk the library.
+    scheduler.update_task(TASK_NAME, enabled=False)

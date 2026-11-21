@@ -360,19 +360,19 @@ def refresh_playability_report(
     from projectionist.engine.playability import (
         PlayabilityProfileError,
         profiles_for_report,
-        run_library_report,
+        request_owner_report,
     )
 
     try:
         profiles = profiles_for_report(payload.profile)
     except PlayabilityProfileError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
-    return run_library_report(
+    return request_owner_report(
         _db(),
         _settings(),
         _dir(),
-        locate=lambda key: describe_title(_settings(), _db(), _dir(), key),
         profiles=profiles,
+        locate=lambda key: describe_title(_settings(), _db(), _dir(), key),
     )
 
 

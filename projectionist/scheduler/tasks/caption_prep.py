@@ -12,7 +12,7 @@ import os
 from typing import Any, Callable, Dict
 
 from projectionist.config_store import Settings
-from projectionist.engine.caption_prep import TASK_NAME, drain_caption_queue, enqueue_recent_arrivals
+from projectionist.engine.caption_prep import TASK_NAME, drain_caption_queue
 from projectionist.library.db import Database
 from projectionist.scheduler.engine import IdleScheduler, TaskDefinition
 
@@ -34,7 +34,8 @@ async def run(
     from projectionist.logging_config import resolve_data_dir
 
     data_dir = getattr(run, "data_dir", None) or resolve_data_dir()
-    enqueue_recent_arrivals(db, data_dir=data_dir)
+    # New arrivals are queued by the library scan. This task only drains, so a
+    # scan cannot refill a 200-deep backlog ahead of the title being watched.
 
     def locate(rating_key: str):
         from projectionist.engine.routes import describe_title
@@ -70,8 +71,9 @@ def register(scheduler: IdleScheduler) -> None:
             description=(
                 "Extracts text captions to WebVTT before Play, so a large subtitle "
                 "track is ready when a session opens. Picture captions are left for "
-                "later. One title at a time, from the queue filled by a library scan, "
-                "a new arrival, Continue Watching, For you, or the title page."
+                "later. One title at a time. The queue is new arrivals, Continue "
+                "Watching, For you, and the title page. A library scan does not "
+                "enqueue the whole library. The title being played goes first."
             ),
             items_per_cycle=BATCH_SIZE,
             catchup_gap_seconds=CATCHUP_GAP_SECONDS,

@@ -80,6 +80,31 @@ class PlannerTests(unittest.TestCase):
         plan = plan_playback(_av("mkv", "hevc", "eac3", level="153"), SAFARI)
         self.assertEqual(plan["plan"], "remux")
 
+    def test_hevc_level_idc_and_the_browser_level_use_the_same_scale(self) -> None:
+        profile = _web(
+            [VideoCapability("hevc", "5.1", bit_depth=10), VideoCapability("h264", "5.2")],
+            ["aac"],
+        )
+        at_limit = _av("mkv", "hevc", "aac", level="153")
+        at_limit.probe.streams[0].bit_depth = 10
+        played = plan_playback(at_limit, profile)
+        self.assertEqual(played["plan"], "remux")
+
+        dotted = _av("mkv", "hevc", "aac", level="153.0")
+        dotted.probe.streams[0].bit_depth = 10
+        self.assertEqual(plan_playback(dotted, profile)["plan"], "remux")
+
+        major_minor = _av("mkv", "hevc", "aac", level="5.1")
+        major_minor.probe.streams[0].bit_depth = 10
+        self.assertEqual(plan_playback(major_minor, profile)["plan"], "remux")
+
+        # ffprobe level 186 is HEVC 6.2. Mulholland Drive is this file.
+        above = _av("mkv", "hevc", "aac", level="186")
+        above.probe.streams[0].bit_depth = 10
+        refused = plan_playback(above, profile)
+        self.assertEqual(refused["plan"], "full")
+        self.assertIn("hevc level is above profile hevc 5.1", str(refused["reason"]))
+
     def test_level_above_the_profile_is_a_full_transcode(self) -> None:
         plan = plan_playback(_av("mp4", "h264", "aac", level="52"), DeviceProfileLow())
         self.assertEqual(plan["plan"], "full")

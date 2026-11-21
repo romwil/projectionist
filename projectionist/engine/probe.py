@@ -243,8 +243,10 @@ def probe_file(
         binary = resolve_ffprobe()
     if not binary:
         raise ProbeError("ffprobe is not available")
+    from projectionist.engine.media_slot import run_media_tool
+
     try:
-        result = runner(
+        result = run_media_tool(
             [
                 binary,
                 "-v",
@@ -255,6 +257,7 @@ def probe_file(
                 "json",
                 str(media),
             ],
+            runner,
             capture_output=True,
             text=True,
             timeout=60,

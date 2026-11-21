@@ -75,10 +75,10 @@ class CaptionPrepTests(unittest.TestCase):
             media = Path(str(asset.local_path))
 
             def fake_run(cmd, **kwargs):
-                self.assertEqual(cmd[0], "/usr/bin/ffmpeg")
-                self.assertEqual(cmd[1:5], ["-y", "-i", str(media), "-map"])
-                self.assertEqual(cmd[5], "0:2")
-                self.assertEqual(cmd[6:8], ["-f", "webvtt"])
+                binary_at = cmd.index("/usr/bin/ffmpeg")
+                self.assertEqual(cmd[binary_at + 1 : binary_at + 5], ["-y", "-i", str(media), "-map"])
+                self.assertEqual(cmd[binary_at + 5], "0:2")
+                self.assertEqual(cmd[binary_at + 6 : binary_at + 8], ["-f", "webvtt"])
                 self.assertGreaterEqual(kwargs["timeout"], 600)
                 self.assertNotEqual(kwargs["timeout"], 20)
                 self.assertEqual(kwargs["timeout"], PREP_TIMEOUT_S)
@@ -260,3 +260,42 @@ class CaptionPrepTests(unittest.TestCase):
         self.assertIn("66167", added)
         self.assertIn("local-zero", added)
         self.assertNotIn("show-1", added)
+
+    def test_a_library_scan_does_not_queue_titles_that_are_not_new(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db = Database(root / "projectionist.db")
+            old = int(time.time()) - 40 * 24 * 3600
+            show_id = db.upsert_library_item(
+                {"rating_key": "show-old", "media_type": "show", "title": "Old Show", "added_at": old}
+            )
+            db.upsert_library_item(
+                {"rating_key": "134335", "media_type": "movie", "title": "Mulholland Drive", "added_at": old}
+            )
+            db.upsert_library_episode(
+                {
+                    "show_item_id": show_id,
+                    "rating_key": "229258",
+                    "season_number": 3,
+                    "episode_number": 16,
+                    "title": "The Lady and the Tiger and the Lawyer",
+                    "added_at": old,
+                }
+            )
+            added = enqueue_recent_arrivals(db, data_dir=root, limit=40)
+            queued = json.loads((root / "caption_prep_queue.json").read_text(encoding="utf-8")) if (root / "caption_prep_queue.json").is_file() else {"items": []}
+        self.assertEqual(added, [])
+        self.assertEqual(queued["items"], [])
+
+    def test_a_playing_title_is_not_stuck_behind_the_arrival_backlog(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            enqueue_caption_prep([str(index) for index in range(1, 201)], data_dir=root, reason="arrival")
+            moved = note_caption_titles(["161755"], data_dir=root, reason="play", force=True)
+            queued = json.loads((root / "caption_prep_queue.json").read_text(encoding="utf-8"))
+        self.assertEqual(moved, None)
+        items = queued["items"]
+        self.assertLessEqual(len(items), 200)
+        self.assertEqual(items[0]["rating_key"], "161755")
+        self.assertEqual(items[0]["reason"], "play")
+        self.assertNotEqual(items[-1]["rating_key"], "161755")
