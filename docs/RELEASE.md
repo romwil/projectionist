@@ -343,6 +343,35 @@ ssh automat 'docker pull romwil/projectionist:X.Y.Z'
 
 Interactive UI QA may still use `:8792`, but for a release candidate the sidecar image must be the **Hub tag** (Path B). Document Path A only as secondary WIP iteration — never as “CA tested.” Never park smartmap or bind QA to `:8790`.
 
+### Engine direct-play on the QA sidecar
+
+An engine session plays a library file when the QA container can read that file.
+
+Mount the media library **read-only** into `projectionist-qa` at the same container paths production uses for that library. Leave the production container, its mounts, and its settings unchanged. Do not mount production's config volume. Do not mount the Docker socket into QA.
+
+| Library | Read-only container path |
+|---------|--------------------------|
+| Movies | `/movies` and `/mnt/user/data/media/movies` |
+| Television | `/tv` and `/mnt/user/data/media/tv` |
+| Preroll | `/preroll` and `/mnt/user/data/media/preroll` |
+
+QA config stays `/mnt/user/appdata/projectionist-qa` → `/config`. Recreate only `projectionist-qa` (`-p 8792:8788`). Never bind `:8790`.
+
+Then set the owner's engine path map so each Plex part path lands on one of those mounts. The Plex prefix and the container prefix have to be different paths; an identity map is rejected. The map is what makes the file readable. On the maintainer host, Plex reports movies under `/data/media/movies` and episodes under `/data/media/tv`, and those files are the library mounted at `/movies` and `/tv`.
+
+```bash
+# Owner session cookie. No restart. The next play uses the map.
+curl -sS -b "$COOKIE" -X PUT "http://127.0.0.1:8792/api/playback/path-mappings" \
+  -H "Content-Type: application/json" \
+  -d '{"mappings":[
+    {"plex_prefix":"/data/media/movies","container_prefix":"/movies"},
+    {"plex_prefix":"/data/media/tv","container_prefix":"/tv"},
+    {"plex_prefix":"/data/media/preroll","container_prefix":"/preroll"}
+  ]}'
+```
+
+A config-only volume with an empty path map does not show the file at the Plex path. The session plan is `plex-fallback` and the reason is `No path mapping for this file`. Set the map before expecting an engine session to play.
+
 ## Spin down maintainer QA (after Hub publish)
 
 After a successful Docker Hub publish (`scripts/docker-release.sh`), **spin down the maintainer QA container** (`projectionist-qa` on `:8792`) unless an active Interactive UI QA / Playwright role suite / agent probe is in progress. Spin up again when the next test pass needs `:8792`. Never stop smartmap / `:8790`.
