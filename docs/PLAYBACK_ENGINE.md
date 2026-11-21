@@ -2,7 +2,7 @@
 
 How Projectionist plays a title from your library: one stream engine, owned by Projectionist, shared by every client — the web app, native apps, and anything that speaks the API. Plex is the first **media source**, not the player.
 
-**Status:** Proposed (design). Today’s shipped path is the Plex universal transcode described in [Today](#today-the-plex-transcode-path). Item IDs (`ENG-…`) are tracked in [docs/roadmap/](roadmap/README.md).
+**Status:** ENG-001 is in the tree: a Plex media source, owner path mappings, and a cached `ffprobe`. Playback still uses the Plex universal transcode described in [Today](#today-the-plex-transcode-path) until a later engine item serves the stream. Item IDs (`ENG-…`) are tracked in [docs/roadmap/](roadmap/README.md).
 **Audience:** Developers / contributors, owners for the honest limits.
 **Related:** [SHARED_SESSIONS.md](SHARED_SESSIONS.md) · [TIMELINE.md](TIMELINE.md) · [TRACKS.md](TRACKS.md) · [NATIVE_CLIENTS.md](NATIVE_CLIENTS.md) · [ARCHITECTURE.md](ARCHITECTURE.md)
 
@@ -151,7 +151,20 @@ The engine reads files through a small adapter interface. Every adapter answers 
 | What streams does it have? | `ffprobe` (cached per file + mtime) | same | same |
 | What is the identity? | `rating_key` ↔ TMDB / IMDB | TMDB / IMDB from sync | Jellyfin id ↔ TMDB / IMDB |
 
-Owners map Plex’s paths to the container’s mounts once (the same pattern Radarr/Sonarr path mapping already uses in Admin → Libraries). The media intelligence stays keyed on TMDB / IMDB identity, so a future source does not fork the knowledge graph.
+Owners map Plex’s paths to the container’s mounts once. The longest prefix wins, and a prefix only matches a directory boundary (`/data/media` does not claim `/data/media-extra`). A file Plex already names with a path this container can read needs no mapping. The media intelligence stays keyed on TMDB / IMDB identity, so a future source does not fork the knowledge graph.
+
+`GET /api/playback/media/{rating_key}` tells a signed-in member whether the engine can read that title and which streams `ffprobe` found. The response has codecs, duration, and TMDB / IMDB identity. It never includes a file path, a Plex token, or a source URL.
+
+```bash
+# Owner: map Plex's movie folder onto the container mount.
+# Saving mappings is owner-only.
+curl -s -X PUT -H "Authorization: Bearer YOUR_OWNER_CREDENTIAL" \
+  -H "Content-Type: application/json" \
+  -d '{"mappings":[{"plex_prefix":"/data/media/movies","container_prefix":"/movies"}]}' \
+  "http://your-host:8788/api/playback/path-mappings"
+```
+
+Probes are cached under the data directory by file path, size, and modification time. Replacing the file probes it again. A failed probe does not invent streams.
 
 ---
 

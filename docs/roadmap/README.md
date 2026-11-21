@@ -19,7 +19,7 @@ Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` ·
 
 | ID | Title | Status | Owning doc |
 |----|-------|--------|------------|
-| ENG-001 | Media source interface + Plex path mapping + cached ffprobe | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
+| ENG-001 | Media source interface + Plex path mapping + cached ffprobe | done | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-002 | Planner with recorded reason; dry-run plan endpoint | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-003 | Session API with device profiles; VOD fMP4 HLS remux | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-004 | WebVTT caption renditions (household cache first) | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
@@ -97,7 +97,7 @@ SES-001 and NAT-002 describe the same work from two sides; build them as one cha
 | 2026-11-20 | **EXP-006 ships** `GET /api/library/art/{media_type}/{item_id}`. Hub, title, and search `poster_url` / `backdrop_url` point at it. The server fetches under the SEC-013 allowlist. `features.cached_art` is the client gate |
 | 2026-11-20 | **Native handhelds get every web sign-in path** (Plex, local password, OIDC, invite redeem, request access), ending in a device credential. The pair-code stays the secondary path. NAT-002 and SES-001 are accepted |
 | 2026-11-20 | **Push is a priority and includes security.** Payloads stay content-free. NAT-006 is accepted: device sign-in approval, Youth join on the same object, and a new-device notice |
-| 2026-11-20 | **The web takes engine sessions as ENG-007, immediately after ENG-003**, behind *Play through Projectionist* (off by default). Apple clients still adopt ENG-003 first. Captions fall back to the Plex path until ENG-004 |
+| 2026-11-20 | **ENG-001** reads a title through a Plex media source: owner path mappings, cached ffprobe, and `GET /api/playback/media/{rating_key}` with no file paths in the response |
 | 2026-11-19 | **Lane A remux spike:** H.264+AC-3 fMP4 HLS (`-c copy`) + household WebVTT works on Safari/WebKit and tvOS AVPlayer (seek without restart; captions selectable). Desktop Chrome/hls.js rejects AC-3 — planner must audio-transcode for those profiles. Findings: [engine-spike-findings](../superpowers/specs/2026-11-19-engine-spike-findings.md). Spike code stays on `spike/engine-remux` (not merged) |
 
 ## Superseded review rows (carry-forward)
