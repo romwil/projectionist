@@ -13,6 +13,7 @@ import importlib
 import json
 import os
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -23,6 +24,9 @@ from fastapi.testclient import TestClient
 from projectionist.web.client_contract import CLIENT_ROUTES
 
 FIXTURE_DIR = Path("docs/api/fixtures")
+# Chicago forecast fixture observation (2026-11-04T23:00, UTC-6). The moon is
+# computed from this instant so the weather example does not follow the wall clock.
+WEATHER_OBSERVED_AT = datetime(2026, 11, 5, 5, 0, tzinfo=timezone.utc)
 JPEG = b"\xff\xd8\xff" + b"\x00" * 16
 PLAYLIST = (
     "#EXTM3U\n"
@@ -220,6 +224,11 @@ def collect_client_fixtures() -> dict[str, dict[str, Any]]:
         def keep(method: str, path: str, response: Any, **extra: Any) -> None:
             recorded[f"{method} {path}"] = _envelope(method, path, response, **extra)
 
+        from projectionist.theater.weather_channel.sources.almanac import moon_phase as real_moon_phase
+
+        def moon_on_forecast_night(when=None, _real=real_moon_phase):
+            return _real(WEATHER_OBSERVED_AT if when is None else when)
+
         with (
             patch("projectionist.devices.pairing.time.time", return_value=1_700_000_000),
             patch("projectionist.devices.pairing.secrets.choice", side_effect=_choice),
@@ -234,6 +243,10 @@ def collect_client_fixtures() -> dict[str, dict[str, Any]]:
             patch(
                 "projectionist.web.theater_delight_routes.get_weather_service",
                 return_value=weather,
+            ),
+            patch(
+                "projectionist.theater.weather_channel.sources.almanac.moon_phase",
+                moon_on_forecast_night,
             ),
         ):
             keep("GET", "/api/health", client.get("/api/health"))

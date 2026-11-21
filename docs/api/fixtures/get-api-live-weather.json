@@ -10,9 +10,9 @@
         "day_length_change_s": -120,
         "day_length_min": 618,
         "moon": {
-          "age_days": 11.2,
-          "illumination": 87,
-          "name": "Waxing gibbous"
+          "age_days": 24.8,
+          "illumination": 23,
+          "name": "Waning crescent"
         },
         "record_high": null,
         "record_low": null,
@@ -373,7 +373,7 @@
         {
           "audio_url": null,
           "source": "template",
-          "text": "Sunrise today was 6:21 AM, and sunset comes at 4:39 PM. Tonight's moon: waxing gibbous."
+          "text": "Sunrise today was 6:21 AM, and sunset comes at 4:39 PM. Tonight's moon: waning crescent."
         }
       ],
       "current": [
