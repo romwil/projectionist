@@ -39,7 +39,13 @@ FORBIDDEN = (TOKEN, "LEAKED", "/Users/", "/mnt/")
 
 
 def fixture_slug(method: str, path: str) -> str:
-    cleaned = path.strip("/").replace("/", "-").replace("{", "").replace("}", "")
+    cleaned = (
+        path.strip("/")
+        .replace("/", "-")
+        .replace("{", "")
+        .replace("}", "")
+        .replace(":", "-")
+    )
     return f"{method.lower()}-{cleaned}.json"
 
 

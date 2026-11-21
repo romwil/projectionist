@@ -52,7 +52,7 @@
   {
     "method": "GET",
     "path": "/api/library/playback/{session_id}/{path:path}",
-    "file": "get-api-library-playback-session_id-path:path.json"
+    "file": "get-api-library-playback-session_id-path-path.json"
   },
   {
     "method": "GET",
