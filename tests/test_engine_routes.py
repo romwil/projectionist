@@ -75,6 +75,9 @@ class EngineRouteTests(unittest.TestCase):
         )
 
     def tearDown(self) -> None:
+        from projectionist.engine.session import reset_engine_sessions
+
+        reset_engine_sessions()
         import projectionist.web.jobs as jobs
 
         jobs._manager = None
@@ -158,3 +161,69 @@ class EngineRouteTests(unittest.TestCase):
         self.assertNotIn("/data/media", plan.text)
         unknown = self.client.get("/api/playback/plan", params={"rating_key": "121986", "profile": "nope"})
         self.assertEqual(unknown.status_code, 400)
+
+    def test_session_token_serves_media_and_records_a_fallback(self) -> None:
+        saved = self.client.put(
+            "/api/playback/path-mappings",
+            json={"mappings": [{"plex_prefix": "/data/media/movies", "container_prefix": str(self.data_dir)}]},
+        )
+        self.assertEqual(saved.status_code, 200, saved.text)
+
+        def fake_start(source, directory, **kwargs):
+            from projectionist.engine.remux import write_master
+
+            directory = Path(directory)
+            write_master(directory, kwargs.get("probe"), file_size=100, duration_ms=600_000)
+            av = directory / "av"
+            av.mkdir(parents=True, exist_ok=True)
+            (av / "stream.m3u8").write_text(
+                "#EXTM3U\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXT-X-ENDLIST\n",
+                encoding="utf-8",
+            )
+            return None
+
+        with patch(
+            "projectionist.engine.routes.plex_part_paths",
+            return_value=["/data/media/movies/film.mkv"],
+        ), patch("projectionist.engine.source.probe_file", return_value=_probe()), patch(
+            "projectionist.engine.session.start_remux",
+            side_effect=fake_start,
+        ):
+            opened = self.client.post(
+                "/api/playback/sessions",
+                json={"rating_key": "121986", "profile": "apple-tv-4k-3"},
+            )
+        self.assertEqual(opened.status_code, 200, opened.text)
+        body = opened.json()
+        self.assertEqual(body["plan"], "remux")
+        self.assertTrue(body["playable"])
+        self.assertNotIn(str(self.media), opened.text)
+        master = self.client.get(body["master_url"])
+        self.assertEqual(master.status_code, 200, master.text)
+        self.assertIn("BANDWIDTH=", master.text)
+        self.assertIn("#EXT-X-ENDLIST", self.client.get(body["master_url"].rsplit("/", 1)[0] + "/av/stream.m3u8").text)
+        broken = body["master_url"].replace(body["master_url"].split("/")[5], "not-the-token")
+        self.assertEqual(self.client.get(broken).status_code, 404)
+        progress = self.client.post(
+            f"/api/playback/sessions/{body['session_id']}/progress",
+            json={"time_ms": 15000, "duration_ms": 600000},
+        )
+        self.assertEqual(progress.status_code, 200, progress.text)
+        self.assertEqual(int(self.db.library_item_by_rating_key("121986")["view_offset_ms"]), 15000)
+
+        with patch(
+            "projectionist.engine.routes.plex_part_paths",
+            return_value=["/data/media/movies/film.mkv"],
+        ), patch("projectionist.engine.source.probe_file", return_value=_probe()):
+            chrome = self.client.post(
+                "/api/playback/sessions",
+                json={"rating_key": "121986", "profile": "chrome"},
+            )
+        self.assertEqual(chrome.status_code, 200, chrome.text)
+        fallback = chrome.json()
+        self.assertEqual(fallback["plan"], "audio")
+        self.assertFalse(fallback["playable"])
+        self.assertIn("AC-3", fallback["reason"])
+        recorded = self.client.get(f"/api/playback/sessions/{fallback['session_id']}")
+        self.assertEqual(recorded.status_code, 200)
+        self.assertEqual(recorded.json()["reason"], fallback["reason"])

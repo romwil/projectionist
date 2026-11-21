@@ -24,10 +24,10 @@ from tests.owner_claim_helpers import grant_owner_claim
 SHIPPED = {
     "device_pairing": 1,
     "throw": 1,
+    "playback_engine": 1,
     "cached_art": 1 if CACHED_ART_ENABLED else 0,
 }
 ACCEPTED_NOT_SHIPPED = {
-    "playback_engine": 0,
     "caption_tracks": 0,
     "shared_sessions": 0,
     "timeline": 0,

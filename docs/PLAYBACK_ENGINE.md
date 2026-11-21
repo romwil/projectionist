@@ -2,7 +2,7 @@
 
 How Projectionist plays a title from your library: one stream engine, owned by Projectionist, shared by every client — the web app, native apps, and anything that speaks the API. Plex is the first **media source**, not the player.
 
-**Status:** ENG-001 and ENG-002 are in the tree. A title can be mapped and probed, and `GET /api/playback/plan` records whether the next step would be direct play, an fMP4 remux, an audio transcode, a full transcode, or the Plex path. Playback still uses the Plex universal transcode described in [Today](#today-the-plex-transcode-path) until ENG-003 serves a session. Item IDs (`ENG-…`) are tracked in [docs/roadmap/](roadmap/README.md).
+**Status:** ENG-001 through ENG-003 are in the tree. `POST /api/playback/sessions` starts a VOD fMP4 remux when the plan is direct or remux. The playlist URL carries a session token, so segments do not need an Authorization header. Audio and full-transcode plans are recorded and left for the Plex path. The web player still uses Plex until ENG-007. Item IDs (`ENG-…`) are tracked in [docs/roadmap/](roadmap/README.md).
 **Audience:** Developers / contributors, owners for the honest limits.
 **Related:** [SHARED_SESSIONS.md](SHARED_SESSIONS.md) · [TIMELINE.md](TIMELINE.md) · [TRACKS.md](TRACKS.md) · [NATIVE_CLIENTS.md](NATIVE_CLIENTS.md) · [ARCHITECTURE.md](ARCHITECTURE.md)
 
