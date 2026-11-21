@@ -544,19 +544,33 @@ def _segment_url(playlist_url: str, ref: str) -> str:
     return urljoin(f"{base}/", text)
 
 
+# Plex has built only an opening slice of a VOD playlist when the master is
+# requested. On Purgatory (567 segments) a HEAD of every segment took about
+# 18 seconds, and about 520 of them were not on disk yet. The largest segment
+# that did exist was index 38 (8,252,260 bytes). The first 48 cover that
+# segment and return in about two seconds.
+PEAK_PROBE_SEGMENTS = 48
+
+
 def measured_peak_bps(
     playlist: str,
     playlist_url: str,
     *,
     headers: Optional[Mapping[str, str]] = None,
     length_of: Optional[Callable[[str], Optional[int]]] = None,
+    limit: int = PEAK_PROBE_SEGMENTS,
 ) -> Optional[int]:
-    """HEAD each media segment and return the peak bitrate plus margin.
+    """HEAD the opening media segments and return the peak bitrate plus margin.
 
-    ``length_of`` replaces the Plex HEAD in tests. A segment with no
-    Content-Length is skipped. This does not change Plex's start parameters.
+    Plex has not built the rest of a long VOD playlist at master time, and
+    HEADing every segment blocks the master response. ``limit`` is how many
+    opening segments to measure. ``length_of`` replaces the Plex HEAD in
+    tests. A segment with no Content-Length is skipped. This does not change
+    Plex's start parameters.
     """
     pairs = _playlist_segments(playlist)
+    if limit > 0:
+        pairs = pairs[: int(limit)]
     if not pairs:
         return None
 
@@ -1262,10 +1276,14 @@ def proxy_session_asset(
         rewrite_base = UNIVERSAL_HLS_MASTER
         variant_average = variant_average_bps(session.file_size, session.duration_ms)
         measured = _master_peak_bps(session, fetch)
-        if measured is not None and variant_average is not None:
-            variant_bandwidth = max(measured, variant_average)
-        else:
+        if measured is None:
+            # The probe found nothing ready. Publish the container average
+            # rather than leaving Plex's own tag in place.
+            variant_bandwidth = variant_average
+        elif variant_average is None:
             variant_bandwidth = measured
+        else:
+            variant_bandwidth = max(measured, variant_average)
     else:
         base = session.plex_base.rstrip("/")
         upstream = plex_fetch_path(path)

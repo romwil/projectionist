@@ -48,3 +48,7 @@ Safari opened `http://10.10.1.202:8788/watch/238445`. The page loaded. `POST /ap
 Safari stops scheduling segment requests when a segment's bitrate exceeds the variant `BANDWIDTH`. Our master sets `BANDWIDTH` and `AVERAGE-BANDWIDTH` to the same number, the container average plus 25 percent, and real segments run higher than that (about 4.6–5.2 Mbps in the opening burst against 3.41 Mbps advertised). The next segment is available. The Plex session is a throttled direct stream, not a dead transcode.
 
 `BANDWIDTH` has to be the measured peak segment bitrate plus a margin. `AVERAGE-BANDWIDTH` stays the container average.
+
+## What a HEAD of the segments shows
+
+After the media playlist exists, `HEAD` of a segment Plex has already written returns `Content-Length` (the opening segment was 5,929,332 bytes). `HEAD` of a segment Plex has not written returns 404. A HEAD of all 567 segments took about 18 seconds: about 42 returned a length and about 520 did not. The largest one that existed was segment 38, 8,252,260 bytes, about 6.60 Mbps. The master request measures the first 48 segments, which covers that segment, and does not wait on the 404s.

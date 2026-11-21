@@ -295,6 +295,61 @@ class PlaylistRewriteTests(unittest.TestCase):
         self.assertIn("BANDWIDTH=7040000", body)
         self.assertIn("AVERAGE-BANDWIDTH=4000000", body)
 
+    def test_master_proxy_uses_average_when_no_segment_has_a_length(self) -> None:
+        session = PlaybackSession(
+            session_id="sess-avg",
+            user_id="owner",
+            rating_key="238445",
+            plex_base="http://plex.test:32400",
+            token="tok",
+            duration_ms=10_000,
+            file_size=5_000_000,
+        )
+        media = "#EXTM3U\n#EXTINF:10,\n00000.ts\n#EXT-X-ENDLIST\n"
+
+        def fake_fetch(url, **_kwargs):
+            if "start.m3u8" in url:
+                return (
+                    b"#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=2723000\nsession/abc/base/index.m3u8\n",
+                    "application/vnd.apple.mpegurl",
+                    200,
+                    url,
+                )
+            return (media.encode(), "application/vnd.apple.mpegurl", 200, url)
+
+        with patch(
+            "projectionist.library.playback.fetch_plex_content_length",
+            lambda *_args, **_kwargs: None,
+        ):
+            asset = proxy_session_asset(session, "index.m3u8", fetch=fake_fetch)
+        body = asset["body"].decode()
+        self.assertIn("BANDWIDTH=4000000", body)
+        self.assertIn("AVERAGE-BANDWIDTH=4000000", body)
+
+    def test_measured_peak_stops_after_the_opening_window(self) -> None:
+        lines = ["#EXTM3U"]
+        for index in range(60):
+            lines.append("#EXTINF:10,")
+            lines.append(f"{index:05d}.ts")
+        seen: list[str] = []
+
+        def length_of(url: str) -> int:
+            seen.append(url)
+            return 1_000_000
+
+        peak = measured_peak_bps(
+            "\n".join(lines),
+            "http://plex.test/video/:/transcode/universal/session/s/base/index.m3u8",
+            length_of=length_of,
+        )
+        self.assertEqual(len(seen), 48)
+        names = {url.rsplit("/", 1)[-1] for url in seen}
+        self.assertIn("00000.ts", names)
+        self.assertIn("00047.ts", names)
+        self.assertNotIn("00048.ts", names)
+        # 1_000_000 bytes / 10s = 800_000 bps, plus 10%.
+        self.assertEqual(peak, 880_000)
+
     def test_measured_peak_skips_segments_with_no_length(self) -> None:
         playlist = "#EXTM3U\n#EXTINF:10,\n00000.ts\n#EXTINF:10,\n00001.ts\n"
         peak = measured_peak_bps(
