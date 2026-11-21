@@ -16,16 +16,11 @@ Default `DATA_DIR`: `/config` in Docker, `./config` in local dev.
 
 ### Which database file opens
 
-Today the server prefers `{DATA_DIR}/projectionist.db` whenever that path exists, and opens `{DATA_DIR}/curatorx.db` only when the new file is absent. “Exists” currently includes a 0-byte file and a file that is not a SQLite database. On QA (2026-11-20) a root-owned empty `projectionist.db` sat next to the real `curatorx.db`. The process opened the empty file, could not write, and crash-looped. Removing the empty file restored startup. Nothing in that incident deleted the real database.
+Startup opens the one real SQLite file in `{DATA_DIR}` (`projectionist.db`, then `curatorx.db`, then the ancient `mediacurator.db` name). A candidate that is missing, 0 bytes, or not a SQLite database is skipped, and the log names that file. Nothing is deleted or overwritten. When two or more real databases are present, startup refuses and names them instead of guessing. A brand-new install still creates `projectionist.db`.
 
-**Accepted fix, not shipped.** When choosing the file:
+On QA (2026-11-20) a root-owned empty `projectionist.db` sat next to the real `curatorx.db`. Before this rule, the process opened the empty file, could not write, and crash-looped. Removing the empty file restored startup. Nothing in that incident deleted the real database.
 
-- Ignore a candidate that is 0 bytes or is not a valid SQLite database. Open the established database and log one warning that names the file that was skipped. Never delete or overwrite a file automatically.
-- If both candidates are real, non-empty databases, refuse to start and name the two files. Do not guess which one is current.
-- Find what created the empty root-owned file. Likely candidates are a container start, a test, or a script that creates the file before migration runs. Stop that path from creating an empty database file.
-- Tests cover an empty preferred file, an invalid preferred file, and two real files.
-
-**Done when:** a data directory that holds an empty `projectionist.db` beside `curatorx.db` still starts, and the suite covers the three cases. The same change adds one line to the pre-rollout checklist in `docs/RELEASE.md`: check the production data directory for a stray empty database file. That checklist edit belongs with the fix. This record does not change `docs/RELEASE.md`.
+The empty file came from a root `sqlite3.connect` (and from `docker exec` as root), which creates a 0-byte file before any page is written. Diagnostic opens use `mode=rw`, so a missing path is not created. The entrypoint chowns stray files under `/config` that are not uid 1000. Runbooks use `docker exec -u projectionist`. The pre-rollout checklist in `docs/RELEASE.md` tells you to move a stray empty `projectionist.db` aside before production moves, and not to delete a non-empty database.
 
 ---
 
