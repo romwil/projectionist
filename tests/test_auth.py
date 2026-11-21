@@ -95,7 +95,15 @@ class AuthTests(unittest.TestCase):
         self.assertIsNone(body["user"])
         self.assertEqual(
             set(body.keys()),
-            {"features", "auth_methods", "setup_state", "authenticated", "user"},
+            {
+                "features",
+                "auth_methods",
+                "setup_state",
+                "authenticated",
+                "user",
+                "api_contract",
+                "capabilities",
+            },
         )
         self.assertEqual(
             set(body["features"].keys()),

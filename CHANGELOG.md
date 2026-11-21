@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- NAT-001: `GET /api/features` includes `api_contract` and a `capabilities` map on the public and signed-in payloads. Signed-in responses still include `features.cached_art`, and `capabilities.cached_art` follows that flag.
+
 ## [1.41.1] — 2026-11-20
 
 Posters come from Projectionist, web playback keeps a fuller buffer, and member screens read in plain language.
