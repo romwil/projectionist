@@ -25,7 +25,7 @@ Jump to: [Principles](#principles) · [Sign-in](#signing-in) · [Capabilities](#
 | Device kind | How it signs in | Status |
 |-------------|-----------------|--------|
 | **TV** (Apple TV) | Shows a code (`XXXX-XXXX`, no 0/O/1/I, 5-minute lifetime); a signed-in web member enters it; the TV polls and receives its credential once | Built (local work: `POST /api/devices/pair/issue`, `…/rotate`, `GET …/pending/{id}`, `POST …/claim`, `POST /api/devices/{id}/revoke`) |
-| **Handheld** (iPhone, iPad, Mac) | Every web sign-in path — Plex PIN, local password, OIDC, redeeming an invite, and requesting access — can end in a device credential instead of a cookie. The TV-style code stays as a secondary path | Accepted (NAT-002 / SES-001) |
+| **Handheld** (iPhone, iPad, Mac) | Every web sign-in path — Plex PIN, local password, OIDC, redeeming an invite, and requesting access — can end in a device credential instead of a cookie. The TV-style code stays as a secondary path | Built (NAT-002 / SES-001). `native_sign_in` is 1 |
 | **Handheld via TV** | Scan a QR on a paired TV to sign a phone in as the same member, then confirm on the phone | Proposed, optional |
 
 Every credential is sent as `Authorization: Bearer <credential>`; the server stores only a hash (`hash_secret` in `devices/pairing.py`). Members see and revoke their devices in **Settings → Apple TV** today; *proposed:* that page becomes **Settings → Devices** for every kind.
@@ -35,6 +35,33 @@ Every credential is sent as `Authorization: Bearer <credential>`; the server sto
 curl -s -H "Authorization: Bearer YOUR_DEVICE_CREDENTIAL" \
   http://your-host:8788/api/auth/me | python3 -m json.tool
 ```
+
+### Native sign-in
+
+Send `client` when the caller wants a device credential instead of `curatorx_session`. `kind` is `iphone` or `ipad`. `label` is the name shown under Settings → Apple TV until that page becomes Settings → Devices (NAT-005). The credential comes back once, in the JSON body, and is stored only as a hash. A request without `client` still sets the browser cookie.
+
+`GET /api/features` includes `sign_in` before anyone is signed in:
+
+```json
+{ "methods": ["plex", "local", "oidc"], "access_requests_open": true }
+```
+
+`methods` is the same list as `auth_methods`. `access_requests_open` is whether `POST /api/access-requests` is accepting requests. That route needs no cookie.
+
+```bash
+# Local password. Omit client for the browser cookie.
+curl -s -X POST http://your-host:8788/api/auth/local/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"alex","password":"YOUR_PASSWORD","client":{"kind":"iphone","label":"Alex’s iPhone"}}'
+```
+
+Plex PIN: `POST /api/auth/plex/pin` with `client` returns `pin_nonce` and does not set the nonce cookie. Poll with header `X-Projectionist-Pin-Nonce`. The header is the nonce, not the device credential. When the PIN completes, the body carries the credential once.
+
+OIDC: `POST /api/auth/oidc/authorize` with `client`, `code_challenge`, and `code_challenge_method` (`S256` only). The provider still redirects to this server’s configured callback. That callback answers `302` to `projectionist://auth/callback?code=…&state=…`. `POST /api/auth/oidc/exchange` with that `code`, the PKCE `code_verifier`, and the same `client` returns the credential. The code is single-use and lasts two minutes. The credential is never in a URL. A client-supplied redirect is not accepted.
+
+Invite: `GET /api/invites/validate?token=…` stays public. The body is the inviter’s display name, the role, the expiry, whether the invite is Youth, and which methods it allows. It does not include another member’s email. `POST /api/invites/redeem/local` with `client` returns a device credential. Plex and OIDC redemption use the same `client` on those paths, plus the invite token they already accept. The Join page links to `projectionist://join?base=<server>&token=<invite>`.
+
+**How this works.** The device row is the same paired-device record a TV gets after a code claim. Revoking it in the household signs that device out. **Honest limit.** The first owner still claims the household in a browser. Native sign-in is for an account that can already be created. `kind` on a code-paired TV stays `tv`. Renaming Settings → Apple TV is NAT-005. A restart drops an in-progress Plex PIN or single sign-on code; start that sign-in again. The household’s identity provider has to accept PKCE. The server does not take a client-supplied redirect.
 
 ---
 
@@ -53,7 +80,7 @@ curl -s -H "Authorization: Bearer YOUR_DEVICE_CREDENTIAL" \
     "shared_sessions": 0,    // SES-004
     "timeline": 0,           // TML-005
     "tracks": 0,             // TRK-003
-    "native_sign_in": 0,     // NAT-002 ships → 1
+    "native_sign_in": 1,     // NAT-002
     "push": 0,               // NAT-006
     "approvals": 0,          // NAT-006
     "cached_art": 1          // same fact as features.cached_art
@@ -105,7 +132,7 @@ Native clients ship through app stores on their own clocks, so the API they depe
 | ID | Item | Depends on |
 |----|------|------------|
 | NAT-001 | Capability manifest + `api_contract` on `GET /api/features` (done: contract 3, map above) | — |
-| NAT-002 | Handheld device credentials for every web sign-in path (Plex PIN, local password, OIDC, invite redeem, request access). A native client sends *proposed* `client: {kind, label}` and receives a device credential once instead of `curatorx_session`. Plex PIN nonce is client-held, not a cookie. OIDC uses an allowlisted custom-scheme redirect, PKCE, and a short-lived single-use code exchanged for the credential (the credential never appears in a URL). Invite `validate` stays public and returns only the inviter display name, role, and expiry. The web Join page offers an open-in-app link carrying the base URL and invite token. `native_sign_in: 1` and a public list of enabled methods ship with it. Security-sensitive: design → plan → build | pairing (local work), NAT-001 |
+| NAT-002 | Handheld device credentials for every web sign-in path (done: `client: {kind, label}`, device credential once, client-held Plex nonce, OIDC PKCE plus a single-use code, public invite validate, Join open-in-app link, `native_sign_in: 1`, public `sign_in` list) | pairing (shipped), NAT-001 |
 | NAT-003 | OpenAPI snapshot + client-facing route tags + CI drift check (done: `docs/api/openapi.json`) | — |
 | NAT-004 | Response fixtures for client-facing routes (done: `docs/api/fixtures/`) | NAT-003 |
 | NAT-005 | **Settings → Devices** — store and return device **kind** (`tv` / `iphone` / `ipad`) on claim and list; rename Settings → Apple TV to Devices; page title, empty state, and claim confirmation speak the kind (not always “Apple TV”). Handhelds may use the existing code flow before NAT-002. Waiting client: APL-016 | pairing (shipped) |

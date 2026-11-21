@@ -1,0 +1,13 @@
+{
+  "body": {
+    "detail": "Multi-user auth is not enabled"
+  },
+  "content_type": "application/json",
+  "method": "GET",
+  "path": "/api/auth/oidc/callback",
+  "query": {
+    "code": "none",
+    "state": "none"
+  },
+  "status": 400
+}

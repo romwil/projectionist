@@ -98,6 +98,7 @@ class AuthTests(unittest.TestCase):
             {
                 "features",
                 "auth_methods",
+                "sign_in",
                 "setup_state",
                 "authenticated",
                 "user",

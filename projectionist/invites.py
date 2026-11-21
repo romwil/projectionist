@@ -61,7 +61,7 @@ def parse_invite_token(token: str) -> Tuple[str, str]:
 
 
 def public_invite_view(invite: Dict[str, Any]) -> Dict[str, Any]:
-    """Safe fields for unauthenticated validate/redeem UI."""
+    """Safe fields for the owner who just created an invite."""
     return {
         "id": invite["id"],
         "status": invite["status"],
@@ -70,6 +70,18 @@ def public_invite_view(invite: Dict[str, Any]) -> Dict[str, Any]:
         "is_youth": bool(invite.get("is_youth")),
         "allowed_methods": list(invite.get("allowed_methods") or []),
         "email": invite.get("email"),
+    }
+
+
+def public_validate_view(invite: Dict[str, Any], *, inviter_display_name: str) -> Dict[str, Any]:
+    """What an unauthenticated invite screen may see. No other member's data."""
+    who = " ".join(str(inviter_display_name or "").split())
+    return {
+        "inviter_display_name": who or "Someone in your household",
+        "role": invite.get("role") or "member",
+        "expires_at": invite.get("expires_at"),
+        "is_youth": bool(invite.get("is_youth")),
+        "allowed_methods": list(invite.get("allowed_methods") or []),
     }
 
 

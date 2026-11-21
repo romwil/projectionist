@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
-import { isLocalOnlyJoin, joinLede, joinMethods } from "./joinPage.ts";
+import { isLocalOnlyJoin, joinLede, joinMethods, openInAppUrl } from "./joinPage.ts";
 
 const src = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -35,6 +35,16 @@ describe("join page copy (GRO-009)", () => {
   it("SSO without Plex does not mention Plex", () => {
     const methods = joinMethods(["oidc", "local"], ["oidc", "local"]);
     assert.doesNotMatch(joinLede({ loading: false, hasInvite: true, methods }), /plex/i);
+  });
+
+  it("open-in-app carries the server and the invite token, not a credential", () => {
+    const href = openInAppUrl("https://house.example:8788", "invite.raw.mac");
+    const url = new URL(href);
+    assert.equal(url.protocol, "projectionist:");
+    assert.equal(url.hostname, "join");
+    assert.equal(url.searchParams.get("base"), "https://house.example:8788");
+    assert.equal(url.searchParams.get("token"), "invite.raw.mac");
+    assert.equal(url.searchParams.has("credential"), false);
   });
 
   it("JoinPage renders Plex words only behind plexEnabled or an active Plex wait", () => {

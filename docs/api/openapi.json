@@ -1,6 +1,57 @@
 {
   "components": {
     "schemas": {
+      "AccessRequestCreatePayload": {
+        "properties": {
+          "display_name": {
+            "maxLength": 120,
+            "minLength": 2,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "maxLength": 320,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "organization_url": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organization Url"
+          }
+        },
+        "required": [
+          "display_name"
+        ],
+        "title": "AccessRequestCreatePayload",
+        "type": "object"
+      },
       "AuthMeUpdatePayload": {
         "properties": {
           "apprise_urls": {
@@ -222,6 +273,46 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "InviteRedeemLocalPayload": {
+        "properties": {
+          "client": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client"
+          },
+          "password": {
+            "maxLength": 200,
+            "minLength": 8,
+            "title": "Password",
+            "type": "string"
+          },
+          "token": {
+            "minLength": 8,
+            "title": "Token",
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 120,
+            "minLength": 2,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "username",
+          "password"
+        ],
+        "title": "InviteRedeemLocalPayload",
+        "type": "object"
+      },
       "LiveChannelsTunePayload": {
         "properties": {
           "channel_id": {
@@ -231,6 +322,137 @@
           }
         },
         "title": "LiveChannelsTunePayload",
+        "type": "object"
+      },
+      "LocalLoginPayload": {
+        "properties": {
+          "client": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client"
+          },
+          "password": {
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          },
+          "username": {
+            "minLength": 1,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "LocalLoginPayload",
+        "type": "object"
+      },
+      "LocalRegisterPayload": {
+        "properties": {
+          "client": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client"
+          },
+          "password": {
+            "maxLength": 256,
+            "minLength": 8,
+            "title": "Password",
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 80,
+            "minLength": 2,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "LocalRegisterPayload",
+        "type": "object"
+      },
+      "OidcExchangePayload": {
+        "properties": {
+          "client": {
+            "additionalProperties": true,
+            "title": "Client",
+            "type": "object"
+          },
+          "code": {
+            "maxLength": 256,
+            "minLength": 20,
+            "title": "Code",
+            "type": "string"
+          },
+          "code_verifier": {
+            "maxLength": 128,
+            "minLength": 43,
+            "title": "Code Verifier",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "code_verifier",
+          "client"
+        ],
+        "title": "OidcExchangePayload",
+        "type": "object"
+      },
+      "OidcNativeAuthorizePayload": {
+        "properties": {
+          "client": {
+            "additionalProperties": true,
+            "title": "Client",
+            "type": "object"
+          },
+          "code_challenge": {
+            "maxLength": 128,
+            "minLength": 43,
+            "title": "Code Challenge",
+            "type": "string"
+          },
+          "code_challenge_method": {
+            "default": "S256",
+            "title": "Code Challenge Method",
+            "type": "string"
+          },
+          "invite_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invite Token"
+          }
+        },
+        "required": [
+          "client",
+          "code_challenge"
+        ],
+        "title": "OidcNativeAuthorizePayload",
         "type": "object"
       },
       "PairIssuePayload": {
@@ -377,6 +599,72 @@
         "title": "PlaybackSubtitlesPayload",
         "type": "object"
       },
+      "PlexLoginPayload": {
+        "properties": {
+          "auth_token": {
+            "minLength": 1,
+            "title": "Auth Token",
+            "type": "string"
+          },
+          "client": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client"
+          },
+          "invite_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invite Token"
+          }
+        },
+        "required": [
+          "auth_token"
+        ],
+        "title": "PlexLoginPayload",
+        "type": "object"
+      },
+      "PlexPinStartPayload": {
+        "properties": {
+          "client": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client"
+          },
+          "invite_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invite Token"
+          }
+        },
+        "title": "PlexPinStartPayload",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -426,6 +714,141 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/access-requests": {
+      "post": {
+        "description": "Public: ask the owner for household membership (queue only).",
+        "operationId": "create_access_request_endpoint_api_access_requests_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessRequestCreatePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Access Request Endpoint Api Access Requests Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Access Request Endpoint",
+        "tags": [
+          "auth",
+          "client"
+        ]
+      }
+    },
+    "/api/auth/local/login": {
+      "post": {
+        "description": "Authenticate with username/password and set session cookie.",
+        "operationId": "auth_local_login_api_auth_local_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocalLoginPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Auth Local Login Api Auth Local Login Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Auth Local Login",
+        "tags": [
+          "auth",
+          "client"
+        ]
+      }
+    },
+    "/api/auth/local/register": {
+      "post": {
+        "description": "Owner-authenticated local account create. Anonymous always 403.",
+        "operationId": "auth_local_register_api_auth_local_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocalRegisterPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Auth Local Register Api Auth Local Register Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Auth Local Register",
+        "tags": [
+          "auth",
+          "client"
+        ]
+      }
+    },
     "/api/auth/me": {
       "get": {
         "operationId": "auth_me_api_auth_me_get",
@@ -487,6 +910,371 @@
           }
         },
         "summary": "Patch Auth Me",
+        "tags": [
+          "auth",
+          "client"
+        ]
+      }
+    },
+    "/api/auth/oidc/authorize": {
+      "get": {
+        "description": "Start OIDC login \u2014 returns the provider authorization URL.",
+        "operationId": "auth_oidc_authorize_api_auth_oidc_authorize_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "invite_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Invite Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Auth Oidc Authorize Api Auth Oidc Authorize Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Auth Oidc Authorize",
+        "tags": [
+          "auth",
+          "client"
+        ]
+      },
+      "post": {
+        "description": "Start OIDC for a native client. PKCE is required. The redirect stays the server callback.",
+        "operationId": "auth_oidc_authorize_native_api_auth_oidc_authorize_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OidcNativeAuthorizePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Auth Oidc Authorize Native Api Auth Oidc Authorize Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Auth Oidc Authorize Native",
+        "tags": [
+          "auth",
+          "client"
+        ]
+      }
+    },
+    "/api/auth/oidc/callback": {
+      "get": {
+        "description": "Handle OIDC provider callback \u2014 exchange code, create/find user, set session.\n\nA native sign-in redirects to the allowlisted app scheme with a one-time code.\nThe device credential is not in that URL.",
+        "operationId": "auth_oidc_callback_api_auth_oidc_callback_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "title": "Code",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": true,
+            "schema": {
+              "title": "State",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Auth Oidc Callback",
+        "tags": [
+          "auth",
+          "client"
+        ]
+      }
+    },
+    "/api/auth/oidc/exchange": {
+      "post": {
+        "description": "Exchange the one-time app code and PKCE verifier for a device credential.",
+        "operationId": "auth_oidc_exchange_api_auth_oidc_exchange_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OidcExchangePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Auth Oidc Exchange Api Auth Oidc Exchange Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Auth Oidc Exchange",
+        "tags": [
+          "auth",
+          "client"
+        ]
+      }
+    },
+    "/api/auth/plex": {
+      "post": {
+        "description": "Advanced fallback: sign in with a raw Plex auth token.",
+        "operationId": "auth_plex_api_auth_plex_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlexLoginPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Auth Plex Api Auth Plex Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Auth Plex",
+        "tags": [
+          "auth",
+          "client"
+        ]
+      }
+    },
+    "/api/auth/plex/pin": {
+      "post": {
+        "description": "Start Overseerr-style Plex PIN login; client opens auth_url and polls.",
+        "operationId": "auth_plex_pin_start_api_auth_plex_pin_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "invite_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Invite Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PlexPinStartPayload"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Auth Plex Pin Start Api Auth Plex Pin Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Auth Plex Pin Start",
+        "tags": [
+          "auth",
+          "client"
+        ]
+      }
+    },
+    "/api/auth/plex/pin/{pin_id}": {
+      "get": {
+        "description": "Poll Plex PIN. Login/join complete the household session when claimed.\n\nPass ``peek=1`` for Link Plex: plex.tv status only \u2014 no cookie, no user bind.\nAn existing household session is not enough to force peek-only.",
+        "operationId": "auth_plex_pin_poll_api_auth_plex_pin__pin_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pin_id",
+            "required": true,
+            "schema": {
+              "title": "Pin Id",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Link Plex: status only, no session bind.",
+            "in": "query",
+            "name": "peek",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Link Plex: status only, no session bind.",
+              "title": "Peek",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Auth Plex Pin Poll Api Auth Plex Pin  Pin Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Auth Plex Pin Poll",
         "tags": [
           "auth",
           "client"
@@ -689,6 +1477,97 @@
         },
         "summary": "Health",
         "tags": [
+          "client"
+        ]
+      }
+    },
+    "/api/invites/redeem/local": {
+      "post": {
+        "description": "Public: redeem invite by creating a local-password account.",
+        "operationId": "redeem_invite_local_endpoint_api_invites_redeem_local_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteRedeemLocalPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Redeem Invite Local Endpoint Api Invites Redeem Local Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Redeem Invite Local Endpoint",
+        "tags": [
+          "auth",
+          "client"
+        ]
+      }
+    },
+    "/api/invites/validate": {
+      "get": {
+        "description": "Public: validate a join token before redeem UI offers sign-in methods.",
+        "operationId": "validate_invite_endpoint_api_invites_validate_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Validate Invite Endpoint Api Invites Validate Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Validate Invite Endpoint",
+        "tags": [
+          "auth",
           "client"
         ]
       }

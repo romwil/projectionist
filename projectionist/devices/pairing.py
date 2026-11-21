@@ -400,7 +400,7 @@ def list_devices(db: Any) -> list[Dict[str, Any]]:
     with db.connect() as conn:
         rows = conn.execute(
             """
-            SELECT d.id, d.user_id, d.label, d.created_at,
+            SELECT d.id, d.user_id, d.label, d.kind, d.created_at,
                    u.display_name, u.role, u.is_youth
             FROM paired_devices d
             LEFT JOIN users u ON u.id = d.user_id
@@ -414,6 +414,7 @@ def list_devices(db: Any) -> list[Dict[str, Any]]:
             {
                 "id": str(row["id"]),
                 "label": str(row["label"] or DEFAULT_LABEL),
+                "kind": str(row["kind"] or "tv"),
                 "user_id": str(row["user_id"] or ""),
                 "display_name": str(row["display_name"] or ""),
                 "role": str(row["role"] or "member"),

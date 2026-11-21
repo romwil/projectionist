@@ -436,6 +436,17 @@ def _apple_tv_devices(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> 
     )
 
 
+def _paired_device_kind(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
+    """NAT-002 stores which kind of device holds a credential. Pair-code rows stay tv."""
+    del db
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(paired_devices)")}
+    if "kind" in cols:
+        return
+    conn.execute(
+        "ALTER TABLE paired_devices ADD COLUMN kind TEXT NOT NULL DEFAULT 'tv'"
+    )
+
+
 def _build_migrations() -> List[Migration]:
     def wrap(method_name: str) -> MigrationFn:
         def _run(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
@@ -511,6 +522,7 @@ def _build_migrations() -> List[Migration]:
         (65, "release2_highs", _release2_highs),
         (66, "apple_tv_devices", _apple_tv_devices),
         (67, "explore_default_home", wrap("_migrate_explore_default_home")),
+        (68, "paired_device_kind", _paired_device_kind),
     ]
 
 

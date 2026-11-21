@@ -140,6 +140,7 @@ from projectionist.web.auth import (
     authenticate_local_user,
     authenticate_plex_user,
     available_auth_methods,
+    sign_in_public,
     bootstrap_owner,
     clear_pin_nonce_cookie,
     clear_session_cookie,
@@ -678,16 +679,19 @@ class AuthSettingsPayload(BaseModel):
 class LocalRegisterPayload(BaseModel):
     username: str = Field(min_length=2, max_length=80)
     password: str = Field(min_length=8, max_length=256)
+    client: Optional[Dict[str, Any]] = None
 
 
 class LocalLoginPayload(BaseModel):
     username: str = Field(min_length=1)
     password: str = Field(min_length=1)
+    client: Optional[Dict[str, Any]] = None
 
 
 class PlexLoginPayload(BaseModel):
     auth_token: str = Field(min_length=1)
     invite_token: Optional[str] = None
+    client: Optional[Dict[str, Any]] = None
 
 
 class InviteCreatePayload(BaseModel):
@@ -704,6 +708,7 @@ class InviteRedeemLocalPayload(BaseModel):
     token: str = Field(min_length=8)
     username: str = Field(min_length=2, max_length=120)
     password: str = Field(min_length=8, max_length=200)
+    client: Optional[Dict[str, Any]] = None
 
 
 class AccessRequestApprovePayload(BaseModel):
@@ -1237,6 +1242,7 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
                 ),
             },
             "auth_methods": methods,
+            "sign_in": sign_in_public(settings),
             "setup_state": setup_state,
             "authenticated": False,
             "user": None,
@@ -1294,6 +1300,7 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
             "oidc_provider_name": settings.auth.oidc_provider_name or "SSO",
         },
         "auth_methods": available_auth_methods(settings),
+        "sign_in": sign_in_public(settings),
         "seerr": {
             "link_on_login": settings.seerr.link_on_login,
             "require_linked_user_for_requests": settings.seerr.require_linked_user_for_requests,

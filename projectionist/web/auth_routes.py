@@ -8,8 +8,8 @@ def register_auth_routes(app):
     """Attach auth / household routes to the FastAPI app."""
     from typing import Any, Dict, Literal, Optional
 
-    from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile
-    from fastapi.responses import FileResponse, JSONResponse
+    from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, Response, UploadFile
+    from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
     from pydantic import BaseModel, Field
 
     import projectionist.web.app as app_mod
@@ -61,6 +61,26 @@ def register_auth_routes(app):
     sync_user_seerr_from_token = app_mod.sync_user_seerr_from_token
     time = app_mod.time
     uuid = app_mod.uuid
+
+    from projectionist.devices.native_login import (
+        NativeClientError,
+        attach_device_credential,
+        issue_device_credential,
+        parse_native_client,
+    )
+    from projectionist.web.auth import NativeOidcRedirect, exchange_native_oidc, native_client_for_pin
+
+    def _client_or_400(value: Any) -> Optional[Dict[str, str]]:
+        try:
+            return parse_native_client(value)
+        except NativeClientError as error:
+            raise HTTPException(status_code=400, detail=error.detail) from error
+
+    def _with_device(body: Dict[str, Any], *, user_id: str, client: Dict[str, str]) -> Dict[str, Any]:
+        issued = issue_device_credential(
+            _db(), user_id=user_id, kind=client["kind"], label=client["label"]
+        )
+        return attach_device_credential(body, issued)
 
     router = APIRouter(tags=["auth"])
 
@@ -378,14 +398,27 @@ def register_auth_routes(app):
         }
 
 
+    class PlexPinStartPayload(BaseModel):
+        client: Optional[Dict[str, Any]] = None
+        invite_token: Optional[str] = None
+
     @router.post("/api/auth/plex/pin")
     def auth_plex_pin_start(
         request: Request,
         response: Response,
         invite_token: Optional[str] = None,
+        payload: Optional[PlexPinStartPayload] = Body(default=None),
     ) -> Dict[str, Any]:
         """Start Overseerr-style Plex PIN login; client opens auth_url and polls."""
-        return start_plex_pin_login(request, response, invite_token=invite_token)
+        body = payload or PlexPinStartPayload()
+        native = _client_or_400(body.client)
+        token = str(body.invite_token or invite_token or "").strip() or None
+        started = start_plex_pin_login(
+            request, response, invite_token=token, native=native
+        )
+        if native is not None:
+            response.headers["Cache-Control"] = "no-store"
+        return started
 
 
     @router.get("/api/auth/plex/pin/{pin_id}")
@@ -411,10 +444,18 @@ def register_auth_routes(app):
         user = poll_plex_pin_login(pin_id, request, _db())
         if user is None:
             return {"authenticated": False, "pending": True}
-        sa.audit(_db(), sa.SIGN_IN, actor_id=user.id, method="plex_pin")
+        native = native_client_for_pin(pin_id, request)
+        audit_detail: Dict[str, Any] = {"method": "plex_pin"}
+        if native is not None:
+            audit_detail["client_kind"] = native["kind"]
+        sa.audit(_db(), sa.SIGN_IN, actor_id=user.id, **audit_detail)
         clear_pin_nonce_cookie(response, request)
+        body = {"user": user.to_dict(), "authenticated": True, "pending": False}
+        if native is not None:
+            response.headers["Cache-Control"] = "no-store"
+            return _with_device(body, user_id=user.id, client=native)
         set_session_cookie(response, user.id, request, db=_db())
-        return {"user": user.to_dict(), "authenticated": True, "pending": False}
+        return body
 
 
     class PlexLinkPayload(BaseModel):
@@ -445,21 +486,30 @@ def register_auth_routes(app):
     def auth_plex(payload: PlexLoginPayload, request: Request, response: Response) -> Dict[str, Any]:
         """Advanced fallback: sign in with a raw Plex auth token."""
         enforce_rate_limit(request, bucket="auth_plex_token", limit=10, window_seconds=60)
+        native = _client_or_400(payload.client)
         user = authenticate_plex_user(
             payload.auth_token,
             _db(),
             invite_token=payload.invite_token,
             request=request,
         )
-        sa.audit(_db(), sa.SIGN_IN, actor_id=user.id, method="plex_token")
+        audit_detail = {"method": "plex_token"}
+        if native is not None:
+            audit_detail["client_kind"] = native["kind"]
+        sa.audit(_db(), sa.SIGN_IN, actor_id=user.id, **audit_detail)
+        body = {"user": user.to_dict(), "authenticated": True}
+        if native is not None:
+            response.headers["Cache-Control"] = "no-store"
+            return _with_device(body, user_id=user.id, client=native)
         set_session_cookie(response, user.id, request, db=_db())
-        return {"user": user.to_dict(), "authenticated": True}
+        return body
 
 
     @router.post("/api/auth/local/register")
     def auth_local_register(
         payload: LocalRegisterPayload,
         request: Request,
+        response: Response,
     ) -> Dict[str, Any]:
         """Owner-authenticated local account create. Anonymous always 403."""
         enforce_rate_limit(request, bucket="auth_local_register", limit=5, window_seconds=60)
@@ -470,21 +520,30 @@ def register_auth_routes(app):
                 detail="Local registration is disabled. Ask the household admin for a join link.",
             )
         requesting_user = get_current_user_dep(request)
+        native = _client_or_400(payload.client)
         user = register_local_user(
             username=payload.username,
             password=payload.password,
             db=db,
             requesting_user=requesting_user,
         )
+        create_detail: Dict[str, Any] = {"role": user.role}
+        if native is not None:
+            create_detail["client_kind"] = native["kind"]
         sa.audit(
             db,
             sa.ACCOUNT_CREATE,
             actor_id=getattr(requesting_user, "id", None),
             target_id=user.id,
-            role=user.role,
+            **create_detail,
         )
         # The caller is the owner; their session must not switch to the new account.
-        return {"user": user.to_dict(), "created": True}
+        body = {"user": user.to_dict(), "created": True}
+        if native is None:
+            return body
+        sa.audit(db, sa.SIGN_IN, actor_id=user.id, method="local", client_kind=native["kind"])
+        response.headers["Cache-Control"] = "no-store"
+        return _with_device(body, user_id=user.id, client=native)
 
 
     @router.post("/api/auth/local/login")
@@ -494,6 +553,7 @@ def register_auth_routes(app):
         response: Response,
     ) -> Dict[str, Any]:
         """Authenticate with username/password and set session cookie."""
+        native = _client_or_400(payload.client)
         try:
             user = authenticate_local_user(
                 username=payload.username,
@@ -512,9 +572,16 @@ def register_auth_routes(app):
                     status=error.status_code,
                 )
             raise
-        sa.audit(_db(), sa.SIGN_IN, actor_id=user.id, method="local")
+        audit_detail = {"method": "local"}
+        if native is not None:
+            audit_detail["client_kind"] = native["kind"]
+        sa.audit(_db(), sa.SIGN_IN, actor_id=user.id, **audit_detail)
+        body = {"user": user.to_dict(), "authenticated": True}
+        if native is not None:
+            response.headers["Cache-Control"] = "no-store"
+            return _with_device(body, user_id=user.id, client=native)
         set_session_cookie(response, user.id, request, db=_db())
-        return {"user": user.to_dict(), "authenticated": True}
+        return body
 
 
     @router.get("/api/auth/oidc/authorize")
@@ -525,19 +592,87 @@ def register_auth_routes(app):
         """Start OIDC login — returns the provider authorization URL."""
         return start_oidc_authorize(request, invite_token=invite_token)
 
+    class OidcNativeAuthorizePayload(BaseModel):
+        client: Dict[str, Any]
+        code_challenge: str = Field(min_length=43, max_length=128)
+        code_challenge_method: str = "S256"
+        invite_token: Optional[str] = None
 
-    @router.get("/api/auth/oidc/callback")
+    @router.post("/api/auth/oidc/authorize")
+    def auth_oidc_authorize_native(
+        payload: OidcNativeAuthorizePayload,
+        request: Request,
+    ) -> Dict[str, Any]:
+        """Start OIDC for a native client. PKCE is required. The redirect stays the server callback."""
+        native = _client_or_400(payload.client)
+        if native is None:
+            raise HTTPException(status_code=400, detail="client must be an object with kind and label")
+        return start_oidc_authorize(
+            request,
+            invite_token=payload.invite_token,
+            native=native,
+            code_challenge=payload.code_challenge,
+            code_challenge_method=payload.code_challenge_method,
+        )
+
+    @router.get("/api/auth/oidc/callback", response_model=None)
     def auth_oidc_callback(
         code: str,
         state: str,
         request: Request,
         response: Response,
     ) -> Dict[str, Any]:
-        """Handle OIDC provider callback — exchange code, create/find user, set session."""
-        user = handle_oidc_callback(code=code, state=state, db=_db(), request=request)
-        sa.audit(_db(), sa.SIGN_IN, actor_id=user.id, method="oidc")
-        set_session_cookie(response, user.id, request, db=_db())
-        return {"user": user.to_dict(), "authenticated": True}
+        """Handle OIDC provider callback — exchange code, create/find user, set session.
+
+        A native sign-in redirects to the allowlisted app scheme with a one-time code.
+        The device credential is not in that URL.
+        """
+        result = handle_oidc_callback(code=code, state=state, db=_db(), request=request)
+        if isinstance(result, NativeOidcRedirect):
+            return RedirectResponse(
+                result.location,
+                status_code=302,
+                headers={"Cache-Control": "no-store"},
+            )
+        sa.audit(_db(), sa.SIGN_IN, actor_id=result.id, method="oidc")
+        set_session_cookie(response, result.id, request, db=_db())
+        return {"user": result.to_dict(), "authenticated": True}
+
+    class OidcExchangePayload(BaseModel):
+        code: str = Field(min_length=20, max_length=256)
+        code_verifier: str = Field(min_length=43, max_length=128)
+        client: Dict[str, Any]
+
+    @router.post("/api/auth/oidc/exchange")
+    def auth_oidc_exchange(
+        payload: OidcExchangePayload,
+        request: Request,
+        response: Response,
+    ) -> Dict[str, Any]:
+        """Exchange the one-time app code and PKCE verifier for a device credential."""
+        native = _client_or_400(payload.client)
+        if native is None:
+            raise HTTPException(status_code=400, detail="client must be an object with kind and label")
+        user = exchange_native_oidc(
+            code=payload.code,
+            code_verifier=payload.code_verifier,
+            client=native,
+            db=_db(),
+            request=request,
+        )
+        sa.audit(
+            _db(),
+            sa.SIGN_IN,
+            actor_id=user.id,
+            method="oidc",
+            client_kind=native["kind"],
+        )
+        response.headers["Cache-Control"] = "no-store"
+        return _with_device(
+            {"user": user.to_dict(), "authenticated": True},
+            user_id=user.id,
+            client=native,
+        )
 
 
     @router.post("/api/auth/logout")
@@ -653,13 +788,23 @@ def register_auth_routes(app):
     def validate_invite_endpoint(token: str, request: Request) -> Dict[str, Any]:
         """Public: validate a join token before redeem UI offers sign-in methods."""
         enforce_rate_limit(request, bucket="invite_validate", limit=30, window_seconds=60)
-        from projectionist.invites import lookup_pending_invite, public_invite_view
+        from projectionist.invites import (
+            _inviter_name,
+            lookup_pending_invite,
+            public_validate_view,
+        )
 
         try:
             invite = lookup_pending_invite(_db(), token)
         except ValueError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
-        return {"invite": public_invite_view(invite), "valid": True}
+        return {
+            "invite": public_validate_view(
+                invite,
+                inviter_display_name=_inviter_name(_db(), str(invite.get("created_by") or "")),
+            ),
+            "valid": True,
+        }
 
 
     @router.post("/api/invites/redeem/local")
@@ -670,6 +815,7 @@ def register_auth_routes(app):
     ) -> Dict[str, Any]:
         """Public: redeem invite by creating a local-password account."""
         enforce_rate_limit(request, bucket="invite_redeem_local", limit=10, window_seconds=60)
+        native = _client_or_400(payload.client)
         from projectionist.invites import redeem_local_invite
         from projectionist.web.auth import _ensure_local_login_enabled
 
@@ -693,9 +839,22 @@ def register_auth_routes(app):
                 raise HTTPException(status_code=409, detail=detail) from error
             raise HTTPException(status_code=400, detail=detail) from error
         new_user_id = str(result["user"]["id"])
-        sa.audit(_db(), sa.INVITE_REDEEM, actor_id=new_user_id, target_id=new_user_id, method="local")
+        redeem_detail: Dict[str, Any] = {"method": "local"}
+        if native is not None:
+            redeem_detail["client_kind"] = native["kind"]
+        sa.audit(
+            _db(),
+            sa.INVITE_REDEEM,
+            actor_id=new_user_id,
+            target_id=new_user_id,
+            **redeem_detail,
+        )
+        body = {"authenticated": True, **result}
+        if native is not None:
+            response.headers["Cache-Control"] = "no-store"
+            return _with_device(body, user_id=new_user_id, client=native)
         set_session_cookie(response, new_user_id, request, db=_db())
-        return {"authenticated": True, **result}
+        return body
 
 
     @router.get("/api/admin/access-requests")

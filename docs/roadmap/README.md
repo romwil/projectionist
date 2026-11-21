@@ -31,7 +31,7 @@ Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` ·
 | ENG-008 | Scrub thumbnails | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-009 | Live Channels on engine sessions (ARCH-007 facade; PRD-007 freeze) | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-010 | Jellyfin media source | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
-| SES-001 | Device credentials for every handheld sign-in path (same work as NAT-002) | accepted | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
+| SES-001 | Device credentials for every handheld sign-in path (same work as NAT-002) | done | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
 | SES-002 | Rooms registry + visibility | proposed | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
 | SES-003 | Session object (owner, screen, position, level) | proposed | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
 | SES-004 | Realtime channel + command authorization + clock | proposed | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
@@ -59,7 +59,7 @@ Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` ·
 | TRK-009 | Series studies | proposed | [TRACKS](../TRACKS.md#roadmap-items) |
 | TRK-010 | Web overlay renderer | proposed | [TRACKS](../TRACKS.md#roadmap-items) |
 | NAT-001 | Capability manifest + `api_contract` | done | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
-| NAT-002 | Handheld device credentials for every web sign-in path | accepted | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
+| NAT-002 | Handheld device credentials for every web sign-in path | done | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
 | NAT-003 | OpenAPI snapshot + client route tags + CI drift check | done | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
 | NAT-004 | Response fixtures | done | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
 | NAT-005 | Settings → Devices + device kind on claim/list | proposed | [NATIVE_CLIENTS](../NATIVE_CLIENTS.md#roadmap-items) |
@@ -115,6 +115,7 @@ SES-001 and NAT-002 describe the same work from two sides; build them as one cha
 | 2026-11-20 | **NAT-001** publishes `api_contract` 3 and the capability map on every `GET /api/features`. Shipped keys are `device_pairing` 1, `throw` 1, and `cached_art` 1 (the same fact as `features.cached_art`). Accepted keys stay at 0: `native_sign_in`, `push`, `approvals`, plus the engine, session, timeline, and track names |
 | 2026-11-20 | **NAT-003** tags the routes a native client may call and checks `docs/api/openapi.json` in CI. Admin routes, device claim, and device revoke stay out of that set |
 | 2026-11-20 | **NAT-004** records one example response per client route under `docs/api/fixtures/` and checks it in CI |
+| 2026-11-20 | **NAT-002** lets every web sign-in path end in a device credential. `native_sign_in` is 1. `sign_in` on `GET /api/features` lists the methods this household has turned on. The pair-code stays the secondary path |
 | 2026-11-20 | **ENG-001** reads a title through a Plex media source: owner path mappings, cached ffprobe, and `GET /api/playback/media/{rating_key}` with no file paths in the response |
 | 2026-11-19 | **Lane A remux spike:** H.264+AC-3 fMP4 HLS (`-c copy`) + household WebVTT works on Safari/WebKit and tvOS AVPlayer (seek without restart; captions selectable). Desktop Chrome/hls.js rejects AC-3 — planner must audio-transcode for those profiles. Findings: [engine-spike-findings](../superpowers/specs/2026-11-19-engine-spike-findings.md). Spike code stays on `spike/engine-remux` (not merged) |
 

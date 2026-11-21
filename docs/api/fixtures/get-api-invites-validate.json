@@ -1,0 +1,12 @@
+{
+  "body": {
+    "detail": "Invite not found"
+  },
+  "content_type": "application/json",
+  "method": "GET",
+  "path": "/api/invites/validate",
+  "query": {
+    "token": "not-an-invite"
+  },
+  "status": 400
+}

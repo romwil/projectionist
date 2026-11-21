@@ -11,7 +11,7 @@ import {
 } from "../api/client";
 import GlassDoor from "../components/GlassDoor";
 import InlineAlert from "../components/InlineAlert";
-import { isLocalOnlyJoin, joinLede, joinMethods } from "../lib/joinPage";
+import { isLocalOnlyJoin, joinLede, joinMethods, openInAppUrl } from "../lib/joinPage";
 import { resolveAuthMethods } from "../lib/loginScreen";
 import { startPlexPinPoll } from "../lib/plexPinPoll";
 
@@ -27,7 +27,11 @@ export default function JoinPage() {
   const pollRef = useRef<(() => void) | null>(null);
 
   type JoinFeatures = { auth_methods?: string[] | Record<string, unknown> };
-  type JoinInvite = { allowed_methods?: string[]; is_youth?: boolean };
+  type JoinInvite = {
+    allowed_methods?: string[];
+    is_youth?: boolean;
+    inviter_display_name?: string;
+  };
 
   const [features, setFeatures] = useState<JoinFeatures | null>(null);
   const [invite, setInvite] = useState<JoinInvite | null>(null);
@@ -71,6 +75,8 @@ export default function JoinPage() {
   }, []);
 
   const methods = joinMethods(resolveAuthMethods(features?.auth_methods), invite?.allowed_methods);
+  const inviter = (invite?.inviter_display_name || "").trim();
+  const appHref = token ? openInAppUrl(window.location.origin, token) : "";
   const plexEnabled = methods.plex;
   const oidcEnabled = methods.oidc;
   const localEnabled = methods.local;
@@ -175,8 +181,14 @@ export default function JoinPage() {
       {!loading && invite ? (
         <>
           <p className="login-help" data-testid="join-invite-summary">
+            {inviter ? `${inviter} invited you. ` : ""}
             You&apos;re joining as a household member
             {invite.is_youth ? " (Youth mode)" : ""}. This link works once.
+          </p>
+          <p className="login-help">
+            <a href={appHref} data-testid="join-open-in-app">
+              Open in the app
+            </a>
           </p>
           {waitingForPlex ? (
             <p className="status status-secondary" data-testid="join-plex-waiting">
