@@ -63,6 +63,7 @@ class MediaStream:
     level: str = ""
     hdr: str = ""
     subtitle_kind: str = ""
+    bit_depth: int = 0
 
 
 @dataclass
@@ -137,6 +138,23 @@ def _hdr(stream: Mapping[str, Any]) -> str:
     return ""
 
 
+def _bit_depth(stream: Mapping[str, Any]) -> int:
+    sample = _int(stream.get("bits_per_raw_sample"))
+    if sample >= 8:
+        return sample
+    pix = str(stream.get("pix_fmt") or "").lower()
+    if "p12" in pix or "12le" in pix or "12be" in pix:
+        return 12
+    if "p10" in pix or "10le" in pix or "10be" in pix:
+        return 10
+    profile = str(stream.get("profile") or "").lower()
+    if "12" in profile:
+        return 12
+    if "10" in profile:
+        return 10
+    return 0
+
+
 def _language(stream: dict[str, Any]) -> str:
     raw_tags = stream.get("tags")
     tags: dict[str, Any] = raw_tags if isinstance(raw_tags, dict) else {}
@@ -172,6 +190,7 @@ def parse_ffprobe(payload: dict[str, Any]) -> ProbeResult:
                 level=str(raw.get("level") or ""),
                 hdr=_hdr(raw) if codec_type == "video" else "",
                 subtitle_kind=subtitle_kind(codec) if codec_type == "subtitle" else "",
+                bit_depth=_bit_depth(raw) if codec_type == "video" else 0,
             )
         )
     return ProbeResult(

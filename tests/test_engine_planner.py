@@ -6,7 +6,7 @@ import unittest
 
 from projectionist.engine.planner import plan_playback
 from projectionist.engine.probe import MediaStream, ProbeResult
-from projectionist.engine.profiles import CHROME, SAFARI, APPLE_TV_4K
+from projectionist.engine.profiles import APPLE_TV_4K, CHROME, SAFARI, VideoCapability
 from projectionist.engine.source import MediaAsset
 
 
@@ -84,6 +84,63 @@ class PlannerTests(unittest.TestCase):
         plan = plan_playback(_av("mp4", "h264", "aac", level="52"), DeviceProfileLow())
         self.assertEqual(plan["plan"], "full")
 
+    def test_web_profile_remuxes_hevc_only_when_the_browser_lists_it(self) -> None:
+        hevc = _av("mkv", "hevc", "aac", level="153")
+        hevc.probe.streams[0].bit_depth = 10
+        capable = _web(
+            [VideoCapability("hevc", "5.1", bit_depth=10), VideoCapability("h264", "5.2")],
+            ["aac"],
+        )
+        played = plan_playback(hevc, capable)
+        self.assertEqual(played["plan"], "remux")
+        self.assertEqual(played["profile_answer"]["video"], "hevc up to 5.1, 10-bit")
+        self.assertIn("hevc up to 5.1, 10-bit", str(played["reason"]))
+
+        refused = plan_playback(hevc, _web([VideoCapability("h264", "5.2")], ["aac"]))
+        self.assertEqual(refused["plan"], "full")
+        self.assertEqual(refused["profile_answer"]["video"], "hevc not in profile")
+        self.assertIn("HEVC video is not playable on web", str(refused["reason"]))
+
+        eight_bit = plan_playback(
+            hevc,
+            _web([VideoCapability("hevc", "5.1", bit_depth=8), VideoCapability("h264", "5.2")], ["aac"]),
+        )
+        self.assertEqual(eight_bit["plan"], "full")
+        self.assertEqual(eight_bit["profile_answer"]["video"], "hevc 10-bit is above profile hevc 8-bit")
+
+    def test_web_profile_remuxes_eac3_only_when_the_browser_lists_it(self) -> None:
+        episode = _av("mkv", "h264", "eac3", level="41")
+        refused = plan_playback(episode, _web([VideoCapability("h264", "5.2")], ["aac"]))
+        self.assertEqual(refused["plan"], "audio")
+        self.assertEqual(refused["profile_answer"]["audio"], "eac3 not in profile")
+        self.assertEqual(refused["profile_answer"]["video"], "h264 up to 5.2")
+
+        played = plan_playback(episode, _web([VideoCapability("h264", "5.2")], ["aac", "eac3"]))
+        self.assertEqual(played["plan"], "remux")
+        self.assertEqual(played["profile_answer"]["audio"], "eac3")
+
+    def test_browser_profile_object_keeps_the_same_shape(self) -> None:
+        from projectionist.engine.profiles import profile_from_mapping
+
+        profile = profile_from_mapping(
+            {
+                "id": "web",
+                "containers": ["mp4", "hls-fmp4"],
+                "video": [
+                    {"codec": "hevc", "max_level": "5.1", "bit_depth": 10},
+                    {"codec": "h264", "max_level": "5.2"},
+                ],
+                "audio": ["aac", "eac3"],
+                "captions": ["webvtt"],
+            }
+        )
+        plan_asset = _av("mkv", "hevc", "eac3", level="153")
+        plan_asset.probe.streams[0].bit_depth = 10
+        plan = plan_playback(plan_asset, profile)
+        self.assertEqual(profile.video[0].bit_depth, 10)
+        self.assertEqual(plan["plan"], "remux")
+        self.assertEqual(plan["profile_answer"]["audio"], "eac3")
+
     def test_unread_file_is_plex_fallback_without_paths(self) -> None:
         asset = MediaAsset(
             rating_key="9",
@@ -95,6 +152,18 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(plan["plan"], "plex-fallback")
         self.assertIn("path mapping", str(plan["reason"]).lower())
         self.assertNotIn("/plex", str(plan))
+
+
+def _web(video, audio):
+    from projectionist.engine.profiles import DeviceProfile
+
+    return DeviceProfile(
+        id="web",
+        containers=["mp4", "hls-fmp4"],
+        video=video,
+        audio=audio,
+        captions=["webvtt"],
+    )
 
 
 def DeviceProfileLow():

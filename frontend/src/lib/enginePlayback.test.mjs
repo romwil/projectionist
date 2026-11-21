@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   browserPlaybackProfile,
+  browserPlaybackProfileFromRuntime,
   chooseWebPlayback,
   engineSessionForPlayer,
   playThroughProjectionist,
@@ -24,8 +25,13 @@ test("the household switch defaults the web player to the Plex path", async () =
 });
 
 test("a playable remux uses the engine master and keeps the Plex path for captions", async () => {
-  const profile = browserPlaybackProfile((type) => type.includes("avc1") || type.includes("mp4a.40.2"));
-  assert.deepEqual(profile.video.map((item) => item.codec), ["h264"]);
+  const profile = browserPlaybackProfile(
+    (type) => type.includes("avc1") || type.includes("mp4a.40.2"),
+  );
+  assert.deepEqual(
+    profile.video.map((item) => item.codec),
+    ["h264"],
+  );
   assert.equal(profile.audio.includes("ac3"), false);
 
   const engine = await chooseWebPlayback({
@@ -55,4 +61,75 @@ test("a playable remux uses the engine master and keeps the Plex path for captio
   });
   assert.equal(fallback.stream_url, "/plex");
   assert.equal(engineSessionForPlayer({ playable: false, plan: "audio", master_url: "" }), null);
+});
+
+test("the profile lists HEVC, AV1, AC-3, E-AC-3, and 10-bit only when the check says yes", () => {
+  const safari = browserPlaybackProfile(
+    (type) =>
+      type.includes("hvc1.1.6.L153.B0") ||
+      type.includes("hvc1.2.4.L153.B0") ||
+      type.includes("av01.0.13M.08") ||
+      type.includes("ac-3") ||
+      type.includes("ec-3") ||
+      type.includes("avc1.640034"),
+  );
+  const hevc = safari.video.find((item) => item.codec === "hevc");
+  assert.equal(hevc.max_level, "5.1");
+  assert.equal(hevc.bit_depth, 10);
+  assert.equal(
+    safari.video.some((item) => item.codec === "av1" && item.bit_depth === 8),
+    true,
+  );
+  assert.equal(safari.audio.includes("ac3"), true);
+  assert.equal(safari.audio.includes("eac3"), true);
+  assert.equal(safari.id, "web");
+  assert.deepEqual(safari.containers, ["mp4", "hls-fmp4"]);
+
+  const low = browserPlaybackProfile(
+    (type) => type.includes("hvc1.1.6.L93.B0") || type.includes("avc1"),
+  );
+  const lowHevc = low.video.find((item) => item.codec === "hevc");
+  assert.equal(lowHevc.max_level, "3.1");
+  assert.equal(lowHevc.bit_depth, 8);
+
+  const chrome = browserPlaybackProfile((type) => type.includes("avc1"));
+  assert.equal(
+    chrome.video.some((item) => item.codec === "hevc"),
+    false,
+  );
+  assert.equal(
+    chrome.video.some((item) => item.codec === "av1"),
+    false,
+  );
+  assert.equal(chrome.audio.includes("eac3"), false);
+  assert.equal(chrome.audio.includes("ac3"), false);
+});
+
+test("canPlayType, MediaSource, and decodingInfo are the same profile", async () => {
+  const safari = await browserPlaybackProfileFromRuntime({
+    canPlayType: (type) =>
+      type.includes("hvc1.2.4.L153.B0") || type.includes("ec-3") || type.includes("avc1.640034")
+        ? "probably"
+        : "",
+    isTypeSupported: () => false,
+    decodingInfo: async () => ({ supported: false }),
+  });
+  assert.equal(safari.video.find((item) => item.codec === "hevc").bit_depth, 10);
+  assert.equal(safari.audio.includes("eac3"), true);
+
+  const chrome = await browserPlaybackProfileFromRuntime({
+    canPlayType: (type) => (type.includes("avc1") ? "probably" : ""),
+    isTypeSupported: (type) => type.includes("av01.0.13M.08"),
+    decodingInfo: async (type) => ({ supported: type.includes("ac-3") }),
+  });
+  assert.equal(
+    chrome.video.some((item) => item.codec === "hevc"),
+    false,
+  );
+  assert.equal(
+    chrome.video.some((item) => item.codec === "av1"),
+    true,
+  );
+  assert.equal(chrome.audio.includes("ac3"), true);
+  assert.equal(chrome.audio.includes("eac3"), false);
 });

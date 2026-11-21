@@ -7,7 +7,7 @@ shortcut for ``GET /api/playback/plan``.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 
 @dataclass
@@ -15,6 +15,8 @@ class VideoCapability:
     codec: str
     max_level: str = ""
     hdr: list[str] = field(default_factory=list)
+    # 0 means the profile does not state a bit depth. 8 or 10 is the browser's answer.
+    bit_depth: int = 0
 
 
 @dataclass
@@ -31,7 +33,12 @@ class DeviceProfile:
             "id": self.id,
             "containers": list(self.containers),
             "video": [
-                {"codec": item.codec, "max_level": item.max_level, "hdr": list(item.hdr)}
+                {
+                    "codec": item.codec,
+                    "max_level": item.max_level,
+                    "hdr": list(item.hdr),
+                    **({"bit_depth": item.bit_depth} if item.bit_depth else {}),
+                }
                 for item in self.video
             ],
             "audio": list(self.audio),
@@ -73,6 +80,39 @@ _NAMED = {
     SAFARI.id: SAFARI,
     CHROME.id: CHROME,
 }
+
+
+def _int(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def profile_from_mapping(raw: Mapping[str, Any]) -> DeviceProfile:
+    """The object a client sends. Same fields as a named profile, including bit depth."""
+    video: list[VideoCapability] = []
+    for item in raw.get("video") or []:
+        if not isinstance(item, dict):
+            continue
+        video.append(
+            VideoCapability(
+                codec=str(item.get("codec") or ""),
+                max_level=str(item.get("max_level") or ""),
+                hdr=[str(name) for name in (item.get("hdr") or [])],
+                bit_depth=_int(item.get("bit_depth")),
+            )
+        )
+    captions = raw.get("captions")
+    bitrate = raw.get("max_bitrate_kbps")
+    return DeviceProfile(
+        id=str(raw.get("id") or "custom"),
+        containers=[str(name) for name in (raw.get("containers") or [])],
+        video=video,
+        audio=[str(name) for name in (raw.get("audio") or [])],
+        captions=[str(name) for name in (captions if isinstance(captions, list) else ["webvtt"])],
+        max_bitrate_kbps=_int(bitrate) if bitrate not in (None, "") else None,
+    )
 
 
 def named_profile(name: str) -> Optional[DeviceProfile]:

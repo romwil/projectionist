@@ -8,7 +8,7 @@ Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` ·
 
 ## Sequencing
 
-1. **ENG** — the playback engine. Shipped through ENG-007 and ENG-004. Next, not started: the browser runtime profile (ENG-007 follow-up), text captions ahead of play (ENG-004 follow-up), then ENG-011 → ENG-012 → ENG-013 → ENG-005 → ENG-014 → ENG-006. Engine sessions are opt-in (`engine_opt_in`). Play through Projectionist stays off until an owner turns it on
+1. **ENG** — the playback engine. Shipped through ENG-007 and ENG-004. The web profile comes from the browser's own codec checks. Next, not started: text captions ahead of play (ENG-004 follow-up), then ENG-011 → ENG-012 → ENG-013 → ENG-005 → ENG-014 → ENG-006. Engine sessions are opt-in (`engine_opt_in`). Play through Projectionist stays off until an owner turns it on
 2. **SES** — shared sessions (extends the Apple TV pairing + throw work)
 3. **TML** — the timeline layer
 4. **TRK** — tracks: Moments, Booth Notes, Class / Study
@@ -27,7 +27,7 @@ Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` ·
 | ENG-004 | WebVTT caption renditions (household cache first). Ahead-of-time extraction is accepted and not started | done | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-005 | Image-caption OCR job | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-006 | Own video transcode: software 1080p H.264 above a benchmark, plus VAAPI/NVENC. Waits on ENG-011 | accepted | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
-| ENG-007 | Web player on engine sessions, behind an off-by-default setting. Runtime browser profile is accepted and not started | done | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
+| ENG-007 | Web player on engine sessions, behind an off-by-default setting. The profile comes from the browser's codec checks | done | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-008 | Scrub thumbnails | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-009 | Live Channels on engine sessions (ARCH-007 facade; PRD-007 freeze) | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-010 | Jellyfin media source | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
@@ -126,6 +126,7 @@ SES-001 and NAT-002 describe the same work from two sides; build them as one cha
 | 2026-11-21 | **ENG-004** puts household subtitle files into the engine master playlist as WebVTT. A title that can be captioned that way plays through the engine and does not record a caption fallback. Picture captions still use the Plex path until ENG-005 |
 | 2026-11-21 | **Engine sessions are opt-in.** `POST /api/playback/sessions` returns a library plan unless the client sends `engine_opt_in`. `playback_engine` means the server can. The QA 1.42.0 playlist 401 was the household gate rejecting a header-free playlist URL that a device credential had opened. That URL now checks the path token. Not in the 1.42.0 image |
 | 2026-11-21 | **Playback tiers, cheapest first:** direct, remux, audio-only, captions as text, source transcode, own video transcode, pre-optimized copies. ENG-011 through ENG-014 are accepted. ENG-006 is re-scoped and waits on the report. The browser profile and ahead-of-time text captions are accepted follow-ups. None of that follow-up work is started |
+| 2026-11-21 | **The web profile comes from the browser.** At play time the web app asks `canPlayType`, `MediaSource.isTypeSupported`, and `MediaCapabilities.decodingInfo` for HEVC (`hvc1`, including 10-bit), AV1, AC-3, and E-AC-3, and sends that profile with the session. The planner records the answer. A browser that does not report HEVC still gets the not-playable plan. Ahead-of-time text captions, ENG-011, ENG-012, ENG-013, and ENG-014 are still not started |
 | 2026-11-19 | **Lane A remux spike:** H.264+AC-3 fMP4 HLS (`-c copy`) + household WebVTT works on Safari/WebKit and tvOS AVPlayer (seek without restart; captions selectable). Desktop Chrome/hls.js rejects AC-3 — planner must audio-transcode for those profiles. Findings: [engine-spike-findings](../superpowers/specs/2026-11-19-engine-spike-findings.md). Spike code stays on `spike/engine-remux` (not merged) |
 
 ## Superseded review rows (carry-forward)

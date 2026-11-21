@@ -178,12 +178,7 @@ class PlaybackProgressBody(BaseModel):
 
 
 def _profile_from_body(raw: Any):
-    from projectionist.engine.profiles import (
-        DeviceProfile,
-        VideoCapability,
-        known_profile_ids,
-        named_profile,
-    )
+    from projectionist.engine.profiles import known_profile_ids, named_profile, profile_from_mapping
 
     if isinstance(raw, str) or raw is None:
         chosen = named_profile(str(raw or "apple-tv-4k-3"))
@@ -193,24 +188,7 @@ def _profile_from_body(raw: Any):
         return chosen
     if not isinstance(raw, dict):
         raise HTTPException(status_code=400, detail="Device profile must be a name or an object.")
-    video = []
-    for item in raw.get("video") or []:
-        if not isinstance(item, dict):
-            continue
-        video.append(
-            VideoCapability(
-                codec=str(item.get("codec") or ""),
-                max_level=str(item.get("max_level") or ""),
-                hdr=[str(name) for name in (item.get("hdr") or [])],
-            )
-        )
-    return DeviceProfile(
-        id=str(raw.get("id") or "custom"),
-        containers=[str(name) for name in (raw.get("containers") or [])],
-        video=video,
-        audio=[str(name) for name in (raw.get("audio") or [])],
-        captions=[str(name) for name in (raw.get("captions") or ["webvtt"])],
-    )
+    return profile_from_mapping(raw)
 
 
 @router.post("/api/playback/sessions")
