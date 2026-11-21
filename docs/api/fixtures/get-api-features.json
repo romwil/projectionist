@@ -22,7 +22,7 @@
       "caption_tracks": 0,
       "device_pairing": 1,
       "native_sign_in": 0,
-      "playback_engine": 0,
+      "playback_engine": 1,
       "push": 0,
       "shared_sessions": 0,
       "throw": 1,
@@ -39,6 +39,7 @@
       "llm_configured": true,
       "multi_user_enabled": false,
       "open_auto_provision": false,
+      "play_through_projectionist": false,
       "plex_collections_enabled": false,
       "seerr_enabled": false,
       "trust_proxy_headers": false
