@@ -46,7 +46,7 @@ There is **no** `/api/auth/` prefix leak. Ingress matches **explicit method+path
 | Method | Path | Notes |
 |--------|------|--------|
 | `GET` | `/api/health` | Liveness |
-| `GET` | `/api/features` | Stripped flags (no guest/tour) |
+| `GET` | `/api/features` | Stripped flags (no guest/tour). Also `api_contract` and `capabilities` — names and numbers only, no household secrets |
 | `POST` | `/api/access-requests` | Queue only; **3 / IP / hour**; honeypot below |
 | `GET` | `/api/invites/validate` | HMAC-verified token; fail closed |
 | `POST` | `/api/invites/redeem/local` | Local fallback on the same invite |

@@ -1212,8 +1212,18 @@ def _apply_youth_filters(filters, user):
 register_webhook_routes(app, db_factory=_db, settings_factory=_settings)
 
 
+def _with_client_contract(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Attach the public capability manifest. No household secrets."""
+    from projectionist.web.capabilities import API_CONTRACT, client_capabilities
+
+    payload["api_contract"] = API_CONTRACT
+    payload["capabilities"] = client_capabilities()
+    return payload
+
+
 def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any]:
     settings = _settings()
+    from projectionist.web.capabilities import CACHED_ART_ENABLED
     from projectionist.web.setup_mode import resolve_setup_state
 
     setup_state = resolve_setup_state(_db())
@@ -1233,7 +1243,7 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
         }
         if "oidc" in methods:
             public["oidc_provider_name"] = settings.auth.oidc_provider_name or "SSO"
-        return public
+        return _with_client_contract(public)
     if user is None:
         user = bootstrap_owner(_db())
     request_path = "seerr" if uses_seerr_request_path(settings, role=user.role) else "arr"
@@ -1271,7 +1281,8 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
                 settings.llm_api_key or settings.llm_provider == "ollama"
             ),
             # EXP-006: hub, title, and search art URLs point at the cache route.
-            "cached_art": True,
+            # Same fact as capabilities.cached_art (1 when this is true).
+            "cached_art": CACHED_ART_ENABLED,
         },
         "setup_state": setup_state,
         "household_domain": str(getattr(settings, "household_domain", "") or ""),
@@ -1335,7 +1346,7 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
             ),
             "gate_active": False,
         }
-    return payload
+    return _with_client_contract(payload)
 
 
 @app.get("/api/health")
