@@ -37,3 +37,12 @@ Done when (added): at 390, 834, and 1440 px the weather view matches its layout,
 - Created: EXP-014 and EXP-015, both accepted. Privacy table already lists the headline hosts and the air-quality host; EXP-015's off switch is noted there.
 - Outbox: 2026-11-20-EXP-015-native.md (the flags a client must read; presentation stays with the client)
 - Needs the person: when this is picked up, whether the boards show UV and air quality, and whether local headlines stay Google News or gain owner RSS. Not started.
+
+---
+## Processing note (agent, 2026-11-20, evening)
+- Decided by the person the same day. The open questions in the drop above stay as written.
+- Updated: EXP-014 shows UV index and air quality on the boards. `air-quality-api.open-meteo.com` is already in [PRIVACY.md](../../PRIVACY.md). It is not a new egress host.
+- Updated: EXP-015 keeps local headlines as a Google News search for the place.
+- Created: EXP-017, proposed, later. Owner RSS feeds are an option and are not in EXP-015.
+- Outbox: addendum on `2026-11-20-EXP-015-native.md`.
+- Needs the person: nothing. Not started.
