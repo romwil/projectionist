@@ -14,6 +14,19 @@ Reference for persistent storage: SQLite tables, settings fields, and Pydantic s
 
 Default `DATA_DIR`: `/config` in Docker, `./config` in local dev.
 
+### Which database file opens
+
+Today the server prefers `{DATA_DIR}/projectionist.db` whenever that path exists, and opens `{DATA_DIR}/curatorx.db` only when the new file is absent. “Exists” currently includes a 0-byte file and a file that is not a SQLite database. On QA (2026-11-20) a root-owned empty `projectionist.db` sat next to the real `curatorx.db`. The process opened the empty file, could not write, and crash-looped. Removing the empty file restored startup. Nothing in that incident deleted the real database.
+
+**Accepted fix, not shipped.** When choosing the file:
+
+- Ignore a candidate that is 0 bytes or is not a valid SQLite database. Open the established database and log one warning that names the file that was skipped. Never delete or overwrite a file automatically.
+- If both candidates are real, non-empty databases, refuse to start and name the two files. Do not guess which one is current.
+- Find what created the empty root-owned file. Likely candidates are a container start, a test, or a script that creates the file before migration runs. Stop that path from creating an empty database file.
+- Tests cover an empty preferred file, an invalid preferred file, and two real files.
+
+**Done when:** a data directory that holds an empty `projectionist.db` beside `curatorx.db` still starts, and the suite covers the three cases. The same change adds one line to the pre-rollout checklist in `docs/RELEASE.md`: check the production data directory for a stray empty database file. That checklist edit belongs with the fix. This record does not change `docs/RELEASE.md`.
+
 ---
 
 ## SQLite schema
