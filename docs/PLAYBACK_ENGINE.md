@@ -2,7 +2,7 @@
 
 How Projectionist plays a title from your library: one stream engine, owned by Projectionist, shared by every client — the web app, native apps, and anything that speaks the API. Plex is the first **media source**, not the player.
 
-**Status:** Proposed (design). Today’s shipped path is the Plex universal transcode described in [Today](#today-the-plex-transcode-path). Item IDs (`ENG-…`) are tracked in [docs/roadmap/](roadmap/README.md).
+**Status:** ENG-001 is in the tree: a Plex media source, owner path mappings, and a cached `ffprobe`. Playback still uses the Plex universal transcode described in [Today](#today-the-plex-transcode-path) until a later engine item serves the stream. Item IDs (`ENG-…`) are tracked in [docs/roadmap/](roadmap/README.md).
 **Audience:** Developers / contributors, owners for the honest limits.
 **Related:** [SHARED_SESSIONS.md](SHARED_SESSIONS.md) · [TIMELINE.md](TIMELINE.md) · [TRACKS.md](TRACKS.md) · [NATIVE_CLIENTS.md](NATIVE_CLIENTS.md) · [ARCHITECTURE.md](ARCHITECTURE.md)
 
@@ -35,6 +35,21 @@ The shipped path, for reference (`projectionist/library/playback.py`):
 3. The web player plays it with **hls.js** (`TheaterPlayer.tsx`, `LivePlayer.tsx`); captions come from `/api/library/items/{key}/subtitles/{id}/file` (WebVTT) and are drawn as an overlay (`lib/subtitleCues.ts`), with the element’s own text tracks muted.
 
 This path stays as the **Plex fallback plan** (below) until the engine covers every case it does.
+
+### Known defect: Safari stops after one burst (QA 1.41.1)
+
+Seen on QA 1.41.1, on this Plex path, which the web keeps until ENG-007 is switched on. The master playlist advertised `BANDWIDTH=3410779` (the file’s average bitrate plus 25%). Safari fetched `00000.ts` through `00009.ts` and then stopped. Several segments still run at about 4.7–5.1 Mbps, above that advertisement. In HLS, `BANDWIDTH` is the peak segment bitrate and `AVERAGE-BANDWIDTH` is the average, so the advertised `BANDWIDTH` is still below the peak.
+
+Ten segments is about a normal Safari read-ahead. The stall is likely the *next* request failing, not Safari deciding to stop. **Investigate before changing the playlist:**
+
+1. Reproduce on QA in Safari and keep the network log through the moment playback stops.
+2. Find the first segment request after the burst. Record its status, timing, and body. Compare that moment with Chrome (hls.js), which plays through.
+3. Check whether the Plex transcode session is still alive then. Look at session timeouts or missing pings while Safari is idle, the proxy’s upstream timeout, and segments that are not transcoded yet.
+4. Play the same title in Safari on production 1.40.1, so the comparison says whether 1.41.1 is worse, the same, or better.
+
+**Then, after that cause is written down:** set `BANDWIDTH` from the measured peak segment bitrate plus a margin, keep `AVERAGE-BANDWIDTH` as the average, and fix whatever stops the stream after the burst. Add a regression test where one can be written. **Done when:** a feature film plays in Safari on QA for 15 minutes, with seeking, in a fresh session.
+
+Not started. This record does not change the playlist.
 
 ---
 
@@ -151,7 +166,20 @@ The engine reads files through a small adapter interface. Every adapter answers 
 | What streams does it have? | `ffprobe` (cached per file + mtime) | same | same |
 | What is the identity? | `rating_key` ↔ TMDB / IMDB | TMDB / IMDB from sync | Jellyfin id ↔ TMDB / IMDB |
 
-Owners map Plex’s paths to the container’s mounts once (the same pattern Radarr/Sonarr path mapping already uses in Admin → Libraries). The media intelligence stays keyed on TMDB / IMDB identity, so a future source does not fork the knowledge graph.
+Owners map Plex’s paths to the container’s mounts once. The longest prefix wins, and a prefix only matches a directory boundary (`/data/media` does not claim `/data/media-extra`). A file Plex already names with a path this container can read needs no mapping. The media intelligence stays keyed on TMDB / IMDB identity, so a future source does not fork the knowledge graph.
+
+`GET /api/playback/media/{rating_key}` tells a signed-in member whether the engine can read that title and which streams `ffprobe` found. The response has codecs, duration, and TMDB / IMDB identity. It never includes a file path, a Plex token, or a source URL.
+
+```bash
+# Owner: map Plex's movie folder onto the container mount.
+# Saving mappings is owner-only.
+curl -s -X PUT -H "Authorization: Bearer YOUR_OWNER_CREDENTIAL" \
+  -H "Content-Type: application/json" \
+  -d '{"mappings":[{"plex_prefix":"/data/media/movies","container_prefix":"/movies"}]}' \
+  "http://your-host:8788/api/playback/path-mappings"
+```
+
+Probes are cached under the data directory by file path, size, and modification time. Replacing the file probes it again. A failed probe does not invent streams.
 
 ---
 

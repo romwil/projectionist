@@ -13,13 +13,15 @@ Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` ·
 3. **TML** — the timeline layer
 4. **TRK** — tracks: Moments, Booth Notes, Class / Study
 5. **NAT** — the client contract, threaded through 1–4 as each capability ships
-6. **EXP** — experience convergence (parallel). Lane B’s next item is **EXP-001** (design tokens). EXP-013, EXP-004, EXP-005, and EXP-006 are done. EXP-014, EXP-015, and EXP-016 are accepted
+6. **EXP** — experience convergence (parallel). Lane B’s next item is **EXP-001** (design tokens). EXP-013, EXP-004, EXP-005, and EXP-006 are done. EXP-014, EXP-015, and EXP-016 are accepted. EXP-017 (owner RSS for local headlines) is proposed and later
+
+**Before the next production rollout.** Two defects from QA 1.41.1 are recorded below. They are not new capability items. The database-file fix lands before production moves. The Safari stall is investigated before any further playlist change. This record does not edit `docs/RELEASE.md`; the fix lane adds the empty-database check to that file’s pre-rollout checklist.
 
 ## Board
 
 | ID | Title | Status | Owning doc |
 |----|-------|--------|------------|
-| ENG-001 | Media source interface + Plex path mapping + cached ffprobe | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
+| ENG-001 | Media source interface + Plex path mapping + cached ffprobe | done | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-002 | Planner with recorded reason; dry-run plan endpoint | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-003 | Session API with device profiles; VOD fMP4 HLS remux | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-004 | WebVTT caption renditions (household cache first) | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
@@ -75,9 +77,19 @@ Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` ·
 | EXP-011 | Design gallery | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | EXP-012 | Title detail keeps navigation | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | EXP-013 | Explore is the default home | done | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
-| EXP-014 | Weather boards on the web, every width | accepted | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
-| EXP-015 | Weather headline controls, including Youth | accepted | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| EXP-014 | Weather boards on the web, every width, including UV and air quality | accepted | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| EXP-015 | Weather headline controls, including Youth. Local headlines stay a news search | accepted | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | EXP-016 | Poster depth on the web: light, edge, generated placeholders | accepted | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| EXP-017 | Optional owner RSS for local weather headlines | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+
+## Known defects (not roadmap items)
+
+Bugs stay off the item list. These two are accepted work, highest priority before the next production rollout, and they are not started.
+
+| Defect | Status | Owning doc |
+|--------|--------|------------|
+| An empty or invalid `projectionist.db` hides the real database and can stop startup. Skip that file, log the skip, and refuse to start when two real databases are present. Do not delete or overwrite anything automatically | Accepted fix, not started. The fix also adds a pre-rollout check to `docs/RELEASE.md` | [DATA_MODEL](../DATA_MODEL.md#which-database-file-opens) |
+| Safari on the Plex path stops after one burst (QA 1.41.1). Investigate the next request before changing the playlist. Then set `BANDWIDTH` from the measured peak, keep `AVERAGE-BANDWIDTH` as the average, and fix whatever stops the stream | Accepted, investigate first. Not started | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#known-defect-safari-stops-after-one-burst-qa-1411) |
 
 SES-001 and NAT-002 describe the same work from two sides; build them as one change.
 
@@ -98,9 +110,12 @@ SES-001 and NAT-002 describe the same work from two sides; build them as one cha
 | 2026-11-20 | **Native handhelds get every web sign-in path** (Plex, local password, OIDC, invite redeem, request access), ending in a device credential. The pair-code stays the secondary path. NAT-002 and SES-001 are accepted |
 | 2026-11-20 | **Push is a priority and includes security.** Payloads stay content-free. NAT-006 is accepted: device sign-in approval, Youth join on the same object, and a new-device notice |
 | 2026-11-20 | **The web takes engine sessions as ENG-007, immediately after ENG-003**, behind *Play through Projectionist* (off by default). Apple clients still adopt ENG-003 first. Captions fall back to the Plex path until ENG-004 |
+| 2026-11-20 | **Weather boards show UV index and air quality.** `air-quality-api.open-meteo.com` is already listed in PRIVACY.md; showing the numbers is not a new egress host. Local headlines stay a Google News search for the place. Owner RSS feeds are later (EXP-017, proposed), not part of EXP-015 |
+| 2026-11-20 | **QA 1.41.1 defects, recorded and not fixed.** An empty `projectionist.db` must not hide the real database; that fix lands before the next production rollout, including its `docs/RELEASE.md` checklist line (the fix lane writes that line). Safari on the Plex path still stops after one burst; the cause is written down before the playlist changes again |
 | 2026-11-20 | **NAT-001** publishes `api_contract` 3 and the capability map on every `GET /api/features`. Shipped keys are `device_pairing` 1, `throw` 1, and `cached_art` 1 (the same fact as `features.cached_art`). Accepted keys stay at 0: `native_sign_in`, `push`, `approvals`, plus the engine, session, timeline, and track names |
 | 2026-11-20 | **NAT-003** tags the routes a native client may call and checks `docs/api/openapi.json` in CI. Admin routes, device claim, and device revoke stay out of that set |
 | 2026-11-20 | **NAT-004** records one example response per client route under `docs/api/fixtures/` and checks it in CI |
+| 2026-11-20 | **ENG-001** reads a title through a Plex media source: owner path mappings, cached ffprobe, and `GET /api/playback/media/{rating_key}` with no file paths in the response |
 | 2026-11-19 | **Lane A remux spike:** H.264+AC-3 fMP4 HLS (`-c copy`) + household WebVTT works on Safari/WebKit and tvOS AVPlayer (seek without restart; captions selectable). Desktop Chrome/hls.js rejects AC-3 — planner must audio-transcode for those profiles. Findings: [engine-spike-findings](../superpowers/specs/2026-11-19-engine-spike-findings.md). Spike code stays on `spike/engine-remux` (not merged) |
 
 ## Superseded review rows (carry-forward)

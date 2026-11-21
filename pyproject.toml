@@ -168,6 +168,7 @@ files = [
     "projectionist/_version.py",
     "projectionist/logging_config.py",
     "projectionist/config_store.py",
+    "projectionist/engine",
     "projectionist/connectors",
     "projectionist/lists",
     "projectionist/memory",

@@ -13,7 +13,7 @@ def register_setup_routes(app):
 
     import projectionist.web.app as app_mod
     from projectionist import security_audit as sa
-    from projectionist.web.setup import merge_youth_settings_payload
+    from projectionist.web.setup import merge_youth_settings_payload, preserve_engine_settings
 
     ANTHROPIC_MODEL_OPTIONS = app_mod.ANTHROPIC_MODEL_OPTIONS
     DATA_DIR = app_mod.DATA_DIR
@@ -238,6 +238,7 @@ def register_setup_routes(app):
         merge_theater_settings_payload(payload, existing, merged)
         merge_youth_settings_payload(payload, existing, merged)
         preserve_omitted_ask_delete_confirmation(payload, existing, merged)
+        preserve_engine_settings(payload, existing, merged)
         settings = _normalize_mcp_image_sizes(
             normalize_path_settings(normalize_settings_llm(Settings.from_mapping(merged)))
         )
