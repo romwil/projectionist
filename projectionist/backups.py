@@ -58,13 +58,10 @@ class RestoreError(RuntimeError):
 
 
 def resolve_db_path(data_dir: Path) -> Path:
-    """Mirror JobManager path resolution: canonical name, then legacy names."""
-    data_dir = Path(data_dir)
-    for name in DB_NAMES:
-        candidate = data_dir / name
-        if candidate.exists():
-            return candidate
-    return data_dir / DB_NAMES[0]
+    """Same choice as startup: skip empty or invalid files, refuse two real databases."""
+    from projectionist.dbfiles import resolve_database_path
+
+    return resolve_database_path(data_dir)
 
 
 def backup_dir(data_dir: Path) -> Path:

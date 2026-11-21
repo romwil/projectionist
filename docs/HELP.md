@@ -449,8 +449,14 @@ The Monday pass ends with a line like *"On this server, last 7 days: 42 chat tur
 There is no in-app switch for this yet. To stop recording on the host, set the `telemetry_enabled` flag to `false` (the app reads it on every event, so no restart is needed):
 
 ```bash
-# On the host, with the container's /config mounted at ./config
-sqlite3 ./config/projectionist.db \
+# On the host, with the container's /config mounted at ./config.
+# Open the existing database read-write. sqlite3 creates a file when the
+# path is missing, so a 0-byte projectionist.db is not used in place of
+# curatorx.db. Inside the container, run this as
+# docker exec -u projectionist (or -u 1000), never as root.
+DB=./config/projectionist.db
+if [ ! -s "$DB" ]; then DB=./config/curatorx.db; fi
+sqlite3 "file:${DB}?mode=rw" \
   "INSERT OR REPLACE INTO curator_system_config (config_key, config_value) VALUES ('telemetry_enabled', 'false');"
 ```
 
