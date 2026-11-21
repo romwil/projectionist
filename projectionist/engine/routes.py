@@ -134,6 +134,34 @@ def playback_media(rating_key: str, user=Depends(get_current_user_dep)) -> dict[
     return public_media(asset)
 
 
+@router.get("/api/playback/plan")
+def playback_plan(
+    rating_key: str = "",
+    profile: str = "apple-tv-4k-3",
+    user=Depends(get_current_user_dep),
+) -> dict[str, Any]:
+    """Dry-run the planner. The response records the plan and why. No file paths."""
+    del user
+    from projectionist.engine.planner import plan_playback
+    from projectionist.engine.profiles import known_profile_ids, named_profile
+
+    try:
+        key = validate_rating_key(rating_key)
+    except PlaybackError as error:
+        raise HTTPException(status_code=error.status_code, detail=error.message) from error
+    chosen = named_profile(profile)
+    if chosen is None:
+        names = ", ".join(known_profile_ids())
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown device profile. Use one of: {names}.",
+        )
+    asset = describe_title(_settings(), _db(), _dir(), key)
+    body = plan_playback(asset, chosen)
+    body["rating_key"] = key
+    return body
+
+
 def register_engine_routes(
     app,
     *,
