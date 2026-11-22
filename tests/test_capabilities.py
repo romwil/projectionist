@@ -27,6 +27,7 @@ SHIPPED = {
     "playback_engine": 1,
     "native_sign_in": 1,
     "cached_art": 1 if CACHED_ART_ENABLED else 0,
+    "household_addresses": 1,
 }
 ACCEPTED_NOT_SHIPPED = {
     "caption_tracks": 0,
@@ -115,5 +116,6 @@ class FeaturesContractTests(unittest.TestCase):
         )
         self.assertNotIn("cached_art", body["features"])
         self.assertEqual(body["capabilities"]["cached_art"], 1)
-        for key in ("household_domain", "seerr", "auth", "notifications", "youth"):
+        for key in ("household_domain", "seerr", "auth", "notifications", "youth", "addresses"):
             self.assertNotIn(key, body)
+        self.assertEqual(body["capabilities"]["household_addresses"], 1)

@@ -1136,6 +1136,14 @@ export async function putPlayThroughProjectionist(enabled: boolean) {
   });
 }
 
+/** Owner: the address people use when they are away from home. Empty clears it. */
+export async function putPublicBaseUrl(publicBaseUrl: string) {
+  return api("/network/public-base-url", {
+    method: "PUT",
+    body: JSON.stringify({ public_base_url: String(publicBaseUrl || "") }),
+  });
+}
+
 export async function getPlayabilityReport(options: { view?: "progress" } = {}) {
   const suffix = options.view === "progress" ? "?view=progress" : "";
   return api(`/playback/playability${suffix}`);

@@ -83,7 +83,8 @@ Invite: `GET /api/invites/validate?token=…` stays public. The body is the invi
     "native_sign_in": 1,     // NAT-002
     "push": 0,               // NAT-006
     "approvals": 0,          // NAT-006
-    "cached_art": 1          // same fact as features.cached_art
+    "cached_art": 1,         // same fact as features.cached_art
+    "household_addresses": 1 // home and away on the signed-in payload
   }
 }
 ```
@@ -95,6 +96,7 @@ curl -s http://your-host:8788/api/features | python3 -m json.tool
 - A capability number is that feature’s **contract version**: `0` absent, `1` first contract, `2` a breaking revision. Additive fields do not bump it. `api_contract` is `3`, the first published number. Clients branch on these numbers, not on the server version string.
 - `capabilities.cached_art` is `1` while `features.cached_art` is true and `0` when that flag is off. The boolean stays on the signed-in payload only, where EXP-006 put it. The number is on the public payload too, so a client can know before sign-in.
 - Clients turn features on by capability. A client facing an older server shows the honest line (*“This Projectionist doesn’t support handheld captions yet.”*) rather than failing.
+- `household_addresses` is `1` when this server publishes `addresses.home` and `addresses.away` to a signed-in client. The strings are absent before sign-in. Home is the last origin seen from the home network; away is the owner’s public base URL, or empty. Engine playlist and segment URLs stay relative either way. See [shared sessions](SHARED_SESSIONS.md#home-and-away).
 - **Honest limit.** A `0` means this server knows the name and does not offer that contract yet. It is not a hint that the feature is about to appear.
 
 ---

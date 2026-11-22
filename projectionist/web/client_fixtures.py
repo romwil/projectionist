@@ -191,11 +191,14 @@ def collect_client_fixtures() -> dict[str, dict[str, Any]]:
         from projectionist.web.rate_limit import clear_rate_limits
         from projectionist.web.session_tokens import clear_session_secret_cache
 
+        from projectionist.web.addresses import reset_observed_home
+
         reset_host_circuits()
         clear_session_secret_cache()
         clear_rate_limits()
         clear_pin_bindings()
         reset_playback_sessions()
+        reset_observed_home()
         import projectionist.web.jobs as jobs
 
         jobs._manager = None

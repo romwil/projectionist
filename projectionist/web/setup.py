@@ -575,6 +575,25 @@ def build_setup_status(settings: Settings, db: Database | None = None) -> Dict[s
     }
 
 
+def preserve_network_settings(
+    payload: Any,
+    existing: Settings,
+    merged: Dict[str, Any],
+) -> None:
+    """Keep the away address when a settings PUT does not mention it.
+
+    The admin settings form does not edit ``network``. A partial PUT must
+    not clear the public base URL.
+    """
+    from dataclasses import asdict
+
+    fields_set = getattr(payload, "model_fields_set", set())
+    if "network" not in fields_set:
+        network = getattr(existing, "network", None)
+        if network is not None:
+            merged["network"] = asdict(network)
+
+
 def preserve_engine_settings(
     payload: Any,
     existing: Settings,

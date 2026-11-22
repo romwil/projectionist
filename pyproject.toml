@@ -173,6 +173,7 @@ files = [
     "projectionist/lists",
     "projectionist/memory",
     "projectionist/models",
+    "projectionist/public_url.py",
     "projectionist/persona",
     "projectionist/privacy",
     "projectionist/reviews",

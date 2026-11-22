@@ -178,6 +178,7 @@ from projectionist.web.mail_unsubscribe_routes import register_mail_unsubscribe_
 from projectionist.web.holidays_routes import register_holidays_routes
 from projectionist.web.live_channels_routes import register_live_channels_routes
 from projectionist.engine.routes import register_engine_routes
+from projectionist.web.address_routes import register_address_routes
 from projectionist.web.playback_routes import register_playback_routes
 from projectionist.web.theater_delight_routes import register_theater_delight_routes
 from projectionist.web.investigate_routes import register_investigate_routes
@@ -1235,7 +1236,9 @@ def _with_client_contract(payload: Dict[str, Any]) -> Dict[str, Any]:
     return payload
 
 
-def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any]:
+def _features_payload(
+    user=None, *, authenticated: bool = True, request: Optional[Request] = None
+) -> Dict[str, Any]:
     settings = _settings()
     from projectionist.web.capabilities import CACHED_ART_ENABLED
     from projectionist.web.setup_mode import resolve_setup_state
@@ -1366,6 +1369,10 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
             ),
             "gate_active": False,
         }
+    if authenticated:
+        from projectionist.web.addresses import addresses_payload
+
+        payload["addresses"] = addresses_payload(request, settings)
     return _with_client_contract(payload)
 
 
@@ -1395,9 +1402,9 @@ def get_features(request: Request) -> Dict[str, Any]:
     if settings.features.multi_user_enabled:
         user = try_get_current_user(request, db)
         if user is None:
-            return _features_payload(None, authenticated=False)
-        return _features_payload(user, authenticated=True)
-    return _features_payload(bootstrap_owner(db), authenticated=True)
+            return _features_payload(None, authenticated=False, request=request)
+        return _features_payload(user, authenticated=True, request=request)
+    return _features_payload(bootstrap_owner(db), authenticated=True, request=request)
 
 
 @app.get("/api/plex/machine-id")
@@ -1434,6 +1441,11 @@ register_engine_routes(
     settings_factory=_settings,
     db_factory=_db,
     data_dir=DATA_DIR,
+)
+register_address_routes(
+    app,
+    settings_factory=_settings,
+    data_dir_factory=lambda: DATA_DIR,
 )
 register_theater_delight_routes(
     app,

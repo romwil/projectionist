@@ -8,6 +8,7 @@ import {
   patchAuthMe,
   pollPlexPinLogin,
   putPlayThroughProjectionist,
+  putPublicBaseUrl,
   signOutEverywhere,
   startPlexPinLogin,
   uploadAuthAvatar,
@@ -49,6 +50,8 @@ export default function ProfilePage() {
     loadPauseWhenBackgrounded(),
   );
   const [playThrough, setPlayThrough] = useState(false);
+  const [awayAddress, setAwayAddress] = useState("");
+  const [awaySaving, setAwaySaving] = useState(false);
   const [status, setStatus] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -78,6 +81,7 @@ export default function ProfilePage() {
     getFeatures()
       .then((features) => {
         setPlayThrough(Boolean(features?.features?.play_through_projectionist));
+        setAwayAddress(String(features?.addresses?.away || ""));
       })
       .catch(() => {
         setPlayThrough(false);
@@ -553,6 +557,48 @@ export default function ProfilePage() {
             <span className="field-help">
               When this is on, the next film or episode plays through Projectionist when the file can be remuxed. Captions stay on the usual path for now. Turning it off applies the next time you press play.
             </span>
+          ) : null}
+          {user?.role === "owner" ? (
+            <label>
+              <span>Away address</span>
+              <input
+                type="url"
+                data-testid="away-address"
+                value={awayAddress}
+                placeholder="https://your-household"
+                autoComplete="off"
+                spellCheck={false}
+                onChange={(event) => setAwayAddress(event.target.value)}
+              />
+              <span className="field-help">
+                The address people use when they are not on the home network. Playback links stay relative, so the same film works at home and away. Leave this blank until you have one.
+              </span>
+            </label>
+          ) : null}
+          {user?.role === "owner" ? (
+            <button
+              type="button"
+              className="ghost"
+              data-testid="away-address-save"
+              disabled={awaySaving}
+              onClick={async () => {
+                setAwaySaving(true);
+                try {
+                  const saved = await putPublicBaseUrl(awayAddress.trim());
+                  setAwayAddress(String(saved?.public_base_url || ""));
+                  setStatus({ type: "ok", message: "Saved the away address." });
+                } catch (error) {
+                  setStatus({
+                    type: "error",
+                    message: (error as any)?.message || "Could not save the away address.",
+                  });
+                } finally {
+                  setAwaySaving(false);
+                }
+              }}
+            >
+              {awaySaving ? "Saving…" : "Save away address"}
+            </button>
           ) : null}
           {user?.role === "owner" ? <PlayabilityReport /> : null}
         </SettingsPanel>
