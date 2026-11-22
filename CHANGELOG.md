@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.45.0] — 2026-11-22
+
+Play gives a demanding picture one try, then continues on the usual path if that picture never starts. Chrome shows the same captions Safari already shows. The playback report can rank which titles to copy ahead of time, and it does not copy them yet.
+
+### Highlights
+- **A demanding picture gets one try.** When the film is a step beyond what this screen advertises, or it is HDR on a screen that can show it, Play copies the picture once. If the first frame never arrives, the next play uses the usual path.
+- **If the picture never starts, Play continues.** The usual path also waits longer for a heavy transcode, so a cold start is not cut off at half a minute. Surround sound can begin while the rest is still being prepared.
+- **Chrome shows the captions.** The same text Safari already shows now appears in Chrome.
+- **The report can say what to copy first.** Watch counts, file sizes, and HDR from the library’s own notes rank the titles that would need a heavier conversion. Nothing is copied yet.
+
+### Added
+- Plan `try`: HEVC above the level a profile advertises, or HDR10 when that profile lists `hdr10`, is a remux tried once per title and device. A remembered miss is not an engine playlist the next time. The player reports whether the first frame arrived.
+- The playability report keeps a watch count and a file size, reads HDR10 and HLG from Plex’s stored media analysis when that database is visible, and ranks source-transcode titles for a copy ahead of time (above 1080p first, then by watch count) with a disk total. It does not copy or transcode.
+- A picture the device cannot play is plan `source-transcode`, with a reason of codec, level, or bit depth. The engine does not start ffmpeg for that plan. The member still plays on the media source’s path.
+- Signed-in clients can read a home address and an away address. The owner sets the away address. Engine playlist and segment URLs stay relative.
+- Named screens, a session that records who started it, which screen it is on, and where it is, and live commands that only the starter and that screen can send.
+
+### Changed
+- When an engine play never shows a picture, the web player starts the library session once and records why. A second miss does not open another session.
+- Surround AAC is published while the encode is running, with a layout the player can name (`5.1`, stereo, or mono). The web profile says how many channels this browser can play.
+- An engine session turns playlist WebVTT on for Chrome and maps cue time onto the video timeline. Live and the library path stay as they were.
+- Library playlist fetches wait 120 seconds. Segment fetches stay at 30. A timeout is a playback error instead of an uncaught timeout.
+- The video-transcode bucket names each codec. An unconfirmed level or HDR stays blank.
+
+### Verification
+- `./scripts/patch-release.sh 1.45.0` lockstep + `frontend/public/release-notes.json`.
+- `docs/api/fixtures/get-api-health.json` regenerated for 1.45.0.
+- Page speed (`npm run test:release-perf`) before Hub publish.
+- CI on the release PR (required checks).
+- Hub image built from tag `v1.45.0`; `org.opencontainers.image.revision` matches that commit.
+- QA `:8792` is a Hub pull of `romwil/projectionist:1.45.0` (Path B). Production stays on 1.43.1.
+
 ## [1.44.0] — 2026-11-22
 
 Play can keep the picture and convert only the sound. When this browser can play FLAC, that soundtrack stays with the picture. The playback report says why a title would need a heavier conversion.
