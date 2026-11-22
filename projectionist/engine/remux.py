@@ -99,6 +99,25 @@ def _unique_name(name: str, used: set[str]) -> str:
     return candidate
 
 
+def _with_timestamp_map(body: str) -> str:
+    """Cue times are media times. hls.js drops an fMP4 WebVTT that has no map.
+
+    LOCAL 0 equals MPEG-TS 0, which is the start of this remux. A file that
+    already names a map is left alone.
+    """
+    text = str(body or "")
+    if "X-TIMESTAMP-MAP" in text or "-->" not in text:
+        return text
+    stamp = "X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:0"
+    lines = text.splitlines()
+    if lines and lines[0].lstrip("\ufeff").strip().upper().startswith("WEBVTT"):
+        lines.insert(1, stamp)
+        mapped = "\n".join(lines)
+    else:
+        mapped = f"WEBVTT\n{stamp}\n\n{text}"
+    return mapped if mapped.endswith("\n") else mapped + "\n"
+
+
 def _media_line(track: CaptionRendition, *, name: str) -> str:
     default = "YES" if track.default else "NO"
     attrs = [
@@ -134,7 +153,7 @@ def write_caption_renditions(
     for track in captions:
         if not _TRACK_ID.fullmatch(track.track_id):
             continue
-        body = str(track.webvtt or "")
+        body = _with_timestamp_map(str(track.webvtt or ""))
         if "-->" not in body:
             continue
         subs.mkdir(parents=True, exist_ok=True)

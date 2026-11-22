@@ -308,6 +308,31 @@ class CaptionPlaylistTests(unittest.TestCase):
     def tearDown(self) -> None:
         reset_engine_sessions()
 
+    def test_engine_webvtt_maps_cue_time_onto_the_fmp4_timeline(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_master(
+                root,
+                None,
+                file_size=1000,
+                duration_ms=5000,
+                captions=[
+                    CaptionRendition(
+                        track_id="s2",
+                        language="en",
+                        name="English",
+                        default=True,
+                        webvtt=(
+                            "WEBVTT\n\n00:52.636 --> 00:55.680\n"
+                            "The wind is really kicking up the dust.\n"
+                        ),
+                    )
+                ],
+            )
+            body = (root / "subs" / "s2.vtt").read_text(encoding="utf-8")
+            self.assertIn("X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:0", body)
+            self.assertIn("The wind is really kicking up the dust.", body)
+
     def test_a_captioned_title_plays_through_the_engine(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

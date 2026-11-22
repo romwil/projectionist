@@ -294,7 +294,7 @@ export function libraryBufferingCopy(health: JsParam) {
   return "";
 }
 
-export function theaterHlsConfig() {
+export function theaterHlsConfig({ engine = false }: { engine?: boolean } = {}) {
   return {
     enableWorker: false,
     lowLatencyMode: false,
@@ -302,10 +302,11 @@ export function theaterHlsConfig() {
     manifestLoadingTimeOut: 20000,
     levelLoadingTimeOut: 20000,
     fragLoadingTimeOut: 30000,
-    // Projectionist draws soft tracks itself. Do not fetch playlist WebVTT
-    // (often a Plex overlay URL that 404s and can stall Live).
-    renderTextTracksNatively: false,
-    enableWebVTT: false,
+    // Live and the Plex path draw soft tracks themselves. Playlist WebVTT
+    // there is often a Plex overlay URL that 404s and can stall the tune.
+    // An engine session's WebVTT is ours. Safari already paints it.
+    renderTextTracksNatively: Boolean(engine),
+    enableWebVTT: Boolean(engine),
     enableIMSC1: false,
     xhrSetup: (xhr: JsParam) => {
       xhr.withCredentials = true;
