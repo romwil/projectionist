@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.44.0] — 2026-11-22
+
+Play can keep the picture and convert only the sound. When this browser can play FLAC, that soundtrack stays with the picture. The playback report says why a title would need a heavier conversion.
+
+### Highlights
+- **The picture stays when only the sound needs help.** Play copies the picture and converts the sound.
+- **A FLAC soundtrack stays whole when this browser can play it.**
+- **The playback report says what a heavier conversion would be for.** Picture format, level, color depth, size above 1080p, and HDR are counted on their own.
+
+### Added
+- Audio-only playback copies the video and encodes the audio to the first codec on the device profile, usually AAC. A DTS or TrueHD title whose video the profile can play uses this plan and is a playable session. One heavy ffmpeg runs at a time, and a Play probe does not wait on it.
+- The playability report splits titles that need a video transcode into codec, level, bit depth, above 1080p, and HDR. Safari and Apple TV each have their own count.
+
+### Changed
+- The web profile asks `canPlayType`, `MediaSource.isTypeSupported`, and `MediaCapabilities.decodingInfo` about FLAC, Opus, and ALAC in MP4, on the same path as AC-3 and E-AC-3. A yes on that codec string includes it. A yes on the bare container (`audio/flac`, `audio/ogg`) does not. H.264 + FLAC is a remux when the browser reports FLAC, and audio-only when it does not.
+
+### Verification
+- `./scripts/patch-release.sh 1.44.0` lockstep + `frontend/public/release-notes.json`.
+- `docs/api/fixtures/get-api-health.json` regenerated for 1.44.0.
+- Page speed (`npm run test:release-perf`) before Hub publish.
+- CI on the release PR (required checks).
+- Hub image built from tag `v1.44.0`; `org.opencontainers.image.revision` matches that commit.
+- QA `:8792` is a Hub pull of `romwil/projectionist:1.44.0` (Path B). Production stays on 1.43.1.
+
 ## [1.43.1] — 2026-11-21
 
 Library playback work stays quiet until you ask. A title this browser cannot play starts on the usual path, and a slow Plex answer says it timed out.
