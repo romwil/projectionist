@@ -5,7 +5,11 @@ import {
   refreshPlayabilityReport,
 } from "../../api/client";
 import { detectBrowserPlaybackProfile } from "../../lib/enginePlayback";
-import { playabilityNotice } from "../../lib/playabilityNotice";
+import {
+  gpuDecisionLine,
+  playabilityNotice,
+  sourceBreakdownLine,
+} from "../../lib/playabilityNotice";
 
 const TIER_ORDER = [
   "direct",
@@ -39,6 +43,14 @@ type ProfileReport = {
   top_reasons?: { reason?: string; count?: number }[];
   titles?: TitleRow[];
   hardware?: string;
+  source_breakdown?: {
+    video_transcode?: number;
+    codec?: number;
+    level?: number;
+    bit_depth?: number;
+    resolution?: number;
+    hdr?: number;
+  };
 };
 type PlayabilityReportBody = {
   message?: string;
@@ -48,6 +60,7 @@ type PlayabilityReportBody = {
   planned_from_plex?: number;
   confirmed_by_ffprobe?: number;
   profiles?: ProfileReport[];
+  gpu?: { safari?: number | null; apple_tv?: number | null };
 };
 
 function profileLabel(id: string) {
@@ -223,6 +236,7 @@ export default function PlayabilityReport() {
   const profiles = report?.profiles || [];
   const loading = report === null && !error;
   const notice = error ? "" : playabilityNotice(report);
+  const gpuLine = gpuDecisionLine(report?.gpu);
 
   return (
     <div className="playability-report" data-testid="playability-report">
@@ -267,6 +281,11 @@ export default function PlayabilityReport() {
           {notice}
         </p>
       ) : null}
+      {gpuLine ? (
+        <p className="field-help" data-testid="playability-gpu">
+          {gpuLine}
+        </p>
+      ) : null}
       {profiles.map((profile) => {
         const id = String(profile.profile || "");
         const shares = profile.shares || {};
@@ -299,6 +318,11 @@ export default function PlayabilityReport() {
                   </li>
                 ))}
               </ul>
+            ) : null}
+            {sourceBreakdownLine(profile.source_breakdown) ? (
+              <p className="field-help" data-testid={`playability-source-${id}`}>
+                {sourceBreakdownLine(profile.source_breakdown)}
+              </p>
             ) : null}
             {profile.hardware ? (
               <p className="field-help" data-testid={`playability-hardware-${id}`}>

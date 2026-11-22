@@ -171,7 +171,7 @@ For one title the row is the planner’s plan, the tier an owner should read, an
 | `source-transcode` | Ask the media source to transcode | `full` |
 | `not-playable` | Not playable through the engine | `plex-fallback` |
 
-Shares count those tiers. `hardware` says how many titles on that profile need a video transcode: “A GPU with Quick Sync would let N titles play without Plex.” Audio-only and picture captions are not in that count. ENG-012 serves the audio-only tier when a client opts in. Source transcode as a served plan, OCR, pre-optimized copies, and our own video transcode are not started.
+Shares count those tiers. `hardware` says how many titles on that profile need a video transcode: “A GPU with Quick Sync would let N titles play without Plex.” Audio-only and picture captions are not in that count. Each profile also has `source_breakdown`: how many of those video-transcode titles are there because of the codec, the level, or the bit depth, and how many of them are above 1080p or HDR. `gpu` is that video-transcode count for Safari and for Apple TV. Those two numbers are the GPU decision. The report still does not transcode. ENG-012 serves the audio-only tier when a client opts in. Source transcode as a served plan, OCR, pre-optimized copies, and our own video transcode are not started.
 
 ```bash
 # Owner: progress and shares, without every title row. No file paths.

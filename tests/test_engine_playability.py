@@ -20,6 +20,7 @@ from projectionist.engine.playability import (
     hardware_sentence,
     library_titles,
     merge_playability_reports,
+    playability_progress,
     profiles_for_report,
     report_path,
     run_library_report,
@@ -37,7 +38,9 @@ def _probe(container: str, streams: list[MediaStream]) -> ProbeResult:
     return ProbeResult(container, container, 600.0, 4_000_000, 1000, streams)
 
 
-def _av(container: str, video: str, audio: str, *, subs: list[MediaStream] | None = None) -> list[MediaStream]:
+def _av(
+    container: str, video: str, audio: str, *, subs: list[MediaStream] | None = None
+) -> list[MediaStream]:
     rows = [
         MediaStream(index=0, codec_type="video", codec=video, level="41", width=1920, height=1080),
         MediaStream(index=1, codec_type="audio", codec=audio, language="eng", channels=2),
@@ -67,7 +70,9 @@ def _asset(
 
 
 def _text_sub() -> MediaStream:
-    return MediaStream(index=2, codec_type="subtitle", codec="subrip", language="eng", subtitle_kind="text")
+    return MediaStream(
+        index=2, codec_type="subtitle", codec="subrip", language="eng", subtitle_kind="text"
+    )
 
 
 def _picture_sub() -> MediaStream:
@@ -98,7 +103,14 @@ class PlayabilityReportTests(unittest.TestCase):
             "picture": _asset("picture", "mkv", "h264", "aac", subs=[_picture_sub()]),
             "audio": _asset("audio", "mkv", "h264", "eac3"),
             "video": _asset("video", "mkv", "hevc", "aac"),
-            "missing": _asset("missing", "mkv", "h264", "aac", readable=False, reason="No path mapping for this file"),
+            "missing": _asset(
+                "missing",
+                "mkv",
+                "h264",
+                "aac",
+                readable=False,
+                reason="No path mapping for this file",
+            ),
         }
         browser = profile_from_mapping(
             {
@@ -160,12 +172,138 @@ class PlayabilityReportTests(unittest.TestCase):
         self.assertEqual(web_rows["video"]["label"], "Ask the media source to transcode")
         self.assertEqual(web_rows["video"]["plan"], "full")
         self.assertEqual(web["shares"]["source-transcode"]["count"], 1)
-        self.assertEqual(web["hardware"], "A GPU with Quick Sync would let 1 title play without Plex.")
+        self.assertEqual(
+            web["hardware"], "A GPU with Quick Sync would let 1 title play without Plex."
+        )
         self.assertEqual(web_rows["pending"]["reason"], CAPTION_PENDING_REASON)
         self.assertEqual(web_rows["picture"]["reason"], CAPTION_FALLBACK_REASON)
         self.assertNotEqual(web_rows["pending"]["reason"], web_rows["picture"]["reason"])
         self.assertEqual(web["shares"]["captions-pending"]["count"], 1)
         self.assertEqual(web["shares"]["needs-ocr"]["count"], 1)
+        self.assertEqual(web["source_breakdown"]["video_transcode"], 1)
+        self.assertEqual(web["source_breakdown"]["codec"], 1)
+        self.assertEqual(safari["source_breakdown"]["video_transcode"], 0)
+        self.assertEqual(report["gpu"]["safari"], 0)
+        self.assertIsNone(report["gpu"]["apple_tv"])
+
+    def test_source_breakdown_is_planned_from_plex_metadata(self) -> None:
+        """Codec, level, bit depth, size, and HDR, without ffprobe. Safari and Apple TV are the GPU counts."""
+        from projectionist.engine.playability import asset_from_plex_row
+        from projectionist.engine.profiles import APPLE_TV_4K, CHROME
+
+        rows = [
+            {
+                "rating_key": "four-k",
+                "title": "Four K",
+                "container": "mkv",
+                "streams": [
+                    {
+                        "codec_type": "video",
+                        "codec": "hevc",
+                        "level": "153",
+                        "bit_depth": 10,
+                        "width": 3840,
+                        "height": 2160,
+                        "hdr": "hdr10",
+                    },
+                    {"codec_type": "audio", "codec": "aac"},
+                ],
+            },
+            {
+                "rating_key": "high-level",
+                "title": "High Level",
+                "container": "mkv",
+                "streams": [
+                    {
+                        "codec_type": "video",
+                        "codec": "hevc",
+                        "level": "186",
+                        "bit_depth": 8,
+                        "height": 1080,
+                    },
+                    {"codec_type": "audio", "codec": "aac"},
+                ],
+            },
+            {
+                "rating_key": "ten-bit",
+                "title": "Ten Bit",
+                "container": "mkv",
+                "streams": [
+                    {
+                        "codec_type": "video",
+                        "codec": "hevc",
+                        "level": "153",
+                        "bit_depth": 10,
+                        "height": 1080,
+                    },
+                    {"codec_type": "audio", "codec": "aac"},
+                ],
+            },
+            {
+                "rating_key": "plain",
+                "title": "Plain",
+                "container": "mp4",
+                "streams": [
+                    {"codec_type": "video", "codec": "h264", "level": "41", "height": 1080},
+                    {"codec_type": "audio", "codec": "aac"},
+                ],
+            },
+        ]
+        eight_bit = profile_from_mapping(
+            {
+                "id": "web",
+                "containers": ["mp4", "hls-fmp4"],
+                "video": [
+                    {"codec": "hevc", "max_level": "5.1", "bit_depth": 8},
+                    {"codec": "h264", "max_level": "5.2"},
+                ],
+                "audio": ["aac"],
+                "captions": ["webvtt"],
+            }
+        )
+        titles = [LibraryTitle(row["rating_key"], row["title"], "en") for row in rows]
+        assets = {row["rating_key"]: asset_from_plex_row(row) for row in rows}
+        with tempfile.TemporaryDirectory() as tmp:
+            report = build_playability_report(
+                titles,
+                assets,
+                [CHROME, SAFARI, APPLE_TV_4K, eight_bit],
+                settings=Settings(),
+                data_dir=Path(tmp),
+            )
+        self.assertNotIn("ffprobe", json.dumps(report).lower())
+        chrome = next(block for block in report["profiles"] if block["profile"] == "chrome")
+        self.assertEqual(chrome["shares"]["source-transcode"]["count"], 3)
+        self.assertEqual(chrome["source_breakdown"]["codec"], 3)
+        self.assertEqual(chrome["source_breakdown"]["level"], 0)
+        self.assertEqual(chrome["source_breakdown"]["resolution"], 1)
+        self.assertEqual(chrome["source_breakdown"]["hdr"], 1)
+        self.assertEqual(chrome["source_breakdown"]["video_transcode"], 3)
+
+        safari = next(block for block in report["profiles"] if block["profile"] == "safari")
+        self.assertEqual(safari["source_breakdown"]["video_transcode"], 1)
+        self.assertEqual(safari["source_breakdown"]["level"], 1)
+        self.assertEqual(safari["source_breakdown"]["resolution"], 0)
+
+        apple = next(block for block in report["profiles"] if block["profile"] == "apple-tv-4k-3")
+        self.assertEqual(apple["source_breakdown"]["video_transcode"], 1)
+        self.assertEqual(apple["source_breakdown"]["level"], 1)
+
+        web = next(block for block in report["profiles"] if block["profile"] == "web")
+        by_key = {row["rating_key"]: row for row in web["titles"]}
+        self.assertEqual(by_key["four-k"]["source_reason"], "bit_depth")
+        self.assertTrue(by_key["four-k"]["above_1080p"])
+        self.assertTrue(by_key["four-k"]["video_hdr"])
+        self.assertEqual(by_key["high-level"]["source_reason"], "level")
+        self.assertEqual(by_key["ten-bit"]["source_reason"], "bit_depth")
+        self.assertEqual(web["source_breakdown"]["bit_depth"], 2)
+        self.assertEqual(web["source_breakdown"]["level"], 1)
+        self.assertEqual(web["source_breakdown"]["resolution"], 1)
+        self.assertEqual(web["source_breakdown"]["hdr"], 1)
+        self.assertEqual(report["gpu"], {"safari": 1, "apple_tv": 1})
+        progress_keys = set(playability_progress(report)["profiles"][0])
+        self.assertIn("source_breakdown", progress_keys)
+        self.assertNotIn("titles", progress_keys)
 
     def test_library_titles_include_a_movie_and_an_episode(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -253,10 +391,20 @@ class PlayabilityInterruptTests(unittest.TestCase):
             root = Path(tmp)
             db = Database(root / "projectionist.db")
             db.upsert_library_item(
-                {"rating_key": "alpha", "media_type": "movie", "title": "Alpha", "original_language": "en"}
+                {
+                    "rating_key": "alpha",
+                    "media_type": "movie",
+                    "title": "Alpha",
+                    "original_language": "en",
+                }
             )
             db.upsert_library_item(
-                {"rating_key": "beta", "media_type": "movie", "title": "Beta", "original_language": "en"}
+                {
+                    "rating_key": "beta",
+                    "media_type": "movie",
+                    "title": "Beta",
+                    "original_language": "en",
+                }
             )
             save_playability_report(root, previous)
             path = report_path(root)
@@ -287,8 +435,16 @@ class PlayabilityInterruptTests(unittest.TestCase):
             "message": "Ready.",
             "title_count": 2,
             "profiles": [
-                {"profile": "safari", "title_count": 2, "titles": [{"rating_key": "alpha"}, {"rating_key": "beta"}]},
-                {"profile": "web", "title_count": 2, "titles": [{"rating_key": "alpha"}, {"rating_key": "beta"}]},
+                {
+                    "profile": "safari",
+                    "title_count": 2,
+                    "titles": [{"rating_key": "alpha"}, {"rating_key": "beta"}],
+                },
+                {
+                    "profile": "web",
+                    "title_count": 2,
+                    "titles": [{"rating_key": "alpha"}, {"rating_key": "beta"}],
+                },
             ],
         }
         fresh = {
@@ -312,7 +468,12 @@ class PlayabilityInterruptTests(unittest.TestCase):
             root = Path(tmp)
             db = Database(root / "projectionist.db")
             db.upsert_library_item(
-                {"rating_key": "alpha", "media_type": "movie", "title": "Alpha", "original_language": "en"}
+                {
+                    "rating_key": "alpha",
+                    "media_type": "movie",
+                    "title": "Alpha",
+                    "original_language": "en",
+                }
             )
             run_library_report(
                 db,
@@ -330,17 +491,31 @@ class PlayabilityInterruptTests(unittest.TestCase):
             "message": "Ready.",
             "title_count": 1,
             "profiles": [
-                {"profile": "web", "title_count": 2, "titles": [{"rating_key": "alpha"}, {"rating_key": "beta"}]},
+                {
+                    "profile": "web",
+                    "title_count": 2,
+                    "titles": [{"rating_key": "alpha"}, {"rating_key": "beta"}],
+                },
             ],
         }
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             db = Database(root / "projectionist.db")
             db.upsert_library_item(
-                {"rating_key": "alpha", "media_type": "movie", "title": "Alpha", "original_language": "en"}
+                {
+                    "rating_key": "alpha",
+                    "media_type": "movie",
+                    "title": "Alpha",
+                    "original_language": "en",
+                }
             )
             db.upsert_library_item(
-                {"rating_key": "beta", "media_type": "movie", "title": "Beta", "original_language": "en"}
+                {
+                    "rating_key": "beta",
+                    "media_type": "movie",
+                    "title": "Beta",
+                    "original_language": "en",
+                }
             )
             save_playability_report(root, previous)
             result = run_library_report(
@@ -361,7 +536,10 @@ class PlayabilityInterruptTests(unittest.TestCase):
     def test_two_savers_do_not_share_one_temp_file(self) -> None:
         import threading
 
-        from projectionist.engine.playability import empty_playability_report, load_playability_report
+        from projectionist.engine.playability import (
+            empty_playability_report,
+            load_playability_report,
+        )
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -421,10 +599,20 @@ class PlayabilityRouteTests(unittest.TestCase):
         self.client = TestClient(app_mod.app)
         self.db = jobs.get_job_manager().db
         self.db.upsert_library_item(
-            {"rating_key": "direct", "media_type": "movie", "title": "Direct Feature", "original_language": "en"}
+            {
+                "rating_key": "direct",
+                "media_type": "movie",
+                "title": "Direct Feature",
+                "original_language": "en",
+            }
         )
         self.db.upsert_library_item(
-            {"rating_key": "remux", "media_type": "movie", "title": "Remux Feature", "original_language": "en"}
+            {
+                "rating_key": "remux",
+                "media_type": "movie",
+                "title": "Remux Feature",
+                "original_language": "en",
+            }
         )
         self.db.upsert_library_item(
             {
@@ -540,7 +728,9 @@ class PlayabilityRouteTests(unittest.TestCase):
             {"direct", "remux", "pending", "picture"},
         )
 
-    def test_refresh_does_not_probe_until_the_walk_runs_and_does_not_start_a_second_one(self) -> None:
+    def test_refresh_does_not_probe_until_the_walk_runs_and_does_not_start_a_second_one(
+        self,
+    ) -> None:
         import projectionist.engine.playability as playability
 
         calls: list[str] = []
@@ -585,7 +775,9 @@ class PlayabilityRouteTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             scheduler = IdleScheduler(Database(Path(tmp) / "projectionist.db"), Path(tmp))
             register(scheduler)
-            state = next(row for row in scheduler.get_task_states() if row["name"] == "playability_report")
+            state = next(
+                row for row in scheduler.get_task_states() if row["name"] == "playability_report"
+            )
         self.assertFalse(state["enabled"])
 
     def test_progress_read_does_not_include_the_full_title_lists(self) -> None:
