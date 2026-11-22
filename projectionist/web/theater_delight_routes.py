@@ -151,6 +151,7 @@ def live_weather_channel(user=Depends(get_current_user_dep)):
         service=_weather_service(),
         settings=settings,
         muzak_folder=str(getattr(settings.tunarr, "muzak_folder", "") or ""),
+        viewer_youth=bool(getattr(user, "is_youth", False)),
         **kwargs,
     )
 
@@ -183,6 +184,8 @@ class WeatherNarrationPayload(BaseModel):
     tts_rate: Optional[float] = Field(default=None, ge=0.5, le=1.5)
     windy_api_key: Optional[str] = Field(default=None, max_length=200)
     clear_windy_api_key: Optional[bool] = None
+    headlines_enabled: Optional[bool] = None
+    youth_headlines: Optional[bool] = None
 
 
 def _weather_admin_status(settings: Settings) -> Dict[str, Any]:
@@ -199,6 +202,8 @@ def _weather_admin_status(settings: Settings) -> Dict[str, Any]:
         "windy_api_key_set": bool(narration.windy_api_key),
         "llm_configured": _weather_llm() is not None,
         "alerts_note": "Weather alerts come from the US National Weather Service, so they appear for US places only.",
+        "headlines_enabled": bool(getattr(settings.weather, "headlines_enabled", True)),
+        "youth_headlines": bool(getattr(settings.weather, "youth_headlines", False)),
         "previews": previews,
     }
 
@@ -216,7 +221,7 @@ def save_live_weather_admin(payload: WeatherNarrationPayload, user=Depends(requi
     _ = user
     settings = _settings()
     weather = asdict(settings.weather)
-    for key in ("narration_enabled", "tts_engine", "tts_voice", "tts_rate"):
+    for key in ("narration_enabled", "tts_engine", "tts_voice", "tts_rate", "headlines_enabled", "youth_headlines"):
         value = getattr(payload, key)
         if value is not None:
             weather[key] = value

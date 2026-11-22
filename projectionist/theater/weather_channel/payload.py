@@ -144,14 +144,45 @@ def available_segments(boards: Dict[str, Any], headlines_ready: bool) -> List[st
     return out
 
 
-def headlines_block(state: LocationState) -> Dict[str, Any]:
+_OFF_SCOPES = (
+    {"scope": "local", "label": "Local"},
+    {"scope": "national", "label": "National"},
+    {"scope": "world", "label": "World"},
+)
+
+
+def headlines_block(state: LocationState, *, enabled: bool = True) -> Dict[str, Any]:
+    """Headline flags for this viewer.
+
+    ``local_source`` stays ``search`` (a news search for the place). Owner
+    feeds are a later option and are not read here. UV and air quality are
+    not added on this block.
+    """
+    block: Dict[str, Any] = {"enabled": bool(enabled), "local_source": "search"}
+    if not enabled:
+        return {
+            **block,
+            "status": "off",
+            "scopes": [{**row, "available": False, "items": []} for row in _OFF_SCOPES],
+            "failed": [],
+        }
     news = state.data.get("headlines")
     if news is None:
         status = "failed" if "headlines" in state.errors else "pending"
-        return {"status": status, "scopes": [], "failed": []}
-    scopes = news.get("scopes") or []
-    status = "ready" if scopes else ("failed" if news.get("failed") else "empty")
-    return {"status": status, "scopes": scopes, "failed": news.get("failed") or []}
+        return {**block, "status": status, "scopes": [], "failed": []}
+    scopes = []
+    seen = set()
+    for scope in news.get("scopes") or []:
+        row = dict(scope)
+        row["available"] = bool(row.get("items"))
+        scopes.append(row)
+        seen.add(row.get("scope"))
+    for name in news.get("failed") or []:
+        if name in seen:
+            continue
+        scopes.append({"scope": name, "label": str(name).title(), "available": False, "items": []})
+    status = "ready" if any(row.get("items") for row in scopes) else ("failed" if news.get("failed") else "empty")
+    return {**block, "status": status, "scopes": scopes, "failed": news.get("failed") or []}
 
 
 def egress_hosts(*, is_us: bool, webcams: bool) -> List[Dict[str, str]]:
@@ -175,13 +206,14 @@ def build_payload(
     music_note: str,
     intro_preroll: Optional[Dict[str, Any]] = None,
     preroll_root_found: bool = False,
+    show_headlines: bool = True,
 ) -> Dict[str, Any]:
     with state.lock:
         scripts = {k: list(v) for k, v in state.scripts.items()}
         version = state.scripts_version
         errors = dict(state.errors)
     boards = _boards(state, scripts, service.holidays())
-    news = headlines_block(state)
+    news = headlines_block(state, enabled=show_headlines)
     segments = available_segments(boards, news["status"] == "ready")
     settings = service.settings_factory()
     choice = service.voice_choice()

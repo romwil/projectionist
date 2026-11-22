@@ -20,6 +20,7 @@ from projectionist.theater.weather_channel.service import NarrationSettings, Wea
 from projectionist.theater.weather_channel.sources.forecast import wmo_label
 
 __all__ = [
+    "headlines_for_viewer",
     "household_place",
     "narration_settings",
     "select_muzak",
@@ -98,6 +99,22 @@ def select_muzak(
     return tracks, ""
 
 
+def headlines_for_viewer(settings: Any, *, youth: bool) -> bool:
+    """Owner switch, then the Youth default.
+
+    Headlines are on unless the owner turns them off. A Youth session hides
+    them unless the owner allows Youth to see headlines. Neither path adds
+    an owner feed list.
+    """
+    weather = getattr(settings, "weather", None)
+    enabled = True if weather is None else bool(getattr(weather, "headlines_enabled", True))
+    if not enabled:
+        return False
+    if youth and not bool(getattr(weather, "youth_headlines", False)):
+        return False
+    return True
+
+
 def narration_settings(settings: Any) -> NarrationSettings:
     weather = getattr(settings, "weather", None)
     if weather is None:
@@ -112,6 +129,7 @@ def narration_settings(settings: Any) -> NarrationSettings:
         voice=str(getattr(weather, "tts_voice", "") or ""),
         rate=rate,
         windy_api_key=str(getattr(weather, "windy_api_key", "") or ""),
+        headlines_enabled=bool(getattr(weather, "headlines_enabled", True)),
     )
 
 
@@ -167,7 +185,9 @@ def weather_channel_payload(
     allowed_roots: Optional[List[Any]] = None,
     rng: Any = None,
     mountinfo_text: Optional[str] = None,
+    viewer_youth: bool = False,
 ) -> Dict[str, Any]:
+    show_headlines = headlines_for_viewer(settings, youth=viewer_youth)
     place, source = resolve_place(
         environ=environ,
         place_name=place_name,
@@ -175,7 +195,7 @@ def weather_channel_payload(
         longitude=longitude,
         location_source=location_source,
     )
-    state = service.view(place)
+    state = service.view(place, headlines=show_headlines)
     tracks, note = select_muzak(
         muzak_folder,
         settings=settings,
@@ -194,4 +214,5 @@ def weather_channel_payload(
         music_note=note,
         intro_preroll=pick_preroll(context="live", root=root, rng=rng) if root else None,
         preroll_root_found=root is not None,
+        show_headlines=show_headlines,
     )

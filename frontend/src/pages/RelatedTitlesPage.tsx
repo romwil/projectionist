@@ -39,7 +39,13 @@ function RelationCard({ edge, onHop }: RelationCardProps) {
         aria-label={`Explore connections from ${item.title}`}
       >
         <span className="relation-card-poster">
-          <PosterArt as="span" posterUrl={item.poster_url} title={item.title} year={item.year} />
+          <PosterArt
+            as="span"
+            posterUrl={item.poster_url}
+            title={item.title}
+            year={item.year}
+            itemId={item.id || item.rating_key}
+          />
           <span className="relation-card-hop-label">Explore from here</span>
         </span>
       </button>

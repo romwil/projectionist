@@ -347,7 +347,12 @@ export default function TitleCard({
   );
 
   const posterMedia = (
-    <PosterArt posterUrl={item.poster_url} title={item.title} year={item.year} />
+    <PosterArt
+      posterUrl={item.poster_url}
+      title={item.title}
+      year={item.year}
+      itemId={item.id || item.rating_key || item.plex_rating_key}
+    />
   );
 
   const showCompactOverlay = Boolean(
