@@ -726,6 +726,9 @@ class EngineSettings:
     path_mappings: list = field(default_factory=list)
     # ENG-007. Off until the owner turns on Play through Projectionist.
     play_through_projectionist: bool = False
+    # ENG-014. Empty until the owner chooses a folder outside the Plex libraries.
+    copy_output_dir: str = ""
+    copy_budget_bytes: int = 200 * 1024 * 1024 * 1024
 
     def __post_init__(self) -> None:
         from projectionist.engine.pathmap import salvage_mappings
@@ -736,6 +739,14 @@ class EngineSettings:
             self.play_through_projectionist = flag.strip().lower() in {"1", "true", "yes", "on"}
         else:
             self.play_through_projectionist = bool(flag)
+        self.copy_output_dir = str(self.copy_output_dir or "").strip()
+        try:
+            budget = int(self.copy_budget_bytes)
+        except (TypeError, ValueError):
+            budget = 200 * 1024 * 1024 * 1024
+        if budget <= 0:
+            budget = 200 * 1024 * 1024 * 1024
+        self.copy_budget_bytes = budget
 
 
 def _settings_flag(value: object, default: bool) -> bool:

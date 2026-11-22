@@ -33,6 +33,12 @@ def run_media_tool(argv: list[str], runner: Callable[..., Any], **kwargs: Any) -
         return runner(command, **kwargs)
 
 
+def run_prepared_command(command: list[str], runner: Callable[..., Any], **kwargs: Any) -> Any:
+    """Run a command that is already prefixed. One heavy process at a time."""
+    with _SLOT:
+        return runner(list(command), **kwargs)
+
+
 def spawn_heavy(
     argv: list[str],
     *,

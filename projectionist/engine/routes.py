@@ -181,7 +181,13 @@ def playback_plan(
 
     source = plex_media_source(_settings(), _db())
     asset = describe_title(_settings(), _db(), _dir(), key, source=source)
-    body = plan_playback(asset, chosen, source=source, failed_tries=failed_try_keys(_dir()))
+    body = plan_playback(
+        asset,
+        chosen,
+        source=source,
+        failed_tries=failed_try_keys(_dir()),
+        ready_copy=_ready_copy(key),
+    )
     body["rating_key"] = key
     return body
 
@@ -214,7 +220,9 @@ def _profile_from_body(raw: Any):
         chosen = named_profile(str(raw or "apple-tv-4k-3"))
         if chosen is None:
             names = ", ".join(known_profile_ids())
-            raise HTTPException(status_code=400, detail=f"Unknown device profile. Use one of: {names}.")
+            raise HTTPException(
+                status_code=400, detail=f"Unknown device profile. Use one of: {names}."
+            )
         return chosen
     if not isinstance(raw, dict):
         raise HTTPException(status_code=400, detail="Device profile must be a name or an object.")
@@ -297,6 +305,7 @@ def open_playback_session(
         force_reason=force_reason,
         captions=[] if force_reason else renditions,
         source=source,
+        ready_copy=_ready_copy(str(playable.get("rating_key") or key)),
     )
     return session.public()
 
@@ -326,7 +335,9 @@ def playback_session_progress(
         session = get_engine_session(session_id, user_id=str(getattr(user, "id", "") or ""))
     except PlaybackError as error:
         raise HTTPException(status_code=error.status_code, detail=error.message) from error
-    update_local_view_offset(_db(), session.rating_key, int(payload.time_ms), int(payload.duration_ms))
+    update_local_view_offset(
+        _db(), session.rating_key, int(payload.time_ms), int(payload.duration_ms)
+    )
     return {
         "ok": True,
         "session_id": session.session_id,
@@ -413,6 +424,13 @@ class PlayabilityPayload(BaseModel):
 
 class EngineSettingPayload(BaseModel):
     play_through_projectionist: bool = False
+
+
+class CopiesPayload(BaseModel):
+    """Owner folder and disk budget for copies made ahead of time."""
+
+    output_dir: str = ""
+    budget_gib: float = 200
 
 
 @router.get("/api/playback/playability")
@@ -506,6 +524,120 @@ def put_engine_setting(
     return {
         "play_through_projectionist": bool(updated.engine.play_through_projectionist),
     }
+
+
+def _ready_copy(rating_key: str):
+    from projectionist.engine.copies import ready_copy_asset
+
+    folder = str(getattr(_settings().engine, "copy_output_dir", "") or "").strip()
+    if not folder:
+        return None
+    return ready_copy_asset(Path(folder), rating_key)
+
+
+def _copy_library_paths() -> list[Path]:
+    settings = _settings()
+    found: list[Path] = []
+    for raw in (
+        getattr(settings, "movies_root", ""),
+        getattr(settings, "tv_root", ""),
+    ):
+        text = str(raw or "").strip()
+        if text:
+            found.append(Path(text))
+    for row in list(getattr(settings.engine, "path_mappings", []) or []):
+        if isinstance(row, dict):
+            source = str(row.get("from") or "").strip()
+            if source:
+                found.append(Path(source))
+    try:
+        from projectionist.library.episode_investigate.path_map import plex_library_locations
+
+        for kind in ("movie", "show"):
+            for item in plex_library_locations(settings, section_type=kind):
+                text = str(item or "").strip()
+                if text:
+                    found.append(Path(text))
+    except Exception:  # noqa: BLE001 — a missing Plex answer is a path we cannot check
+        logger.info("copy folder check could not read Plex library paths")
+    return found
+
+
+def _copy_titles() -> list[dict[str, Any]]:
+    from projectionist.engine.playability import load_playability_report
+
+    report = load_playability_report(_dir())
+    ahead = report.get("copy_ahead") if isinstance(report, dict) else None
+    rows = ahead.get("titles") if isinstance(ahead, dict) else None
+    return [row for row in rows or [] if isinstance(row, dict)]
+
+
+@router.get("/api/playback/copies")
+def get_copies(user=Depends(require_role("owner"))) -> dict[str, Any]:
+    """Queue and used space for copies made ahead of time. No source paths."""
+    del user
+    from projectionist.engine.copies import describe_copies
+
+    engine = _settings().engine
+    folder = str(engine.copy_output_dir or "")
+    view = describe_copies(
+        _copy_titles(),
+        Path(folder) if folder else None,
+        budget_bytes=int(engine.copy_budget_bytes),
+    )
+    view["output_dir"] = folder
+    return view
+
+
+@router.put("/api/playback/copies")
+def put_copies(payload: CopiesPayload, user=Depends(require_role("owner"))) -> dict[str, Any]:
+    """Save the output folder and budget. Refuse a folder inside a Plex library."""
+    del user
+    from dataclasses import asdict
+
+    from projectionist.engine.copies import DEFAULT_BUDGET_BYTES, copy_folder_problem
+
+    folder = str(payload.output_dir or "").strip()
+    if not folder:
+        raise HTTPException(status_code=400, detail="Choose a folder for the copies.")
+    problem = copy_folder_problem(Path(folder), _copy_library_paths())
+    if problem:
+        raise HTTPException(status_code=400, detail=problem)
+    try:
+        gib = float(payload.budget_gib)
+    except (TypeError, ValueError):
+        gib = 0
+    if gib <= 0:
+        raise HTTPException(status_code=400, detail="The disk budget has to be greater than zero.")
+    budget = int(gib * 1024 * 1024 * 1024)
+    if budget <= 0:
+        budget = DEFAULT_BUDGET_BYTES
+    existing = _settings()
+    current = asdict(existing.engine)
+    current["copy_output_dir"] = folder
+    current["copy_budget_bytes"] = budget
+    updated = Settings.from_mapping({**asdict(existing), "engine": current})
+    save_settings(_dir(), updated)
+    return get_copies(user=None)
+
+
+@router.delete("/api/playback/copies/{rating_key}")
+def delete_copy(rating_key: str, user=Depends(require_role("owner"))) -> dict[str, Any]:
+    """Remove one ready copy. The source file stays where it is."""
+    del user
+    from projectionist.engine.copies import remove_copy
+
+    try:
+        key = validate_rating_key(rating_key)
+    except PlaybackError as error:
+        raise HTTPException(status_code=error.status_code, detail=error.message) from error
+    folder = str(_settings().engine.copy_output_dir or "").strip()
+    if folder:
+        try:
+            remove_copy(Path(folder), key)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+    return get_copies(user=None)
 
 
 def register_engine_routes(

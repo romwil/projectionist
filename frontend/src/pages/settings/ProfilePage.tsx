@@ -13,6 +13,7 @@ import {
   startPlexPinLogin,
   uploadAuthAvatar,
 } from "../../api/client";
+import CopiesAhead from "../../components/settings/CopiesAhead";
 import PlayabilityReport from "../../components/settings/PlayabilityReport";
 import SettingsPageHeader from "../../components/settings/SettingsPageHeader";
 import SettingsPanel from "../../components/settings/SettingsPanel";
@@ -601,6 +602,7 @@ export default function ProfilePage() {
             </button>
           ) : null}
           {user?.role === "owner" ? <PlayabilityReport /> : null}
+          {user?.role === "owner" ? <CopiesAhead /> : null}
         </SettingsPanel>
 
         <div className="settings-actions">
