@@ -173,3 +173,110 @@ jobs:
             exit 1
           fi
           echo "ready reports the missing database"
+
+  # Real Chrome playback of generated clips. The job always reports a result.
+  # The browser run happens when the pull request touches playback.
+  playback-fixtures:
+    name: Playback fixtures
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect playback changes
+        id: changed
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, subprocess
+          event = os.environ.get("GITHUB_EVENT_NAME", "")
+          if event == "pull_request":
+              base = os.environ.get("BASE_SHA", "")
+              diff = subprocess.check_output(["git", "diff", "--name-only", f"{base}...HEAD"], text=True)
+          else:
+              before = os.environ.get("BEFORE_SHA", "")
+              if before and set(before) != {"0"}:
+                  diff = subprocess.check_output(["git", "diff", "--name-only", f"{before}...HEAD"], text=True)
+              else:
+                  diff = subprocess.check_output(["git", "diff", "--name-only", "HEAD~1...HEAD"], text=True)
+          prefixes = (
+              "projectionist/engine/",
+              "projectionist/library/playback.py",
+              "projectionist/library/subtitle_cache.py",
+              "projectionist/web/app.py",
+              "frontend/src/components/theater/",
+              "frontend/src/lib/enginePlayback.ts",
+              "frontend/src/lib/theaterPlayer.ts",
+              "frontend/src/lib/subtitleCues.ts",
+              "frontend/src/lib/inAppPip.ts",
+              "frontend/src/pages/LibraryWatchPage.tsx",
+              "e2e/playback-fixtures.spec.ts",
+              "playwright.playback.config.ts",
+              "playwright.config.ts",
+              "package.json",
+              "scripts/generate-playback-fixtures.py",
+              "scripts/start-playback-fixture-e2e.mjs",
+              "docs/testing/playback-fixtures.md",
+              "docs/PLAYBACK_ENGINE.md",
+              "docs/TESTING.md",
+              ".github/workflows/ci.yml",
+          )
+          changed = [line.strip() for line in diff.splitlines() if line.strip()]
+          run = any(path == prefix or path.startswith(prefix) for path in changed for prefix in prefixes)
+          print("Playback path check:")
+          print("\n".join(changed) or "(no changed files)")
+          print("run", run)
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+              handle.write("run=" + ("true" if run else "false") + "\n")
+          PY
+
+      - uses: actions/setup-python@v5
+        if: steps.changed.outputs.run == 'true'
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - uses: actions/setup-node@v4
+        if: steps.changed.outputs.run == 'true'
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Install Python package
+        if: steps.changed.outputs.run == 'true'
+        run: pip install ".[web,dev]"
+
+      - name: Install Google Chrome and ffmpeg
+        if: steps.changed.outputs.run == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg wget ca-certificates
+          wget -q -O /tmp/google-chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt-get install -y /tmp/google-chrome.deb
+          google-chrome --version
+          ffmpeg -hide_banner -version | head -n 1
+
+      - name: Install and build frontend
+        if: steps.changed.outputs.run == 'true'
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+
+      - name: Install Playwright
+        if: steps.changed.outputs.run == 'true'
+        run: npm ci
+
+      - name: Play fixtures in Google Chrome
+        if: steps.changed.outputs.run == 'true'
+        run: npm run test:e2e:playback
+        env:
+          CI: true
+

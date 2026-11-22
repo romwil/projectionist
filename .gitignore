@@ -25,6 +25,8 @@ node_modules/
 test-results/
 frontend/perf/last-run.json
 playwright-report/
+# Generated playback clips (scripts/generate-playback-fixtures.py). Not committed.
+e2e/.playback-fixtures/
 blob-report/
 playwright/.cache/
 htmlcov/

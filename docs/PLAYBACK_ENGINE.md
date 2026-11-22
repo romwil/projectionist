@@ -225,7 +225,9 @@ Honest limits: the named Safari and Chrome profiles are the dry-run shortcuts, n
 
 ## Media sources
 
-The engine reads files through a small adapter interface. Every adapter answers the same three questions:
+The engine reads files through a small adapter interface. The automated playback test can point the process at a fixture directory (`PROJECTIONIST_FIXTURE_MEDIA_DIR`). That source reads generated clips and never calls Plex. It is not a household source. What each clip asserts, and the manual HEVC and Safari checklist, are in [playback fixtures](testing/playback-fixtures.md).
+
+Every adapter answers the same three questions:
 
 | Question | Plex source (first) | Path-map source | Jellyfin source (future) |
 |----------|--------------------|------------------|--------------------------|

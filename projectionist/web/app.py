@@ -441,6 +441,16 @@ async def lifespan(_app: FastAPI):
     except Exception:  # noqa: BLE001
         logger.exception("Startup: closed-loop facet telemetry bind failed (continuing)")
 
+    try:
+        from projectionist.engine.fixture_source import install_fixture_library
+
+        installed = install_fixture_library(manager.db, DATA_DIR)
+        if installed:
+            logger.info("Startup: fixture media library ready (%s titles)", installed)
+    except Exception:
+        logger.exception("Startup: fixture media library failed")
+        raise
+
     # This flips only after synchronous startup work is complete. Background
     # library warm-ups intentionally continue after readiness so they never
     # hold the probe hostage to a Movies query.
