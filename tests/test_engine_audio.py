@@ -207,24 +207,45 @@ class AudioTranscodeTests(unittest.TestCase):
             self.assertIn("hvc1", master)
             self.assertIn("mp4a.40.2", master)
 
-    def test_hevc_above_the_profile_asks_the_source_even_with_dts(self) -> None:
+    def test_hevc_above_the_profile_tries_once_and_copies_the_video(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             media = Path(tmp) / "film.mkv"
             media.write_bytes(b"mkv")
             asset = _asset("hevc", "dts", level="186", bit_depth=10)
+            asset.rating_key = "134335"
             asset.local_path = str(media)
+            seen: dict[str, object] = {}
 
             def runner(cmd, cwd):
-                del cmd, cwd
-                raise AssertionError("HEVC above the profile must not start an audio transcode")
+                seen["cmd"] = list(cmd)
+                Path(cwd, "stream.m3u8").write_text("#EXTM3U\n#EXT-X-ENDLIST\n", encoding="utf-8")
 
             session = self._open(asset, SAFARI, runner, title="Mulholland Drive")
-            self.assertEqual(session.plan, "source-transcode")
-            self.assertEqual(session.source_reason, "level")
-            self.assertEqual(session.provider, "plex")
-            self.assertFalse(session.playable)
-            self.assertEqual(session.master_url(), "")
-            self.assertIn("not playable", session.reason)
+            joined = " ".join(_ffmpeg_args(list(seen["cmd"])))
+            self.assertEqual(session.plan, "try")
+            self.assertTrue(session.playable)
+            self.assertIn("-c:v copy", joined)
+            self.assertIn("-c:a aac", joined)
+            self.assertNotIn("libx265", joined)
+            self.assertNotIn("libx264", joined)
+
+            from projectionist.engine.tries import record_first_frame
+
+            record_first_frame(
+                Path(tmp),
+                rating_key="134335",
+                profile_id=SAFARI.id,
+                arrived=False,
+            )
+
+            def refused(cmd, cwd):
+                del cmd, cwd
+                raise AssertionError("a remembered miss must not start another audio transcode")
+
+            again = self._open(asset, SAFARI, refused, title="Mulholland Drive")
+            self.assertEqual(again.plan, "source-transcode")
+            self.assertFalse(again.playable)
+            self.assertEqual(again.master_url(), "")
 
     def test_truehd_on_apple_tv_copies_h264(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

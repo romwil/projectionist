@@ -133,7 +133,7 @@ class EngineSessionTests(unittest.TestCase):
             self.assertNotIn("-c copy", command)
             self.assertNotIn("libx264", command)
 
-    def test_source_transcode_is_not_an_engine_playlist(self) -> None:
+    def test_a_remembered_failure_is_not_an_engine_playlist(self) -> None:
         import tempfile
 
         from projectionist.engine.profiles import profile_from_mapping
@@ -156,18 +156,59 @@ class EngineSessionTests(unittest.TestCase):
                 }
             )
 
+            calls = {"n": 0}
+
             def runner(cmd, cwd):
-                raise AssertionError("a full plan must not start an engine playlist")
+                calls["n"] += 1
+                folder = Path(cwd)
+                (folder / "init.mp4").write_bytes(b"init")
+                (folder / "seg_0000.m4s").write_bytes(b"seg")
+                (folder / "stream.m3u8").write_text(
+                    "#EXTM3U\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXTINF:6.000,\nseg_0000.m4s\n#EXT-X-ENDLIST\n",
+                    encoding="utf-8",
+                )
+                del cmd
+
+            first = open_engine_session(
+                asset,
+                profile,
+                user_id="owner",
+                title="Mulholland Drive",
+                duration_ms=8_840_299,
+                view_offset_ms=0,
+                data_dir=Path(tmp),
+                runner=runner,
+                ffmpeg="ffmpeg",
+            )
+            self.assertEqual(first.plan, "try")
+            self.assertTrue(first.playable)
+            self.assertIn(first.token, first.master_url())
+            self.assertEqual(calls["n"], 1)
+            self.assertIn("hevc level is above profile hevc 5.1", first.reason)
+
+            from projectionist.engine.tries import record_first_frame
+
+            record_first_frame(
+                Path(tmp),
+                rating_key=asset.rating_key,
+                profile_id=profile.id,
+                arrived=False,
+            )
+            reset_engine_sessions()
+
+            def refused(cmd, cwd):
+                del cmd, cwd
+                raise AssertionError("a remembered miss must not start another playlist")
 
             session = open_engine_session(
                 asset,
                 profile,
                 user_id="owner",
                 title="Mulholland Drive",
-                duration_ms=8_820_000,
+                duration_ms=8_840_299,
                 view_offset_ms=0,
                 data_dir=Path(tmp),
-                runner=runner,
+                runner=refused,
                 ffmpeg="ffmpeg",
             )
             self.assertEqual(session.plan, "source-transcode")
@@ -175,7 +216,7 @@ class EngineSessionTests(unittest.TestCase):
             self.assertEqual(session.provider, "plex")
             self.assertFalse(session.playable)
             self.assertEqual(session.master_url(), "")
-            self.assertIn("hevc level is above profile hevc 5.1", session.reason)
+            self.assertIn("did not show a picture", session.reason)
             shown = session.public()
             self.assertEqual(shown["plan"], "source-transcode")
             self.assertEqual(shown["source_reason"], "level")

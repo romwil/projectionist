@@ -177,9 +177,11 @@ def playback_plan(
             status_code=400,
             detail=f"Unknown device profile. Use one of: {names}.",
         )
+    from projectionist.engine.tries import failed_try_keys
+
     source = plex_media_source(_settings(), _db())
     asset = describe_title(_settings(), _db(), _dir(), key, source=source)
-    body = plan_playback(asset, chosen, source=source)
+    body = plan_playback(asset, chosen, source=source, failed_tries=failed_try_keys(_dir()))
     body["rating_key"] = key
     return body
 
@@ -197,6 +199,12 @@ class PlaybackSessionPayload(BaseModel):
 class PlaybackProgressBody(BaseModel):
     time_ms: int = Field(default=0, ge=0)
     duration_ms: int = Field(default=0, ge=0)
+
+
+class FirstFrameBody(BaseModel):
+    """Whether the try showed a picture. Clients that cannot say yet may omit the call."""
+
+    arrived: bool = False
 
 
 def _profile_from_body(raw: Any):
@@ -324,6 +332,41 @@ def playback_session_progress(
         "session_id": session.session_id,
         "plan": session.plan,
         "reason": session.reason,
+    }
+
+
+@router.post("/api/playback/sessions/{session_id}/first-frame")
+def record_playback_first_frame(
+    session_id: str,
+    payload: FirstFrameBody,
+    user=Depends(get_current_user_dep),
+) -> dict[str, Any]:
+    """Remember whether a try showed a picture. Other plans are not stored.
+
+    The title and profile come from the session, so a client cannot write a
+    different pair. A client that cannot report yet may omit the call.
+    """
+    from projectionist.engine.session import get_engine_session
+    from projectionist.engine.tries import record_first_frame
+
+    try:
+        session = get_engine_session(session_id, user_id=str(getattr(user, "id", "") or ""))
+    except PlaybackError as error:
+        raise HTTPException(status_code=error.status_code, detail=error.message) from error
+    stored = session.plan == "try"
+    if stored:
+        record_first_frame(
+            _dir(),
+            rating_key=session.rating_key,
+            profile_id=session.profile_id,
+            arrived=bool(payload.arrived),
+        )
+    return {
+        "ok": True,
+        "stored": stored,
+        "arrived": bool(payload.arrived),
+        "rating_key": session.rating_key,
+        "profile": session.profile_id,
     }
 
 

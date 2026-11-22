@@ -1122,6 +1122,14 @@ export async function progressEnginePlayback(sessionId: string, payload: JsonObj
   });
 }
 
+/** Tell the server whether a try showed a picture. A miss is not tried again. */
+export async function reportEngineFirstFrame(sessionId: string, arrived: boolean) {
+  return api(`/playback/sessions/${encodeURIComponent(sessionId)}/first-frame`, {
+    method: "POST",
+    body: JSON.stringify({ arrived: Boolean(arrived) }),
+  });
+}
+
 export async function stopEnginePlayback(sessionId: string) {
   return api(`/playback/sessions/${encodeURIComponent(sessionId)}/stop`, {
     method: "POST",
