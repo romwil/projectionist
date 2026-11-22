@@ -600,6 +600,150 @@ class PlayabilityReportTests(unittest.TestCase):
         self.assertNotIn("titles", progress["copy_ahead"])
         self.assertNotIn("ffprobe", json.dumps(report).lower())
 
+    def test_listing_sizes_and_watch_counts_rank_without_a_database(self) -> None:
+        """A refresh ranks the section listing when no Plex database path is set.
+
+        An unfinished report from before those fields existed is planned again.
+        Continuing it would leave the ranking empty. HDR stays blank. Blank is
+        not a count of zero. This does not transcode and does not make a copy.
+        """
+        import xml.etree.ElementTree as ET
+
+        from projectionist.connectors.plex import title_streams_from_element
+        from projectionist.engine.playability import _run_owner_report
+
+        listing = ET.fromstring(
+            """
+            <MediaContainer>
+              <Video ratingKey="12" title="Wide" viewCount="1">
+                <Media id="3" container="mkv" videoCodec="vp9" videoResolution="4k">
+                  <Part size="5000" />
+                </Media>
+              </Video>
+              <Video ratingKey="10" title="Often" viewCount="9">
+                <Media id="1" container="mkv" videoCodec="av1" videoResolution="1080">
+                  <Part size="800" />
+                </Media>
+              </Video>
+              <Video ratingKey="13" title="Plain" viewCount="4">
+                <Media id="4" container="mp4" videoCodec="h264" videoResolution="1080">
+                  <Part size="50" />
+                </Media>
+              </Video>
+            </MediaContainer>
+            """
+        )
+        rows = []
+        for element in listing.findall("Video"):
+            media = element.find("Media")
+            self.assertIsNotNone(media)
+            self.assertNotIn("colorTrc", media.attrib)
+            row = title_streams_from_element(element)
+            self.assertEqual(row["streams"][0]["hdr"], "")
+            self.assertFalse(row["streams"][0]["hdr_known"])
+            rows.append(row)
+        by_rating = {row["rating_key"]: row for row in rows}
+        self.assertEqual(by_rating["12"]["view_count"], 1)
+        self.assertEqual(by_rating["12"]["file_size"], 5000)
+        self.assertEqual(by_rating["10"]["view_count"], 9)
+        self.assertEqual(by_rating["10"]["file_size"], 800)
+
+        previous = {
+            "generated_at": "2026-11-21T00:00:00+00:00",
+            "complete": False,
+            "running": False,
+            "phase": "ffprobe",
+            "planned_from_plex": 1,
+            "confirmed_by_ffprobe": 0,
+            "message": "Planned from Plex metadata. Confirming files in the background.",
+            "title_count": 1,
+            "profiles": [
+                {
+                    "profile": "safari",
+                    "title_count": 1,
+                    "shares": {},
+                    "titles": [
+                        {
+                            "rating_key": "old",
+                            "title": "Old row",
+                            "tier": "source-transcode",
+                            "above_1080p": True,
+                            "video_hdr": False,
+                            "plan": "source-transcode",
+                            "label": "Ask the media source to transcode",
+                            "reason": "vp9 not in profile",
+                            "source_reason": "codec",
+                            "confirmed": False,
+                            "profile_answer": {"video": "vp9 not in profile", "audio": ""},
+                        }
+                    ],
+                    "source_breakdown": {
+                        "video_transcode": 1,
+                        "codec": 1,
+                        "resolution": 1,
+                        "hdr": 0,
+                    },
+                    "hardware": "A GPU with Quick Sync would let 1 title play without Plex.",
+                }
+            ],
+            "gpu": {"safari": 1, "apple_tv": None},
+        }
+        self.assertNotIn("copy_ahead", previous)
+        self.assertNotIn("watch_count", previous["profiles"][0]["titles"][0])
+        self.assertNotIn("file_size", previous["profiles"][0]["titles"][0])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            save_playability_report(root, previous)
+            removed = os.environ.pop("PLEX_LIBRARY_DATABASE", None)
+            try:
+                report = _run_owner_report(
+                    Database(root / "projectionist.db"),
+                    Settings(),
+                    root,
+                    profiles=[SAFARI],
+                    locate=lambda _key: None,
+                    catalog=lambda _settings: rows,
+                    should_stop=lambda: True,
+                )
+
+                def listing_again(_settings: object) -> list[dict[str, object]]:
+                    raise AssertionError("the listing was read again")
+
+                continued = _run_owner_report(
+                    Database(root / "projectionist.db"),
+                    Settings(),
+                    root,
+                    profiles=[SAFARI],
+                    locate=lambda _key: None,
+                    catalog=listing_again,
+                    should_stop=lambda: True,
+                )
+            finally:
+                if removed is not None:
+                    os.environ["PLEX_LIBRARY_DATABASE"] = removed
+
+        self.assertFalse(getattr(Settings(), "plex_library_database", ""))
+        ranking = report["copy_ahead"]
+        self.assertEqual(ranking["profile"], "safari")
+        self.assertEqual([row["rating_key"] for row in ranking["titles"]], ["12", "10"])
+        self.assertEqual(ranking["above_1080p"], 1)
+        self.assertEqual(ranking["title_count"], 2)
+        self.assertEqual(ranking["disk_bytes"], 5800)
+        self.assertEqual(ranking["titles"][0]["above_1080p"], True)
+        self.assertEqual(ranking["titles"][0]["watch_count"], 1)
+        self.assertEqual(ranking["titles"][0]["file_size"], 5000)
+        self.assertEqual(ranking["titles"][0]["hdr"], "")
+        self.assertEqual(ranking["titles"][1]["watch_count"], 9)
+        self.assertEqual(ranking["titles"][1]["file_size"], 800)
+        self.assertEqual(ranking["titles"][1]["hdr"], "")
+        self.assertNotIn("13", {row["rating_key"] for row in ranking["titles"]})
+        self.assertNotIn("old", {row["rating_key"] for row in ranking["titles"]})
+        safari = report["profiles"][0]
+        self.assertIsNone(safari["source_breakdown"]["hdr"])
+        self.assertEqual(continued["copy_ahead"]["disk_bytes"], 5800)
+        self.assertEqual(continued["planned_from_plex"], 3)
+
     def test_library_titles_include_a_movie_and_an_episode(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "projectionist.db")
