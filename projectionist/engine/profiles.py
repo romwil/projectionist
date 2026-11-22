@@ -71,10 +71,17 @@ SAFARI = DeviceProfile(
     audio=["aac", "ac3", "eac3", "alac", "flac", "mp3"],
 )
 
+# Chrome 157.0.8103.79 on this Mac, headless with its own profile, answered
+# probably / Media Source / decodingInfo for Main and Main 10 through level 6.2
+# (hvc1 and hev1). The named profile uses that level. It does not list HDR.
 CHROME = DeviceProfile(
     id="chrome",
     containers=["mp4", "hls-fmp4"],
-    video=_video(("h264", "5.2")),
+    video=[
+        VideoCapability("hevc", "6.2", bit_depth=10),
+        VideoCapability("hevc", "6.2", bit_depth=8),
+        VideoCapability("h264", "5.2"),
+    ],
     audio=["aac", "mp3", "opus", "flac"],
 )
 

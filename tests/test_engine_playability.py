@@ -275,13 +275,17 @@ class PlayabilityReportTests(unittest.TestCase):
             )
         self.assertNotIn("ffprobe", json.dumps(report).lower())
         chrome = next(block for block in report["profiles"] if block["profile"] == "chrome")
-        self.assertEqual(chrome["shares"]["source-transcode"]["count"], 3)
-        self.assertEqual(chrome["source_breakdown"]["codec"], 3)
-        self.assertEqual(chrome["source_breakdown"]["codecs"], {"hevc": 3})
+        chrome_rows = {row["rating_key"]: row for row in chrome["titles"]}
+        self.assertEqual(chrome_rows["four-k"]["plan"], "remux")
+        self.assertEqual(chrome_rows["high-level"]["plan"], "remux")
+        self.assertEqual(chrome_rows["ten-bit"]["plan"], "remux")
+        self.assertEqual(chrome["shares"]["source-transcode"]["count"], 0)
+        self.assertEqual(chrome["source_breakdown"]["codec"], 0)
+        self.assertEqual(chrome["source_breakdown"]["codecs"], {})
         self.assertEqual(chrome["source_breakdown"]["level"], 0)
-        self.assertEqual(chrome["source_breakdown"]["resolution"], 1)
-        self.assertEqual(chrome["source_breakdown"]["hdr"], 1)
-        self.assertEqual(chrome["source_breakdown"]["video_transcode"], 3)
+        self.assertEqual(chrome["source_breakdown"]["resolution"], 0)
+        self.assertEqual(chrome["source_breakdown"]["hdr"], 0)
+        self.assertEqual(chrome["source_breakdown"]["video_transcode"], 0)
 
         safari = next(block for block in report["profiles"] if block["profile"] == "safari")
         safari_rows = {row["rating_key"]: row for row in safari["titles"]}
@@ -389,9 +393,10 @@ class PlayabilityReportTests(unittest.TestCase):
         safari = next(block for block in report["profiles"] if block["profile"] == "safari")
         apple = next(block for block in report["profiles"] if block["profile"] == "apple-tv-4k-3")
 
-        self.assertEqual(chrome["source_breakdown"]["video_transcode"], 3)
-        self.assertEqual(chrome["source_breakdown"]["codecs"], {"av1": 1, "hevc": 1, "mpeg4": 1})
-        self.assertEqual(sum(chrome["source_breakdown"]["codecs"].values()), 3)
+        self.assertEqual(chrome["source_breakdown"]["video_transcode"], 2)
+        self.assertEqual(chrome["source_breakdown"]["codecs"], {"av1": 1, "mpeg4": 1})
+        self.assertNotIn("hevc", chrome["source_breakdown"]["codecs"])
+        self.assertEqual(sum(chrome["source_breakdown"]["codecs"].values()), 2)
         self.assertIsNone(chrome["source_breakdown"]["level"])
         self.assertIsNone(chrome["source_breakdown"]["hdr"])
         self.assertEqual(chrome["source_breakdown"]["bit_depth"], 0)
@@ -436,7 +441,10 @@ class PlayabilityReportTests(unittest.TestCase):
                 data_dir=Path(tmp),
             )
         checked_chrome = checked["profiles"][0]
-        self.assertEqual(checked_chrome["source_breakdown"]["codecs"], {"hevc": 1})
+        checked_rows = {row["rating_key"]: row for row in checked_chrome["titles"]}
+        self.assertEqual(checked_rows["hevc-sdr"]["plan"], "remux")
+        self.assertEqual(checked_chrome["source_breakdown"]["codecs"], {})
+        self.assertEqual(checked_chrome["source_breakdown"]["video_transcode"], 0)
         self.assertEqual(checked_chrome["source_breakdown"]["level"], 0)
         self.assertEqual(checked_chrome["source_breakdown"]["hdr"], 0)
         self.assertEqual(checked_chrome["source_breakdown"]["bit_depth"], 0)
