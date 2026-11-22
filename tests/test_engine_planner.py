@@ -154,6 +154,34 @@ class PlannerTests(unittest.TestCase):
         high_ten.probe.streams[0].bit_depth = 10
         self.assertEqual(plan_playback(high_ten, both)["plan"], "full")
 
+    def test_web_profile_remuxes_flac_only_when_the_browser_lists_it(self) -> None:
+        # Adventures of Zatoichi is H.264 + FLAC. A reported FLAC answer remuxes.
+        # A browser that does not report it stays audio-only, not a fake remux.
+        film = _av("mkv", "h264", "flac", level="41")
+        refused = plan_playback(film, _web([VideoCapability("h264", "5.2")], ["aac"]))
+        self.assertEqual(refused["plan"], "audio")
+        self.assertEqual(refused["profile_answer"]["audio"], "flac not in profile")
+        self.assertEqual(refused["profile_answer"]["video"], "h264 up to 5.2")
+        self.assertIn("FLAC audio is not", str(refused["reason"]))
+
+        played = plan_playback(film, _web([VideoCapability("h264", "5.2")], ["aac", "flac"]))
+        self.assertEqual(played["plan"], "remux")
+        self.assertEqual(played["profile_answer"]["audio"], "flac")
+        self.assertIn("FLAC", str(played["reason"]))
+
+        opus = plan_playback(
+            _av("mkv", "h264", "opus", level="41"),
+            _web([VideoCapability("h264", "5.2")], ["aac", "opus"]),
+        )
+        self.assertEqual(opus["plan"], "remux")
+        self.assertEqual(opus["profile_answer"]["audio"], "opus")
+        missing_opus = plan_playback(
+            _av("mkv", "h264", "opus", level="41"),
+            _web([VideoCapability("h264", "5.2")], ["aac"]),
+        )
+        self.assertEqual(missing_opus["plan"], "audio")
+        self.assertEqual(missing_opus["profile_answer"]["audio"], "opus not in profile")
+
     def test_web_profile_remuxes_eac3_only_when_the_browser_lists_it(self) -> None:
         episode = _av("mkv", "h264", "eac3", level="41")
         refused = plan_playback(episode, _web([VideoCapability("h264", "5.2")], ["aac"]))
