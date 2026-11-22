@@ -40,7 +40,7 @@ async def run(
     def locate(rating_key: str):
         from projectionist.engine.routes import describe_title
 
-        return describe_title(settings, db, data_dir, rating_key)
+        return describe_title(settings, db, data_dir, rating_key, background=True)
 
     if should_stop():
         return {"status": "interrupted", "processed": 0, "has_more": True, "batch_size": BATCH_SIZE}

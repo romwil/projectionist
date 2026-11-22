@@ -214,8 +214,14 @@ def probe_file(
     cache_dir: Path,
     runner: RunFn,
     ffprobe: Optional[str] = None,
+    background: bool = False,
 ) -> ProbeResult:
-    """Probe ``path``, reusing a cache entry when size and mtime still match."""
+    """Probe ``path``, reusing a cache entry when size and mtime still match.
+
+    A Play probe (``background`` false) runs at normal priority and does not
+    wait on caption extraction. Its limit is the ffprobe timeout below. A
+    library confirmation probe waits on the shared low-priority slot.
+    """
     media = Path(path)
     try:
         stat = media.stat()
@@ -243,26 +249,36 @@ def probe_file(
         binary = resolve_ffprobe()
     if not binary:
         raise ProbeError("ffprobe is not available")
-    from projectionist.engine.media_slot import run_media_tool
-
+    argv = [
+        binary,
+        "-v",
+        "error",
+        "-show_format",
+        "-show_streams",
+        "-of",
+        "json",
+        str(media),
+    ]
     try:
-        result = run_media_tool(
-            [
-                binary,
-                "-v",
-                "error",
-                "-show_format",
-                "-show_streams",
-                "-of",
-                "json",
-                str(media),
-            ],
-            runner,
-            capture_output=True,
-            text=True,
-            timeout=60,
-            check=False,
-        )
+        if background:
+            from projectionist.engine.media_slot import run_media_tool
+
+            result = run_media_tool(
+                argv,
+                runner,
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=False,
+            )
+        else:
+            result = runner(
+                argv,
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=False,
+            )
     except (OSError, TimeoutError) as error:
         raise ProbeError("ffprobe failed") from error
     stdout = str(getattr(result, "stdout", "") or "")

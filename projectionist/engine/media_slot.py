@@ -1,8 +1,9 @@
-"""One ffmpeg or ffprobe at a time, at low priority.
+"""One background ffmpeg or ffprobe at a time, at low priority.
 
 Caption extraction and the playability confirmation share this slot. A second
-caller waits. The command is prefixed with ``nice`` and, when it is installed,
-``ionice`` so a library walk does not compete with playback.
+background caller waits. A Play probe does not take the slot. The command is
+prefixed with ``nice`` and, when it is installed, ``ionice`` so a library walk
+does not compete with playback.
 """
 
 from __future__ import annotations

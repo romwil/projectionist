@@ -1,5 +1,9 @@
-import { useEffect, useState } from "react";
-import { getPlayabilityReport, refreshPlayabilityReport } from "../../api/client";
+import { useEffect, useRef, useState } from "react";
+import {
+  getPlayabilityReport,
+  getPlayabilityTitles,
+  refreshPlayabilityReport,
+} from "../../api/client";
 import { detectBrowserPlaybackProfile } from "../../lib/enginePlayback";
 import { playabilityNotice } from "../../lib/playabilityNotice";
 
@@ -50,6 +54,109 @@ function profileLabel(id: string) {
   return PROFILE_LABELS[id] || id;
 }
 
+function TierShare({
+  profileId,
+  tier,
+  share,
+  titleCount,
+}: {
+  profileId: string;
+  tier: string;
+  share: Share;
+  titleCount: number;
+}) {
+  const count = Number(share.count || 0);
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  const [open, setOpen] = useState(false);
+  const [rows, setRows] = useState<TitleRow[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const node = detailsRef.current;
+    if (!node) return undefined;
+    const onToggle = () => {
+      const next = node.open;
+      setOpen(next);
+      if (next) setLoading(true);
+    };
+    node.addEventListener("toggle", onToggle);
+    return () => node.removeEventListener("toggle", onToggle);
+  }, [count]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    let live = true;
+    getPlayabilityTitles(profileId, tier, 0)
+      .then((payload) => {
+        if (!live) return;
+        const body = payload as { titles?: TitleRow[]; total?: number };
+        setRows(Array.isArray(body.titles) ? body.titles : []);
+        setTotal(Number(body.total || 0));
+      })
+      .catch(() => {
+        if (!live) return;
+        setRows([]);
+        setTotal(0);
+      })
+      .finally(() => {
+        if (live) setLoading(false);
+      });
+    return () => {
+      live = false;
+    };
+  }, [open, profileId, tier]);
+
+  async function showMore() {
+    try {
+      const payload = await getPlayabilityTitles(profileId, tier, rows.length);
+      const body = payload as { titles?: TitleRow[]; total?: number };
+      const next = Array.isArray(body.titles) ? body.titles : [];
+      setRows((current) => current.concat(next));
+      setTotal(Number(body.total || 0));
+    } catch {
+      // The rows already on screen stay. The next open tries again.
+    }
+  }
+
+  if (count <= 0) {
+    return (
+      <li>
+        <span>
+          {share.label || tier}: 0 of {titleCount}
+        </span>
+      </li>
+    );
+  }
+
+  return (
+    <li>
+      <details ref={detailsRef}>
+        <summary>
+          {share.label || tier}: {count} of {titleCount}
+        </summary>
+        {loading && rows.length === 0 ? (
+          <p className="field-help">Loading titles…</p>
+        ) : (
+          <ul className="playability-titles">
+            {rows.map((row) => (
+              <li key={row.rating_key} data-testid={`playability-title-${row.rating_key}`}>
+                <strong>{row.title || row.rating_key}</strong>
+                <span className="field-help">{row.reason}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {rows.length > 0 && rows.length < total ? (
+          <button type="button" onClick={() => void showMore()}>
+            Show more
+          </button>
+        ) : null}
+      </details>
+    </li>
+  );
+}
+
 /**
  * Owner view of the library playability report. The server dry-runs the
  * planner. This panel does not start a transcode.
@@ -61,7 +168,7 @@ export default function PlayabilityReport() {
 
   useEffect(() => {
     let live = true;
-    getPlayabilityReport()
+    getPlayabilityReport({ view: "progress" })
       .then((payload) => {
         if (live) setReport(payload as PlayabilityReportBody);
       })
@@ -77,7 +184,7 @@ export default function PlayabilityReport() {
     if (!report?.running) return undefined;
     let live = true;
     const timer = window.setInterval(() => {
-      getPlayabilityReport()
+      getPlayabilityReport({ view: "progress" })
         .then((payload) => {
           if (live) setReport(payload as PlayabilityReportBody);
         })
@@ -101,7 +208,8 @@ export default function PlayabilityReport() {
       } catch {
         profile = null;
       }
-      const next = await refreshPlayabilityReport(profile);
+      await refreshPlayabilityReport(profile);
+      const next = await getPlayabilityReport({ view: "progress" });
       setReport(next as PlayabilityReportBody);
     } catch (err) {
       setError(
@@ -162,42 +270,23 @@ export default function PlayabilityReport() {
       {profiles.map((profile) => {
         const id = String(profile.profile || "");
         const shares = profile.shares || {};
-        const titles = profile.titles || [];
+        const titleCount = Number(profile.title_count || 0);
         return (
           <section key={id} className="playability-profile" data-testid={`playability-${id}`}>
             <h5>{profileLabel(id)}</h5>
-            <p className="field-help">{profile.title_count || 0} titles</p>
+            <p className="field-help">{titleCount} titles</p>
             <ul className="playability-shares">
               {TIER_ORDER.map((tier) => {
                 const share = shares[tier];
                 if (!share) return null;
-                const count = Number(share.count || 0);
-                const rows = titles.filter((row) => row.tier === tier).slice(0, 40);
                 return (
-                  <li key={tier}>
-                    {count > 0 && rows.length ? (
-                      <details>
-                        <summary>
-                          {share.label || tier}: {count} of {profile.title_count || titles.length}
-                        </summary>
-                        <ul className="playability-titles">
-                          {rows.map((row) => (
-                            <li
-                              key={row.rating_key}
-                              data-testid={`playability-title-${row.rating_key}`}
-                            >
-                              <strong>{row.title || row.rating_key}</strong>
-                              <span className="field-help">{row.reason}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </details>
-                    ) : (
-                      <span>
-                        {share.label || tier}: {count} of {profile.title_count || 0}
-                      </span>
-                    )}
-                  </li>
+                  <TierShare
+                    key={tier}
+                    profileId={id}
+                    tier={tier}
+                    share={share}
+                    titleCount={titleCount}
+                  />
                 );
               })}
             </ul>

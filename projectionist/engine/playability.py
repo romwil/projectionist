@@ -364,6 +364,60 @@ def build_playability_report(
     }
 
 
+_TITLE_PAGE = 40
+
+
+def playability_progress(report: Mapping[str, Any]) -> dict[str, Any]:
+    """Shares and walk progress. Title rows stay in the saved report."""
+    copied = dict(report)
+    profiles: list[dict[str, Any]] = []
+    for block in report.get("profiles") or []:
+        if not isinstance(block, dict):
+            continue
+        profiles.append({key: value for key, value in block.items() if key != "titles"})
+    copied["profiles"] = profiles
+    return copied
+
+
+def playability_title_page(
+    report: Mapping[str, Any],
+    *,
+    profile: str,
+    tier: str,
+    limit: int = _TITLE_PAGE,
+    offset: int = 0,
+) -> dict[str, Any]:
+    """One page of title rows for a profile and tier. The page is capped."""
+    try:
+        page_limit = int(limit)
+    except (TypeError, ValueError):
+        page_limit = _TITLE_PAGE
+    page_limit = min(max(page_limit, 1), _TITLE_PAGE)
+    try:
+        page_offset = int(offset)
+    except (TypeError, ValueError):
+        page_offset = 0
+    page_offset = max(page_offset, 0)
+    wanted_profile = str(profile or "")
+    wanted_tier = str(tier or "")
+    matched: list[dict[str, Any]] = []
+    for block in report.get("profiles") or []:
+        if not isinstance(block, dict) or str(block.get("profile") or "") != wanted_profile:
+            continue
+        for row in block.get("titles") or []:
+            if isinstance(row, dict) and str(row.get("tier") or "") == wanted_tier:
+                matched.append(dict(row))
+        break
+    return {
+        "profile": wanted_profile,
+        "tier": wanted_tier,
+        "total": len(matched),
+        "offset": page_offset,
+        "limit": page_limit,
+        "titles": matched[page_offset : page_offset + page_limit],
+    }
+
+
 def load_playability_report(data_dir: Path) -> dict[str, Any]:
     path = report_path(data_dir)
     if not path.is_file():

@@ -77,7 +77,20 @@ def identity_from_db(db: Any, rating_key: str) -> dict[str, Any]:
     return {"tmdb_id": tmdb, "imdb_id": str(imdb or "")}
 
 
-def describe_title(settings: Settings, db: Any, data_dir: Path, rating_key: str):
+def describe_title(
+    settings: Settings,
+    db: Any,
+    data_dir: Path,
+    rating_key: str,
+    *,
+    background: bool = False,
+):
+    """Locate a title and probe it.
+
+    Play uses the default: normal priority, and it does not wait on caption
+    extraction. The library walk and caption prep pass ``background`` so their
+    ffprobe shares the low-priority slot with extraction.
+    """
     engine = getattr(settings, "engine", None)
     mappings = list(getattr(engine, "path_mappings", []) or [])
     source = PlexMediaSource(
@@ -89,6 +102,7 @@ def describe_title(settings: Settings, db: Any, data_dir: Path, rating_key: str)
         rating_key,
         cache_dir=Path(data_dir) / "engine" / "probes",
         runner=subprocess.run,
+        background=background,
     )
 
 
@@ -289,7 +303,12 @@ def playback_session_progress(
     except PlaybackError as error:
         raise HTTPException(status_code=error.status_code, detail=error.message) from error
     update_local_view_offset(_db(), session.rating_key, int(payload.time_ms), int(payload.duration_ms))
-    return {"ok": True, "session_id": session.session_id, "plan": session.plan, "reason": session.reason}
+    return {
+        "ok": True,
+        "session_id": session.session_id,
+        "plan": session.plan,
+        "reason": session.reason,
+    }
 
 
 @router.post("/api/playback/sessions/{session_id}/stop")
@@ -338,12 +357,39 @@ class EngineSettingPayload(BaseModel):
 
 
 @router.get("/api/playback/playability")
-def get_playability_report(user=Depends(require_role("owner"))) -> dict[str, Any]:
-    """The last library playability report. Owner only. No file paths."""
-    del user
-    from projectionist.engine.playability import load_playability_report
+def get_playability_report(
+    view: str = "",
+    profile: str = "",
+    tier: str = "",
+    limit: int = 40,
+    offset: int = 0,
+    user=Depends(require_role("owner")),
+) -> dict[str, Any]:
+    """The last library playability report. Owner only. No file paths.
 
-    return load_playability_report(_dir())
+    ``view=progress`` is what Settings polls while a walk is running: shares
+    and counts, without title rows. ``profile`` and ``tier`` together return
+    one page of those rows. The saved report still holds every title.
+    """
+    del user
+    from projectionist.engine.playability import (
+        load_playability_report,
+        playability_progress,
+        playability_title_page,
+    )
+
+    report = load_playability_report(_dir())
+    if str(view or "") == "progress":
+        return playability_progress(report)
+    if str(profile or "") and str(tier or ""):
+        return playability_title_page(
+            report,
+            profile=profile,
+            tier=tier,
+            limit=limit,
+            offset=offset,
+        )
+    return report
 
 
 @router.post("/api/playback/playability")
@@ -372,7 +418,7 @@ def refresh_playability_report(
         _settings(),
         _dir(),
         profiles=profiles,
-        locate=lambda key: describe_title(_settings(), _db(), _dir(), key),
+        locate=lambda key: describe_title(_settings(), _db(), _dir(), key, background=True),
     )
 
 
