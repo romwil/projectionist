@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
+from projectionist.sessions.live import apply_command, server_time_ms
 from projectionist.sessions.rooms import screen_signed_in_user
 from projectionist.sessions.shared import (
     SharedSessionError,
@@ -112,6 +113,84 @@ def close_session(session_id: str, user=Depends(get_current_user_dep)) -> dict:
         raise HTTPException(status_code=403, detail="Only the person who started this session can end it.")
     end_shared_session(session)
     return {"id": session.id, "state": "ended"}
+
+
+def _role(session, user_id: str) -> str | None:
+    screen_user = screen_signed_in_user(_db(), session.screen_id)
+    if session.owner_id == user_id:
+        return "owner"
+    if screen_user and screen_user == user_id:
+        return "screen"
+    return None
+
+
+def _user_from_websocket(websocket: WebSocket):
+    from projectionist.web.auth import row_to_current_user
+    from projectionist.web.session_tokens import SESSION_COOKIE_NAME, parse_session_claims
+
+    token = websocket.cookies.get(SESSION_COOKIE_NAME) or ""
+    if not token:
+        header = websocket.headers.get("authorization") or ""
+        if header.lower().startswith("bearer "):
+            token = header.split(" ", 1)[1].strip()
+    claims = parse_session_claims(token) if token else None
+    if not claims:
+        return None
+    row = _db().get_user(str(claims.get("uid") or ""))
+    if row is None:
+        return None
+    return row_to_current_user(row)
+
+
+@router.websocket("/api/sessions/{session_id}/live")
+async def session_live(websocket: WebSocket, session_id: str) -> None:
+    """Events down, commands up. The server authorizes every command."""
+    await websocket.accept()
+    user = _user_from_websocket(websocket)
+    session = get_shared_session(session_id)
+    user_id = str(getattr(user, "id", "") or "")
+    role = _role(session, user_id) if session is not None and user is not None else None
+    if session is None or role is None:
+        await websocket.send_json({"type": "error", "detail": _UNAVAILABLE})
+        await websocket.close(code=1008)
+        return
+    await websocket.send_json(
+        {
+            "type": "state",
+            "server_time_ms": server_time_ms(),
+            "position_ms": session.position_ms,
+            "state": session.state,
+            "level": session.level,
+        }
+    )
+    while True:
+        try:
+            payload = await websocket.receive_json()
+        except WebSocketDisconnect:
+            return
+        if not isinstance(payload, dict):
+            await websocket.send_json({"type": "error", "detail": "That command is not allowed."})
+            continue
+        try:
+            event = apply_command(session, role, payload)
+        except SharedSessionError as error:
+            await websocket.send_json({"type": "error", "detail": error.detail})
+            continue
+        await websocket.send_json(event)
+        if event.get("type") == "ended":
+            await websocket.close()
+            return
+
+
+@router.post("/api/sessions/{session_id}/commands")
+def post_command(session_id: str, payload: dict, user=Depends(get_current_user_dep)) -> dict:
+    """The same commands as the live channel, for a client that posts them."""
+    session, user_id, _screen_user = _visible(session_id, user)
+    role = "owner" if session.owner_id == user_id else "screen"
+    try:
+        return apply_command(session, role, payload)
+    except SharedSessionError as error:
+        _raise(error)
 
 
 def register_shared_session_routes(app) -> None:

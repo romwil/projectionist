@@ -31,7 +31,7 @@
       "push": 0,
       "rooms": 1,
       "session_object": 1,
-      "shared_sessions": 0,
+      "shared_sessions": 1,
       "throw": 1,
       "timeline": 0,
       "tracks": 0

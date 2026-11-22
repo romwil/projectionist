@@ -25,7 +25,7 @@ def client_capabilities() -> dict[str, int]:
         "throw": 1,
         "playback_engine": 1,  # ENG-003 session API, VOD fMP4 remux
         "caption_tracks": 0,  # ENG-004
-        "shared_sessions": 0,  # SES-004
+        "shared_sessions": 1,  # SES-004 live channel, command authorization, clock
         "timeline": 0,  # TML-005
         "tracks": 0,  # TRK-003
         "native_sign_in": 1,  # NAT-002 device credential on every web sign-in path
