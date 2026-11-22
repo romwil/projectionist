@@ -52,6 +52,25 @@ test.describe("Explore hub", () => {
     await expect(page).toHaveURL(/\/title\/movie\/348/);
   });
 
+  test("shelves use a generated poster and the top nav keeps a solid fill", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/explore");
+    const card = page.getByRole("article").filter({ has: page.getByRole("heading", { name: /Alien/ }) }).first();
+    await expect(card).toBeVisible();
+    const poster = await card.evaluate((node) => {
+      const art = node.querySelector("[data-motif]");
+      if (!art) return null;
+      const style = getComputedStyle(art);
+      return { motif: art.getAttribute("data-motif"), shadow: style.boxShadow };
+    });
+    expect(poster?.motif).toMatch(/skyline|road|tower|hills|dunes/);
+    expect(poster?.shadow).not.toBe("none");
+    const nav = page.getByRole("banner");
+    await expect(nav).toBeVisible();
+    const paint = await nav.evaluate((node) => getComputedStyle(node).backgroundColor);
+    expect(paint).not.toBe("rgba(0, 0, 0, 0)");
+  });
+
   test("deep-linked facet walls use shared browse controls", async ({ page }) => {
     await page.goto("/explore?genre=Sci-Fi");
 

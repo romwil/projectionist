@@ -56,7 +56,12 @@ export default function LibraryMediaCard({
   }, [item?.id, item?.rating_key, motifWhy?.summary]);
 
   const media = (
-    <PosterArt posterUrl={item.poster_url} title={libraryItem.title} year={item.year} />
+    <PosterArt
+      posterUrl={item.poster_url}
+      title={libraryItem.title}
+      year={item.year}
+      itemId={item.id || item.rating_key || item.plex_rating_key}
+    />
   );
 
   const titleBlock = (

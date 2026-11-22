@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import HelpHint from "./HelpHint";
+import PosterArt from "./PosterArt";
 import {
   isAddableToRadarr,
   isAddableToSonarr,
@@ -300,9 +301,14 @@ export default function TitleDetailContent({
       className={`title-detail-content${compact ? " title-detail-content--compact" : ""}`}
       data-testid={compact ? "title-detail-drawer-content" : "title-detail-content"}
     >
-      {compact && detail.poster_url ? (
+      {compact ? (
         <div className="title-detail-drawer-poster" aria-hidden="true">
-          <img src={detail.poster_url} alt="" loading="lazy" />
+          <PosterArt
+            posterUrl={detail.poster_url}
+            title={detail.title}
+            year={detail.year}
+            itemId={detail.library_item_id || detail.rating_key || detail.plex_rating_key}
+          />
         </div>
       ) : null}
 

@@ -27,10 +27,36 @@ function payload() {
     is_us: true,
     error: "",
     boards: {
-      current: { temp: 41, feels_like: 35, code: 95, sky: "Thunderstorm", wind: 22, wind_dir: "SW", humidity: 88 },
-      hourly: [{ time: "2026-11-04T23:00", label: "11 PM", temp: 41, code: 95, sky: "Thunderstorm", precip: 80 }],
+      current: {
+        temp: 41,
+        feels_like: 35,
+        code: 95,
+        sky: "Thunderstorm",
+        wind: 22,
+        wind_dir: "SW",
+        humidity: 88,
+      },
+      hourly: [
+        {
+          time: "2026-11-04T23:00",
+          label: "11 PM",
+          temp: 41,
+          code: 95,
+          sky: "Thunderstorm",
+          precip: 80,
+        },
+      ],
       five_day: [
-        { date: "2026-11-05", weekday: "THU", weekday_name: "Thursday", high: 52, low: 38, code: 61, sky: "Light rain", precip: 60 },
+        {
+          date: "2026-11-05",
+          weekday: "THU",
+          weekday_name: "Thursday",
+          high: 52,
+          low: 38,
+          code: 61,
+          sky: "Light rain",
+          precip: 60,
+        },
       ],
       alerts: {
         supported: true,
@@ -53,7 +79,10 @@ function payload() {
       radar: {
         source: "Iowa Environmental Mesonet NEXRAD",
         marker: { x: 0.5, y: 0.5 },
-        frames: Array.from({ length: 6 }, (_, i) => ({ url: PIXEL + "#" + i, time: `2026-11-04T22:${10 + i * 10}:00Z` })),
+        frames: Array.from({ length: 6 }, (_, i) => ({
+          url: PIXEL + "#" + i,
+          time: `2026-11-04T22:${10 + i * 10}:00Z`,
+        })),
       },
     },
     segments: [
@@ -66,8 +95,16 @@ function payload() {
     ],
     local_on_the_8s: ["current", "overview", "hourly"],
     scripts: {
-      alerts: [{ text: "This is a weather bulletin.", source: "template", audio_url: "" }],
-      current: [{ text: "Forty-one and stormy.", source: "template", audio_url: "" }],
+      alerts: [
+        {
+          text: "This is a weather bulletin.",
+          source: "template",
+          audio_url: "",
+        },
+      ],
+      current: [
+        { text: "Forty-one and stormy.", source: "template", audio_url: "" },
+      ],
     },
     scripts_version: 1,
     chyron: [
@@ -78,9 +115,33 @@ function payload() {
     chyron_summary: "Now 41 degrees with a thunderstorm.",
     headlines: {
       status: "ready",
-      scopes: [{ scope: "world", label: "World", items: [{ title: "Unique headline title", source: "BBC News" }] }],
+      enabled: true,
+      local_source: "search",
+      scopes: [
+        {
+          scope: "local",
+          label: "Chicago",
+          available: true,
+          items: [{ title: "Local council meets", source: "City desk" }],
+        },
+        {
+          scope: "national",
+          label: "United States",
+          available: true,
+          items: [{ title: "National briefing", source: "Wire" }],
+        },
+        {
+          scope: "world",
+          label: "World",
+          available: true,
+          items: [{ title: "Unique headline title", source: "BBC News" }],
+        },
+      ],
     },
-    music: { tracks: [], note: "No soundtrack — the forecast plays without music." },
+    music: {
+      tracks: [],
+      note: "No soundtrack — the forecast plays without music.",
+    },
     muzak: null,
     muzak_note: "No soundtrack — the forecast plays without music.",
     narration: { enabled: false, ready: false },
@@ -97,10 +158,17 @@ test.describe("Weather Channel (mocked)", () => {
   test.beforeEach(async ({ page }) => {
     resetMockCertifications();
     await mockCuratorApis(page);
-    await mockFeatures(page, { live_channels_enabled: true, live_channels_ready: true });
+    await mockFeatures(page, {
+      live_channels_enabled: true,
+      live_channels_ready: true,
+    });
     await mockLiveChannelsHousehold(page, { enabled: true, ready: true });
     await page.route("**/api/live/weather", async (route: Route) => {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(payload()) });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(payload()),
+      });
     });
     await page.addInitScript(() => {
       (window as any).__speechCalls = 0;
@@ -112,31 +180,47 @@ test.describe("Weather Channel (mocked)", () => {
     });
   });
 
-  test("Warning plays first with a bulletin bar; chyron is weather-only; no browser speech", async ({ page }) => {
+  test("Warning plays first with a bulletin bar; chyron is weather-only; no browser speech", async ({
+    page,
+  }) => {
     await page.goto("/live?mode=weather");
     const channel = page.getByTestId("weather-channel");
     await expect(channel).toBeVisible({ timeout: 15_000 });
     await expect(channel).toHaveAttribute("data-board", "alerts");
-    await expect(page.getByTestId("weather-bulletin-bar")).toContainText("Severe Thunderstorm Warning");
-    await expect(page.getByTestId("weather-board-alerts")).toContainText("Move to an interior room");
-    await expect(page.getByTestId("weather-warning-announcement")).toContainText("Severe Thunderstorm Warning");
+    await expect(page.getByTestId("weather-bulletin-bar")).toContainText(
+      "Severe Thunderstorm Warning",
+    );
+    await expect(page.getByTestId("weather-board-alerts")).toContainText(
+      "Move to an interior room",
+    );
+    await expect(
+      page.getByTestId("weather-warning-announcement"),
+    ).toContainText("Severe Thunderstorm Warning");
 
     const chyron = page.getByTestId("weather-chyron");
     await expect(chyron).toContainText("NOW 41° Thunderstorm");
     await expect(chyron).toContainText("THU 52°/38°");
     await expect(chyron).not.toContainText("Unique headline title");
 
-    await expect(page.getByTestId("weather-caption")).toContainText("weather bulletin");
-    await expect(page.getByTestId("weather-channel-egress")).toContainText("api.weather.gov");
+    await expect(page.getByTestId("weather-caption")).toContainText(
+      "weather bulletin",
+    );
+    await expect(page.getByTestId("weather-channel-egress")).toContainText(
+      "api.weather.gov",
+    );
     expect(await page.evaluate(() => (window as any).__speechCalls)).toBe(0);
   });
 
-  test("reduced motion holds the radar on the latest frame", async ({ page }) => {
+  test("reduced motion holds the radar on the latest frame", async ({
+    page,
+  }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.clock.install({ time: new Date("2026-11-04T22:01:00") });
     await page.goto("/live?mode=weather");
     const channel = page.getByTestId("weather-channel");
-    await expect(channel).toHaveAttribute("data-motion", "reduced", { timeout: 15_000 });
+    await expect(channel).toHaveAttribute("data-motion", "reduced", {
+      timeout: 15_000,
+    });
     // Bulletin, then the local block (current, hourly), then the rotation reaches radar.
     for (let i = 0; i < 8; i += 1) {
       if ((await channel.getAttribute("data-board")) === "radar") break;
@@ -148,5 +232,43 @@ test.describe("Weather Channel (mocked)", () => {
     await expect(radar).toHaveAttribute("data-animating", "false");
     await page.clock.runFor(2_000);
     await expect(radar).toHaveAttribute("data-frame", "5");
+  });
+
+  test("channel, tablet, and scrolling page keep their layouts", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/live?mode=weather");
+    const channel = page.getByTestId("weather-channel");
+    await expect(channel).toHaveAttribute("data-layout", "channel", {
+      timeout: 15_000,
+    });
+    await expect(page.getByTestId("weather-bug")).toHaveText("Weather");
+    await expect(page.getByTestId("weather-segment-dots")).toBeVisible();
+    await expect(page.getByTestId("weather-chyron")).toContainText("Up next");
+    const wide = await channel.evaluate(
+      (node) => node.scrollWidth <= node.clientWidth + 1,
+    );
+    expect(wide).toBe(true);
+
+    await page.setViewportSize({ width: 834, height: 1112 });
+    await expect(channel).toHaveAttribute("data-layout", "tablet");
+    await page
+      .getByTestId("weather-segment-dots")
+      .getByRole("button", { name: "Current conditions" })
+      .click();
+    await expect(page.getByTestId("weather-instruments")).toBeVisible();
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(channel).toHaveAttribute("data-layout", "page");
+    await expect(page.getByTestId("weather-section-chips")).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Local" })).toBeVisible();
+    await page.getByRole("tab", { name: "National" }).click();
+    await expect(page.getByText("National briefing")).toBeVisible();
+    const narrow = await channel.evaluate(
+      (node) => node.scrollWidth <= node.clientWidth + 1,
+    );
+    expect(narrow).toBe(true);
+    await expect(page.getByTestId("weather-radar-play")).toBeVisible();
   });
 });

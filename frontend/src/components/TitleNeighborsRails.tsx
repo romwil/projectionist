@@ -24,7 +24,12 @@ function TitleNeighborCard({ item, testId, why = null }: TitleNeighborCardProps)
   const libraryItem = { ...item, in_library: true };
   const path = titleDetailPath(libraryItem);
   const poster = (
-    <PosterArt posterUrl={libraryItem.poster_url} title={libraryItem.title} year={libraryItem.year} />
+    <PosterArt
+      posterUrl={libraryItem.poster_url}
+      title={libraryItem.title}
+      year={libraryItem.year}
+      itemId={libraryItem.id || libraryItem.rating_key}
+    />
   );
 
   return (

@@ -1,35 +1,39 @@
+import Poster from "./Poster";
+
 /**
- * VIS-027: real poster when we have one; otherwise a *designed* missing-art
- * state (title + year inside the 2:3 well) instead of a single oversized
- * initial letter. No open proxy — this only ever renders `poster_url` as
- * given by our own API payloads, or falls back to text we already have.
+ * Shelf art. Renders the shared Poster: a generated placeholder, then the
+ * cached image fading in over it. `posterUrl` is only ever the URL our API
+ * already returned.
  */
 type PosterArtProps = {
   posterUrl?: string | null;
   title?: string | null;
   year?: string | number | null;
+  itemId?: string | number | null;
+  /** Kept so older call sites still type-check. The poster itself is one element. */
   as?: "div" | "span";
   className?: string;
+  titleOnArt?: boolean;
 };
 
 export default function PosterArt({
   posterUrl,
   title,
   year,
-  as: Tag = "div",
+  itemId,
+  as: _as = "div",
   className,
+  titleOnArt = false,
 }: PosterArtProps) {
-  if (posterUrl) {
-    return <img src={posterUrl} alt="" loading="lazy" className={className} />;
-  }
-  const label = String(title || "").trim() || "Untitled";
+  void _as;
   return (
-    <Tag
-      className={`poster-fallback${className ? ` ${className}` : ""}`}
-      data-testid="poster-missing-art"
-    >
-      <span className="poster-fallback-title">{label}</span>
-      {year ? <span className="poster-fallback-year">{year}</span> : null}
-    </Tag>
+    <Poster
+      src={posterUrl}
+      title={title}
+      year={year}
+      itemId={itemId}
+      className={className}
+      titleOnArt={titleOnArt}
+    />
   );
 }
