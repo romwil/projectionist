@@ -31,7 +31,9 @@ def _asset(audio: str = "ac3") -> MediaAsset:
             bitrate=4_000_000,
             size=300_000_000,
             streams=[
-                MediaStream(index=0, codec_type="video", codec="h264", width=1920, height=1080, level="41"),
+                MediaStream(
+                    index=0, codec_type="video", codec="h264", width=1920, height=1080, level="41"
+                ),
                 MediaStream(index=1, codec_type="audio", codec=audio, channels=2, language="eng"),
             ],
         ),
@@ -97,7 +99,9 @@ class EngineSessionTests(unittest.TestCase):
                 resolve_session_file(session, "../film.mkv")
             with self.assertRaises(PlaybackError):
                 session_for_token(session.session_id, "wrong-token")
-            self.assertEqual(session_for_token(session.session_id, session.token).rating_key, "121986")
+            self.assertEqual(
+                session_for_token(session.session_id, session.token).rating_key, "121986"
+            )
 
     def test_audio_plan_copies_video_and_is_playable(self) -> None:
         import tempfile
@@ -152,7 +156,10 @@ class EngineSessionTests(unittest.TestCase):
                 {
                     "id": "web",
                     "containers": ["mp4", "hls-fmp4"],
-                    "video": [{"codec": "hevc", "max_level": "5.1", "bit_depth": 10}, {"codec": "h264", "max_level": "5.2"}],
+                    "video": [
+                        {"codec": "hevc", "max_level": "5.1", "bit_depth": 10},
+                        {"codec": "h264", "max_level": "5.2"},
+                    ],
                     "audio": ["aac", "ac3", "eac3"],
                     "captions": ["webvtt"],
                 }
