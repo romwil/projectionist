@@ -7,6 +7,7 @@ import {
   chooseWebPlayback,
   engineSessionForPlayer,
   playThroughProjectionist,
+  settleEngineFirstFrame,
 } from "./enginePlayback.ts";
 
 test("the household switch defaults the web player to the Plex path", async () => {
@@ -215,6 +216,95 @@ test("canPlayType, MediaSource, and decodingInfo are the same profile", async ()
   assert.equal(chrome.audio.includes("ac3"), true);
   assert.equal(chrome.audio.includes("eac3"), false);
   assert.equal(chrome.audio.includes("flac"), false);
+});
+
+test("an engine session retries the library path once when the first frame never arrives", async () => {
+  const logs = [];
+  let libraryStarts = 0;
+  let engineStops = 0;
+  const startLibrary = async () => {
+    libraryStarts += 1;
+    return { stream_url: "/plex", engine: false, session_id: "library" };
+  };
+  const stopEngine = async () => {
+    engineStops += 1;
+  };
+  const log = (reason) => logs.push(reason);
+
+  const timedOut = await settleEngineFirstFrame({
+    elapsedMs: 8000,
+    videoWidth: 0,
+    readyState: 0,
+    fatalError: "",
+    retried: false,
+    startLibrary,
+    stopEngine,
+    log,
+  });
+  assert.equal(libraryStarts, 1);
+  assert.equal(engineStops, 1);
+  assert.equal(timedOut.retried, true);
+  assert.equal(timedOut.session.stream_url, "/plex");
+  assert.match(logs[0], /no first frame within 8 seconds/);
+
+  const secondTimeout = await settleEngineFirstFrame({
+    elapsedMs: 16000,
+    videoWidth: 0,
+    readyState: 0,
+    fatalError: "",
+    retried: timedOut.retried,
+    startLibrary,
+    stopEngine,
+    log,
+  });
+  assert.equal(libraryStarts, 1);
+  assert.equal(engineStops, 1);
+  assert.equal(secondTimeout.session, null);
+  assert.equal(logs.length, 1);
+
+  const fatal = await settleEngineFirstFrame({
+    elapsedMs: 200,
+    videoWidth: 0,
+    readyState: 0,
+    fatalError: "manifestLoadError",
+    retried: false,
+    startLibrary,
+    stopEngine,
+    log,
+  });
+  assert.equal(libraryStarts, 2);
+  assert.equal(engineStops, 2);
+  assert.equal(fatal.retried, true);
+  assert.equal(fatal.session.stream_url, "/plex");
+  assert.match(logs[1], /failed before the first frame: manifestLoadError/);
+
+  const secondFatal = await settleEngineFirstFrame({
+    elapsedMs: 200,
+    videoWidth: 0,
+    readyState: 0,
+    fatalError: "manifestLoadError",
+    retried: fatal.retried,
+    startLibrary,
+    stopEngine,
+    log,
+  });
+  assert.equal(libraryStarts, 2);
+  assert.equal(engineStops, 2);
+  assert.equal(secondFatal.session, null);
+
+  const playing = await settleEngineFirstFrame({
+    elapsedMs: 9000,
+    videoWidth: 1918,
+    readyState: 4,
+    fatalError: "",
+    retried: false,
+    startLibrary,
+    stopEngine,
+    log,
+  });
+  assert.equal(libraryStarts, 2);
+  assert.equal(playing.session, null);
+  assert.equal(playing.retried, false);
 });
 
 test("FLAC, Opus, and ALAC are included only when the mp4 codec check says yes", async () => {

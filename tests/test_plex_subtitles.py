@@ -91,6 +91,24 @@ class PlexStreamCatalogTests(unittest.TestCase):
         media_row = title_streams_from_element(fallback)
         self.assertEqual(media_row["streams"][0]["height"], 2160)
         self.assertEqual(media_row["streams"][0]["hdr"], "hdr10")
+        self.assertTrue(media_row["streams"][0]["hdr_known"])
+
+        summary = ET.fromstring(
+            """
+            <Video ratingKey="161003" title="Summary only">
+              <Media container="mkv" videoCodec="hevc" videoProfile="main 10"
+                     videoResolution="1080" width="1920" height="1080" />
+            </Video>
+            """
+        )
+        summary_row = title_streams_from_element(summary)
+        summary_video = summary_row["streams"][0]
+        self.assertEqual(summary_video["codec"], "hevc")
+        self.assertEqual(summary_video["level"], "")
+        self.assertEqual(summary_video["bit_depth"], 10)
+        self.assertEqual(summary_video["hdr"], "")
+        self.assertFalse(summary_video["hdr_known"])
+        self.assertEqual(summary_video["height"], 1080)
 
 
 class PlexSubtitleClientTests(unittest.TestCase):

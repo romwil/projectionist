@@ -15,7 +15,13 @@ import {
   stopEnginePlayback,
   stopLibraryPlayback,
 } from "../../api/client";
-import { chooseWebPlayback, detectBrowserPlaybackProfile } from "../../lib/enginePlayback";
+import {
+  chooseWebPlayback,
+  detectBrowserPlaybackProfile,
+  ENGINE_FIRST_FRAME_TIMEOUT_MS,
+  engineFirstFrameReason,
+  settleEngineFirstFrame,
+} from "../../lib/enginePlayback";
 import { isCompactPlayViewport, isPhonePlayViewport } from "../../lib/chatLayout.js";
 import { useTitleDetail } from "../../hooks/useTitleDetail";
 import EndCardRatingPrompt from "./EndCardRatingPrompt";
@@ -172,6 +178,8 @@ export default function LibraryPlayer({
   const seekRestartPendingMsRef = useRef<any>(null);
   const seekPaintTimerRef = useRef<any>(null);
   const pictureHoldRef = useRef(false);
+  const engineFallbackRef = useRef(false);
+  const engineAttachedAtRef = useRef(0);
   const seekReloadArmedRef = useRef(false);
   const seekRestoreMsRef = useRef<any>(null);
   const seekRestoreAttemptedRef = useRef(false);
@@ -260,6 +268,8 @@ export default function LibraryPlayer({
     setPictureHold(false);
     setHoldFrame("");
     pictureHoldRef.current = false;
+    engineFallbackRef.current = false;
+    engineAttachedAtRef.current = 0;
     seekTimelineOriginRef.current = 0;
   }
 
@@ -477,6 +487,104 @@ export default function LibraryPlayer({
     else video.addEventListener("loadedmetadata", apply);
     return () => video.removeEventListener("loadedmetadata", apply);
   }, [session?.engine, session?.session_id, session?.view_offset_ms]);
+
+  const applyEngineFallback = useCallback((next: any) => {
+    if (!next?.stream_url) {
+      setError("This title couldn’t start in Projectionist.");
+      setStatus("error");
+      return;
+    }
+    sessionRef.current = next;
+    seekTimelineOriginRef.current = 0;
+    seekCommittedMsRef.current = null;
+    setSeekEpoch(0);
+    setSession(next);
+    setDurationMs(Number(next.duration_ms) || 0);
+    setNowMs(Number(next.view_offset_ms) || 0);
+    setError("");
+    setStatus("ready");
+  }, []);
+
+  const runEngineFirstFrameFallback = useCallback(async (input: {
+    elapsedMs: number;
+    videoWidth: number;
+    readyState: number;
+    fatalError: string;
+  }) => {
+    if (engineFallbackRef.current || pictureHoldRef.current) return;
+    const current = sessionRef.current;
+    if (!current?.engine || !current.session_id) return;
+    if (!engineFirstFrameReason(input)) return;
+    engineFallbackRef.current = true;
+    const result = await settleEngineFirstFrame({
+      ...input,
+      retried: false,
+      stopEngine: () => stopEnginePlayback(current.session_id),
+      startLibrary: () => startLibraryPlayback(key, { startOver: false, rec: recRef.current }),
+    });
+    if (sessionRef.current !== current) return;
+    applyEngineFallback(result.session);
+  }, [applyEngineFallback, key]);
+
+  useEffect(() => {
+    const attached = Boolean(
+      session?.engine && session.stream_url && !resumeOpen && !preroll && !ended,
+    );
+    if (!attached) return undefined;
+    engineAttachedAtRef.current = Date.now();
+    let watched: any = null;
+    const onVideoError = () => {
+      const video = videoRef.current;
+      void runEngineFirstFrameFallback({
+        elapsedMs: Date.now() - engineAttachedAtRef.current,
+        videoWidth: video?.videoWidth || 0,
+        readyState: video?.readyState || 0,
+        fatalError: video?.error?.message || "video error",
+      });
+    };
+    const timer = window.setInterval(() => {
+      const video = videoRef.current;
+      if (video && watched !== video) {
+        watched?.removeEventListener?.("error", onVideoError);
+        watched = video;
+        video.addEventListener("error", onVideoError);
+      }
+      void runEngineFirstFrameFallback({
+        elapsedMs: Date.now() - engineAttachedAtRef.current,
+        videoWidth: video?.videoWidth || 0,
+        readyState: video?.readyState || 0,
+        fatalError: "",
+      });
+    }, 500);
+    return () => {
+      window.clearInterval(timer);
+      watched?.removeEventListener?.("error", onVideoError);
+    };
+  }, [
+    ended,
+    preroll,
+    resumeOpen,
+    runEngineFirstFrameFallback,
+    session?.engine,
+    session?.session_id,
+    session?.stream_url,
+  ]);
+
+  const handleEngineHlsError = useCallback((data: any) => {
+    if (!data?.fatal || !sessionRef.current?.engine || engineFallbackRef.current || pictureHoldRef.current) {
+      return false;
+    }
+    const video = videoRef.current;
+    const input = {
+      elapsedMs: engineAttachedAtRef.current ? Date.now() - engineAttachedAtRef.current : 0,
+      videoWidth: video?.videoWidth || 0,
+      readyState: video?.readyState || 0,
+      fatalError: String(data.details || data.type || "playback error"),
+    };
+    if (!engineFirstFrameReason(input)) return false;
+    void runEngineFirstFrameFallback(input);
+    return true;
+  }, [runEngineFirstFrameFallback]);
 
   const handlePlayerStatus = useCallback((next: any) => {
     setStatus(next);
@@ -1418,6 +1526,7 @@ export default function LibraryPlayer({
         onStatus={handlePlayerStatus}
         onVideoRef={handleVideoRef}
         onHlsRef={handleHlsRef}
+        onHlsError={handleEngineHlsError}
         playlistSubtitles={Boolean(session?.engine)}
         resumeMutedIfBlocked={continueAtMs != null}
         onAutoplayResult={(result) => {
