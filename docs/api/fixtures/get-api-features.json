@@ -29,6 +29,7 @@
       "native_sign_in": 1,
       "playback_engine": 1,
       "push": 0,
+      "rooms": 1,
       "shared_sessions": 0,
       "throw": 1,
       "timeline": 0,

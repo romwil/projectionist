@@ -385,6 +385,7 @@ def collect_client_fixtures() -> dict[str, dict[str, Any]]:
                 "/api/devices/me/intent",
                 client.get("/api/devices/me/intent", headers=bearer),
             )
+            keep("GET", "/api/rooms", client.get("/api/rooms"))
             keep("GET", "/api/library/feeds/hub", client.get("/api/library/feeds/hub"))
             keep(
                 "GET",

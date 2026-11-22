@@ -46,6 +46,7 @@ CLIENT_ROUTES: frozenset[tuple[str, str]] = frozenset(
         ("GET", "/api/auth/me"),
         ("PATCH", "/api/auth/me"),
         ("GET", "/api/devices/me/intent"),
+        ("GET", "/api/rooms"),
         ("GET", "/api/library/feeds/hub"),
         ("GET", "/api/library/feeds/tonight-table"),
         ("GET", "/api/library/query"),
