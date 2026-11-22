@@ -30,10 +30,10 @@ SHIPPED = {
     "household_addresses": 1,
     "rooms": 1,
     "session_object": 1,
+    "shared_sessions": 1,
 }
 ACCEPTED_NOT_SHIPPED = {
     "caption_tracks": 0,
-    "shared_sessions": 0,
     "timeline": 0,
     "tracks": 0,
     "push": 0,

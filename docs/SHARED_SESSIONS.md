@@ -56,7 +56,7 @@ A session has exactly one screen. Moving playback to another screen is a **hando
 
 Joined devices need sub-second state. Polling `GET /api/devices/me/intent` is right for a throw; it is wrong for a remote.
 
-- **Transport:** a WebSocket per joined device at `/api/sessions/{id}/live` (SSE fallback for the web, matching the existing `/api/chat/stream` pattern). *Open decision:* WebSocket vs SSE + POST commands; proposed WebSocket because commands and events are symmetric.
+- **Transport:** a WebSocket per joined device at `/api/sessions/{id}/live`. The same commands are accepted at `POST /api/sessions/{id}/commands`. The socket sends the current state on connect. Every accepted command comes back as an event with `server_time_ms`.
 - **Events (server → devices):** `state` (playing / paused / buffering / ended), `position` heartbeat (~1 s while playing, plus on every seek), `track` (current level, next cue id), `cue` (a [track cue](TRACKS.md#cues) is due), `detour` (start / end), `members` (who joined), `ended`.
 - **Commands (device → server → screen):** `play`, `pause`, `seek {ms}`, `skip {s}`, `rate {1|2}`, `captions {id|off}`, `level {…}`, `detour.accept`, `end`. The server authorizes every command against the session role table above, then relays to the screen.
 - **Clock:** events carry server time; devices estimate the playhead from the last `position` + elapsed time, so handheld captions and cue timing stay within a few hundred milliseconds of the picture.
@@ -120,7 +120,7 @@ curl -s -X POST http://your-host:8788/api/sessions \
 
 The starter can change the level and end the session. The member signed in on the screen can read it and report position. Any other member gets 404, including the title. Starting another session on the same screen ends the previous one.
 
-**How this works.** The capability `session_object` is `1`. `shared_sessions` stays `0` until the realtime channel. **Honest limit.** The object is kept in memory and is gone after a restart. It does not by itself move the picture; the screen still plays the engine playlist. Joining, guest transport, and the live channel are later items.
+**How this works.** The capability `session_object` is `1`. **Honest limit.** The object is kept in memory and is gone after a restart. It does not by itself move the picture; the screen still plays the engine playlist. Joining, guest transport, and the live channel are later items.
 
 ## Rooms
 
@@ -146,7 +146,7 @@ The household owner, or the member signed in on that screen, can rename it with 
 | SES-001 | Device credentials for phones and tablets (done with NAT-002). Every web sign-in path can end in a device credential | pairing (shipped) |
 | SES-002 | Rooms registry (named screens per household) + visibility rules (done: `GET /api/rooms`, `rooms` is 1) | SES-001 |
 | SES-003 | Session object (owner, screen, position, level) on top of engine sessions (done: `session_object` is 1) | ENG-003 |
-| SES-004 | Realtime channel (`/api/sessions/{id}/live`), command authorization, clock model | SES-003 |
+| SES-004 | Realtime channel (`/api/sessions/{id}/live`), command authorization, clock model (done: `shared_sessions` is 1) | SES-003 |
 | SES-005 | Join flow (owner approval or on-screen code) + guest permissions | SES-004 |
 | SES-006 | Handheld captions | SES-004, ENG-004 |
 | SES-007 | Handoff between screens (same session, new screen) | SES-004 |
