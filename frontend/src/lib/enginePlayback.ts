@@ -16,6 +16,13 @@ type VideoProbe = { codec: string; max_level: string; bit_depth?: number; type: 
 // Each row is one runtime answer. The level and bit depth come from the row that passes,
 // not from a fixed Safari or Chrome list.
 const VIDEO_PROBES: VideoProbe[] = [
+  // Chrome 157.0.8103.79 (headless, its own user-data-dir, 2026-11-22) said
+  // probably, and decodingInfo supported, for Main and Main 10 through level
+  // 6.2 on both hvc1 and hev1. Bare hvc1 / hev1 and L999 were no.
+  { codec: "hevc", max_level: "6.2", bit_depth: 10, type: 'video/mp4; codecs="hvc1.2.4.L186.B0"' },
+  { codec: "hevc", max_level: "6.2", bit_depth: 10, type: 'video/mp4; codecs="hev1.2.4.L186.B0"' },
+  { codec: "hevc", max_level: "6.2", bit_depth: 8, type: 'video/mp4; codecs="hvc1.1.6.L186.B0"' },
+  { codec: "hevc", max_level: "6.2", bit_depth: 8, type: 'video/mp4; codecs="hev1.1.6.L186.B0"' },
   { codec: "hevc", max_level: "5.1", bit_depth: 10, type: 'video/mp4; codecs="hvc1.2.4.L153.B0"' },
   { codec: "hevc", max_level: "5.0", bit_depth: 10, type: 'video/mp4; codecs="hvc1.2.4.L150.B0"' },
   { codec: "hevc", max_level: "4.0", bit_depth: 10, type: 'video/mp4; codecs="hvc1.2.4.L120.90"' },
@@ -34,6 +41,11 @@ const VIDEO_PROBES: VideoProbe[] = [
   { codec: "h264", max_level: "4.0", type: 'video/mp4; codecs="avc1.640028"' },
   { codec: "h264", max_level: "3.0", type: 'video/mp4; codecs="avc1.42E01E"' },
 ];
+
+/** HEVC strings the runtime profile asks. Locked to a Chrome 157 probe on this Mac. */
+export const HEVC_PROBE_TYPES = VIDEO_PROBES.filter((probe) => probe.codec === "hevc").map(
+  (probe) => probe.type,
+);
 
 // Each row is one mp4 codec string. FLAC, Opus, and ALAC have no level.
 // A yes on audio/flac or audio/ogg is the container, not this remux, so it

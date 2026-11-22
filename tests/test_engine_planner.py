@@ -67,14 +67,33 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(plan["plan"], "audio")
         self.assertIn("AC-3", str(plan["reason"]))
 
-    def test_chrome_asks_the_source_to_transcode_hevc(self) -> None:
-        plan = plan_playback(_av("mkv", "hevc", "aac", level="153"), CHROME)
-        self.assertEqual(plan["plan"], "source-transcode")
-        self.assertEqual(plan["source_reason"], "codec")
-        self.assertEqual(plan["provider"], "plex")
-        self.assertFalse(plan["playable"])
-        self.assertIn("HEVC", str(plan["reason"]))
-        self.assertNotIn("/secret", str(plan))
+    def test_chrome_hevc_through_level_6_2_remuxes_and_above_that_is_a_try(self) -> None:
+        """Chrome 157 accepted Main and Main 10 through level 6.2, hvc1 and hev1.
+
+        Level 186 is 6.2, so it is a remux. A higher level idc is above that
+        advertised level and is a try. A remembered miss is not tried again.
+        """
+        within = _av("mkv", "hevc", "aac", level="153")
+        within.probe.streams[0].bit_depth = 10
+        played = plan_playback(within, CHROME)
+        self.assertEqual(played["plan"], "remux")
+        self.assertIn("hevc up to 6.2, 10-bit", str(played["profile_answer"]["video"]))
+
+        at_ceiling = _av("mkv", "hevc", "aac", level="186")
+        at_ceiling.probe.streams[0].bit_depth = 10
+        ceiling = plan_playback(at_ceiling, CHROME)
+        self.assertEqual(ceiling["plan"], "remux")
+
+        above = _av("mkv", "hevc", "aac", level="189")
+        above.rating_key = "134335"
+        above.probe.streams[0].bit_depth = 10
+        tried = plan_playback(above, CHROME)
+        self.assertEqual(tried["plan"], "try")
+        self.assertIn("hevc level is above profile hevc 6.2", str(tried["profile_answer"]["video"]))
+        again = plan_playback(above, CHROME, failed_tries={("134335", "chrome")})
+        self.assertEqual(again["plan"], "source-transcode")
+        self.assertNotEqual(again["plan"], "try")
+        self.assertEqual(again["source_reason"], "level")
 
     def test_a_later_source_can_answer_the_same_request(self) -> None:
         class LaterSource:
@@ -88,7 +107,7 @@ class PlannerTests(unittest.TestCase):
                 }
 
         plan = plan_playback(
-            _av("mkv", "hevc", "aac", level="153"),
+            _av("mkv", "av1", "aac", level="153"),
             CHROME,
             source=LaterSource(),
         )
@@ -96,7 +115,7 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(plan["provider"], "jellyfin")
         self.assertEqual(plan["source_reason"], "codec")
         self.assertFalse(plan["playable"])
-        self.assertIn("HEVC", str(plan["reason"]))
+        self.assertIn("AV1", str(plan["reason"]))
 
     def test_safari_direct_plays_mp4_h264_aac(self) -> None:
         plan = plan_playback(_av("mp4", "h264", "aac"), SAFARI)

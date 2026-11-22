@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   browserPlaybackProfile,
   browserPlaybackProfileFromRuntime,
+  HEVC_PROBE_TYPES,
   chooseWebPlayback,
   engineSessionForPlayer,
   isSafariUserAgent,
@@ -421,4 +422,40 @@ test("safari reports hdr10 only with a high dynamic range display and an HEVC pr
 
   const noHevc = browserPlaybackProfile((type) => type.includes("avc1"), 2, { hdr: true });
   assert.ok(noHevc.video.every((row) => !row.hdr));
+});
+
+test("chrome 157 accepts these HEVC strings and rejects bare hvc1, hev1, and L999", () => {
+  assert.deepEqual(HEVC_PROBE_TYPES, [
+    'video/mp4; codecs="hvc1.2.4.L186.B0"',
+    'video/mp4; codecs="hev1.2.4.L186.B0"',
+    'video/mp4; codecs="hvc1.1.6.L186.B0"',
+    'video/mp4; codecs="hev1.1.6.L186.B0"',
+    'video/mp4; codecs="hvc1.2.4.L153.B0"',
+    'video/mp4; codecs="hvc1.2.4.L150.B0"',
+    'video/mp4; codecs="hvc1.2.4.L120.90"',
+    'video/mp4; codecs="hvc1.2.4.L93.B0"',
+    'video/mp4; codecs="hvc1.1.6.L153.B0"',
+    'video/mp4; codecs="hev1.1.6.L153.B0"',
+    'video/mp4; codecs="hvc1.1.6.L120.90"',
+    'video/mp4; codecs="hvc1.1.6.L93.B0"',
+    'video/mp4; codecs="hev1.1.6.L93.B0"',
+  ]);
+  const rejected = [
+    'video/mp4; codecs="hvc1"',
+    'video/mp4; codecs="hev1"',
+    'video/mp4; codecs="hvc1.2.4.L999.B0"',
+  ];
+  for (const type of rejected) {
+    assert.equal(HEVC_PROBE_TYPES.includes(type), false);
+  }
+  const profile = browserPlaybackProfile((type) => HEVC_PROBE_TYPES.includes(type));
+  const ten = profile.video.find((row) => row.codec === "hevc" && row.bit_depth === 10);
+  const eight = profile.video.find((row) => row.codec === "hevc" && row.bit_depth === 8);
+  assert.equal(ten.max_level, "6.2");
+  assert.equal(eight.max_level, "6.2");
+  const bare = browserPlaybackProfile((type) => rejected.includes(type));
+  assert.equal(
+    bare.video.some((row) => row.codec === "hevc"),
+    false,
+  );
 });
