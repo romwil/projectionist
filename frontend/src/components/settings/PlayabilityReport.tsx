@@ -14,6 +14,7 @@ import {
 const TIER_ORDER = [
   "direct",
   "remux",
+  "try",
   "audio",
   "captions-pending",
   "needs-ocr",
@@ -243,9 +244,9 @@ export default function PlayabilityReport() {
     <div className="playability-report" data-testid="playability-report">
       <h4>Library playability</h4>
       <p className="field-help">
-        Which tier would play each title: serve the file, remux, audio-only, captions that are not
-        ready yet, picture captions, ask the media source to transcode, or not playable through the
-        engine. Refresh plans from the stream metadata Plex already has, then confirms with ffprobe
+        Which tier would play each title: serve the file, remux, try the remux, audio-only, captions
+        that are not ready yet, picture captions, ask the media source to transcode, or not playable
+        through the engine. Refresh plans from the stream metadata Plex already has, then confirms with ffprobe
         in the background. It does not start on its own, and it does not transcode.
       </p>
       <button

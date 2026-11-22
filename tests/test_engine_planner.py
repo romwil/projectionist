@@ -124,15 +124,13 @@ class PlannerTests(unittest.TestCase):
         major_minor.probe.streams[0].bit_depth = 10
         self.assertEqual(plan_playback(major_minor, profile)["plan"], "remux")
 
-        # ffprobe level 186 is HEVC 6.2. Mulholland Drive is this file.
+        # ffprobe level 186 is HEVC 6.2. The first plan is a try, not a transcode.
         above = _av("mkv", "hevc", "aac", level="186")
         above.probe.streams[0].bit_depth = 10
-        refused = plan_playback(above, profile)
-        self.assertEqual(refused["plan"], "source-transcode")
-        self.assertEqual(refused["source_reason"], "level")
-        self.assertEqual(refused["provider"], "plex")
-        self.assertFalse(refused["playable"])
-        self.assertIn("hevc level is above profile hevc 5.1", str(refused["reason"]))
+        tried = plan_playback(above, profile)
+        self.assertEqual(tried["plan"], "try")
+        self.assertIn("hevc level is above profile hevc 5.1", str(tried["reason"]))
+        self.assertNotIn("playable", str(tried["reason"]))
 
     def test_level_above_the_profile_asks_the_source_to_transcode(self) -> None:
         plan = plan_playback(_av("mp4", "h264", "aac", level="52"), DeviceProfileLow())
@@ -183,8 +181,9 @@ class PlannerTests(unittest.TestCase):
             ["aac"],
         )
         hidden = plan_playback(eight, only_ten)
-        self.assertEqual(hidden["plan"], "source-transcode")
-        self.assertEqual(hidden["source_reason"], "level")
+        self.assertEqual(hidden["plan"], "try")
+        self.assertIn("hevc level is above profile hevc 4.0", str(hidden["profile_answer"]["video"]))
+        self.assertNotEqual(hidden["plan"], "remux")
         high_ten = _av("mkv", "hevc", "aac", level="153")
         high_ten.probe.streams[0].bit_depth = 10
         above_bits = plan_playback(high_ten, both)
@@ -252,6 +251,77 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(plan["plan"], "remux")
         self.assertEqual(plan["profile_answer"]["audio"], "eac3")
 
+    def test_mulholland_drive_first_plan_is_a_try(self) -> None:
+        """Probed facts: HEVC Main 10, level 186 (6.2), 10-bit, HDR10, 1920×1032.
+
+        Above the advertised HEVC level is a remux try, not a transcode and not
+        a claim that the picture is playable. DTS-HD MA still needs audio work.
+        """
+        film = _mulholland_drive()
+        video = film.probe.streams[0]
+        self.assertEqual(video.profile, "Main 10")
+        self.assertEqual(video.level, "186")
+        self.assertEqual(video.bit_depth, 10)
+        self.assertEqual(video.hdr, "hdr10")
+        self.assertEqual((video.width, video.height), (1920, 1032))
+        self.assertEqual(film.probe.streams[1].profile, "DTS-HD MA")
+        self.assertEqual(film.probe.duration_s, 8840.299)
+
+        safari = plan_playback(film, SAFARI)
+        apple = plan_playback(film, APPLE_TV_4K)
+        self.assertEqual(safari["plan"], "try")
+        self.assertEqual(apple["plan"], "try")
+        self.assertNotIn("playable", str(safari["reason"]))
+        self.assertIn("hevc level is above profile hevc 5.1", str(safari["profile_answer"]["video"]))
+        self.assertIn("dts not in profile", str(safari["profile_answer"]["audio"]))
+        self.assertTrue(safari.get("audio_transcode"))
+        self.assertNotIn("/secret", str(safari))
+
+    def test_a_remembered_failure_is_not_tried_again(self) -> None:
+        film = _mulholland_drive()
+        again = plan_playback(film, SAFARI, failed_tries={("134335", "safari")})
+        self.assertEqual(again["plan"], "source-transcode")
+        self.assertNotEqual(again["plan"], "try")
+        self.assertFalse(again["playable"])
+        self.assertEqual(again["source_reason"], "level")
+        self.assertIn("did not show a picture", str(again["reason"]))
+        other_device = plan_playback(film, APPLE_TV_4K, failed_tries={("134335", "safari")})
+        self.assertEqual(other_device["plan"], "try")
+
+    def test_a_device_that_does_not_report_hdr_does_not_get_an_hdr_try(self) -> None:
+        """HDR10 inside the advertised level is a try only when the device reports HDR."""
+        film = _asset(
+            "mkv",
+            [
+                MediaStream(
+                    index=0,
+                    codec_type="video",
+                    codec="hevc",
+                    profile="Main 10",
+                    level="153",
+                    bit_depth=10,
+                    hdr="hdr10",
+                    hdr_known=True,
+                    width=1920,
+                    height=1032,
+                ),
+                MediaStream(index=1, codec_type="audio", codec="aac", channels=2, language="eng"),
+            ],
+        )
+        film.rating_key = "134335"
+        silent = plan_playback(film, SAFARI)
+        self.assertNotEqual(silent["plan"], "try")
+        self.assertEqual(silent["plan"], "remux")
+
+        reporting = _web(
+            [VideoCapability("hevc", "5.1", ["hdr10"]), VideoCapability("h264", "5.2")],
+            ["aac"],
+        )
+        tried = plan_playback(film, reporting)
+        self.assertEqual(tried["plan"], "try")
+        self.assertIn("hdr10", str(tried["profile_answer"]["video"]))
+        self.assertNotIn("level is above", str(tried["profile_answer"]["video"]))
+
     def test_unread_file_is_plex_fallback_without_paths(self) -> None:
         asset = MediaAsset(
             rating_key="9",
@@ -263,6 +333,38 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(plan["plan"], "plex-fallback")
         self.assertIn("path mapping", str(plan["reason"]).lower())
         self.assertNotIn("/plex", str(plan))
+
+
+def _mulholland_drive() -> MediaAsset:
+    """Rating key 134335. Duration 8840299 ms. The picture is above HEVC 5.1."""
+    asset = _asset(
+        "mkv",
+        [
+            MediaStream(
+                index=0,
+                codec_type="video",
+                codec="hevc",
+                profile="Main 10",
+                level="186",
+                bit_depth=10,
+                hdr="hdr10",
+                hdr_known=True,
+                width=1920,
+                height=1032,
+            ),
+            MediaStream(
+                index=1,
+                codec_type="audio",
+                codec="dts",
+                profile="DTS-HD MA",
+                channels=6,
+                language="eng",
+            ),
+        ],
+    )
+    asset.rating_key = "134335"
+    asset.probe.duration_s = 8840.299
+    return asset
 
 
 def _web(video, audio):

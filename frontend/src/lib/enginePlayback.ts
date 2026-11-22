@@ -3,7 +3,7 @@
 export type WebPlaybackProfile = {
   id: string;
   containers: string[];
-  video: { codec: string; max_level: string; bit_depth?: number }[];
+  video: { codec: string; max_level: string; bit_depth?: number; hdr?: string[] }[];
   audio: string[];
   captions: string[];
   max_channels: number;
@@ -60,8 +60,24 @@ function checkedTypes() {
   ];
 }
 
+/** Safari reports HDR when the display is in high dynamic range. Chrome's user agent also contains "Safari". */
+export function isSafariUserAgent(userAgent: string): boolean {
+  const text = String(userAgent || "");
+  if (!/safari/i.test(text)) return false;
+  return !/chrome|chromium|crios|edg|android|headless/i.test(text);
+}
+
+/** The server tries HDR10 only when this is true and the codec probe found HEVC. */
+export function safariReportsHdr(highDynamicRange: boolean, safari: boolean): boolean {
+  return Boolean(highDynamicRange && safari);
+}
+
 /** One row per codec and bit depth. A 10-bit yes must not hide an 8-bit yes. */
-export function browserPlaybackProfile(canPlay: CanPlay, maxChannels = 2): WebPlaybackProfile {
+export function browserPlaybackProfile(
+  canPlay: CanPlay,
+  maxChannels = 2,
+  options: { hdr?: boolean } = {},
+): WebPlaybackProfile {
   const supported = VIDEO_PROBES.filter((probe) => canPlay(probe.type));
   const video: WebPlaybackProfile["video"] = [];
   for (const codec of ["hevc", "av1", "h264"]) {
@@ -80,6 +96,7 @@ export function browserPlaybackProfile(canPlay: CanPlay, maxChannels = 2): WebPl
       );
       const entry: WebPlaybackProfile["video"][number] = { codec, max_level: maxLevel };
       if (codec !== "h264" && depth) entry.bit_depth = depth;
+      if (options.hdr && codec === "hevc") entry.hdr = ["hdr10"];
       video.push(entry);
     }
   }
@@ -115,6 +132,7 @@ export type CodecRuntime = {
  */
 export async function browserPlaybackProfileFromRuntime(
   runtime: CodecRuntime,
+  options: { hdr?: boolean } = {},
 ): Promise<WebPlaybackProfile> {
   const decoding = new Map<string, boolean>();
   if (runtime.decodingInfo) {
@@ -149,11 +167,23 @@ export async function browserPlaybackProfileFromRuntime(
       // This browser has no Media Source answer for the type.
     }
     return decoding.get(type) === true;
-  }, maxChannels);
+  }, maxChannels, options);
 }
 
 /** Ask this browser, at play time, and send that profile with the session. */
 export function detectBrowserPlaybackProfile(): Promise<WebPlaybackProfile> {
+  let highDynamicRange = false;
+  try {
+    highDynamicRange = Boolean(
+      typeof window !== "undefined" && window.matchMedia?.("(dynamic-range: high)")?.matches,
+    );
+  } catch {
+    highDynamicRange = false;
+  }
+  const safari = safariReportsHdr(
+    highDynamicRange,
+    isSafariUserAgent(typeof navigator !== "undefined" ? navigator.userAgent : ""),
+  );
   const video = typeof document !== "undefined" ? document.createElement("video") : null;
   const mediaSource = typeof MediaSource !== "undefined" ? MediaSource : null;
   const capabilities = typeof navigator !== "undefined" ? navigator.mediaCapabilities : undefined;
@@ -200,7 +230,7 @@ export function detectBrowserPlaybackProfile(): Promise<WebPlaybackProfile> {
           return { supported: false };
         }
       : undefined,
-  });
+  }, { hdr: safari });
 }
 
 export function playThroughProjectionist(features: any) {
@@ -209,7 +239,12 @@ export function playThroughProjectionist(features: any) {
 
 export function engineSessionForPlayer(session: any) {
   if (!session?.playable || !session.master_url) return null;
-  if (session.plan !== "remux" && session.plan !== "direct" && session.plan !== "audio") {
+  if (
+    session.plan !== "remux" &&
+    session.plan !== "direct" &&
+    session.plan !== "audio" &&
+    session.plan !== "try"
+  ) {
     return null;
   }
   return { ...session, engine: true, stream_url: session.master_url };
@@ -217,7 +252,7 @@ export function engineSessionForPlayer(session: any) {
 
 /**
  * When the household switch is on, try an engine session. A playable remux,
- * direct, or audio-only plan uses that playlist. A plan the engine cannot
+ * direct, audio-only, or try plan uses that playlist. A plan the engine cannot
  * play, including source-transcode and the caption fallback, returns to the
  * Plex start. When the switch is off, the Plex start is the only call.
  */

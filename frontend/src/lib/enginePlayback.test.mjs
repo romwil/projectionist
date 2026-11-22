@@ -6,7 +6,9 @@ import {
   browserPlaybackProfileFromRuntime,
   chooseWebPlayback,
   engineSessionForPlayer,
+  isSafariUserAgent,
   playThroughProjectionist,
+  safariReportsHdr,
   settleEngineFirstFrame,
 } from "./enginePlayback.ts";
 
@@ -364,4 +366,59 @@ test("AAC channel cap is 6 only when the browser proves surround", async () => {
   });
   assert.equal(surround.max_channels, 6);
   assert.equal(browserPlaybackProfile(() => false).max_channels, 2);
+});
+
+test("a playable try uses the engine playlist", async () => {
+  const engine = await chooseWebPlayback({
+    features: { features: { play_through_projectionist: true } },
+    openEngine: async () => ({
+      playable: true,
+      master_url: "/api/playback/sessions/s/token/master.m3u8",
+      plan: "try",
+      session_id: "s",
+    }),
+    startPlex: async () => {
+      throw new Error("a try must play the engine playlist");
+    },
+  });
+  assert.equal(engine.engine, true);
+  assert.equal(engine.plan, "try");
+  assert.equal(engine.stream_url, "/api/playback/sessions/s/token/master.m3u8");
+});
+
+test("safari reports hdr10 only with a high dynamic range display and an HEVC probe", () => {
+  assert.equal(safariReportsHdr(true, true), true);
+  assert.equal(safariReportsHdr(false, true), false);
+  assert.equal(safariReportsHdr(true, false), false);
+  assert.equal(
+    isSafariUserAgent(
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+    ),
+    true,
+  );
+  assert.equal(
+    isSafariUserAgent(
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36",
+    ),
+    false,
+  );
+
+  const reporting = browserPlaybackProfile(
+    (type) => type.includes("hvc1.2.4.L153.B0") || type.includes("avc1"),
+    2,
+    { hdr: true },
+  );
+  const hevc = reporting.video.find((row) => row.codec === "hevc");
+  assert.deepEqual(hevc.hdr, ["hdr10"]);
+  assert.equal(reporting.video.find((row) => row.codec === "h264").hdr, undefined);
+
+  const silent = browserPlaybackProfile(
+    (type) => type.includes("hvc1.2.4.L153.B0"),
+    2,
+    { hdr: false },
+  );
+  assert.equal(silent.video.find((row) => row.codec === "hevc").hdr, undefined);
+
+  const noHevc = browserPlaybackProfile((type) => type.includes("avc1"), 2, { hdr: true });
+  assert.ok(noHevc.video.every((row) => !row.hdr));
 });

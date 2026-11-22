@@ -8,6 +8,7 @@ import {
   getFeatures,
   openEnginePlayback,
   progressEnginePlayback,
+  reportEngineFirstFrame,
   progressLibraryPlayback,
   seekLibraryPlayback,
   setLibraryPlaybackSubtitles,
@@ -493,6 +494,19 @@ export default function LibraryPlayer({
     setStatus("ready");
   }, []);
 
+  const tryFrameNotedRef = useRef("");
+  const noteTryFrame = useCallback(async (arrived: boolean) => {
+    const current = sessionRef.current;
+    if (!current?.engine || current.plan !== "try" || !current.session_id) return;
+    if (tryFrameNotedRef.current === current.session_id) return;
+    tryFrameNotedRef.current = current.session_id;
+    try {
+      await reportEngineFirstFrame(current.session_id, arrived);
+    } catch {
+      // The next plan keeps the last record that did land.
+    }
+  }, []);
+
   const runEngineFirstFrameFallback = useCallback(async (input: {
     elapsedMs: number;
     videoWidth: number;
@@ -504,6 +518,7 @@ export default function LibraryPlayer({
     if (!current?.engine || !current.session_id) return;
     if (!engineFirstFrameReason(input)) return;
     engineFallbackRef.current = true;
+    void noteTryFrame(false);
     const result = await settleEngineFirstFrame({
       ...input,
       retried: false,
@@ -512,7 +527,7 @@ export default function LibraryPlayer({
     });
     if (sessionRef.current !== current) return;
     applyEngineFallback(result.session);
-  }, [applyEngineFallback, key]);
+  }, [applyEngineFallback, key, noteTryFrame]);
 
   useEffect(() => {
     const attached = Boolean(
@@ -537,12 +552,16 @@ export default function LibraryPlayer({
         watched = video;
         video.addEventListener("error", onVideoError);
       }
-      void runEngineFirstFrameFallback({
+      const input = {
         elapsedMs: Date.now() - engineAttachedAtRef.current,
         videoWidth: video?.videoWidth || 0,
         readyState: video?.readyState || 0,
         fatalError: "",
-      });
+      };
+      if (Number(input.videoWidth) > 0 && Number(input.readyState) >= 2) {
+        void noteTryFrame(true);
+      }
+      void runEngineFirstFrameFallback(input);
     }, 500);
     return () => {
       window.clearInterval(timer);
@@ -550,6 +569,7 @@ export default function LibraryPlayer({
     };
   }, [
     ended,
+    noteTryFrame,
     preroll,
     resumeOpen,
     runEngineFirstFrameFallback,

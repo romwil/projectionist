@@ -33,6 +33,7 @@ from projectionist.engine.profiles import (
     profile_from_mapping,
 )
 from projectionist.engine.source import MediaAsset, source_transcode_reason
+from projectionist.engine.tries import failed_try_keys
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,7 @@ TASK_NAME = "playability_report"
 # reason. This report does not start it.
 TIER_DIRECT = "direct"
 TIER_REMUX = "remux"
+TIER_TRY = "try"
 TIER_AUDIO = "audio"
 TIER_CAPTIONS_PENDING = "captions-pending"
 TIER_NEEDS_OCR = "needs-ocr"
@@ -54,6 +56,7 @@ TIER_NOT_PLAYABLE = "not-playable"
 TIER_LABELS: dict[str, str] = {
     TIER_DIRECT: "Serve the file",
     TIER_REMUX: "Remux",
+    TIER_TRY: "Try the remux",
     TIER_AUDIO: "Audio-only",
     TIER_CAPTIONS_PENDING: "These captions are not ready yet",
     TIER_NEEDS_OCR: "Picture captions that are not text yet",
@@ -63,7 +66,7 @@ TIER_LABELS: dict[str, str] = {
 
 TIER_ORDER: tuple[str, ...] = tuple(TIER_LABELS)
 
-_ENGINE_PLANS = frozenset({"direct", "remux", "audio"})
+_ENGINE_PLANS = frozenset({"direct", "remux", "audio", "try"})
 _TOP_REASONS = 5
 
 LocateFn = Callable[[str], MediaAsset]
@@ -356,6 +359,8 @@ def _tier_for_plan(plan: str) -> str:
         return TIER_DIRECT
     if plan == "remux":
         return TIER_REMUX
+    if plan == "try":
+        return TIER_TRY
     if plan == "audio":
         return TIER_AUDIO
     if plan in {"full", "source-transcode"}:
@@ -371,6 +376,7 @@ def classify_title(
     title_language: str = "",
     settings: Any,
     data_dir: Path,
+    failed_tries: Optional[set[tuple[str, str]]] = None,
 ) -> dict[str, Any]:
     """One title on one profile. The planner chooses. Captions can keep it off the engine.
 
@@ -378,7 +384,11 @@ def classify_title(
     A video codec the profile cannot play asks the media source to transcode.
     That is a label, not a transcode.
     """
-    planned = plan_playback(asset, profile)
+    planned = plan_playback(
+        asset,
+        profile,
+        failed_tries=failed_try_keys(data_dir) if failed_tries is None else failed_tries,
+    )
     plan = str(planned.get("plan") or "")
     reason = _safe_reason(str(planned.get("reason") or ""), asset)
     tier = _tier_for_plan(plan)
@@ -516,6 +526,7 @@ def build_playability_report(
 ) -> dict[str, Any]:
     """Classify the titles already in hand. ``assets`` is keyed by rating key."""
     stamp = generated_at or _stamp()
+    blocked = failed_try_keys(data_dir)
     if not message:
         if not complete:
             message = "The walk stopped early. Refresh to finish the library."
@@ -540,6 +551,7 @@ def build_playability_report(
                     title_language=item.title_language,
                     settings=settings,
                     data_dir=data_dir,
+                    failed_tries=blocked,
                 )
             )
         profiles_out.append(summarize_profile(profile, rows, generated_at=stamp))
@@ -1010,6 +1022,7 @@ def _run_owner_report(
     stopped = False
     paused = False
     since_save = 0
+    blocked = failed_try_keys(root)
     for item in order:
         if should_stop is not None and should_stop():
             stopped = True
@@ -1036,6 +1049,7 @@ def _run_owner_report(
                 title_language=item.title_language,
                 settings=settings,
                 data_dir=root,
+                failed_tries=blocked,
             )
             row["confirmed"] = True
             classified[profile.id] = row

@@ -80,28 +80,54 @@ def stream_bit_depth(stream: MediaStream) -> int:
     return 8
 
 
-def _video_decision(stream: MediaStream, caps: list[VideoCapability]) -> tuple[bool, str]:
-    """Which profile video row allowed this stream, or why none did."""
+def _reports_hdr10(cap: VideoCapability) -> bool:
+    return any(str(name).strip().lower() == "hdr10" for name in cap.hdr)
+
+
+def _video_decision(stream: MediaStream, caps: list[VideoCapability]) -> tuple[str, str]:
+    """``play``, ``try``, or ``block``, and the profile answer that chose it.
+
+    HEVC above the advertised level is a try: the remux might play, and a
+    transcode is the wrong first answer. HDR10 is a try only when a video row
+    for that codec lists ``hdr10``. A device that does not report HDR is not
+    given an HDR try. H.264 above its level, a missing codec, and a bit depth
+    the profile refuses stay blocked.
+    """
     codec = canonical_codec(stream.codec)
     depth = stream_bit_depth(stream)
     same = [cap for cap in caps if canonical_codec(cap.codec) == codec]
     if not same:
-        return False, f"{codec} not in profile"
+        return "block", f"{codec} not in profile"
     depth_limit = 0
+    level_limit = ""
+    level_score = -1.0
+    saw_hevc_level = False
+    hdr = str(stream.hdr or "").strip().lower()
+    device_hdr = any(_reports_hdr10(cap) for cap in same)
     for cap in same:
         limit = level_number(codec, cap.max_level)
         actual = level_number(codec, stream.level)
         if limit is not None and actual is not None and actual > limit + 0.05:
+            if codec == "hevc" and limit > level_score:
+                saw_hevc_level = True
+                level_score = limit
+                level_limit = cap.max_level
             continue
         if cap.bit_depth and depth > cap.bit_depth:
             depth_limit = max(depth_limit, cap.bit_depth)
             continue
         bits = f", {cap.bit_depth}-bit" if cap.bit_depth else ""
         level = cap.max_level or "any level"
-        return True, f"{codec} up to {level}{bits}"
+        answer = f"{codec} up to {level}{bits}"
+        if hdr == "hdr10" and device_hdr:
+            return "try", f"{answer}; hdr10"
+        return "play", answer
     if depth_limit:
-        return False, f"{codec} {depth}-bit is above profile {codec} {depth_limit}-bit"
-    return False, f"{codec} level is above profile {codec} {same[0].max_level}"
+        return "block", f"{codec} {depth}-bit is above profile {codec} {depth_limit}-bit"
+    if saw_hevc_level:
+        shown = level_limit or same[0].max_level
+        return "try", f"{codec} level is above profile {codec} {shown}"
+    return "block", f"{codec} level is above profile {codec} {same[0].max_level}"
 
 
 def _audio_decision(audios: list[MediaStream], profile: DeviceProfile) -> tuple[bool, str, Optional[MediaStream]]:
@@ -191,12 +217,18 @@ def plan_playback(
     profile: DeviceProfile,
     *,
     source: Optional[SourceTranscode] = None,
+    failed_tries: Optional[set[tuple[str, str]]] = None,
 ) -> dict[str, object]:
     """Record a plan, the profile answer that chose it, and a reason. Never a file path.
 
     When the picture is outside the profile, ``source`` is asked to transcode.
     The default source is Plex. The returned plan is ``source-transcode`` and
     is not playable here.
+
+    HEVC above the advertised level, and HDR10 on a device that reports HDR,
+    are plan ``try``: a remux, not a claim that it will play. ``failed_tries``
+    holds ``(rating_key, profile id)`` pairs whose first frame did not arrive.
+    Those titles are not tried again.
     """
     captions = caption_inventory(asset.probe)
     empty_answer = {"video": "", "audio": ""}
@@ -221,7 +253,13 @@ def plan_playback(
             "profile_answer": {"video": "no video", "audio": ""},
         }
 
-    video_ok, video_text = _video_decision(video, profile.video)
+    video_mode, video_text = _video_decision(video, profile.video)
+    remembered_miss = video_mode == "try" and (
+        (str(asset.rating_key or ""), str(profile.id or "")) in set(failed_tries or ())
+    )
+    if remembered_miss:
+        video_mode = "block"
+    video_ok = video_mode == "play"
     audio_ok, audio_text, playable_audio = _audio_decision(audios, profile)
     audio = playable_audio or (audios[0] if audios else None)
     video_label = _pretty_codec(video.codec)
@@ -259,8 +297,27 @@ def plan_playback(
                 f"{audio_label} audio is not, so the audio is transcoded ({audio_text})"
             ),
         }
+    if video_mode == "try" and remux_ok:
+        transcode_audio = audio is not None and not audio_ok
+        if transcode_audio:
+            reason = (
+                f"{video_label} video is a try on {profile.id} ({video_text}); "
+                f"{audio_label} audio is not, so the audio is transcoded ({audio_text})"
+            )
+        else:
+            reason = (
+                f"{container} container; {video_label} + {audio_label} is a try on {profile.id} "
+                f"({video_text}; {audio_text})"
+            )
+        return {**base, "plan": "try", "reason": reason, "audio_transcode": transcode_audio}
     if not video_ok:
-        sentence = f"{video_label} video is not playable on {profile.id} ({video_text})"
+        if remembered_miss:
+            sentence = (
+                f"A try on {profile.id} did not show a picture, so this stays on the media source "
+                f"({video_text})"
+            )
+        else:
+            sentence = f"{video_label} video is not playable on {profile.id} ({video_text})"
         return {**base, **_ask_source(source, reason=sentence, video_answer=video_text)}
     return {
         **base,

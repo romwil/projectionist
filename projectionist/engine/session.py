@@ -23,6 +23,7 @@ from projectionist.engine.captions import CaptionRendition
 from projectionist.engine.planner import plan_playback
 from projectionist.engine.profiles import DeviceProfile
 from projectionist.engine.remux import start_remux
+from projectionist.engine.tries import failed_try_keys
 from projectionist.engine.source import MediaAsset
 from projectionist.library.playback import PlaybackError, YouthBlockedError
 
@@ -165,13 +166,19 @@ def open_engine_session(
     captions: Optional[Sequence[CaptionRendition]] = None,
     source: Any = None,
 ) -> EngineSession:
-    planned = plan_playback(asset, profile, source=source)
+    planned = plan_playback(
+        asset,
+        profile,
+        source=source,
+        failed_tries=failed_try_keys(data_dir),
+    )
     plan = str(planned["plan"])
     reason = str(planned["reason"])
     source_reason = str(planned.get("source_reason") or "")
     provider = str(planned.get("provider") or "")
     audio_codec = ""
-    if plan == "audio":
+    needs_audio = plan == "audio" or (plan == "try" and bool(planned.get("audio_transcode")))
+    if needs_audio:
         from projectionist.engine.audio import audio_encode_codec
 
         audio_codec = audio_encode_codec(profile)
@@ -190,7 +197,7 @@ def open_engine_session(
         provider = ""
     playable = (
         not force_reason
-        and plan in {"remux", "direct", "audio"}
+        and plan in {"remux", "direct", "audio", "try"}
         and bool(asset.local_path)
         and asset.probe is not None
     )
@@ -215,7 +222,7 @@ def open_engine_session(
         if media_duration_ms <= 0 and asset.probe is not None and asset.probe.duration_s > 0:
             media_duration_ms = int(round(asset.probe.duration_s * 1000))
         try:
-            if plan == "audio":
+            if needs_audio:
                 from projectionist.engine.audio import start_audio_transcode
 
                 def _still_wanted() -> bool:
