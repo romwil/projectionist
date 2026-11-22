@@ -34,8 +34,16 @@ const VIDEO_PROBES: VideoProbe[] = [
   { codec: "h264", max_level: "3.0", type: 'video/mp4; codecs="avc1.42E01E"' },
 ];
 
-const AC3 = 'audio/mp4; codecs="ac-3"';
-const EAC3 = 'audio/mp4; codecs="ec-3"';
+// Each row is one mp4 codec string. FLAC, Opus, and ALAC have no level.
+// A yes on audio/flac or audio/ogg is the container, not this remux, so it
+// is not a probe — the same way a bare hvc1 yes is not a level.
+const AUDIO_PROBES: { codec: string; type: string }[] = [
+  { codec: "ac3", type: 'audio/mp4; codecs="ac-3"' },
+  { codec: "eac3", type: 'audio/mp4; codecs="ec-3"' },
+  { codec: "flac", type: 'audio/mp4; codecs="flac"' },
+  { codec: "opus", type: 'audio/mp4; codecs="opus"' },
+  { codec: "alac", type: 'audio/mp4; codecs="alac"' },
+];
 
 function levelValue(level: string) {
   const number = Number(level);
@@ -43,7 +51,12 @@ function levelValue(level: string) {
 }
 
 function checkedTypes() {
-  return [...new Set([...VIDEO_PROBES.map((probe) => probe.type), AC3, EAC3])];
+  return [
+    ...new Set([
+      ...VIDEO_PROBES.map((probe) => probe.type),
+      ...AUDIO_PROBES.map((probe) => probe.type),
+    ]),
+  ];
 }
 
 /** One row per codec and bit depth. A 10-bit yes must not hide an 8-bit yes. */
@@ -71,8 +84,9 @@ export function browserPlaybackProfile(canPlay: CanPlay): WebPlaybackProfile {
   }
   if (!video.length) video.push({ codec: "h264", max_level: "5.2" });
   const audio = ["aac"];
-  if (canPlay(AC3)) audio.push("ac3");
-  if (canPlay(EAC3)) audio.push("eac3");
+  for (const probe of AUDIO_PROBES) {
+    if (canPlay(probe.type) && !audio.includes(probe.codec)) audio.push(probe.codec);
+  }
   return {
     id: "web",
     containers: ["mp4", "hls-fmp4"],
