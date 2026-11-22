@@ -171,7 +171,7 @@ For one title the row is the planner’s plan, the tier an owner should read, an
 | `source-transcode` | Ask the media source to transcode | `full` |
 | `not-playable` | Not playable through the engine | `plex-fallback` |
 
-Shares count those tiers. `hardware` says how many titles on that profile need a video transcode: “A GPU with Quick Sync would let N titles play without Plex.” Audio-only and picture captions are not in that count. Later tiers (audio transcode, source transcode as a served plan, OCR, pre-optimized copies, our own video transcode) are not started.
+Shares count those tiers. `hardware` says how many titles on that profile need a video transcode: “A GPU with Quick Sync would let N titles play without Plex.” Audio-only and picture captions are not in that count. ENG-012 serves the audio-only tier when a client opts in. Source transcode as a served plan, OCR, pre-optimized copies, and our own video transcode are not started.
 
 ```bash
 # Owner: progress and shares, without every title row. No file paths.
@@ -201,7 +201,7 @@ One title row. The saved report keeps it inside `profiles[].titles`. A title pag
 
 How it works: Refresh from Settings posts this browser’s profile and stores the result under `DATA_DIR/engine/playability.json`. The same planner as `GET /api/playback/plan` runs on Plex’s stream list first. `planned_from_plex`, `confirmed_by_ffprobe`, and `running` are on that document while ffprobe is still going. The jobs-engine task `playability_report` stays registered and disabled so an older install stops walking on a timer.
 
-Honest limits: the named Safari and Chrome profiles are the dry-run shortcuts, not a measurement of one household’s browser. The browser profile on Refresh is the measurement. The report does not play anything, and it does not start ENG-012, ENG-013, ENG-005, ENG-014, or ENG-006.
+Honest limits: the named Safari and Chrome profiles are the dry-run shortcuts, not a measurement of one household’s browser. The browser profile on Refresh is the measurement. The report does not play anything and does not transcode. Audio-only playback is a separate session, started only when a client opts in.
 
 ---
 
@@ -253,7 +253,7 @@ First playability sample on QA, image `romwil/projectionist:1.42.0`, digest `sha
 | Chrome and Safari | The Swan Princess: Escape from Castle Mountain | MKV, H.264, AAC | remux | Playable session. |
 | Chrome and Safari | Mulholland Drive | MKV, HEVC | full | Not playable. HEVC is above what the web profile accepts. |
 | Chrome and Safari | Peep Show “Local Zero” | MKV, H.264, AAC | remux | Playable, and the session wrote a WebVTT rendition. |
-| Chrome profile | The Dick Van Dyke Show S3E16 | MKV, H.264, E-AC-3 | audio | Not playable. E-AC-3 would have to be transcoded. |
+| Chrome profile | The Dick Van Dyke Show S3E16 | MKV, H.264, E-AC-3 | audio | Playable. The video is copied and E-AC-3 is encoded to the profile's audio, usually AAC. |
 | Safari profile | The Dick Van Dyke Show S3E16 | MKV, H.264, E-AC-3 | remux | Playable, with a WebVTT rendition. |
 | Chrome and Safari | Adventures of Zatoichi | MKV, English SubRip | plex-fallback | Captions were not ready as WebVTT within 20 seconds. |
 | Chrome and Safari | 13 Assassins | picture captions only | plex-fallback | Captions are not ready as WebVTT. |
@@ -264,7 +264,7 @@ Direct MP4 H.264/AAC, MKV H.264/AAC remux, and WebVTT for a text caption all sta
 
 Text captions are now extracted before Play, off the 20-second limit that stopped *Adventures of Zatoichi* on this image. A text track that is already WebVTT plays through the engine. One that is still being prepared falls back and records that the captions are not ready yet, which is not a path error. *13 Assassins* still falls back because its captions are pictures.
 
-The HEVC row is what a profile without an HEVC answer planned, including a Safari-shaped body whose id was `web`. The web player now asks the browser at play time. *Mulholland Drive* plans `remux` where those checks report HEVC at a level and bit depth the file fits, and stays `full` where they do not. E-AC-3 remuxes only when the profile lists it.
+The HEVC row is what a profile without an HEVC answer planned, including a Safari-shaped body whose id was `web`. The web player now asks the browser at play time. *Mulholland Drive* plans `remux` where those checks report HEVC at a level and bit depth the file fits, and stays `full` where they do not. E-AC-3 remuxes only when the profile lists it. When the profile does not list the audio and the video is playable, the session copies the video and encodes the profile's audio. A video the profile cannot play stays `full` and on the Plex path.
 
 ## Playlist 401 on a device credential (2026-11-21)
 
@@ -276,7 +276,7 @@ The fix on main, not in the 1.42.0 image: a client gets a playable engine sessio
 
 ## Honest limits
 
-- **Browsers decode less than Apple devices.** The web profile is this browser's codec checks, not a fixed Chrome or Safari list. A browser that does not report HEVC or E-AC-3 does not get those streams as a remux. DTS and TrueHD still wait for an audio transcode.
+- **Browsers decode less than Apple devices.** The web profile is this browser's codec checks, not a fixed Chrome or Safari list. A browser that does not report HEVC does not get that video as a remux or an audio-only transcode. A browser that does not report E-AC-3, AC-3, DTS, or TrueHD, and can play the video, gets an audio-only transcode: the video is copied and the audio is encoded to the first codec on that profile.
 - **Full transcodes are expensive.** Without hardware encode, a 4K HEVC → H.264 transcode can saturate a homelab CPU. The planner limits concurrent full transcodes (owner setting) and says so: *“This title needs a full transcode; another room is already using it.”*
 - **Dolby Vision profile 7** (dual-layer UHD rips) cannot be passed through to Apple devices as-is; the plan falls back to HDR10 base layer or transcode, and says which.
 - **OCR is not perfect.** Image-caption OCR can misread italics and stylized fonts. OCR’d tracks are labeled as such in the caption menu.
@@ -297,7 +297,7 @@ The fix on main, not in the 1.42.0 image: a client gets a playable engine sessio
 | ENG-006 | Own video transcode, re-scoped 2026-11-21. (a) Software 1080p H.264 on CPU-rich servers, only after the owner opts in and a startup benchmark clears a threshold, with a low concurrency cap. 4K, HEVC/AV1 output, and HDR tone-mapping in software are never chosen. (b) Hardware VAAPI/QSV and NVENC when an encoder test-open succeeds. Both wait until ENG-011 shows enough titles need them. (a) can be tested on a 2× Xeon E5-2630 v3, 32 threads, no GPU. (b) waits for a GPU box | ENG-003, ENG-011 |
 | ENG-007 | Web player adoption, behind *Play through Projectionist* (off by default). The web sends `engine_opt_in: true` with the session. The profile is built at play time from `canPlayType`, `MediaSource.isTypeSupported`, and `MediaCapabilities.decodingInfo` for HEVC (`hvc1`, including 10-bit), AV1, E-AC-3, and AC-3. The plan records which answer it used. *Mulholland Drive* plans `remux` where that check reports HEVC, and `full` where it does not | ENG-003 |
 | ENG-011 | Library playability report. The owner starts it from Settings → Playback. It plans first from Plex stream metadata, shows those shares while ffprobe confirms in the background, and does not start on a timer. Settings shows the share that is direct, remux, audio-only, captions not ready yet, needs OCR, or needs a video transcode, plus progress, the top reasons, each title’s tier, and what a GPU would change. It does not transcode | ENG-001, ENG-002 |
-| ENG-012 | Audio-only transcode tier. Copy the video, convert the audio to the device profile’s target, serve segments like a remux, and cap how many run at once. A DTS or TrueHD film plays in Safari and on an Apple TV profile with the video untouched. The Chrome E-AC-3 row in the QA baseline is the first web case | ENG-003, ENG-011 |
+| ENG-012 | Audio-only transcode tier. Copy the video, convert the audio to the device profile’s first encodeable codec, serve segments like a remux, and share the one heavy-ffmpeg slot. A Play probe does not wait on that slot. A DTS or TrueHD film whose video the profile can play is served this way. HEVC above the profile stays `full` and on the Plex path. The Chrome E-AC-3 row is the first web case | ENG-003, ENG-011 |
 | ENG-013 | Source-transcode tier. Today’s Plex fallback becomes a planned tier with a reason, behind the media-source interface, so a later source can provide it. Members see the same playback | ENG-003 |
 | ENG-014 | Pre-optimized versions. An owner-triggered or scheduled job makes compatible copies for chosen titles, or for everything the report says needs a video transcode, inside a disk budget. The planner prefers those copies and plays them as direct or remux | ENG-011, ENG-012 |
 | ENG-008 | Scrub thumbnails (trickplay image sprites / I-frame playlist) | ENG-003 |
@@ -314,7 +314,7 @@ The fix on main, not in the 1.42.0 image: a client gets a playable engine sessio
 - **Caption packaging (ENG-004):** a household `DATA_DIR/subtitles/{rating_key}/{lang}.srt` is one WebVTT file plus a one-segment VOD subtitle playlist in the master `SUBTITLES` group. Embedded text tracks are extracted to the same shape ahead of Play, and cached beside that file, when that language is not already in the household cache. Play does not extract. Segmenting the VTT waits until a client requires it. Picture captions stay on the Plex path until ENG-005. The spike showed that shape is selectable in WebKit and tvOS AVPlayer.
 - **Spike evidence:** [2026-11-19-engine-spike-findings.md](superpowers/specs/2026-11-19-engine-spike-findings.md) (throwaway code on `spike/engine-remux`, not merged).
 - **Opt-in (decided 2026-11-21):** an engine session is only for a client that sends `engine_opt_in`. The capability is “this server can.” The household switch does not force a client onto the engine. Playlist URLs stay header-free, and a device credential can fetch them.
-- **Playback tiers (decided 2026-11-21), cheapest first:** direct, remux, audio-only transcode, captions as text (ENG-005), source transcode, own video transcode (ENG-006, opt-in), pre-optimized copies. The planner records the tier, the reason, and the profile answer that chose them. Software video transcode is 1080p H.264 only, above a startup benchmark, with a low cap. The browser runtime profile is done: the web asks the browser at play time. Text captions are extracted ahead of play. ENG-011, the library playability report, is in the tree. Next, not started: ENG-012 audio → ENG-013 source tier → ENG-005 → ENG-014 → ENG-006 when the report says it is worth it. ENG-012, ENG-013, and ENG-014 are accepted and not started. Startup detection (core count, a one-time 1080p encode benchmark, Quick Sync or VAAPI, NVENC, and which encoders ffmpeg actually opens) lands with ENG-006 as a `playback_hardware` capability. No hardware is required to run Projectionist. Live channel normalization (ENG-009) is not in this stack.
+- **Playback tiers (decided 2026-11-21), cheapest first:** direct, remux, audio-only transcode, captions as text (ENG-005), source transcode, own video transcode (ENG-006, opt-in), pre-optimized copies. The planner records the tier, the reason, and the profile answer that chose them. Software video transcode is 1080p H.264 only, above a startup benchmark, with a low cap. The browser runtime profile is done: the web asks the browser at play time. Text captions are extracted ahead of play. ENG-011, the library playability report, is in the tree. ENG-012 serves audio-only: copy the video, encode the profile's audio, one heavy ffmpeg at a time, and a Play probe does not wait. Next, not started: ENG-013 source tier → ENG-005 → ENG-014 → ENG-006 when the report says it is worth it. ENG-013 and ENG-014 are accepted and not started. Startup detection (core count, a one-time 1080p encode benchmark, Quick Sync or VAAPI, NVENC, and which encoders ffmpeg actually opens) lands with ENG-006 as a `playback_hardware` capability. No hardware is required to run Projectionist. Live channel normalization (ENG-009) is not in this stack.
 
 ## See also
 

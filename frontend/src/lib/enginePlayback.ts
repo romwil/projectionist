@@ -174,14 +174,17 @@ export function playThroughProjectionist(features: any) {
 
 export function engineSessionForPlayer(session: any) {
   if (!session?.playable || !session.master_url) return null;
-  if (session.plan !== "remux" && session.plan !== "direct") return null;
+  if (session.plan !== "remux" && session.plan !== "direct" && session.plan !== "audio") {
+    return null;
+  }
   return { ...session, engine: true, stream_url: session.master_url };
 }
 
 /**
- * When the household switch is on, try an engine session. A plan the engine
- * cannot play, including the caption fallback, returns to the Plex start.
- * When the switch is off, the Plex start is the only call.
+ * When the household switch is on, try an engine session. A playable remux,
+ * direct, or audio-only plan uses that playlist. A plan the engine cannot
+ * play, including a full transcode and the caption fallback, returns to the
+ * Plex start. When the switch is off, the Plex start is the only call.
  */
 export async function chooseWebPlayback({
   features,

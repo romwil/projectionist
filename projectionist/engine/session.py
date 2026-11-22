@@ -1,10 +1,11 @@
 """Engine playback sessions.
 
-Opening a session records the plan. A remux or direct plan starts an fMP4
-HLS copy only when the client sets ``engine_opt_in``. Anything else stays on
-the library path. Playlist and segment URLs carry the session token; they
-do not require an Authorization header. The household gate allows those
-URLs through and the route checks the token.
+Opening a session records the plan. A remux, direct, or audio-only plan
+starts fMP4 HLS only when the client sets ``engine_opt_in``. Audio-only
+copies the video and encodes the audio. A full transcode stays on the
+library path. Playlist and segment URLs carry the session token; they do
+not require an Authorization header. The household gate allows those URLs
+through and the route checks the token.
 """
 
 from __future__ import annotations
@@ -65,6 +66,7 @@ class EngineSession:
     profile_id: str
     directory: Optional[Path] = None
     process: Any = None
+    cancelled: bool = False
     created_at: float = field(default_factory=time.time)
 
     def master_url(self) -> str:
@@ -129,6 +131,7 @@ def resolve_session_file(session: EngineSession, relative: str) -> Path:
 
 
 def _stop_process(session: EngineSession) -> None:
+    session.cancelled = True
     process = session.process
     if process is None:
         return
@@ -157,12 +160,23 @@ def open_engine_session(
     planned = plan_playback(asset, profile)
     plan = str(planned["plan"])
     reason = str(planned["reason"])
+    audio_codec = ""
+    if plan == "audio":
+        from projectionist.engine.audio import audio_encode_codec
+
+        audio_codec = audio_encode_codec(profile)
+        if not audio_codec:
+            plan = "plex-fallback"
+            reason = (
+                f"{profile.id} has no audio codec this server can encode, "
+                "so this title stays on the Plex path"
+            )
     if force_reason:
         plan = "plex-fallback"
         reason = force_reason
     playable = (
         not force_reason
-        and plan in {"remux", "direct"}
+        and plan in {"remux", "direct", "audio"}
         and bool(asset.local_path)
         and asset.probe is not None
     )
@@ -185,16 +199,43 @@ def open_engine_session(
         if media_duration_ms <= 0 and asset.probe is not None and asset.probe.duration_s > 0:
             media_duration_ms = int(round(asset.probe.duration_s * 1000))
         try:
-            session.process = start_remux(
-                Path(str(asset.local_path)),
-                directory,
-                probe=asset.probe,
-                file_size=int(asset.probe.size if asset.probe else 0),
-                duration_ms=media_duration_ms,
-                runner=runner,
-                ffmpeg=ffmpeg,
-                captions=list(captions or []),
-            )
+            if plan == "audio":
+                from projectionist.engine.audio import start_audio_transcode
+
+                def _still_wanted() -> bool:
+                    return not session.cancelled
+
+                def _attach(process: Any) -> bool:
+                    with _LOCK:
+                        if session.cancelled:
+                            return False
+                        session.process = process
+                        return True
+
+                start_audio_transcode(
+                    Path(str(asset.local_path)),
+                    directory,
+                    probe=asset.probe,
+                    file_size=int(asset.probe.size if asset.probe else 0),
+                    duration_ms=media_duration_ms,
+                    audio_codec=audio_codec,
+                    runner=runner,
+                    ffmpeg=ffmpeg,
+                    captions=list(captions or []),
+                    still_wanted=_still_wanted,
+                    attach=_attach,
+                )
+            else:
+                session.process = start_remux(
+                    Path(str(asset.local_path)),
+                    directory,
+                    probe=asset.probe,
+                    file_size=int(asset.probe.size if asset.probe else 0),
+                    duration_ms=media_duration_ms,
+                    runner=runner,
+                    ffmpeg=ffmpeg,
+                    captions=list(captions or []),
+                )
         except FileNotFoundError:
             session.plan = "plex-fallback"
             session.reason = "ffmpeg is not available, so this title stays on the Plex path"
@@ -213,7 +254,12 @@ def stop_engine_session(session: EngineSession) -> dict[str, Any]:
     _stop_process(session)
     with _LOCK:
         _SESSIONS.pop(session.session_id, None)
-    return {"ok": True, "session_id": session.session_id, "plan": session.plan, "reason": session.reason}
+    return {
+        "ok": True,
+        "session_id": session.session_id,
+        "plan": session.plan,
+        "reason": session.reason,
+    }
 
 
 def assert_session_allowed(user: Any, settings: Any, item: dict[str, Any]) -> None:

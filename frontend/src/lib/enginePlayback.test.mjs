@@ -63,30 +63,43 @@ test("a playable remux uses the engine master and keeps the Plex path for captio
   assert.equal(engineSessionForPlayer({ playable: false, plan: "audio", master_url: "" }), null);
 });
 
-test("a full plan and an audio plan start library playback", async () => {
-  for (const plan of ["full", "audio"]) {
-    let plex = 0;
-    const played = await chooseWebPlayback({
-      features: { features: { play_through_projectionist: true } },
-      openEngine: async () => ({
-        playable: true,
-        master_url: "/api/playback/sessions/s/token/master.m3u8",
-        plan,
-        session_id: "s",
-        reason:
-          plan === "full"
-            ? "HEVC video is not playable on web (hevc level is above profile hevc 5.1)"
-            : "H.264 video is playable on web; E-AC-3 audio is not, so the audio would be transcoded (eac3 not in profile)",
-      }),
-      startPlex: async () => {
-        plex += 1;
-        return { stream_url: "/plex", engine: false };
-      },
-    });
-    assert.equal(plex, 1);
-    assert.equal(played.stream_url, "/plex");
-    assert.equal(played.engine, false);
-  }
+test("a playable audio plan uses the engine and a full plan stays on the library path", async () => {
+  const audio = await chooseWebPlayback({
+    features: { features: { play_through_projectionist: true } },
+    openEngine: async () => ({
+      playable: true,
+      master_url: "/api/playback/sessions/s/token/master.m3u8",
+      plan: "audio",
+      session_id: "s",
+      reason:
+        "H.264 video is playable on web; E-AC-3 audio is not, so the audio is transcoded (eac3 not in profile)",
+    }),
+    startPlex: async () => {
+      throw new Error("a playable audio plan must not start the library path");
+    },
+  });
+  assert.equal(audio.engine, true);
+  assert.equal(audio.stream_url, "/api/playback/sessions/s/token/master.m3u8");
+
+  let plex = 0;
+  const full = await chooseWebPlayback({
+    features: { features: { play_through_projectionist: true } },
+    openEngine: async () => ({
+      playable: false,
+      master_url: "",
+      plan: "full",
+      session_id: "s",
+      reason: "HEVC video is not playable on web (hevc level is above profile hevc 5.1)",
+    }),
+    startPlex: async () => {
+      plex += 1;
+      return { stream_url: "/plex", engine: false };
+    },
+  });
+  assert.equal(plex, 1);
+  assert.equal(full.stream_url, "/plex");
+  assert.equal(full.engine, false);
+  assert.equal(engineSessionForPlayer({ playable: false, plan: "audio", master_url: "" }), null);
 });
 
 test("the profile lists HEVC, AV1, AC-3, E-AC-3, and 10-bit only when the check says yes", () => {

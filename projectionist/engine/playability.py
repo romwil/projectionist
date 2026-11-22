@@ -39,9 +39,9 @@ logger = logging.getLogger(__name__)
 REPORT_NAME = "playability.json"
 TASK_NAME = "playability_report"
 
-# Cheapest outcome first. These are labels for the planner's answer, not new
-# pipelines. Audio-only and a video transcode are named so the report is honest
-# about what would have to happen. Serving them is later work.
+# Cheapest outcome first. These are labels for the planner's answer. The
+# report itself does not transcode. Audio-only is served by ENG-012 when a
+# client opts in. A video transcode is still a label, not a pipeline.
 TIER_DIRECT = "direct"
 TIER_REMUX = "remux"
 TIER_AUDIO = "audio"
