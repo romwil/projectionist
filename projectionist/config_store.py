@@ -698,6 +698,23 @@ class TheaterSettings:
 
 
 @dataclass
+class NetworkSettings:
+    """How clients reach this household when they are away.
+
+    ``public_base_url`` is an http(s) origin the owner sets. The home address
+    is observed from requests and is not stored here. An invalid value is
+    dropped at load so a bad settings file cannot stop startup.
+    """
+
+    public_base_url: str = ""
+
+    def __post_init__(self) -> None:
+        from projectionist.public_url import sanitize_stored_public_base_url
+
+        self.public_base_url = sanitize_stored_public_base_url(self.public_base_url)
+
+
+@dataclass
 class EngineSettings:
     """Playback engine (ENG-001).
 
@@ -764,6 +781,7 @@ NESTED_SETTINGS_TYPES.update(
         "acrcloud": AcrcloudSettings,
         "weather": WeatherSettings,
         "engine": EngineSettings,
+        "network": NetworkSettings,
     }
 )
 
@@ -840,6 +858,7 @@ class Settings:
     acrcloud: AcrcloudSettings = field(default_factory=AcrcloudSettings)
     weather: WeatherSettings = field(default_factory=WeatherSettings)
     engine: EngineSettings = field(default_factory=EngineSettings)
+    network: NetworkSettings = field(default_factory=NetworkSettings)
 
     def apply_to_environ(self) -> None:
         for env_name, field_name in ENV_TO_FIELD.items():

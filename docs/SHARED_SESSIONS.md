@@ -6,13 +6,15 @@ A playback session is a **room**, not a private stream: one screen plays, the pe
 **Audience:** Developers / contributors; members and owners for the behavior.
 **Related:** [PLAYBACK_ENGINE.md](PLAYBACK_ENGINE.md) · [TRACKS.md](TRACKS.md) · [TIMELINE.md](TIMELINE.md) · [NATIVE_CLIENTS.md](NATIVE_CLIENTS.md) · [PRIVACY.md](PRIVACY.md)
 
-Jump to: [The idea](#the-idea) · [Roles](#who-is-in-a-session) · [What a guest can do](#what-a-joined-device-can-do) · [Realtime](#the-realtime-channel) · [Handheld captions](#handheld-captions) · [Privacy](#privacy-and-youth) · [Items](#roadmap-items)
+Jump to: [The idea](#the-idea) · [Home and away](#home-and-away) · [Roles](#who-is-in-a-session) · [What a guest can do](#what-a-joined-device-can-do) · [Realtime](#the-realtime-channel) · [Handheld captions](#handheld-captions) · [Privacy](#privacy-and-youth) · [Items](#roadmap-items)
 
 ---
 
 ## The idea
 
 > **Friday night.** You start *Heat* on the living-room Apple TV from your phone. The phone becomes a rich remote. Your partner opens Projectionist on theirs and taps **Join Living Room** — they get captions in their hand without turning them on for the room. Twenty minutes in, you swipe up and ask your curator, “who was that in the car just now?” — and it already knows you are at 0:21:40.
+
+A device at home and a device away from home do not share one origin. [Home and away](#home-and-away) is how a client learns both, while the playlist itself stays relative.
 
 Three ideas carry that evening:
 
@@ -83,6 +85,27 @@ A guest (or the owner) can read captions on their own device while the room watc
 - **No new exports.** Session state is ephemeral; position reporting continues to feed Continue Watching and the watch tracker exactly as library Play does today.
 
 ---
+
+## Home and away
+
+A device on the home network and a device somewhere else need different origins. The owner sets the away address — the public base URL — in **Settings → Playback**. A signed-in `GET /api/features` publishes both:
+
+```json
+"addresses": { "home": "http://10.0.0.8:8788", "away": "https://films.example.com" }
+```
+
+Home is the origin of a request that arrived from the home network (a private address, loopback, a link-local address, or a `.local` / `.lan` / `.home.arpa` / `.internal` name). Projectionist remembers the latest one until the process restarts. Away is the owner’s address, or `""` until they set one. A signed-out client receives the capability and not the addresses.
+
+```bash
+curl -s -X PUT http://your-host:8788/api/network/public-base-url \
+  -H "Authorization: Bearer YOUR_OWNER_CREDENTIAL" \
+  -H "Content-Type: application/json" \
+  -d '{"public_base_url":"https://films.example.com"}'
+```
+
+Engine playlist and segment URLs stay relative (`/api/playback/sessions/…`, `av/stream.m3u8`, `seg_0001.m4s`). The client joins them to the address it is using. The away address is never written into a playlist.
+
+**How this works.** The capability `household_addresses` is `1` on every features response. The two strings are only on the signed-in payload. **Honest limit.** After a restart, home is empty until someone opens Projectionist on the home network. The away address is an origin: a path, a query, or a username in the URL is refused.
 
 ## Roadmap items
 

@@ -363,6 +363,15 @@ Owners (or single-workspace installs with no login) also configure sync and idle
 
 **Settings → Playback** includes **Library playability** for the owner. It does not start when you open Settings, when the server starts, or when the library is scanned. **Refresh report** plans from the stream list Plex already has (container, codecs, profile, level, bit depth) and shows those shares while it is still running. ffprobe then confirms the files in the background, one at a time. The tiers are serve the file, remux, audio-only, captions that are not ready yet, picture captions, ask the media source to transcode, or not playable through the engine. The report does not transcode, and it does not change the next Play. When Play through Projectionist is on, an audio-only title plays from Projectionist: the picture is copied and the sound is converted. A title whose picture this device cannot play still uses the usual player.
 
+**Settings → Playback** also has **Away address** for the owner. That is the address people use when they are not on the home network. Playback links stay relative, so the same film works at home and away. Leave it blank until you have one. A path, a query, or a username in the address is refused.
+
+```bash
+curl -s -X PUT http://your-host:8788/api/network/public-base-url \
+  -H "Authorization: Bearer YOUR_OWNER_CREDENTIAL" \
+  -H "Content-Type: application/json" \
+  -d '{"public_base_url":"https://films.example.com"}'
+```
+
 A line under each device says what a GPU would change, in the form “A GPU with Quick Sync would let N titles play without Plex.” N is only the titles whose video that device cannot play. The same bucket is split by codec, level, and bit depth, and it says how many of those titles are above 1080p or HDR. Safari’s N and Apple TV’s N are the two counts that decide whether a GPU is worth it. Audio-only and picture captions are counted on their own. The shares appear from the stream list Plex already has, before the file check finishes.
 
 ```bash

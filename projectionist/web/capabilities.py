@@ -32,4 +32,7 @@ def client_capabilities() -> dict[str, int]:
         "push": 0,  # NAT-006, accepted, not shipped
         "approvals": 0,  # NAT-006, accepted, not shipped
         "cached_art": 1 if CACHED_ART_ENABLED else 0,
+        # Signed-in features publish addresses.home and addresses.away.
+        # Playlist URLs stay relative. The number is public; the addresses are not.
+        "household_addresses": 1,
     }
