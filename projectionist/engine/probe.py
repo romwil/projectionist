@@ -64,6 +64,10 @@ class MediaStream:
     hdr: str = ""
     subtitle_kind: str = ""
     bit_depth: int = 0
+    # True once a probe or a Plex stream attribute actually answered. An empty
+    # ``hdr`` with this flag is "no HDR". An empty ``hdr`` without it is unknown.
+    hdr_known: bool = False
+    bit_depth_known: bool = False
 
 
 @dataclass
@@ -76,12 +80,19 @@ class ProbeResult:
     streams: list[MediaStream] = field(default_factory=list)
 
     def as_public(self) -> dict[str, Any]:
+        streams = []
+        for stream in self.streams:
+            row = asdict(stream)
+            # Knowledge flags stay on the server. Clients already read hdr and bit_depth.
+            row.pop("hdr_known", None)
+            row.pop("bit_depth_known", None)
+            streams.append(row)
         return {
             "container": self.container,
             "duration_s": self.duration_s,
             "bitrate": self.bitrate,
             "size": self.size,
-            "streams": [asdict(stream) for stream in self.streams],
+            "streams": streams,
         }
 
 
@@ -191,6 +202,8 @@ def parse_ffprobe(payload: dict[str, Any]) -> ProbeResult:
                 hdr=_hdr(raw) if codec_type == "video" else "",
                 subtitle_kind=subtitle_kind(codec) if codec_type == "subtitle" else "",
                 bit_depth=_bit_depth(raw) if codec_type == "video" else 0,
+                hdr_known=codec_type == "video",
+                bit_depth_known=codec_type == "video",
             )
         )
     return ProbeResult(

@@ -334,6 +334,7 @@ def _plex_stream(element) -> Optional[Dict[str, Any]]:
         "width": width,
         "height": height,
         "hdr": _plex_hdr(element) if kind == "video" else "",
+        "hdr_known": _plex_hdr_known(element) if kind == "video" else False,
     }
 
 
@@ -357,10 +358,33 @@ def _plex_frame_size(element) -> tuple[int, int]:
     return named.get(label, (0, 0))
 
 
+_PLEX_HDR_ATTRS = (
+    "DOVIPresent",
+    "colorTrc",
+    "colorTransfer",
+    "HDR10Present",
+    "HDR10PlusPresent",
+)
+
+
+def _plex_hdr_known(element) -> bool:
+    """True when this element carried an HDR attribute, including a negative one.
+
+    The library listing's ``Media`` summary usually has none of these. An empty
+    result there is "not on this listing", not "the file has no HDR".
+    """
+    return any(name in element.attrib for name in _PLEX_HDR_ATTRS)
+
+
 def _plex_hdr(element) -> str:
     dovi = str(element.attrib.get("DOVIPresent") or "").strip().lower()
     if dovi in {"1", "true", "yes"}:
         return "dolby-vision"
+    plus = str(
+        element.attrib.get("HDR10PlusPresent") or element.attrib.get("HDR10Present") or ""
+    ).strip().lower()
+    if plus in {"1", "true", "yes"}:
+        return "hdr10"
     transfer = (
         str(element.attrib.get("colorTrc") or element.attrib.get("colorTransfer") or "")
         .strip()
@@ -376,7 +400,9 @@ def _plex_hdr(element) -> str:
 def title_streams_from_element(element) -> Optional[Dict[str, Any]]:
     """Container, codecs, profile, level, and bit depth already on a Plex Video.
 
-    The library listing includes this on ``Media`` / ``Stream``. No ffprobe.
+    A per-title metadata document includes ``Stream`` children (level, bit depth,
+    HDR). The section listing usually has only the ``Media`` summary: codec,
+    profile name, and frame size, with no level and no HDR attribute. No ffprobe.
     """
     rating_key = str(element.attrib.get("ratingKey") or "").strip()
     if not rating_key:
@@ -416,6 +442,7 @@ def title_streams_from_element(element) -> Optional[Dict[str, Any]]:
                     "width": width,
                     "height": height,
                     "hdr": _plex_hdr(media),
+                    "hdr_known": _plex_hdr_known(media),
                 }
             )
         if audio:
@@ -447,6 +474,8 @@ def title_streams_from_element(element) -> Optional[Dict[str, Any]]:
             stream["height"] = frame_height
         if not stream.get("hdr") and frame_hdr:
             stream["hdr"] = frame_hdr
+        if not stream.get("hdr_known") and _plex_hdr_known(media):
+            stream["hdr_known"] = True
     return {
         "rating_key": rating_key,
         "title": str(element.attrib.get("title") or ""),

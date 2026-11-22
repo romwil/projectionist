@@ -24,7 +24,7 @@ from projectionist.engine.captions import (
     CAPTION_PENDING_REASON,
     caption_fallback_reason,
 )
-from projectionist.engine.planner import plan_playback
+from projectionist.engine.planner import canonical_codec, level_number, plan_playback
 from projectionist.engine.probe import MediaStream, ProbeResult, subtitle_kind
 from projectionist.engine.profiles import (
     DeviceProfile,
@@ -207,15 +207,55 @@ def _safe_reason(reason: str, asset: MediaAsset) -> str:
 _SOURCE_REASONS = ("codec", "level", "bit_depth", "resolution", "hdr")
 
 
-def empty_source_breakdown() -> dict[str, int]:
+def empty_source_breakdown() -> dict[str, Any]:
     """Why a title is in the source-transcode bucket, plus size and HDR inside it.
 
     Codec, level, and bit depth are the planner's reason and add up to
-    ``video_transcode`` when every title has one of those. Resolution and HDR
-    count titles in that same bucket that are above 1080p or carry HDR, so a
-    4K HEVC title can be both ``codec`` and ``resolution``.
+    ``video_transcode`` when every title has one of those. ``codecs`` names
+    the video codec of each title in that bucket. Resolution and HDR count
+    titles in that same bucket that are above 1080p or carry HDR, so a 4K
+    HEVC title can be both ``codec`` and ``resolution``.
+
+    ``level``, ``bit_depth``, and ``hdr`` are null when that fact was not in
+    the metadata and ffprobe has not confirmed it. Null is not a zero.
     """
-    return {name: 0 for name in ("video_transcode", *_SOURCE_REASONS)}
+    counts: dict[str, Any] = {name: 0 for name in ("video_transcode", *_SOURCE_REASONS)}
+    counts["codecs"] = {}
+    return counts
+
+
+def _codec_from_answer(text: str) -> str:
+    """The video codec named in a planner answer, when the row has no codec field."""
+    folded = str(text or "").strip().lower()
+    if not folded:
+        return ""
+    if " not in profile" in folded:
+        return folded.split(" not in profile")[0].split()[-1]
+    if " level is above" in folded:
+        return folded.split(" level is above")[0].split()[-1]
+    if "-bit is above" in folded:
+        return folded.split("-bit is above")[0].split()[0]
+    return ""
+
+
+def _video_codec_name(row: Mapping[str, Any]) -> str:
+    named = str(row.get("video_codec") or "").strip().lower()
+    if named:
+        return canonical_codec(named)
+    answer = ""
+    profile_answer = row.get("profile_answer")
+    if isinstance(profile_answer, dict):
+        answer = str(profile_answer.get("video") or "")
+    return canonical_codec(_codec_from_answer(answer))
+
+
+def _bit_depth_is_known(stream) -> bool:
+    if bool(getattr(stream, "bit_depth_known", False)):
+        return True
+    if int(getattr(stream, "bit_depth", 0) or 0) >= 8:
+        return True
+    text = str(getattr(stream, "profile", "") or "").lower()
+    return "12" in text or "10" in text
 
 
 def source_block_reason(answer: str) -> str:
@@ -241,20 +281,54 @@ def _above_1080p(stream) -> bool:
     )
 
 
-def source_transcode_breakdown(rows: Sequence[Mapping[str, Any]]) -> dict[str, int]:
+def source_transcode_breakdown(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     counts = empty_source_breakdown()
+    codecs: dict[str, int] = {}
+    level_unchecked = False
+    saw_bucket = False
+    bucket_hdr_known = True
+    bit_depth_gap = False
     for row in rows:
+        if not isinstance(row, Mapping):
+            continue
+        video_codec = _video_codec_name(row)
+        if video_codec and row.get("codec_in_profile") and not row.get("level_known"):
+            # The codec is one this device plays, and the level was missing, so
+            # the planner skipped the level check. A level count of 0 would
+            # hide that.
+            level_unchecked = True
         if str(row.get("tier") or "") != TIER_SOURCE:
             continue
+        saw_bucket = True
         counts["video_transcode"] += 1
         reason = str(row.get("source_reason") or "")
         if reason not in {"codec", "level", "bit_depth"}:
             reason = "codec"
         counts[reason] += 1
+        name = video_codec or "unknown"
+        codecs[name] = codecs.get(name, 0) + 1
         if row.get("above_1080p"):
             counts["resolution"] += 1
         if row.get("video_hdr"):
             counts["hdr"] += 1
+        if not row.get("hdr_known"):
+            bucket_hdr_known = False
+        if row.get("profile_limits_bit_depth") and not row.get("bit_depth_known"):
+            bit_depth_gap = True
+    counts["codecs"] = {
+        name: count
+        for name, count in sorted(codecs.items(), key=lambda item: (-item[1], item[0]))
+    }
+    if level_unchecked:
+        counts["level"] = None
+    if saw_bucket and counts["hdr"] == 0 and not bucket_hdr_known:
+        counts["hdr"] = None
+    # A profile that states no bit-depth limit never rejects for bit depth.
+    # Zero there is the reason, not a claim that every file is 8-bit.
+    # A profile that does limit bit depth, with a file whose depth was never
+    # read, must not report that zero as a measurement.
+    if saw_bucket and bit_depth_gap and counts["bit_depth"] == 0:
+        counts["bit_depth"] = None
     return counts
 
 
@@ -337,6 +411,24 @@ def classify_title(
             str(planned.get("source_reason") or "") or source_block_reason(video_answer) or "codec"
         )
         provider = str(planned.get("provider") or "") or "plex"
+    video_codec = canonical_codec(video.codec) if video is not None else ""
+    hdr_value = str(getattr(video, "hdr", "") or "").strip() if video is not None else ""
+    level_known = (
+        level_number(video_codec, str(getattr(video, "level", "") or "")) is not None
+        if video is not None and video_codec
+        else False
+    )
+    codec_in_profile = bool(
+        video_codec
+        and any(canonical_codec(cap.codec) == video_codec for cap in profile.video)
+    )
+    profile_limits_bit_depth = bool(
+        video_codec
+        and any(
+            canonical_codec(cap.codec) == video_codec and int(cap.bit_depth or 0) > 0
+            for cap in profile.video
+        )
+    )
     return {
         "rating_key": str(asset.rating_key or ""),
         "title": str(title or ""),
@@ -350,8 +442,16 @@ def classify_title(
         },
         "source_reason": source_reason,
         "provider": provider,
+        "video_codec": video_codec,
+        "level_known": level_known,
+        "bit_depth_known": _bit_depth_is_known(video) if video is not None else False,
+        "hdr_known": (
+            bool(getattr(video, "hdr_known", False) or hdr_value) if video is not None else False
+        ),
+        "codec_in_profile": codec_in_profile,
+        "profile_limits_bit_depth": profile_limits_bit_depth,
         "above_1080p": _above_1080p(video),
-        "video_hdr": bool(video is not None and str(getattr(video, "hdr", "") or "").strip()),
+        "video_hdr": bool(hdr_value),
     }
 
 
@@ -684,6 +784,10 @@ def asset_from_plex_row(row: Mapping[str, Any]) -> MediaAsset:
             stream_index = int(raw_index) if raw_index is not None else index
         except (TypeError, ValueError):
             stream_index = index
+        profile = str(raw.get("profile") or "")
+        bit_depth = int(raw.get("bit_depth") or 0)
+        hdr = str(raw.get("hdr") or "") if kind == "video" else ""
+        profile_bits = "12" in profile.lower() or "10" in profile.lower()
         streams.append(
             MediaStream(
                 index=stream_index,
@@ -693,11 +797,15 @@ def asset_from_plex_row(row: Mapping[str, Any]) -> MediaAsset:
                 width=int(raw.get("width") or 0),
                 height=int(raw.get("height") or 0),
                 channels=int(raw.get("channels") or 0),
-                profile=str(raw.get("profile") or ""),
+                profile=profile,
                 level=str(raw.get("level") or ""),
-                hdr=str(raw.get("hdr") or "") if kind == "video" else "",
-                bit_depth=int(raw.get("bit_depth") or 0),
+                hdr=hdr,
+                bit_depth=bit_depth,
                 subtitle_kind=subtitle_kind(codec) if kind == "subtitle" else "",
+                hdr_known=bool(raw.get("hdr_known") or hdr) if kind == "video" else False,
+                bit_depth_known=bool(raw.get("bit_depth_known") or bit_depth >= 8 or profile_bits)
+                if kind == "video"
+                else False,
             )
         )
     container = str(row.get("container") or "")
