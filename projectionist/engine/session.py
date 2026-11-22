@@ -165,13 +165,16 @@ def open_engine_session(
     force_reason: str = "",
     captions: Optional[Sequence[CaptionRendition]] = None,
     source: Any = None,
+    ready_copy: Any = None,
 ) -> EngineSession:
     planned = plan_playback(
         asset,
         profile,
         source=source,
         failed_tries=failed_try_keys(data_dir),
+        ready_copy=ready_copy,
     )
+    play_asset = ready_copy if planned.get("from_copy") and ready_copy is not None else asset
     plan = str(planned["plan"])
     reason = str(planned["reason"])
     source_reason = str(planned.get("source_reason") or "")
@@ -198,8 +201,8 @@ def open_engine_session(
     playable = (
         not force_reason
         and plan in {"remux", "direct", "audio", "try"}
-        and bool(asset.local_path)
-        and asset.probe is not None
+        and bool(play_asset.local_path)
+        and play_asset.probe is not None
     )
     session = EngineSession(
         session_id=str(uuid.uuid4()),
@@ -219,8 +222,12 @@ def open_engine_session(
     if playable:
         directory = Path(data_dir) / "engine" / "sessions" / session.session_id
         media_duration_ms = session.duration_ms
-        if media_duration_ms <= 0 and asset.probe is not None and asset.probe.duration_s > 0:
-            media_duration_ms = int(round(asset.probe.duration_s * 1000))
+        if (
+            media_duration_ms <= 0
+            and play_asset.probe is not None
+            and play_asset.probe.duration_s > 0
+        ):
+            media_duration_ms = int(round(play_asset.probe.duration_s * 1000))
         try:
             if needs_audio:
                 from projectionist.engine.audio import start_audio_transcode
@@ -236,10 +243,10 @@ def open_engine_session(
                         return True
 
                 start_audio_transcode(
-                    Path(str(asset.local_path)),
+                    Path(str(play_asset.local_path)),
                     directory,
-                    probe=asset.probe,
-                    file_size=int(asset.probe.size if asset.probe else 0),
+                    probe=play_asset.probe,
+                    file_size=int(play_asset.probe.size if play_asset.probe else 0),
                     duration_ms=media_duration_ms,
                     audio_codec=audio_codec,
                     runner=runner,
@@ -251,10 +258,10 @@ def open_engine_session(
                 )
             else:
                 session.process = start_remux(
-                    Path(str(asset.local_path)),
+                    Path(str(play_asset.local_path)),
                     directory,
-                    probe=asset.probe,
-                    file_size=int(asset.probe.size if asset.probe else 0),
+                    probe=play_asset.probe,
+                    file_size=int(play_asset.probe.size if play_asset.probe else 0),
                     duration_ms=media_duration_ms,
                     runner=runner,
                     ffmpeg=ffmpeg,

@@ -1169,6 +1169,24 @@ export async function getPlayabilityTitles(profile: string, tier: string, offset
 }
 
 /** Dry-run the library. `profile` is this browser's codec answer, when we have one. */
+export async function getAheadOfTimeCopies() {
+  return api("/playback/copies");
+}
+
+export async function saveAheadOfTimeCopies(outputDir: string, budgetGib: number) {
+  return api("/playback/copies", {
+    method: "PUT",
+    body: JSON.stringify({
+      output_dir: String(outputDir || ""),
+      budget_gib: Number(budgetGib) || 0,
+    }),
+  });
+}
+
+export async function removeAheadOfTimeCopy(ratingKey: string) {
+  return api(`/playback/copies/${encodeURIComponent(ratingKey)}`, { method: "DELETE" });
+}
+
 export async function refreshPlayabilityReport(profile: JsonObject | null = null) {
   return api("/playback/playability", {
     method: "POST",

@@ -130,7 +130,9 @@ def _video_decision(stream: MediaStream, caps: list[VideoCapability]) -> tuple[s
     return "block", f"{codec} level is above profile {codec} {same[0].max_level}"
 
 
-def _audio_decision(audios: list[MediaStream], profile: DeviceProfile) -> tuple[bool, str, Optional[MediaStream]]:
+def _audio_decision(
+    audios: list[MediaStream], profile: DeviceProfile
+) -> tuple[bool, str, Optional[MediaStream]]:
     if not audios:
         return True, "no audio", None
     names = {canonical_codec(name) for name in profile.audio}
@@ -218,6 +220,7 @@ def plan_playback(
     *,
     source: Optional[SourceTranscode] = None,
     failed_tries: Optional[set[tuple[str, str]]] = None,
+    ready_copy: Optional[MediaAsset] = None,
 ) -> dict[str, object]:
     """Record a plan, the profile answer that chose it, and a reason. Never a file path.
 
@@ -225,11 +228,23 @@ def plan_playback(
     The default source is Plex. The returned plan is ``source-transcode`` and
     is not playable here.
 
+    A ready copy that direct-plays or remuxes is used instead of that live
+    transcode. A partial file is not a ready copy.
+
     HEVC above the advertised level, and HDR10 on a device that reports HDR,
     are plan ``try``: a remux, not a claim that it will play. ``failed_tries``
     holds ``(rating_key, profile id)`` pairs whose first frame did not arrive.
     Those titles are not tried again.
     """
+    if ready_copy is not None:
+        copy_plan = plan_playback(ready_copy, profile, source=source, failed_tries=failed_tries)
+        if str(copy_plan.get("plan") or "") in {"direct", "remux"}:
+            source_plan = plan_playback(asset, profile, source=source, failed_tries=failed_tries)
+            if str(source_plan.get("plan") or "") == "source-transcode":
+                chosen = dict(copy_plan)
+                chosen["from_copy"] = True
+                return chosen
+            return source_plan
     captions = caption_inventory(asset.probe)
     empty_answer = {"video": "", "audio": ""}
     base = {

@@ -44,6 +44,7 @@ def register_all(scheduler: IdleScheduler) -> None:
         semantic_embeddings,
         subtitle_enrichment,
         caption_prep,
+        copies,
         playability_report,
         summary_motifs,
         taste_refresh,
@@ -76,6 +77,7 @@ def register_all(scheduler: IdleScheduler) -> None:
     subtitle_enrichment.register(scheduler)
     caption_prep.register(scheduler)
     playability_report.register(scheduler)
+    copies.register(scheduler)
     plot_neighbors.register(scheduler)
     summary_motifs.register(scheduler)
     llm_logline_enrichment.register(scheduler)
