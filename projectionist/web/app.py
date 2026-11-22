@@ -180,6 +180,7 @@ from projectionist.web.live_channels_routes import register_live_channels_routes
 from projectionist.engine.routes import register_engine_routes
 from projectionist.web.address_routes import register_address_routes
 from projectionist.web.room_routes import register_room_routes
+from projectionist.web.shared_session_routes import register_shared_session_routes
 from projectionist.web.playback_routes import register_playback_routes
 from projectionist.web.theater_delight_routes import register_theater_delight_routes
 from projectionist.web.investigate_routes import register_investigate_routes
@@ -1458,6 +1459,7 @@ register_rematch_routes(app)
 register_whisper_routes(app)
 register_device_routes(app)
 register_room_routes(app)
+register_shared_session_routes(app)
 
 
 def _scheduler_trigger_background(name: str) -> Dict[str, Any]:

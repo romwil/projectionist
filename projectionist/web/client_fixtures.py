@@ -386,6 +386,36 @@ def collect_client_fixtures() -> dict[str, dict[str, Any]]:
                 client.get("/api/devices/me/intent", headers=bearer),
             )
             keep("GET", "/api/rooms", client.get("/api/rooms"))
+            from projectionist.sessions.shared import reset_shared_sessions
+
+            reset_shared_sessions()
+            opened = client.post(
+                "/api/sessions",
+                json={"screen_id": device_id, "rating_key": "movie-1", "level": "off"},
+            )
+            keep("POST", "/api/sessions", opened)
+            shared_id = opened.json()["id"]
+            keep(
+                "GET",
+                "/api/sessions/{session_id}",
+                client.get(f"/api/sessions/{shared_id}"),
+                example_path=f"/api/sessions/{shared_id}",
+            )
+            keep(
+                "PATCH",
+                "/api/sessions/{session_id}",
+                client.patch(
+                    f"/api/sessions/{shared_id}",
+                    json={"position_ms": 12000, "state": "paused"},
+                ),
+                example_path=f"/api/sessions/{shared_id}",
+            )
+            keep(
+                "DELETE",
+                "/api/sessions/{session_id}",
+                client.delete(f"/api/sessions/{shared_id}"),
+                example_path=f"/api/sessions/{shared_id}",
+            )
             keep("GET", "/api/library/feeds/hub", client.get("/api/library/feeds/hub"))
             keep(
                 "GET",

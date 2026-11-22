@@ -107,6 +107,21 @@ Engine playlist and segment URLs stay relative (`/api/playback/sessions/…`, `a
 
 **How this works.** The capability `household_addresses` is `1` on every features response. The two strings are only on the signed-in payload. **Honest limit.** After a restart, home is empty until someone opens Projectionist on the home network. The away address is an origin: a path, a query, or a username in the URL is refused.
 
+## The session object
+
+A session belongs to the member who started it, on one screen. It carries a position, a state (`playing`, `paused`, `buffering`, `ended`), and a level (`off`, `moments`, `popups`, `class`).
+
+```bash
+curl -s -X POST http://your-host:8788/api/sessions \
+  -H "Authorization: Bearer YOUR_CREDENTIAL" \
+  -H "Content-Type: application/json" \
+  -d '{"screen_id":"ROOM_ID","rating_key":"123","level":"off"}'
+```
+
+The starter can change the level and end the session. The member signed in on the screen can read it and report position. Any other member gets 404, including the title. Starting another session on the same screen ends the previous one.
+
+**How this works.** The capability `session_object` is `1`. `shared_sessions` stays `0` until the realtime channel. **Honest limit.** The object is kept in memory and is gone after a restart. It does not by itself move the picture; the screen still plays the engine playlist. Joining, guest transport, and the live channel are later items.
+
 ## Rooms
 
 A room is a named screen in the household. Every signed-in member can read the list. A handheld is not a room. A removed screen is not a room.
@@ -130,7 +145,7 @@ The household owner, or the member signed in on that screen, can rename it with 
 |----|------|------------|
 | SES-001 | Device credentials for phones and tablets (done with NAT-002). Every web sign-in path can end in a device credential | pairing (shipped) |
 | SES-002 | Rooms registry (named screens per household) + visibility rules (done: `GET /api/rooms`, `rooms` is 1) | SES-001 |
-| SES-003 | Session object (owner, screen, position, level) on top of engine sessions | ENG-003 |
+| SES-003 | Session object (owner, screen, position, level) on top of engine sessions (done: `session_object` is 1) | ENG-003 |
 | SES-004 | Realtime channel (`/api/sessions/{id}/live`), command authorization, clock model | SES-003 |
 | SES-005 | Join flow (owner approval or on-screen code) + guest permissions | SES-004 |
 | SES-006 | Handheld captions | SES-004, ENG-004 |

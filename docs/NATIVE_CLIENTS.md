@@ -85,7 +85,8 @@ Invite: `GET /api/invites/validate?token=…` stays public. The body is the invi
     "approvals": 0,          // NAT-006
     "cached_art": 1,         // same fact as features.cached_art
     "household_addresses": 1, // home and away on the signed-in payload
-    "rooms": 1               // SES-002 named screens, no playback
+    "rooms": 1,              // SES-002 named screens, no playback
+    "session_object": 1      // SES-003 owner, screen, position, level
   }
 }
 ```
@@ -97,6 +98,7 @@ curl -s http://your-host:8788/api/features | python3 -m json.tool
 - A capability number is that feature’s **contract version**: `0` absent, `1` first contract, `2` a breaking revision. Additive fields do not bump it. `api_contract` is `3`, the first published number. Clients branch on these numbers, not on the server version string.
 - `capabilities.cached_art` is `1` while `features.cached_art` is true and `0` when that flag is off. The boolean stays on the signed-in payload only, where EXP-006 put it. The number is on the public payload too, so a client can know before sign-in.
 - Clients turn features on by capability. A client facing an older server shows the honest line (*“This Projectionist doesn’t support handheld captions yet.”*) rather than failing.
+- `session_object` is `1` when `POST /api/sessions` records an owner, a screen, a position, and a level. Other members cannot read it. `shared_sessions` stays `0` until the realtime channel.
 - `rooms` is `1` when `GET /api/rooms` lists named screens. The list does not include what is playing. See [shared sessions](SHARED_SESSIONS.md#rooms).
 - `household_addresses` is `1` when this server publishes `addresses.home` and `addresses.away` to a signed-in client. The strings are absent before sign-in. Home is the last origin seen from the home network; away is the owner’s public base URL, or empty. Engine playlist and segment URLs stay relative either way. See [shared sessions](SHARED_SESSIONS.md#home-and-away).
 - **Honest limit.** A `0` means this server knows the name and does not offer that contract yet. It is not a hint that the feature is about to appear.

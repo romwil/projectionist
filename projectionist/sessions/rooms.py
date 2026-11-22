@@ -63,6 +63,25 @@ def list_rooms(db: Any) -> list[dict[str, str]]:
     return rooms
 
 
+def screen_signed_in_user(db: Any, room_id: str) -> str | None:
+    """The member signed in on a live screen, or None when it is not a room."""
+    device = str(room_id or "").strip().lower()
+    if not _DEVICE_ID.match(device):
+        return None
+    with db.connect() as conn:
+        row = conn.execute(
+            """
+            SELECT user_id, kind, revoked_at
+            FROM paired_devices
+            WHERE id = ?
+            """,
+            (device,),
+        ).fetchone()
+    if row is None or row["revoked_at"] is not None or _row_kind(row) != SCREEN_KIND:
+        return None
+    return str(row["user_id"] or "")
+
+
 def rename_room(db: Any, room_id: str, name: str, *, user_id: str, is_owner: bool) -> dict[str, str]:
     """The household owner, or the member signed in on that screen, may rename it."""
     device = str(room_id or "").strip().lower()

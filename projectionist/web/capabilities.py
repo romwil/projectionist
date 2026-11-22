@@ -36,4 +36,5 @@ def client_capabilities() -> dict[str, int]:
         # Playlist URLs stay relative. The number is public; the addresses are not.
         "household_addresses": 1,
         "rooms": 1,  # SES-002 named screens; the list has no playback
+        "session_object": 1,  # SES-003 owner, screen, position, level
     }
