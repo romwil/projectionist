@@ -253,6 +253,7 @@ The web app benefits as much as any native client:
 - **Desktop browsers and iPad Safari** keep element fullscreen, so Projectionist’s own controls, hold-to-2×, caption styling, and curator overlays ([TRACKS.md](TRACKS.md)) stay on screen in fullscreen.
 - **iPhone Safari** still hands fullscreen to the system player (an Apple rule). The difference: the system player now has real caption tracks and a VOD playlist, so fullscreen stops being a downgrade. Projectionist overlays do not show there; the native iPhone app is the premium path.
 - `lib/subtitleCues.ts` overlay drawing becomes the **styling layer** on top of native text tracks rather than the only caption path.
+- If an engine session shows no picture within about 8 seconds, or the player reports a fatal error before that first frame, the web player stops that session and starts the library session once. The browser console records the reason. A second failure stays on the library session. The resume prompt and the movie bumper do not start that clock; it starts when the engine playlist is the thing on screen.
 
 ---
 

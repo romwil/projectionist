@@ -200,6 +200,94 @@ export function engineSessionForPlayer(session: any) {
  * play, including source-transcode and the caption fallback, returns to the
  * Plex start. When the switch is off, the Plex start is the only call.
  */
+/** How long an engine playlist may sit with no picture before the library path is tried. */
+export const ENGINE_FIRST_FRAME_TIMEOUT_MS = 8000;
+
+/**
+ * Empty when the engine picture is already on screen, or when it is too early
+ * to give up. A fatal player error before that picture, or a wait past the
+ * timeout with no decoded frame, is the reason the library path should start.
+ */
+export function engineFirstFrameReason({
+  elapsedMs = 0,
+  videoWidth = 0,
+  readyState = 0,
+  fatalError = "",
+  timeoutMs = ENGINE_FIRST_FRAME_TIMEOUT_MS,
+}: {
+  elapsedMs?: number;
+  videoWidth?: number;
+  readyState?: number;
+  fatalError?: string;
+  timeoutMs?: number;
+} = {}): string {
+  const width = Number(videoWidth);
+  const ready = Number(readyState);
+  if (Number.isFinite(width) && width > 0 && Number.isFinite(ready) && ready >= 2) return "";
+  const fatal = String(fatalError || "").trim();
+  if (fatal) return `Engine session failed before the first frame: ${fatal}`;
+  const elapsed = Number(elapsedMs);
+  const timeout = Number(timeoutMs);
+  const limit = Number.isFinite(timeout) && timeout > 0 ? timeout : ENGINE_FIRST_FRAME_TIMEOUT_MS;
+  if (Number.isFinite(elapsed) && elapsed >= limit) {
+    const seconds = Math.max(1, Math.round(limit / 1000));
+    return `Engine session had no first frame within ${seconds} seconds`;
+  }
+  return "";
+}
+
+/**
+ * One library retry for an engine session that never shows a picture.
+ * A second call with `retried` set does not stop or start anything again.
+ */
+export async function settleEngineFirstFrame({
+  elapsedMs = 0,
+  videoWidth = 0,
+  readyState = 0,
+  fatalError = "",
+  retried = false,
+  timeoutMs = ENGINE_FIRST_FRAME_TIMEOUT_MS,
+  startLibrary,
+  stopEngine,
+  log = (reason: string) => {
+    console.warn(reason);
+  },
+}: {
+  elapsedMs?: number;
+  videoWidth?: number;
+  readyState?: number;
+  fatalError?: string;
+  retried?: boolean;
+  timeoutMs?: number;
+  startLibrary: () => Promise<any>;
+  stopEngine: () => Promise<unknown>;
+  log?: (reason: string) => void;
+}): Promise<{ retried: boolean; session: any | null; reason: string }> {
+  if (retried) return { retried: true, session: null, reason: "" };
+  const reason = engineFirstFrameReason({
+    elapsedMs,
+    videoWidth,
+    readyState,
+    fatalError,
+    timeoutMs,
+  });
+  if (!reason) return { retried: false, session: null, reason: "" };
+  log(reason);
+  try {
+    await stopEngine();
+  } catch {
+    // The library session is the one retry. Stopping the engine is best-effort.
+  }
+  try {
+    const session = await startLibrary();
+    return { retried: true, session, reason };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "the library session did not start";
+    log(`Engine first-frame fallback could not start the library session: ${message}`);
+    return { retried: true, session: null, reason };
+  }
+}
+
 export async function chooseWebPlayback({
   features,
   openEngine,
