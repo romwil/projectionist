@@ -8,6 +8,7 @@ from pathlib import Path
 from projectionist.engine.probe import MediaStream, ProbeResult
 from projectionist.engine.profiles import APPLE_TV_4K, CHROME
 from projectionist.engine.session import (
+    EngineSession,
     open_engine_session,
     reset_engine_sessions,
     resolve_session_file,
@@ -30,7 +31,9 @@ def _asset(audio: str = "ac3") -> MediaAsset:
             bitrate=4_000_000,
             size=300_000_000,
             streams=[
-                MediaStream(index=0, codec_type="video", codec="h264", width=1920, height=1080, level="41"),
+                MediaStream(
+                    index=0, codec_type="video", codec="h264", width=1920, height=1080, level="41"
+                ),
                 MediaStream(index=1, codec_type="audio", codec=audio, channels=2, language="eng"),
             ],
         ),
@@ -83,7 +86,8 @@ class EngineSessionTests(unittest.TestCase):
             self.assertIn(session.token, session.master_url())
             command = " ".join(str(part) for part in seen["cmd"])
             self.assertIn("-c copy", command)
-            self.assertIn("-hls_playlist_type vod", command)
+            self.assertIn("-hls_playlist_type event", command)
+            self.assertNotIn("-hls_playlist_type vod", command)
             self.assertIn(str(media), command)
             master = (session.directory / "master.m3u8").read_text(encoding="utf-8")
             self.assertIn("BANDWIDTH=5000000", master)
@@ -95,7 +99,9 @@ class EngineSessionTests(unittest.TestCase):
                 resolve_session_file(session, "../film.mkv")
             with self.assertRaises(PlaybackError):
                 session_for_token(session.session_id, "wrong-token")
-            self.assertEqual(session_for_token(session.session_id, session.token).rating_key, "121986")
+            self.assertEqual(
+                session_for_token(session.session_id, session.token).rating_key, "121986"
+            )
 
     def test_audio_plan_copies_video_and_is_playable(self) -> None:
         import tempfile
@@ -150,7 +156,10 @@ class EngineSessionTests(unittest.TestCase):
                 {
                     "id": "web",
                     "containers": ["mp4", "hls-fmp4"],
-                    "video": [{"codec": "hevc", "max_level": "5.1", "bit_depth": 10}, {"codec": "h264", "max_level": "5.2"}],
+                    "video": [
+                        {"codec": "hevc", "max_level": "5.1", "bit_depth": 10},
+                        {"codec": "h264", "max_level": "5.2"},
+                    ],
                     "audio": ["aac", "ac3", "eac3"],
                     "captions": ["webvtt"],
                 }
@@ -222,3 +231,103 @@ class EngineSessionTests(unittest.TestCase):
             self.assertEqual(shown["source_reason"], "level")
             self.assertEqual(shown["provider"], "plex")
             self.assertNotIn("libx264", shown["reason"])
+
+
+class _Running:
+    def poll(self):
+        return None
+
+
+class _Finished:
+    def poll(self):
+        return 0
+
+
+class PlaylistWaitTests(unittest.TestCase):
+    def _session(self, root: Path, process: object) -> EngineSession:
+        session = EngineSession(
+            session_id="s1",
+            token="token",
+            rating_key="70373",
+            user_id="owner",
+            plan="remux",
+            reason="",
+            playable=True,
+            title="Beetlejuice",
+            duration_ms=1,
+            view_offset_ms=0,
+            profile_id="chrome",
+            directory=root,
+            process=process,
+        )
+        return session
+
+    def test_media_playlist_waits_until_the_event_playlist_appears(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "av").mkdir()
+            now = {"t": 0.0}
+
+            def clock() -> float:
+                return now["t"]
+
+            def sleep(seconds: float) -> None:
+                now["t"] += seconds
+                (root / "av" / "stream.m3u8").write_text(
+                    "#EXTM3U\n#EXT-X-PLAYLIST-TYPE:EVENT\n",
+                    encoding="utf-8",
+                )
+
+            path = resolve_session_file(
+                self._session(root, _Running()),
+                "av/stream.m3u8",
+                wait_s=20,
+                sleep=sleep,
+                clock=clock,
+            )
+            self.assertIn("EVENT", path.read_text(encoding="utf-8"))
+
+    def test_missing_playlist_404s_when_ffmpeg_has_already_exited(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "av").mkdir()
+            slept: list[float] = []
+            with self.assertRaises(PlaybackError) as caught:
+                resolve_session_file(
+                    self._session(root, _Finished()),
+                    "av/stream.m3u8",
+                    wait_s=20,
+                    sleep=slept.append,
+                    clock=lambda: 0.0,
+                )
+            self.assertEqual(caught.exception.status_code, 404)
+            self.assertEqual(slept, [])
+
+    def test_missing_playlist_404s_after_the_wait_if_ffmpeg_never_writes_it(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "av").mkdir()
+            now = {"t": 0.0}
+
+            def clock() -> float:
+                return now["t"]
+
+            def sleep(seconds: float) -> None:
+                now["t"] += seconds
+
+            with self.assertRaises(PlaybackError) as caught:
+                resolve_session_file(
+                    self._session(root, _Running()),
+                    "av/stream.m3u8",
+                    wait_s=20,
+                    sleep=sleep,
+                    clock=clock,
+                )
+            self.assertEqual(caught.exception.status_code, 404)
+            self.assertGreaterEqual(now["t"], 20)

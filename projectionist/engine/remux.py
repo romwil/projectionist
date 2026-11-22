@@ -223,6 +223,12 @@ def write_master(
 
 
 def remux_command(ffmpeg: str, source: Path) -> list[str]:
+    """Copy the picture and sound into fMP4 HLS.
+
+    ``event`` writes ``stream.m3u8`` as each segment lands. ``vod`` waits
+    until ffmpeg exits, so a feature-length copy has no media playlist and
+    the player gets 404 for ``av/stream.m3u8``.
+    """
     return [
         ffmpeg,
         "-y",
@@ -239,7 +245,7 @@ def remux_command(ffmpeg: str, source: Path) -> list[str]:
         "-hls_time",
         "6",
         "-hls_playlist_type",
-        "vod",
+        "event",
         "-hls_segment_type",
         "fmp4",
         "-hls_fmp4_init_filename",

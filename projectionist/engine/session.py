@@ -29,6 +29,9 @@ from projectionist.library.playback import PlaybackError, YouthBlockedError
 
 _LOCK = threading.Lock()
 _SESSIONS: dict[str, "EngineSession"] = {}
+# A copy remux publishes the media playlist after the first segment, not before
+# the request. Wait only for that playlist, and only while ffmpeg is still running.
+_PLAYLIST_WAIT_S = 20.0
 
 # A client that did not ask for an engine session stays on the library path.
 # The capability means this server can open one. It does not mean the client must.
@@ -121,7 +124,27 @@ def session_for_token(session_id: str, token: str) -> EngineSession:
     return session
 
 
-def resolve_session_file(session: EngineSession, relative: str) -> Path:
+def _playlist_still_publishing(session: EngineSession, relative: str) -> bool:
+    name = relative.rsplit("/", 1)[-1]
+    if name != "stream.m3u8":
+        return False
+    process = session.process
+    if process is None:
+        return False
+    try:
+        return process.poll() is None
+    except OSError:
+        return False
+
+
+def resolve_session_file(
+    session: EngineSession,
+    relative: str,
+    *,
+    wait_s: Optional[float] = None,
+    sleep: Any = time.sleep,
+    clock: Any = time.monotonic,
+) -> Path:
     if session.directory is None:
         raise PlaybackError("This session has no stream.", status_code=404)
     raw = str(relative or "").strip().lstrip("/")
@@ -133,6 +156,22 @@ def resolve_session_file(session: EngineSession, relative: str) -> Path:
         candidate.relative_to(root)
     except ValueError as error:
         raise PlaybackError("Invalid stream path", status_code=400) from error
+    if candidate.is_file():
+        return candidate
+    limit = float(_PLAYLIST_WAIT_S if wait_s is None else wait_s)
+    if limit > 0 and _playlist_still_publishing(session, raw) and not session.cancelled:
+        deadline = clock() + limit
+        while clock() < deadline:
+            if candidate.is_file():
+                return candidate
+            if not _playlist_still_publishing(session, raw) or session.cancelled:
+                break
+            remaining = deadline - clock()
+            if remaining <= 0:
+                break
+            sleep(min(0.2, remaining))
+        if candidate.is_file():
+            return candidate
     if not candidate.is_file():
         raise PlaybackError("Stream segment is not ready.", status_code=404)
     return candidate
