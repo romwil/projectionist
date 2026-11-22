@@ -1,18 +1,26 @@
 """Choose the cheapest plan a device can play, and say why.
 
-Order: direct, remux, audio transcode, full transcode, Plex fallback.
-ENG-003 serves remux (direct is a file plan, not a transcode). ENG-012
-serves audio by copying the video and encoding the audio. A full transcode
-stays on the Plex path until a later tier can serve it.
+Order: direct, remux, audio transcode, source transcode, then a fallback
+when the file itself cannot be planned. ENG-003 serves remux. ENG-012
+serves audio by copying the video and encoding the audio. ENG-013 asks the
+media source to transcode the picture and records why. This server does
+not start that transcode. A file the engine cannot read stays a fallback.
 """
 
 from __future__ import annotations
 
-from typing import Optional
+from collections.abc import Mapping
+from typing import Any, Optional
 
 from projectionist.engine.profiles import DeviceProfile, VideoCapability
 from projectionist.engine.probe import MediaStream, ProbeResult
-from projectionist.engine.source import MediaAsset
+from projectionist.engine.source import (
+    MediaAsset,
+    PlexMediaSource,
+    SourceTranscode,
+    normalize_source_transcode,
+    source_transcode_reason,
+)
 
 _CODEC_ALIASES = {
     "avc": "h264",
@@ -160,8 +168,36 @@ def _first(streams: list[MediaStream], codec_type: str) -> Optional[MediaStream]
     return None
 
 
-def plan_playback(asset: MediaAsset, profile: DeviceProfile) -> dict[str, object]:
-    """Record a plan, the profile answer that chose it, and a reason. Never a file path."""
+def _ask_source(
+    source: Optional[SourceTranscode],
+    *,
+    reason: str,
+    video_answer: str,
+) -> dict[str, Any]:
+    """The media source owns the transcode. Plex is the source when none is passed."""
+    kind = source_transcode_reason(video_answer) or "codec"
+    method = getattr(source, "source_transcode", None) if source is not None else None
+    asker = source if callable(method) else None
+    if asker is None:
+        asker = PlexMediaSource(mappings=[], path_lookup=lambda _key: [])
+    offer = asker.source_transcode(reason=reason, source_reason=kind)
+    if not isinstance(offer, Mapping):
+        offer = {}
+    return normalize_source_transcode(offer, reason=reason, source_reason=kind)
+
+
+def plan_playback(
+    asset: MediaAsset,
+    profile: DeviceProfile,
+    *,
+    source: Optional[SourceTranscode] = None,
+) -> dict[str, object]:
+    """Record a plan, the profile answer that chose it, and a reason. Never a file path.
+
+    When the picture is outside the profile, ``source`` is asked to transcode.
+    The default source is Plex. The returned plan is ``source-transcode`` and
+    is not playable here.
+    """
     captions = caption_inventory(asset.probe)
     empty_answer = {"video": "", "audio": ""}
     base = {
@@ -224,11 +260,8 @@ def plan_playback(asset: MediaAsset, profile: DeviceProfile) -> dict[str, object
             ),
         }
     if not video_ok:
-        return {
-            **base,
-            "plan": "full",
-            "reason": f"{video_label} video is not playable on {profile.id} ({video_text})",
-        }
+        sentence = f"{video_label} video is not playable on {profile.id} ({video_text})"
+        return {**base, **_ask_source(source, reason=sentence, video_answer=video_text)}
     return {
         **base,
         "plan": "plex-fallback",

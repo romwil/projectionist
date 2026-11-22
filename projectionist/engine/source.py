@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Optional, Sequence
+from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
 
 from projectionist.engine.pathmap import map_plex_path
 from projectionist.engine.probe import ProbeResult, probe_file
@@ -28,6 +28,64 @@ PathLookup = Callable[[str], Sequence[str]]
 IsFileFn = Callable[[str], bool]
 ProbeFn = Callable[..., Any]
 IdentityLookup = Callable[[str], dict[str, Any]]
+
+# ENG-013. The engine does not transcode the picture. It asks the media
+# source, records why, and leaves playback on that source's own path.
+SOURCE_TRANSCODE_PLAN = "source-transcode"
+SOURCE_REASONS = frozenset({"codec", "level", "bit_depth"})
+
+
+def source_transcode_reason(answer: str) -> str:
+    """The planner's video answer, as codec, level, or bit depth.
+
+    An answer that is not one of those is empty. The offer then records
+    ``codec``, which is the bucket the playability report already uses.
+    """
+    text = str(answer or "").lower()
+    if "not in profile" in text:
+        return "codec"
+    if "bit" in text and "above" in text:
+        return "bit_depth"
+    if "level is above" in text:
+        return "level"
+    return ""
+
+
+def source_transcode_offer(*, provider: str, reason: str, source_reason: str) -> dict[str, Any]:
+    """One shape every source returns. This server does not play the result.
+
+    ``playable`` stays false so a member keeps the source's existing playback.
+    A source cannot opt this server into starting ffmpeg by setting it true.
+    """
+    kind = source_reason if source_reason in SOURCE_REASONS else "codec"
+    return {
+        "plan": SOURCE_TRANSCODE_PLAN,
+        "reason": str(reason or ""),
+        "source_reason": kind,
+        "provider": str(provider or "plex"),
+        "playable": False,
+    }
+
+
+class SourceTranscode(Protocol):
+    """A media source that can be asked to transcode a picture it already has."""
+
+    def source_transcode(self, *, reason: str, source_reason: str) -> Mapping[str, Any]:
+        """Record that this source will transcode. Do not start ffmpeg."""
+
+
+def normalize_source_transcode(
+    offer: Mapping[str, Any],
+    *,
+    reason: str,
+    source_reason: str,
+) -> dict[str, Any]:
+    """Force the public plan name. The source names itself; the tier does not change."""
+    return source_transcode_offer(
+        provider=str(offer.get("provider") or "plex"),
+        reason=str(offer.get("reason") or reason),
+        source_reason=str(offer.get("source_reason") or source_reason),
+    )
 
 
 @dataclass
@@ -80,6 +138,14 @@ class PlexMediaSource:
         self.is_file = is_file or (lambda candidate: Path(candidate).is_file())
         self.probe: ProbeFn = probe if probe is not None else probe_file
         self.identity_lookup = identity_lookup or (lambda _key: {})
+
+    def source_transcode(self, *, reason: str, source_reason: str) -> dict[str, Any]:
+        """Plex transcodes on its own playback path.
+
+        Projectionist does not start ffmpeg and does not read the file again.
+        A later source answers this same method with its own provider name.
+        """
+        return source_transcode_offer(provider="plex", reason=reason, source_reason=source_reason)
 
     def _exists(self, path: str) -> bool:
         try:

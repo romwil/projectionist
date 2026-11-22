@@ -2,10 +2,11 @@
 
 Opening a session records the plan. A remux, direct, or audio-only plan
 starts fMP4 HLS only when the client sets ``engine_opt_in``. Audio-only
-copies the video and encodes the audio. A full transcode stays on the
-library path. Playlist and segment URLs carry the session token; they do
-not require an Authorization header. The household gate allows those URLs
-through and the route checks the token.
+copies the video and encodes the audio. A source-transcode plan names the
+media source and the reason, and stays on that source's playback path.
+Playlist and segment URLs carry the session token; they do not require an
+Authorization header. The household gate allows those URLs through and the
+route checks the token.
 """
 
 from __future__ import annotations
@@ -48,6 +49,8 @@ def declined_engine_session(rating_key: str) -> dict[str, Any]:
         "duration_ms": 0,
         "view_offset_ms": 0,
         "profile": "",
+        "source_reason": "",
+        "provider": "",
     }
 
 
@@ -64,6 +67,8 @@ class EngineSession:
     duration_ms: int
     view_offset_ms: int
     profile_id: str
+    source_reason: str = ""
+    provider: str = ""
     directory: Optional[Path] = None
     process: Any = None
     cancelled: bool = False
@@ -86,6 +91,8 @@ class EngineSession:
             "duration_ms": self.duration_ms,
             "view_offset_ms": self.view_offset_ms,
             "profile": self.profile_id,
+            "source_reason": self.source_reason,
+            "provider": self.provider,
         }
 
 
@@ -156,10 +163,13 @@ def open_engine_session(
     ffmpeg: Optional[str] = None,
     force_reason: str = "",
     captions: Optional[Sequence[CaptionRendition]] = None,
+    source: Any = None,
 ) -> EngineSession:
-    planned = plan_playback(asset, profile)
+    planned = plan_playback(asset, profile, source=source)
     plan = str(planned["plan"])
     reason = str(planned["reason"])
+    source_reason = str(planned.get("source_reason") or "")
+    provider = str(planned.get("provider") or "")
     audio_codec = ""
     if plan == "audio":
         from projectionist.engine.audio import audio_encode_codec
@@ -171,9 +181,13 @@ def open_engine_session(
                 f"{profile.id} has no audio codec this server can encode, "
                 "so this title stays on the Plex path"
             )
+            source_reason = ""
+            provider = ""
     if force_reason:
         plan = "plex-fallback"
         reason = force_reason
+        source_reason = ""
+        provider = ""
     playable = (
         not force_reason
         and plan in {"remux", "direct", "audio"}
@@ -192,6 +206,8 @@ def open_engine_session(
         duration_ms=max(0, int(duration_ms or 0)),
         view_offset_ms=max(0, int(view_offset_ms or 0)),
         profile_id=profile.id,
+        source_reason=source_reason if plan == "source-transcode" else "",
+        provider=provider if plan == "source-transcode" else "",
     )
     if playable:
         directory = Path(data_dir) / "engine" / "sessions" / session.session_id
@@ -240,6 +256,8 @@ def open_engine_session(
             session.plan = "plex-fallback"
             session.reason = "ffmpeg is not available, so this title stays on the Plex path"
             session.playable = False
+            session.source_reason = ""
+            session.provider = ""
         else:
             session.directory = directory
             session.playable = True

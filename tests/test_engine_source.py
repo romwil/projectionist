@@ -400,6 +400,51 @@ class PublicMediaTests(unittest.TestCase):
         self.assertEqual(video.bit_depth, 10)
 
 
+class SourceTranscodeTests(unittest.TestCase):
+    """ENG-013: the source says it will transcode. This server does not start ffmpeg."""
+
+    def test_plex_offers_source_transcode_with_a_reason_and_does_not_probe(self) -> None:
+        looked = {"n": 0}
+
+        def path_lookup(key: str):
+            looked["n"] += 1
+            return [f"/secret/{key}.mkv"]
+
+        def probe(path: str, **kwargs):
+            raise AssertionError("a source transcode must not probe or transcode")
+
+        source = PlexMediaSource(mappings=[], path_lookup=path_lookup, probe=probe)
+        offer = source.source_transcode(
+            reason="HEVC video is not playable on web (hevc not in profile)",
+            source_reason="codec",
+        )
+        self.assertEqual(offer["plan"], "source-transcode")
+        self.assertEqual(offer["source_reason"], "codec")
+        self.assertEqual(offer["provider"], "plex")
+        self.assertFalse(offer["playable"])
+        self.assertIn("HEVC", offer["reason"])
+        self.assertEqual(looked["n"], 0)
+        self.assertNotIn("/secret", json.dumps(offer))
+
+    def test_an_unknown_reason_is_recorded_as_codec(self) -> None:
+        source = PlexMediaSource(mappings=[], path_lookup=lambda key: [])
+        offer = source.source_transcode(reason="The picture will not play", source_reason="mystery")
+        self.assertEqual(offer["plan"], "source-transcode")
+        self.assertEqual(offer["source_reason"], "codec")
+        self.assertFalse(offer["playable"])
+
+    def test_level_and_bit_depth_stay_distinct(self) -> None:
+        from projectionist.engine.source import source_transcode_reason
+
+        self.assertEqual(source_transcode_reason("hevc not in profile"), "codec")
+        self.assertEqual(source_transcode_reason("hevc level is above profile hevc 5.1"), "level")
+        self.assertEqual(
+            source_transcode_reason("hevc 10-bit is above profile hevc 8-bit"),
+            "bit_depth",
+        )
+        self.assertEqual(source_transcode_reason("h264 up to 5.2"), "")
+
+
 class EngineSettingsRoundTripTests(unittest.TestCase):
     def test_path_mappings_survive_settings_load(self) -> None:
         raw = {
