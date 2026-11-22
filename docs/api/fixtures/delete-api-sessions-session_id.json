@@ -1,0 +1,11 @@
+{
+  "body": {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "state": "ended"
+  },
+  "content_type": "application/json",
+  "example_path": "/api/sessions/00000000-0000-4000-8000-000000000001",
+  "method": "DELETE",
+  "path": "/api/sessions/{session_id}",
+  "status": 200
+}

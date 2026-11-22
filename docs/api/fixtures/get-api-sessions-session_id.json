@@ -1,0 +1,19 @@
+{
+  "body": {
+    "engine_session_id": "",
+    "id": "00000000-0000-4000-8000-000000000001",
+    "level": "off",
+    "owner_id": "bootstrap-owner",
+    "position_ms": 0,
+    "rating_key": "movie-1",
+    "screen_id": "00000000-0000-4000-8000-000000000001",
+    "state": "playing",
+    "updated_at": 1700000000,
+    "youth": false
+  },
+  "content_type": "application/json",
+  "example_path": "/api/sessions/00000000-0000-4000-8000-000000000001",
+  "method": "GET",
+  "path": "/api/sessions/{session_id}",
+  "status": 200
+}

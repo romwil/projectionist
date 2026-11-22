@@ -1,5 +1,10 @@
 [
   {
+    "method": "DELETE",
+    "path": "/api/sessions/{session_id}",
+    "file": "delete-api-sessions-session_id.json"
+  },
+  {
     "method": "GET",
     "path": "/api/auth/me",
     "file": "get-api-auth-me.json"
@@ -111,6 +116,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/sessions/{session_id}",
+    "file": "get-api-sessions-session_id.json"
+  },
+  {
+    "method": "GET",
     "path": "/api/title/{media_type}/{item_id}",
     "file": "get-api-title-media_type-item_id.json"
   },
@@ -118,6 +128,11 @@
     "method": "PATCH",
     "path": "/api/auth/me",
     "file": "patch-api-auth-me.json"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/sessions/{session_id}",
+    "file": "patch-api-sessions-session_id.json"
   },
   {
     "method": "POST",
@@ -198,5 +213,10 @@
     "method": "POST",
     "path": "/api/live-channels/tune",
     "file": "post-api-live-channels-tune.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/sessions",
+    "file": "post-api-sessions.json"
   }
 ]

@@ -29,6 +29,7 @@ SHIPPED = {
     "cached_art": 1 if CACHED_ART_ENABLED else 0,
     "household_addresses": 1,
     "rooms": 1,
+    "session_object": 1,
 }
 ACCEPTED_NOT_SHIPPED = {
     "caption_tracks": 0,
