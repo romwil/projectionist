@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
+import sqlite3
 import time
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, Sequence
 
 from projectionist.connectors.http import (
     merge_plex_provider_ids,
@@ -19,6 +22,8 @@ if TYPE_CHECKING:
     from projectionist.watch_tracker.plex_history import PlexHistoryPage
 
 PLEX_LIBRARY_IDENTIFIER = "com.plexapp.plugins.library"
+
+logger = logging.getLogger(__name__)
 
 
 def normalize_stars(stars: float | int) -> float:
@@ -397,6 +402,23 @@ def _plex_hdr(element) -> str:
     return ""
 
 
+def hdr_from_color_transfer(value: Any) -> tuple[str, bool]:
+    """HDR label from one stored Plex media analysis transfer.
+
+    ``smpte2084`` is HDR10. ``arib-std-b67`` is HLG. Any other recorded
+    transfer is a picture whose HDR was checked and is neither of those.
+    An empty transfer was not on the analysis row.
+    """
+    transfer = str(value or "").strip().lower()
+    if not transfer:
+        return "", False
+    if transfer == "smpte2084":
+        return "hdr10", True
+    if transfer == "arib-std-b67":
+        return "hlg", True
+    return "", True
+
+
 def title_streams_from_element(element) -> Optional[Dict[str, Any]]:
     """Container, codecs, profile, level, and bit depth already on a Plex Video.
 
@@ -414,8 +436,12 @@ def title_streams_from_element(element) -> Optional[Dict[str, Any]]:
     if media is None:
         return None
     container = str(media.attrib.get("container") or "").strip().lower()
+    media_id = str(media.attrib.get("id") or "").strip()
     streams: List[Dict[str, Any]] = []
     parts = media.findall("Part") or media.findall(".//Part")
+    file_size = 0
+    for part in parts:
+        file_size += _plex_part_size(part.attrib.get("size"))
     for part in parts:
         if not container:
             container = str(part.attrib.get("container") or "").strip().lower()
@@ -481,7 +507,114 @@ def title_streams_from_element(element) -> Optional[Dict[str, Any]]:
         "title": str(element.attrib.get("title") or ""),
         "container": container or "mkv",
         "streams": streams,
+        "view_count": _plex_int(element.attrib.get("viewCount")),
+        "file_size": file_size,
+        "media_id": media_id,
     }
+
+
+def apply_plex_media_analysis(
+    rows: Sequence[Mapping[str, Any]],
+    analysis: Sequence[Mapping[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Fill HDR from Plex media analysis rows.
+
+    The section listing has no HDR attribute. Each analysis row is one stored
+    media row: ``media_id``, ``rating_key`` (the metadata item id), and
+    ``color_trc``. ``smpte2084`` becomes HDR10 and ``arib-std-b67`` becomes HLG.
+    A listing that already named HDR is left as it is.
+    """
+    by_media: Dict[str, str] = {}
+    by_rating: Dict[str, str] = {}
+    for item in analysis:
+        if not isinstance(item, Mapping):
+            continue
+        transfer = str(item.get("color_trc") or "")
+        media_id = str(item.get("media_id") or "").strip()
+        rating = str(item.get("rating_key") or item.get("metadata_item_id") or "").strip()
+        if media_id:
+            by_media[media_id] = transfer
+        if rating and rating not in by_rating:
+            by_rating[rating] = transfer
+    applied: List[Dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            continue
+        copied = dict(row)
+        streams: List[Any] = []
+        for stream in row.get("streams") or []:
+            streams.append(dict(stream) if isinstance(stream, Mapping) else stream)
+        copied["streams"] = streams
+        media_id = str(copied.get("media_id") or "").strip()
+        rating = str(copied.get("rating_key") or "").strip()
+        if media_id and media_id in by_media:
+            transfer = by_media[media_id]
+        elif rating in by_rating:
+            transfer = by_rating[rating]
+        else:
+            applied.append(copied)
+            continue
+        label, known = hdr_from_color_transfer(transfer)
+        if not known:
+            applied.append(copied)
+            continue
+        for stream in streams:
+            if not isinstance(stream, dict) or stream.get("codec_type") != "video":
+                continue
+            if stream.get("hdr") or stream.get("hdr_known"):
+                break
+            stream["hdr"] = label
+            stream["hdr_known"] = True
+            break
+        applied.append(copied)
+    return applied
+
+
+def read_plex_media_analysis(path: Path) -> List[Dict[str, Any]]:
+    """Read color transfer from Plex's media rows. Read-only. No file paths.
+
+    One row per metadata item: the lowest media id still present, which is the
+    media the section listing plans. ``color_trc`` is the stored analysis.
+    """
+    database = Path(path)
+    if not database.is_file():
+        return []
+    uri = f"{database.resolve().as_uri()}?mode=ro"
+    try:
+        connection = sqlite3.connect(uri, uri=True)
+    except sqlite3.Error:
+        logger.warning("could not open Plex media analysis")
+        return []
+    try:
+        try:
+            cursor = connection.execute(
+                """
+                SELECT id, metadata_item_id, color_trc
+                FROM media_items
+                WHERE deleted_at IS NULL
+                ORDER BY metadata_item_id, id
+                """
+            )
+        except sqlite3.Error:
+            logger.warning("could not read Plex media analysis")
+            return []
+        found: List[Dict[str, Any]] = []
+        seen: set[str] = set()
+        for record in cursor:
+            rating = str(record[1] or "").strip()
+            if not rating or rating in seen:
+                continue
+            seen.add(rating)
+            found.append(
+                {
+                    "media_id": str(record[0] or ""),
+                    "rating_key": rating,
+                    "color_trc": str(record[2] or ""),
+                }
+            )
+        return found
+    finally:
+        connection.close()
 
 
 def _plex_media_parts(root) -> List[Dict[str, Any]]:

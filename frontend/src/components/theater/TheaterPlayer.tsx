@@ -135,6 +135,8 @@ export type TheaterPlayerProps = {
    * `ctx.remount()` re-attaches the current src without a new tune.
    */
   onHlsError?: (data: ErrorData, ctx: TheaterHlsErrorContext) => boolean | void;
+  /** Engine playlist WebVTT. Live and the Plex path keep their own overlay. */
+  playlistSubtitles?: boolean;
   onManifestParsed?: (hls: Hls) => void;
   onSubtitleTracks?: (hls: Hls) => void;
   onAttachApi?: (api: TheaterAttachApi | null) => void;
@@ -229,6 +231,7 @@ export default function TheaterPlayer({
    * `ctx.remount()` re-attaches the current src without a new tune.
    */
   onHlsError,
+  playlistSubtitles = false,
   onManifestParsed,
   onSubtitleTracks,
   onAttachApi,
@@ -512,7 +515,7 @@ export default function TheaterPlayer({
     };
 
     const muteNativeSubs = () => {
-      if (destroyed) return;
+      if (destroyed || playlistSubtitles) return;
       const hls = hlsRef.current;
       if (hls && typeof hls.subtitleTrack === "number") hls.subtitleTrack = -1;
       silenceNativeTextTracks(video);
@@ -525,7 +528,9 @@ export default function TheaterPlayer({
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
-      const hls = new Hls(theaterHlsConfig() as ConstructorParameters<typeof Hls>[0]);
+      const hls = new Hls(
+        theaterHlsConfig({ engine: playlistSubtitles }) as ConstructorParameters<typeof Hls>[0],
+      );
       hlsRef.current = hls;
       onHlsRefRef.current?.(hls);
       hls.loadSource(src);
@@ -638,7 +643,7 @@ export default function TheaterPlayer({
       video.removeAttribute("src");
       video.load();
     };
-  }, [src, autoFullscreen, attachKey, mediaMode]);
+  }, [src, autoFullscreen, attachKey, mediaMode, playlistSubtitles]);
 
   function toggleFullscreen() {
     toggleTheaterFullscreen(rootRef.current, { video: videoRef.current });

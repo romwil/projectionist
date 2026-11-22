@@ -130,6 +130,15 @@ test("formatClockMs is living-room readable", () => {
   assert.equal(formatClockMs(3_661_000), "1:01:01");
 });
 
+test("an engine playlist lets hls.js paint WebVTT while Live stays off", () => {
+  const live = theaterHlsConfig();
+  assert.equal(live.enableWebVTT, false);
+  assert.equal(live.renderTextTracksNatively, false);
+  const engine = theaterHlsConfig({ engine: true });
+  assert.equal(engine.enableWebVTT, true);
+  assert.equal(engine.renderTextTracksNatively, true);
+});
+
 test("theaterHlsConfig uses credentialed XHR (session cookies on proxy)", () => {
   const cfg = theaterHlsConfig();
   assert.equal(cfg.enableWorker, false);

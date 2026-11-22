@@ -82,6 +82,16 @@ class LibraryTitle:
     rating_key: str
     title: str
     title_language: str
+    watch_count: int = 0
+    file_size: int = 0
+
+
+def _nonneg(value: Any) -> int:
+    try:
+        number = int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+    return number if number > 0 else 0
 
 
 def report_path(data_dir: Path) -> Path:
@@ -335,6 +345,88 @@ def source_transcode_breakdown(rows: Sequence[Mapping[str, Any]]) -> dict[str, A
     return counts
 
 
+def _copy_ahead_block(report: Mapping[str, Any]) -> Optional[Mapping[str, Any]]:
+    """Safari and Apple TV share this video-transcode set. Safari is the row we rank."""
+    found: dict[str, Mapping[str, Any]] = {}
+    for block in report.get("profiles") or []:
+        if isinstance(block, Mapping) and block.get("profile"):
+            found[str(block["profile"])] = block
+    for profile_id in ("safari", "apple-tv-4k-3"):
+        block = found.get(profile_id)
+        if block is not None:
+            return block
+    return None
+
+
+def copy_ahead_ranking(report: Mapping[str, Any]) -> dict[str, Any]:
+    """Order a copy made ahead of time. This does not make the copy or transcode.
+
+    Titles above 1080p in the Safari or Apple TV video-transcode set come first.
+    The rest of that set follows, most-watched first. ``disk_bytes`` is the sum
+    of the file sizes Plex already stored for the whole set.
+    """
+    block = _copy_ahead_block(report)
+    empty: dict[str, Any] = {
+        "profile": "",
+        "title_count": 0,
+        "above_1080p": 0,
+        "disk_bytes": 0,
+        "above_1080p_codecs": {},
+        "titles": [],
+    }
+    if block is None:
+        return empty
+    waiting: list[Mapping[str, Any]] = []
+    for row in block.get("titles") or []:
+        if isinstance(row, Mapping) and str(row.get("tier") or "") == TIER_SOURCE:
+            waiting.append(row)
+
+    def sort_key(row: Mapping[str, Any]) -> tuple[Any, ...]:
+        return (
+            0 if row.get("above_1080p") else 1,
+            -_nonneg(row.get("watch_count")),
+            -_nonneg(row.get("file_size")),
+            str(row.get("title") or ""),
+            str(row.get("rating_key") or ""),
+        )
+
+    disk = 0
+    above = 0
+    codecs: dict[str, int] = {}
+    titles: list[dict[str, Any]] = []
+    for row in sorted(waiting, key=sort_key):
+        size = _nonneg(row.get("file_size"))
+        watches = _nonneg(row.get("watch_count"))
+        is_above = bool(row.get("above_1080p"))
+        disk += size
+        name = str(row.get("video_codec") or "") or "unknown"
+        if is_above:
+            above += 1
+            codecs[name] = codecs.get(name, 0) + 1
+        titles.append(
+            {
+                "rating_key": str(row.get("rating_key") or ""),
+                "title": str(row.get("title") or ""),
+                "video_codec": name if row.get("video_codec") else "",
+                "above_1080p": is_above,
+                "watch_count": watches,
+                "file_size": size,
+                "hdr": str(row.get("hdr") or ""),
+            }
+        )
+    return {
+        "profile": str(block.get("profile") or ""),
+        "title_count": len(titles),
+        "above_1080p": above,
+        "disk_bytes": disk,
+        "above_1080p_codecs": {
+            name: count
+            for name, count in sorted(codecs.items(), key=lambda item: (-item[1], item[0]))
+        },
+        "titles": titles,
+    }
+
+
 def gpu_decision(profiles: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     """How many titles need a video transcode on Safari and on Apple TV.
 
@@ -377,6 +469,8 @@ def classify_title(
     settings: Any,
     data_dir: Path,
     failed_tries: Optional[set[tuple[str, str]]] = None,
+    watch_count: int = 0,
+    file_size: int = 0,
 ) -> dict[str, Any]:
     """One title on one profile. The planner chooses. Captions can keep it off the engine.
 
@@ -462,6 +556,9 @@ def classify_title(
         "profile_limits_bit_depth": profile_limits_bit_depth,
         "above_1080p": _above_1080p(video),
         "video_hdr": bool(hdr_value),
+        "hdr": hdr_value,
+        "watch_count": _nonneg(watch_count),
+        "file_size": _nonneg(file_size) or _nonneg(getattr(asset.probe, "size", 0)),
     }
 
 
@@ -552,10 +649,12 @@ def build_playability_report(
                     settings=settings,
                     data_dir=data_dir,
                     failed_tries=blocked,
+                    watch_count=item.watch_count,
+                    file_size=item.file_size,
                 )
             )
         profiles_out.append(summarize_profile(profile, rows, generated_at=stamp))
-    return {
+    report = {
         "generated_at": stamp,
         "complete": bool(complete),
         "message": message,
@@ -563,6 +662,8 @@ def build_playability_report(
         "profiles": profiles_out,
         "gpu": gpu_decision(profiles_out),
     }
+    report["copy_ahead"] = copy_ahead_ranking(report)
+    return report
 
 
 _TITLE_PAGE = 40
@@ -577,6 +678,9 @@ def playability_progress(report: Mapping[str, Any]) -> dict[str, Any]:
             continue
         profiles.append({key: value for key, value in block.items() if key != "titles"})
     copied["profiles"] = profiles
+    ahead = copied.get("copy_ahead")
+    if isinstance(ahead, dict):
+        copied["copy_ahead"] = {key: value for key, value in ahead.items() if key != "titles"}
     return copied
 
 
@@ -850,7 +954,18 @@ def plex_stream_catalog(settings: Any) -> list[dict[str, Any]]:
         movie_section=str(getattr(settings, "plex_movie_section", "") or "") or None,
         tv_section=str(getattr(settings, "plex_tv_section", "") or "") or None,
     )
-    return list(client.playback_stream_catalog())
+    rows = list(client.playback_stream_catalog())
+    database = str(getattr(settings, "plex_library_database", "") or "").strip()
+    if not database:
+        database = str(os.environ.get("PLEX_LIBRARY_DATABASE") or "").strip()
+    if not database:
+        return rows
+    from projectionist.connectors.plex import apply_plex_media_analysis, read_plex_media_analysis
+
+    analysis = read_plex_media_analysis(Path(database))
+    if not analysis:
+        return rows
+    return apply_plex_media_analysis(rows, analysis)
 
 
 def _mark_unconfirmed(report: dict[str, Any]) -> None:
@@ -890,7 +1005,12 @@ def _apply_confirmed_title(
         replaced = False
         for row in block.get("titles") or []:
             if isinstance(row, dict) and str(row.get("rating_key") or "") == rating_key:
-                rows.append(dict(incoming))
+                kept = dict(incoming)
+                if not _nonneg(kept.get("watch_count")):
+                    kept["watch_count"] = _nonneg(row.get("watch_count"))
+                if not _nonneg(kept.get("file_size")):
+                    kept["file_size"] = _nonneg(row.get("file_size"))
+                rows.append(kept)
                 replaced = True
             elif isinstance(row, dict):
                 rows.append(row)
@@ -906,6 +1026,7 @@ def _apply_confirmed_title(
     report["gpu"] = gpu_decision(
         [block for block in report.get("profiles") or [] if isinstance(block, dict)]
     )
+    report["copy_ahead"] = copy_ahead_ranking(report)
     report["confirmed_by_ffprobe"] = len(_confirmed_keys(report))
     report["title_count"] = max(
         (
@@ -969,6 +1090,8 @@ def _run_owner_report(
                     rating_key=key,
                     title=known.title if known is not None else str(row.get("title") or ""),
                     title_language=known.title_language if known is not None else "",
+                    watch_count=_nonneg(row.get("view_count")),
+                    file_size=_nonneg(row.get("file_size")),
                 )
             )
             assets[key] = asset_from_plex_row(row)
