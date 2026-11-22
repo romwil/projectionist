@@ -25,7 +25,7 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
-      testIgnore: [/mobile-native\.spec\.ts/],
+      testIgnore: [/mobile-native\.spec\.ts/, /playback-fixtures\.spec\.ts/],
     },
     {
       // iPhone 12 class — 390×844 on Chromium (do not use devices["iPhone 12"]:
