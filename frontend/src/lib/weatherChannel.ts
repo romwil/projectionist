@@ -144,7 +144,8 @@ function commit(state: PlannerState, segment: string, patch: Partial<PlannerStat
       ...state,
       ...patch,
       last: segment,
-      sinceRecap: segment === "headlines" ? 0 : (patch.sinceRecap ?? state.sinceRecap) + (isWeather ? 1 : 0),
+      sinceRecap:
+        segment === "headlines" ? 0 : (patch.sinceRecap ?? state.sinceRecap) + (isWeather ? 1 : 0),
     },
   };
 }
@@ -178,7 +179,10 @@ export function nextWeatherSegment(
   const slot = localSlotKey(now);
   const local = LOCAL_ON_THE_8S.filter((id) => available.includes(id));
   if (local.length && ((isLocalOnThe8s(now) && slot !== state.lastLocalSlot) || !state.last)) {
-    return commit(state, local[0], { queue: local.slice(1), lastLocalSlot: isLocalOnThe8s(now) ? slot : state.lastLocalSlot });
+    return commit(state, local[0], {
+      queue: local.slice(1),
+      lastLocalSlot: isLocalOnThe8s(now) ? slot : state.lastLocalSlot,
+    });
   }
 
   const recapReady = available.includes("headlines") && state.last !== "headlines";
@@ -214,19 +218,56 @@ export function pickVariant(
 
 /** How long a board stays up when there is no voice to wait for. */
 export function captionDwellMs(segment: string, text: string): number {
-  const words = String(text || "").split(/\s+/).filter(Boolean).length;
+  const words = String(text || "")
+    .split(/\s+/)
+    .filter(Boolean).length;
   const reading = Math.round((words / 2.6) * 1000) + 1500;
-  const floor = segment === "radar" || segment === "satellite" ? MAP_DWELL_MS : WEATHER_MIN_DWELL_MS;
+  const floor =
+    segment === "radar" || segment === "satellite" ? MAP_DWELL_MS : WEATHER_MIN_DWELL_MS;
   return Math.min(WEATHER_MAX_DWELL_MS, Math.max(floor, reading));
 }
 
 /** Map loop frame for a moment in time. Reduced motion holds the latest frame. */
-export function mapFrameIndex(frameCount: number, elapsedMs: number, reducedMotion: boolean): number {
+export function mapFrameIndex(
+  frameCount: number,
+  elapsedMs: number,
+  reducedMotion: boolean,
+): number {
   if (frameCount <= 0) return 0;
   if (reducedMotion) return frameCount - 1;
   const cycle = frameCount + 2; // hold the newest frame a beat before looping
   const step = Math.floor(Math.max(0, elapsedMs) / MAP_FRAME_MS) % cycle;
   return Math.min(step, frameCount - 1);
+}
+
+export const CHANNEL_MIN_PX = 1024;
+export const TABLET_MIN_PX = 768;
+
+export type WeatherLayout = "channel" | "tablet" | "page";
+
+/** ≥1024 channel, 768–1023 tablet, under 768 a scrolling page. */
+export function weatherLayout(width: number): WeatherLayout {
+  if (width >= CHANNEL_MIN_PX) return "channel";
+  if (width >= TABLET_MIN_PX) return "tablet";
+  return "page";
+}
+
+const BOARD_CHYRON_GROUP: Record<string, string> = {
+  current: "NOW",
+  hourly: "HOURLY",
+  five_day: "5-DAY",
+};
+
+/** Up next: drop the group that only repeats the board on screen. */
+export function chyronGroupsForBoard(
+  payload: JsParam,
+  segment: string,
+): Array<{ group: string; items: string[] }> {
+  const groups = chyronGroups(payload);
+  const hide = BOARD_CHYRON_GROUP[segment];
+  if (!hide) return groups;
+  const rest = groups.filter((group) => group.group !== hide);
+  return rest.length ? rest : groups;
 }
 
 /** Chyron groups exactly as the server built them (NOW, HOURLY, 5-DAY). Never headlines. */

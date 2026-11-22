@@ -8,6 +8,7 @@ import {
   availableSegments,
   captionDwellMs,
   chyronGroups,
+  chyronGroupsForBoard,
   initialPlannerState,
   isLocalOnThe8s,
   mapFrameIndex,
@@ -15,12 +16,14 @@ import {
   pickVariant,
   RECAP_EVERY,
   skyFromWeatherCode,
+  weatherLayout,
   weatherSky,
   WEATHER_MIN_DWELL_MS,
 } from "./weatherChannel.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const playerSource = () => readFileSync(join(here, "../components/live/WeatherChannelPlayer.tsx"), "utf8");
+const playerSource = () =>
+  readFileSync(join(here, "../components/live/WeatherChannelPlayer.tsx"), "utf8");
 
 const ALL = [
   "current",
@@ -91,7 +94,11 @@ describe("weather segment planner", () => {
     // Same :08 minute again does not restart the block once it has finished.
     const rest = run(data, new Date(2026, 10, 4, 22, 8, 10), 3, state).out;
     assert.deepEqual(rest.slice(0, 2), ["overview", "hourly"]);
-    const after = nextWeatherSegment(run(data, new Date(2026, 10, 4, 22, 8, 10), 2, state).state, data, new Date(2026, 10, 4, 22, 8, 50));
+    const after = nextWeatherSegment(
+      run(data, new Date(2026, 10, 4, 22, 8, 10), 2, state).state,
+      data,
+      new Date(2026, 10, 4, 22, 8, 50),
+    );
     assert.notEqual(after.segment, "current");
   });
 
@@ -102,7 +109,10 @@ describe("weather segment planner", () => {
     assert.ok(!out.includes("radar"));
     assert.ok(!out.includes("headlines"));
     assert.deepEqual(availableSegments({ segments: [] }), []);
-    assert.equal(nextWeatherSegment(initialPlannerState(), { segments: [] }, new Date()).segment, "");
+    assert.equal(
+      nextWeatherSegment(initialPlannerState(), { segments: [] }, new Date()).segment,
+      "",
+    );
   });
 
   it("puts a headline recap between weather segments", () => {
@@ -133,7 +143,8 @@ describe("weather segment planner", () => {
     assert.equal(out[0], "alerts");
     const recaps = out.map((s, i) => (s === "headlines" ? i : -1)).filter((i) => i > 0);
     assert.ok(recaps.length >= 1);
-    for (const i of recaps) assert.equal(out[i - 1], "alerts", `recap at ${i} follows ${out[i - 1]}`);
+    for (const i of recaps)
+      assert.equal(out[i - 1], "alerts", `recap at ${i} follows ${out[i - 1]}`);
   });
 
   it("does not treat an advisory as a bulletin", () => {
@@ -182,6 +193,28 @@ describe("variants, dwell, maps, chyron", () => {
     );
     assert.deepEqual(groups[1].items, ["11 PM 41°", "1 AM 40°"]);
     assert.ok(!JSON.stringify(groups).includes("Something happened"));
+  });
+
+  it("drops the chyron group that repeats the board", () => {
+    const data = payload();
+    assert.deepEqual(
+      chyronGroupsForBoard(data, "current").map((group) => group.group),
+      ["HOURLY", "5-DAY"],
+    );
+    assert.deepEqual(
+      chyronGroupsForBoard(data, "hourly").map((group) => group.group),
+      ["NOW", "5-DAY"],
+    );
+    assert.ok(chyronGroupsForBoard(data, "alerts").some((group) => group.group === "NOW"));
+  });
+
+  it("picks a layout from the width", () => {
+    assert.equal(weatherLayout(1440), "channel");
+    assert.equal(weatherLayout(1024), "channel");
+    assert.equal(weatherLayout(834), "tablet");
+    assert.equal(weatherLayout(768), "tablet");
+    assert.equal(weatherLayout(767), "page");
+    assert.equal(weatherLayout(390), "page");
   });
 });
 

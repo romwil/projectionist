@@ -52,13 +52,18 @@ export default function WeatherNarrationPanel() {
     }
   }
 
-  const engines: Array<{ id: string; label: string; voices: Array<{ id: string; label: string }> }> =
-    narration.engines || [];
+  const engines: Array<{
+    id: string;
+    label: string;
+    voices: Array<{ id: string; label: string }>;
+  }> = narration.engines || [];
   const engine = engines.find((e) => e.id === narration.engine) || engines[0];
   const total = Number(narration.download_total_bytes) || 0;
   const done = Number(narration.download_done_bytes) || 0;
-  const previews: Array<{ place: string; scripts: Record<string, Array<{ text: string; source: string }>> }> =
-    status?.previews || [];
+  const previews: Array<{
+    place: string;
+    scripts: Record<string, Array<{ text: string; source: string }>>;
+  }> = status?.previews || [];
 
   return (
     <div className="service-card weather-narration-card" data-testid="weather-narration-panel">
@@ -68,9 +73,9 @@ export default function WeatherNarrationPanel() {
         </div>
       </div>
       <p className="wizard-note">
-        A local voice on this server reads each forecast segment. The voice model downloads once when you turn
-        narration on ({megabytes(narration.download_bytes)} for this voice). If the voice is off or fails, viewers see
-        captions instead. Browsers never synthesize speech.
+        A local voice on this server reads each forecast segment. The voice model downloads once
+        when you turn narration on ({megabytes(narration.download_bytes)} for this voice). If the
+        voice is off or fails, viewers see captions instead. Browsers never synthesize speech.
       </p>
       <label className="checkbox-row">
         <input
@@ -111,7 +116,8 @@ export default function WeatherNarrationPanel() {
       ) : null}
       {narration.enabled && narration.engine_available === false ? (
         <p className="field-help">
-          The {engine?.label || narration.engine} engine is not installed in this image, so viewers get captions.
+          The {engine?.label || narration.engine} engine is not installed in this image, so viewers
+          get captions.
         </p>
       ) : null}
 
@@ -122,7 +128,9 @@ export default function WeatherNarrationPanel() {
             data-testid="weather-tts-engine"
             value={narration.engine || ""}
             disabled={busy || !status}
-            onChange={(e) => save({ tts_engine: e.target.value, tts_voice: "" }, "Voice engine saved.")}
+            onChange={(e) =>
+              save({ tts_engine: e.target.value, tts_voice: "" }, "Voice engine saved.")
+            }
           >
             {engines.map((e) => (
               <option key={e.id} value={e.id}>
@@ -168,7 +176,11 @@ export default function WeatherNarrationPanel() {
             type="password"
             autoComplete="off"
             data-testid="weather-windy-key"
-            placeholder={status?.windy_api_key_set ? "Saved — enter a new key to replace" : "Not set — no webcams board"}
+            placeholder={
+              status?.windy_api_key_set
+                ? "Saved — enter a new key to replace"
+                : "Not set — no webcams board"
+            }
             value={windyKey}
             onChange={(e) => setWindyKey(e.target.value)}
           />
@@ -180,7 +192,10 @@ export default function WeatherNarrationPanel() {
           className="ghost"
           disabled={busy || !windyKey.trim()}
           onClick={async () => {
-            await save({ windy_api_key: windyKey.trim() }, "Windy key saved. Webcams appear on the next refresh.");
+            await save(
+              { windy_api_key: windyKey.trim() },
+              "Windy key saved. Webcams appear on the next refresh.",
+            );
             setWindyKey("");
           }}
         >
@@ -191,12 +206,59 @@ export default function WeatherNarrationPanel() {
             type="button"
             className="ghost"
             disabled={busy}
-            onClick={() => save({ clear_windy_api_key: true }, "Windy key removed. No webcams board.")}
+            onClick={() =>
+              save({ clear_windy_api_key: true }, "Windy key removed. No webcams board.")
+            }
           >
             Remove key
           </button>
         ) : null}
       </div>
+
+      <div className="service-card-header">
+        <div className="service-card-title">
+          <h3>Headlines</h3>
+        </div>
+      </div>
+      <p className="wizard-note">
+        Local, national, and world headlines sit on the weather channel. Local headlines stay a news
+        search for the place. Youth members do not see headlines unless you allow it. Turning
+        headlines off also stops the news fetches.
+      </p>
+      <label className="checkbox-row" htmlFor="weather-headlines-enabled">
+        <input
+          id="weather-headlines-enabled"
+          type="checkbox"
+          data-testid="weather-headlines-enabled"
+          checked={status?.headlines_enabled !== false}
+          disabled={busy || !status}
+          onChange={(e) =>
+            save(
+              { headlines_enabled: e.target.checked },
+              e.target.checked ? "Headlines on." : "Headlines off. The news feeds stop.",
+            )
+          }
+        />
+        <span>Show headlines</span>
+      </label>
+      <label className="checkbox-row" htmlFor="weather-youth-headlines">
+        <input
+          id="weather-youth-headlines"
+          type="checkbox"
+          data-testid="weather-youth-headlines"
+          checked={!!status?.youth_headlines}
+          disabled={busy || !status || status?.headlines_enabled === false}
+          onChange={(e) =>
+            save(
+              { youth_headlines: e.target.checked },
+              e.target.checked
+                ? "Youth members can see headlines."
+                : "Youth members do not see headlines.",
+            )
+          }
+        />
+        <span>Youth members can see headlines</span>
+      </label>
 
       {status?.alerts_note ? <p className="field-help">{status.alerts_note}</p> : null}
       <p className="field-help">
