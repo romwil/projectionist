@@ -32,7 +32,7 @@ from projectionist.engine.profiles import (
     named_profile,
     profile_from_mapping,
 )
-from projectionist.engine.source import MediaAsset
+from projectionist.engine.source import MediaAsset, source_transcode_reason
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,8 @@ TASK_NAME = "playability_report"
 
 # Cheapest outcome first. These are labels for the planner's answer. The
 # report itself does not transcode. Audio-only is served by ENG-012 when a
-# client opts in. A video transcode is still a label, not a pipeline.
+# client opts in. Source-transcode is the media source's own path, with a
+# reason. This report does not start it.
 TIER_DIRECT = "direct"
 TIER_REMUX = "remux"
 TIER_AUDIO = "audio"
@@ -219,14 +220,7 @@ def empty_source_breakdown() -> dict[str, int]:
 
 def source_block_reason(answer: str) -> str:
     """The planner's video answer, as one of codec, level, or bit depth."""
-    text = str(answer or "").lower()
-    if "not in profile" in text:
-        return "codec"
-    if "bit" in text and "above" in text:
-        return "bit_depth"
-    if "level is above" in text:
-        return "level"
-    return ""
+    return source_transcode_reason(answer)
 
 
 def _video_stream(asset: MediaAsset):
@@ -290,7 +284,7 @@ def _tier_for_plan(plan: str) -> str:
         return TIER_REMUX
     if plan == "audio":
         return TIER_AUDIO
-    if plan == "full":
+    if plan in {"full", "source-transcode"}:
         return TIER_SOURCE
     return TIER_NOT_PLAYABLE
 
@@ -336,6 +330,13 @@ def classify_title(
         answer = answer_raw
     video = _video_stream(asset)
     video_answer = str(answer.get("video") or "")
+    source_reason = ""
+    provider = ""
+    if tier == TIER_SOURCE:
+        source_reason = (
+            str(planned.get("source_reason") or "") or source_block_reason(video_answer) or "codec"
+        )
+        provider = str(planned.get("provider") or "") or "plex"
     return {
         "rating_key": str(asset.rating_key or ""),
         "title": str(title or ""),
@@ -347,7 +348,8 @@ def classify_title(
             "video": video_answer,
             "audio": str(answer.get("audio") or ""),
         },
-        "source_reason": source_block_reason(video_answer) if tier == TIER_SOURCE else "",
+        "source_reason": source_reason,
+        "provider": provider,
         "above_1080p": _above_1080p(video),
         "video_hdr": bool(video is not None and str(getattr(video, "hdr", "") or "").strip()),
     }

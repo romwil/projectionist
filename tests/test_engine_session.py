@@ -133,7 +133,7 @@ class EngineSessionTests(unittest.TestCase):
             self.assertNotIn("-c copy", command)
             self.assertNotIn("libx264", command)
 
-    def test_full_plan_is_not_an_engine_playlist(self) -> None:
+    def test_source_transcode_is_not_an_engine_playlist(self) -> None:
         import tempfile
 
         from projectionist.engine.profiles import profile_from_mapping
@@ -170,7 +170,14 @@ class EngineSessionTests(unittest.TestCase):
                 runner=runner,
                 ffmpeg="ffmpeg",
             )
-            self.assertEqual(session.plan, "full")
+            self.assertEqual(session.plan, "source-transcode")
+            self.assertEqual(session.source_reason, "level")
+            self.assertEqual(session.provider, "plex")
             self.assertFalse(session.playable)
             self.assertEqual(session.master_url(), "")
             self.assertIn("hevc level is above profile hevc 5.1", session.reason)
+            shown = session.public()
+            self.assertEqual(shown["plan"], "source-transcode")
+            self.assertEqual(shown["source_reason"], "level")
+            self.assertEqual(shown["provider"], "plex")
+            self.assertNotIn("libx264", shown["reason"])

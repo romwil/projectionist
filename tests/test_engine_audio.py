@@ -150,7 +150,7 @@ class AudioTranscodeTests(unittest.TestCase):
             self.assertIn("hvc1", master)
             self.assertIn("mp4a.40.2", master)
 
-    def test_hevc_above_the_profile_stays_full_even_with_dts(self) -> None:
+    def test_hevc_above_the_profile_asks_the_source_even_with_dts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             media = Path(tmp) / "film.mkv"
             media.write_bytes(b"mkv")
@@ -162,7 +162,9 @@ class AudioTranscodeTests(unittest.TestCase):
                 raise AssertionError("HEVC above the profile must not start an audio transcode")
 
             session = self._open(asset, SAFARI, runner, title="Mulholland Drive")
-            self.assertEqual(session.plan, "full")
+            self.assertEqual(session.plan, "source-transcode")
+            self.assertEqual(session.source_reason, "level")
+            self.assertEqual(session.provider, "plex")
             self.assertFalse(session.playable)
             self.assertEqual(session.master_url(), "")
             self.assertIn("not playable", session.reason)
