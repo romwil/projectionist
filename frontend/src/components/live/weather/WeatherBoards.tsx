@@ -1,4 +1,4 @@
-import type { ReactNode, SVGProps } from "react";
+import { useState, type ReactNode, SVGProps } from "react";
 import {
   alertTimeLabel,
   dayLengthChange,
@@ -59,6 +59,99 @@ function deg(value: unknown) {
   return value == null ? "—" : `${value}°`;
 }
 
+/** UV index and air quality stay unwired until the person asks. */
+export function AirFactsSlot({
+  facts,
+}: {
+  facts?: { uv_index?: unknown; uv_label?: unknown; aqi?: unknown; aqi_label?: unknown } | null;
+}) {
+  void facts;
+  return null;
+}
+
+function minutesOfDay(value: unknown): number | null {
+  const text = String(value || "");
+  const iso = text.match(/T(\d{2}):(\d{2})/);
+  if (iso) return Number(iso[1]) * 60 + Number(iso[2]);
+  const clock = text.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if (!clock) return null;
+  let hour = Number(clock[1]) % 12;
+  if (clock[3].toUpperCase() === "PM") hour += 12;
+  return hour * 60 + Number(clock[2]);
+}
+
+export function DaylightArc({ sunrise, sunset }: { sunrise?: unknown; sunset?: unknown }) {
+  const start = minutesOfDay(sunrise);
+  const end = minutesOfDay(sunset);
+  if (start == null || end == null || end <= start) return null;
+  const now = new Date();
+  const minute = now.getHours() * 60 + now.getMinutes();
+  const along = Math.min(1, Math.max(0, (minute - start) / (end - start)));
+  const angle = Math.PI * (1 - along);
+  const x = 16 + Math.cos(angle) * 68;
+  const y = 78 - Math.sin(angle) * 58;
+  return (
+    <figure className="weather-daylight" data-testid="weather-daylight-arc">
+      <svg viewBox="0 0 160 90" role="img" aria-label={`Daylight from ${sunrise} to ${sunset}`}>
+        <path d="M16 78 A64 58 0 0 1 144 78" fill="none" />
+        <line x1="16" y1="78" x2="144" y2="78" />
+        <circle cx={x} cy={y} r="4" />
+      </svg>
+      <figcaption>
+        <span>{String(sunrise).replace(/^\d{4}-\d{2}-\d{2}T/, "")}</span>
+        <span>{String(sunset).replace(/^\d{4}-\d{2}-\d{2}T/, "")}</span>
+      </figcaption>
+    </figure>
+  );
+}
+
+export function TemperatureCurve({ hours }: { hours: Row[] }) {
+  const temps = hours.map((hour) => Number(hour.temp)).filter((n) => Number.isFinite(n));
+  if (temps.length < 2) return null;
+  const min = Math.min(...temps);
+  const max = Math.max(...temps);
+  const span = Math.max(1, max - min);
+  const width = 100;
+  const height = 36;
+  const points = hours
+    .map((hour, index) => {
+      const temp = Number(hour.temp);
+      const x = (index / Math.max(1, hours.length - 1)) * width;
+      const y = height - 4 - ((temp - min) / span) * (height - 8);
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    })
+    .join(" ");
+  return (
+    <div className="weather-curve" data-testid="weather-temp-curve">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="none"
+        role="img"
+        aria-label="Temperature over the next 12 hours"
+      >
+        <polyline points={points} />
+      </svg>
+      <div className="weather-rain-bars" aria-hidden="true">
+        {hours.map((hour) => (
+          <span
+            key={hour.time}
+            style={{ height: `${Math.max(0, Math.min(100, Number(hour.precip) || 0))}%` }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function sharedRange(days: Row[]) {
+  const lows = days.map((day) => Number(day.low)).filter((n) => Number.isFinite(n));
+  const highs = days.map((day) => Number(day.high)).filter((n) => Number.isFinite(n));
+  if (!lows.length || !highs.length) return null;
+  const min = Math.min(...lows);
+  const max = Math.max(...highs);
+  return { min, span: Math.max(1, max - min) };
+}
+
 function Board({ id, label, children }: { id: string; label: string; children: ReactNode }) {
   return (
     <section
@@ -72,7 +165,15 @@ function Board({ id, label, children }: { id: string; label: string; children: R
   );
 }
 
-export function CurrentBoard({ board, label }: { board: Row; label: string }) {
+export function CurrentBoard({
+  board,
+  label,
+  daylight,
+}: {
+  board: Row;
+  label: string;
+  daylight?: { sunrise?: unknown; sunset?: unknown } | null;
+}) {
   const rows: Array<[string, string]> = [];
   if (board.feels_like != null) rows.push(["Feels like", deg(board.feels_like)]);
   if (board.wind != null) {
@@ -82,7 +183,10 @@ export function CurrentBoard({ board, label }: { board: Row; label: string }) {
   if (board.humidity != null) rows.push(["Humidity", `${board.humidity}%`]);
   if (board.dew_point != null) rows.push(["Dew point", deg(board.dew_point)]);
   if (board.pressure_inhg != null)
-    rows.push(["Pressure", `${board.pressure_inhg.toFixed(2)} in${board.pressure_trend ? ` ${board.pressure_trend}` : ""}`]);
+    rows.push([
+      "Pressure",
+      `${board.pressure_inhg.toFixed(2)} in${board.pressure_trend ? ` ${board.pressure_trend}` : ""}`,
+    ]);
   if (board.visibility_mi != null) rows.push(["Visibility", `${board.visibility_mi} mi`]);
   return (
     <Board id="current" label={label}>
@@ -94,14 +198,28 @@ export function CurrentBoard({ board, label }: { board: Row; label: string }) {
           </p>
           <p className="weather-current-sky">{board.sky}</p>
         </div>
-        <dl className="weather-facts">
-          {rows.map(([name, value]) => (
-            <div key={name} className="weather-fact">
-              <dt>{name}</dt>
-              <dd>{value}</dd>
-            </div>
-          ))}
-        </dl>
+        <div className="weather-current-side">
+          <div className="weather-instruments" data-testid="weather-instruments">
+            {rows.slice(0, 4).map(([name, value]) => (
+              <div key={name} className="weather-instrument">
+                <span>{name}</span>
+                <strong>{value}</strong>
+              </div>
+            ))}
+          </div>
+          <DaylightArc sunrise={daylight?.sunrise} sunset={daylight?.sunset} />
+          <AirFactsSlot facts={null} />
+          {rows.length > 4 ? (
+            <dl className="weather-facts">
+              {rows.slice(4).map(([name, value]) => (
+                <div key={name} className="weather-fact">
+                  <dt>{name}</dt>
+                  <dd>{value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
+        </div>
       </div>
     </Board>
   );
@@ -127,10 +245,22 @@ export function OverviewBoard({ board, label }: { board: Row; label: string }) {
   );
 }
 
-export function HourlyBoard({ hours, label }: { hours: Row[]; label: string }) {
+export function HourlyBoard({
+  hours,
+  label,
+  compact = false,
+}: {
+  hours: Row[];
+  label: string;
+  compact?: boolean;
+}) {
   return (
     <Board id="hourly" label={label}>
-      <ol className="weather-hourly-strip" data-testid="weather-hourly-strip">
+      <TemperatureCurve hours={hours} />
+      <ol
+        className={`weather-hourly-strip${compact ? " weather-hourly-strip--compact" : ""}`}
+        data-testid="weather-hourly-strip"
+      >
         {hours.map((hour) => (
           <li key={hour.time} className="weather-hour">
             <span className="weather-col-head">{hour.label}</span>
@@ -145,19 +275,36 @@ export function HourlyBoard({ hours, label }: { hours: Row[]; label: string }) {
 }
 
 export function FiveDayBoard({ days, label }: { days: Row[]; label: string }) {
+  const scale = sharedRange(days);
   return (
     <Board id="five_day" label={label}>
       <ol className="weather-day-grid" data-testid="weather-day-grid">
-        {days.map((day) => (
-          <li key={day.date} className="weather-day-col" data-testid="weather-day-col">
-            <span className="weather-col-head">{day.weekday}</span>
-            <SkyGlyph sky={sky(day.code)} />
-            <span className="weather-day-sky">{day.sky}</span>
-            <span className="weather-day-high">{deg(day.high)}</span>
-            <span className="weather-day-low">{deg(day.low)}</span>
-            <span className="weather-precip">{day.precip != null ? `${day.precip}% precip` : ""}</span>
-          </li>
-        ))}
+        {days.map((day) => {
+          const low = Number(day.low);
+          const high = Number(day.high);
+          const bar =
+            scale && Number.isFinite(low) && Number.isFinite(high)
+              ? {
+                  left: `${((low - scale.min) / scale.span) * 100}%`,
+                  width: `${Math.max(10, ((high - low) / scale.span) * 100)}%`,
+                }
+              : null;
+          return (
+            <li key={day.date} className="weather-day-col" data-testid="weather-day-col">
+              <span className="weather-col-head">{day.weekday}</span>
+              <SkyGlyph sky={sky(day.code)} />
+              <span className="weather-day-sky">{day.sky}</span>
+              <span className="weather-range" data-testid="weather-range-bar">
+                {bar ? <span className="weather-range-fill" style={bar} /> : null}
+              </span>
+              <span className="weather-day-high">{deg(day.high)}</span>
+              <span className="weather-day-low">{deg(day.low)}</span>
+              <span className="weather-precip">
+                {day.precip != null ? `${day.precip}% precip` : ""}
+              </span>
+            </li>
+          );
+        })}
       </ol>
     </Board>
   );
@@ -168,7 +315,10 @@ export function AlertsBoard({ items, label }: { items: Row[]; label: string }) {
     <Board id="alerts" label={label}>
       <ul className="weather-alert-list">
         {items.slice(0, 3).map((alert) => (
-          <li key={alert.id || alert.event} className={`weather-alert${alert.is_warning ? " is-warning" : ""}`}>
+          <li
+            key={alert.id || alert.event}
+            className={`weather-alert${alert.is_warning ? " is-warning" : ""}`}
+          >
             <p className="weather-alert-event">
               {alert.event} <span className="weather-alert-severity">{alert.severity}</span>
             </p>
@@ -179,7 +329,9 @@ export function AlertsBoard({ items, label }: { items: Row[]; label: string }) {
             </p>
             {alert.headline ? <p className="weather-alert-headline">{alert.headline}</p> : null}
             {alert.description ? <p className="weather-alert-text">{alert.description}</p> : null}
-            {alert.instruction ? <p className="weather-alert-text weather-alert-do">{alert.instruction}</p> : null}
+            {alert.instruction ? (
+              <p className="weather-alert-text weather-alert-do">{alert.instruction}</p>
+            ) : null}
             {alert.sender ? <p className="weather-board-source">Source: {alert.sender}</p> : null}
           </li>
         ))}
@@ -205,24 +357,47 @@ export function RegionalBoard({ cities, label }: { cities: Row[]; label: string 
   );
 }
 
+const HEADLINE_TABS: Record<string, string> = {
+  local: "Local",
+  national: "National",
+  world: "World",
+};
+
 export function RadarBoard({
   radar,
   label,
   elapsedMs,
   reducedMotion,
+  paused = false,
+  cities = [],
+  onPlay,
 }: {
   radar: Row;
   label: string;
   elapsedMs: number;
   reducedMotion: boolean;
+  paused?: boolean;
+  cities?: Row[];
+  onPlay?: () => void;
 }) {
   const frames: Row[] = radar.frames || [];
-  const index = mapFrameIndex(frames.length, elapsedMs, reducedMotion);
+  const [playing, setPlaying] = useState(!paused && !reducedMotion);
+  const [manual, setManual] = useState<number | null>(null);
+  const index =
+    manual != null
+      ? Math.min(manual, Math.max(0, frames.length - 1))
+      : mapFrameIndex(frames.length, elapsedMs, reducedMotion || !playing);
   const frame = frames[index] || {};
   const marker = radar.marker || { x: 0.5, y: 0.5 };
+  const animating = playing && !reducedMotion;
   return (
     <Board id="radar" label={label}>
-      <figure className="weather-map" data-testid="weather-radar" data-frame={index} data-animating={reducedMotion ? "false" : "true"}>
+      <figure
+        className="weather-map"
+        data-testid="weather-radar"
+        data-frame={index}
+        data-animating={animating ? "true" : "false"}
+      >
         <div className="weather-map-frame">
           {frames.map((f, i) => (
             <img
@@ -243,6 +418,48 @@ export function RadarBoard({
         <figcaption className="weather-board-source">
           {radar.source} · {mapTimeLabel(frame.time)}
         </figcaption>
+        <div className="weather-radar-tools">
+          {paused && !playing ? (
+            <button
+              type="button"
+              className="ghost"
+              data-testid="weather-radar-play"
+              onClick={() => {
+                setPlaying(true);
+                onPlay?.();
+              }}
+            >
+              Play radar
+            </button>
+          ) : null}
+          {frames.length > 1 ? (
+            <input
+              className="weather-radar-scrubber"
+              type="range"
+              min={0}
+              max={frames.length - 1}
+              value={index}
+              aria-label="Radar time"
+              data-testid="weather-radar-scrubber"
+              onChange={(event) => setManual(Number(event.target.value))}
+            />
+          ) : null}
+          <ul className="weather-radar-legend" aria-label="Radar legend">
+            <li>Light</li>
+            <li>Moderate</li>
+            <li>Heavy</li>
+          </ul>
+        </div>
+        {cities.length ? (
+          <ul className="weather-regional weather-radar-obs" aria-label="Regional observations">
+            {cities.slice(0, 6).map((city) => (
+              <li key={`${city.name}-${city.region}`}>
+                <span>{city.name}</span>
+                <span>{deg(city.temp)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </figure>
     </Board>
   );
@@ -253,7 +470,11 @@ export function SatelliteBoard({ satellite, label }: { satellite: Row; label: st
     <Board id="satellite" label={label}>
       <figure className="weather-map" data-testid="weather-satellite">
         <div className="weather-map-frame weather-map-frame--square">
-          <img src={satellite.url} alt={`Satellite at ${mapTimeLabel(satellite.time)}`} className="weather-map-img is-current" />
+          <img
+            src={satellite.url}
+            alt={`Satellite at ${mapTimeLabel(satellite.time)}`}
+            className="weather-map-img is-current"
+          />
         </div>
         <figcaption className="weather-board-source">
           {satellite.source} · {mapTimeLabel(satellite.time)}
@@ -304,7 +525,9 @@ export function AlmanacBoard({ board, label }: { board: Row; label: string }) {
             <dt>Daylight</dt>
             <dd>
               {Math.floor(board.day_length_min / 60)}h {board.day_length_min % 60}m
-              <span className="weather-fact-note">{dayLengthChange(board.day_length_change_s)}</span>
+              <span className="weather-fact-note">
+                {dayLengthChange(board.day_length_change_s)}
+              </span>
             </dd>
           </div>
         ) : null}
@@ -321,7 +544,8 @@ export function AlmanacBoard({ board, label }: { board: Row; label: string }) {
           <div className="weather-fact">
             <dt>Record high</dt>
             <dd>
-              {deg(board.record_high.value)} <span className="weather-fact-note">{board.record_high.year}</span>
+              {deg(board.record_high.value)}{" "}
+              <span className="weather-fact-note">{board.record_high.year}</span>
             </dd>
           </div>
         ) : null}
@@ -329,14 +553,17 @@ export function AlmanacBoard({ board, label }: { board: Row; label: string }) {
           <div className="weather-fact">
             <dt>Record low</dt>
             <dd>
-              {deg(board.record_low.value)} <span className="weather-fact-note">{board.record_low.year}</span>
+              {deg(board.record_low.value)}{" "}
+              <span className="weather-fact-note">{board.record_low.year}</span>
             </dd>
           </div>
         ) : null}
       </dl>
       {board.trivia ? <p className="weather-trivia">{board.trivia}</p> : null}
       {board.archive_years ? (
-        <p className="weather-board-source">Records: Open-Meteo archive, {board.archive_years} years</p>
+        <p className="weather-board-source">
+          Records: Open-Meteo archive, {board.archive_years} years
+        </p>
       ) : null}
     </Board>
   );
@@ -403,21 +630,77 @@ export function SeasonalBoard({ board, label }: { board: Row; label: string }) {
   );
 }
 
-export function HeadlinesBoard({ scopes, label }: { scopes: Row[]; label: string }) {
+function HeadlineList({ scope }: { scope: Row }) {
+  const items = scope.available === false ? [] : scope.items || [];
+  return (
+    <ul>
+      {items.map((item: Row) => (
+        <li key={item.title} className="weather-headline">
+          <span className="weather-headline-title">{item.title}</span>
+          <span className="weather-headline-source">
+            {item.source}
+            {item.age ? ` · ${item.age}` : ""}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export function HeadlinesBoard({
+  scopes,
+  label,
+  tabs = false,
+}: {
+  scopes: Row[];
+  label: string;
+  tabs?: boolean;
+}) {
+  const visible = scopes.filter((scope) => scope.available !== false && (scope.items || []).length);
+  const [active, setActive] = useState(String(visible[0]?.scope || "local"));
+  if (!visible.length) return null;
+  if (tabs) {
+    const current = visible.find((scope) => scope.scope === active) || visible[0];
+    return (
+      <Board id="headlines" label={label}>
+        <div
+          className="weather-headline-tabs"
+          role="tablist"
+          aria-label="Headline scopes"
+          data-testid="weather-headline-tabs"
+        >
+          {visible.map((scope) => (
+            <button
+              key={scope.scope}
+              type="button"
+              role="tab"
+              aria-selected={scope.scope === current.scope}
+              onClick={() => setActive(String(scope.scope))}
+            >
+              {HEADLINE_TABS[scope.scope] || scope.label}
+            </button>
+          ))}
+        </div>
+        <section
+          className="weather-headline-scope"
+          aria-label={`${HEADLINE_TABS[current.scope] || current.label} headlines`}
+        >
+          <HeadlineList scope={current} />
+        </section>
+      </Board>
+    );
+  }
   return (
     <Board id="headlines" label={label}>
       <div className="weather-headlines">
-        {scopes.map((scope) => (
-          <section key={scope.scope} className="weather-headline-scope" aria-label={`${scope.label} headlines`}>
-            <h3 className="weather-col-head">{scope.label}</h3>
-            <ul>
-              {(scope.items || []).map((item: Row) => (
-                <li key={item.title} className="weather-headline">
-                  <span className="weather-headline-title">{item.title}</span>
-                  <span className="weather-headline-source">{item.source}</span>
-                </li>
-              ))}
-            </ul>
+        {visible.map((scope) => (
+          <section
+            key={scope.scope}
+            className="weather-headline-scope"
+            aria-label={`${scope.label} headlines`}
+          >
+            <h3 className="weather-col-head">{HEADLINE_TABS[scope.scope] || scope.label}</h3>
+            <HeadlineList scope={scope} />
           </section>
         ))}
       </div>

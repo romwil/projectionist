@@ -738,6 +738,14 @@ class EngineSettings:
             self.play_through_projectionist = bool(flag)
 
 
+def _settings_flag(value: object, default: bool) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    if value is None:
+        return default
+    return bool(value)
+
+
 @dataclass
 class WeatherSettings:
     """Weather Channel narration (local TTS) and the optional Windy webcam key."""
@@ -750,6 +758,14 @@ class WeatherSettings:
     tts_rate: float = 1.0
     # Windy Webcams API key. Empty = no webcams board.
     windy_api_key: str = ""
+    # EXP-015. On until the owner turns headlines off. That also stops the news fetches.
+    headlines_enabled: bool = True
+    # Youth sessions hide headlines unless the owner allows them.
+    youth_headlines: bool = False
+
+    def __post_init__(self) -> None:
+        self.headlines_enabled = _settings_flag(self.headlines_enabled, True)
+        self.youth_headlines = _settings_flag(self.youth_headlines, False)
 
 
 NESTED_SETTINGS_TYPES.update(

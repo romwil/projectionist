@@ -341,7 +341,9 @@
     "enabled": true,
     "error": "",
     "headlines": {
+      "enabled": true,
       "failed": [],
+      "local_source": "search",
       "scopes": [],
       "status": "pending"
     },

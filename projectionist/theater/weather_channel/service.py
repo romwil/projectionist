@@ -52,6 +52,8 @@ class NarrationSettings:
     voice: str = ""
     rate: float = 1.0
     windy_api_key: str = ""
+    # Owner switch. Youth hiding is decided per viewer and does not live here.
+    headlines_enabled: bool = True
 
 
 @dataclass
@@ -65,6 +67,8 @@ class LocationState:
     scripts: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict)
     script_keys: Dict[str, str] = field(default_factory=dict)
     scripts_version: int = 0
+    # Last time a viewer who is allowed to see headlines opened this place.
+    headlines_viewed: float = 0.0
     lock: threading.RLock = field(default_factory=threading.RLock)
 
 
@@ -149,8 +153,12 @@ class WeatherService:
 
     # -- viewers ---------------------------------------------------------
 
-    def view(self, place: Place) -> LocationState:
-        """A viewer is on this place. Cold places fetch the forecast now; the rest follows in the background."""
+    def view(self, place: Place, *, headlines: bool = True) -> LocationState:
+        """A viewer is on this place. Cold places fetch the forecast now; the rest follows in the background.
+
+        ``headlines`` is true only when this viewer is allowed to see them. A
+        Youth session that hides headlines does not keep the news feeds warm.
+        """
         now = self.clock()
         with self._lock:
             state = self.states.get(place.key)
@@ -159,8 +167,11 @@ class WeatherService:
                 state = LocationState(place=place)
                 if previous is not None and previous.place.key == place.key:
                     state.data, state.fetched_at = dict(previous.data), dict(previous.fetched_at)
+                    state.headlines_viewed = previous.headlines_viewed
                 self.states[place.key] = state
             state.last_viewed = now
+            if headlines:
+                state.headlines_viewed = now
         if "forecast" not in state.fetched_at:
             self._refresh_source(state, "forecast", now)
         if not state.scripts:
@@ -183,12 +194,18 @@ class WeatherService:
             return False
         return fetched is None or now - fetched >= TTL_S[source]
 
-    def _sources_for(self, state: LocationState, settings: NarrationSettings) -> List[str]:
+    def _sources_for(self, state: LocationState, settings: NarrationSettings, now: float) -> List[str]:
         names = ["forecast", "alerts", "regional", "air", "maps", "archive", "headlines"]
         if not state.place.is_us:
             names.remove("alerts")
         if settings.windy_api_key:
             names.append("webcams")
+        # Owner off, or nobody who can see headlines has watched recently.
+        if (
+            not settings.headlines_enabled
+            or now - state.headlines_viewed > ACTIVE_VIEWER_S
+        ) and "headlines" in names:
+            names.remove("headlines")
         return names
 
     def _load(self, state: LocationState, source: str, settings: NarrationSettings) -> Any:
@@ -276,7 +293,7 @@ class WeatherService:
         now = self.clock() if now is None else now
         settings = self.settings_factory()
         changed = []
-        for source in self._sources_for(state, settings):
+        for source in self._sources_for(state, settings, now):
             if self._due(state, source, now) and self._refresh_source(state, source, now, settings):
                 changed.append(source)
         return changed

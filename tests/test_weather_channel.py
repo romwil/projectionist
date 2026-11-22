@@ -690,6 +690,62 @@ class WeatherRoutesTests(unittest.TestCase):
         self.client.cookies.clear()
         self.assertIn(self.client.get("/api/live/weather/audio/" + "a" * 32 + ".opus").status_code, {401, 403})
 
+    def test_owner_can_turn_headlines_off(self) -> None:
+        self._login("owner")
+        status = self.client.get("/api/admin/live/weather").json()
+        self.assertTrue(status["headlines_enabled"])
+        self.assertFalse(status["youth_headlines"])
+        saved = self.client.put(
+            "/api/admin/live/weather",
+            json={"headlines_enabled": False, "youth_headlines": True},
+        )
+        self.assertEqual(saved.status_code, 200, saved.text)
+        body = saved.json()
+        self.assertFalse(body["headlines_enabled"])
+        self.assertTrue(body["youth_headlines"])
+
+
+class HeadlineControlTests(unittest.TestCase):
+    def test_owner_off_does_not_fetch_news(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            net = FakeNet()
+            service = _service(tmp, net, settings_factory=lambda: NarrationSettings(headlines_enabled=False))
+            service.view(CHICAGO)
+            service.tick(NOW)
+            self.assertNotIn("news.google.com", net.hosts())
+            self.assertNotIn("feeds.bbci.co.uk", net.hosts())
+
+    def test_youth_view_does_not_keep_the_feed_warm(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            net = FakeNet()
+            service = _service(tmp, net)
+            service.view(CHICAGO, headlines=False)
+            service.tick(NOW)
+            self.assertNotIn("news.google.com", net.hosts())
+
+    def test_hidden_payload_has_flags_and_no_titles(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            service = _service(tmp, FakeNet())
+            state = service.view(CHICAGO)
+            service.tick(NOW)
+            hidden = build_payload(
+                service, state, location_source="profile", household_place="", music=[], music_note="", show_headlines=False
+            )
+            self.assertFalse(hidden["headlines"]["enabled"])
+            self.assertEqual(hidden["headlines"]["status"], "off")
+            self.assertEqual(hidden["headlines"]["local_source"], "search")
+            self.assertTrue(hidden["headlines"]["scopes"])
+            self.assertTrue(all(scope["available"] is False and scope["items"] == [] for scope in hidden["headlines"]["scopes"]))
+            self.assertNotIn("headlines", [row["id"] for row in hidden["segments"]])
+            shown = build_payload(
+                service, state, location_source="profile", household_place="", music=[], music_note="", show_headlines=True
+            )
+            local = next(scope for scope in shown["headlines"]["scopes"] if scope["scope"] == "local")
+            self.assertTrue(shown["headlines"]["enabled"])
+            self.assertEqual(shown["headlines"]["local_source"], "search")
+            self.assertTrue(local["available"])
+            self.assertTrue(local["items"])
+
 
 if __name__ == "__main__":
     unittest.main()

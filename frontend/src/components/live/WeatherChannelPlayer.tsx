@@ -2,17 +2,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getLiveWeatherChannel } from "../../api/client";
 import {
   activeWarning,
+  availableSegments,
   captionDwellMs,
   CHYRON_SUMMARY_MS,
-  chyronGroups,
+  chyronGroupsForBoard,
   formatWeatherClock,
   initialPlannerState,
   nextWeatherSegment,
   PAYLOAD_POLL_MS,
   pickVariant,
   segmentLabel,
+  weatherLayout,
   weatherSky,
   type PlannerState,
+  type WeatherLayout,
 } from "../../lib/weatherChannel";
 import { WeatherMusicBed, type AudioLike } from "../../lib/weatherMusic";
 import WeatherLocationPicker from "../weather/WeatherLocationPicker";
@@ -31,6 +34,7 @@ import {
   SeasonalBoard,
   WebcamsBoard,
 } from "./weather/WeatherBoards";
+import WeatherScroll from "./weather/WeatherScroll";
 
 type WeatherPayload = Record<string, any>;
 
@@ -40,6 +44,12 @@ export type WeatherChannelPlayerProps = {
 };
 
 const VOICE_GAP_MS = 1_200;
+const SEGMENT_DOTS = ["current", "hourly", "five_day", "almanac", "headlines", "radar"];
+
+function readWeatherLayout(): WeatherLayout {
+  if (typeof window === "undefined") return "channel";
+  return weatherLayout(window.innerWidth);
+}
 
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message) return err.message;
@@ -52,7 +62,9 @@ function errorMessage(err: unknown, fallback: string): string {
 
 function usePrefersReducedMotion(): boolean {
   const [reduced, setReduced] = useState(
-    () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches,
+    () =>
+      typeof window !== "undefined" &&
+      !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches,
   );
   useEffect(() => {
     const query = window.matchMedia?.("(prefers-reduced-motion: reduce)");
@@ -64,12 +76,26 @@ function usePrefersReducedMotion(): boolean {
   return reduced;
 }
 
-function renderBoard(segment: string, payload: WeatherPayload, elapsedMs: number, reducedMotion: boolean) {
+function renderBoard(
+  segment: string,
+  payload: WeatherPayload,
+  elapsedMs: number,
+  reducedMotion: boolean,
+) {
   const boards = payload?.boards || {};
   const label = segmentLabel(payload, segment);
   switch (segment) {
     case "current":
-      return boards.current ? <CurrentBoard board={boards.current} label={label} /> : null;
+      return boards.current ? (
+        <CurrentBoard
+          board={boards.current}
+          label={label}
+          daylight={{
+            sunrise: boards.five_day?.[0]?.sunrise || boards.almanac?.sunrise,
+            sunset: boards.five_day?.[0]?.sunset || boards.almanac?.sunset,
+          }}
+        />
+      ) : null;
     case "overview":
       return boards.overview ? <OverviewBoard board={boards.overview} label={label} /> : null;
     case "hourly":
@@ -82,10 +108,18 @@ function renderBoard(segment: string, payload: WeatherPayload, elapsedMs: number
       return <RegionalBoard cities={boards.regional || []} label={label} />;
     case "radar":
       return boards.radar ? (
-        <RadarBoard radar={boards.radar} label={label} elapsedMs={elapsedMs} reducedMotion={reducedMotion} />
+        <RadarBoard
+          radar={boards.radar}
+          label={label}
+          elapsedMs={elapsedMs}
+          reducedMotion={reducedMotion}
+          cities={boards.regional || []}
+        />
       ) : null;
     case "satellite":
-      return boards.satellite ? <SatelliteBoard satellite={boards.satellite} label={label} /> : null;
+      return boards.satellite ? (
+        <SatelliteBoard satellite={boards.satellite} label={label} />
+      ) : null;
     case "webcams":
       return <WebcamsBoard cams={boards.webcams || []} label={label} />;
     case "almanac":
@@ -105,7 +139,10 @@ function renderBoard(segment: string, payload: WeatherPayload, elapsedMs: number
  * weather pieces, a red bulletin bar for Warnings, server-rendered narration,
  * and a shuffled music bed that fades around each voiceover.
  */
-export default function WeatherChannelPlayer({ className = "", onClose }: WeatherChannelPlayerProps) {
+export default function WeatherChannelPlayer({
+  className = "",
+  onClose,
+}: WeatherChannelPlayerProps) {
   const [payload, setPayload] = useState<WeatherPayload | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(true);
@@ -119,6 +156,11 @@ export default function WeatherChannelPlayer({ className = "", onClose }: Weathe
   const [warningAnnouncement, setWarningAnnouncement] = useState("");
   const [soundBlocked, setSoundBlocked] = useState(false);
   const reducedMotion = usePrefersReducedMotion();
+  const [layout, setLayout] = useState<WeatherLayout>(readWeatherLayout);
+  const layoutRef = useRef(layout);
+  useEffect(() => {
+    layoutRef.current = layout;
+  }, [layout]);
 
   const payloadRef = useRef<WeatherPayload | null>(null);
   const plannerRef = useRef<PlannerState>(initialPlannerState());
@@ -179,7 +221,13 @@ export default function WeatherChannelPlayer({ className = "", onClose }: Weathe
       const warningId = warning ? String(warning.id || warning.event) : "";
       if (warningId && !announcedRef.current.has(warningId)) {
         announcedRef.current.add(warningId);
-        setWarningAnnouncement(`Weather bulletin: ${warning?.event} for ${warning?.area_short || "the area"}.`);
+        setWarningAnnouncement(
+          `Weather bulletin: ${warning?.event} for ${warning?.area_short || "the area"}.`,
+        );
+      }
+      if (layoutRef.current === "page") {
+        startedRef.current = false;
+        return;
       }
       if (!startedRef.current) {
         startedRef.current = true;
@@ -225,6 +273,32 @@ export default function WeatherChannelPlayer({ className = "", onClose }: Weathe
   // Music bed: shuffle every file; fade around each voiceover.
   const trackKey = (payload?.music?.tracks || []).map((t: any) => t.id).join(",");
   useEffect(() => {
+    const query = window.matchMedia?.("(min-width: 1024px), (min-width: 768px)");
+    const onResize = () => setLayout(readWeatherLayout());
+    onResize();
+    window.addEventListener("resize", onResize);
+    query?.addEventListener?.("change", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      query?.removeEventListener?.("change", onResize);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (layout === "page") {
+      clearTimer();
+      voiceRef.current?.pause();
+      startedRef.current = false;
+      return;
+    }
+    if (payloadRef.current && !startedRef.current) {
+      startedRef.current = true;
+      advance();
+    }
+  }, [layout, advance]);
+
+  useEffect(() => {
+    if (layout === "page") return undefined;
     const tracks = payloadRef.current?.music?.tracks || [];
     if (!tracks.length) return undefined;
     const decks = [deckARef.current, deckBRef.current];
@@ -245,7 +319,7 @@ export default function WeatherChannelPlayer({ className = "", onClose }: Weathe
       bed.stop();
       bedRef.current = null;
     };
-  }, [trackKey]);
+  }, [trackKey, layout]);
 
   useEffect(() => {
     const voice = voiceRef.current;
@@ -259,7 +333,10 @@ export default function WeatherChannelPlayer({ className = "", onClose }: Weathe
     const onError = () => {
       if (bedRef.current?.isDucked) bedRef.current.voiceEnd(performance.now());
       clearTimer();
-      timerRef.current = window.setTimeout(advance, captionDwellMs("", voice.dataset.caption || ""));
+      timerRef.current = window.setTimeout(
+        advance,
+        captionDwellMs("", voice.dataset.caption || ""),
+      );
     };
     voice.addEventListener("play", onPlay);
     voice.addEventListener("ended", onDone);
@@ -278,7 +355,10 @@ export default function WeatherChannelPlayer({ className = "", onClose }: Weathe
   }, []);
 
   useEffect(() => {
-    const id = window.setInterval(() => setSummary(String(payloadRef.current?.chyron_summary || "")), CHYRON_SUMMARY_MS);
+    const id = window.setInterval(
+      () => setSummary(String(payloadRef.current?.chyron_summary || "")),
+      CHYRON_SUMMARY_MS,
+    );
     return () => window.clearInterval(id);
   }, []);
 
@@ -290,11 +370,16 @@ export default function WeatherChannelPlayer({ className = "", onClose }: Weathe
   }, [animating]);
 
   const warning = activeWarning(payload);
-  const groups = useMemo(() => chyronGroups(payload), [payload]);
+  const groups = useMemo(() => chyronGroupsForBoard(payload, segment), [payload, segment]);
   const sky = weatherSky(payload);
-  const board = payload && segment ? renderBoard(segment, payload, Math.max(0, now - segmentStart), reducedMotion) : null;
+  const board =
+    payload && segment
+      ? renderBoard(segment, payload, Math.max(0, now - segmentStart), reducedMotion)
+      : null;
   const narrationOn = !!payload?.narration?.enabled;
-  const egress: Array<{ host: string; purpose: string }> = Array.isArray(payload?.egress) ? payload.egress : [];
+  const egress: Array<{ host: string; purpose: string }> = Array.isArray(payload?.egress)
+    ? payload.egress
+    : [];
 
   const enableSound = () => {
     setSoundBlocked(false);
@@ -303,57 +388,131 @@ export default function WeatherChannelPlayer({ className = "", onClose }: Weathe
     if (voice?.src && voice.paused && narrationOn) voice.play?.()?.catch?.(() => {});
   };
 
+  const dots = SEGMENT_DOTS.filter((id) => availableSegments(payload).includes(id));
+  const jumpTo = (id: string) => {
+    clearTimer();
+    const picked = pickVariant(payload?.scripts, id, countersRef.current);
+    countersRef.current = picked.counters;
+    setSegment(id);
+    setCaption(String(picked.variant?.text || ""));
+    setSegmentStart(Date.now());
+    timerRef.current = window.setTimeout(
+      advance,
+      captionDwellMs(id, String(picked.variant?.text || "")),
+    );
+  };
+
+  const controls = (
+    <div className="weather-channel-controls">
+      {onClose ? (
+        <button
+          type="button"
+          className="ghost weather-channel-close"
+          onClick={onClose}
+          data-testid="weather-channel-close"
+        >
+          Back to Live
+        </button>
+      ) : null}
+      <button
+        type="button"
+        className="ghost weather-channel-place-toggle"
+        data-testid="weather-location-toggle"
+        onClick={() => setEditingPlace((open) => !open)}
+      >
+        {editingPlace ? "Hide place" : "Change place"}
+      </button>
+      {soundBlocked ? (
+        <button
+          type="button"
+          className="ghost"
+          data-testid="weather-sound-on"
+          onClick={enableSound}
+        >
+          Turn on sound
+        </button>
+      ) : null}
+    </div>
+  );
+
+  const placePicker = editingPlace ? (
+    <WeatherLocationPicker
+      variant="channel"
+      savedPlace={payload?.location_source === "profile" ? payload?.place || "" : ""}
+      source={payload?.location_source || "household"}
+      householdPlace={payload?.household_place || ""}
+      onSaved={() => {
+        setEditingPlace(false);
+        loadForecast(true);
+      }}
+    />
+  ) : null;
+
+  if (layout === "page") {
+    return (
+      <div
+        className={`weather-page weather-channel ${className}`.trim()}
+        data-testid="weather-channel"
+        data-layout="page"
+        data-sky={sky}
+        data-motion={reducedMotion ? "reduced" : "full"}
+      >
+        {controls}
+        {placePicker}
+        <WeatherScroll payload={payload} reducedMotion={reducedMotion} busy={busy} error={error} />
+        <p className="sr-only" aria-live="assertive" data-testid="weather-warning-announcement">
+          {warningAnnouncement}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <TheaterPlayer
       src=""
       className={`weather-channel ${className}`.trim()}
       testId="weather-channel"
       osdVisible={false}
-      dataAttrs={{ sky, board: segment || "empty", warning: warning ? "true" : "false", motion: reducedMotion ? "reduced" : "full" }}
+      dataAttrs={{
+        sky,
+        board: segment || "empty",
+        warning: warning ? "true" : "false",
+        motion: reducedMotion ? "reduced" : "full",
+        layout,
+      }}
     >
       <div className="weather-channel-sky" aria-hidden="true" />
-      <div className="weather-channel-controls">
-        {onClose ? (
-          <button type="button" className="ghost weather-channel-close" onClick={onClose} data-testid="weather-channel-close">
-            Back to Live
-          </button>
-        ) : null}
-        <button
-          type="button"
-          className="ghost weather-channel-place-toggle"
-          data-testid="weather-location-toggle"
-          onClick={() => setEditingPlace((open) => !open)}
-        >
-          {editingPlace ? "Hide place" : "Change place"}
-        </button>
-        {soundBlocked ? (
-          <button type="button" className="ghost" data-testid="weather-sound-on" onClick={enableSound}>
-            Turn on sound
-          </button>
-        ) : null}
-      </div>
-      {editingPlace ? (
-        <WeatherLocationPicker
-          variant="channel"
-          savedPlace={payload?.location_source === "profile" ? payload?.place || "" : ""}
-          source={payload?.location_source || "household"}
-          householdPlace={payload?.household_place || ""}
-          onSaved={() => {
-            setEditingPlace(false);
-            loadForecast(true);
-          }}
-        />
-      ) : null}
+      {controls}
+      {placePicker}
 
       {busy && !payload ? <p className="weather-channel-status">Tuning the forecast…</p> : null}
-      {error ? <p className="weather-channel-status weather-channel-status--error">{error}</p> : null}
+      {error ? (
+        <p className="weather-channel-status weather-channel-status--error">{error}</p>
+      ) : null}
       {payload?.error ? <p className="weather-channel-status">{payload.error}</p> : null}
 
       <div className="weather-stage" data-testid="weather-board-stage">
         <header className="weather-stage-top">
-          <span className="weather-stage-segment">{segment ? segmentLabel(payload, segment) : "Local forecast"}</span>
+          <span className="weather-bug" data-testid="weather-bug">
+            Weather
+          </span>
           <span className="weather-stage-place">{payload?.place || "Local conditions"}</span>
           <span className="weather-stage-clock">{clock}</span>
+          <nav
+            className="weather-segment-dots"
+            aria-label="Forecast segments"
+            data-testid="weather-segment-dots"
+          >
+            {dots.map((id) => (
+              <button
+                key={id}
+                type="button"
+                aria-current={id === segment ? "true" : undefined}
+                aria-label={segmentLabel(payload, id)}
+                onClick={() => jumpTo(id)}
+              />
+            ))}
+          </nav>
         </header>
         {warning ? (
           <p className="weather-bulletin-bar" data-testid="weather-bulletin-bar">
@@ -374,6 +533,7 @@ export default function WeatherChannelPlayer({ className = "", onClose }: Weathe
         ) : null}
         {groups.length ? (
           <div className="weather-channel-ticker weather-chyron" data-testid="weather-chyron">
+            <span className="weather-chyron-kicker">Up next</span>
             <div className="weather-chyron-track" aria-hidden="true">
               {[0, 1].map((copy) => (
                 <span key={copy} className="weather-chyron-run">
@@ -413,18 +573,26 @@ export default function WeatherChannelPlayer({ className = "", onClose }: Weathe
               {index < egress.length - 1 ? ", " : ""}
             </span>
           ))}
-          {egress.length ? "" : "nothing yet"}. They get the place’s coordinates or name, never who is watching.
+          {egress.length ? "" : "nothing yet"}. They get the place’s coordinates or name, never who
+          is watching.
         </p>
         <p>
           {payload?.music?.tracks?.length
             ? `Music: ${payload.music.tracks.length} track${payload.music.tracks.length === 1 ? "" : "s"} from the owner’s folder, shuffled.`
             : payload?.muzak_note || "No soundtrack — the forecast plays without music."}{" "}
-          {narrationOn ? "Narration: local voice on this server." : "Narration is off, so the forecast is captioned."}
+          {narrationOn
+            ? "Narration: local voice on this server."
+            : "Narration is off, so the forecast is captioned."}
         </p>
       </footer>
       <audio ref={deckARef} data-testid="weather-channel-muzak" preload="auto" />
       <audio ref={deckBRef} data-testid="weather-channel-muzak-next" preload="auto" />
-      <audio ref={voiceRef} data-testid="weather-channel-voice" data-caption={caption} preload="auto" />
+      <audio
+        ref={voiceRef}
+        data-testid="weather-channel-voice"
+        data-caption={caption}
+        preload="auto"
+      />
     </TheaterPlayer>
   );
 }

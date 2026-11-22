@@ -46,3 +46,9 @@ Done when (added): at 390, 834, and 1440 px the weather view matches its layout,
 - Created: EXP-017, proposed, later. Owner RSS feeds are an option and are not in EXP-015.
 - Outbox: addendum on `2026-11-20-EXP-015-native.md`.
 - Needs the person: nothing. Not started.
+
+---
+## Processing note (agent, 2026-11-21)
+- Shipped on the web: the six boards at three widths, and the headline controls (EXP-014, EXP-015).
+- UV index, air quality, and owner RSS were not added. Hooks remain (`AirFactsSlot`, `headlines.local_source` = `search`). They wait for the person.
+- This is not a release.
