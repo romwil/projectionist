@@ -77,6 +77,17 @@ def identity_from_db(db: Any, rating_key: str) -> dict[str, Any]:
     return {"tmdb_id": tmdb, "imdb_id": str(imdb or "")}
 
 
+def plex_media_source(settings: Settings, db: Any) -> PlexMediaSource:
+    """The household media source. Plex is the first one that can transcode."""
+    engine = getattr(settings, "engine", None)
+    mappings = list(getattr(engine, "path_mappings", []) or [])
+    return PlexMediaSource(
+        mappings=mappings,
+        path_lookup=lambda key: plex_part_paths(settings, key),
+        identity_lookup=lambda key: identity_from_db(db, key),
+    )
+
+
 def describe_title(
     settings: Settings,
     db: Any,
@@ -84,21 +95,17 @@ def describe_title(
     rating_key: str,
     *,
     background: bool = False,
+    source: Optional[PlexMediaSource] = None,
 ):
     """Locate a title and probe it.
 
     Play uses the default: normal priority, and it does not wait on caption
     extraction. The library walk and caption prep pass ``background`` so their
-    ffprobe shares the low-priority slot with extraction.
+    ffprobe shares the low-priority slot with extraction. Pass ``source`` when
+    the same object should also answer a source-transcode plan.
     """
-    engine = getattr(settings, "engine", None)
-    mappings = list(getattr(engine, "path_mappings", []) or [])
-    source = PlexMediaSource(
-        mappings=mappings,
-        path_lookup=lambda key: plex_part_paths(settings, key),
-        identity_lookup=lambda key: identity_from_db(db, key),
-    )
-    return source.locate(
+    chosen = source if source is not None else plex_media_source(settings, db)
+    return chosen.locate(
         rating_key,
         cache_dir=Path(data_dir) / "engine" / "probes",
         runner=subprocess.run,
@@ -170,8 +177,9 @@ def playback_plan(
             status_code=400,
             detail=f"Unknown device profile. Use one of: {names}.",
         )
-    asset = describe_title(_settings(), _db(), _dir(), key)
-    body = plan_playback(asset, chosen)
+    source = plex_media_source(_settings(), _db())
+    asset = describe_title(_settings(), _db(), _dir(), key, source=source)
+    body = plan_playback(asset, chosen, source=source)
     body["rating_key"] = key
     return body
 
@@ -236,7 +244,14 @@ def open_playback_session(
         raise HTTPException(status_code=error.status_code, detail=error.message) from error
     except PlaybackError as error:
         raise HTTPException(status_code=error.status_code, detail=error.message) from error
-    asset = describe_title(_settings(), _db(), _dir(), str(playable.get("rating_key") or key))
+    source = plex_media_source(_settings(), _db())
+    asset = describe_title(
+        _settings(),
+        _db(),
+        _dir(),
+        str(playable.get("rating_key") or key),
+        source=source,
+    )
     if payload.start_over:
         offset = 0
     elif payload.offset_ms is not None:
@@ -273,6 +288,7 @@ def open_playback_session(
         data_dir=_dir(),
         force_reason=force_reason,
         captions=[] if force_reason else renditions,
+        source=source,
     )
     return session.public()
 

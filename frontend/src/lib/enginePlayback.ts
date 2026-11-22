@@ -183,7 +183,7 @@ export function engineSessionForPlayer(session: any) {
 /**
  * When the household switch is on, try an engine session. A playable remux,
  * direct, or audio-only plan uses that playlist. A plan the engine cannot
- * play, including a full transcode and the caption fallback, returns to the
+ * play, including source-transcode and the caption fallback, returns to the
  * Plex start. When the switch is off, the Plex start is the only call.
  */
 export async function chooseWebPlayback({

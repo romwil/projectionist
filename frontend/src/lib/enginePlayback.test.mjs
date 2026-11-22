@@ -63,7 +63,7 @@ test("a playable remux uses the engine master and keeps the Plex path for captio
   assert.equal(engineSessionForPlayer({ playable: false, plan: "audio", master_url: "" }), null);
 });
 
-test("a playable audio plan uses the engine and a full plan stays on the library path", async () => {
+test("a playable audio plan uses the engine and a source transcode stays on the library path", async () => {
   const audio = await chooseWebPlayback({
     features: { features: { play_through_projectionist: true } },
     openEngine: async () => ({
@@ -82,12 +82,14 @@ test("a playable audio plan uses the engine and a full plan stays on the library
   assert.equal(audio.stream_url, "/api/playback/sessions/s/token/master.m3u8");
 
   let plex = 0;
-  const full = await chooseWebPlayback({
+  const source = await chooseWebPlayback({
     features: { features: { play_through_projectionist: true } },
     openEngine: async () => ({
       playable: false,
       master_url: "",
-      plan: "full",
+      plan: "source-transcode",
+      source_reason: "level",
+      provider: "plex",
       session_id: "s",
       reason: "HEVC video is not playable on web (hevc level is above profile hevc 5.1)",
     }),
@@ -97,9 +99,12 @@ test("a playable audio plan uses the engine and a full plan stays on the library
     },
   });
   assert.equal(plex, 1);
-  assert.equal(full.stream_url, "/plex");
-  assert.equal(full.engine, false);
-  assert.equal(engineSessionForPlayer({ playable: false, plan: "audio", master_url: "" }), null);
+  assert.equal(source.stream_url, "/plex");
+  assert.equal(source.engine, false);
+  assert.equal(
+    engineSessionForPlayer({ playable: false, plan: "source-transcode", master_url: "" }),
+    null,
+  );
 });
 
 test("the profile lists HEVC, AV1, AC-3, E-AC-3, and 10-bit only when the check says yes", () => {

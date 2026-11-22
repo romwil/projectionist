@@ -67,9 +67,35 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(plan["plan"], "audio")
         self.assertIn("AC-3", str(plan["reason"]))
 
-    def test_chrome_full_transcodes_hevc(self) -> None:
+    def test_chrome_asks_the_source_to_transcode_hevc(self) -> None:
         plan = plan_playback(_av("mkv", "hevc", "aac", level="153"), CHROME)
-        self.assertEqual(plan["plan"], "full")
+        self.assertEqual(plan["plan"], "source-transcode")
+        self.assertEqual(plan["source_reason"], "codec")
+        self.assertEqual(plan["provider"], "plex")
+        self.assertFalse(plan["playable"])
+        self.assertIn("HEVC", str(plan["reason"]))
+        self.assertNotIn("/secret", str(plan))
+
+    def test_a_later_source_can_answer_the_same_request(self) -> None:
+        class LaterSource:
+            def source_transcode(self, *, reason: str, source_reason: str) -> dict:
+                return {
+                    "plan": "something-else",
+                    "reason": reason,
+                    "source_reason": source_reason,
+                    "provider": "jellyfin",
+                    "playable": True,
+                }
+
+        plan = plan_playback(
+            _av("mkv", "hevc", "aac", level="153"),
+            CHROME,
+            source=LaterSource(),
+        )
+        self.assertEqual(plan["plan"], "source-transcode")
+        self.assertEqual(plan["provider"], "jellyfin")
+        self.assertEqual(plan["source_reason"], "codec")
+        self.assertFalse(plan["playable"])
         self.assertIn("HEVC", str(plan["reason"]))
 
     def test_safari_direct_plays_mp4_h264_aac(self) -> None:
@@ -102,12 +128,17 @@ class PlannerTests(unittest.TestCase):
         above = _av("mkv", "hevc", "aac", level="186")
         above.probe.streams[0].bit_depth = 10
         refused = plan_playback(above, profile)
-        self.assertEqual(refused["plan"], "full")
+        self.assertEqual(refused["plan"], "source-transcode")
+        self.assertEqual(refused["source_reason"], "level")
+        self.assertEqual(refused["provider"], "plex")
+        self.assertFalse(refused["playable"])
         self.assertIn("hevc level is above profile hevc 5.1", str(refused["reason"]))
 
-    def test_level_above_the_profile_is_a_full_transcode(self) -> None:
+    def test_level_above_the_profile_asks_the_source_to_transcode(self) -> None:
         plan = plan_playback(_av("mp4", "h264", "aac", level="52"), DeviceProfileLow())
-        self.assertEqual(plan["plan"], "full")
+        self.assertEqual(plan["plan"], "source-transcode")
+        self.assertEqual(plan["source_reason"], "level")
+        self.assertFalse(plan["playable"])
 
     def test_web_profile_remuxes_hevc_only_when_the_browser_lists_it(self) -> None:
         hevc = _av("mkv", "hevc", "aac", level="153")
@@ -122,7 +153,8 @@ class PlannerTests(unittest.TestCase):
         self.assertIn("hevc up to 5.1, 10-bit", str(played["reason"]))
 
         refused = plan_playback(hevc, _web([VideoCapability("h264", "5.2")], ["aac"]))
-        self.assertEqual(refused["plan"], "full")
+        self.assertEqual(refused["plan"], "source-transcode")
+        self.assertEqual(refused["source_reason"], "codec")
         self.assertEqual(refused["profile_answer"]["video"], "hevc not in profile")
         self.assertIn("HEVC video is not playable on web", str(refused["reason"]))
 
@@ -130,7 +162,8 @@ class PlannerTests(unittest.TestCase):
             hevc,
             _web([VideoCapability("hevc", "5.1", bit_depth=8), VideoCapability("h264", "5.2")], ["aac"]),
         )
-        self.assertEqual(eight_bit["plan"], "full")
+        self.assertEqual(eight_bit["plan"], "source-transcode")
+        self.assertEqual(eight_bit["source_reason"], "bit_depth")
         self.assertEqual(eight_bit["profile_answer"]["video"], "hevc 10-bit is above profile hevc 8-bit")
 
     def test_an_8_bit_level_is_not_hidden_by_a_lower_10_bit_row(self) -> None:
@@ -149,10 +182,14 @@ class PlannerTests(unittest.TestCase):
             [VideoCapability("hevc", "4.0", bit_depth=10), VideoCapability("h264", "5.2")],
             ["aac"],
         )
-        self.assertEqual(plan_playback(eight, only_ten)["plan"], "full")
+        hidden = plan_playback(eight, only_ten)
+        self.assertEqual(hidden["plan"], "source-transcode")
+        self.assertEqual(hidden["source_reason"], "level")
         high_ten = _av("mkv", "hevc", "aac", level="153")
         high_ten.probe.streams[0].bit_depth = 10
-        self.assertEqual(plan_playback(high_ten, both)["plan"], "full")
+        above_bits = plan_playback(high_ten, both)
+        self.assertEqual(above_bits["plan"], "source-transcode")
+        self.assertEqual(above_bits["source_reason"], "bit_depth")
 
     def test_web_profile_remuxes_eac3_only_when_the_browser_lists_it(self) -> None:
         episode = _av("mkv", "h264", "eac3", level="41")

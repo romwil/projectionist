@@ -170,7 +170,9 @@ class PlayabilityReportTests(unittest.TestCase):
         self.assertEqual(web_rows["audio"]["plan"], "audio")
         self.assertEqual(web_rows["video"]["tier"], "source-transcode")
         self.assertEqual(web_rows["video"]["label"], "Ask the media source to transcode")
-        self.assertEqual(web_rows["video"]["plan"], "full")
+        self.assertEqual(web_rows["video"]["plan"], "source-transcode")
+        self.assertEqual(web_rows["video"]["source_reason"], "codec")
+        self.assertEqual(web_rows["video"]["provider"], "plex")
         self.assertEqual(web["shares"]["source-transcode"]["count"], 1)
         self.assertEqual(
             web["hardware"], "A GPU with Quick Sync would let 1 title play without Plex."
