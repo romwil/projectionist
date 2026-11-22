@@ -27,6 +27,8 @@ class DeviceProfile:
     audio: list[str]
     captions: list[str] = field(default_factory=lambda: ["webvtt"])
     max_bitrate_kbps: Optional[int] = None
+    # 0 means the client did not say. AAC then stays within a named 5.1 layout.
+    max_channels: int = 0
 
     def as_public(self) -> dict[str, Any]:
         return {
@@ -44,6 +46,7 @@ class DeviceProfile:
             "audio": list(self.audio),
             "captions": list(self.captions),
             "max_bitrate_kbps": self.max_bitrate_kbps,
+            "max_channels": self.max_channels,
         }
 
 
@@ -112,6 +115,7 @@ def profile_from_mapping(raw: Mapping[str, Any]) -> DeviceProfile:
         audio=[str(name) for name in (raw.get("audio") or [])],
         captions=[str(name) for name in (captions if isinstance(captions, list) else ["webvtt"])],
         max_bitrate_kbps=_int(bitrate) if bitrate not in (None, "") else None,
+        max_channels=_int(raw.get("max_channels")),
     )
 
 

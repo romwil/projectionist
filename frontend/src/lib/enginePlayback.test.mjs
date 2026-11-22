@@ -350,3 +350,18 @@ test("FLAC, Opus, and ALAC are included only when the mp4 codec check says yes",
   assert.equal(fromDecoding.audio.includes("alac"), false);
   assert.equal(fromDecoding.audio.includes("ac3"), false);
 });
+
+test("AAC channel cap is 6 only when the browser proves surround", async () => {
+  const stereo = await browserPlaybackProfileFromRuntime({
+    canPlayType: (type) => (type.includes("avc1") ? "probably" : ""),
+    decodingInfo: async (_type, options) => ({ supported: options?.channels !== "6" }),
+  });
+  assert.equal(stereo.max_channels, 2);
+
+  const surround = await browserPlaybackProfileFromRuntime({
+    canPlayType: () => "",
+    decodingInfo: async (_type, options) => ({ supported: options?.channels === "6" }),
+  });
+  assert.equal(surround.max_channels, 6);
+  assert.equal(browserPlaybackProfile(() => false).max_channels, 2);
+});

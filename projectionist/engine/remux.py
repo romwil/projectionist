@@ -167,6 +167,7 @@ def write_master(
     duration_ms: int,
     captions: Optional[Sequence[CaptionRendition]] = None,
     audio_codec: str = "",
+    audio_channels: int = 0,
 ) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     media_lines = write_caption_renditions(directory, list(captions or []), duration_ms=duration_ms)
@@ -175,6 +176,8 @@ def write_master(
     codecs = _codecs(probe, audio_codec=audio_codec)
     if codecs:
         extras.append(f'CODECS="{codecs}"')
+    if int(audio_channels or 0) > 0:
+        extras.append(f'CHANNELS="{int(audio_channels)}"')
     video = next(
         (item for item in (probe.streams if probe else []) if item.codec_type == "video"), None
     )

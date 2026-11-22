@@ -6,6 +6,7 @@ export type WebPlaybackProfile = {
   video: { codec: string; max_level: string; bit_depth?: number }[];
   audio: string[];
   captions: string[];
+  max_channels: number;
 };
 
 type CanPlay = (mimeType: string) => boolean;
@@ -60,7 +61,7 @@ function checkedTypes() {
 }
 
 /** One row per codec and bit depth. A 10-bit yes must not hide an 8-bit yes. */
-export function browserPlaybackProfile(canPlay: CanPlay): WebPlaybackProfile {
+export function browserPlaybackProfile(canPlay: CanPlay, maxChannels = 2): WebPlaybackProfile {
   const supported = VIDEO_PROBES.filter((probe) => canPlay(probe.type));
   const video: WebPlaybackProfile["video"] = [];
   for (const codec of ["hevc", "av1", "h264"]) {
@@ -93,13 +94,17 @@ export function browserPlaybackProfile(canPlay: CanPlay): WebPlaybackProfile {
     video,
     audio,
     captions: ["webvtt"],
+    max_channels: Number(maxChannels) >= 6 ? 6 : 2,
   };
 }
 
 export type CodecRuntime = {
   canPlayType?: (type: string) => string;
   isTypeSupported?: (type: string) => boolean;
-  decodingInfo?: (type: string) => Promise<{ supported?: boolean } | null | undefined>;
+  decodingInfo?: (
+    type: string,
+    options?: { channels?: string },
+  ) => Promise<{ supported?: boolean } | null | undefined>;
 };
 
 /**
@@ -124,6 +129,17 @@ export async function browserPlaybackProfileFromRuntime(
       }),
     );
   }
+  let maxChannels = 2;
+  if (runtime.decodingInfo) {
+    try {
+      const surround = await runtime.decodingInfo('audio/mp4; codecs="mp4a.40.2"', {
+        channels: "6",
+      });
+      if (surround?.supported) maxChannels = 6;
+    } catch {
+      maxChannels = 2;
+    }
+  }
   return browserPlaybackProfile((type) => {
     const played = String(runtime.canPlayType?.(type) || "");
     if (played === "probably" || played === "maybe") return true;
@@ -133,7 +149,7 @@ export async function browserPlaybackProfileFromRuntime(
       // This browser has no Media Source answer for the type.
     }
     return decoding.get(type) === true;
-  });
+  }, maxChannels);
 }
 
 /** Ask this browser, at play time, and send that profile with the session. */
@@ -157,12 +173,17 @@ export function detectBrowserPlaybackProfile(): Promise<WebPlaybackProfile> {
       }
     },
     decodingInfo: capabilities?.decodingInfo
-      ? async (type) => {
+      ? async (type, options) => {
           const videoConfig = type.startsWith("video/")
             ? { contentType: type, width: 1920, height: 1080, bitrate: 8_000_000, framerate: 24 }
             : undefined;
           const audioConfig = type.startsWith("audio/")
-            ? { contentType: type, channels: "2", bitrate: 384000, samplerate: 48000 }
+            ? {
+                contentType: type,
+                channels: options?.channels || "2",
+                bitrate: 384000,
+                samplerate: 48000,
+              }
             : undefined;
           for (const kind of ["file", "media-source"] as const) {
             try {
