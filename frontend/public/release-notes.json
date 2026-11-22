@@ -1,6 +1,43 @@
 {
-  "generated_at": "2026-11-22T16:02:33Z",
+  "generated_at": "2026-11-22T23:10:15Z",
   "releases": [
+    {
+      "version": "1.45.1",
+      "date": "2026-11-22",
+      "summary": "Play can start while a copy is still being made, so a film no longer stops on a playlist that only appeared after the copy finished. Compatible copies can be made overnight, inside a disk budget you choose.",
+      "highlights": [
+        "**Play starts while the copy is still being made.** When Play is copying the picture, the playlist appears while that copy is still running.",
+        "**A compatible copy can be ready by morning.** You choose a folder outside the library and a disk budget. One copy is made late at night, and a finished copy plays without a live conversion.",
+        "**The copy list ranks from the library listing.** Watch counts and file sizes already on the listing are enough to decide what to copy first."
+      ],
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "Settings → Playback → **Copies ahead of time**: the owner chooses a writable folder outside every Plex library and a disk budget (200 GiB unless changed). The queue follows the playability ranking, titles above 1080p first, then watch count, and stops before a title that would pass the budget. One encode runs at a time, from 1:00 a.m. to 6:00 a.m. A partial file is not played. A finished copy is planned as direct or remux. The same screen shows used space and can remove a copy.",
+            "An unfinished playback report that cannot rank is planned again from the Plex listing. HDR still comes from the analysis rows only when that database is set."
+          ]
+        },
+        {
+          "title": "Fixed",
+          "bullets": [
+            "A remux publishes an event playlist while ffmpeg is still running, and the media playlist request waits during that run. A playlist that never appears, or a process that has already exited, is still a 404. In 1.45.0, Chrome HEVC remuxes (*Beetlejuice*, *The Blue Angels*, *Marriage Story*) asked for `av/stream.m3u8` before a VOD playlist existed and got 404."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "`./scripts/patch-release.sh 1.45.1` lockstep + `frontend/public/release-notes.json`.",
+            "`docs/api/fixtures/get-api-health.json` regenerated for 1.45.1.",
+            "Page speed (`npm run test:release-perf`) before Hub publish.",
+            "Generated clips prove playback tiers in Chrome without Plex. HEVC and Safari stay on the manual checklist.",
+            "CI on the release PR (required checks).",
+            "Hub image built from tag `v1.45.1`; `org.opencontainers.image.revision` matches that commit.",
+            "QA `:8792` is a Hub pull of `romwil/projectionist:1.45.1` (Path B). Production stays on 1.43.1."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.45.0",
       "date": "2026-11-22",
