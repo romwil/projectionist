@@ -498,6 +498,27 @@ class PlaybackStartMockTests(unittest.TestCase):
         self.assertEqual(payload["title"], "Heat")
         self.assertEqual(payload["subtitle_stream_id"], "")
 
+    def test_a_4k_start_is_not_cut_off_at_thirty_seconds(self) -> None:
+        """Mulholland Drive's HEVC software transcode exceeded the 30s urlopen
+        and the start returned 502 timed out. The same limit is in 1.43.1.
+        """
+        settings = Settings(plex_url="http://plex.test:32400", plex_token="server-token")
+        user = type("U", (), {"id": "owner", "is_youth": False})()
+        seen: dict[str, int] = {}
+
+        def fake_fetch(url, **kwargs):
+            seen["timeout"] = int(kwargs.get("timeout") or 0)
+            return b"#EXTM3U\n", "application/vnd.apple.mpegurl", 200, url
+
+        start_playback(
+            self.db,
+            settings,
+            rating_key="movie-1",
+            user=user,
+            fetch=fake_fetch,
+        )
+        self.assertGreaterEqual(seen["timeout"], 90)
+
     def test_progress_throttles_then_writes_offset(self) -> None:
         settings = Settings(plex_url="http://plex.test:32400", plex_token="server-token")
         user = type("U", (), {"id": "owner", "is_youth": False})()

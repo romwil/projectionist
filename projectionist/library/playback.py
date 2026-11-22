@@ -39,6 +39,10 @@ MAX_RATING_KEY_LEN = 128
 # or the proxy fetches ``/session/...`` and Plex returns 4xx → we surface 502.
 UNIVERSAL_HLS_DIR = "video/:/transcode/universal"
 UNIVERSAL_HLS_MASTER = f"{UNIVERSAL_HLS_DIR}/start.m3u8"
+# A cold 4K HEVC software transcode can sit longer than 30s before the first
+# playlist. Cutting the urlopen off there is a 502 ("timed out") while Plex
+# is still starting. Segments stay on the shorter limit.
+PLEX_PLAYLIST_TIMEOUT = 120
 
 _SAFE_RATING_KEY = re.compile(r"^[A-Za-z0-9._:@/-]{1,128}$")
 _SAFE_SESSION = re.compile(r"^[A-Za-z0-9._-]{8,80}$")
@@ -490,6 +494,8 @@ def fetch_plex_bytes(
             f"Plex HTTP {error.code}",
             status_code=502,
         ) from error
+    except TimeoutError as error:
+        raise PlaybackError("Plex timed out before the playlist was ready.", status_code=502) from error
     except URLError as error:
         raise PlaybackError("Plex is unreachable.", status_code=502) from error
 
@@ -1002,7 +1008,7 @@ def start_plex_hls(
         offset_seconds=offset_seconds,
         subtitle_stream_id=session.subtitle_stream_id,
     )
-    fetch(url, headers=plex_identity_headers(session.token), timeout=30)
+    fetch(url, headers=plex_identity_headers(session.token), timeout=PLEX_PLAYLIST_TIMEOUT)
     session.last_offset_s = max(0.0, float(offset_seconds))
 
 
@@ -1243,7 +1249,9 @@ def _master_peak_bps(session: PlaybackSession, fetch: FetchFn) -> Optional[int]:
     )
     headers = plex_identity_headers(session.token)
     try:
-        body, _content_type, status, _final = fetch(media_url, headers=headers, timeout=30)
+        body, _content_type, status, _final = fetch(
+            media_url, headers=headers, timeout=PLEX_PLAYLIST_TIMEOUT
+        )
     except PlaybackError:
         logger.warning("Could not read the media playlist to measure segment peaks")
         return None
@@ -1292,7 +1300,7 @@ def proxy_session_asset(
     body, upstream_ct, status, final_url = fetch(
         url,
         headers=plex_identity_headers(session.token),
-        timeout=30,
+        timeout=PLEX_PLAYLIST_TIMEOUT if str(path).endswith(".m3u8") else 30,
     )
     media_type = content_type_for_path(path, upstream_ct)
     if is_playlist_path(path):
