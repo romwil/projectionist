@@ -1,6 +1,45 @@
 {
-  "generated_at": "2026-11-21T20:38:49Z",
+  "generated_at": "2026-11-21T23:52:33Z",
   "releases": [
+    {
+      "version": "1.43.1",
+      "date": "2026-11-21",
+      "summary": "Library playback work stays quiet until you ask. A title this browser cannot play starts on the usual path, and a slow Plex answer says it timed out.",
+      "highlights": [
+        "**The library report waits until you ask.** It does not start on its own. When you refresh it, shares show up from what Plex already knows, then the rest fills in quietly.",
+        "**A title this browser cannot play still starts.** If the picture or the sound needs a conversion we do not do yet, Play uses the usual path instead of sitting at 0:00.",
+        "**The title you pressed Play on goes first.** Caption preparation does not leave that title behind a queue of new arrivals.",
+        "**A slow Plex answer says it timed out.** Only an empty file list says no file was reported."
+      ],
+      "sections": [
+        {
+          "title": "Changed",
+          "bullets": [
+            "The playability report runs only when an owner refreshes Settings → Playback. It does not start on the jobs timer, at startup, or when the library is scanned. It plans first from the stream list Plex already returns (container, codecs, profile, level, bit depth), saves those shares, then confirms with ffprobe in the background. The saved report includes partial shares and `planned_from_plex`, `confirmed_by_ffprobe`, and `running` while that confirmation is still going. A stopped walk stays incomplete so Refresh can continue.",
+            "Caption extraction queues new arrivals from the last two weeks (at most 40), Continue Watching, For you, and the title page. A library scan does not enqueue the whole library. Play and the title page go to the front of the queue. ffmpeg and ffprobe share one slot, prefixed with `nice` and `ionice` when those tools exist. The queue is on disk, so a stop can resume."
+          ]
+        },
+        {
+          "title": "Fixed",
+          "bullets": [
+            "A plan the engine cannot serve yet (`full`, and `audio` until that tier exists) starts library playback in the web player. *Mulholland Drive* is HEVC level 6.2, which is a `full` plan for a browser that reports HEVC 5.1, so Play uses the Plex path.",
+            "HEVC level comparison uses one scale. ffprobe `level_idc` 153, the string `153.0`, and the browser level `5.1` are the same level. 186 is 6.2, above 5.1.",
+            "A Plex timeout or an open circuit says “Plex timed out before it reported a file for this title.” An empty Part list still says “Plex did not report a file for this title.”",
+            "A stopped playability walk, a partial caption file, and a browser check that did not name a level are not treated as a finished play."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "`./scripts/patch-release.sh 1.43.1` lockstep + `frontend/public/release-notes.json`.",
+            "Page speed (`npm run test:release-perf`) before Hub publish.",
+            "CI on the release PR (required checks).",
+            "Hub image built from tag `v1.43.1`; `org.opencontainers.image.revision` matches that commit.",
+            "QA `:8792` is a Hub pull of `romwil/projectionist:1.43.1` (Path B). Prod stays on 1.40.1."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.43.0",
       "date": "2026-11-21",
