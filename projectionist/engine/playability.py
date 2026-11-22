@@ -1038,6 +1038,26 @@ def _apply_confirmed_title(
     )
 
 
+def _listing_fields_are_saved(report: Mapping[str, Any]) -> bool:
+    """The plan already stored the listing's watch count and file size.
+
+    ``copy_ahead`` is written in the same step. An unfinished report from
+    before those fields existed has neither, and continuing it leaves the
+    ranking empty.
+    """
+    if not isinstance(report.get("copy_ahead"), Mapping):
+        return False
+    for block in report.get("profiles") or []:
+        if not isinstance(block, Mapping):
+            continue
+        titles = block.get("titles") or []
+        if not titles:
+            continue
+        sample = titles[0]
+        return isinstance(sample, Mapping) and "watch_count" in sample and "file_size" in sample
+    return False
+
+
 def _run_owner_report(
     db: Any,
     settings: Any,
@@ -1048,10 +1068,18 @@ def _run_owner_report(
     catalog: Callable[[Any], Sequence[Mapping[str, Any]]],
     should_stop: Optional[StopFn] = None,
 ) -> dict[str, Any]:
-    """Plan from Plex metadata, save that, then confirm with one ffprobe at a time."""
+    """Plan from Plex metadata, save that, then confirm with one ffprobe at a time.
+
+    A plan that does not yet carry the listing's watch count and file size is
+    planned again. Those fields do not require ``PLEX_LIBRARY_DATABASE``.
+    """
     root = Path(data_dir)
     current = load_playability_report(root)
-    resume = bool(current.get("planned_from_plex")) and not current.get("complete")
+    resume = (
+        bool(current.get("planned_from_plex"))
+        and not current.get("complete")
+        and _listing_fields_are_saved(current)
+    )
     chosen = list(profiles)
     if resume and current.get("profile_specs"):
         chosen = [
