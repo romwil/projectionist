@@ -58,6 +58,7 @@ class MediaStream:
     width: int = 0
     height: int = 0
     channels: int = 0
+    channel_layout: str = ""
     bitrate: int = 0
     profile: str = ""
     level: str = ""
@@ -185,6 +186,7 @@ def parse_ffprobe(payload: dict[str, Any]) -> ProbeResult:
                 width=_int(raw.get("width")),
                 height=_int(raw.get("height")),
                 channels=_int(raw.get("channels")),
+                channel_layout=str(raw.get("channel_layout") or ""),
                 bitrate=_int(raw.get("bit_rate")),
                 profile=str(raw.get("profile") or ""),
                 level=str(raw.get("level") or ""),

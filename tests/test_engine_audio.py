@@ -126,6 +126,63 @@ class AudioTranscodeTests(unittest.TestCase):
             self.assertNotIn("/plex", master)
             self.assertNotIn(str(media), str(session.public()))
 
+    def test_surround_aac_publishes_the_playlist_and_names_the_layout(self) -> None:
+        """5.1(side) TrueHD and DTS must not wait for ffmpeg to exit, and must not
+        leave AAC with an unnamed channel layout. A lower profile max downmixes.
+        """
+        chrome = profile_from_mapping(
+            {
+                "id": "web",
+                "containers": ["mp4", "hls-fmp4"],
+                "video": [{"codec": "h264", "max_level": "5.2"}],
+                "audio": ["aac"],
+                "captions": ["webvtt"],
+                "max_channels": 6,
+            }
+        )
+        stereo = profile_from_mapping(
+            {
+                "id": "web",
+                "containers": ["mp4", "hls-fmp4"],
+                "video": [{"codec": "h264", "max_level": "5.2"}],
+                "audio": ["aac"],
+                "captions": ["webvtt"],
+                "max_channels": 2,
+            }
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            media = Path(tmp) / "night.mkv"
+            media.write_bytes(b"mkv")
+            asset = _asset("h264", "truehd", level="41")
+            asset.probe.streams[1].channels = 6
+            asset.probe.streams[1].channel_layout = "5.1(side)"
+            asset.local_path = str(media)
+            seen: dict[str, object] = {}
+
+            def runner(cmd, cwd):
+                seen["cmd"] = list(cmd)
+                Path(cwd, "stream.m3u8").write_text("#EXTM3U\n#EXT-X-ENDLIST\n", encoding="utf-8")
+
+            session = self._open(asset, chrome, runner, title="30 Days of Night")
+            args = _ffmpeg_args(list(seen["cmd"]))
+            playlist = args[args.index("-hls_playlist_type") + 1]
+            self.assertEqual(playlist, "event")
+            self.assertNotIn("vod", args)
+            self.assertEqual(args[args.index("-ac") + 1], "6")
+            self.assertEqual(args[args.index("-channel_layout") + 1], "5.1")
+            master = (session.directory / "master.m3u8").read_text(encoding="utf-8")
+            self.assertIn('CODECS="avc1.640028,mp4a.40.2"', master)
+            self.assertIn('CHANNELS="6"', master)
+
+            seen.clear()
+            narrow = self._open(asset, stereo, runner, title="13")
+            narrow_args = _ffmpeg_args(list(seen["cmd"]))
+            self.assertEqual(narrow_args[narrow_args.index("-ac") + 1], "2")
+            self.assertEqual(narrow_args[narrow_args.index("-channel_layout") + 1], "stereo")
+            narrow_master = (narrow.directory / "master.m3u8").read_text(encoding="utf-8")
+            self.assertIn('CHANNELS="2"', narrow_master)
+            self.assertNotIn('CHANNELS="6"', narrow_master)
+
     def test_dts_with_playable_hevc_is_audio_only(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             media = Path(tmp) / "film.mkv"

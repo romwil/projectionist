@@ -240,6 +240,7 @@ def open_engine_session(
                     captions=list(captions or []),
                     still_wanted=_still_wanted,
                     attach=_attach,
+                    max_channels=int(getattr(profile, "max_channels", 0) or 0),
                 )
             else:
                 session.process = start_remux(

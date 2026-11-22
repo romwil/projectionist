@@ -94,7 +94,7 @@ The planner picks the cheapest plan the device can play, in this order:
 |------|------|------|-------|
 | **Direct** | Container + codecs already playable (e.g. MP4/H.264/AAC on Safari) | ~0 | Byte-range file serving behind the session URL. Captions still ship as WebVTT sidecar tracks |
 | **Remux** | Codecs playable, container is not (e.g. MKV with HEVC + E-AC-3 on Apple TV) | Low (I/O) | `-c copy` into fMP4 HLS. The common case for Apple clients |
-| **Audio transcode** | Video playable, audio is not (e.g. DTS / TrueHD on a browser) | Low–moderate | Copy video, encode AAC (and keep E-AC-3 where supported) |
+| **Audio transcode** | Video playable, audio is not (e.g. DTS / TrueHD on a browser) | Low–moderate | Copy video, encode AAC. The media playlist is published while ffmpeg is still encoding. Surround is a named 5.1, or stereo when the profile's channel cap is lower. 5.1(side) is not left unnamed |
 | **Full transcode** | Video codec unsupported (e.g. HEVC on desktop Chrome without HEVC decode, AV1 on old devices) | High | Uses hardware encode (VAAPI / QSV / NVENC / VideoToolbox) when the owner enables it; otherwise CPU with a conservative ladder |
 | **Plex fallback** | The engine cannot read the file (no path mapping) or the owner turned the engine off | Plex’s | Today’s path, unchanged |
 
