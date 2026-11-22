@@ -302,13 +302,25 @@ export default function LibraryPlayer({
   }, []);
 
   useEffect(() => {
+    if (session?.engine) setActiveSub(-1);
+  }, [session?.engine, session?.session_id]);
+
+  useEffect(() => {
+    if (session?.engine) return undefined;
     const video = videoRef.current;
     const hls = hlsRef.current;
     if (hls && typeof hls.subtitleTrack === "number") {
       hls.subtitleTrack = -1;
     }
     if (subPresentation.disableAllNative) silenceNativeTextTracks(video);
-  }, [subPresentation.disableAllNative, activeSub, seekEpoch, session?.stream_url]);
+    return undefined;
+  }, [
+    subPresentation.disableAllNative,
+    activeSub,
+    seekEpoch,
+    session?.engine,
+    session?.stream_url,
+  ]);
 
   useEffect(() => {
     setActiveSub(-1);
@@ -359,7 +371,7 @@ export default function LibraryPlayer({
           householdLanguage: listed?.household_language,
           preferredLanguages: preferred,
         });
-        if (defaultIndex !== -1) setActiveSub(defaultIndex);
+        if (defaultIndex !== -1 && !sessionRef.current?.engine) setActiveSub(defaultIndex);
         if (resolved.empty && !resolved.burnInTracks.length) {
           setSubListNote(
             downloadMessage ||
@@ -1515,6 +1527,7 @@ export default function LibraryPlayer({
         onVideoRef={handleVideoRef}
         onHlsRef={handleHlsRef}
         onHlsError={handleEngineHlsError}
+        playlistSubtitles={Boolean(session?.engine)}
         resumeMutedIfBlocked={continueAtMs != null}
         onAutoplayResult={(result) => {
           pendingUnmuteRef.current = Boolean(result?.unmuteOnTap && result?.playing);
