@@ -19,14 +19,17 @@ export function playabilityNotice(report: PlayabilityNoticeReport): string {
   return "";
 }
 
-type SourceBreakdown = {
-  video_transcode?: number;
-  codec?: number;
-  level?: number;
-  bit_depth?: number;
-  resolution?: number;
-  hdr?: number;
-} | null;
+type SourceBreakdown =
+  | {
+      video_transcode?: number;
+      codec?: number;
+      level?: number;
+      bit_depth?: number;
+      resolution?: number;
+      hdr?: number;
+    }
+  | null
+  | undefined;
 
 /** Why the source-transcode bucket is that size. Resolution and HDR overlap the other reasons. */
 export function sourceBreakdownLine(breakdown: SourceBreakdown): string {
@@ -39,7 +42,7 @@ export function sourceBreakdownLine(breakdown: SourceBreakdown): string {
   );
 }
 
-type GpuDecision = { safari?: number | null; apple_tv?: number | null } | null;
+type GpuDecision = { safari?: number | null; apple_tv?: number | null } | null | undefined;
 
 /** The two counts that decide whether a GPU is worth it. A missing device is omitted. */
 export function gpuDecisionLine(gpu: GpuDecision): string {
