@@ -1,0 +1,15 @@
+{
+  "body": {
+    "rooms": [
+      {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "kind": "tv",
+        "name": "Apple TV"
+      }
+    ]
+  },
+  "content_type": "application/json",
+  "method": "GET",
+  "path": "/api/rooms",
+  "status": 200
+}

@@ -107,12 +107,29 @@ Engine playlist and segment URLs stay relative (`/api/playback/sessions/…`, `a
 
 **How this works.** The capability `household_addresses` is `1` on every features response. The two strings are only on the signed-in payload. **Honest limit.** After a restart, home is empty until someone opens Projectionist on the home network. The away address is an origin: a path, a query, or a username in the URL is refused.
 
+## Rooms
+
+A room is a named screen in the household. Every signed-in member can read the list. A handheld is not a room. A removed screen is not a room.
+
+```bash
+curl -s -H "Authorization: Bearer YOUR_CREDENTIAL" \
+  http://your-host:8788/api/rooms
+```
+
+```json
+{ "rooms": [{ "id": "…", "name": "Living Room", "kind": "tv" }] }
+```
+
+The household owner, or the member signed in on that screen, can rename it with `PATCH /api/rooms/{id}` and `{"name": "Den"}`.
+
+**How this works.** The capability `rooms` is `1`. The list is only the name. **Honest limit.** What is playing is not on this list. Joining a room is a later item. A browser tab is not a room yet.
+
 ## Roadmap items
 
 | ID | Item | Depends on |
 |----|------|------------|
 | SES-001 | Device credentials for phones and tablets (done with NAT-002). Every web sign-in path can end in a device credential | pairing (shipped) |
-| SES-002 | Rooms registry (named screens per household) + visibility rules | SES-001 |
+| SES-002 | Rooms registry (named screens per household) + visibility rules (done: `GET /api/rooms`, `rooms` is 1) | SES-001 |
 | SES-003 | Session object (owner, screen, position, level) on top of engine sessions | ENG-003 |
 | SES-004 | Realtime channel (`/api/sessions/{id}/live`), command authorization, clock model | SES-003 |
 | SES-005 | Join flow (owner approval or on-screen code) + guest permissions | SES-004 |

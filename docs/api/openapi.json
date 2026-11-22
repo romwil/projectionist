@@ -3008,6 +3008,31 @@
         ]
       }
     },
+    "/api/rooms": {
+      "get": {
+        "description": "Named screens in this household. What is playing is not on this list.",
+        "operationId": "rooms_list_api_rooms_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Rooms List Api Rooms Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Rooms List",
+        "tags": [
+          "client",
+          "rooms"
+        ]
+      }
+    },
     "/api/title/{media_type}/{item_id}": {
       "get": {
         "operationId": "title_detail_api_title__media_type___item_id__get",
