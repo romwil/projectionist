@@ -142,6 +142,9 @@ test("the profile lists HEVC, AV1, AC-3, E-AC-3, and 10-bit only when the check 
   );
   assert.equal(chrome.audio.includes("eac3"), false);
   assert.equal(chrome.audio.includes("ac3"), false);
+  assert.equal(chrome.audio.includes("flac"), false);
+  assert.equal(chrome.audio.includes("opus"), false);
+  assert.equal(chrome.audio.includes("alac"), false);
 });
 
 test("a 10-bit yes does not hide an 8-bit yes at a higher level", () => {
@@ -206,4 +209,49 @@ test("canPlayType, MediaSource, and decodingInfo are the same profile", async ()
   );
   assert.equal(chrome.audio.includes("ac3"), true);
   assert.equal(chrome.audio.includes("eac3"), false);
+  assert.equal(chrome.audio.includes("flac"), false);
+});
+
+test("FLAC, Opus, and ALAC are included only when the mp4 codec check says yes", async () => {
+  const reported = browserPlaybackProfile(
+    (type) =>
+      type === 'audio/mp4; codecs="flac"' ||
+      type === 'audio/mp4; codecs="opus"' ||
+      type === 'audio/mp4; codecs="alac"' ||
+      type.includes("avc1"),
+  );
+  assert.deepEqual(reported.audio, ["aac", "flac", "opus", "alac"]);
+
+  const silent = browserPlaybackProfile((type) => type.includes("avc1"));
+  assert.deepEqual(silent.audio, ["aac"]);
+
+  // A bare container yes is not the fMP4 codec the remux writes.
+  const family = await browserPlaybackProfileFromRuntime({
+    canPlayType: (type) => {
+      if (
+        type === "audio/flac" ||
+        type === "audio/opus" ||
+        type === "audio/alac" ||
+        type === 'audio/ogg; codecs="opus"' ||
+        type === 'audio/ogg; codecs="flac"' ||
+        type === "audio/mp4"
+      ) {
+        return "maybe";
+      }
+      return type.includes("avc1") ? "probably" : "";
+    },
+    isTypeSupported: (type) => type === "audio/flac" || type === 'audio/webm; codecs="opus"',
+    decodingInfo: async (type) => ({ supported: type === "audio/flac" }),
+  });
+  assert.deepEqual(family.audio, ["aac"]);
+
+  const fromDecoding = await browserPlaybackProfileFromRuntime({
+    canPlayType: () => "",
+    isTypeSupported: (type) => type === 'audio/mp4; codecs="opus"',
+    decodingInfo: async (type) => ({ supported: type === 'audio/mp4; codecs="flac"' }),
+  });
+  assert.equal(fromDecoding.audio.includes("flac"), true);
+  assert.equal(fromDecoding.audio.includes("opus"), true);
+  assert.equal(fromDecoding.audio.includes("alac"), false);
+  assert.equal(fromDecoding.audio.includes("ac3"), false);
 });
