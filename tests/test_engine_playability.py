@@ -277,6 +277,7 @@ class PlayabilityReportTests(unittest.TestCase):
         chrome = next(block for block in report["profiles"] if block["profile"] == "chrome")
         self.assertEqual(chrome["shares"]["source-transcode"]["count"], 3)
         self.assertEqual(chrome["source_breakdown"]["codec"], 3)
+        self.assertEqual(chrome["source_breakdown"]["codecs"], {"hevc": 3})
         self.assertEqual(chrome["source_breakdown"]["level"], 0)
         self.assertEqual(chrome["source_breakdown"]["resolution"], 1)
         self.assertEqual(chrome["source_breakdown"]["hdr"], 1)
@@ -284,11 +285,13 @@ class PlayabilityReportTests(unittest.TestCase):
 
         safari = next(block for block in report["profiles"] if block["profile"] == "safari")
         self.assertEqual(safari["source_breakdown"]["video_transcode"], 1)
+        self.assertEqual(safari["source_breakdown"]["codecs"], {"hevc": 1})
         self.assertEqual(safari["source_breakdown"]["level"], 1)
         self.assertEqual(safari["source_breakdown"]["resolution"], 0)
 
         apple = next(block for block in report["profiles"] if block["profile"] == "apple-tv-4k-3")
         self.assertEqual(apple["source_breakdown"]["video_transcode"], 1)
+        self.assertEqual(apple["source_breakdown"]["codecs"], {"hevc": 1})
         self.assertEqual(apple["source_breakdown"]["level"], 1)
 
         web = next(block for block in report["profiles"] if block["profile"] == "web")
@@ -306,6 +309,128 @@ class PlayabilityReportTests(unittest.TestCase):
         progress_keys = set(playability_progress(report)["profiles"][0])
         self.assertIn("source_breakdown", progress_keys)
         self.assertNotIn("titles", progress_keys)
+
+    def test_video_transcode_bucket_names_codecs_per_device(self) -> None:
+        """Each device names the codecs in its video-transcode bucket.
+
+        A library listing without a level or an HDR flag must not report those
+        as zero. A probed file with no HDR still reports zero.
+        """
+        from projectionist.engine.playability import asset_from_plex_row
+        from projectionist.engine.profiles import APPLE_TV_4K, CHROME
+
+        def video(codec: str, **extra: object) -> dict[str, object]:
+            row = {
+                "codec_type": "video",
+                "codec": codec,
+                "profile": "",
+                "level": "",
+                "bit_depth": 0,
+                "width": 1920,
+                "height": 1080,
+                "hdr": "",
+                "hdr_known": False,
+            }
+            row.update(extra)
+            return row
+
+        listing = [
+            {
+                "rating_key": "hevc-main10",
+                "title": "Main Ten",
+                "container": "mkv",
+                "streams": [
+                    video("hevc", profile="main 10", bit_depth=10),
+                    {"codec_type": "audio", "codec": "aac"},
+                ],
+            },
+            {
+                "rating_key": "av1-film",
+                "title": "AV1 Film",
+                "container": "mkv",
+                "streams": [video("av1", profile="Main"), {"codec_type": "audio", "codec": "aac"}],
+            },
+            {
+                "rating_key": "mpeg4-film",
+                "title": "MPEG-4 Film",
+                "container": "mkv",
+                "streams": [
+                    video("mpeg4", profile="Advanced Simple", width=720, height=480),
+                    {"codec_type": "audio", "codec": "aac"},
+                ],
+            },
+            {
+                "rating_key": "h264-film",
+                "title": "H.264 Film",
+                "container": "mkv",
+                "streams": [video("h264", profile="high"), {"codec_type": "audio", "codec": "aac"}],
+            },
+        ]
+        titles = [LibraryTitle(row["rating_key"], row["title"], "en") for row in listing]
+        assets = {row["rating_key"]: asset_from_plex_row(row) for row in listing}
+        with tempfile.TemporaryDirectory() as tmp:
+            report = build_playability_report(
+                titles,
+                assets,
+                [CHROME, SAFARI, APPLE_TV_4K],
+                settings=Settings(),
+                data_dir=Path(tmp),
+            )
+        chrome = next(block for block in report["profiles"] if block["profile"] == "chrome")
+        safari = next(block for block in report["profiles"] if block["profile"] == "safari")
+        apple = next(block for block in report["profiles"] if block["profile"] == "apple-tv-4k-3")
+
+        self.assertEqual(chrome["source_breakdown"]["video_transcode"], 3)
+        self.assertEqual(chrome["source_breakdown"]["codecs"], {"av1": 1, "hevc": 1, "mpeg4": 1})
+        self.assertEqual(sum(chrome["source_breakdown"]["codecs"].values()), 3)
+        self.assertIsNone(chrome["source_breakdown"]["level"])
+        self.assertIsNone(chrome["source_breakdown"]["hdr"])
+        self.assertEqual(chrome["source_breakdown"]["bit_depth"], 0)
+        self.assertEqual(chrome["source_breakdown"]["resolution"], 0)
+
+        self.assertEqual(safari["source_breakdown"]["video_transcode"], 2)
+        self.assertEqual(safari["source_breakdown"]["codecs"], {"av1": 1, "mpeg4": 1})
+        self.assertNotIn("hevc", safari["source_breakdown"]["codecs"])
+        self.assertIsNone(safari["source_breakdown"]["level"])
+        self.assertIsNone(safari["source_breakdown"]["hdr"])
+        self.assertEqual(safari["source_breakdown"]["bit_depth"], 0)
+        self.assertEqual(apple["source_breakdown"]["codecs"], safari["source_breakdown"]["codecs"])
+
+        probed = [
+            {
+                "rating_key": "hevc-sdr",
+                "title": "Checked SDR",
+                "container": "mkv",
+                "streams": [
+                    video("hevc", level="153", bit_depth=8, hdr_known=True),
+                    {"codec_type": "audio", "codec": "aac"},
+                ],
+            },
+            {
+                "rating_key": "h264-sdr",
+                "title": "Checked H.264",
+                "container": "mkv",
+                "streams": [
+                    video("h264", level="41", bit_depth=8, hdr_known=True),
+                    {"codec_type": "audio", "codec": "aac"},
+                ],
+            },
+        ]
+        probed_titles = [LibraryTitle(row["rating_key"], row["title"], "en") for row in probed]
+        probed_assets = {row["rating_key"]: asset_from_plex_row(row) for row in probed}
+        with tempfile.TemporaryDirectory() as tmp:
+            checked = build_playability_report(
+                probed_titles,
+                probed_assets,
+                [CHROME],
+                settings=Settings(),
+                data_dir=Path(tmp),
+            )
+        checked_chrome = checked["profiles"][0]
+        self.assertEqual(checked_chrome["source_breakdown"]["codecs"], {"hevc": 1})
+        self.assertEqual(checked_chrome["source_breakdown"]["level"], 0)
+        self.assertEqual(checked_chrome["source_breakdown"]["hdr"], 0)
+        self.assertEqual(checked_chrome["source_breakdown"]["bit_depth"], 0)
 
     def test_library_titles_include_a_movie_and_an_episode(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

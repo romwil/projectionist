@@ -46,10 +46,11 @@ type ProfileReport = {
   source_breakdown?: {
     video_transcode?: number;
     codec?: number;
-    level?: number;
-    bit_depth?: number;
+    codecs?: Record<string, number>;
+    level?: number | null;
+    bit_depth?: number | null;
     resolution?: number;
-    hdr?: number;
+    hdr?: number | null;
   };
 };
 type PlayabilityReportBody = {
