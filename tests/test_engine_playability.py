@@ -432,6 +432,157 @@ class PlayabilityReportTests(unittest.TestCase):
         self.assertEqual(checked_chrome["source_breakdown"]["hdr"], 0)
         self.assertEqual(checked_chrome["source_breakdown"]["bit_depth"], 0)
 
+    def test_analysis_rows_supply_hdr_and_metadata_supplies_the_ranking(self) -> None:
+        """HDR10 and HLG come from stored media analysis, not the section listing.
+
+        The listing has no HDR attribute. Watch count and file size on that
+        metadata are what the copy-ahead ranking uses. This does not transcode
+        and does not make a copy.
+        """
+        import sqlite3
+        import xml.etree.ElementTree as ET
+
+        from projectionist.connectors.plex import (
+            apply_plex_media_analysis,
+            read_plex_media_analysis,
+            title_streams_from_element,
+        )
+        from projectionist.engine.playability import asset_from_plex_row
+        from projectionist.engine.profiles import APPLE_TV_4K
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            database = root / "library.db"
+            connection = sqlite3.connect(database)
+            connection.execute(
+                """
+                CREATE TABLE media_items (
+                    id INTEGER PRIMARY KEY,
+                    metadata_item_id INTEGER,
+                    color_trc TEXT,
+                    deleted_at INTEGER
+                )
+                """
+            )
+            connection.executemany(
+                """
+                INSERT INTO media_items (id, metadata_item_id, color_trc, deleted_at)
+                VALUES (?, ?, ?, NULL)
+                """,
+                [
+                    (1, 10, "smpte2084"),
+                    (2, 11, "arib-std-b67"),
+                    (3, 12, ""),
+                    (9, 10, "bt709"),
+                ],
+            )
+            connection.commit()
+            connection.close()
+
+            analysis = read_plex_media_analysis(database)
+            by_transfer = {row["rating_key"]: row["color_trc"] for row in analysis}
+            self.assertEqual(by_transfer["10"], "smpte2084")
+            self.assertEqual(by_transfer["11"], "arib-std-b67")
+            self.assertEqual(by_transfer["12"], "")
+            self.assertNotIn("bt709", by_transfer.values())
+
+            listing = ET.fromstring(
+                """
+                <MediaContainer>
+                  <Video ratingKey="10" title="Often" viewCount="9">
+                    <Media id="1" container="mkv" videoCodec="av1" videoResolution="1080">
+                      <Part size="800" />
+                    </Media>
+                  </Video>
+                  <Video ratingKey="11" title="Rare" viewCount="2">
+                    <Media id="2" container="mkv" videoCodec="mpeg4" videoResolution="480">
+                      <Part size="100" />
+                    </Media>
+                  </Video>
+                  <Video ratingKey="12" title="Wide" viewCount="1">
+                    <Media id="3" container="mkv" videoCodec="vp9" videoResolution="4k">
+                      <Part size="5000" />
+                    </Media>
+                  </Video>
+                  <Video ratingKey="13" title="Plain" viewCount="4">
+                    <Media id="4" container="mp4" videoCodec="h264" videoResolution="1080">
+                      <Part size="50" />
+                    </Media>
+                  </Video>
+                </MediaContainer>
+                """
+            )
+            rows = []
+            for element in listing.findall("Video"):
+                media = element.find("Media")
+                self.assertIsNotNone(media)
+                self.assertNotIn("colorTrc", media.attrib)
+                self.assertNotIn("HDR10Present", media.attrib)
+                row = title_streams_from_element(element)
+                self.assertEqual(row["streams"][0]["hdr"], "")
+                self.assertFalse(row["streams"][0]["hdr_known"])
+                rows.append(row)
+            merged = apply_plex_media_analysis(rows, analysis)
+            by_rating = {row["rating_key"]: row for row in merged}
+            self.assertEqual(by_rating["10"]["streams"][0]["hdr"], "hdr10")
+            self.assertTrue(by_rating["10"]["streams"][0]["hdr_known"])
+            self.assertEqual(by_rating["11"]["streams"][0]["hdr"], "hlg")
+            self.assertTrue(by_rating["11"]["streams"][0]["hdr_known"])
+            self.assertEqual(by_rating["12"]["streams"][0]["hdr"], "")
+            self.assertFalse(by_rating["12"]["streams"][0]["hdr_known"])
+            self.assertEqual(by_rating["10"]["view_count"], 9)
+            self.assertEqual(by_rating["10"]["file_size"], 800)
+            self.assertEqual(by_rating["12"]["file_size"], 5000)
+
+            titles = [
+                LibraryTitle(
+                    row["rating_key"],
+                    row["title"],
+                    "en",
+                    watch_count=int(row["view_count"]),
+                    file_size=int(row["file_size"]),
+                )
+                for row in merged
+            ]
+            assets = {row["rating_key"]: asset_from_plex_row(row) for row in merged}
+            report = build_playability_report(
+                titles,
+                assets,
+                [SAFARI, APPLE_TV_4K],
+                settings=Settings(),
+                data_dir=root,
+            )
+
+        safari = next(block for block in report["profiles"] if block["profile"] == "safari")
+        planned = {row["rating_key"]: row for row in safari["titles"]}
+        self.assertEqual(planned["10"]["hdr"], "hdr10")
+        self.assertEqual(planned["11"]["hdr"], "hlg")
+        self.assertEqual(planned["10"]["watch_count"], 9)
+        self.assertEqual(planned["10"]["file_size"], 800)
+        self.assertEqual(planned["12"]["watch_count"], 1)
+        self.assertEqual(planned["12"]["file_size"], 5000)
+        ranking = report["copy_ahead"]
+        self.assertEqual(ranking["profile"], "safari")
+        self.assertEqual([row["rating_key"] for row in ranking["titles"]], ["12", "10", "11"])
+        self.assertEqual(ranking["above_1080p"], 1)
+        self.assertEqual(ranking["above_1080p_codecs"], {"vp9": 1})
+        self.assertEqual(ranking["disk_bytes"], 5900)
+        self.assertEqual(ranking["titles"][0]["above_1080p"], True)
+        self.assertEqual(ranking["titles"][1]["hdr"], "hdr10")
+        self.assertEqual(ranking["titles"][1]["watch_count"], 9)
+        self.assertEqual(ranking["titles"][1]["file_size"], 800)
+        self.assertEqual(ranking["titles"][2]["hdr"], "hlg")
+        self.assertEqual(ranking["titles"][2]["watch_count"], 2)
+        self.assertEqual(ranking["titles"][2]["file_size"], 100)
+        self.assertNotIn("13", {row["rating_key"] for row in ranking["titles"]})
+        for row in ranking["titles"]:
+            self.assertGreaterEqual(row["watch_count"], 0)
+            self.assertGreater(row["file_size"], 0)
+        progress = playability_progress(report)
+        self.assertEqual(progress["copy_ahead"]["disk_bytes"], 5900)
+        self.assertNotIn("titles", progress["copy_ahead"])
+        self.assertNotIn("ffprobe", json.dumps(report).lower())
+
     def test_library_titles_include_a_movie_and_an_episode(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "projectionist.db")
