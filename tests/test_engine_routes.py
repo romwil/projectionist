@@ -218,22 +218,46 @@ class EngineRouteTests(unittest.TestCase):
         self.assertEqual(progress.status_code, 200, progress.text)
         self.assertEqual(int(self.db.library_item_by_rating_key("121986")["view_offset_ms"]), 15000)
 
+        def fake_audio(source, directory, **kwargs):
+            from projectionist.engine.remux import write_master
+
+            directory = Path(directory)
+            write_master(
+                directory,
+                kwargs.get("probe"),
+                file_size=100,
+                duration_ms=int(kwargs.get("duration_ms") or 600_000),
+                audio_codec=str(kwargs.get("audio_codec") or "aac"),
+            )
+            av = directory / "av"
+            av.mkdir(parents=True, exist_ok=True)
+            (av / "stream.m3u8").write_text("#EXTM3U\n#EXT-X-ENDLIST\n", encoding="utf-8")
+            return None
+
         with patch(
             "projectionist.engine.routes.plex_part_paths",
             return_value=["/data/media/movies/film.mkv"],
-        ), patch("projectionist.engine.source.probe_file", return_value=_probe()):
+        ), patch("projectionist.engine.source.probe_file", return_value=_probe()), patch(
+            "projectionist.engine.audio.start_audio_transcode",
+            side_effect=fake_audio,
+        ):
             chrome = self.client.post(
                 "/api/playback/sessions",
                 json={"rating_key": "121986", "profile": "chrome", "engine_opt_in": True},
             )
         self.assertEqual(chrome.status_code, 200, chrome.text)
-        fallback = chrome.json()
-        self.assertEqual(fallback["plan"], "audio")
-        self.assertFalse(fallback["playable"])
-        self.assertIn("AC-3", fallback["reason"])
-        recorded = self.client.get(f"/api/playback/sessions/{fallback['session_id']}")
+        audio = chrome.json()
+        self.assertEqual(audio["plan"], "audio")
+        self.assertTrue(audio["playable"])
+        self.assertIn("AC-3", audio["reason"])
+        self.assertIn("/master.m3u8", audio["master_url"])
+        master = self.client.get(audio["master_url"])
+        self.assertEqual(master.status_code, 200, master.text)
+        self.assertIn("mp4a.40.2", master.text)
+        self.assertNotIn("ac-3", master.text)
+        recorded = self.client.get(f"/api/playback/sessions/{audio['session_id']}")
         self.assertEqual(recorded.status_code, 200)
-        self.assertEqual(recorded.json()["reason"], fallback["reason"])
+        self.assertEqual(recorded.json()["reason"], audio["reason"])
 
     def _map_movie(self) -> None:
         saved = self.client.put(

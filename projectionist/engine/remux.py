@@ -43,17 +43,44 @@ def bandwidth_bps(probe: Optional[ProbeResult], *, file_size: int = 0, duration_
     return 5_000_000
 
 
-def _codecs(probe: Optional[ProbeResult]) -> str:
-    if probe is None:
-        return ""
+def _codec_token(name: str) -> str:
+    text = str(name or "").strip().lower()
+    aliases = {
+        "ac-3": "ac3",
+        "e-ac-3": "eac3",
+        "ec-3": "eac3",
+        "avc": "h264",
+        "h265": "hevc",
+    }
+    return _CODECS.get(aliases.get(text, text), "")
+
+
+def _codecs(probe: Optional[ProbeResult], *, audio_codec: str = "") -> str:
+    """Playlist codec string. ``audio_codec`` is the stream the player will decode.
+
+    A remux advertises the file's audio. An audio-only transcode advertises the
+    encoded audio, so the player does not try to decode E-AC-3 or DTS.
+    """
     names: list[str] = []
-    for kind in ("video", "audio"):
-        stream = next((item for item in probe.streams if item.codec_type == kind), None)
-        if stream is None:
-            continue
-        token = _CODECS.get(stream.codec)
+    video = next(
+        (item for item in (probe.streams if probe else []) if item.codec_type == "video"), None
+    )
+    if video is not None:
+        token = _codec_token(video.codec)
         if token:
             names.append(token)
+    if audio_codec:
+        token = _codec_token(audio_codec)
+        if token:
+            names.append(token)
+    else:
+        audio = next(
+            (item for item in (probe.streams if probe else []) if item.codec_type == "audio"), None
+        )
+        if audio is not None:
+            token = _codec_token(audio.codec)
+            if token:
+                names.append(token)
     return ",".join(names)
 
 
@@ -111,7 +138,9 @@ def write_caption_renditions(
         if "-->" not in body:
             continue
         subs.mkdir(parents=True, exist_ok=True)
-        (subs / f"{track.track_id}.vtt").write_text(body if body.endswith("\n") else body + "\n", encoding="utf-8")
+        (subs / f"{track.track_id}.vtt").write_text(
+            body if body.endswith("\n") else body + "\n", encoding="utf-8"
+        )
         playlist = "\n".join(
             [
                 "#EXTM3U",
@@ -137,15 +166,18 @@ def write_master(
     file_size: int,
     duration_ms: int,
     captions: Optional[Sequence[CaptionRendition]] = None,
+    audio_codec: str = "",
 ) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     media_lines = write_caption_renditions(directory, list(captions or []), duration_ms=duration_ms)
     bandwidth = bandwidth_bps(probe, file_size=file_size, duration_ms=duration_ms)
     extras = [f"BANDWIDTH={bandwidth}", f"AVERAGE-BANDWIDTH={bandwidth}"]
-    codecs = _codecs(probe)
+    codecs = _codecs(probe, audio_codec=audio_codec)
     if codecs:
         extras.append(f'CODECS="{codecs}"')
-    video = next((item for item in (probe.streams if probe else []) if item.codec_type == "video"), None)
+    video = next(
+        (item for item in (probe.streams if probe else []) if item.codec_type == "video"), None
+    )
     if video and video.width and video.height:
         extras.append(f"RESOLUTION={video.width}x{video.height}")
     if media_lines:

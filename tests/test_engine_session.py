@@ -97,7 +97,7 @@ class EngineSessionTests(unittest.TestCase):
                 session_for_token(session.session_id, "wrong-token")
             self.assertEqual(session_for_token(session.session_id, session.token).rating_key, "121986")
 
-    def test_audio_plan_is_recorded_and_not_playable(self) -> None:
+    def test_audio_plan_copies_video_and_is_playable(self) -> None:
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -105,9 +105,12 @@ class EngineSessionTests(unittest.TestCase):
             media.write_bytes(b"mkv")
             asset = _asset("ac3")
             asset.local_path = str(media)
+            seen: dict[str, object] = {}
 
             def runner(cmd, cwd):
-                raise AssertionError("audio plans must not remux")
+                seen["cmd"] = list(cmd)
+                folder = Path(cwd)
+                (folder / "stream.m3u8").write_text("#EXTM3U\n#EXT-X-ENDLIST\n", encoding="utf-8")
 
             session = open_engine_session(
                 asset,
@@ -118,11 +121,17 @@ class EngineSessionTests(unittest.TestCase):
                 view_offset_ms=0,
                 data_dir=Path(tmp),
                 runner=runner,
+                ffmpeg="ffmpeg",
             )
             self.assertEqual(session.plan, "audio")
-            self.assertFalse(session.playable)
-            self.assertEqual(session.master_url(), "")
+            self.assertTrue(session.playable)
+            self.assertIn(session.token, session.master_url())
             self.assertIn("AC-3", session.reason)
+            command = " ".join(str(part) for part in seen["cmd"])
+            self.assertIn("-c:v copy", command)
+            self.assertIn("-c:a aac", command)
+            self.assertNotIn("-c copy", command)
+            self.assertNotIn("libx264", command)
 
     def test_full_plan_is_not_an_engine_playlist(self) -> None:
         import tempfile

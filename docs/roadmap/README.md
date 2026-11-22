@@ -8,7 +8,7 @@ Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` ·
 
 ## Sequencing
 
-1. **ENG** — the playback engine. Shipped through ENG-007 and ENG-004, including text captions extracted ahead of play. The web profile comes from the browser's own codec checks. ENG-011, the library playability report, is done. Next, not started: ENG-012 → ENG-013 → ENG-005 → ENG-014 → ENG-006. Engine sessions are opt-in (`engine_opt_in`). Play through Projectionist stays off until an owner turns it on
+1. **ENG** — the playback engine. Shipped through ENG-007 and ENG-004, including text captions extracted ahead of play. The web profile comes from the browser's own codec checks. ENG-011, the library playability report, is done. ENG-012 serves an audio-only transcode: the video is copied and the audio is encoded for the device. Next, not started: ENG-013 → ENG-005 → ENG-014 → ENG-006. Engine sessions are opt-in (`engine_opt_in`). Play through Projectionist stays off until an owner turns it on
 2. **SES** — shared sessions (extends the Apple TV pairing + throw work)
 3. **TML** — the timeline layer
 4. **TRK** — tracks: Moments, Booth Notes, Class / Study
@@ -32,7 +32,7 @@ Status values: `proposed` · `accepted` · `in progress` · `shipped (x.y.z)` ·
 | ENG-009 | Live Channels on engine sessions (ARCH-007 facade; PRD-007 freeze) | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-010 | Jellyfin media source | proposed | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-011 | Library playability report for each device profile | done | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#library-playability-report) |
-| ENG-012 | Audio-only transcode tier | accepted | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
+| ENG-012 | Audio-only transcode tier | done | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-013 | Source-transcode tier (today’s Plex fallback, with a reason) | accepted | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | ENG-014 | Pre-optimized versions inside a disk budget | accepted | [PLAYBACK_ENGINE](../PLAYBACK_ENGINE.md#roadmap-items) |
 | SES-001 | Device credentials for every handheld sign-in path (same work as NAT-002) | done | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
@@ -130,6 +130,7 @@ SES-001 and NAT-002 describe the same work from two sides; build them as one cha
 | 2026-11-21 | **Text captions are extracted ahead of Play.** A library scan, a new arrival, Continue Watching, For you, or the title page queues embedded text tracks. Play serves WebVTT that is already cached and does not wait on ffmpeg. A text track that is not ready yet records that the captions are not ready, and the job keeps going. Picture captions still use the Plex path. ENG-011, ENG-012, ENG-013, ENG-014, ENG-005, and ENG-006 are not started |
 | 2026-11-21 | **The library playability report is in the tree.** Settings → Playback dry-runs the planner for each named device profile, and for this browser when the owner refreshes. A title is serve the file, remux, audio-only, captions not ready yet, picture captions, ask the media source to transcode, or not playable through the engine. ENG-011 is done. ENG-012, ENG-013, ENG-005, ENG-014, and ENG-006 are not started. This is not a release |
 | 2026-11-21 | **Background playback work stays quiet until the owner asks.** The playability report does not start on startup, on a timer, on a library scan, or when Settings opens. The first shares come from Plex’s stream metadata; ffprobe confirms afterwards, one file at a time, at low priority, and a restart continues. Caption extraction queues new arrivals, Continue Watching, For you, and the title page. A scan does not enqueue the library. The title being played is first in that queue. A Plex timeout is reported as a timeout. A plan the engine cannot serve (`full`, and `audio` until ENG-012) plays on the Plex path. This is not a release |
+| 2026-11-21 | **Audio-only playback copies the video and converts the sound.** A title whose picture the device can play, and whose sound it cannot (E-AC-3, AC-3, DTS, TrueHD), is plan `audio` and a playable engine session. ffmpeg encodes the profile's first audio codec, usually AAC, and copies the video. That ffmpeg is idle-priority and shares the one heavy-media slot with caption extraction and the playability file check. A Play probe does not wait on that slot. A plan whose video is above the profile stays `full` and plays on the Plex path. This is not a release |
 | 2026-11-19 | **Lane A remux spike:** H.264+AC-3 fMP4 HLS (`-c copy`) + household WebVTT works on Safari/WebKit and tvOS AVPlayer (seek without restart; captions selectable). Desktop Chrome/hls.js rejects AC-3 — planner must audio-transcode for those profiles. Findings: [engine-spike-findings](../superpowers/specs/2026-11-19-engine-spike-findings.md). Spike code stays on `spike/engine-remux` (not merged) |
 
 ## Superseded review rows (carry-forward)

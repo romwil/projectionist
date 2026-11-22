@@ -210,7 +210,7 @@ def open_playback_session(
     payload: PlaybackSessionPayload,
     user=Depends(get_current_user_dep),
 ) -> dict[str, Any]:
-    """Open an engine session. Remux and direct plans get a token URL. Other plans record why.
+    """Open an engine session. Remux, direct, and audio-only plans get a token URL.
 
     A client that does not set ``engine_opt_in`` gets the library path. No probe,
     no remux, and no playlist URL.

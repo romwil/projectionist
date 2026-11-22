@@ -1,9 +1,9 @@
 """Choose the cheapest plan a device can play, and say why.
 
 Order: direct, remux, audio transcode, full transcode, Plex fallback.
-Audio and full transcode are named here so the dry-run is honest. Serving
-them waits for ENG-006. ENG-003 serves remux (and direct is a file plan,
-not a transcode).
+ENG-003 serves remux (direct is a file plan, not a transcode). ENG-012
+serves audio by copying the video and encoding the audio. A full transcode
+stays on the Plex path until a later tier can serve it.
 """
 
 from __future__ import annotations
@@ -220,7 +220,7 @@ def plan_playback(asset: MediaAsset, profile: DeviceProfile) -> dict[str, object
             "plan": "audio",
             "reason": (
                 f"{video_label} video is playable on {profile.id}; "
-                f"{audio_label} audio is not, so the audio would be transcoded ({audio_text})"
+                f"{audio_label} audio is not, so the audio is transcoded ({audio_text})"
             ),
         }
     if not video_ok:
