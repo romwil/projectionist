@@ -8,7 +8,12 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
-from projectionist.connectors.http import merge_plex_provider_ids, optional_int, request_empty, request_xml
+from projectionist.connectors.http import (
+    merge_plex_provider_ids,
+    optional_int,
+    request_empty,
+    request_xml,
+)
 
 if TYPE_CHECKING:
     from projectionist.watch_tracker.plex_history import PlexHistoryPage
@@ -248,11 +253,7 @@ class PlexSubtitleStream:
 
     def _label(self) -> str:
         base = (
-            self.display_title
-            or self.title
-            or self.language
-            or self.language_code
-            or "Subtitle"
+            self.display_title or self.title or self.language or self.language_code or "Subtitle"
         ).strip()
         tags: List[str] = []
         if self.forced:
@@ -313,9 +314,12 @@ def _plex_stream(element) -> Optional[Dict[str, Any]]:
     bit_depth = _plex_int(element.attrib.get("bitDepth"))
     if kind == "video" and bit_depth < 8 and "10" in profile.lower():
         bit_depth = 10
-    language = str(
-        element.attrib.get("languageCode") or element.attrib.get("languageTag") or ""
-    ).strip().lower()
+    language = (
+        str(element.attrib.get("languageCode") or element.attrib.get("languageTag") or "")
+        .strip()
+        .lower()
+    )
+    width, height = _plex_frame_size(element)
     return {
         "index": _plex_int(element.attrib.get("index") or element.attrib.get("id")),
         "codec_type": kind,
@@ -323,9 +327,50 @@ def _plex_stream(element) -> Optional[Dict[str, Any]]:
         "profile": profile,
         "level": str(element.attrib.get("level") or ""),
         "bit_depth": bit_depth,
-        "channels": _plex_int(element.attrib.get("channels") or element.attrib.get("audioChannels")),
+        "channels": _plex_int(
+            element.attrib.get("channels") or element.attrib.get("audioChannels")
+        ),
         "language": language,
+        "width": width,
+        "height": height,
+        "hdr": _plex_hdr(element) if kind == "video" else "",
     }
+
+
+def _plex_frame_size(element) -> tuple[int, int]:
+    width = _plex_int(element.attrib.get("width"))
+    height = _plex_int(element.attrib.get("height"))
+    if width or height:
+        return width, height
+    label = str(element.attrib.get("videoResolution") or "").strip().lower()
+    named = {
+        "4k": (3840, 2160),
+        "2160": (3840, 2160),
+        "uhd": (3840, 2160),
+        "1080": (1920, 1080),
+        "1080p": (1920, 1080),
+        "720": (1280, 720),
+        "720p": (1280, 720),
+        "480": (720, 480),
+        "sd": (720, 480),
+    }
+    return named.get(label, (0, 0))
+
+
+def _plex_hdr(element) -> str:
+    dovi = str(element.attrib.get("DOVIPresent") or "").strip().lower()
+    if dovi in {"1", "true", "yes"}:
+        return "dolby-vision"
+    transfer = (
+        str(element.attrib.get("colorTrc") or element.attrib.get("colorTransfer") or "")
+        .strip()
+        .lower()
+    )
+    if transfer == "smpte2084":
+        return "hdr10"
+    if transfer == "arib-std-b67":
+        return "hlg"
+    return ""
 
 
 def title_streams_from_element(element) -> Optional[Dict[str, Any]]:
@@ -357,6 +402,7 @@ def title_streams_from_element(element) -> Optional[Dict[str, Any]]:
         audio = str(media.attrib.get("audioCodec") or "").strip().lower()
         profile = str(media.attrib.get("videoProfile") or "")
         if video:
+            width, height = _plex_frame_size(media)
             streams.append(
                 {
                     "index": 0,
@@ -367,6 +413,9 @@ def title_streams_from_element(element) -> Optional[Dict[str, Any]]:
                     "bit_depth": 10 if "10" in profile.lower() else 0,
                     "channels": 0,
                     "language": "",
+                    "width": width,
+                    "height": height,
+                    "hdr": _plex_hdr(media),
                 }
             )
         if audio:
@@ -380,10 +429,24 @@ def title_streams_from_element(element) -> Optional[Dict[str, Any]]:
                     "bit_depth": 0,
                     "channels": _plex_int(media.attrib.get("audioChannels")),
                     "language": "",
+                    "width": 0,
+                    "height": 0,
+                    "hdr": "",
                 }
             )
     if not streams:
         return None
+    frame_width, frame_height = _plex_frame_size(media)
+    frame_hdr = _plex_hdr(media)
+    for stream in streams:
+        if stream.get("codec_type") != "video":
+            continue
+        if not stream.get("width") and frame_width:
+            stream["width"] = frame_width
+        if not stream.get("height") and frame_height:
+            stream["height"] = frame_height
+        if not stream.get("hdr") and frame_hdr:
+            stream["hdr"] = frame_hdr
     return {
         "rating_key": rating_key,
         "title": str(element.attrib.get("title") or ""),
@@ -613,11 +676,7 @@ class PlexClient:
                 continue
             rating_key = str(element.attrib.get("ratingKey") or "").strip()
             user = element.find("User")
-            source_user_key = (
-                str(user.attrib.get("id") or "").strip()
-                if user is not None
-                else ""
-            )
+            source_user_key = str(user.attrib.get("id") or "").strip() if user is not None else ""
             if not rating_key or not source_user_key:
                 continue
             player = element.find("Player")
@@ -731,7 +790,9 @@ class PlexClient:
         separator = "&" if "?" in path else "?"
         return f"{self.base_url}{path}{separator}X-Plex-Token={urllib.parse.quote(self.token)}"
 
-    def _fetch_items(self, section_key: str, media_type: str, plex_type: int) -> List[PlexLibraryItem]:
+    def _fetch_items(
+        self, section_key: str, media_type: str, plex_type: int
+    ) -> List[PlexLibraryItem]:
         root = self._request_xml(
             f"/library/sections/{section_key}/all?type={plex_type}&includeGuids=1"
         )
@@ -820,9 +881,15 @@ class PlexClient:
             tvdb_id=ids.get("tvdb_id"),
             imdb_id=ids.get("imdb_id"),
             file_size=file_size,
-            season_count=optional_int(element.attrib.get("childCount")) if media_type == "show" else None,
-            leaf_count=optional_int(element.attrib.get("leafCount")) if media_type == "show" else None,
-            viewed_leaf_count=optional_int(element.attrib.get("viewedLeafCount")) if media_type == "show" else None,
+            season_count=optional_int(element.attrib.get("childCount"))
+            if media_type == "show"
+            else None,
+            leaf_count=optional_int(element.attrib.get("leafCount"))
+            if media_type == "show"
+            else None,
+            viewed_leaf_count=optional_int(element.attrib.get("viewedLeafCount"))
+            if media_type == "show"
+            else None,
             user_rating_stars=plex_rating_to_stars(optional_int(element.attrib.get("userRating"))),
         )
 
@@ -1108,9 +1175,7 @@ class PlexClient:
                 "forced": int(forced),
             }
         )
-        root = self._request_xml(
-            f"/library/metadata/{urllib.parse.quote(key)}/subtitles?{query}"
-        )
+        root = self._request_xml(f"/library/metadata/{urllib.parse.quote(key)}/subtitles?{query}")
         streams: List[PlexSubtitleStream] = []
         for element in root.findall(".//Stream"):
             parsed = self._parse_subtitle_stream(element, searchable=True)
@@ -1147,7 +1212,9 @@ class PlexClient:
             return response.read()
 
     @staticmethod
-    def _parse_subtitle_stream(element, *, searchable: bool = False) -> Optional[PlexSubtitleStream]:
+    def _parse_subtitle_stream(
+        element, *, searchable: bool = False
+    ) -> Optional[PlexSubtitleStream]:
         stream_id = str(
             element.attrib.get("id")
             or element.attrib.get("streamKey")
@@ -1157,11 +1224,11 @@ class PlexClient:
         key = str(element.attrib.get("key") or "").strip()
         if not stream_id and not key:
             return None
-        lang_code = str(
-            element.attrib.get("languageCode")
-            or element.attrib.get("languageTag")
-            or ""
-        ).strip().lower()
+        lang_code = (
+            str(element.attrib.get("languageCode") or element.attrib.get("languageTag") or "")
+            .strip()
+            .lower()
+        )
         language = str(element.attrib.get("language") or lang_code or "").strip()
         return PlexSubtitleStream(
             id=stream_id or key,
@@ -1169,7 +1236,9 @@ class PlexClient:
             language_code=lang_code,
             title=str(element.attrib.get("title") or "").strip(),
             display_title=str(element.attrib.get("displayTitle") or "").strip(),
-            format=str(element.attrib.get("format") or element.attrib.get("codec") or "").strip().lower(),
+            format=str(element.attrib.get("format") or element.attrib.get("codec") or "")
+            .strip()
+            .lower(),
             key=key,
             forced=str(element.attrib.get("forced") or "0") in {"1", "true", "True"},
             hearing_impaired=str(element.attrib.get("hearingImpaired") or "0")

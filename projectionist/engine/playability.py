@@ -203,6 +203,86 @@ def _safe_reason(reason: str, asset: MediaAsset) -> str:
     return text
 
 
+_SOURCE_REASONS = ("codec", "level", "bit_depth", "resolution", "hdr")
+
+
+def empty_source_breakdown() -> dict[str, int]:
+    """Why a title is in the source-transcode bucket, plus size and HDR inside it.
+
+    Codec, level, and bit depth are the planner's reason and add up to
+    ``video_transcode`` when every title has one of those. Resolution and HDR
+    count titles in that same bucket that are above 1080p or carry HDR, so a
+    4K HEVC title can be both ``codec`` and ``resolution``.
+    """
+    return {name: 0 for name in ("video_transcode", *_SOURCE_REASONS)}
+
+
+def source_block_reason(answer: str) -> str:
+    """The planner's video answer, as one of codec, level, or bit depth."""
+    text = str(answer or "").lower()
+    if "not in profile" in text:
+        return "codec"
+    if "bit" in text and "above" in text:
+        return "bit_depth"
+    if "level is above" in text:
+        return "level"
+    return ""
+
+
+def _video_stream(asset: MediaAsset):
+    if asset.probe is None:
+        return None
+    for stream in asset.probe.streams:
+        if stream.codec_type == "video":
+            return stream
+    return None
+
+
+def _above_1080p(stream) -> bool:
+    if stream is None:
+        return False
+    return (
+        int(getattr(stream, "height", 0) or 0) > 1080
+        or int(getattr(stream, "width", 0) or 0) > 1920
+    )
+
+
+def source_transcode_breakdown(rows: Sequence[Mapping[str, Any]]) -> dict[str, int]:
+    counts = empty_source_breakdown()
+    for row in rows:
+        if str(row.get("tier") or "") != TIER_SOURCE:
+            continue
+        counts["video_transcode"] += 1
+        reason = str(row.get("source_reason") or "")
+        if reason not in {"codec", "level", "bit_depth"}:
+            reason = "codec"
+        counts[reason] += 1
+        if row.get("above_1080p"):
+            counts["resolution"] += 1
+        if row.get("video_hdr"):
+            counts["hdr"] += 1
+    return counts
+
+
+def gpu_decision(profiles: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """How many titles need a video transcode on Safari and on Apple TV.
+
+    A missing profile stays null so a browser-only refresh does not claim
+    that device needs zero titles.
+    """
+    found: dict[str, Optional[int]] = {"safari": None, "apple_tv": None}
+    for block in profiles:
+        if not isinstance(block, dict):
+            continue
+        profile_id = str(block.get("profile") or "")
+        count = int((block.get("source_breakdown") or {}).get("video_transcode") or 0)
+        if profile_id == "safari":
+            found["safari"] = count
+        elif profile_id == "apple-tv-4k-3":
+            found["apple_tv"] = count
+    return found
+
+
 def _tier_for_plan(plan: str) -> str:
     if plan == "direct":
         return TIER_DIRECT
@@ -254,6 +334,8 @@ def classify_title(
     answer: dict[str, object] = {}
     if isinstance(answer_raw, dict):
         answer = answer_raw
+    video = _video_stream(asset)
+    video_answer = str(answer.get("video") or "")
     return {
         "rating_key": str(asset.rating_key or ""),
         "title": str(title or ""),
@@ -262,9 +344,12 @@ def classify_title(
         "plan": plan,
         "reason": reason,
         "profile_answer": {
-            "video": str(answer.get("video") or ""),
+            "video": video_answer,
             "audio": str(answer.get("audio") or ""),
         },
+        "source_reason": source_block_reason(video_answer) if tier == TIER_SOURCE else "",
+        "above_1080p": _above_1080p(video),
+        "video_hdr": bool(video is not None and str(getattr(video, "hdr", "") or "").strip()),
     }
 
 
@@ -312,6 +397,7 @@ def summarize_profile(
         "top_reasons": _top_reasons(rows),
         "titles": [dict(row) for row in rows],
         "hardware": hardware_sentence(int(shares[TIER_SOURCE]["count"])),
+        "source_breakdown": source_transcode_breakdown(rows),
     }
 
 
@@ -361,6 +447,7 @@ def build_playability_report(
         "message": message,
         "title_count": len(titles),
         "profiles": profiles_out,
+        "gpu": gpu_decision(profiles_out),
     }
 
 
@@ -601,9 +688,12 @@ def asset_from_plex_row(row: Mapping[str, Any]) -> MediaAsset:
                 codec_type=kind,
                 codec=codec,
                 language=str(raw.get("language") or ""),
+                width=int(raw.get("width") or 0),
+                height=int(raw.get("height") or 0),
                 channels=int(raw.get("channels") or 0),
                 profile=str(raw.get("profile") or ""),
                 level=str(raw.get("level") or ""),
+                hdr=str(raw.get("hdr") or "") if kind == "video" else "",
                 bit_depth=int(raw.get("bit_depth") or 0),
                 subtitle_kind=subtitle_kind(codec) if kind == "subtitle" else "",
             )
@@ -690,9 +780,17 @@ def _apply_confirmed_title(
         block["top_reasons"] = _top_reasons(rows)
         block["title_count"] = len(rows)
         block["hardware"] = hardware_sentence(int(shares[TIER_SOURCE]["count"]))
+        block["source_breakdown"] = source_transcode_breakdown(rows)
+    report["gpu"] = gpu_decision(
+        [block for block in report.get("profiles") or [] if isinstance(block, dict)]
+    )
     report["confirmed_by_ffprobe"] = len(_confirmed_keys(report))
     report["title_count"] = max(
-        (int(block.get("title_count") or 0) for block in report.get("profiles") or [] if isinstance(block, dict)),
+        (
+            int(block.get("title_count") or 0)
+            for block in report.get("profiles") or []
+            if isinstance(block, dict)
+        ),
         default=0,
     )
 
@@ -713,7 +811,11 @@ def _run_owner_report(
     resume = bool(current.get("planned_from_plex")) and not current.get("complete")
     chosen = list(profiles)
     if resume and current.get("profile_specs"):
-        chosen = [profile_from_mapping(spec) for spec in current["profile_specs"] if isinstance(spec, dict)]
+        chosen = [
+            profile_from_mapping(spec)
+            for spec in current["profile_specs"]
+            if isinstance(spec, dict)
+        ]
     report = dict(current) if resume else empty_playability_report()
     report["running"] = True
     report["phase"] = "plex-metadata" if not resume else "ffprobe"
@@ -788,7 +890,11 @@ def _run_owner_report(
                 continue
             key = str(row.get("rating_key") or "")
             if key and key not in known_keys:
-                order.append(LibraryTitle(rating_key=key, title=str(row.get("title") or ""), title_language=""))
+                order.append(
+                    LibraryTitle(
+                        rating_key=key, title=str(row.get("title") or ""), title_language=""
+                    )
+                )
                 known_keys.add(key)
         break
     stopped = False
@@ -842,8 +948,7 @@ def _run_owner_report(
         planned = int(report.get("planned_from_plex") or 0)
         confirmed = int(report.get("confirmed_by_ffprobe") or 0)
         report["message"] = (
-            f"Planned {planned} titles from Plex metadata. "
-            f"Confirmed {confirmed} with ffprobe."
+            f"Planned {planned} titles from Plex metadata. Confirmed {confirmed} with ffprobe."
         )
     save_playability_report(root, report)
     return report

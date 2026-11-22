@@ -49,6 +49,49 @@ class PlexStreamCatalogTests(unittest.TestCase):
         self.assertEqual(row["streams"][0]["profile"], "Main 10")
         self.assertEqual(row["streams"][2]["codec"], "subrip")
 
+    def test_a_listing_keeps_frame_size_and_hdr_without_ffprobe(self) -> None:
+        from projectionist.connectors.plex import title_streams_from_element
+
+        element = ET.fromstring(
+            """
+            <Video ratingKey="161000" title="A large film">
+              <Media container="mkv" videoResolution="4k" colorTrc="smpte2084">
+                <Part>
+                  <Stream streamType="1" codec="hevc" profile="Main 10" level="153"
+                          bitDepth="10" width="3840" height="2160" DOVIPresent="1" index="0" />
+                  <Stream streamType="2" codec="eac3" channels="6" index="1" />
+                </Part>
+              </Media>
+            </Video>
+            """
+        )
+        row = title_streams_from_element(element)
+        video = row["streams"][0]
+        self.assertEqual(video["width"], 3840)
+        self.assertEqual(video["height"], 2160)
+        self.assertEqual(video["hdr"], "dolby-vision")
+
+        listed = ET.fromstring(
+            """
+            <Video ratingKey="161001" title="Resolution only">
+              <Media container="mkv" videoResolution="1080" />
+            </Video>
+            """
+        )
+        # No stream list, so there is nothing to plan. The Media-only fallback
+        # needs a video codec. This one has neither, and stays empty.
+        self.assertIsNone(title_streams_from_element(listed))
+        fallback = ET.fromstring(
+            """
+            <Video ratingKey="161002" title="Codec on the media">
+              <Media container="mkv" videoCodec="hevc" videoResolution="4k" colorTrc="smpte2084" />
+            </Video>
+            """
+        )
+        media_row = title_streams_from_element(fallback)
+        self.assertEqual(media_row["streams"][0]["height"], 2160)
+        self.assertEqual(media_row["streams"][0]["hdr"], "hdr10")
+
 
 class PlexSubtitleClientTests(unittest.TestCase):
     def _client(self) -> PlexClient:
@@ -157,12 +200,15 @@ class SubtitleServiceTests(unittest.TestCase):
         )
         client = PlexClient("http://plex.test:32400", "token")
         lists = [[pgs], [pgs, attached]]
-        with patch(
-            "projectionist.library.subtitles.plex_client_from_settings",
-            return_value=client,
-        ), patch.object(client, "list_subtitle_streams", side_effect=lists), patch.object(
-            client, "search_subtitles", return_value=[srt]
-        ) as search, patch.object(client, "download_subtitle") as download:
+        with (
+            patch(
+                "projectionist.library.subtitles.plex_client_from_settings",
+                return_value=client,
+            ),
+            patch.object(client, "list_subtitle_streams", side_effect=lists),
+            patch.object(client, "search_subtitles", return_value=[srt]) as search,
+            patch.object(client, "download_subtitle") as download,
+        ):
             result = download_preferred_subtitles(_Settings(), "42")
         self.assertTrue(result["ok"])
         self.assertTrue(result["downloaded"])
@@ -190,11 +236,13 @@ class SubtitleServiceTests(unittest.TestCase):
         settings = _Settings()
         client = PlexClient("http://plex.test:32400", "token")
 
-        with patch(
-            "projectionist.library.subtitles.plex_client_from_settings",
-            return_value=client,
-        ), patch.object(client, "list_subtitle_streams", return_value=[]), patch.object(
-            client, "search_subtitles", return_value=[]
+        with (
+            patch(
+                "projectionist.library.subtitles.plex_client_from_settings",
+                return_value=client,
+            ),
+            patch.object(client, "list_subtitle_streams", return_value=[]),
+            patch.object(client, "search_subtitles", return_value=[]),
         ):
             listed = list_item_subtitles(settings, "1")
             self.assertTrue(listed["ok"])
