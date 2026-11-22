@@ -7,6 +7,7 @@
     "test": "python -m pytest && npm run test:frontend && npm run test:e2e",
     "test:frontend": "cd frontend && npm install && npm run test:unit && npm run build",
     "test:e2e": "playwright test",
+    "test:e2e:playback": "playwright test -c playwright.playback.config.ts",
     "test:release-perf": "playwright test e2e/release-perf.spec.ts --project=chromium",
     "test:e2e:live": "E2E_MOCK_APIS=0 playwright test",
     "test:e2e:live-stack": "PROJECTIONIST_E2E_LIVE=1 E2E_MOCK_APIS=0 playwright test e2e/live.spec.ts",

@@ -77,6 +77,20 @@ def identity_from_db(db: Any, rating_key: str) -> dict[str, Any]:
     return {"tmdb_id": tmdb, "imdb_id": str(imdb or "")}
 
 
+def household_media_source(settings: Settings, db: Any):
+    """The source for this process.
+
+    A fixture directory is the automated playback test. It never calls Plex.
+    Every other process uses the household Plex source.
+    """
+    from projectionist.engine.fixture_source import try_fixture_media_source
+
+    fixture = try_fixture_media_source()
+    if fixture is not None:
+        return fixture
+    return plex_media_source(settings, db)
+
+
 def plex_media_source(settings: Settings, db: Any) -> PlexMediaSource:
     """The household media source. Plex is the first one that can transcode."""
     engine = getattr(settings, "engine", None)
@@ -95,7 +109,7 @@ def describe_title(
     rating_key: str,
     *,
     background: bool = False,
-    source: Optional[PlexMediaSource] = None,
+    source: Any = None,
 ):
     """Locate a title and probe it.
 
@@ -104,7 +118,7 @@ def describe_title(
     ffprobe shares the low-priority slot with extraction. Pass ``source`` when
     the same object should also answer a source-transcode plan.
     """
-    chosen = source if source is not None else plex_media_source(settings, db)
+    chosen = source if source is not None else household_media_source(settings, db)
     return chosen.locate(
         rating_key,
         cache_dir=Path(data_dir) / "engine" / "probes",
@@ -179,7 +193,7 @@ def playback_plan(
         )
     from projectionist.engine.tries import failed_try_keys
 
-    source = plex_media_source(_settings(), _db())
+    source = household_media_source(_settings(), _db())
     asset = describe_title(_settings(), _db(), _dir(), key, source=source)
     body = plan_playback(
         asset,
@@ -260,7 +274,7 @@ def open_playback_session(
         raise HTTPException(status_code=error.status_code, detail=error.message) from error
     except PlaybackError as error:
         raise HTTPException(status_code=error.status_code, detail=error.message) from error
-    source = plex_media_source(_settings(), _db())
+    source = household_media_source(_settings(), _db())
     asset = describe_title(
         _settings(),
         _db(),
