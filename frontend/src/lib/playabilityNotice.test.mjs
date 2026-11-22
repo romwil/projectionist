@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { playabilityNotice } from "./playabilityNotice.ts";
+import { gpuDecisionLine, playabilityNotice, sourceBreakdownLine } from "./playabilityNotice.ts";
 
 const STOPPED = "The walk stopped early. Refresh to finish the library.";
 
@@ -40,5 +40,33 @@ test("a finished report with rows does not repeat the summary as an empty state"
       profiles: [{ profile: "safari", title_count: 4 }],
     }),
     "",
+  );
+});
+
+test("the source-transcode breakdown names codec, level, bit depth, size, and HDR", () => {
+  assert.equal(sourceBreakdownLine(null), "");
+  assert.equal(sourceBreakdownLine({ video_transcode: 0 }), "");
+  assert.equal(
+    sourceBreakdownLine({
+      video_transcode: 9506,
+      codec: 8000,
+      level: 1000,
+      bit_depth: 506,
+      resolution: 3000,
+      hdr: 1200,
+    }),
+    "Video transcode 9506: codec 8000, level 1000, bit depth 506. Above 1080p 3000. HDR 1200.",
+  );
+});
+
+test("the GPU line is the Safari and Apple TV video-transcode counts", () => {
+  assert.equal(gpuDecisionLine(null), "");
+  assert.equal(
+    gpuDecisionLine({ safari: 40, apple_tv: 12 }),
+    "Safari would need a video transcode for 40 titles. Apple TV would need a video transcode for 12 titles.",
+  );
+  assert.equal(
+    gpuDecisionLine({ safari: 0, apple_tv: null }),
+    "Safari would need a video transcode for 0 titles.",
   );
 });
