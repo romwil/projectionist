@@ -159,6 +159,43 @@ class TranscodeStartCircuitTests(unittest.TestCase):
         self.assertEqual(calls["subtitles"], 1)
         self.assertEqual(calls["next_start"], 1)
 
+    def test_a_metadata_timeout_does_not_open_the_breaker_or_block_the_next_title(self) -> None:
+        """Marriage Story's metadata lookups timed out while no start was held.
+
+        Those three timeouts used to open the host breaker. The next title
+        then could not ask Plex for anything. A failed /identity still opens it.
+        """
+        metadata = f"{PLEX}/library/metadata/{MARRIAGE}"
+        identity = f"{PLEX}/identity"
+        zatoichi = _start_url(ZATOICHI)
+        calls = {"next": 0}
+
+        def fake_open(request, timeout=30):  # noqa: ARG001
+            url = str(getattr(request, "full_url", request) or "")
+            if url.startswith(metadata):
+                raise TimeoutError("timed out")
+            if "/identity" in url:
+                raise TimeoutError("timed out")
+            if "start.m3u8" in url and ZATOICHI in url:
+                calls["next"] += 1
+                return _Body(b"#EXTM3U\n", url=url)
+            raise AssertionError(f"unexpected url {url}")
+
+        with (
+            patch("urllib.request.urlopen", side_effect=fake_open),
+            patch("projectionist.library.playback.urlopen", side_effect=fake_open),
+        ):
+            for _ in range(QUARANTINE_THRESHOLD):
+                with self.assertRaises(Exception):
+                    request_xml(metadata, timeout=8)
+            self.assertFalse(host_circuits.is_open(PLEX))
+            fetch_plex_bytes(zatoichi, timeout=30)
+            self.assertEqual(calls["next"], 1)
+            for _ in range(QUARANTINE_THRESHOLD):
+                with self.assertRaises(Exception):
+                    request_xml(identity, timeout=2)
+            self.assertTrue(host_circuits.is_open(PLEX))
+
     def test_a_refused_connection_still_opens_the_shared_breaker(self) -> None:
         """A Plex that is not accepting connections is still an outage, even
         while one title's transcode start is waiting.

@@ -8,12 +8,17 @@ another machine.
 
 from __future__ import annotations
 
+import json
+import logging
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
 
 from projectionist.engine.pathmap import map_plex_path
 from projectionist.engine.probe import ProbeResult, probe_file
+
+logger = logging.getLogger(__name__)
 
 
 def plex_lookup_reason(error: BaseException) -> str:
@@ -123,6 +128,50 @@ def public_media(asset: MediaAsset) -> dict[str, Any]:
     }
 
 
+def location_cache_file(cache_dir: Path, rating_key: str) -> Path:
+    """Where a resolved path is remembered, beside the probe cache."""
+    safe = "".join(ch for ch in str(rating_key or "") if ch.isalnum() or ch in "._-")
+    return Path(cache_dir).parent / "locations" / f"{safe or 'title'}.json"
+
+
+def read_location(cache_dir: Optional[Path], rating_key: str) -> Optional[dict[str, Any]]:
+    if cache_dir is None:
+        return None
+    path = location_cache_file(Path(cache_dir), rating_key)
+    if not path.is_file():
+        return None
+    try:
+        blob = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(blob, dict):
+        return None
+    return blob
+
+
+def write_location(cache_dir: Path, rating_key: str, *, source_path: str, local_path: str) -> None:
+    path = location_cache_file(cache_dir, rating_key)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        stat = Path(local_path).stat()
+        size = int(stat.st_size)
+        mtime_ns = int(stat.st_mtime_ns)
+    except OSError:
+        size = -1
+        mtime_ns = -1
+    path.write_text(
+        json.dumps(
+            {
+                "source_path": source_path,
+                "local_path": local_path,
+                "size": size,
+                "mtime_ns": mtime_ns,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 class PlexMediaSource:
     def __init__(
         self,
@@ -153,12 +202,105 @@ class PlexMediaSource:
         except OSError:
             return False
 
+    def _probe_asset(
+        self,
+        *,
+        key: str,
+        source_path: str,
+        local: str,
+        identity: dict[str, Any],
+        probe_kwargs: dict[str, Any],
+    ) -> MediaAsset:
+        probe: Optional[ProbeResult] = None
+        reason = ""
+        try:
+            probe = self.probe(local, **probe_kwargs) if probe_kwargs else self.probe(local)
+        except Exception:  # noqa: BLE001 — a readable file can still fail to probe
+            reason = "Could not read streams for this file"
+        return MediaAsset(
+            rating_key=key,
+            source_path=source_path,
+            local_path=local,
+            readable=True,
+            reason=reason,
+            identity=identity,
+            probe=probe,
+        )
+
+    def _cached_asset(
+        self,
+        key: str,
+        identity: dict[str, Any],
+        probe_kwargs: dict[str, Any],
+    ) -> Optional[MediaAsset]:
+        cache_dir = probe_kwargs.get("cache_dir")
+        saved = read_location(cache_dir, key)
+        if not saved:
+            return None
+        local = str(saved.get("local_path") or "")
+        source_path = str(saved.get("source_path") or "")
+        if not local or not self._exists(local):
+            return None
+        try:
+            stat = Path(local).stat()
+            same = int(saved.get("size") or -1) == int(stat.st_size) and int(
+                saved.get("mtime_ns") or -1
+            ) == int(stat.st_mtime_ns)
+        except OSError:
+            return None
+        if not same:
+            return None
+        self._refresh_location(key, cache_dir)
+        return self._probe_asset(
+            key=key,
+            source_path=source_path,
+            local=local,
+            identity=identity,
+            probe_kwargs=probe_kwargs,
+        )
+
+    def _refresh_location(self, rating_key: str, cache_dir: Any) -> None:
+        """Ask Plex again after the play has already started from the cache."""
+        if cache_dir is None:
+            return
+
+        def work() -> None:
+            try:
+                paths = [
+                    str(item).strip()
+                    for item in (self.path_lookup(rating_key) or [])
+                    if str(item).strip()
+                ]
+            except Exception:  # noqa: BLE001 — a refresh must not affect the play
+                logger.debug("engine path refresh failed key=%s", rating_key, exc_info=True)
+                return
+            if not paths:
+                return
+            source_path = paths[0]
+            mapped = map_plex_path(source_path, self.mappings)
+            local = mapped if mapped is not None else source_path
+            if not self._exists(local):
+                return
+            try:
+                write_location(Path(cache_dir), rating_key, source_path=source_path, local_path=local)
+            except OSError:
+                logger.debug("engine path refresh could not be stored", exc_info=True)
+
+        threading.Thread(
+            target=work,
+            name=f"projectionist-path-refresh-{rating_key}",
+            daemon=True,
+        ).start()
+
     def locate(self, rating_key: str, **probe_kwargs: Any) -> MediaAsset:
         key = str(rating_key or "").strip()
         try:
             identity = dict(self.identity_lookup(key) or {})
         except Exception:  # noqa: BLE001 — identity is optional
             identity = {}
+        cached = self._cached_asset(key, identity, probe_kwargs)
+        if cached is not None:
+            return cached
         try:
             paths = [str(item).strip() for item in (self.path_lookup(key) or []) if str(item).strip()]
         except Exception as error:  # noqa: BLE001 — Plex failures become an unread file
@@ -199,18 +341,16 @@ class PlexMediaSource:
                     reason="No path mapping for this file",
                     identity=identity,
                 )
-        probe: Optional[ProbeResult] = None
-        reason = ""
-        try:
-            probe = self.probe(local, **probe_kwargs) if probe_kwargs else self.probe(local)
-        except Exception:  # noqa: BLE001 — a readable file can still fail to probe
-            reason = "Could not read streams for this file"
-        return MediaAsset(
-            rating_key=key,
+        cache_dir = probe_kwargs.get("cache_dir")
+        if cache_dir is not None and local:
+            try:
+                write_location(Path(cache_dir), key, source_path=source_path, local_path=local)
+            except OSError:
+                logger.debug("engine path cache could not be stored", exc_info=True)
+        return self._probe_asset(
+            key=key,
             source_path=source_path,
-            local_path=local,
-            readable=True,
-            reason=reason,
+            local=local,
             identity=identity,
-            probe=probe,
+            probe_kwargs=probe_kwargs,
         )

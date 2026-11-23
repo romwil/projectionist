@@ -408,7 +408,10 @@ class AudioTranscodeTests(unittest.TestCase):
             finished.wait(2)
             command = list(seen["cmd"])
             self.assertEqual(command[:6], ["nice", "-n", "19", "ionice", "-c", "3"])
-            self.assertIn("-c:v", command)
-            self.assertEqual(command[command.index("-c:v") + 1], "copy")
-            self.assertNotIn("libx264", command)
+            self.assertIn("projectionist.engine.copied_hls", command)
+            from projectionist.engine.audio import audio_transcode_command
+
+            inner = audio_transcode_command("ffmpeg", media, "aac", output="frag")
+            self.assertEqual(inner[inner.index("-c:v") + 1], "copy")
+            self.assertNotIn("libx264", inner)
             self.assertTrue(seen.get("terminated"))

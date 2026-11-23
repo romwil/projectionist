@@ -76,6 +76,7 @@ def audio_transcode_command(
     *,
     channels: int = 0,
     max_channels: int = 0,
+    output: str = "hls",
 ) -> list[str]:
     """Copy video, encode audio, package fMP4 HLS. Never a video encoder.
 
@@ -100,23 +101,38 @@ def audio_transcode_command(
     ]
     if audio_codec == "aac":
         command.extend(_aac_layout_flags(channels, max_channels=max_channels))
-    command.extend(
-        [
-            "-f",
-            "hls",
-            "-hls_time",
-            "6",
-            "-hls_playlist_type",
-            "event",
-            "-hls_segment_type",
-            "fmp4",
-            "-hls_fmp4_init_filename",
-            "init.mp4",
-            "-hls_segment_filename",
-            "seg_%04d.m4s",
-            "stream.m3u8",
-        ]
-    )
+    if output == "frag":
+        # One fragmented MP4 on stdout. The packer cuts a new HLS segment only
+        # where the picture is an IDR, then writes the playlist beside it.
+        command.extend(
+            [
+                "-f",
+                "mp4",
+                "-movflags",
+                "frag_keyframe+empty_moov+default_base_moof",
+                "-frag_duration",
+                "0",
+                "pipe:1",
+            ]
+        )
+    else:
+        command.extend(
+            [
+                "-f",
+                "hls",
+                "-hls_time",
+                "6",
+                "-hls_playlist_type",
+                "event",
+                "-hls_segment_type",
+                "fmp4",
+                "-hls_fmp4_init_filename",
+                "init.mp4",
+                "-hls_segment_filename",
+                "seg_%04d.m4s",
+                "stream.m3u8",
+            ]
+        )
     return command
 
 
@@ -186,10 +202,25 @@ def start_audio_transcode(
         return
     if not binary:
         raise FileNotFoundError("ffmpeg is not available")
+    from projectionist.engine.copied_hls import copied_hls_command
     from projectionist.engine.media_slot import spawn_heavy
+    from projectionist.engine.planner import canonical_codec
 
+    video_codec = "h264"
+    if probe is not None:
+        for stream in probe.streams:
+            if stream.codec_type == "video" and stream.codec:
+                video_codec = canonical_codec(stream.codec)
+                break
     spawn_heavy(
-        argv,
+        copied_hls_command(
+            binary,
+            source,
+            audio_codec,
+            channels=source_channels,
+            max_channels=max_channels,
+            video_codec=video_codec,
+        ),
         cwd=str(av),
         still_wanted=still_wanted or (lambda: True),
         attach=attach or (lambda _process: True),

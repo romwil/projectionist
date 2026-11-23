@@ -134,9 +134,15 @@ class PlaybackSession:
     # Picture facts for the start timeout. Empty when Plex did not say.
     video_codec: str = ""
     video_profile: str = ""
+    video_level: str = ""
     video_bit_depth: int = 0
     video_width: int = 0
     video_height: int = 0
+    # Codecs the browser said it can play, sent to Plex on the library path.
+    # Empty keeps Plex's own profile. ``copy_video`` asks for a direct stream
+    # of the picture instead of a video transcode.
+    video_codecs: str = ""
+    copy_video: bool = False
 
 
 _sessions: Dict[str, PlaybackSession] = {}
@@ -442,6 +448,50 @@ def plex_identity_headers(token: str) -> Dict[str, str]:
     }
 
 
+def direct_stream_choice(
+    profile: Any,
+    video_codec: str,
+    *,
+    bit_depth: int = 0,
+    level: str = "",
+    video_profile: str = "",
+) -> tuple[str, bool]:
+    """Codecs to name on the Plex start, and whether the picture should be copied.
+
+    A profile that can play the source video asks Plex for a direct stream.
+    A profile that cannot, or that would only try a higher level, names the
+    codecs it can play so Plex transcodes the picture. No profile leaves the
+    decision to Plex.
+    """
+    codec = str(video_codec or "").strip().lower()
+    if profile is None or not codec:
+        return "", False
+    from projectionist.engine.planner import _video_decision, canonical_codec
+    from projectionist.engine.probe import MediaStream
+
+    stream = MediaStream(
+        index=0,
+        codec_type="video",
+        codec=codec,
+        profile=str(video_profile or ""),
+        level=str(level or ""),
+        bit_depth=int(bit_depth or 0),
+    )
+    decision, _reason = _video_decision(stream, list(getattr(profile, "video", []) or []))
+    names: list[str] = []
+    for cap in getattr(profile, "video", []) or []:
+        name = canonical_codec(getattr(cap, "codec", ""))
+        if name and name not in names:
+            names.append(name)
+    source = canonical_codec(codec)
+    if decision != "play":
+        transcode = [name for name in names if name != source]
+        return ",".join(transcode) or "h264", False
+    if source and source not in names:
+        names.insert(0, source)
+    return ",".join(names), True
+
+
 def universal_start_url(
     plex_base: str,
     rating_key: str,
@@ -449,6 +499,8 @@ def universal_start_url(
     session_id: str,
     offset_seconds: float = 0,
     subtitle_stream_id: Optional[str] = None,
+    video_codecs: str = "",
+    copy_video: bool = False,
 ) -> str:
     base = str(plex_base or "").strip().rstrip("/")
     burn_id = normalize_burn_in_stream_id(subtitle_stream_id)
@@ -476,6 +528,15 @@ def universal_start_url(
         "X-Plex-Device": "Web",
         "X-Plex-Device-Name": "Projectionist",
     }
+    codecs = str(video_codecs or "").strip()
+    if codecs:
+        params["videoCodec"] = codecs
+    if copy_video:
+        # A high ceiling keeps Plex from transcoding a 4K picture the browser
+        # can already decode. Audio still transcodes when directStreamAudio
+        # cannot copy it.
+        params["maxVideoBitrate"] = "200000"
+        params["autoAdjustQuality"] = "0"
     if burn_id:
         params["subtitleStreamID"] = burn_id
         params["advancedSubtitles"] = "burn"
@@ -510,6 +571,7 @@ def start_timeout_seconds(session: PlaybackSession) -> int:
 def _apply_video_facts(session: PlaybackSession, facts: Mapping[str, Any]) -> None:
     session.video_codec = str(facts.get("codec") or "")
     session.video_profile = str(facts.get("profile") or "")
+    session.video_level = str(facts.get("level") or "")
     try:
         session.video_bit_depth = int(facts.get("bit_depth") or 0)
         session.video_width = int(facts.get("width") or 0)
@@ -1107,6 +1169,8 @@ def start_plex_hls(
         session_id=session.session_id,
         offset_seconds=offset_seconds,
         subtitle_stream_id=session.subtitle_stream_id,
+        video_codecs=session.video_codecs,
+        copy_video=session.copy_video,
     )
     fetch(
         url,
@@ -1139,6 +1203,20 @@ def session_public_payload(session: PlaybackSession, *, can_resume: Optional[boo
     }
 
 
+def _playback_profile(raw: Any) -> Any:
+    if raw is None or raw == "":
+        return None
+    from projectionist.engine.profiles import named_profile, profile_from_mapping
+
+    if isinstance(raw, str):
+        return named_profile(raw)
+    if isinstance(raw, dict):
+        return profile_from_mapping(raw)
+    if getattr(raw, "video", None) is not None:
+        return raw
+    return None
+
+
 def start_playback(
     db: Any,
     settings: Any,
@@ -1148,6 +1226,7 @@ def start_playback(
     start_over: bool = False,
     offset_ms: Optional[int] = None,
     fetch: Optional[FetchFn] = None,
+    profile: Any = None,
 ) -> Dict[str, Any]:
     fetch = fetch or fetch_plex_bytes
     playable = resolve_playable_item(db, rating_key)
@@ -1217,6 +1296,15 @@ def start_playback(
             last_offset_s=offset_ms / 1000.0,
         )
         _apply_video_facts(session, facts)
+        codecs, copy_video = direct_stream_choice(
+            _playback_profile(profile),
+            session.video_codec,
+            bit_depth=session.video_bit_depth,
+            level=session.video_level,
+            video_profile=session.video_profile,
+        )
+        session.video_codecs = codecs
+        session.copy_video = copy_video
         start_plex_hls(session, offset_seconds=session.last_offset_s, fetch=fetch)
     _put_session(session)
     return session_public_payload(
@@ -1391,6 +1479,8 @@ def proxy_session_asset(
             session.rating_key,
             session_id=session.session_id,
             offset_seconds=session.last_offset_s,
+            video_codecs=session.video_codecs,
+            copy_video=session.copy_video,
         )
         rewrite_base = UNIVERSAL_HLS_MASTER
         variant_average = variant_average_bps(session.file_size, session.duration_ms)

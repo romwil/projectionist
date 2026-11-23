@@ -19,6 +19,7 @@ from projectionist.library.playback import (
     PlaybackSession,
     YouthBlockedError,
     assert_youth_allowed,
+    direct_stream_choice,
     plex_fetch_path,
     proxy_session_asset,
     report_progress,
@@ -452,6 +453,50 @@ class YouthAndProgressTests(unittest.TestCase):
         self.assertIn("advancedSubtitles=burn", url)
         self.assertNotIn("subtitles=none", url)
         self.assertIn("offset=90", url)
+
+    def test_a_profile_that_can_play_the_video_asks_for_a_direct_stream(self) -> None:
+        """HEVC in Chrome is copied. A profile without HEVC still asks Plex to transcode."""
+        from projectionist.engine.profiles import CHROME, SAFARI, profile_from_mapping
+
+        codecs, copy = direct_stream_choice(CHROME, "hevc", level="186", bit_depth=10)
+        self.assertTrue(copy)
+        self.assertIn("hevc", codecs.split(","))
+        url = universal_start_url(
+            "http://plex.test:32400",
+            "40984",
+            session_id="sess-direct",
+            video_codecs=codecs,
+            copy_video=copy,
+        )
+        self.assertIn("directStream=1", url)
+        self.assertIn("videoCodec=", url)
+        self.assertIn("hevc", url)
+        self.assertIn("maxVideoBitrate=200000", url)
+        h264_only = profile_from_mapping(
+            {
+                "id": "h264-only",
+                "containers": ["mp4"],
+                "video": [{"codec": "h264", "max_level": "5.2"}],
+                "audio": ["aac"],
+            }
+        )
+        transcode_codecs, transcode_copy = direct_stream_choice(h264_only, "hevc")
+        self.assertFalse(transcode_copy)
+        self.assertNotIn("hevc", transcode_codecs.split(","))
+        self.assertIn("h264", transcode_codecs.split(","))
+        transcode = universal_start_url(
+            "http://plex.test:32400",
+            "40984",
+            session_id="sess-transcode",
+            video_codecs=transcode_codecs,
+            copy_video=transcode_copy,
+        )
+        self.assertIn("videoCodec=h264", transcode)
+        self.assertNotIn("hevc", transcode)
+        self.assertNotIn("maxVideoBitrate=", transcode)
+        above, above_copy = direct_stream_choice(SAFARI, "hevc", level="186", bit_depth=10)
+        self.assertFalse(above_copy)
+        self.assertNotIn("hevc", above.split(","))
 
 
 class PlaybackStartMockTests(unittest.TestCase):

@@ -5,11 +5,11 @@ use the same class, keyed by host, so Live Channels pollers and every other
 ``request_json`` / ``request_xml`` / ``request_empty`` caller fail fast when
 Plex or Tunarr is unreachable instead of hammering the local socket.
 
-A library transcode start is a different failure. One title's start can sit
-for minutes while Plex builds a 4K or HEVC 10-bit picture, and other calls
-to that host time out behind it. Those timeouts are recorded on that title's
-start, not on the host breaker playback and subtitles share. A refused
-connection or an HTTP 5xx still opens the host breaker.
+The shared Plex breaker is a cheap health check. A timeout on a heavy call
+(a transcode start, a metadata lookup, a session list) does not count, even
+when no start is currently held. A transcode-start timeout stays on that
+title. A refused connection, or a failed ``/identity`` check, still opens
+the host breaker. An HTTP 5xx on another host still opens that host.
 """
 
 from __future__ import annotations
@@ -103,6 +103,32 @@ def failure_is_timeout(error: str) -> bool:
     """A slow answer, as opposed to a refused connection or an HTTP error."""
     text = str(error or "").strip().lower()
     return "timed out" in text or "timeout" in text
+
+
+def is_health_check_url(url: str) -> bool:
+    """Plex ``/identity``. A failure here is the shared host check."""
+    path = urllib.parse.urlparse(str(url or "").strip()).path.rstrip("/")
+    return path == "/identity" or path.endswith("/identity")
+
+
+def is_heavy_call_url(url: str) -> bool:
+    """A slow Plex call. Its timeout stays off the shared host breaker."""
+    path = urllib.parse.urlparse(str(url or "").strip()).path
+    return any(
+        marker in path
+        for marker in (
+            "transcode/universal",
+            "/library/metadata",
+            "/status/sessions",
+            "/library/sections",
+        )
+    )
+
+
+def failure_is_refused(error: str) -> bool:
+    """The host is not accepting connections."""
+    text = str(error or "").strip().lower()
+    return "connection refused" in text or "actively refused" in text or "errno 111" in text
 
 
 def is_transcode_start_url(url: str) -> bool:
@@ -206,14 +232,17 @@ class HostCircuitRegistry:
             return
         with self._lock:
             held = int(self._start_holds.get(host, 0)) > 0
-            # A start's own timeout is counted on that title. Timeouts of
-            # other calls while the start is still waiting are not an outage:
-            # Plex is busy with the picture. The host breaker stays available
-            # for the next title's playback and subtitles.
-            if failure_is_timeout(error) and (is_transcode_start_url(url) or held):
-                if not is_transcode_start_url(url):
-                    return
+            # A heavy timeout is one title being slow. It does not say the
+            # host is down. ``/identity`` does. A refused connection does.
+            # A transcode start's own timeout stays on that title so a later
+            # start of the same rating key can fail fast, without closing
+            # the breaker the next title uses.
+            if failure_is_timeout(error) and is_transcode_start_url(url):
                 key = transcode_start_key(url)
+            elif failure_is_timeout(error) and is_health_check_url(url):
+                key = host
+            elif failure_is_timeout(error) and (is_heavy_call_url(url) or held):
+                return
             else:
                 key = host
             info = self._get_locked(key)
