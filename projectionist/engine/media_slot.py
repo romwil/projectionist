@@ -62,11 +62,11 @@ def _run_subprocess(command: list[str], **kwargs: Any) -> subprocess.CompletedPr
     check = bool(kwargs.pop("check", False))
     text = bool(kwargs.pop("text", False))
     capture = bool(kwargs.pop("capture_output", False))
-    stdout = subprocess.PIPE if capture else kwargs.pop("stdout", None)
-    stderr = subprocess.PIPE if capture else kwargs.pop("stderr", None)
+    out_pipe = subprocess.PIPE if capture else kwargs.pop("stdout", None)
+    err_pipe = subprocess.PIPE if capture else kwargs.pop("stderr", None)
     cwd = kwargs.pop("cwd", None)
     kwargs.pop("input", None)
-    proc = subprocess.Popen(command, stdout=stdout, stderr=stderr, cwd=cwd)
+    proc = subprocess.Popen(command, stdout=out_pipe, stderr=err_pipe, cwd=cwd)
     _remember(proc)
     started = time.monotonic()
     try:
@@ -78,13 +78,20 @@ def _run_subprocess(command: list[str], **kwargs: Any) -> subprocess.CompletedPr
                 _stop_quiet(proc)
                 raise subprocess.TimeoutExpired(command, timeout)
             time.sleep(0.05)
-        out, err = proc.communicate()
+        raw_out, raw_err = proc.communicate()
         if text:
-            out = (out or b"").decode("utf-8", errors="replace") if isinstance(out, bytes) else (out or "")
-            err = (err or b"").decode("utf-8", errors="replace") if isinstance(err, bytes) else (err or "")
-        result = subprocess.CompletedProcess(command, int(proc.returncode or 0), out, err)
+            body: str | bytes = (
+                raw_out.decode("utf-8", errors="replace") if isinstance(raw_out, bytes) else (raw_out or "")
+            )
+            errors: str | bytes = (
+                raw_err.decode("utf-8", errors="replace") if isinstance(raw_err, bytes) else (raw_err or "")
+            )
+        else:
+            body = raw_out if raw_out is not None else b""
+            errors = raw_err if raw_err is not None else b""
+        result = subprocess.CompletedProcess(command, int(proc.returncode or 0), body, errors)
         if check and result.returncode != 0:
-            raise subprocess.CalledProcessError(result.returncode, command, out, err)
+            raise subprocess.CalledProcessError(result.returncode, command, body, errors)
         return result
     finally:
         _forget(proc)
