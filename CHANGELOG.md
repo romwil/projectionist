@@ -2,11 +2,29 @@
 
 ## [Unreleased]
 
+## [1.45.2] — 2026-11-23
+
+A slow start on one film no longer blocks the next. Play waits until the picture is ready, then starts the opening clock.
+
+### Highlights
+- **A slow film does not stop the next one.** A 4K or high-detail start can take up to four minutes. If it runs long, the next film still starts, and its captions still load.
+- **Play waits while the picture gets ready.** The opening clock starts when the picture is ready. If preparation fails, Play moves on at once.
+- **A first try that never reached the picture is remembered.** The next play uses the usual path.
+
 ### Fixed
 - A live engine session waits up to 30 seconds for `av/stream.m3u8` while ffmpeg is still starting, including an audio transcode that has not attached yet and a disk that is still spinning up. A missing or expired session is still a 404. ffmpeg exiting before the playlist exists is its own error.
-- An engine session reports `preparing`, `ready`, or `failed`. The web player leaves at once when the session has failed. The 8 second first-frame clock starts when the playlist is ready, and the whole wait stops at about 30 seconds.
+- An engine session reports `preparing`, `ready`, or `failed`. The web player leaves at once when the session has failed. The 8 second first-frame clock starts when the playlist is ready, and the whole wait stops at about 30 seconds. A missing first frame on a title that already had its soundtrack was that clock.
 - A try whose master was fetched and whose media playlist was never requested is remembered as a miss when the session stops, so the next play does not try that title again.
-- A slow library transcode start no longer opens the shared Plex circuit. One title timing out, including a 4K or HEVC 10-bit picture, leaves the next title able to play and load subtitles. A Plex that refuses connections still opens that circuit. 4K and HEVC 10-bit starts wait 240 seconds for the first playlist. Other starts stay at 120 seconds.
+- A slow library transcode start no longer opens the shared Plex circuit. One title timing out, including a 4K or HEVC 10-bit picture, leaves the next title able to play and load subtitles. A Plex that refuses connections still opens that circuit. 4K and HEVC 10-bit starts wait 240 seconds for the first playlist. Other starts stay at 120 seconds. Segment fetches stay at 30 seconds.
+
+### Verification
+- `./scripts/patch-release.sh 1.45.2` lockstep + `frontend/public/release-notes.json`.
+- `docs/api/fixtures/get-api-health.json` regenerated for 1.45.2.
+- Page speed (`npm run test:release-perf`) before Hub publish.
+- Playback fixtures CI is green on the commit that `v1.45.2` tags.
+- CI on the release PR (required checks).
+- Hub image built from tag `v1.45.2`; `org.opencontainers.image.revision` matches that commit.
+- QA `:8792` is a Hub pull of `romwil/projectionist:1.45.2` (Path B). Production stays on 1.43.1.
 
 ## [1.45.1] — 2026-11-22
 
