@@ -183,6 +183,7 @@ export default function LibraryPlayer({
   const engineCreatedAtRef = useRef(0);
   const engineReadyAtRef = useRef(0);
   const engineClockSessionRef = useRef("");
+  const engineProgressRef = useRef({ bytes: 0, playhead: -1, changedAt: 0 });
   const seekReloadArmedRef = useRef(false);
   const seekRestoreMsRef = useRef<any>(null);
   const seekRestoreAttemptedRef = useRef(false);
@@ -531,9 +532,21 @@ export default function LibraryPlayer({
       engineClockSessionRef.current = sessionId;
       engineCreatedAtRef.current = Date.now();
       engineReadyAtRef.current = 0;
+      engineProgressRef.current = { bytes: 0, playhead: -1, changedAt: Date.now() };
     }
     const phase = String(current?.state || "");
     if (phase === "ready" && !engineReadyAtRef.current) engineReadyAtRef.current = Date.now();
+    const progress = engineProgressRef.current;
+    const loaded = Number(hlsRef.current?.__bytesLoaded || 0);
+    const playhead = Number(video?.currentTime);
+    const playheadSeconds = Number.isFinite(playhead) ? playhead : 0;
+    const bytesMoved = loaded > progress.bytes;
+    const playheadMoved = progress.playhead >= 0 && Math.abs(playheadSeconds - progress.playhead) > 0.05;
+    if (progress.playhead < 0 || bytesMoved || playheadMoved) {
+      progress.changedAt = Date.now();
+    }
+    progress.bytes = loaded;
+    progress.playhead = playheadSeconds;
     return enginePlaybackClock({
       state: phase,
       sinceCreatedMs: engineCreatedAtRef.current ? Date.now() - engineCreatedAtRef.current : 0,
@@ -541,6 +554,9 @@ export default function LibraryPlayer({
       videoWidth: video?.videoWidth || 0,
       readyState: video?.readyState || 0,
       fatalError,
+      segmentBytes: loaded,
+      playheadSeconds,
+      quietMs: Date.now() - progress.changedAt,
     });
   }, []);
 
@@ -576,6 +592,7 @@ export default function LibraryPlayer({
       engineClockSessionRef.current = sessionId;
       engineCreatedAtRef.current = Date.now();
       engineReadyAtRef.current = session?.state === "ready" ? Date.now() : 0;
+      engineProgressRef.current = { bytes: 0, playhead: -1, changedAt: Date.now() };
     } else if (session?.state === "ready" && !engineReadyAtRef.current) {
       engineReadyAtRef.current = Date.now();
     }
@@ -711,6 +728,16 @@ export default function LibraryPlayer({
 
   const handleHlsRef = useCallback((hls: any) => {
     hlsRef.current = hls;
+    if (!hls || hls.__bytesHook) return;
+    hls.__bytesHook = true;
+    hls.__bytesLoaded = 0;
+    hls.on?.("hlsFragLoaded", (_event, data) => {
+      const stats = data?.frag?.stats || {};
+      const amount = Number(stats.total || stats.loaded || 0);
+      if (Number.isFinite(amount) && amount > 0) {
+        hls.__bytesLoaded = Number(hls.__bytesLoaded || 0) + amount;
+      }
+    });
   }, []);
 
   const handleVideoRef = useCallback((el: any) => {
