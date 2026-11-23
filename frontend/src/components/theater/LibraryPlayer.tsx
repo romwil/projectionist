@@ -13,10 +13,12 @@ import {
   progressLibraryPlayback,
   seekLibraryPlayback,
   setLibraryPlaybackSubtitles,
+  requestPreparedCopy,
   startLibraryPlayback,
   stopEnginePlayback,
   stopLibraryPlayback,
 } from "../../api/client";
+import { offersCopy } from "../../lib/prepareForScreen";
 import {
   chooseWebPlayback,
   detectBrowserPlaybackProfile,
@@ -1771,6 +1773,18 @@ export default function LibraryPlayer({
           >
             <p>{error}</p>
             <div className="theater-resume-actions">
+              {offersCopy(error) ? (
+                <button
+                  type="button"
+                  className="title-cta title-cta-primary"
+                  disabled={startBusy}
+                  onClick={() => {
+                    void requestPreparedCopy(key);
+                  }}
+                >
+                  Make a copy
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="title-cta title-cta-primary"

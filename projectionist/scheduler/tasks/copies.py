@@ -42,6 +42,9 @@ async def run(db: Database, settings: Settings, should_stop: Callable[[], bool])
     report = load_playability_report(data_dir)
     ahead = report.get("copy_ahead") if isinstance(report, dict) else None
     titles = ahead.get("titles") if isinstance(ahead, dict) else []
+    from projectionist.engine.copies import apply_copy_requests, load_copy_requests
+
+    titles = apply_copy_requests(list(titles or []), load_copy_requests(data_dir))
 
     def source_for(rating_key: str) -> Path:
         from projectionist.engine.routes import describe_title

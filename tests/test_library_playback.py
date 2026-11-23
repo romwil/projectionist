@@ -519,6 +519,67 @@ class PlaybackStartMockTests(unittest.TestCase):
         reset_playback_sessions()
         self._tmpdir.cleanup()
 
+    def test_an_hdr_title_is_not_tone_mapped_without_a_hardware_transcoder(self) -> None:
+        from projectionist.library.playback import PREPARE_FOR_SCREEN, PlaybackError
+
+        settings = Settings(plex_url="http://plex.test:32400", plex_token="server-token")
+        user = type("U", (), {"id": "owner", "is_youth": False})()
+        calls: list[str] = []
+        facts = {
+            "codec": "hevc",
+            "profile": "Main 10",
+            "level": "186",
+            "bit_depth": 10,
+            "hdr": "hdr10",
+            "width": 1920,
+            "height": 1080,
+        }
+        h264_only = {
+            "id": "web",
+            "containers": ["mp4"],
+            "video": [{"codec": "h264", "max_level": "5.2"}],
+            "audio": ["aac"],
+            "captions": ["webvtt"],
+            "max_channels": 2,
+        }
+
+        def fake_fetch(url, **_kwargs):
+            calls.append(url)
+            return b"#EXTM3U\n", "application/vnd.apple.mpegurl", 200, url
+
+        with patch(
+            "projectionist.library.playback.hardware_transcoder_present",
+            return_value=False,
+        ):
+            with self.assertRaises(PlaybackError) as caught:
+                start_playback(
+                    self.db,
+                    settings,
+                    rating_key="movie-1",
+                    user=user,
+                    fetch=fake_fetch,
+                    profile=h264_only,
+                    video_facts=facts,
+                )
+        self.assertEqual(str(caught.exception), PREPARE_FOR_SCREEN)
+        self.assertEqual(calls, [])
+
+        with patch(
+            "projectionist.library.playback.hardware_transcoder_present",
+            return_value=True,
+        ):
+            start_playback(
+                self.db,
+                settings,
+                rating_key="movie-1",
+                user=user,
+                fetch=fake_fetch,
+                profile=h264_only,
+                video_facts=facts,
+            )
+        self.assertTrue(any("start.m3u8" in url for url in calls))
+        self.assertTrue(any("videoCodec=h264" in url for url in calls))
+
     def test_start_returns_proxy_url_not_pms(self) -> None:
         settings = Settings(plex_url="http://plex.test:32400", plex_token="server-token")
         user = type("U", (), {"id": "owner", "is_youth": False})()
