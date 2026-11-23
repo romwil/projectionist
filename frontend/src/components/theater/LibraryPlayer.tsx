@@ -733,7 +733,7 @@ export default function LibraryPlayer({
     if (!hls || hls.__bytesHook) return;
     hls.__bytesHook = true;
     hls.__bytesLoaded = 0;
-    hls.on?.("hlsFragLoaded", (_event, data) => {
+    hls.on?.("hlsFragLoaded", (_event: any, data: any) => {
       const stats = data?.frag?.stats || {};
       const amount = Number(stats.total || stats.loaded || 0);
       if (Number.isFinite(amount) && amount > 0) {
