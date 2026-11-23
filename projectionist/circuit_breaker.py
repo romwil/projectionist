@@ -4,6 +4,12 @@ The idle scheduler quarantines tasks with this type. Connector HTTP helpers
 use the same class, keyed by host, so Live Channels pollers and every other
 ``request_json`` / ``request_xml`` / ``request_empty`` caller fail fast when
 Plex or Tunarr is unreachable instead of hammering the local socket.
+
+A library transcode start is a different failure. One title's start can sit
+for minutes while Plex builds a 4K or HEVC 10-bit picture, and other calls
+to that host time out behind it. Those timeouts are recorded on that title's
+start, not on the host breaker playback and subtitles share. A refused
+connection or an HTTP 5xx still opens the host breaker.
 """
 
 from __future__ import annotations
@@ -93,6 +99,37 @@ def host_key(url: str) -> str:
     return f"{host}:{port}" if port is not None else host
 
 
+def failure_is_timeout(error: str) -> bool:
+    """A slow answer, as opposed to a refused connection or an HTTP error."""
+    text = str(error or "").strip().lower()
+    return "timed out" in text or "timeout" in text
+
+
+def is_transcode_start_url(url: str) -> bool:
+    """Plex universal HLS start. One of these is in flight per library play."""
+    path = urllib.parse.urlparse(str(url or "").strip()).path
+    return "transcode/universal/start.m3u8" in path
+
+
+def transcode_start_title(url: str) -> str:
+    """Rating key carried on a universal start URL, or empty."""
+    query = urllib.parse.parse_qs(urllib.parse.urlparse(str(url or "").strip()).query)
+    raw = str((query.get("path") or [""])[0] or "")
+    marker = "/library/metadata/"
+    if marker not in raw:
+        return ""
+    return raw.split(marker, 1)[1].split("/", 1)[0].strip()
+
+
+def transcode_start_key(url: str) -> str:
+    """Per-title key. A slow start of one rating key does not name the host."""
+    host = host_key(url)
+    if not host:
+        return ""
+    title = transcode_start_title(url) or "unknown"
+    return f"{host}|transcode-start|{title}"
+
+
 class HostCircuitRegistry:
     """Process-wide per-host breakers shared by all connector HTTP helpers."""
 
@@ -100,6 +137,9 @@ class HostCircuitRegistry:
         self._cooldown_seconds = int(cooldown_seconds)
         self._lock = threading.Lock()
         self._breakers: Dict[str, QuarantineInfo] = {}
+        # Hosts with a library transcode start in flight. Timeouts while the
+        # count is positive stay off the shared host breaker.
+        self._start_holds: Dict[str, int] = {}
 
     def _get_locked(self, key: str) -> QuarantineInfo:
         info = self._breakers.get(key)
@@ -108,30 +148,74 @@ class HostCircuitRegistry:
             self._breakers[key] = info
         return info
 
+    @contextmanager
+    def hold_transcode_start(self, url: str) -> Iterator[None]:
+        """Mark ``url``'s host as waiting on one library transcode start.
+
+        Nested starts on the same host share one count. Timeouts recorded
+        while the count is positive do not open the host breaker.
+        """
+        host = host_key(url)
+        if not host:
+            yield
+            return
+        with self._lock:
+            self._start_holds[host] = self._start_holds.get(host, 0) + 1
+        try:
+            yield
+        finally:
+            with self._lock:
+                left = int(self._start_holds.get(host, 0)) - 1
+                if left <= 0:
+                    self._start_holds.pop(host, None)
+                else:
+                    self._start_holds[host] = left
+
     def before_request(self, url: str) -> None:
         if getattr(_bypass, "active", False):
             return
-        key = host_key(url)
-        if not key:
+        host = host_key(url)
+        if not host:
             return
         with self._lock:
-            info = self._get_locked(key)
+            info = self._get_locked(host)
             if info.is_quarantined:
                 remaining = float(info.remaining_seconds or 0.0)
-                raise CircuitOpenError(key, remaining)
+                raise CircuitOpenError(host, remaining)
+            if is_transcode_start_url(url):
+                title_key = transcode_start_key(url)
+                title = self._breakers.get(title_key)
+                if title is not None and title.is_quarantined:
+                    remaining = float(title.remaining_seconds or 0.0)
+                    raise CircuitOpenError(title_key, remaining)
 
     def record_success(self, url: str) -> None:
-        key = host_key(url)
-        if not key:
+        host = host_key(url)
+        if not host:
             return
         with self._lock:
-            self._get_locked(key).record_success()
+            self._get_locked(host).record_success()
+            if is_transcode_start_url(url):
+                title = self._breakers.get(transcode_start_key(url))
+                if title is not None:
+                    title.record_success()
 
     def record_failure(self, url: str, error: str) -> None:
-        key = host_key(url)
-        if not key:
+        host = host_key(url)
+        if not host:
             return
         with self._lock:
+            held = int(self._start_holds.get(host, 0)) > 0
+            # A start's own timeout is counted on that title. Timeouts of
+            # other calls while the start is still waiting are not an outage:
+            # Plex is busy with the picture. The host breaker stays available
+            # for the next title's playback and subtitles.
+            if failure_is_timeout(error) and (is_transcode_start_url(url) or held):
+                if not is_transcode_start_url(url):
+                    return
+                key = transcode_start_key(url)
+            else:
+                key = host
             info = self._get_locked(key)
             opened = info.record_failure(error)
         if opened:
@@ -165,6 +249,7 @@ class HostCircuitRegistry:
     def reset(self) -> None:
         with self._lock:
             self._breakers.clear()
+            self._start_holds.clear()
 
 
 host_circuits = HostCircuitRegistry()

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- A slow library transcode start no longer opens the shared Plex circuit. One title timing out, including a 4K or HEVC 10-bit picture, leaves the next title able to play and load subtitles. A Plex that refuses connections still opens that circuit. 4K and HEVC 10-bit starts wait 240 seconds for the first playlist. Other starts stay at 120 seconds.
+
 ## [1.45.1] — 2026-11-22
 
 Play can start while a copy is still being made, so a film no longer stops on a playlist that only appeared after the copy finished. Compatible copies can be made overnight, inside a disk budget you choose.
