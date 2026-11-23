@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ### Fixed
+- A live engine session waits up to 30 seconds for `av/stream.m3u8` while ffmpeg is still starting, including an audio transcode that has not attached yet and a disk that is still spinning up. A missing or expired session is still a 404. ffmpeg exiting before the playlist exists is its own error.
+- An engine session reports `preparing`, `ready`, or `failed`. The web player leaves at once when the session has failed. The 8 second first-frame clock starts when the playlist is ready, and the whole wait stops at about 30 seconds.
+- A try whose master was fetched and whose media playlist was never requested is remembered as a miss when the session stops, so the next play does not try that title again.
 - A slow library transcode start no longer opens the shared Plex circuit. One title timing out, including a 4K or HEVC 10-bit picture, leaves the next title able to play and load subtitles. A Plex that refuses connections still opens that circuit. 4K and HEVC 10-bit starts wait 240 seconds for the first playlist. Other starts stay at 120 seconds.
 
 ## [1.45.1] — 2026-11-22

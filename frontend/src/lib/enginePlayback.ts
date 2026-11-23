@@ -271,6 +271,9 @@ export function engineSessionForPlayer(session: any) {
 /** How long an engine playlist may sit with no picture before the library path is tried. */
 export const ENGINE_FIRST_FRAME_TIMEOUT_MS = 8000;
 
+/** Preparing plus the first frame. A disk spin-up can finish inside this. A dead session cannot. */
+export const ENGINE_WARMUP_CAP_MS = 30_000;
+
 /**
  * Empty when the engine picture is already on screen, or when it is too early
  * to give up. A fatal player error before that picture, or a wait past the
@@ -305,6 +308,67 @@ export function engineFirstFrameReason({
 }
 
 /**
+ * Whether to leave an engine session.
+ *
+ * The 8 second first-frame limit starts once `state` is `ready`, measured by
+ * `sinceReadyMs`. Time since the session was created does not count while
+ * ffmpeg is still publishing. `failed` leaves on the first look. The whole
+ * wait, including disk spin-up, stops at about 30 seconds.
+ */
+export function enginePlaybackClock({
+  state = "",
+  sinceCreatedMs = 0,
+  sinceReadyMs = 0,
+  videoWidth = 0,
+  readyState = 0,
+  fatalError = "",
+  capMs = ENGINE_WARMUP_CAP_MS,
+  firstFrameMs = ENGINE_FIRST_FRAME_TIMEOUT_MS,
+}: {
+  state?: string;
+  sinceCreatedMs?: number;
+  sinceReadyMs?: number;
+  videoWidth?: number;
+  readyState?: number;
+  fatalError?: string;
+  capMs?: number;
+  firstFrameMs?: number;
+} = {}): { fallback: boolean; reason: string } {
+  const width = Number(videoWidth);
+  const ready = Number(readyState);
+  if (Number.isFinite(width) && width > 0 && Number.isFinite(ready) && ready >= 2) {
+    return { fallback: false, reason: "" };
+  }
+  const phase = String(state || "");
+  if (phase === "failed") {
+    return { fallback: true, reason: "Engine session failed before the first frame" };
+  }
+  const created = Number(sinceCreatedMs);
+  const cap = Number(capMs);
+  const limit = Number.isFinite(cap) && cap > 0 ? cap : ENGINE_WARMUP_CAP_MS;
+  if (phase === "preparing") {
+    if (Number.isFinite(created) && created >= limit) {
+      const seconds = Math.max(1, Math.round(limit / 1000));
+      return { fallback: true, reason: `Engine session was not ready within ${seconds} seconds` };
+    }
+    return { fallback: false, reason: "" };
+  }
+  if (Number.isFinite(created) && created >= limit) {
+    const seconds = Math.max(1, Math.round(limit / 1000));
+    return { fallback: true, reason: `Engine session had no first frame within ${seconds} seconds` };
+  }
+  const elapsed = phase === "ready" ? Number(sinceReadyMs) : Number(sinceCreatedMs);
+  const reason = engineFirstFrameReason({
+    elapsedMs: elapsed,
+    videoWidth,
+    readyState,
+    fatalError,
+    timeoutMs: firstFrameMs,
+  });
+  return { fallback: Boolean(reason), reason };
+}
+
+/**
  * One library retry for an engine session that never shows a picture.
  * A second call with `retried` set does not stop or start anything again.
  */
@@ -313,6 +377,7 @@ export async function settleEngineFirstFrame({
   videoWidth = 0,
   readyState = 0,
   fatalError = "",
+  reason: givenReason = "",
   retried = false,
   timeoutMs = ENGINE_FIRST_FRAME_TIMEOUT_MS,
   startLibrary,
@@ -325,6 +390,7 @@ export async function settleEngineFirstFrame({
   videoWidth?: number;
   readyState?: number;
   fatalError?: string;
+  reason?: string;
   retried?: boolean;
   timeoutMs?: number;
   startLibrary: () => Promise<any>;
@@ -332,13 +398,15 @@ export async function settleEngineFirstFrame({
   log?: (reason: string) => void;
 }): Promise<{ retried: boolean; session: any | null; reason: string }> {
   if (retried) return { retried: true, session: null, reason: "" };
-  const reason = engineFirstFrameReason({
-    elapsedMs,
-    videoWidth,
-    readyState,
-    fatalError,
-    timeoutMs,
-  });
+  const reason =
+    String(givenReason || "").trim() ||
+    engineFirstFrameReason({
+      elapsedMs,
+      videoWidth,
+      readyState,
+      fatalError,
+      timeoutMs,
+    });
   if (!reason) return { retried: false, session: null, reason: "" };
   log(reason);
   try {

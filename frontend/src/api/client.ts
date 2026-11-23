@@ -1112,6 +1112,10 @@ export async function openEnginePlayback(ratingKey: string, { profile = null, st
   });
 }
 
+export async function readEnginePlayback(sessionId: string) {
+  return api(`/playback/sessions/${encodeURIComponent(sessionId)}`);
+}
+
 export async function progressEnginePlayback(sessionId: string, payload: JsonObject) {
   return api(`/playback/sessions/${encodeURIComponent(sessionId)}/progress`, {
     method: "POST",

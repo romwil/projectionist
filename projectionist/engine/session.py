@@ -29,9 +29,13 @@ from projectionist.library.playback import PlaybackError, YouthBlockedError
 
 _LOCK = threading.Lock()
 _SESSIONS: dict[str, "EngineSession"] = {}
-# A copy remux publishes the media playlist after the first segment, not before
-# the request. Wait only for that playlist, and only while ffmpeg is still running.
-_PLAYLIST_WAIT_S = 20.0
+# A live session publishes the media playlist after ffmpeg starts, which can
+# be after the request. Unraid disks may still be spinning up, and an audio
+# transcode may still be waiting for the shared slot, so the process is not
+# attached yet. Wait for the file. 404 is an unknown or expired session.
+_PLAYLIST_WAIT_S = 30.0
+_FFMPEG_FAILED = "ffmpeg exited before the media playlist was published."
+_PLAYLIST_NOT_READY = "The media playlist was not ready in time."
 
 # A client that did not ask for an engine session stays on the library path.
 # The capability means this server can open one. It does not mean the client must.
@@ -74,8 +78,11 @@ class EngineSession:
     source_reason: str = ""
     provider: str = ""
     directory: Optional[Path] = None
+    data_dir: Optional[Path] = None
     process: Any = None
     cancelled: bool = False
+    master_seen: bool = False
+    media_playlist_seen: bool = False
     created_at: float = field(default_factory=time.time)
 
     def master_url(self) -> str:
@@ -90,6 +97,7 @@ class EngineSession:
             "plan": self.plan,
             "reason": self.reason,
             "playable": self.playable,
+            "state": session_playback_state(self),
             "master_url": self.master_url(),
             "title": self.title,
             "duration_ms": self.duration_ms,
@@ -124,17 +132,53 @@ def session_for_token(session_id: str, token: str) -> EngineSession:
     return session
 
 
-def _playlist_still_publishing(session: EngineSession, relative: str) -> bool:
-    name = relative.rsplit("/", 1)[-1]
-    if name != "stream.m3u8":
-        return False
-    process = session.process
+def session_playback_state(session: EngineSession) -> str:
+    """``preparing`` until the media playlist exists, then ``ready`` or ``failed``.
+
+    A session that is not an engine playlist has no state. ffmpeg exiting
+    before the file exists is failed, so the client can leave immediately.
+    A process that has not started yet is still preparing.
+    """
+    if not session.playable or session.directory is None:
+        return ""
+    playlist = session.directory / "av" / "stream.m3u8"
+    try:
+        ready = playlist.is_file()
+    except OSError:
+        ready = False
+    if ready:
+        return "ready"
+    if session.cancelled or _process_exited(session.process):
+        return "failed"
+    return "preparing"
+
+
+def _media_playlist(relative: str) -> bool:
+    return relative.rsplit("/", 1)[-1] == "stream.m3u8"
+
+
+def _process_exited(process: Any) -> bool:
+    """True once ffmpeg has a return code. A process that has not started is still live."""
     if process is None:
         return False
     try:
-        return process.poll() is None
+        return process.poll() is not None
     except OSError:
         return False
+
+
+def _playlist_failure(session: EngineSession) -> Optional[PlaybackError]:
+    """Why a live session still has no media playlist. None means keep waiting.
+
+    An unknown or stopped session is a 404 from the lookup, before this runs.
+    ffmpeg leaving without the file is its own error. A segment that is not
+    the media playlist stays a 404 so the player can retry that one file.
+    """
+    if session.cancelled:
+        return PlaybackError("Playback session is not valid.", status_code=404)
+    if _process_exited(session.process):
+        return PlaybackError(_FFMPEG_FAILED, status_code=502)
+    return None
 
 
 def resolve_session_file(
@@ -158,23 +202,30 @@ def resolve_session_file(
         raise PlaybackError("Invalid stream path", status_code=400) from error
     if candidate.is_file():
         return candidate
+    if not _media_playlist(raw):
+        raise PlaybackError("Stream segment is not ready.", status_code=404)
+    failure = _playlist_failure(session)
+    if failure is not None:
+        raise failure
     limit = float(_PLAYLIST_WAIT_S if wait_s is None else wait_s)
-    if limit > 0 and _playlist_still_publishing(session, raw) and not session.cancelled:
+    if limit > 0:
         deadline = clock() + limit
         while clock() < deadline:
             if candidate.is_file():
                 return candidate
-            if not _playlist_still_publishing(session, raw) or session.cancelled:
-                break
+            failure = _playlist_failure(session)
+            if failure is not None:
+                raise failure
             remaining = deadline - clock()
             if remaining <= 0:
                 break
             sleep(min(0.2, remaining))
         if candidate.is_file():
             return candidate
-    if not candidate.is_file():
-        raise PlaybackError("Stream segment is not ready.", status_code=404)
-    return candidate
+        failure = _playlist_failure(session)
+        if failure is not None:
+            raise failure
+    raise PlaybackError(_PLAYLIST_NOT_READY, status_code=503)
 
 
 def _stop_process(session: EngineSession) -> None:
@@ -257,6 +308,7 @@ def open_engine_session(
         profile_id=profile.id,
         source_reason=source_reason if plan == "source-transcode" else "",
         provider=provider if plan == "source-transcode" else "",
+        data_dir=Path(data_dir),
     )
     if playable:
         directory = Path(data_dir) / "engine" / "sessions" / session.session_id
@@ -322,7 +374,38 @@ def open_engine_session(
     return session
 
 
+def note_session_media(session: EngineSession, relative: str) -> None:
+    """Remember which playlist this client actually asked for."""
+    name = str(relative or "").strip().lstrip("/").rsplit("/", 1)[-1]
+    if name == "master.m3u8":
+        session.master_seen = True
+    elif name == "stream.m3u8":
+        session.media_playlist_seen = True
+
+
+def _remember_fast_failed_try(session: EngineSession) -> None:
+    """A try whose master was fetched and whose media playlist was not.
+
+    Safari can reject the master and never ask for ``av/stream.m3u8``. That
+    is a failed try, so the next play does not open another one. A play that
+    did ask for the media playlist is left to the first-frame report.
+    """
+    if session.plan != "try" or session.data_dir is None:
+        return
+    if not session.master_seen or session.media_playlist_seen:
+        return
+    from projectionist.engine.tries import record_first_frame
+
+    record_first_frame(
+        session.data_dir,
+        rating_key=session.rating_key,
+        profile_id=session.profile_id,
+        arrived=False,
+    )
+
+
 def stop_engine_session(session: EngineSession) -> dict[str, Any]:
+    _remember_fast_failed_try(session)
     _stop_process(session)
     with _LOCK:
         _SESSIONS.pop(session.session_id, None)

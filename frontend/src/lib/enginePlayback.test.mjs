@@ -10,6 +10,7 @@ import {
   isSafariUserAgent,
   playThroughProjectionist,
   safariReportsHdr,
+  enginePlaybackClock,
   settleEngineFirstFrame,
 } from "./enginePlayback.ts";
 
@@ -308,6 +309,65 @@ test("an engine session retries the library path once when the first frame never
   assert.equal(libraryStarts, 2);
   assert.equal(playing.session, null);
   assert.equal(playing.retried, false);
+});
+
+test("the first-frame timer starts when the session is ready, and a failed session falls back immediately", () => {
+  const preparing = enginePlaybackClock({
+    state: "preparing",
+    sinceCreatedMs: 8000,
+    sinceReadyMs: 0,
+    videoWidth: 0,
+    readyState: 1,
+  });
+  assert.equal(preparing.fallback, false);
+
+  const failed = enginePlaybackClock({
+    state: "failed",
+    sinceCreatedMs: 200,
+    sinceReadyMs: 0,
+    videoWidth: 0,
+    readyState: 0,
+  });
+  assert.equal(failed.fallback, true);
+  assert.match(failed.reason, /failed/i);
+
+  const readyEarly = enginePlaybackClock({
+    state: "ready",
+    sinceCreatedMs: 20000,
+    sinceReadyMs: 7000,
+    videoWidth: 0,
+    readyState: 1,
+  });
+  assert.equal(readyEarly.fallback, false);
+
+  const readyLate = enginePlaybackClock({
+    state: "ready",
+    sinceCreatedMs: 22000,
+    sinceReadyMs: 8000,
+    videoWidth: 0,
+    readyState: 1,
+  });
+  assert.equal(readyLate.fallback, true);
+  assert.match(readyLate.reason, /no first frame within 8 seconds/);
+
+  const capped = enginePlaybackClock({
+    state: "preparing",
+    sinceCreatedMs: 30000,
+    sinceReadyMs: 0,
+    videoWidth: 0,
+    readyState: 0,
+  });
+  assert.equal(capped.fallback, true);
+  assert.match(capped.reason, /30 seconds/);
+
+  const playing = enginePlaybackClock({
+    state: "ready",
+    sinceCreatedMs: 40000,
+    sinceReadyMs: 12000,
+    videoWidth: 1280,
+    readyState: 4,
+  });
+  assert.equal(playing.fallback, false);
 });
 
 test("FLAC, Opus, and ALAC are included only when the mp4 codec check says yes", async () => {

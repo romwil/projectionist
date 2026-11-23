@@ -411,10 +411,15 @@ def playback_session_media(session_id: str, token: str, asset_path: str):
     """Playlist and segments. The token in the path is the credential."""
     from fastapi.responses import FileResponse
 
-    from projectionist.engine.session import resolve_session_file, session_for_token
+    from projectionist.engine.session import (
+        note_session_media,
+        resolve_session_file,
+        session_for_token,
+    )
 
     try:
         session = session_for_token(session_id, token)
+        note_session_media(session, asset_path)
         path = resolve_session_file(session, asset_path)
     except PlaybackError as error:
         raise HTTPException(status_code=error.status_code, detail=error.message) from error

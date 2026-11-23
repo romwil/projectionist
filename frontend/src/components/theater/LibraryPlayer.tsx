@@ -8,6 +8,7 @@ import {
   getFeatures,
   openEnginePlayback,
   progressEnginePlayback,
+  readEnginePlayback,
   reportEngineFirstFrame,
   progressLibraryPlayback,
   seekLibraryPlayback,
@@ -19,8 +20,7 @@ import {
 import {
   chooseWebPlayback,
   detectBrowserPlaybackProfile,
-  ENGINE_FIRST_FRAME_TIMEOUT_MS,
-  engineFirstFrameReason,
+  enginePlaybackClock,
   settleEngineFirstFrame,
 } from "../../lib/enginePlayback";
 import { isCompactPlayViewport, isPhonePlayViewport } from "../../lib/chatLayout.js";
@@ -180,7 +180,9 @@ export default function LibraryPlayer({
   const seekPaintTimerRef = useRef<any>(null);
   const pictureHoldRef = useRef(false);
   const engineFallbackRef = useRef(false);
-  const engineAttachedAtRef = useRef(0);
+  const engineCreatedAtRef = useRef(0);
+  const engineReadyAtRef = useRef(0);
+  const engineClockSessionRef = useRef("");
   const seekReloadArmedRef = useRef(false);
   const seekRestoreMsRef = useRef<any>(null);
   const seekRestoreAttemptedRef = useRef(false);
@@ -270,7 +272,9 @@ export default function LibraryPlayer({
     setHoldFrame("");
     pictureHoldRef.current = false;
     engineFallbackRef.current = false;
-    engineAttachedAtRef.current = 0;
+    engineCreatedAtRef.current = 0;
+    engineReadyAtRef.current = 0;
+    engineClockSessionRef.current = "";
     seekTimelineOriginRef.current = 0;
   }
 
@@ -519,20 +523,36 @@ export default function LibraryPlayer({
     }
   }, []);
 
-  const runEngineFirstFrameFallback = useCallback(async (input: {
-    elapsedMs: number;
-    videoWidth: number;
-    readyState: number;
-    fatalError: string;
-  }) => {
+  const engineClock = useCallback((fatalError = "") => {
+    const current = sessionRef.current;
+    const video = videoRef.current;
+    const sessionId = String(current?.session_id || "");
+    if (sessionId && engineClockSessionRef.current !== sessionId) {
+      engineClockSessionRef.current = sessionId;
+      engineCreatedAtRef.current = Date.now();
+      engineReadyAtRef.current = 0;
+    }
+    const phase = String(current?.state || "");
+    if (phase === "ready" && !engineReadyAtRef.current) engineReadyAtRef.current = Date.now();
+    return enginePlaybackClock({
+      state: phase,
+      sinceCreatedMs: engineCreatedAtRef.current ? Date.now() - engineCreatedAtRef.current : 0,
+      sinceReadyMs: engineReadyAtRef.current ? Date.now() - engineReadyAtRef.current : 0,
+      videoWidth: video?.videoWidth || 0,
+      readyState: video?.readyState || 0,
+      fatalError,
+    });
+  }, []);
+
+  const runEngineFirstFrameFallback = useCallback(async (decision: { fallback?: boolean; reason?: string }) => {
     if (engineFallbackRef.current || pictureHoldRef.current) return;
     const current = sessionRef.current;
     if (!current?.engine || !current.session_id) return;
-    if (!engineFirstFrameReason(input)) return;
+    if (!decision?.fallback || !decision.reason) return;
     engineFallbackRef.current = true;
     void noteTryFrame(false);
     const result = await settleEngineFirstFrame({
-      ...input,
+      reason: decision.reason,
       retried: false,
       stopEngine: () => stopEnginePlayback(current.session_id),
       startLibrary: () => startLibraryPlayback(key, { startOver: false, rec: recRef.current }),
@@ -546,34 +566,57 @@ export default function LibraryPlayer({
       session?.engine && session.stream_url && !resumeOpen && !preroll && !ended,
     );
     if (!attached) return undefined;
-    engineAttachedAtRef.current = Date.now();
+    const sessionId = String(session?.session_id || "");
+    if (sessionId && engineClockSessionRef.current !== sessionId) {
+      engineClockSessionRef.current = sessionId;
+      engineCreatedAtRef.current = Date.now();
+      engineReadyAtRef.current = session?.state === "ready" ? Date.now() : 0;
+    } else if (session?.state === "ready" && !engineReadyAtRef.current) {
+      engineReadyAtRef.current = Date.now();
+    }
     let watched: any = null;
+    let polling = false;
     const onVideoError = () => {
       const video = videoRef.current;
-      void runEngineFirstFrameFallback({
-        elapsedMs: Date.now() - engineAttachedAtRef.current,
-        videoWidth: video?.videoWidth || 0,
-        readyState: video?.readyState || 0,
-        fatalError: video?.error?.message || "video error",
-      });
+      void runEngineFirstFrameFallback(engineClock(video?.error?.message || "video error"));
     };
+    const look = async () => {
+      if (polling) return;
+      polling = true;
+      try {
+        const current = sessionRef.current;
+        if (current?.engine && current.state === "preparing" && current.session_id) {
+          try {
+            const fresh = await readEnginePlayback(current.session_id);
+            const next = String(fresh?.state || "");
+            if (next && sessionRef.current?.session_id === current.session_id && next !== current.state) {
+              sessionRef.current = { ...sessionRef.current, state: next };
+                setSession((prev: any) =>
+                  prev && prev.session_id === current.session_id ? { ...prev, state: next } : prev,
+                );
+            }
+          } catch {
+            // The 30 second cap still ends a session the server stopped answering.
+          }
+        }
+        const video = videoRef.current;
+        if (video && watched !== video) {
+          watched?.removeEventListener?.("error", onVideoError);
+          watched = video;
+          video.addEventListener("error", onVideoError);
+        }
+        const decision = engineClock();
+        if (Number(video?.videoWidth) > 0 && Number(video?.readyState) >= 2) {
+          void noteTryFrame(true);
+        }
+        if (decision.fallback) void runEngineFirstFrameFallback(decision);
+      } finally {
+        polling = false;
+      }
+    };
+    void look();
     const timer = window.setInterval(() => {
-      const video = videoRef.current;
-      if (video && watched !== video) {
-        watched?.removeEventListener?.("error", onVideoError);
-        watched = video;
-        video.addEventListener("error", onVideoError);
-      }
-      const input = {
-        elapsedMs: Date.now() - engineAttachedAtRef.current,
-        videoWidth: video?.videoWidth || 0,
-        readyState: video?.readyState || 0,
-        fatalError: "",
-      };
-      if (Number(input.videoWidth) > 0 && Number(input.readyState) >= 2) {
-        void noteTryFrame(true);
-      }
-      void runEngineFirstFrameFallback(input);
+      void look();
     }, 500);
     return () => {
       window.clearInterval(timer);
@@ -581,6 +624,7 @@ export default function LibraryPlayer({
     };
   }, [
     ended,
+    engineClock,
     noteTryFrame,
     preroll,
     resumeOpen,
@@ -594,17 +638,11 @@ export default function LibraryPlayer({
     if (!data?.fatal || !sessionRef.current?.engine || engineFallbackRef.current || pictureHoldRef.current) {
       return false;
     }
-    const video = videoRef.current;
-    const input = {
-      elapsedMs: engineAttachedAtRef.current ? Date.now() - engineAttachedAtRef.current : 0,
-      videoWidth: video?.videoWidth || 0,
-      readyState: video?.readyState || 0,
-      fatalError: String(data.details || data.type || "playback error"),
-    };
-    if (!engineFirstFrameReason(input)) return false;
-    void runEngineFirstFrameFallback(input);
+    const decision = engineClock(String(data.details || data.type || "playback error"));
+    if (!decision.fallback) return false;
+    void runEngineFirstFrameFallback(decision);
     return true;
-  }, [runEngineFirstFrameFallback]);
+  }, [engineClock, runEngineFirstFrameFallback]);
 
   const handlePlayerStatus = useCallback((next: any) => {
     setStatus(next);
@@ -1525,7 +1563,11 @@ export default function LibraryPlayer({
     >
       <TheaterPlayer
         src={
-          resumeOpen || ended || preroll || !session?.stream_url
+          resumeOpen ||
+          ended ||
+          preroll ||
+          !session?.stream_url ||
+          (session?.engine && (session.state === "preparing" || session.state === "failed"))
             ? ""
             : playbackSrcForSeek(session.stream_url, seekEpoch)
         }
