@@ -19,6 +19,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qsl, quote, urlencode, urljoin, urlparse
 from urllib.request import Request, urlopen
 
+from projectionist.circuit_breaker import CircuitOpenError, host_circuits, is_transcode_start_url
 from projectionist.library.watch_state import resolve_plex_watch_token
 from projectionist.youth.rating_gate import (
     content_rating_allowed,
@@ -39,10 +40,17 @@ MAX_RATING_KEY_LEN = 128
 # or the proxy fetches ``/session/...`` and Plex returns 4xx → we surface 502.
 UNIVERSAL_HLS_DIR = "video/:/transcode/universal"
 UNIVERSAL_HLS_MASTER = f"{UNIVERSAL_HLS_DIR}/start.m3u8"
-# A cold 4K HEVC software transcode can sit longer than 30s before the first
+# A cold HEVC software transcode can sit longer than 30s before the first
 # playlist. Cutting the urlopen off there is a 502 ("timed out") while Plex
 # is still starting. Segments stay on the shorter limit.
 PLEX_PLAYLIST_TIMEOUT = 120
+# 4K is about four times the pixels of 1080p, and HEVC Main 10 asks Plex to
+# decode 10-bit in software. The 120s wait was sized for a cold HEVC start
+# that had already passed 30s. Marriage Story is HEVC Main 10 at 3600×2160,
+# and that start still outlives 120s when another transcode is already
+# running. One more doubling covers that class and still ends a stuck start
+# inside four minutes. Segments stay at 30s.
+PLEX_HEAVY_START_TIMEOUT = 240
 
 _SAFE_RATING_KEY = re.compile(r"^[A-Za-z0-9._:@/-]{1,128}$")
 _SAFE_SESSION = re.compile(r"^[A-Za-z0-9._-]{8,80}$")
@@ -123,6 +131,12 @@ class PlaybackSession:
     # Container size of the file being played. With duration_ms this is the
     # real media bitrate used to advertise the master variant.
     file_size: int = 0
+    # Picture facts for the start timeout. Empty when Plex did not say.
+    video_codec: str = ""
+    video_profile: str = ""
+    video_bit_depth: int = 0
+    video_width: int = 0
+    video_height: int = 0
 
 
 _sessions: Dict[str, PlaybackSession] = {}
@@ -468,6 +482,60 @@ def universal_start_url(
     return f"{base}/video/:/transcode/universal/start.m3u8?{urlencode(params)}"
 
 
+def heavy_transcode_start(session: PlaybackSession) -> bool:
+    """4K, or HEVC 10-bit (including a Main 10 profile), needs a longer start."""
+    codec = str(getattr(session, "video_codec", "") or "").strip().lower()
+    profile = str(getattr(session, "video_profile", "") or "").strip().lower()
+    try:
+        bit_depth = int(getattr(session, "video_bit_depth", 0) or 0)
+        width = int(getattr(session, "video_width", 0) or 0)
+        height = int(getattr(session, "video_height", 0) or 0)
+    except (TypeError, ValueError):
+        bit_depth = 0
+        width = 0
+        height = 0
+    four_k = height > 1080 or width >= 3200
+    hevc = codec in {"hevc", "h265"}
+    ten_bit = bit_depth >= 10 or "main 10" in profile or "main10" in profile
+    return four_k or (hevc and ten_bit)
+
+
+def start_timeout_seconds(session: PlaybackSession) -> int:
+    """How long to wait for Plex to return the first playlist of this title."""
+    if heavy_transcode_start(session):
+        return PLEX_HEAVY_START_TIMEOUT
+    return PLEX_PLAYLIST_TIMEOUT
+
+
+def _apply_video_facts(session: PlaybackSession, facts: Mapping[str, Any]) -> None:
+    session.video_codec = str(facts.get("codec") or "")
+    session.video_profile = str(facts.get("profile") or "")
+    try:
+        session.video_bit_depth = int(facts.get("bit_depth") or 0)
+        session.video_width = int(facts.get("width") or 0)
+        session.video_height = int(facts.get("height") or 0)
+    except (TypeError, ValueError):
+        session.video_bit_depth = 0
+        session.video_width = 0
+        session.video_height = 0
+
+
+def read_playback_video(plex_url: str, token: str, rating_key: str) -> Dict[str, Any]:
+    """Video stream Plex already analyzed for this rating key, or empty.
+
+    A failure here leaves the start on the ordinary timeout. The caller holds
+    the transcode-start scope so this lookup's timeout does not open the
+    shared host circuit.
+    """
+    from projectionist.connectors.plex import PlexClient
+
+    try:
+        return PlexClient(plex_url, token, timeout=8).video_stream(rating_key)
+    except Exception:
+        logger.debug("Could not read video facts for %s", rating_key, exc_info=True)
+        return {}
+
+
 def fetch_plex_bytes(
     url: str,
     *,
@@ -476,6 +544,30 @@ def fetch_plex_bytes(
     method: str = "GET",
 ) -> Tuple[bytes, str, int, str]:
     """GET/HEAD upstream Plex bytes. Returns (body, content_type, status, final_url)."""
+    if is_transcode_start_url(url):
+        with host_circuits.hold_transcode_start(url):
+            return _fetch_plex_bytes_once(url, headers=headers, timeout=timeout, method=method)
+    return _fetch_plex_bytes_once(url, headers=headers, timeout=timeout, method=method)
+
+
+def _fetch_plex_bytes_once(
+    url: str,
+    *,
+    headers: Optional[Mapping[str, str]] = None,
+    timeout: int = 30,
+    method: str = "GET",
+) -> Tuple[bytes, str, int, str]:
+    start = is_transcode_start_url(url)
+    if start:
+        try:
+            host_circuits.before_request(url)
+        except CircuitOpenError as error:
+            if "transcode-start" in str(getattr(error, "host", "")):
+                raise PlaybackError(
+                    "Plex is still starting this title. Try again in a minute.",
+                    status_code=503,
+                ) from error
+            raise PlaybackError("Plex is unreachable.", status_code=503) from error
     request = Request(url, method=method)
     for key, value in (headers or {}).items():
         if value:
@@ -486,6 +578,8 @@ def fetch_plex_bytes(
             status = int(getattr(response, "status", 200) or 200)
             final_url = str(getattr(response, "url", url) or url)
             body = response.read() if method != "HEAD" else b""
+            if start:
+                host_circuits.record_success(url)
             return body, content_type, status, final_url
     except HTTPError as error:
         if hasattr(error, "read"):
@@ -495,8 +589,14 @@ def fetch_plex_bytes(
             status_code=502,
         ) from error
     except TimeoutError as error:
+        if start:
+            host_circuits.record_failure(url, "timeout")
         raise PlaybackError("Plex timed out before the playlist was ready.", status_code=502) from error
     except URLError as error:
+        reason = getattr(error, "reason", error)
+        if start:
+            detail = "timed out" if isinstance(reason, TimeoutError) else str(reason or "unreachable")
+            host_circuits.record_failure(url, detail)
         raise PlaybackError("Plex is unreachable.", status_code=502) from error
 
 
@@ -1008,7 +1108,11 @@ def start_plex_hls(
         offset_seconds=offset_seconds,
         subtitle_stream_id=session.subtitle_stream_id,
     )
-    fetch(url, headers=plex_identity_headers(session.token), timeout=PLEX_PLAYLIST_TIMEOUT)
+    fetch(
+        url,
+        headers=plex_identity_headers(session.token),
+        timeout=start_timeout_seconds(session),
+    )
     session.last_offset_s = max(0.0, float(offset_seconds))
 
 
@@ -1078,35 +1182,42 @@ def start_playback(
     from projectionist.connectors.plex import plex_watch_url as plex_web_watch_url
     from projectionist.connectors.plex import cached_machine_identifier
 
-    machine_id = ""
-    try:
-        machine_id = cached_machine_identifier(plex_url, token, timeout=5)
-    except Exception:  # noqa: BLE001
+    # The identity lookup and the start share one hold. A timeout while Plex
+    # is busy on this title stays off the host breaker. A refused connection
+    # still counts as an outage.
+    with host_circuits.hold_transcode_start(plex_url):
         machine_id = ""
-
-    session = PlaybackSession(
-        session_id=session_id,
-        user_id=str(getattr(user, "id", "") or ""),
-        rating_key=str(playable["rating_key"]),
-        plex_base=plex_url.rstrip("/"),
-        token=token,
-        token_source=str(resolved.get("source") or "") or None,
-        duration_ms=int(playable.get("duration_ms") or 0),
-        file_size=int(playable.get("file_size") or 0),
-        view_offset_ms=offset_ms,
-        title=str(playable.get("title") or ""),
-        show_title=str(playable.get("show_title") or ""),
-        season=playable.get("season"),
-        episode=playable.get("episode"),
-        media_type=str(playable.get("media_type") or ""),
-        poster_url=str(playable.get("poster_url") or ""),
-        content_rating=str(playable.get("content_rating") or ""),
-        show_rating_key=str(playable.get("show_rating_key") or ""),
-        next_episode=next_ep,
-        plex_watch_url=plex_web_watch_url(machine_id, str(playable["rating_key"])),
-        last_offset_s=offset_ms / 1000.0,
-    )
-    start_plex_hls(session, offset_seconds=session.last_offset_s, fetch=fetch)
+        try:
+            machine_id = cached_machine_identifier(plex_url, token, timeout=5)
+        except Exception:  # noqa: BLE001
+            machine_id = ""
+        facts: Dict[str, Any] = {}
+        if fetch is fetch_plex_bytes:
+            facts = read_playback_video(plex_url, token, str(playable["rating_key"]))
+        session = PlaybackSession(
+            session_id=session_id,
+            user_id=str(getattr(user, "id", "") or ""),
+            rating_key=str(playable["rating_key"]),
+            plex_base=plex_url.rstrip("/"),
+            token=token,
+            token_source=str(resolved.get("source") or "") or None,
+            duration_ms=int(playable.get("duration_ms") or 0),
+            file_size=int(playable.get("file_size") or 0),
+            view_offset_ms=offset_ms,
+            title=str(playable.get("title") or ""),
+            show_title=str(playable.get("show_title") or ""),
+            season=playable.get("season"),
+            episode=playable.get("episode"),
+            media_type=str(playable.get("media_type") or ""),
+            poster_url=str(playable.get("poster_url") or ""),
+            content_rating=str(playable.get("content_rating") or ""),
+            show_rating_key=str(playable.get("show_rating_key") or ""),
+            next_episode=next_ep,
+            plex_watch_url=plex_web_watch_url(machine_id, str(playable["rating_key"])),
+            last_offset_s=offset_ms / 1000.0,
+        )
+        _apply_video_facts(session, facts)
+        start_plex_hls(session, offset_seconds=session.last_offset_s, fetch=fetch)
     _put_session(session)
     return session_public_payload(
         session,
@@ -1297,10 +1408,16 @@ def proxy_session_asset(
         upstream = plex_fetch_path(path)
         url = f"{base}/{upstream.lstrip('/')}"
         rewrite_base = upstream
+    if path in {"index.m3u8", "master.m3u8"}:
+        fetch_timeout = start_timeout_seconds(session)
+    elif str(path).endswith(".m3u8"):
+        fetch_timeout = PLEX_PLAYLIST_TIMEOUT
+    else:
+        fetch_timeout = 30
     body, upstream_ct, status, final_url = fetch(
         url,
         headers=plex_identity_headers(session.token),
-        timeout=PLEX_PLAYLIST_TIMEOUT if str(path).endswith(".m3u8") else 30,
+        timeout=fetch_timeout,
     )
     media_type = content_type_for_path(path, upstream_ct)
     if is_playlist_path(path):

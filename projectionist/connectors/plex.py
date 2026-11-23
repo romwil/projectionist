@@ -1302,6 +1302,25 @@ class PlexClient:
             raise ValueError("section_key is required")
         self._request_empty(f"/library/sections/{urllib.parse.quote(key)}/refresh", method="GET")
 
+    def video_stream(self, rating_key: str) -> Dict[str, Any]:
+        """The video stream Plex already stored for one movie or episode.
+
+        Used to decide how long a library transcode start may wait. An empty
+        dict means the start uses the ordinary timeout.
+        """
+        key = str(rating_key or "").strip()
+        if not key:
+            return {}
+        root = self._request_xml(f"/library/metadata/{urllib.parse.quote(key)}")
+        element = root.find(".//Video")
+        if element is None:
+            return {}
+        info = title_streams_from_element(element) or {}
+        for stream in info.get("streams") or []:
+            if str(stream.get("codec_type") or "") == "video":
+                return dict(stream)
+        return {}
+
     def list_subtitle_streams(self, rating_key: str) -> List[PlexSubtitleStream]:
         """Return subtitle streams already attached to a movie/episode (streamType=3)."""
         key = str(rating_key or "").strip()
