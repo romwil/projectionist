@@ -67,6 +67,9 @@ class PlaybackStartPayload(BaseModel):
     start_over: bool = False
     # ``chat:<assistant message id>`` or ``share:<recommendation id>``; verified server-side.
     rec: Optional[str] = Field(default=None, max_length=160)
+    # The same browser profile an engine session accepts. When it can play the
+    # picture, the library path asks Plex for a direct stream.
+    profile: Any = None
 
 
 def _record_play_start(rating_key: str, rec: Optional[str], user: Any) -> None:
@@ -121,6 +124,7 @@ def library_playback_start(
             rating_key=key,
             user=user,
             start_over=bool(payload.start_over),
+            profile=payload.profile,
         )
         _record_play_start(key, payload.rec, user)
         return session

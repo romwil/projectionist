@@ -555,7 +555,12 @@ export default function LibraryPlayer({
       reason: decision.reason,
       retried: false,
       stopEngine: () => stopEnginePlayback(current.session_id),
-      startLibrary: () => startLibraryPlayback(key, { startOver: false, rec: recRef.current }),
+      startLibrary: async () =>
+        startLibraryPlayback(key, {
+          startOver: false,
+          rec: recRef.current,
+          profile: await detectBrowserPlaybackProfile(),
+        }),
     });
     if (sessionRef.current !== current) return;
     applyEngineFallback(result.session);
@@ -742,7 +747,11 @@ export default function LibraryPlayer({
             profile: await detectBrowserPlaybackProfile(),
             startOver,
           }),
-          startPlex: () => startLibraryPlayback(key, { startOver }),
+          startPlex: async () =>
+            startLibraryPlayback(key, {
+              startOver,
+              profile: await detectBrowserPlaybackProfile(),
+            }),
         });
         sessionRef.current = payload;
         setSession(payload);
@@ -787,7 +796,12 @@ export default function LibraryPlayer({
             profile: await detectBrowserPlaybackProfile(),
             startOver: false,
           }),
-          startPlex: () => startLibraryPlayback(key, { startOver: false, rec: recRef.current }),
+          startPlex: async () =>
+            startLibraryPlayback(key, {
+              startOver: false,
+              rec: recRef.current,
+              profile: await detectBrowserPlaybackProfile(),
+            }),
         });
         if (cancelled) {
           try {

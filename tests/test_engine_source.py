@@ -463,3 +463,60 @@ class EngineSettingsRoundTripTests(unittest.TestCase):
             {"engine": {"path_mappings": settings.engine.path_mappings}}
         )
         self.assertEqual(again.engine.path_mappings, settings.engine.path_mappings)
+
+
+class CachedLocateTests(unittest.TestCase):
+    def test_a_slow_plex_does_not_block_a_cached_engine_start(self) -> None:
+        """Play uses the remembered path. A slow Plex lookup is only a refresh."""
+        import time
+
+        from projectionist.engine.probe import MediaStream, ProbeResult
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            media = root / "film.mkv"
+            media.write_bytes(b"not-a-real-movie")
+            probes = root / "engine" / "probes"
+            probes.mkdir(parents=True)
+            calls = {"n": 0}
+
+            def slow_lookup(_key: str):
+                time.sleep(2)
+                calls["n"] += 1
+                return ["/plex/movies/film.mkv"]
+
+            def instant_probe(_path: str, **_kwargs):
+                return ProbeResult(
+                    container="mkv",
+                    format_name="matroska",
+                    duration_s=90,
+                    bitrate=1000,
+                    size=media.stat().st_size,
+                    streams=[
+                        MediaStream(
+                            index=0,
+                            codec_type="video",
+                            codec="h264",
+                            width=320,
+                            height=180,
+                        )
+                    ],
+                )
+
+            source = PlexMediaSource(
+                mappings=[{"plex_prefix": "/plex/movies", "container_prefix": str(root)}],
+                path_lookup=lambda key: ["/plex/movies/film.mkv"],
+                probe=instant_probe,
+            )
+            first = source.locate("121972", cache_dir=probes)
+            self.assertTrue(first.readable)
+            self.assertEqual(first.local_path, str(media))
+            source.path_lookup = slow_lookup
+            started = time.monotonic()
+            second = source.locate("121972", cache_dir=probes)
+            elapsed = time.monotonic() - started
+            self.assertLess(elapsed, 1.0)
+            self.assertTrue(second.readable)
+            self.assertEqual(second.local_path, str(media))
+            self.assertIsNotNone(second.probe)
+            self.assertEqual(calls["n"], 0)

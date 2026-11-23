@@ -1086,13 +1086,14 @@ export async function tuneLiveChannel(channelId: string) {
 }
 
 /** Household: start an in-app library HLS session (movie / episode / show key). */
-export async function startLibraryPlayback(ratingKey: string, { startOver = false, rec = "" }: JsonObject = {}) {
+export async function startLibraryPlayback(ratingKey: string, { startOver = false, rec = "", profile = null }: JsonObject = {}) {
   return api("/library/playback/start", {
     method: "POST",
     body: JSON.stringify({
       rating_key: String(ratingKey || ""),
       start_over: Boolean(startOver),
       ...(rec ? { rec: String(rec) } : {}),
+      ...(profile ? { profile } : {}),
     }),
   });
 }
