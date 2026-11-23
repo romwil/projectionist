@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+## [1.45.3] — 2026-11-23
+
+Play starts from the file Projectionist already knows, and a slow Plex call no longer stops the next film.
+
+### Highlights
+- **Play does not wait on Plex when the file is already known.** The remembered path and probe are enough to start. Plex is asked again in the background, or when that memory is missing.
+- **A slow film does not mark Plex as down.** A timeout on a heavy start or a metadata lookup stays with that title. Plex counts as down when it refuses the connection or its identity check fails. The next film still starts.
+- **A picture this browser can play is not transcoded.** The library path asks Plex to copy the picture. A browser that cannot play it still gets a transcode.
+- **An audio-only film keeps a decodable picture.** Copied-video segments start on a real keyframe, so the picture does not die partway in.
+
+### Fixed
+- An engine start uses the cached path and probe. A slow Plex file lookup no longer decides whether the session can start.
+- Timeouts on a transcode start, a metadata lookup, or the session list do not open the shared Plex circuit. A failed `/identity` check or a refused connection does. A transcode-start timeout stays on that title. 4K and HEVC 10-bit starts still wait 240 seconds. Other starts stay at 120 seconds. Segment fetches stay at 30 seconds.
+- The library start sends the browser profile. When that profile can play the source picture, Plex is asked for a direct stream instead of a video transcode, including a 4K HEVC picture Chrome or Safari can decode. A higher level than the profile advertises, or a codec it cannot play, still transcodes.
+- Audio-only playback copies the picture and packs fMP4 segments that start on an IDR. An open-GOP recovery point stays inside the segment that began at the previous IDR, so VideoToolbox is not given a fragment it cannot decode (the -12909 error partway into a TrueHD film).
+
+### Verification
+- `./scripts/patch-release.sh 1.45.3` lockstep + `frontend/public/release-notes.json`.
+- `docs/api/fixtures/get-api-health.json` regenerated for 1.45.3.
+- Page speed (`npm run test:release-perf`) before Hub publish.
+- Playback fixtures CI is green on the commit that `v1.45.3` tags.
+- CI on the release PR (required checks).
+- Hub image built from tag `v1.45.3`; `org.opencontainers.image.revision` matches that commit.
+- QA `:8792` is a Hub pull of `romwil/projectionist:1.45.3` (Path B). Production stays on 1.43.1.
+
 ## [1.45.2] — 2026-11-23
 
 A slow start on one film no longer blocks the next. Play waits until the picture is ready, then starts the opening clock.
