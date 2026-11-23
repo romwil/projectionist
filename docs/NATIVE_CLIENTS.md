@@ -103,6 +103,7 @@ curl -s http://your-host:8788/api/features | python3 -m json.tool
 - `rooms` is `1` when `GET /api/rooms` lists named screens. The list does not include what is playing. See [shared sessions](SHARED_SESSIONS.md#rooms).
 - `household_addresses` is `1` when this server publishes `addresses.home` and `addresses.away` to a signed-in client. The strings are absent before sign-in. Home is the last origin seen from the home network; away is the owner’s public base URL, or empty. Engine playlist and segment URLs stay relative either way. See [shared sessions](SHARED_SESSIONS.md#home-and-away).
 - **Honest limit.** A `0` means this server knows the name and does not offer that contract yet. It is not a hint that the feature is about to appear.
+- *Proposed, not on this manifest:* `preroll_warm_start` (ENG-015) and `warmup_screen` (EXP-018). A client treats a missing name the way it treats `0`. Neither name is served until those items ship. ENG-015 adds no route. EXP-018's lines document is *proposed* as `GET /api/playback/warmup-lines`.
 
 ---
 

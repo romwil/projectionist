@@ -2,7 +2,7 @@
 
 How Projectionist plays a title from your library: one stream engine, owned by Projectionist, shared by every client — the web app, native apps, and anything that speaks the API. Plex is the first **media source**, not the player.
 
-**Status:** ENG-001 through ENG-004, ENG-007, and the library playability report (ENG-011) are in the tree. The web player uses an engine session only when the owner turns on Play through Projectionist. That household switch is `features.play_through_projectionist` (also `PUT /api/playback/engine-setting`) and it is off by default. Turning it off changes the next play, with no restart. An engine session is also opt-in on the request: `POST /api/playback/sessions` starts a remux only when `engine_opt_in` is true. `playback_engine` on `GET /api/features` means this server can. It does not mean a client must. When the engine can turn a title's captions into WebVTT — the household subtitle file first, then an embedded text track — that title plays through the engine and the session does not record a caption fallback. Picture captions still stay on the Plex path until ENG-005, and the session records why. A plan the engine cannot remux does the same. Fullscreen controls stay the web player's. Item IDs (`ENG-…`) are tracked in [docs/roadmap/](roadmap/README.md).
+**Status:** ENG-001 through ENG-004, ENG-007, and the library playability report (ENG-011) are in the tree. The web player uses an engine session only when the owner turns on Play through Projectionist. That household switch is `features.play_through_projectionist` (also `PUT /api/playback/engine-setting`) and it is off by default. Turning it off changes the next play, with no restart. An engine session is also opt-in on the request: `POST /api/playback/sessions` starts a remux only when `engine_opt_in` is true. `playback_engine` on `GET /api/features` means this server can. It does not mean a client must. When the engine can turn a title's captions into WebVTT — the household subtitle file first, then an embedded text track — that title plays through the engine and the session does not record a caption fallback. Picture captions still stay on the Plex path until ENG-005, and the session records why. A plan the engine cannot remux does the same. Fullscreen controls stay the web player's. ENG-015, preparing the film while the preroll plays, is accepted and not started. Item IDs (`ENG-…`) are tracked in [docs/roadmap/](roadmap/README.md).
 **Audience:** Developers / contributors, owners for the honest limits.
 **Related:** [SHARED_SESSIONS.md](SHARED_SESSIONS.md) · [TIMELINE.md](TIMELINE.md) · [TRACKS.md](TRACKS.md) · [NATIVE_CLIENTS.md](NATIVE_CLIENTS.md) · [ARCHITECTURE.md](ARCHITECTURE.md)
 
@@ -307,6 +307,45 @@ The fix on main, not in the 1.42.0 image: a client gets a playable engine sessio
 
 ---
 
+## Prepare the film during the preroll
+
+ENG-015 is accepted and not started. It follows the playback-start fixes already underway: one title's transcode-start timeout must not open the shared circuit, a playlist waits while ffmpeg is starting and is a 404 only for an unknown or expired session, and a session can say `preparing`, `ready`, or `failed`. ENG-015 does not define those fixes. It is not a release.
+
+**Why.** A preroll is time the member is already watching. The server can wake the disk, probe, extract text captions, and start the engine or the library transcode during those seconds, so the first frame is ready when the preroll ends. The warm-up screen ([EXP-018](EXPERIENCE.md#warm-up-screen)) is then the rare case.
+
+**Done when.**
+
+- With prerolls on, Play creates the film session immediately. `GET /api/playback/sessions/{session_id}` reports `state: preparing` while the preroll plays and `state: ready` once the first segments exist.
+- A library-plan film that used to time out as the preroll ended is already started, and the picture begins at the hand-off or within a few seconds of it.
+- Back during the preroll stops that preparation within a few seconds. No ffmpeg is left running, and the media source shows no leftover transcode. The work counts toward the same concurrency caps as any other session.
+- The session record keeps how long preparation took and whether the film was ready at hand-off (`ready_at_handoff`).
+- A fixture covers the preroll plus the film hand-off against a slowed source.
+- On the web, the player preloads the film during the last few seconds of the preroll and switches with no gap. If the film is not ready, the warm-up screen bridges the gap.
+
+**Depends on.** ENG-003. It uses the `preparing`, `ready`, and `failed` states from the work already running. Text captions during preparation use ENG-004.
+
+**Client contract.** *Proposed capability:* `preroll_warm_start` is `1` on `GET /api/features` when this behavior is on. A missing name means clients keep today's order. No new route. Play still uses `POST /api/playback/sessions`, and the library session when that is the plan. *Proposed additive fields* on the session read: `state` (`preparing`, `ready`, `failed`), `prepare_ms`, and `ready_at_handoff`. Stop stays `POST /api/playback/sessions/{session_id}/stop`. The first-frame fallback clock starts at the hand-off, not at Play. If engine preparation fails during the preroll, the server switches to the library plan during the preroll.
+
+Opening a title, or resting on a Continue Watching item for about two seconds, may wake the disk, probe, and queue caption extraction. That pre-warm never starts ffmpeg or a library transcode. A device keeps at most one, and moving on drops it.
+
+Clients preload the film playlist and the first segments during the last few seconds of the preroll and switch with no gap. The web player does that in this repository. Other clients get the contract in [the outbox handoff](roadmap/outbox/2026-11-22-ENG-015-apple.md).
+
+```bash
+# Today's session open. ENG-015 adds no route. The proposed fields are not served yet.
+curl -s -b 'curatorx_session=YOUR_SESSION' \
+  -H 'Content-Type: application/json' \
+  -d '{"rating_key":"RATING_KEY","engine_opt_in":true,"profile":{}}' \
+  http://your-host:8788/api/playback/sessions
+```
+
+**Honest limits.** Preparation shares the audio-encode and library-transcode caps. A preroll that is off, or a title that does not take one, starts the film the way it does today. Live's scope freeze (PRD-007) is unchanged: this is on-demand playback, not a new channel type.
+
+**Privacy.** Preparation time stays on the household session record. Nothing new leaves the house.
+
+**Status.** accepted. Not started.
+
+---
+
 ## Roadmap items
 
 | ID | Item | Depends on |
@@ -322,6 +361,7 @@ The fix on main, not in the 1.42.0 image: a client gets a playable engine sessio
 | ENG-012 | Audio-only transcode tier. Copy the video, convert the audio to the device profile’s first encodeable codec, serve segments like a remux, and share the one heavy-ffmpeg slot. A Play probe does not wait on that slot. A DTS or TrueHD film whose video the profile can play is served this way. HEVC above the advertised level is a `try` that still copies the video and encodes the audio; a remembered miss stays on the Plex path. The Chrome E-AC-3 row is the first web case | ENG-003, ENG-011 |
 | ENG-013 | Source-transcode tier. A picture the profile cannot play is plan `source-transcode`, with `source_reason` of `codec`, `level`, or `bit_depth`, and `provider` naming the media source (`plex` today). `PlexMediaSource.source_transcode` records that offer and does not start ffmpeg. `playable` stays false, so a member still uses the source's existing playback. `playback_engine` stays `1`. A file the engine cannot read stays `plex-fallback`. The Jellyfin side of this tier is part of ENG-010 | ENG-003 |
 | ENG-014 | Pre-optimized versions. The owner chooses a folder outside every Plex library and a disk budget (200 GiB unless they change it). The job follows the copy ranking: above 1080p first, then watch count. One idle-priority encode runs from 1:00 a.m. to 6:00 a.m. A partial file is not a ready copy. A finished copy plays as direct or remux instead of a live transcode. Settings → Playback shows the queue, used space, and remove | ENG-011 |
+| ENG-015 | Prepare the film while the preroll plays. The film session starts at Play and reports `preparing`, then `ready` when the first segments exist. Back during the preroll stops that work. Accepted and not started. See [Prepare the film during the preroll](#prepare-the-film-during-the-preroll) | ENG-003 |
 | ENG-008 | Scrub thumbnails (trickplay image sprites / I-frame playlist) | ENG-003 |
 | ENG-009 | Live Channels on engine sessions (same stations, new stream). Build as the Live facade ARCH-007 asked for; PRD-007 freeze still holds (no new channel types) | ENG-003; ARCH-007 |
 | ENG-010 | Jellyfin media source. Follows ENG-012, ENG-013, ENG-005, and ENG-014, includes the Jellyfin side of the source-transcode tier, and comes before any public community launch | ENG-001 |
@@ -336,7 +376,7 @@ The fix on main, not in the 1.42.0 image: a client gets a playable engine sessio
 - **Caption packaging (ENG-004):** a household `DATA_DIR/subtitles/{rating_key}/{lang}.srt` is one WebVTT file plus a one-segment VOD subtitle playlist in the master `SUBTITLES` group. Embedded text tracks are extracted to the same shape ahead of Play, and cached beside that file, when that language is not already in the household cache. Play does not extract. Segmenting the VTT waits until a client requires it. Picture captions stay on the Plex path until ENG-005. The spike showed that shape is selectable in WebKit and tvOS AVPlayer.
 - **Spike evidence:** [2026-11-19-engine-spike-findings.md](superpowers/specs/2026-11-19-engine-spike-findings.md) (throwaway code on `spike/engine-remux`, not merged).
 - **Opt-in (decided 2026-11-21):** an engine session is only for a client that sends `engine_opt_in`. The capability is “this server can.” The household switch does not force a client onto the engine. Playlist URLs stay header-free, and a device credential can fetch them.
-- **Playback tiers (decided 2026-11-21), cheapest first:** direct, remux, audio-only transcode, captions as text (ENG-005), source transcode, own video transcode (ENG-006, opt-in), pre-optimized copies. The planner records the tier, the reason, and the profile answer that chose them. Software video transcode is 1080p H.264 only, above a startup benchmark, with a low cap. The browser runtime profile is done: the web asks the browser at play time. Text captions are extracted ahead of play. ENG-011, the library playability report, is in the tree. ENG-012 serves audio-only: copy the video, encode the profile's audio, one heavy ffmpeg at a time, and a Play probe does not wait. ENG-013 asks the media source to transcode a picture the profile cannot play, records `source-transcode` plus the reason, and does not start ffmpeg. Members still play on the source's existing path. ENG-014 makes compatible copies inside the owner's disk budget. Next, not started: ENG-005, then ENG-010 (Jellyfin, including the Jellyfin side of the source-transcode tier) before any public community launch. ENG-006 stays accepted and not started: the breakdown does not yet show a measured need. Startup detection (core count, a one-time 1080p encode benchmark, Quick Sync or VAAPI, NVENC, and which encoders ffmpeg actually opens) lands with ENG-006 as a `playback_hardware` capability. No hardware is required to run Projectionist. Live channel normalization (ENG-009) is not in this stack.
+- **Playback tiers (decided 2026-11-21), cheapest first:** direct, remux, audio-only transcode, captions as text (ENG-005), source transcode, own video transcode (ENG-006, opt-in), pre-optimized copies. The planner records the tier, the reason, and the profile answer that chose them. Software video transcode is 1080p H.264 only, above a startup benchmark, with a low cap. The browser runtime profile is done: the web asks the browser at play time. Text captions are extracted ahead of play. ENG-011, the library playability report, is in the tree. ENG-012 serves audio-only: copy the video, encode the profile's audio, one heavy ffmpeg at a time, and a Play probe does not wait. ENG-013 asks the media source to transcode a picture the profile cannot play, records `source-transcode` plus the reason, and does not start ffmpeg. Members still play on the source's existing path. ENG-014 makes compatible copies inside the owner's disk budget. Next, not started: ENG-005, then ENG-010 (Jellyfin, including the Jellyfin side of the source-transcode tier) before any public community launch. ENG-006 stays accepted and not started: the breakdown does not yet show a measured need. ENG-015 is accepted and not started. It follows the playback-start fixes already underway and does not pull ENG-005 or ENG-006 forward. Startup detection (core count, a one-time 1080p encode benchmark, Quick Sync or VAAPI, NVENC, and which encoders ffmpeg actually opens) lands with ENG-006 as a `playback_hardware` capability. No hardware is required to run Projectionist. Live channel normalization (ENG-009) is not in this stack.
 
 ## See also
 
