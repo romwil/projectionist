@@ -309,7 +309,7 @@ The fix on main, not in the 1.42.0 image: a client gets a playable engine sessio
 
 ## Prepare the film during the preroll
 
-ENG-015 is accepted and not started. It follows the playback-start fixes already underway: one title's transcode-start timeout must not open the shared circuit, a playlist waits while ffmpeg is starting and is a 404 only for an unknown or expired session, and a session can say `preparing`, `ready`, or `failed`. ENG-015 does not define those fixes. It is not a release.
+ENG-015 is accepted and not started. The playback-start fixes it follows shipped in 1.45.2: one title's transcode-start timeout does not open the shared circuit, a playlist waits while ffmpeg is starting and is a 404 only for an unknown or expired session, and a session can say `preparing`, `ready`, or `failed`. ENG-015 does not define those fixes. Warm start during the preroll and the warm-up screen remain accepted work that has not started.
 
 **Why.** A preroll is time the member is already watching. The server can wake the disk, probe, extract text captions, and start the engine or the library transcode during those seconds, so the first frame is ready when the preroll ends. The warm-up screen ([EXP-018](EXPERIENCE.md#warm-up-screen)) is then the rare case.
 
