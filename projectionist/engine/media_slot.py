@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import threading
 import time
+import types
 from typing import Any, Callable, Optional
 
 _SLOT = threading.Lock()
@@ -52,6 +53,13 @@ def _stop_holder() -> None:
 
 def _failed(command: list[str]) -> subprocess.CompletedProcess:
     return subprocess.CompletedProcess(command, 1, "", "")
+
+
+def _real_subprocess_run(runner: Any) -> bool:
+    """True for the real ``subprocess.run``. A test double is not that function."""
+    if not isinstance(runner, (types.FunctionType, types.BuiltinFunctionType)):
+        return False
+    return getattr(runner, "__module__", "") == "subprocess" and getattr(runner, "__name__", "") == "run"
 
 
 def _run_subprocess(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess:
@@ -100,20 +108,22 @@ def _run_subprocess(command: list[str], **kwargs: Any) -> subprocess.CompletedPr
 def run_media_tool(argv: list[str], runner: Callable[..., Any], **kwargs: Any) -> Any:
     """Run one media tool. A play does not wait for this process to finish."""
     command = media_command(argv)
+    real = _real_subprocess_run(runner)
     with _SLOT:
-        if _PLAY.is_set() and runner is subprocess.run:
+        if _PLAY.is_set() and real:
             return _failed(command)
-        if runner is subprocess.run:
+        if real:
             return _run_subprocess(command, **kwargs)
         return runner(command, **kwargs)
 
 
 def run_prepared_command(command: list[str], runner: Callable[..., Any], **kwargs: Any) -> Any:
     """Run a command that is already prefixed. One heavy process at a time."""
+    real = _real_subprocess_run(runner)
     with _SLOT:
-        if _PLAY.is_set() and runner is subprocess.run:
+        if _PLAY.is_set() and real:
             return _failed(list(command))
-        if runner is subprocess.run:
+        if real:
             return _run_subprocess(list(command), **kwargs)
         return runner(list(command), **kwargs)
 
