@@ -226,3 +226,23 @@ class CopyPlannerTests(unittest.TestCase):
         result = asyncio.run(run(None, Settings(), lambda: False))
         self.assertEqual(result["status"], "skipped")
         self.assertEqual(result["processed"], 0)
+
+    def test_a_requested_title_joins_the_overnight_list_first(self) -> None:
+        from projectionist.engine.copies import (
+            apply_copy_requests,
+            load_copy_requests,
+            remember_copy_request,
+            titles_within_budget,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            saved = remember_copy_request(Path(tmp), "134335")
+            self.assertEqual(saved, ["134335"])
+            self.assertEqual(load_copy_requests(Path(tmp)), ["134335"])
+        titles = apply_copy_requests(
+            [{"rating_key": "other", "above_1080p": True, "watch_count": 9, "file_size": 10}],
+            ["134335"],
+        )
+        ordered = titles_within_budget(titles, budget_bytes=1000)
+        self.assertEqual(ordered[0]["rating_key"], "134335")
+        self.assertTrue(ordered[0]["requested"])

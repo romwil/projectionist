@@ -445,6 +445,10 @@ class EngineSettingPayload(BaseModel):
     play_through_projectionist: bool = False
 
 
+class CopyRequestPayload(BaseModel):
+    rating_key: str = ""
+
+
 class CopiesPayload(BaseModel):
     """Owner folder and disk budget for copies made ahead of time."""
 
@@ -589,6 +593,23 @@ def _copy_titles() -> list[dict[str, Any]]:
     ahead = report.get("copy_ahead") if isinstance(report, dict) else None
     rows = ahead.get("titles") if isinstance(ahead, dict) else None
     return [row for row in rows or [] if isinstance(row, dict)]
+
+
+@router.post("/api/playback/copies/requests")
+def request_copy(payload: CopyRequestPayload, user=Depends(get_current_user_dep)) -> dict[str, Any]:
+    """Remember a title for the overnight copy pass. Does not start an encode."""
+    del user
+    from projectionist.engine.copies import remember_copy_request
+    from projectionist.library.playback import PREPARE_FOR_SCREEN
+
+    try:
+        key = validate_rating_key(payload.rating_key)
+        saved = remember_copy_request(_dir(), key)
+    except (PlaybackError, ValueError) as error:
+        detail = getattr(error, "message", None) or str(error)
+        status = int(getattr(error, "status_code", 400) or 400)
+        raise HTTPException(status_code=status, detail=detail) from error
+    return {"rating_key": key, "requested": True, "rating_keys": saved, "message": PREPARE_FOR_SCREEN}
 
 
 @router.get("/api/playback/copies")

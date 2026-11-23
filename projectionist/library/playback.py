@@ -12,6 +12,7 @@ import re
 import threading
 import time
 import uuid
+from pathlib import Path
 from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
@@ -566,6 +567,31 @@ def start_timeout_seconds(session: PlaybackSession) -> int:
     if heavy_transcode_start(session):
         return PLEX_HEAVY_START_TIMEOUT
     return PLEX_PLAYLIST_TIMEOUT
+
+
+PREPARE_FOR_SCREEN = "This title needs preparing for this screen"
+
+_HDR_TONEMAP = {"hdr10", "hlg", "dolby-vision"}
+
+
+def hardware_transcoder_present(device_root: Optional[Path] = None) -> bool:
+    """True when this server can see a GPU render node.
+
+    A display-only card does not count. Tone-mapping an HDR picture on the
+    CPU is the case this refuses.
+    """
+    root = Path("/dev/dri") if device_root is None else Path(device_root)
+    try:
+        return any(path.name.startswith("renderD") for path in root.iterdir())
+    except OSError:
+        return False
+
+
+def tone_map_transcode(facts: Mapping[str, Any], copy_video: bool) -> bool:
+    """True when a Plex video transcode of this picture would tone-map HDR."""
+    if copy_video:
+        return False
+    return str(facts.get("hdr") or "").strip().lower() in _HDR_TONEMAP
 
 
 def _apply_video_facts(session: PlaybackSession, facts: Mapping[str, Any]) -> None:
@@ -1227,6 +1253,7 @@ def start_playback(
     offset_ms: Optional[int] = None,
     fetch: Optional[FetchFn] = None,
     profile: Any = None,
+    video_facts: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     fetch = fetch or fetch_plex_bytes
     playable = resolve_playable_item(db, rating_key)
@@ -1270,8 +1297,8 @@ def start_playback(
             machine_id = cached_machine_identifier(plex_url, token, timeout=5)
         except Exception:  # noqa: BLE001
             machine_id = ""
-        facts: Dict[str, Any] = {}
-        if fetch is fetch_plex_bytes:
+        facts = dict(video_facts or {})
+        if not facts and fetch is fetch_plex_bytes:
             facts = read_playback_video(plex_url, token, str(playable["rating_key"]))
         session = PlaybackSession(
             session_id=session_id,
@@ -1305,6 +1332,8 @@ def start_playback(
         )
         session.video_codecs = codecs
         session.copy_video = copy_video
+        if tone_map_transcode(facts, copy_video) and not hardware_transcoder_present():
+            raise PlaybackError(PREPARE_FOR_SCREEN, status_code=409)
         start_plex_hls(session, offset_seconds=session.last_offset_s, fetch=fetch)
     _put_session(session)
     return session_public_payload(

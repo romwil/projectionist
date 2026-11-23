@@ -311,8 +311,66 @@ def _size(value: Any) -> int:
     return number if number > 0 else 0
 
 
+def remember_copy_request(data_dir: Path, rating_key: str) -> list[str]:
+    """Remember one title for the overnight copy pass. Does not start an encode."""
+    key = str(rating_key or "").strip()
+    if not key or "/" in key or key in {".", ".."}:
+        raise ValueError("rating_key is required")
+    folder = Path(data_dir) / "engine"
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / "copy-requests.json"
+    keys = load_copy_requests(data_dir)
+    if key not in keys:
+        keys.append(key)
+    path.write_text(json.dumps({"rating_keys": keys}), encoding="utf-8")
+    return keys
+
+
+def load_copy_requests(data_dir: Path) -> list[str]:
+    path = Path(data_dir) / "engine" / "copy-requests.json"
+    try:
+        blob = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    raw = blob.get("rating_keys") if isinstance(blob, dict) else None
+    keys: list[str] = []
+    for item in raw or []:
+        key = str(item or "").strip()
+        if key and "/" not in key and key not in keys:
+            keys.append(key)
+    return keys
+
+
+def apply_copy_requests(
+    titles: Sequence[Mapping[str, Any]],
+    rating_keys: Sequence[str],
+) -> list[dict[str, Any]]:
+    """Put a member's requested titles on the existing overnight list."""
+    merged: list[dict[str, Any]] = []
+    index: dict[str, int] = {}
+    for row in titles:
+        if not isinstance(row, Mapping):
+            continue
+        key = str(row.get("rating_key") or "").strip()
+        if not key or key in index:
+            continue
+        index[key] = len(merged)
+        merged.append(dict(row))
+    for key in rating_keys:
+        clean = str(key or "").strip()
+        if not clean:
+            continue
+        if clean in index:
+            merged[index[clean]]["requested"] = True
+            continue
+        index[clean] = len(merged)
+        merged.append({"rating_key": clean, "requested": True, "file_size": 0})
+    return merged
+
+
 def _sort_key(row: Mapping[str, Any]) -> tuple[Any, ...]:
     return (
+        0 if row.get("requested") else 1,
         0 if row.get("above_1080p") else 1,
         -_size(row.get("watch_count")),
         str(row.get("title") or ""),

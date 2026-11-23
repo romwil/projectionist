@@ -1085,6 +1085,14 @@ export async function tuneLiveChannel(channelId: string) {
   });
 }
 
+/** Ask the overnight copy pass to prepare this title. Does not start an encode. */
+export async function requestPreparedCopy(ratingKey: string) {
+  return api("/playback/copies/requests", {
+    method: "POST",
+    body: JSON.stringify({ rating_key: String(ratingKey || "") }),
+  });
+}
+
 /** Household: start an in-app library HLS session (movie / episode / show key). */
 export async function startLibraryPlayback(ratingKey: string, { startOver = false, rec = "", profile = null }: JsonObject = {}) {
   return api("/library/playback/start", {
