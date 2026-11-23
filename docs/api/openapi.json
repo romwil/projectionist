@@ -552,6 +552,9 @@
       },
       "PlaybackStartPayload": {
         "properties": {
+          "profile": {
+            "title": "Profile"
+          },
           "rating_key": {
             "default": "",
             "title": "Rating Key",
