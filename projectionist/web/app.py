@@ -563,6 +563,22 @@ async def security_headers_middleware(request: Request, call_next):
     return response
 
 
+@app.middleware("http")
+async def cookie_origin_middleware(request: Request, call_next):
+    """A browser on another site cannot spend the household cookie (SEC-023)."""
+    from fastapi.responses import JSONResponse
+
+    from projectionist.web.origin_check import ORIGIN_REJECTED, cookie_origin_rejected
+
+    if cookie_origin_rejected(request):
+        return JSONResponse(
+            {"detail": ORIGIN_REJECTED},
+            status_code=403,
+            headers={"Cache-Control": "private, no-store"},
+        )
+    return await call_next(request)
+
+
 _SWR_INVALIDATING_PREFIXES = ("/api/admin/live-channels", "/api/live-channels", "/api/settings")
 
 
