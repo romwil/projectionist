@@ -87,6 +87,7 @@ export function checklistProgress(items: JsParam) {
 const AUDIT_EVENT_LABELS: Record<string, string> = {
   sign_in: "Signed in",
   sign_in_failed: "Sign-in refused",
+  sign_in_locked: "Sign-in locked",
   sign_out_everywhere: "Signed out everywhere",
   password_change: "Changed password",
   password_reset: "Password reset by owner",
@@ -135,5 +136,7 @@ export function auditDetailLine(row: JsParam) {
     parts.push(`${shown}${more}`);
   }
   if (detail.username) parts.push(`as “${detail.username}”`);
+  if (detail.subject) parts.push(String(detail.subject));
+  if (detail.lock_minutes) parts.push(`locked ${detail.lock_minutes} min`);
   return parts.join(" · ");
 }

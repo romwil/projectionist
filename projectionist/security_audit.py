@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 SIGN_IN = "sign_in"
 SIGN_IN_FAILED = "sign_in_failed"
+SIGN_IN_LOCKED = "sign_in_locked"
 SIGN_OUT_EVERYWHERE = "sign_out_everywhere"
 PASSWORD_CHANGE = "password_change"
 PASSWORD_RESET = "password_reset"
@@ -42,6 +43,7 @@ MEMORY_REVIEW = YOUTH_MEMORY_READ  # back-compat alias
 AUDIT_EVENTS = (
     SIGN_IN,
     SIGN_IN_FAILED,
+    SIGN_IN_LOCKED,
     SIGN_OUT_EVERYWHERE,
     PASSWORD_CHANGE,
     PASSWORD_RESET,

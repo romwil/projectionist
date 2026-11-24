@@ -18,7 +18,7 @@ The numbered list is the subject order inside that plan.
 4. **TRK** — tracks: Moments, Booth Notes, Class / Study, after the timeline
 5. **NAT** — the client contract, threaded through the lanes as each capability ships
 6. **EXP** — experience convergence (parallel). Lane B’s next item is **EXP-001** (design tokens). EXP-013, EXP-004, EXP-005, EXP-006, EXP-014, EXP-015, and EXP-016 are done. EXP-017 (owner RSS for local headlines) is proposed and later. UV index and air quality on the weather boards are hooks and wait for the person. EXP-018 is the warm-up lines file and step names, then the web screen. The lines file and the session step are in. The web screen is still ahead. It is not a release.
-7. **SEC** — the public front door, continued from the review series at the next free numbers (SEC-017 onward). SEC-017 through SEC-022 are the gate before the extra login on the public hostname can come off. That login stays until the person removes it. SEC-017, the tunnel client address for rate limits, is on main and is not in a release image. Edge rules are a separate plan and are not applied here.
+7. **SEC** — the public front door, continued from the review series at the next free numbers (SEC-017 onward). SEC-017 through SEC-022 are the gate before the extra login on the public hostname can come off. That login stays until the person removes it. SEC-017 (tunnel client address) is on main. SEC-018 (per-account sign-in lock) is in this change and is not a release image. Edge rules are a separate plan and are not applied here.
 
 **Before the next production rollout.** Two defects from QA 1.41.1 are recorded below. They are not new capability items. The database-file fix lands before production moves. The Safari stall is investigated before any further playlist change. This record does not edit `docs/RELEASE.md`; the fix lane adds the empty-database check to that file’s pre-rollout checklist.
 
@@ -94,7 +94,7 @@ The numbered list is the subject order inside that plan.
 | EXP-018 | Warm-up lines and step names, then the web screen. The lines file, `step`, and the web player are in. Humor stays On | accepted | [EXPERIENCE](../EXPERIENCE.md#warm-up-screen) |
 | EXP-019 | Installable web app. Manifest, shell worker, quiet install, media keys, shortcuts. Push waits | in progress | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | SEC-017 | Use the tunnel client address for rate limits | done | [SECURITY](../SECURITY.md#roadmap-items) |
-| SEC-018 | Throttle sign-in failures per account | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
+| SEC-018 | Throttle sign-in failures per account | done | [SECURITY](../SECURITY.md#roadmap-items) |
 | SEC-019 | Require a second factor for owner accounts | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
 | SEC-020 | Treat the tunnel as outside the house | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
 | SEC-021 | Keep private responses out of shared caches | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
