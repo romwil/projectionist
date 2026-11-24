@@ -3475,6 +3475,62 @@
         ]
       }
     },
+    "/api/sessions/{session_id}/captions": {
+      "get": {
+        "description": "Cues for this device. The room's captions stay as they are.",
+        "operationId": "session_captions_api_sessions__session_id__captions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "title": "Language",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Session Captions Api Sessions  Session Id  Captions Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Session Captions",
+        "tags": [
+          "client",
+          "sessions"
+        ]
+      }
+    },
     "/api/sessions/{session_id}/code": {
       "get": {
         "description": "The code on the screen. Guests do not receive a copy of it.",

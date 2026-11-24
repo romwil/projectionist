@@ -88,7 +88,8 @@ Invite: `GET /api/invites/validate?token=…` stays public. The body is the invi
     "rooms": 1,              // SES-002 named screens, no playback
     "session_object": 1,     // SES-003 owner, screen, position, level
     "session_join": 1,       // SES-005 code or starter approval, guest remote
-    "youth_join": 1          // SES-009 approval tightens the room; push waits
+    "youth_join": 1,         // SES-009 approval tightens the room; push waits
+    "session_captions": 1    // SES-006 caption feed for a device in the session
   }
 }
 ```

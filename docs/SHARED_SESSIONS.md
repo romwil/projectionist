@@ -67,9 +67,8 @@ Joined devices need sub-second state. Polling `GET /api/devices/me/intent` is ri
 
 A guest (or the owner) can read captions on their own device while the room watches clean.
 
-- The device fetches the session’s caption rendition list from the [engine](PLAYBACK_ENGINE.md#captions) and renders cues locally against the realtime playhead.
-- Language is per device: one person reads English, another the original French.
-- **How this works:** the cues are the same WebVTT the screen would use; nothing is generated per person. **Honest limit:** if the screen buffers, handheld cues pause on the next heartbeat — they can lag by up to a second during a seek.
+- The device fetches the session’s caption feed at `GET /api/sessions/{id}/captions`. The cues are the household subtitle file. Language is per request. The room's caption command is unchanged.
+- **How this works:** the cues are the same text the screen would use; nothing is generated per person. **Honest limit:** if the screen buffers, a device still has the file's clock and estimates the playhead from the live channel. The capability `session_captions` is `1`.
 
 ---
 
@@ -149,7 +148,7 @@ The household owner, or the member signed in on that screen, can rename it with 
 | SES-003 | Session object (owner, screen, position, level) on top of engine sessions (done: `session_object` is 1) | ENG-003 |
 | SES-004 | Realtime channel (`/api/sessions/{id}/live`), command authorization, clock model (done: `shared_sessions` is 1) | SES-003 |
 | SES-005 | Join flow (owner approval or on-screen code) + guest permissions (done: `session_join` is 1) | SES-004 |
-| SES-006 | Handheld captions | SES-004, ENG-004 |
+| SES-006 | Handheld captions (done: `session_captions` is 1) | SES-004, ENG-004 |
 | SES-007 | Handoff between screens (same session, new screen) | SES-004 |
 | SES-008 | Web client as a second screen (join from a browser) | SES-005 |
 | SES-009 | Youth join approval: owner notification, Approve tightens the session ceiling, Not now declines (done: `youth_join` is 1; push waits) | SES-005, TRK-003 |
