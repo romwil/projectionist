@@ -1,6 +1,78 @@
 {
-  "generated_at": "2026-11-24T03:49:04Z",
+  "generated_at": "2026-11-24T16:48:19Z",
   "releases": [
+    {
+      "version": "1.46.1",
+      "date": "2026-11-24",
+      "summary": "Tag `v1.46.0` was created and never published. This is the Hub image after 1.45.5. It contains that tag's commit and the merges after it. Pull request 323, \"Treat a tunnel request as outside the house,\" had not merged, so it is not in this image.",
+      "highlights": [
+        "**A holiday question reaches the curator.** Ask the curator answers. It no longer comes back as the word \"picks\".",
+        "**The film prepares while the preroll plays.** A warm-up screen says what is happening, and the movie is ready when the preroll ends.",
+        "**Household playback is an owner control.** Play through Projectionist, the away address, the playability report, and copies made ahead are under Admin → Household → Playback. The switch says it affects everyone in the household. Members do not see that section. An old Profile playback anchor opens the new section.",
+        "**Install Projectionist, and play on another screen.** Settings and the account menu offer Install when the browser does. The installed window opens on Explore. Rooms names the screens. Play in… starts the film on one of them. The remote plays, pauses, and skips ten seconds."
+      ],
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "Let Ask the professor reach the curator.",
+            "Prepare the film while a preroll plays.",
+            "Show a warm-up while a film prepares, and preload it during the preroll.",
+            "Serve warm-up lines and the playback step.",
+            "Make the web app installable without caching media.",
+            "Keep the service worker from answering API requests.",
+            "Let the web app list rooms, start a film on a screen, and remote it.",
+            "Let a member join a session with a code or the starter's approval.",
+            "Ask before a Youth member joins, and tighten the room on approval.",
+            "Give a device in the session its own caption feed.",
+            "Move a session to another screen without starting over.",
+            "Fingerprint a media file from its size, time, and duration.",
+            "Import dialogue from the household subtitle cache.",
+            "Require a sign-in code for an owner password.",
+            "Lock a username or invite after repeated sign-in failures.",
+            "Count tunnel clients only from a listed connector."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "Move household playback controls into Admin. Profile keeps pause, text size, and the default page.",
+            "Record the installable web app and web rooms as done.",
+            "Record the timeline capabilities on the features fixture.",
+            "Register session approvals in the privacy registry.",
+            "Include a room-join request in the personal-data registry.",
+            "Keep owner session decisions out of a member's download.",
+            "Drop the duplicate session-approval export.",
+            "Finish owner enrollment in the existing sign-in tests.",
+            "Measure login timing by the median so one slow sample is not an oracle.",
+            "Keep the Continue Watching art fix on main. That picture fix shipped in 1.45.5.",
+            "Do not cut an audio-only segment inside a large slice.",
+            "A publish checks the changelog heading before it creates the version tag. A missing `## [X.Y.Z]` heading exits non-zero and does not create or push the tag."
+          ]
+        },
+        {
+          "title": "Security",
+          "bullets": [
+            "SEC-017 counts tunnel clients only from a listed connector. A forwarding header from any other peer is not the rate-limit key.",
+            "SEC-018 locks a username or an invite after repeated sign-in failures. The error is the same when the account or invite does not exist.",
+            "SEC-019 requires a sign-in code for an owner password."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "`./scripts/patch-release.sh 1.46.1` lockstep + `frontend/public/release-notes.json`.",
+            "`docs/api/fixtures/get-api-health.json` records 1.46.1.",
+            "Page speed (`npm run test:release-perf`) before Hub publish.",
+            "The publish script's heading preflight is tested in `tests/test_docker_release_revision.py`.",
+            "CI on the release PR (required checks).",
+            "Hub image `romwil/projectionist:1.46.1`; `org.opencontainers.image.revision` matches tag `v1.46.1`.",
+            "QA `:8792` is a Hub pull of that image (Path B). Production stays on 1.45.5.",
+            "Pull request 323 had not merged at the cut."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.45.5",
       "date": "2026-11-24",
@@ -22,7 +94,7 @@
             "Page speed before Hub publish.",
             "This image is the art fix on v1.45.4. Household playback is not in it.",
             "Hub image `romwil/projectionist:1.45.5`; `org.opencontainers.image.revision` matches the tag.",
-            "QA `:8792` is a Hub pull of that image. Production moves to 1.45.5 only after health says so."
+            "QA `:8792` is a Hub pull of that image. Production health says 1.45.5."
           ]
         }
       ]
