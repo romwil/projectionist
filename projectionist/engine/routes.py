@@ -442,13 +442,14 @@ def playback_session_progress(
     user=Depends(get_current_user_dep),
 ) -> dict[str, Any]:
     """Write Continue Watching for an engine session. Does not touch a Plex transcode."""
-    from projectionist.engine.session import get_engine_session
+    from projectionist.engine.session import get_engine_session, note_playback_progress
     from projectionist.library.playback import update_local_view_offset
 
     try:
         session = get_engine_session(session_id, user_id=str(getattr(user, "id", "") or ""))
     except PlaybackError as error:
         raise HTTPException(status_code=error.status_code, detail=error.message) from error
+    note_playback_progress(session, int(payload.time_ms))
     update_local_view_offset(
         _db(), session.rating_key, int(payload.time_ms), int(payload.duration_ms)
     )
