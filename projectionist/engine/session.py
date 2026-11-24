@@ -22,6 +22,7 @@ from typing import Any, Optional, Sequence
 from projectionist.engine.captions import CaptionRendition
 from projectionist.engine.planner import plan_playback
 from projectionist.engine.profiles import DeviceProfile
+from projectionist.engine.quality import title_is_replaced
 from projectionist.engine.remux import start_remux
 from projectionist.engine.tries import failed_try_keys
 from projectionist.engine.source import MediaAsset
@@ -378,6 +379,7 @@ def open_engine_session(
         source=source,
         failed_tries=failed_try_keys(data_dir),
         ready_copy=ready_copy,
+        replaced=title_is_replaced(data_dir, str(asset.rating_key or "")),
     )
     play_asset = ready_copy if planned.get("from_copy") and ready_copy is not None else asset
     plan = str(planned["plan"])

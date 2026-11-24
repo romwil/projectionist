@@ -738,9 +738,12 @@ class EngineSettings:
     # ENG-014. Empty until the owner chooses a folder outside the Plex libraries.
     copy_output_dir: str = ""
     copy_budget_bytes: int = 200 * 1024 * 1024 * 1024
+    # Owner quality ceiling. Titles above this are listed on the playability report.
+    quality_ceiling: str = "1080p"
 
     def __post_init__(self) -> None:
         from projectionist.engine.pathmap import salvage_mappings
+        from projectionist.engine.quality import normalize_quality_ceiling
 
         self.path_mappings = salvage_mappings(self.path_mappings)
         flag = self.play_through_projectionist
@@ -756,6 +759,7 @@ class EngineSettings:
         if budget <= 0:
             budget = 200 * 1024 * 1024 * 1024
         self.copy_budget_bytes = budget
+        self.quality_ceiling = normalize_quality_ceiling(self.quality_ceiling)
 
 
 def _settings_flag(value: object, default: bool) -> bool:

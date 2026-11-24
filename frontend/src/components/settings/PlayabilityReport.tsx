@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import {
   getPlayabilityReport,
   getPlayabilityTitles,
+  markQualityTargetReplaced,
+  queueQualityCopy,
   refreshPlayabilityReport,
 } from "../../api/client";
 import { detectBrowserPlaybackProfile } from "../../lib/enginePlayback";
@@ -54,6 +56,20 @@ type ProfileReport = {
     hdr?: number | null;
   };
 };
+type AboveTargetRow = {
+  rating_key?: string;
+  title?: string;
+  resolution?: string;
+  codec?: string;
+  file_size?: number;
+  path?: string;
+};
+type AboveTarget = {
+  title?: string;
+  count?: number;
+  ceiling?: string;
+  titles?: AboveTargetRow[];
+};
 type PlayabilityReportBody = {
   message?: string;
   title_count?: number;
@@ -63,7 +79,38 @@ type PlayabilityReportBody = {
   confirmed_by_ffprobe?: number;
   profiles?: ProfileReport[];
   gpu?: { safari?: number | null; apple_tv?: number | null };
+  quality_ceiling?: string;
+  above_target?: AboveTarget;
 };
+
+const CODEC_LABELS: Record<string, string> = {
+  hevc: "HEVC",
+  h264: "H.264",
+  av1: "AV1",
+  vp9: "VP9",
+  vc1: "VC-1",
+};
+
+function codecLabel(name: string) {
+  const key = String(name || "")
+    .trim()
+    .toLowerCase();
+  return CODEC_LABELS[key] || name;
+}
+
+function formatBytes(bytes: number): string {
+  const value = Number(bytes) || 0;
+  const gib = value / (1024 * 1024 * 1024);
+  if (Math.abs(gib) >= 0.1) return `${gib.toFixed(1)} GiB`;
+  const mib = value / (1024 * 1024);
+  if (Math.abs(mib) >= 0.1) return `${Math.round(mib)} MiB`;
+  return `${value} B`;
+}
+
+function targetSummary(count: number): string {
+  if (count === 1) return "1 title is above your quality target.";
+  return `${count} titles are above your quality target.`;
+}
 
 function profileLabel(id: string) {
   return PROFILE_LABELS[id] || id;
@@ -176,10 +223,12 @@ function TierShare({
  * Owner view of the library playability report. The server dry-runs the
  * planner. This panel does not start a transcode.
  */
-export default function PlayabilityReport() {
+export default function PlayabilityReport({ listRevision = 0 }: { listRevision?: number }) {
   const [report, setReport] = useState<PlayabilityReportBody | null>(null);
   const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [busyKey, setBusyKey] = useState("");
 
   useEffect(() => {
     let live = true;
@@ -193,7 +242,25 @@ export default function PlayabilityReport() {
     return () => {
       live = false;
     };
-  }, []);
+  }, [listRevision]);
+
+  async function runTargetAction(ratingKey: string, action: "copy" | "replaced") {
+    setBusyKey(`${action}:${ratingKey}`);
+    setActionError("");
+    try {
+      if (action === "copy") await queueQualityCopy(ratingKey);
+      else await markQualityTargetReplaced(ratingKey);
+      const next = await getPlayabilityReport({ view: "progress" });
+      setReport(next as PlayabilityReportBody);
+    } catch (err) {
+      setActionError(
+        (err as { message?: string })?.message ||
+          (action === "copy" ? "Couldn’t queue that copy." : "Couldn’t mark that title."),
+      );
+    } finally {
+      setBusyKey("");
+    }
+  }
 
   useEffect(() => {
     if (!report?.running) return undefined;
@@ -239,6 +306,9 @@ export default function PlayabilityReport() {
   const loading = report === null && !error;
   const notice = error ? "" : playabilityNotice(report);
   const gpuLine = gpuDecisionLine(report?.gpu);
+  const above = report?.above_target;
+  const aboveCount = Number(above?.count || 0);
+  const aboveRows = Array.isArray(above?.titles) ? above.titles : [];
 
   return (
     <div className="playability-report" data-testid="playability-report">
@@ -246,8 +316,8 @@ export default function PlayabilityReport() {
       <p className="field-help">
         Which tier would play each title: serve the file, remux, try the remux, audio-only, captions
         that are not ready yet, picture captions, ask the media source to transcode, or not playable
-        through the engine. Refresh plans from the stream metadata Plex already has, then confirms with ffprobe
-        in the background. It does not start on its own, and it does not transcode.
+        through the engine. Refresh plans from the stream metadata Plex already has, then confirms
+        with ffprobe in the background. It does not start on its own, and it does not transcode.
       </p>
       <button
         type="button"
@@ -287,6 +357,52 @@ export default function PlayabilityReport() {
         <p className="field-help" data-testid="playability-gpu">
           {gpuLine}
         </p>
+      ) : null}
+      {report ? (
+        <section data-testid="above-quality-target">
+          <h4>Above your quality target</h4>
+          <p className="field-help" data-testid="above-quality-target-count">
+            {targetSummary(aboveCount)}
+          </p>
+          {actionError ? (
+            <p className="status status-error" data-testid="above-quality-target-error">
+              {actionError}
+            </p>
+          ) : null}
+          {aboveRows.length ? (
+            <ul className="playability-titles">
+              {aboveRows.map((row) => {
+                const key = String(row.rating_key || "");
+                const rowBusy = busyKey.endsWith(`:${key}`);
+                return (
+                  <li key={key} data-testid={`above-target-${key}`}>
+                    <strong>{row.title || key}</strong>
+                    <span className="field-help">{row.resolution}</span>
+                    <span className="field-help">{codecLabel(String(row.codec || ""))}</span>
+                    <span className="field-help">{formatBytes(Number(row.file_size || 0))}</span>
+                    <span className="field-help">{row.path}</span>
+                    <button
+                      type="button"
+                      data-testid={`quality-copy-${key}`}
+                      disabled={rowBusy}
+                      onClick={() => void runTargetAction(key, "copy")}
+                    >
+                      Make a 1080p copy
+                    </button>
+                    <button
+                      type="button"
+                      data-testid={`quality-replaced-${key}`}
+                      disabled={rowBusy}
+                      onClick={() => void runTargetAction(key, "replaced")}
+                    >
+                      Mark as replaced
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+        </section>
       ) : null}
       {profiles.map((profile) => {
         const id = String(profile.profile || "");

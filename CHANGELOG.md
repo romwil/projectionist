@@ -7,6 +7,7 @@ A holiday shelf can carry a theme and a reason for each pick. The owner previews
 ### Highlights
 
 - **A holiday shelf has a theme and a reason.** Ask the professor, read the preview, then apply. Explore shows the theme and each note. Youth members do not see After bedtime. Holidays and seasons are one admin page. This is not in the 1.46.1 image.
+- **The owner sets a quality ceiling.** The default is 1080p, on Household → Playback. The playability report counts titles above that target and lists them. Make a 1080p copy queues the existing copy for that one title. Mark as replaced takes it off the list.
 
 ## [1.46.1] — 2026-11-24
 

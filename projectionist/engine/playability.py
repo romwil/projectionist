@@ -555,6 +555,8 @@ def classify_title(
         "codec_in_profile": codec_in_profile,
         "profile_limits_bit_depth": profile_limits_bit_depth,
         "above_1080p": _above_1080p(video),
+        "width": int(getattr(video, "width", 0) or 0) if video is not None else 0,
+        "height": int(getattr(video, "height", 0) or 0) if video is not None else 0,
         "video_hdr": bool(hdr_value),
         "hdr": hdr_value,
         "watch_count": _nonneg(watch_count),

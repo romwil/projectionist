@@ -1228,6 +1228,34 @@ export async function putPlayThroughProjectionist(enabled: boolean) {
   });
 }
 
+/** Owner quality ceiling. Default is 1080p. */
+export async function getQualityCeiling() {
+  return api("/playback/quality-ceiling");
+}
+
+export async function putQualityCeiling(qualityCeiling: string) {
+  return api("/playback/quality-ceiling", {
+    method: "PUT",
+    body: JSON.stringify({ quality_ceiling: String(qualityCeiling || "") }),
+  });
+}
+
+/** Queue one 1080p copy on the existing overnight path. Does not encode the library. */
+export async function queueQualityCopy(ratingKey: string) {
+  return api("/playback/quality-target/copy", {
+    method: "POST",
+    body: JSON.stringify({ rating_key: String(ratingKey || "") }),
+  });
+}
+
+/** The title is replaced, so it leaves the above-target list. */
+export async function markQualityTargetReplaced(ratingKey: string) {
+  return api("/playback/quality-target/replaced", {
+    method: "POST",
+    body: JSON.stringify({ rating_key: String(ratingKey || "") }),
+  });
+}
+
 /** Owner: the address people use when they are away from home. Empty clears it. */
 export async function putPublicBaseUrl(publicBaseUrl: string) {
   return api("/network/public-base-url", {
