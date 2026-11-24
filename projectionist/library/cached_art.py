@@ -61,6 +61,69 @@ def _identity(item: Mapping[str, Any]) -> Optional[tuple[str, str, str]]:
     return None
 
 
+def serialize_library_art(payload: Any, settings: object) -> Any:
+    """Set poster and backdrop addresses to the art route for library items.
+
+    Hub, Continue Watching, Because you watched, related titles, search,
+    holiday rails, and Live all use this. It has to run before the privacy
+    sanitizer. That sanitizer keeps an art-route address and drops a tokenized
+    Plex thumb, so a feed that sanitizes first cannot grow the picture back.
+    """
+    return point_cached_art(payload, settings)
+
+
+def _row_cell(row: Mapping[str, Any], key: str) -> Any:
+    try:
+        keys = row.keys()
+    except AttributeError:
+        return None
+    if key not in keys:
+        return None
+    return row[key]
+
+
+def _program_from_library_row(program: dict[str, Any], row: Mapping[str, Any]) -> None:
+    media_type = str(_row_cell(row, "media_type") or program.get("media_type") or program.get("type") or "")
+    program["media_type"] = media_type.strip().lower()
+    program["rating_key"] = str(_row_cell(row, "rating_key") or program.get("plexRatingKey") or "")
+    program["in_library"] = True
+    tmdb_id = _positive_int(_row_cell(row, "tmdb_id"))
+    if tmdb_id:
+        program["tmdb_id"] = tmdb_id
+    tvdb_id = _positive_int(_row_cell(row, "tvdb_id"))
+    if tvdb_id:
+        program["tvdb_id"] = tvdb_id
+    program["poster_url"] = str(_row_cell(row, "poster_url") or "")
+    program["backdrop_url"] = str(_row_cell(row, "backdrop_url") or "")
+
+
+def _fill_live_program_art(payload: Any, db: Any, cache: dict[str, Any]) -> Any:
+    """Copy a guide payload and hang library art on programs we can name."""
+    if isinstance(payload, Mapping):
+        out = {key: _fill_live_program_art(value, db, cache) for key, value in payload.items()}
+        key = str(out.get("plexRatingKey") or "").strip()
+        if not key or str(out.get("poster_url") or "").strip():
+            return out
+        if key not in cache:
+            try:
+                cache[key] = db.library_item_by_rating_key(key)
+            except Exception:  # noqa: BLE001 — a guide cell without a row keeps no art
+                cache[key] = None
+        row = cache[key]
+        if isinstance(row, Mapping):
+            _program_from_library_row(out, row)
+        return out
+    if isinstance(payload, list):
+        return [_fill_live_program_art(item, db, cache) for item in payload]
+    return payload
+
+
+def serialize_live_guide(payload: Any, db: Any, settings: object) -> Any:
+    """Live guide cells use the same art route as a library card."""
+    filled = _fill_live_program_art(payload, db, {})
+    return serialize_library_art(filled, settings)
+
+
 def point_cached_art(payload: Any, settings: object) -> Any:
     """Replace servable poster and backdrop URLs with the art route.
 

@@ -85,6 +85,67 @@ test.describe("Explore hub", () => {
     ).toBe("1");
   });
 
+  test("Continue Watching shows the picture when the feed has art", async ({ page }) => {
+    const art = "/api/library/art/movie/29705?id_type=tmdb&kind=poster";
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      "base64",
+    );
+    const item = {
+      id: 9,
+      title: "Transatlantic Tunnel",
+      year: 1935,
+      media_type: "movie",
+      tmdb_id: 29705,
+      rating_key: "29705",
+      in_library: true,
+      poster_url: art,
+      view_offset_ms: 120000,
+      duration_ms: 5400000,
+      resume_label: "22% watched",
+      card_kind: "continue_watching",
+    };
+    const rail = {
+      feed: "continue-watching",
+      total: 1,
+      note: null,
+      items: [item],
+    };
+    const payload = mockExploreHubPayload({ rails: { continue_watching: rail } });
+    await page.route("**/api/library/art/**", async (route) => {
+      await route.fulfill({ status: 200, contentType: "image/png", body: png });
+    });
+    await page.route("**/api/library/feeds/hub**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(payload),
+      });
+    });
+    await page.route("**/api/library/feeds/continue-watching**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(rail),
+      });
+    });
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/explore");
+    const card = page.getByTestId("explore-continue-watching-rail").getByRole("article").first();
+    await expect(card).toBeVisible();
+    await card.scrollIntoViewIfNeeded();
+    const img = card.locator("img.poster-art");
+    await expect(img).toHaveCount(1);
+    await expect.poll(async () =>
+      img.evaluate((node) => {
+        const image = node as HTMLImageElement;
+        if (image.naturalWidth <= 0) return "hidden";
+        return getComputedStyle(image).opacity;
+      }),
+    ).toBe("1");
+  });
+
   test("shelves use a generated poster and the top nav keeps a solid fill", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/explore");
