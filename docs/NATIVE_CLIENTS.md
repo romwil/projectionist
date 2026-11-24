@@ -80,6 +80,7 @@ Invite: `GET /api/invites/validate?token=…` stays public. The body is the invi
     "shared_sessions": 1,    // SES-004 live channel, commands, clock
     "timeline": 0,           // TML-005
     "timeline_files": 1,     // TML-001 size, mtime, and duration
+    "timeline_dialogue": 1,  // TML-002 cues from the subtitle cache
     "tracks": 0,             // TRK-003
     "native_sign_in": 1,     // NAT-002
     "push": 0,               // NAT-006
