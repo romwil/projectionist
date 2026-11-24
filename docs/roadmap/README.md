@@ -18,6 +18,7 @@ The numbered list is the subject order inside that plan.
 4. **TRK** — tracks: Moments, Booth Notes, Class / Study, after the timeline
 5. **NAT** — the client contract, threaded through the lanes as each capability ships
 6. **EXP** — experience convergence (parallel). Lane B’s next item is **EXP-001** (design tokens). EXP-013, EXP-004, EXP-005, EXP-006, EXP-014, EXP-015, and EXP-016 are done. EXP-017 (owner RSS for local headlines) is proposed and later. UV index and air quality on the weather boards are hooks and wait for the person. EXP-018 is the warm-up lines file and step names, then the web screen. The lines file and the session step are in. The web screen is still ahead. It is not a release.
+7. **SEC** — the public front door, continued from the review series at the next free numbers (SEC-017 onward). SEC-017 through SEC-022 are the gate before the extra login on the public hostname can come off. That login stays until the person removes it. SEC-017, the tunnel client address for rate limits, is on main and is not in a release image. Edge rules are a separate plan and are not applied here.
 
 **Before the next production rollout.** Two defects from QA 1.41.1 are recorded below. They are not new capability items. The database-file fix lands before production moves. The Safari stall is investigated before any further playlist change. This record does not edit `docs/RELEASE.md`; the fix lane adds the empty-database check to that file’s pre-rollout checklist.
 
@@ -92,6 +93,16 @@ The numbered list is the subject order inside that plan.
 | EXP-017 | Optional owner RSS for local weather headlines | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | EXP-018 | Warm-up lines and step names, then the web screen. The lines file, `step`, and the web player are in. Humor stays On | accepted | [EXPERIENCE](../EXPERIENCE.md#warm-up-screen) |
 | EXP-019 | Installable web app. Manifest, shell worker, quiet install, media keys, shortcuts. Push waits | in progress | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| SEC-017 | Use the tunnel client address for rate limits | done | [SECURITY](../SECURITY.md#roadmap-items) |
+| SEC-018 | Throttle sign-in failures per account | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
+| SEC-019 | Require a second factor for owner accounts | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
+| SEC-020 | Treat the tunnel as outside the house | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
+| SEC-021 | Keep private responses out of shared caches | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
+| SEC-022 | Give anonymous callers only the sign-in card | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
+| SEC-023 | Check the origin on cookie writes | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
+| SEC-024 | Keep MCP on the LAN unless the owner says otherwise | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
+| SEC-025 | Notice a new sign-in | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
+| SEC-026 | Review the public handshake | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
 
 ## Known defects (not roadmap items)
 
@@ -158,6 +169,7 @@ SES-001 and NAT-002 describe the same work from two sides; build them as one cha
 | 2026-11-22 | **An unfinished report that cannot rank is planned again from the listing.** Watch counts and file sizes are on the Plex section listing, with or without `PLEX_LIBRARY_DATABASE`. HDR still comes from the analysis rows only when that database is set, and a missing transfer stays blank rather than zero. A refresh continues ffprobe only when the saved plan already has those listing fields and a `copy_ahead` block. This does not make the copies, and it is not a release |
 | 2026-11-22 | **Copies are made ahead of time, inside a disk budget.** The owner chooses a writable folder that is not inside a Plex library and not a parent of one. The default budget is 200 GiB. The queue is the Safari and Apple TV video-transcode ranking: above 1080p first, then watch count. One ffmpeg runs at a time, at idle priority, from 1:00 a.m. to 6:00 a.m. A partial file is not played, and the same title continues the next night. A finished copy is preferred over a live transcode. Settings → Playback shows the queue, the space used, and a way to remove a copy. This is not a release |
 | 2026-11-22 | **Prepare the film while the preroll plays, then show an honest warm-up when it is not ready.** ENG-015 and EXP-018 are accepted and not started. They follow the playback-start fixes already underway: one title's transcode-start timeout must not open the shared circuit, a playlist waits while ffmpeg is starting, and a session can say preparing, ready, or failed. ENG-015 is the server session during the preroll. EXP-018 is the lines file and the step names first, then the web screen. Further copy work stays after that. This is not a release |
+| 2026-11-24 | **The public hostname will rely on household sign-in.** SEC-017 through SEC-026 are accepted, continuing the existing SEC series. SEC-017 through SEC-022 are the gate. The extra login in front of the hostname stays until the person removes it. Edge rules are not applied in this pass. SEC-017 is on main and is not a release |
 
 ## Superseded review rows (carry-forward)
 
