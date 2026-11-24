@@ -150,7 +150,7 @@ The household owner, or the member signed in on that screen, can rename it with 
 | SES-005 | Join flow (owner approval or on-screen code) + guest permissions (done: `session_join` is 1) | SES-004 |
 | SES-006 | Handheld captions (done: `session_captions` is 1) | SES-004, ENG-004 |
 | SES-007 | Handoff between screens (same session, new screen) (done: `session_handoff` is 1) | SES-004 |
-| SES-008 | Web client as a second screen (done: Settings → Rooms, Play in…, live-channel remote) | SES-005 |
+| SES-008 | Web client as a second screen (done: Settings → Rooms, Play in…, live-channel remote; pull request 311, `b2d3b226`; not in production 1.45.5) | SES-005 |
 | SES-009 | Youth join approval: owner notification, Approve tightens the session ceiling, Not now declines (done: `youth_join` is 1; push waits) | SES-005, TRK-003 |
 
 ## See also
