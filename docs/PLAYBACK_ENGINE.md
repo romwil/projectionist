@@ -309,7 +309,7 @@ The fix on main, not in the 1.42.0 image: a client gets a playable engine sessio
 
 ## Prepare the film during the preroll
 
-ENG-015 is on the server. The playback-start fixes it follows shipped in 1.45.2: one title's transcode-start timeout does not open the shared circuit, a playlist waits while ffmpeg is starting and is a 404 only for an unknown or expired session, and a session can say `preparing`, `ready`, or `failed`. ENG-015 does not define those fixes. The web player still waits to preload the film during the last seconds of the preroll. The warm-up screen remains accepted work that has not started.
+ENG-015 is on the server. The playback-start fixes it follows shipped in 1.45.2: one title's transcode-start timeout does not open the shared circuit, a playlist waits while ffmpeg is starting and is a 404 only for an unknown or expired session, and a session can say `preparing`, `ready`, or `failed`. ENG-015 does not define those fixes. The web player preloads the film during the last seconds of the preroll, and the warm-up screen is on main with EXP-018 (pull request 298, `54649269`). The slowed fixture is still ahead. This is not in production 1.45.5.
 
 **Why.** A preroll is time the member is already watching. The server can wake the disk, probe, extract text captions, and start the engine or the library transcode during those seconds, so the first frame is ready when the preroll ends. The warm-up screen ([EXP-018](EXPERIENCE.md#warm-up-screen)) is then the rare case.
 
@@ -342,7 +342,7 @@ curl -s -b 'curatorx_session=YOUR_SESSION' \
 
 **Privacy.** Preparation time stays on the household session record. Nothing new leaves the house.
 
-**Status.** The server session is in. `preroll_warm_start` is `1`. The web preload and the warm-up screen are not.
+**Status.** The server session, the web preload, and the warm-up screen are on main (pull request 298, `54649269`). `preroll_warm_start` is `1`. The slowed fixture is still ahead. This is not in production 1.45.5.
 
 ---
 
@@ -361,7 +361,7 @@ curl -s -b 'curatorx_session=YOUR_SESSION' \
 | ENG-012 | Audio-only transcode tier. Copy the video, convert the audio to the device profile’s first encodeable codec, serve segments like a remux, and share the one heavy-ffmpeg slot. A Play probe does not wait on that slot. A DTS or TrueHD film whose video the profile can play is served this way. HEVC above the advertised level is a `try` that still copies the video and encodes the audio; a remembered miss stays on the Plex path. The Chrome E-AC-3 row is the first web case | ENG-003, ENG-011 |
 | ENG-013 | Source-transcode tier. A picture the profile cannot play is plan `source-transcode`, with `source_reason` of `codec`, `level`, or `bit_depth`, and `provider` naming the media source (`plex` today). `PlexMediaSource.source_transcode` records that offer and does not start ffmpeg. `playable` stays false, so a member still uses the source's existing playback. `playback_engine` stays `1`. A file the engine cannot read stays `plex-fallback`. The Jellyfin side of this tier is part of ENG-010 | ENG-003 |
 | ENG-014 | Pre-optimized versions. The owner chooses a folder outside every Plex library and a disk budget (200 GiB unless they change it). The job follows the copy ranking: above 1080p first, then watch count. One idle-priority encode runs from 1:00 a.m. to 6:00 a.m. A partial file is not a ready copy. A finished copy plays as direct or remux instead of a live transcode. Admin → Household → Playback shows the queue, used space, and remove | ENG-011 |
-| ENG-015 | Prepare the film while the preroll plays. The film session starts at Play and reports `preparing`, then `ready` when the first segments exist. Back during the preroll stops that work. The server session is in. See [Prepare the film during the preroll](#prepare-the-film-during-the-preroll) | ENG-003 |
+| ENG-015 | Prepare the film while the preroll plays. The film session starts at Play and reports `preparing`, then `ready` when the first segments exist. Back during the preroll stops that work. The server session and the web hand-off are on main (pull request 298, `54649269`). Not in production 1.45.5. See [Prepare the film during the preroll](#prepare-the-film-during-the-preroll) | ENG-003 |
 | ENG-008 | Scrub thumbnails (trickplay image sprites / I-frame playlist) | ENG-003 |
 | ENG-009 | Live Channels on engine sessions (same stations, new stream). Build as the Live facade ARCH-007 asked for; PRD-007 freeze still holds (no new channel types) | ENG-003; ARCH-007 |
 | ENG-010 | Jellyfin media source. Follows ENG-012, ENG-013, ENG-005, and ENG-014, includes the Jellyfin side of the source-transcode tier, and comes before any public community launch | ENG-001 |

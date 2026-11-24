@@ -27,3 +27,9 @@ Some households use the web app as their client. Installing it gives that househ
 - Created: EXP-019, in progress with this change. Push is not part of it.
 - Outbox: none. Web only.
 - Needs the person: nothing.
+
+## Processing note (agent, 2026-11-24)
+- Updated: EXP-019 is done on main. Pull request 309, `a0d72b62cee277ed43d3d036cf6336a7d6df4c08`. The browser can install the app. The shell worker does not store API responses, art, or media. Push still waits on NAT-006. This is not in production 1.45.5.
+- Updated: SES-008 is done on main. Pull request 311, `b2d3b226d23abef8c2554b8789fea526de083669`. Settings → Rooms lists the screens, Play in… starts a film on one of them, and the remote follows that session. This is not in production 1.45.5.
+- Outbox: none. Web only.
+- Needs the person: nothing.
