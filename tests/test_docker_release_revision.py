@@ -38,6 +38,8 @@ class DockerReleaseRevisionTests(unittest.TestCase):
         text = _SCRIPT.read_text(encoding="utf-8")
         self.assertIn("${TAG_NAME}^{commit}", text)
         self.assertIn("org.opencontainers.image.revision", text)
+        self.assertIn("Refusing to create or push", text)
+        self.assertNotIn("git tag -f", text)
         self.assertNotIn("git rev-parse --short HEAD", text)
 
     def test_builds_tagged_commit_when_checkout_is_earlier(self) -> None:
@@ -77,9 +79,41 @@ class DockerReleaseRevisionTests(unittest.TestCase):
             env = self._env(repo, capture)
             result = _run(["bash", "scripts/docker-release.sh", "9.9.9"], repo, env)
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("v9.9.9 must already point at the commit", result.stderr)
+            self.assertIn("Refusing to create or push v9.9.9.", result.stderr)
+            self.assertIn("missing heading ## [9.9.9]", result.stderr)
+            self.assertNotEqual(_run(["git", "rev-parse", "--verify", "v9.9.9"], repo).returncode, 0)
             self.assertFalse(capture.exists())
             self.assertEqual(self._head(repo), earlier)
+
+    def test_missing_heading_does_not_create_or_push_a_tag(self) -> None:
+        with self._repo() as (repo, _tagged, _earlier):
+            _run(["git", "tag", "-d", "v1.2.3"], repo)
+            (repo / "CHANGELOG.md").write_text("## [Unreleased]\n", encoding="utf-8")
+            git = ["git", "-c", "user.email=release-test@example.com", "-c", "user.name=Release Test"]
+            _must(git + ["add", "CHANGELOG.md"], repo)
+            _must(git + ["commit", "-m", "drop heading"], repo)
+            head = _run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+            capture = repo / "docker-capture.txt"
+            result = self._release(repo, capture)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Refusing to create or push v1.2.3.", result.stderr)
+            self.assertIn(head, result.stderr)
+            self.assertNotEqual(_run(["git", "rev-parse", "--verify", "v1.2.3"], repo).returncode, 0)
+            self.assertFalse(capture.exists())
+            self.assertEqual(self._head(repo), head)
+
+    def test_creates_annotated_tag_when_heading_is_present(self) -> None:
+        with self._repo() as (repo, tagged, _earlier):
+            _run(["git", "tag", "-d", "v1.2.3"], repo)
+            capture = repo / "docker-capture.txt"
+            result = self._release(repo, capture)
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            peeled = _run(["git", "rev-parse", "v1.2.3^{commit}"], repo)
+            self.assertEqual(peeled.stdout.strip(), tagged)
+            kind = _run(["git", "cat-file", "-t", "v1.2.3"], repo)
+            self.assertEqual(kind.stdout.strip(), "tag")
+            self.assertIn(f"vcs={tagged}", capture.read_text(encoding="utf-8"))
+            self.assertEqual(self._head(repo), tagged)
 
     def _repo(self):
         return _ReleaseRepo()
@@ -143,11 +177,17 @@ class _ReleaseRepo:
         (repo / "marker").write_text("early\n", encoding="utf-8")
         git = ["git", "-c", "user.email=release-test@example.com", "-c", "user.name=Release Test"]
         _must(git + ["init", "-b", "main"], repo)
+        _must(["git", "config", "user.email", "release-test@example.com"], repo)
+        _must(["git", "config", "user.name", "Release Test"], repo)
         _must(git + ["add", "scripts", "marker"], repo)
         _must(git + ["commit", "-m", "earlier"], repo)
         earlier = _must(["git", "rev-parse", "HEAD"], repo).stdout.strip()
         (repo / "marker").write_text("tagged\n", encoding="utf-8")
-        _must(git + ["add", "marker"], repo)
+        (repo / "CHANGELOG.md").write_text(
+            "# Changelog\n\n## [1.2.3] — 2026-01-01\n\nA note.\n\n### Highlights\n- Works.\n",
+            encoding="utf-8",
+        )
+        _must(git + ["add", "marker", "CHANGELOG.md"], repo)
         _must(git + ["commit", "-m", "tagged"], repo)
         tagged = _must(["git", "rev-parse", "HEAD"], repo).stdout.strip()
         _must(git + ["tag", "-a", "v1.2.3", "-m", "v1.2.3"], repo)

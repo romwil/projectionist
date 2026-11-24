@@ -4,17 +4,72 @@
 
 A holiday shelf can carry a theme and a reason for each pick. The owner previews that mix and applies it. Youth members do not see After bedtime. Holidays and seasons are one admin page. This is not in the 1.46.1 image.
 
-Household playback controls live in Admin → Household → Playback. Profile keeps pause, text size, and the default page. That change is on main and is not in the 1.45.5 image.
+### Highlights
 
-The web app can be installed. A quiet Install entry appears when the browser offers it. The service worker stores the shell and never stores API, art, or media. Media keys follow the film that is playing. Web push waits.
+- **A holiday shelf has a theme and a reason.** Ask the professor, read the preview, then apply. Explore shows the theme and each note. Youth members do not see After bedtime. Holidays and seasons are one admin page. This is not in the 1.46.1 image.
 
-A browser can be a second screen. Settings → Rooms lists the named screens, without what is playing. Play in… starts a session on one of them. The remote uses the live channel. Web push is still not included.
+## [1.46.1] — 2026-11-24
+
+Tag `v1.46.0` was created and never published. This is the Hub image after 1.45.5. It contains that tag's commit and the merges after it, including pull request 323, "Treat a tunnel request as outside the house."
+
+A holiday question reaches the curator. The film prepares while the preroll plays. Household playback lives under Admin. The web app can be installed, and a browser can start a film on another screen. An owner password needs a sign-in code.
 
 ### Highlights
-- **A holiday shelf has a theme and a reason.** Ask the professor, read the preview, then apply. Explore shows the theme and each note. Youth members do not see After bedtime. Holidays and seasons are one admin page. This is not in the 1.46.1 image.
+
+- **A holiday question reaches the curator.** Ask the curator answers. It no longer comes back as the word "picks".
+- **The film prepares while the preroll plays.** A warm-up screen says what is happening, and the movie is ready when the preroll ends.
 - **Household playback is an owner control.** Play through Projectionist, the away address, the playability report, and copies made ahead are under Admin → Household → Playback. The switch says it affects everyone in the household. Members do not see that section. An old Profile playback anchor opens the new section.
-- **Install Projectionist from the browser.** Settings and the account menu offer Install when the browser does. The installed window opens on Explore. The shell is saved for a fast start, and an offline page says when the server can't be reached. Play, pause, and seek show up on the system media keys. Ctrl or Command K opens Search.
-- **Rooms, Play in…, and a remote.** Settings → Rooms is the names of the screens. Play in… starts the film on one of them. Join with the code, or ask, and the page does not name the film until the answer is yes. The remote plays, pauses, and skips ten seconds on the live channel.
+- **Install Projectionist, and play on another screen.** Settings and the account menu offer Install when the browser does. The installed window opens on Explore. Rooms names the screens. Play in… starts the film on one of them. The remote plays, pauses, and skips ten seconds.
+
+### Added
+- Let Ask the professor reach the curator.
+- Prepare the film while a preroll plays.
+- Show a warm-up while a film prepares, and preload it during the preroll.
+- Serve warm-up lines and the playback step.
+- Make the web app installable without caching media.
+- Keep the service worker from answering API requests.
+- Let the web app list rooms, start a film on a screen, and remote it.
+- Let a member join a session with a code or the starter's approval.
+- Ask before a Youth member joins, and tighten the room on approval.
+- Give a device in the session its own caption feed.
+- Move a session to another screen without starting over.
+- Fingerprint a media file from its size, time, and duration.
+- Import dialogue from the household subtitle cache.
+- Require a sign-in code for an owner password.
+- Lock a username or invite after repeated sign-in failures.
+- Count tunnel clients only from a listed connector.
+- Treat a tunnel request as outside the house.
+- Remember active mode after the setup check.
+
+### Changed
+- Move household playback controls into Admin. Profile keeps pause, text size, and the default page.
+- Record the installable web app and web rooms as done.
+- Record the timeline capabilities on the features fixture.
+- Register session approvals in the privacy registry.
+- Include a room-join request in the personal-data registry.
+- Keep owner session decisions out of a member's download.
+- Drop the duplicate session-approval export.
+- Finish owner enrollment in the existing sign-in tests.
+- Measure login timing by the median so one slow sample is not an oracle.
+- Keep the Continue Watching art fix on main. That picture fix shipped in 1.45.5.
+- Do not cut an audio-only segment inside a large slice.
+- A publish checks the changelog heading before it creates the version tag. A missing `## [X.Y.Z]` heading exits non-zero and does not create or push the tag.
+
+### Security
+- SEC-017 counts tunnel clients only from a listed connector. A forwarding header from any other peer is not the rate-limit key.
+- SEC-018 locks a username or an invite after repeated sign-in failures. The error is the same when the account or invite does not exist.
+- SEC-019 requires a sign-in code for an owner password.
+- SEC-020 treats a tunnel request as outside the house. A request that arrived through the connector is external even when the socket address is private. Active mode is remembered after the setup check.
+
+### Verification
+- `./scripts/patch-release.sh 1.46.1` lockstep + `frontend/public/release-notes.json`.
+- `docs/api/fixtures/get-api-health.json` records 1.46.1.
+- Page speed (`npm run test:release-perf`) before Hub publish.
+- The publish script's heading preflight is tested in `tests/test_docker_release_revision.py`.
+- CI on the release PR (required checks).
+- Hub image `romwil/projectionist:1.46.1`; `org.opencontainers.image.revision` matches tag `v1.46.1`.
+- QA `:8792` is a Hub pull of that image (Path B). Production stays on 1.45.5.
+- Pull request 323, "Treat a tunnel request as outside the house," is in this image.
 
 ## [1.45.5] — 2026-11-24
 

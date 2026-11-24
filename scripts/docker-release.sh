@@ -10,6 +10,12 @@
 # org.opencontainers.image.revision is that full commit. The script exits if
 # the published label and the tag's commit differ.
 #
+# Before any tag is created or pushed, the commit that would be tagged must
+# contain a CHANGELOG heading ## [X.Y.Z] — YYYY-MM-DD. A missing heading exits
+# non-zero and does not create or push the tag. When the tag is absent and the
+# heading is present, this script creates the annotated tag on HEAD and pushes
+# it. An existing tag is not moved.
+#
 # ALWAYS push Docker v2 schema 2 manifest lists (not OCI indexes with
 # attestations). Unraid Dockerman's update checker fails on OCI indexes
 # (shows "not available"); Force Update then recreates from the local tag.
@@ -82,15 +88,60 @@ cleanup_release_worktree() {
 }
 trap cleanup_release_worktree EXIT
 
-# Peel annotated tags to the commit that will be published.
-if ! RELEASE_COMMIT="$(git rev-parse --verify --quiet "${TAG_NAME}^{commit}" 2>/dev/null)"; then
-  echo "Tag ${TAG_NAME} must already point at the commit to publish." >&2
-  echo "The image is built from that commit. Create the tag, then rerun this script." >&2
-  exit 1
+# The commit we would tag. An existing tag is peeled and is not moved.
+EXISTING_TAG_COMMIT="$(git rev-parse --verify --quiet "${TAG_NAME}^{commit}" 2>/dev/null || true)"
+if [[ -n "${EXISTING_TAG_COMMIT}" ]]; then
+  RELEASE_COMMIT="${EXISTING_TAG_COMMIT}"
+else
+  RELEASE_COMMIT="$(git rev-parse --verify HEAD)"
 fi
 if [[ ! "${RELEASE_COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then
-  echo "Tag ${TAG_NAME} did not resolve to a commit (${RELEASE_COMMIT})." >&2
+  echo "Could not resolve a commit to publish (${RELEASE_COMMIT})." >&2
   exit 1
+fi
+
+# Heading check before any tag is created or pushed. git show reads the
+# committed tree, so an uncommitted changelog line does not count.
+if ! python3 - "${VERSION}" "${RELEASE_COMMIT}" "${TAG_NAME}" <<'PY'
+import re
+import subprocess
+import sys
+
+version, commit, tag_name = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    text = subprocess.check_output(
+        ["git", "show", f"{commit}:CHANGELOG.md"],
+        text=True,
+        stderr=subprocess.DEVNULL,
+    )
+except subprocess.CalledProcessError:
+    text = ""
+pattern = re.compile(
+    rf"^## \[{re.escape(version)}\]\s*[—–-]\s*\d{{4}}-\d{{2}}-\d{{2}}\s*$",
+    re.MULTILINE,
+)
+if pattern.search(text):
+    raise SystemExit(0)
+print(
+    f"CHANGELOG.md at {commit} is missing heading ## [{version}] — YYYY-MM-DD.",
+    file=sys.stderr,
+)
+print(f"Refusing to create or push {tag_name}.", file=sys.stderr)
+raise SystemExit(1)
+PY
+then
+  exit 1
+fi
+
+if [[ -z "${EXISTING_TAG_COMMIT}" ]]; then
+  git tag -a "${TAG_NAME}" "${RELEASE_COMMIT}" -m "${TAG_NAME}"
+  if git remote get-url origin >/dev/null 2>&1; then
+    if ! git push origin "refs/tags/${TAG_NAME}"; then
+      git tag -d "${TAG_NAME}" >/dev/null 2>&1 || true
+      echo "Push of ${TAG_NAME} failed. Removed the local tag so a later run can create it." >&2
+      exit 1
+    fi
+  fi
 fi
 
 verify_published_revision() {

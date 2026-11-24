@@ -557,6 +557,9 @@ async def security_headers_middleware(request: Request, call_next):
             "Strict-Transport-Security",
             "max-age=31536000; includeSubDomains",
         )
+    from projectionist.web.private_cache import apply_private_api_cache
+
+    apply_private_api_cache(request.url.path, response.headers)
     return response
 
 
