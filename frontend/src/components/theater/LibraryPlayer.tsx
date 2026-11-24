@@ -71,6 +71,7 @@ import {
   theaterKeyAction,
   toggleTheaterFullscreen,
 } from "../../lib/theaterPlayer.js";
+import { clearPlaybackMediaSession, syncPlaybackMediaSession } from "../../lib/mediaSession.js";
 import {
   UI_PREFS_CHANGED_EVENT,
   loadPauseWhenBackgrounded,
@@ -1035,6 +1036,62 @@ export default function LibraryPlayer({
     return () => window.removeEventListener("keydown", onWindowKey);
   }, []);
 
+  useEffect(() => {
+    const sessionApi = navigator.mediaSession;
+    if (!sessionApi) return undefined;
+    let lastPositionAt = 0;
+    function controls() {
+      return {
+        onPlay: () => {
+          if (videoRef.current?.paused) playKeyRef.current.togglePlayback?.();
+        },
+        onPause: () => {
+          if (videoRef.current && !videoRef.current.paused) playKeyRef.current.togglePlayback?.();
+        },
+        onSeek: (seconds: number) => {
+          if (videoRef.current && Number.isFinite(seconds)) videoRef.current.currentTime = seconds;
+        },
+        onSkip: (delta: number) => playKeyRef.current.skipBy?.(delta),
+      };
+    }
+    function publish(forcePosition = false) {
+      const current = sessionRef.current;
+      if (!current) {
+        clearPlaybackMediaSession(sessionApi as never);
+        return;
+      }
+      const now = Date.now();
+      if (!forcePosition && now - lastPositionAt < 1000) return;
+      lastPositionAt = now;
+      const video = videoRef.current;
+      syncPlaybackMediaSession(
+        sessionApi as never,
+        {
+          title: displayTitle(current),
+          artwork: String(current.poster_url || ""),
+          paused: Boolean(video?.paused ?? true),
+          duration: Number(video?.duration) || 0,
+          position: Number(video?.currentTime) || 0,
+          ...controls(),
+        },
+        window.location.origin,
+      );
+    }
+    publish(true);
+    const video = videoRef.current;
+    const onChange = () => publish(true);
+    const onTime = () => publish(false);
+    video?.addEventListener("play", onChange);
+    video?.addEventListener("pause", onChange);
+    video?.addEventListener("timeupdate", onTime);
+    return () => {
+      video?.removeEventListener("play", onChange);
+      video?.removeEventListener("pause", onChange);
+      video?.removeEventListener("timeupdate", onTime);
+      clearPlaybackMediaSession(sessionApi as never);
+    };
+  }, [session]);
+
   async function sendProgress(state: any, video: any) {
     const current = sessionRef.current;
     if (!current?.session_id) return;
@@ -1395,7 +1452,7 @@ export default function LibraryPlayer({
     }
   }
 
-  playKeyRef.current = { skipBy, togglePlayback };
+  playKeyRef.current = { skipBy, togglePlayback, onFullscreen: toggleFullscreen };
 
   async function enterPiP() {
     const video = videoRef.current;

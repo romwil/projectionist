@@ -8,6 +8,7 @@ import {
 } from "../lib/authGate.js";
 import { applyLiveChannelsFeature, initialLiveChannelsReady } from "../lib/liveNavReady.js";
 import { signOut } from "../lib/signOut.js";
+import InstallProjectionist from "./InstallProjectionist";
 import UserAvatar from "./UserAvatar";
 import { useAnchoredPopover } from "../hooks/useAnchoredPopover";
 
@@ -64,6 +65,7 @@ export default function UserMenu() {
           <Link to="/settings" className="user-menu-link" onClick={() => setOpen(false)}>
             Settings
           </Link>
+          <InstallProjectionist className="user-menu-link" />
           <Link to="/help" className="user-menu-link" data-testid="user-menu-help" onClick={() => setOpen(false)}>
             Help
           </Link>
