@@ -91,6 +91,7 @@ The numbered list is the subject order inside that plan.
 | EXP-016 | Poster depth on the web: light, edge, generated placeholders | done | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | EXP-017 | Optional owner RSS for local weather headlines | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | EXP-018 | Warm-up lines and step names, then the web screen. The lines file, `step`, and the web player are in. Humor stays On | accepted | [EXPERIENCE](../EXPERIENCE.md#warm-up-screen) |
+| EXP-019 | Installable web app. Manifest, shell worker, quiet install, media keys, shortcuts. Push waits | in progress | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 
 ## Known defects (not roadmap items)
 

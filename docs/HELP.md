@@ -25,11 +25,12 @@ Deep dive: [PRODUCT.md](PRODUCT.md) · [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.
 | Save a curator reply | **Save to library** below any curator response, then open [Library](/library) |
 | Curated shelves | [Lists & playlists](/lists) |
 | Personal prefs | [Settings](/settings) |
+| Install the app | Settings, when this browser offers it. There is no banner and no notification prompt |
 | Version & release notes | [About](/about) |
 | License | [About](/about#license) · AGPL-3.0-only |
 | Data use | [Privacy](/privacy) |
 
-Keyboard cheat sheet: press `?` (outside a text field). Slash commands in chat: type `/help`.
+Keyboard cheat sheet: press `?` (outside a text field). Ctrl or Command K opens Search. Slash commands in chat: type `/help`.
 
 ---
 

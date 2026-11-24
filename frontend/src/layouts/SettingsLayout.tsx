@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { listNotifications } from "../api/client";
 import { applyAuthSnapshot, loadAuthSessionUser, loadAuthSnapshot } from "../lib/authGate.js";
 import PrimaryTopbar from "../components/PrimaryTopbar";
+import InstallProjectionist from "../components/InstallProjectionist";
 import { ROUTES } from "../lib/backNav.js";
 import { SETTINGS_NAV } from "../lib/settingsNav.js";
 import { applyLiveChannelsFeature, initialLiveChannelsReady } from "../lib/liveNavReady.js";
@@ -180,6 +181,7 @@ export default function SettingsLayout() {
           ))}
         </nav>
         <div className="settings-rail-footer">
+          <InstallProjectionist className="settings-rail-meta-link" />
           {isOwner ? (
             <Link to="/admin" className="settings-rail-meta-link">
               Admin

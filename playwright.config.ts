@@ -9,7 +9,11 @@ const baseURL = process.env.E2E_BASE_URL || `http://127.0.0.1:${port}`;
 
 export default defineConfig({
   testDir: "./e2e",
-  testIgnore: [/auth\.setup\.ts/, /live-roles\.spec\.ts/, /playback-fixtures\.spec\.ts/],
+  testIgnore: [
+    /auth\.setup\.ts/,
+    /live-roles\.spec\.ts/,
+    /playback-fixtures\.spec\.ts/,
+  ],
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
@@ -20,6 +24,10 @@ export default defineConfig({
     baseURL,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
+    // The production bundle registers a service worker. Once it claims the
+    // page it handles navigations, and a worker fetch hides mocked routes.
+    // These tests block registration. The installable spec opts back in.
+    serviceWorkers: "block",
   },
   projects: [
     {
@@ -49,4 +57,3 @@ export default defineConfig({
     timeout: 120_000,
   },
 });
-

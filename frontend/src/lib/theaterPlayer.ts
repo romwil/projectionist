@@ -532,15 +532,16 @@ export function isPlayShortcutBlockedTarget(target: JsParam) {
  * Returns true when the event was consumed (including Space key-repeat, which
  * is swallowed so the page does not scroll).
  */
-export function dispatchLibraryPlayKey(event: JsParam, { skipBy, togglePlayback }: JsParam = {}) {
+export function dispatchLibraryPlayKey(event: JsParam, { skipBy, togglePlayback, onFullscreen }: JsParam = {}) {
   if (!event || isPlayShortcutBlockedTarget(event.target)) return false;
   const action = theaterKeyAction(event.key);
-  if (action !== "toggle" && action !== "skipBack" && action !== "skipForward") return false;
+  if (action !== "toggle" && action !== "skipBack" && action !== "skipForward" && action !== "fullscreen") return false;
   event.preventDefault?.();
   if (event.repeat && action === "toggle") return true;
   if (action === "toggle") togglePlayback?.();
   else if (action === "skipBack") skipBy?.(-SKIP_SECONDS);
-  else skipBy?.(SKIP_SECONDS);
+  else if (action === "skipForward") skipBy?.(SKIP_SECONDS);
+  else onFullscreen?.();
   return true;
 }
 
