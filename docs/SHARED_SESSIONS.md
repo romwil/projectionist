@@ -118,9 +118,11 @@ curl -s -X POST http://your-host:8788/api/sessions \
   -d '{"screen_id":"ROOM_ID","rating_key":"123","level":"off"}'
 ```
 
-The starter can change the level and end the session. The member signed in on the screen can read it and report position. Any other member gets 404, including the title. Starting another session on the same screen ends the previous one.
+The starter can change the level, decide whether guests may use the remote, and end the session. The member signed in on the screen can read it and report position. A guest can read it after joining. Any other member gets 404, including the title. Starting another session on the same screen ends the previous one.
 
-**How this works.** The capability `session_object` is `1`. **Honest limit.** The object is kept in memory and is gone after a restart. It does not by itself move the picture; the screen still plays the engine playlist. Joining, guest transport, and the live channel are later items.
+A member joins the room with `POST /api/rooms/{id}/join`. The code from `GET /api/sessions/{id}/code` (the starter, or the member signed in on the screen) joins at once. Without a code, the starter sees a request and answers `approve` or `not_now`. A declined member is not told what is playing. Guests may pause, seek, and play at double speed only after the starter allows the remote. They cannot change the level, the room's captions, or end the session.
+
+**How this works.** The capability `session_object` is `1`. The capability `session_join` is `1`. **Honest limit.** The object is kept in memory and is gone after a restart. It does not by itself move the picture; the screen still plays the engine playlist. A wrong code stops answering after a few tries.
 
 ## Rooms
 
@@ -147,7 +149,7 @@ The household owner, or the member signed in on that screen, can rename it with 
 | SES-002 | Rooms registry (named screens per household) + visibility rules (done: `GET /api/rooms`, `rooms` is 1) | SES-001 |
 | SES-003 | Session object (owner, screen, position, level) on top of engine sessions (done: `session_object` is 1) | ENG-003 |
 | SES-004 | Realtime channel (`/api/sessions/{id}/live`), command authorization, clock model (done: `shared_sessions` is 1) | SES-003 |
-| SES-005 | Join flow (owner approval or on-screen code) + guest permissions | SES-004 |
+| SES-005 | Join flow (owner approval or on-screen code) + guest permissions (done: `session_join` is 1) | SES-004 |
 | SES-006 | Handheld captions | SES-004, ENG-004 |
 | SES-007 | Handoff between screens (same session, new screen) | SES-004 |
 | SES-008 | Web client as a second screen (join from a browser) | SES-005 |

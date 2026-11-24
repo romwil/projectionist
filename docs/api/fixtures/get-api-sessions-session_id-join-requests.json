@@ -1,0 +1,10 @@
+{
+  "body": {
+    "requests": []
+  },
+  "content_type": "application/json",
+  "example_path": "/api/sessions/00000000-0000-4000-8000-000000000001/join-requests",
+  "method": "GET",
+  "path": "/api/sessions/{session_id}/join-requests",
+  "status": 200
+}
