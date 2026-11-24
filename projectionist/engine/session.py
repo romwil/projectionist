@@ -37,6 +37,10 @@ _PLAYLIST_WAIT_S = 30.0
 _FFMPEG_FAILED = "ffmpeg exited before the media playlist was published."
 _PLAYLIST_NOT_READY = "The media playlist was not ready in time."
 
+# The path token dies with the session, and also after this long without the
+# playhead or the media playlist actually moving. A fetch renews the same token.
+MEDIA_TOKEN_TTL_SECONDS = 6 * 60 * 60
+
 # A client that did not ask for an engine session stays on the library path.
 # The capability means this server can open one. It does not mean the client must.
 OPT_IN_REASON = (
@@ -86,6 +90,9 @@ class EngineSession:
     master_seen: bool = False
     media_playlist_seen: bool = False
     created_at: float = field(default_factory=time.time)
+    token_ttl_s: float = MEDIA_TOKEN_TTL_SECONDS
+    token_expires_at: float = 0.0
+    token_progress_ms: int = -1
     # Play asked for a preroll. Preparation runs during that bumper.
     warm: bool = False
     step: str = ""
@@ -96,6 +103,12 @@ class EngineSession:
     library_session_id: str = ""
     prepare_frozen_ms: Optional[int] = None
     clock: Any = field(default=time.time, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        if self.token_expires_at <= 0:
+            self.token_expires_at = float(self.created_at) + float(self.token_ttl_s)
+        if self.token_progress_ms < 0:
+            self.token_progress_ms = int(self.view_offset_ms or 0)
 
     def master_url(self) -> str:
         if not self.playable:
@@ -146,9 +159,25 @@ def get_engine_session(session_id: str, *, user_id: str = "") -> EngineSession:
     return session
 
 
+def media_token_expired(session: EngineSession) -> bool:
+    """True once the session has ended, or the play has been still for the TTL."""
+    if session.cancelled:
+        return True
+    return float(session.clock()) >= float(session.token_expires_at)
+
+
+def renew_media_token(session: EngineSession) -> None:
+    """Keep the same path token alive while this play is still moving."""
+    if session.cancelled:
+        return
+    session.token_expires_at = float(session.clock()) + float(session.token_ttl_s)
+
+
 def session_for_token(session_id: str, token: str) -> EngineSession:
     session = get_engine_session(session_id)
     if not secrets.compare_digest(session.token, str(token or "")):
+        raise PlaybackError("Playback session is not valid.", status_code=404)
+    if media_token_expired(session):
         raise PlaybackError("Playback session is not valid.", status_code=404)
     return session
 
@@ -472,6 +501,16 @@ def open_engine_session(
     return session
 
 
+def _media_request_is_playback(name: str) -> bool:
+    """A media playlist or a segment means the player is still playing.
+
+    The master playlist is the index. Fetching it alone does not move the film.
+    """
+    if name == "stream.m3u8":
+        return True
+    return name.endswith((".m4s", ".mp4", ".vtt"))
+
+
 def note_session_media(session: EngineSession, relative: str) -> None:
     """Remember which playlist this client actually asked for."""
     name = str(relative or "").strip().lstrip("/").rsplit("/", 1)[-1]
@@ -479,6 +518,19 @@ def note_session_media(session: EngineSession, relative: str) -> None:
         session.master_seen = True
     elif name == "stream.m3u8":
         session.media_playlist_seen = True
+    if _media_request_is_playback(name):
+        renew_media_token(session)
+
+
+def note_playback_progress(session: EngineSession, time_ms: int) -> bool:
+    """Renew the path token when the playhead has moved. The same position does not."""
+    current = max(0, int(time_ms or 0))
+    if current == int(session.token_progress_ms):
+        return False
+    session.token_progress_ms = current
+    session.view_offset_ms = current
+    renew_media_token(session)
+    return True
 
 
 def _remember_fast_failed_try(session: EngineSession) -> None:

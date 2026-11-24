@@ -600,3 +600,55 @@ class PlaylistWaitTests(unittest.TestCase):
             self.assertEqual(body["state"], "")
             self.assertEqual(body["step"], "falling_back")
             self.assertIn("library path", body["reason"])
+
+    def test_the_media_token_expires_unless_playback_moves(self) -> None:
+        import tempfile
+
+        from projectionist.engine.session import (
+            MEDIA_TOKEN_TTL_SECONDS,
+            note_playback_progress,
+            note_session_media,
+            stop_engine_session,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session = open_engine_session(
+                _asset(),
+                APPLE_TV_4K,
+                user_id="owner",
+                title="3 Ninjas",
+                duration_ms=600_000,
+                view_offset_ms=0,
+                data_dir=Path(tmp),
+                force_reason="held for the token lifetime",
+            )
+            self.assertEqual(session.token_ttl_s, MEDIA_TOKEN_TTL_SECONDS)
+            now = {"t": 1_700_000_000.0}
+            session.clock = lambda: now["t"]
+            session.token_ttl_s = 60.0
+            session.token_expires_at = now["t"] + 60.0
+            same_token = session.token
+
+            self.assertEqual(session_for_token(session.session_id, same_token).session_id, session.session_id)
+            note_session_media(session, "master.m3u8")
+            self.assertEqual(session.token_expires_at, now["t"] + 60.0)
+
+            now["t"] += 60.0
+            with self.assertRaises(PlaybackError):
+                session_for_token(session.session_id, same_token)
+
+            now["t"] -= 30.0
+            note_session_media(session, "av/seg_0001.m4s")
+            self.assertEqual(session.token, same_token)
+            self.assertEqual(session.token_expires_at, now["t"] + 60.0)
+            now["t"] += 59.0
+            self.assertEqual(session_for_token(session.session_id, same_token).rating_key, "121986")
+
+            self.assertFalse(note_playback_progress(session, 0))
+            self.assertEqual(session.token_expires_at, now["t"] + 1.0)
+            self.assertTrue(note_playback_progress(session, 12_000))
+            self.assertEqual(session.token_expires_at, now["t"] + 60.0)
+
+            stop_engine_session(session)
+            with self.assertRaises(PlaybackError):
+                session_for_token(session.session_id, same_token)
