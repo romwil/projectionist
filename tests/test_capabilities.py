@@ -36,6 +36,7 @@ SHIPPED = {
     "session_captions": 1,
     "session_handoff": 1,
     "timeline_files": 1,
+    "timeline_dialogue": 1,
 }
 ACCEPTED_NOT_SHIPPED = {
     "caption_tracks": 0,
