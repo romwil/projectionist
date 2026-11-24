@@ -47,19 +47,21 @@ describe("adminNav", () => {
       "Integrations & keys",
     );
     assert.equal(adminNavLinks().find((item) => item.id === "household")?.label, "Members");
+    assert.equal(adminNavLinks().find((item) => item.id === "playback")?.label, "Playback");
+    assert.equal(adminNavLinks().find((item) => item.id === "playback")?.to, "/admin/playback");
     assert.equal(
       adminNavLinks().some((item) => item.id === "dashboard" || item.id === "usage" || item.id === "issues"),
       false,
     );
-    assert.equal(adminNavLinks().length, 18);
+    assert.equal(adminNavLinks().length, 19);
   });
 
-  it("groups the rail as Overview / Setup / Members / Experience / Health / Advanced", () => {
+  it("groups the rail as Overview / Setup / Household / Experience / Health / Advanced", () => {
     const headings = ADMIN_NAV.filter((item) => item.kind === "heading").map((item) => item.label);
     assert.deepEqual(headings, [
       "Overview",
       "Setup",
-      "Members",
+      "Household",
       "Experience",
       "Health",
       "Advanced",
@@ -68,20 +70,20 @@ describe("adminNav", () => {
     assert.equal(groups.length, 6);
     assert.deepEqual(
       groups.map((group) => group.label),
-      ["Overview", "Setup", "Members", "Experience", "Health", "Advanced"],
+      ["Overview", "Setup", "Household", "Experience", "Health", "Advanced"],
     );
     assert.equal(groups[0].hideHeading, true, "Overview group label is hidden in the rail");
     assert.ok(groups.slice(1).every((group) => group.hideHeading === false));
     assert.equal(
       groups.reduce((sum, group) => sum + group.links.length, 0),
-      18,
+      19,
     );
     assert.deepEqual(
       groups.map((group) => group.links.map((item) => item.id)),
       [
         ["overview"],
         ["connections", "libraries"],
-        ["household", "access", "youth"],
+        ["household", "playback", "access", "youth"],
         ["live-channels", "lobby", "holidays", "seerr"],
         ["tasks", "health", "taxonomy", "logs"],
         ["persona", "mail", "newsletters", "advanced"],
@@ -141,6 +143,7 @@ describe("adminNav", () => {
       SINGLE_USER_ADMIN_LINK_IDS,
     );
     assert.equal(links.some((item) => item.id === "household"), false);
+    assert.equal(links.some((item) => item.id === "playback"), true);
     assert.equal(links.some((item) => item.id === "access"), false);
     assert.equal(links.some((item) => item.id === "youth"), false);
     assert.equal(links.some((item) => item.id === "mail"), false);
@@ -149,7 +152,7 @@ describe("adminNav", () => {
     const groups = adminNavGroups({ multiUserEnabled: false });
     assert.deepEqual(
       groups.map((group) => group.label),
-      ["Overview", "Setup", "Experience", "Health", "Advanced"],
+      ["Overview", "Setup", "Household", "Experience", "Health", "Advanced"],
     );
     assert.equal(groups[0].hideHeading, true);
     assert.deepEqual(
@@ -157,13 +160,14 @@ describe("adminNav", () => {
       [
         ["overview"],
         ["connections", "libraries"],
+        ["playback"],
         ["lobby", "live-channels"],
         ["tasks", "logs"],
         ["persona", "advanced"],
       ],
     );
-    assert.match(String(groups[2].subtitle || ""), /On the wall/i);
-    assert.equal(links.length, 9);
+    assert.match(String(groups[3].subtitle || ""), /On the wall/i);
+    assert.equal(links.length, 10);
     assert.equal(links.some((item) => item.id === "health"), false);
     assert.equal(links.some((item) => item.id === "taxonomy"), false);
   });

@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+Household playback controls live in Admin → Household → Playback. Profile keeps pause, text size, and the default page.
+
+### Highlights
+- **Household playback is an owner control.** Play through Projectionist, the away address, the playability report, and copies made ahead are under Admin → Household → Playback. The switch says it affects everyone in the household. Members do not see that section. An old Profile playback anchor opens the new section.
+
 ## [1.45.3] — 2026-11-23
 
 Play starts from the file Projectionist already knows, and a slow Plex call no longer stops the next film.

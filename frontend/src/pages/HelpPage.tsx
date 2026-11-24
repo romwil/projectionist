@@ -30,6 +30,7 @@ const IN_APP_ROUTES = new Set([
   "/join",
   "/admin",
   "/admin/tasks",
+  "/admin/playback",
   "/admin/health",
   "/admin/dashboard",
   "/admin/usage",

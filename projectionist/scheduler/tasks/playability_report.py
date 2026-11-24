@@ -1,6 +1,6 @@
 """Jobs-engine slot for the library playability report.
 
-The walk runs only when the owner refreshes Settings → Playback. This task
+The walk runs only when the owner refreshes Admin → Household → Playback. This task
 stays registered so an older install can be turned off, and it does not walk
 the library on startup, on a timer, or when Settings is opened.
 """
@@ -22,7 +22,7 @@ async def run(
     db: Database, settings: Settings, should_stop: Callable[[], bool]
 ) -> Dict[str, Any]:
     del db, settings, should_stop
-    # The owner starts this from Settings. A schedule, a startup, and a library
+    # The owner starts this from Admin → Household → Playback. A schedule, a startup, and a library
     # scan must not walk the library.
     return {"status": "skipped", "processed": 0, "has_more": False}
 
@@ -39,7 +39,7 @@ def register(scheduler: IdleScheduler) -> None:
             off_loop=True,
             description=(
                 "Records which tier would play each title. It runs only when the "
-                "owner refreshes Settings → Playback. It does not start on a timer, "
+                "owner refreshes Admin → Household → Playback. It does not start on a timer, "
                 "at startup, or when the library is scanned, and it does not transcode."
             ),
         )

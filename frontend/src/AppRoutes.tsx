@@ -146,6 +146,8 @@ export default function AppRoutes() {
       <Route path="/settings" element={<SettingsLayout />}>
         <Route index element={<Navigate to="profile" replace />} />
         <Route path="profile" element={<ProfilePage />} />
+        <Route path="playback" element={<Navigate to="/admin/playback" replace />} />
+        <Route path="profile/playback" element={<Navigate to="/admin/playback" replace />} />
         <Route path="voice" element={<VoicePage />} />
         <Route path="taste" element={<TasteSettingsPage />} />
         <Route path="notifications" element={<NotificationsSettingsPage />} />

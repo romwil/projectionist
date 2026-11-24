@@ -486,7 +486,7 @@ Default lens: **`general`**.
 
 ## Away address
 
-The owner sets this in **Settings → Playback**, or with `PUT /api/network/public-base-url`. It is stored as `network.public_base_url` in `settings.json`: an `http` or `https` origin, with no path, query, username, or password. An empty string clears it.
+The owner sets this in **Admin → Household → Playback**, or with `PUT /api/network/public-base-url`. It is stored as `network.public_base_url` in `settings.json`: an `http` or `https` origin, with no path, query, username, or password. An empty string clears it.
 
 Signed-in `GET /api/features` publishes `addresses.away` (that origin, or `""`) and `addresses.home` (the last origin seen from the home network, remembered until restart). Signed-out clients do not receive either string. Engine playlist and segment URLs stay relative; clients join them to whichever address they are using.
 
