@@ -44,7 +44,11 @@ def _page(title: str, body: str, *, status_code: int = 200) -> HTMLResponse:
         "button:focus-visible{outline:2px solid #1a4fd6;outline-offset:2px}</style>"
         f"</head><body><main><h1>{html.escape(title)}</h1>{body}</main></body></html>"
     )
-    return HTMLResponse(markup, status_code=status_code, headers={"Cache-Control": "no-store"})
+    return HTMLResponse(
+        markup,
+        status_code=status_code,
+        headers={"Cache-Control": "private, no-store"},
+    )
 
 
 def _token_from(request: Request) -> str:

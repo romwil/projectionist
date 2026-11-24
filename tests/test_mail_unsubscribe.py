@@ -113,7 +113,7 @@ class MailUnsubscribeTests(unittest.TestCase):
         self.assertEqual(page.status_code, 200, page.text)
         self.assertIn("watch nudges", page.text)
         self.assertIn('method="post"', page.text)
-        self.assertEqual(page.headers.get("cache-control"), "no-store")
+        self.assertEqual(page.headers.get("cache-control"), "private, no-store")
         self.assertEqual(self._prefs("local-alex"), before_alex)
 
         done = self._post(token)
