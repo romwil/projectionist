@@ -235,11 +235,31 @@ test("an engine session retries the library path once when the first frame never
   };
   const log = (reason) => logs.push(reason);
 
-  const timedOut = await settleEngineFirstFrame({
-    elapsedMs: 8000,
+  const stillFlowing = await settleEngineFirstFrame({
+    elapsedMs: 15000,
     videoWidth: 0,
     readyState: 0,
     fatalError: "",
+    segmentBytes: 250000,
+    playheadSeconds: 0,
+    quietMs: 400,
+    retried: false,
+    startLibrary,
+    stopEngine,
+    log,
+  });
+  assert.equal(libraryStarts, 0);
+  assert.equal(stillFlowing.retried, false);
+  assert.equal(stillFlowing.session, null);
+
+  const timedOut = await settleEngineFirstFrame({
+    elapsedMs: 10000,
+    videoWidth: 0,
+    readyState: 0,
+    fatalError: "",
+    segmentBytes: 0,
+    playheadSeconds: 0,
+    quietMs: 10000,
     retried: false,
     startLibrary,
     stopEngine,
@@ -249,7 +269,7 @@ test("an engine session retries the library path once when the first frame never
   assert.equal(engineStops, 1);
   assert.equal(timedOut.retried, true);
   assert.equal(timedOut.session.stream_url, "/plex");
-  assert.match(logs[0], /no first frame within 8 seconds/);
+  assert.match(logs[0], /no progress for 10 seconds/);
 
   const secondTimeout = await settleEngineFirstFrame({
     elapsedMs: 16000,
@@ -311,7 +331,7 @@ test("an engine session retries the library path once when the first frame never
   assert.equal(playing.retried, false);
 });
 
-test("the first-frame timer starts when the session is ready, and a failed session falls back immediately", () => {
+test("segments that are still arriving keep the engine session, and ten seconds with no bytes and no playhead movement leaves", () => {
   const preparing = enginePlaybackClock({
     state: "preparing",
     sinceCreatedMs: 8000,
@@ -334,21 +354,39 @@ test("the first-frame timer starts when the session is ready, and a failed sessi
   const readyEarly = enginePlaybackClock({
     state: "ready",
     sinceCreatedMs: 20000,
-    sinceReadyMs: 7000,
+    sinceReadyMs: 8000,
     videoWidth: 0,
     readyState: 1,
+    segmentBytes: 0,
+    playheadSeconds: 0,
   });
   assert.equal(readyEarly.fallback, false);
+
+  const flowing = enginePlaybackClock({
+    state: "ready",
+    sinceCreatedMs: 40000,
+    sinceReadyMs: 16000,
+    videoWidth: 0,
+    readyState: 1,
+    segmentBytes: 1_500_000,
+    playheadSeconds: 0,
+    quietMs: 500,
+  });
+  assert.equal(flowing.fallback, false);
+  assert.equal(flowing.reason, "");
 
   const readyLate = enginePlaybackClock({
     state: "ready",
     sinceCreatedMs: 22000,
-    sinceReadyMs: 8000,
+    sinceReadyMs: 10000,
     videoWidth: 0,
     readyState: 1,
+    segmentBytes: 0,
+    playheadSeconds: 0,
+    quietMs: 10000,
   });
   assert.equal(readyLate.fallback, true);
-  assert.match(readyLate.reason, /no first frame within 8 seconds/);
+  assert.match(readyLate.reason, /no progress for 10 seconds/);
 
   const capped = enginePlaybackClock({
     state: "preparing",

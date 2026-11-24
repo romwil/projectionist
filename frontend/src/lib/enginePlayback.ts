@@ -268,41 +268,77 @@ export function engineSessionForPlayer(session: any) {
  * play, including source-transcode and the caption fallback, returns to the
  * Plex start. When the switch is off, the Plex start is the only call.
  */
-/** How long an engine playlist may sit with no picture before the library path is tried. */
-export const ENGINE_FIRST_FRAME_TIMEOUT_MS = 8000;
+/** How long a ready session may sit with no bytes and no playhead movement. */
+export const ENGINE_PROGRESS_QUIET_MS = 10_000;
 
-/** Preparing plus the first frame. A disk spin-up can finish inside this. A dead session cannot. */
+/** Kept so older callers still name the constant. Progress, not this clock, decides. */
+export const ENGINE_FIRST_FRAME_TIMEOUT_MS = ENGINE_PROGRESS_QUIET_MS;
+
+/** A session that never becomes ready. Disk spin-up can finish inside this. */
 export const ENGINE_WARMUP_CAP_MS = 30_000;
 
 /**
+ * True when segment bytes or the playhead moved recently.
+ * A fixed wait does not count as progress.
+ */
+export function engineSegmentsAreFlowing({
+  segmentBytes = 0,
+  playheadSeconds = 0,
+  quietMs = ENGINE_PROGRESS_QUIET_MS,
+}: {
+  segmentBytes?: number;
+  playheadSeconds?: number;
+  quietMs?: number;
+} = {}): boolean {
+  const quiet = Number(quietMs);
+  if (!Number.isFinite(quiet) || quiet >= ENGINE_PROGRESS_QUIET_MS) return false;
+  const bytes = Number(segmentBytes);
+  if (Number.isFinite(bytes) && bytes > 0) return true;
+  const playhead = Number(playheadSeconds);
+  return Number.isFinite(playhead) && Math.abs(playhead) > 0.05;
+}
+
+/**
  * Empty when the engine picture is already on screen, or when it is too early
- * to give up. A fatal player error before that picture, or a wait past the
- * timeout with no decoded frame, is the reason the library path should start.
+ * to give up. A fatal player error leaves at once. After the session is ready,
+ * no segment bytes and no playhead movement for about 10 seconds leaves too.
+ * Bytes that are still arriving are not that timeout.
  */
 export function engineFirstFrameReason({
   elapsedMs = 0,
   videoWidth = 0,
   readyState = 0,
   fatalError = "",
-  timeoutMs = ENGINE_FIRST_FRAME_TIMEOUT_MS,
+  segmentBytes = 0,
+  playheadSeconds = 0,
+  quietMs,
 }: {
   elapsedMs?: number;
   videoWidth?: number;
   readyState?: number;
   fatalError?: string;
-  timeoutMs?: number;
+  segmentBytes?: number;
+  playheadSeconds?: number;
+  quietMs?: number;
 } = {}): string {
   const width = Number(videoWidth);
   const ready = Number(readyState);
   if (Number.isFinite(width) && width > 0 && Number.isFinite(ready) && ready >= 2) return "";
   const fatal = String(fatalError || "").trim();
   if (fatal) return `Engine session failed before the first frame: ${fatal}`;
-  const elapsed = Number(elapsedMs);
-  const timeout = Number(timeoutMs);
-  const limit = Number.isFinite(timeout) && timeout > 0 ? timeout : ENGINE_FIRST_FRAME_TIMEOUT_MS;
-  if (Number.isFinite(elapsed) && elapsed >= limit) {
-    const seconds = Math.max(1, Math.round(limit / 1000));
-    return `Engine session had no first frame within ${seconds} seconds`;
+  const quiet = Number(quietMs == null ? elapsedMs : quietMs);
+  if (
+    engineSegmentsAreFlowing({
+      segmentBytes,
+      playheadSeconds,
+      quietMs: quiet,
+    })
+  ) {
+    return "";
+  }
+  if (Number.isFinite(quiet) && quiet >= ENGINE_PROGRESS_QUIET_MS) {
+    const seconds = Math.max(1, Math.round(ENGINE_PROGRESS_QUIET_MS / 1000));
+    return `Engine session made no progress for ${seconds} seconds`;
   }
   return "";
 }
@@ -310,10 +346,11 @@ export function engineFirstFrameReason({
 /**
  * Whether to leave an engine session.
  *
- * The 8 second first-frame limit starts once `state` is `ready`, measured by
- * `sinceReadyMs`. Time since the session was created does not count while
- * ffmpeg is still publishing. `failed` leaves on the first look. The whole
- * wait, including disk spin-up, stops at about 30 seconds.
+ * `failed` leaves on the first look. A fatal player error leaves on the first
+ * look. Once `state` is `ready`, segment bytes or playhead movement keep the
+ * engine session. About 10 seconds with neither is the library path. Time
+ * since create does not count while ffmpeg is still publishing. A session
+ * that stays `preparing` still stops at about 30 seconds.
  */
 export function enginePlaybackClock({
   state = "",
@@ -323,7 +360,9 @@ export function enginePlaybackClock({
   readyState = 0,
   fatalError = "",
   capMs = ENGINE_WARMUP_CAP_MS,
-  firstFrameMs = ENGINE_FIRST_FRAME_TIMEOUT_MS,
+  segmentBytes = 0,
+  playheadSeconds = 0,
+  quietMs,
 }: {
   state?: string;
   sinceCreatedMs?: number;
@@ -332,7 +371,9 @@ export function enginePlaybackClock({
   readyState?: number;
   fatalError?: string;
   capMs?: number;
-  firstFrameMs?: number;
+  segmentBytes?: number;
+  playheadSeconds?: number;
+  quietMs?: number;
 } = {}): { fallback: boolean; reason: string } {
   const width = Number(videoWidth);
   const ready = Number(readyState);
@@ -342,6 +383,10 @@ export function enginePlaybackClock({
   const phase = String(state || "");
   if (phase === "failed") {
     return { fallback: true, reason: "Engine session failed before the first frame" };
+  }
+  const fatal = String(fatalError || "").trim();
+  if (fatal) {
+    return { fallback: true, reason: `Engine session failed before the first frame: ${fatal}` };
   }
   const created = Number(sinceCreatedMs);
   const cap = Number(capMs);
@@ -353,17 +398,24 @@ export function enginePlaybackClock({
     }
     return { fallback: false, reason: "" };
   }
-  if (Number.isFinite(created) && created >= limit) {
-    const seconds = Math.max(1, Math.round(limit / 1000));
-    return { fallback: true, reason: `Engine session had no first frame within ${seconds} seconds` };
+  const quiet = quietMs == null ? Number(sinceReadyMs) : Number(quietMs);
+  if (
+    engineSegmentsAreFlowing({
+      segmentBytes,
+      playheadSeconds,
+      quietMs: quiet,
+    })
+  ) {
+    return { fallback: false, reason: "" };
   }
-  const elapsed = phase === "ready" ? Number(sinceReadyMs) : Number(sinceCreatedMs);
   const reason = engineFirstFrameReason({
-    elapsedMs: elapsed,
+    elapsedMs: Number(sinceReadyMs),
     videoWidth,
     readyState,
     fatalError,
-    timeoutMs: firstFrameMs,
+    segmentBytes,
+    playheadSeconds,
+    quietMs: quiet,
   });
   return { fallback: Boolean(reason), reason };
 }
@@ -379,7 +431,9 @@ export async function settleEngineFirstFrame({
   fatalError = "",
   reason: givenReason = "",
   retried = false,
-  timeoutMs = ENGINE_FIRST_FRAME_TIMEOUT_MS,
+  segmentBytes = 0,
+  playheadSeconds = 0,
+  quietMs,
   startLibrary,
   stopEngine,
   log = (reason: string) => {
@@ -392,7 +446,9 @@ export async function settleEngineFirstFrame({
   fatalError?: string;
   reason?: string;
   retried?: boolean;
-  timeoutMs?: number;
+  segmentBytes?: number;
+  playheadSeconds?: number;
+  quietMs?: number;
   startLibrary: () => Promise<any>;
   stopEngine: () => Promise<unknown>;
   log?: (reason: string) => void;
@@ -405,7 +461,9 @@ export async function settleEngineFirstFrame({
       videoWidth,
       readyState,
       fatalError,
-      timeoutMs,
+      segmentBytes,
+      playheadSeconds,
+      quietMs,
     });
   if (!reason) return { retried: false, session: null, reason: "" };
   log(reason);
