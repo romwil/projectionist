@@ -370,6 +370,7 @@ export default function TitleDetailContent({
           <TitleCtaBar
             compact={compact}
             playTo={playTo}
+            ratingKey={playTo ? plexPlayRatingKey(detail) : ""}
             onPlayClick={() => overlay?.closeTitleDetail?.()}
             onChatClick={() => overlay?.closeTitleDetail?.()}
             addPrimary={

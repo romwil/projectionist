@@ -39,10 +39,13 @@ const ROUTE_TITLES: RouteTitleEntry[] = [
   { pattern: "/explore/plot-lab", title: () => "Related Titles" },
   { pattern: "/explore/browse", title: () => "Browse" },
   { pattern: "/explore/engagement", title: () => "My Journey" },
-  { pattern: "/explore/section/:sectionId", title: ({ sectionId }) => {
-    const label = titleCaseSlug(sectionId);
-    return label ? `Explore — ${label}` : "Explore";
-  } },
+  {
+    pattern: "/explore/section/:sectionId",
+    title: ({ sectionId }) => {
+      const label = titleCaseSlug(sectionId);
+      return label ? `Explore — ${label}` : "Explore";
+    },
+  },
   { pattern: "/explore", title: () => "Explore" },
   { pattern: "/watchlist", title: () => "Watchlist" },
   { pattern: "/live/watch", title: () => "Watching Live" },
@@ -87,6 +90,8 @@ const ROUTE_TITLES: RouteTitleEntry[] = [
   { pattern: "/admin/sync", title: () => "Libraries" },
   { pattern: "/admin/:section", title: ({ section }) => titleCaseSlug(section) || "Admin" },
   { pattern: "/admin", title: () => "Admin Overview" },
+  { pattern: "/remote/:sessionId", title: () => "Remote" },
+  { pattern: "/settings/rooms", title: () => "Rooms" },
   { pattern: "/settings/profile", title: () => "Profile" },
   { pattern: "/settings/voice", title: () => "Voice" },
   { pattern: "/settings/taste", title: () => "Taste" },
@@ -97,10 +102,13 @@ const ROUTE_TITLES: RouteTitleEntry[] = [
   { pattern: "/settings", title: () => "Profile" },
   { pattern: "/title/:mediaType/:itemId", title: () => "Title" },
   { pattern: "/person/:tmdbPersonId", title: () => "Person" },
-  { pattern: "/tag/:tagName", title: ({ tagName }) => {
-    const label = titleCaseSlug(tagName ? decodeURIComponent(tagName) : "");
-    return label ? `Tag — ${label}` : "Tags";
-  } },
+  {
+    pattern: "/tag/:tagName",
+    title: ({ tagName }) => {
+      const label = titleCaseSlug(tagName ? decodeURIComponent(tagName) : "");
+      return label ? `Tag — ${label}` : "Tags";
+    },
+  },
   { pattern: "*", title: () => "Not Found" },
 ];
 
@@ -137,7 +145,9 @@ export function routeNamesItself(pathname: string): boolean {
 }
 
 /** "Alien (1979)" — or "" until the item has a title. */
-export function titlePageName(detail: { title?: unknown; year?: unknown } | null | undefined): string {
+export function titlePageName(
+  detail: { title?: unknown; year?: unknown } | null | undefined,
+): string {
   const title = String(detail?.title || "").trim();
   if (!title) return "";
   const year = String(detail?.year || "").trim();

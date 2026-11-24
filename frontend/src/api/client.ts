@@ -2590,6 +2590,70 @@ export async function throwToAppleTv(deviceId: string, payload: JsonObject) {
   });
 }
 
+export async function listRooms() {
+  return api<{ rooms?: JsonObject[] }>("/rooms");
+}
+
+export async function renameRoom(roomId: string, name: string) {
+  return api(`/rooms/${encodeURIComponent(roomId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function openSharedSession(payload: JsonObject) {
+  return api<JsonObject>("/sessions", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function readSharedSession(sessionId: string) {
+  return api<JsonObject>(`/sessions/${encodeURIComponent(sessionId)}`);
+}
+
+export async function joinRoom(roomId: string, code = "") {
+  return api<JsonObject>(`/rooms/${encodeURIComponent(roomId)}/join`, {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+}
+
+export async function postSessionCommand(sessionId: string, payload: JsonObject) {
+  return api<JsonObject>(`/sessions/${encodeURIComponent(sessionId)}/commands`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function patchSharedSession(sessionId: string, payload: JsonObject) {
+  return api<JsonObject>(`/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function readJoinCode(sessionId: string) {
+  return api<{ code?: string }>(`/sessions/${encodeURIComponent(sessionId)}/code`);
+}
+
+export async function listJoinRequests(sessionId: string) {
+  return api<{ requests?: JsonObject[] }>(
+    `/sessions/${encodeURIComponent(sessionId)}/join-requests`,
+  );
+}
+
+export async function decideJoinRequest(
+  sessionId: string,
+  requestId: string,
+  decision: "approve" | "not_now",
+) {
+  return api(`/sessions/${encodeURIComponent(sessionId)}/join-requests/${encodeURIComponent(requestId)}`, {
+    method: "POST",
+    body: JSON.stringify({ decision }),
+  });
+}
+
 export async function listSessionApprovals() {
   return api<{ approvals?: JsonObject[] }>("/session-approvals");
 }

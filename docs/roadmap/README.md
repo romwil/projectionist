@@ -47,7 +47,7 @@ The numbered list is the subject order inside that plan.
 | SES-005 | Join flow + guest permissions | done | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
 | SES-006 | Handheld captions | done | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
 | SES-007 | Handoff between screens | done | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
-| SES-008 | Web client as a second screen | proposed | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
+| SES-008 | Web client as a second screen | in progress | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
 | SES-009 | Youth join approval tightens the session ceiling | done | [SHARED_SESSIONS](../SHARED_SESSIONS.md#privacy-and-youth) |
 | TML-001 | Timeline schema + file fingerprinting | done | [TIMELINE](../TIMELINE.md#roadmap-items) |
 | TML-002 | Dialogue import from the household subtitle cache | done | [TIMELINE](../TIMELINE.md#roadmap-items) |

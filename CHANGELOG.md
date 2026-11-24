@@ -6,9 +6,12 @@ Household playback controls live in Admin → Household → Playback. Profile ke
 
 The web app can be installed. A quiet Install entry appears when the browser offers it. The service worker stores the shell and never stores API, art, or media. Media keys follow the film that is playing. Web push waits.
 
+A browser can be a second screen. Settings → Rooms lists the named screens, without what is playing. Play in… starts a session on one of them. The remote uses the live channel. Web push is still not included.
+
 ### Highlights
 - **Household playback is an owner control.** Play through Projectionist, the away address, the playability report, and copies made ahead are under Admin → Household → Playback. The switch says it affects everyone in the household. Members do not see that section. An old Profile playback anchor opens the new section.
 - **Install Projectionist from the browser.** Settings and the account menu offer Install when the browser does. The installed window opens on Explore. The shell is saved for a fast start, and an offline page says when the server can't be reached. Play, pause, and seek show up on the system media keys. Ctrl or Command K opens Search.
+- **Rooms, Play in…, and a remote.** Settings → Rooms is the names of the screens. Play in… starts the film on one of them. Join with the code, or ask, and the page does not name the film until the answer is yes. The remote plays, pauses, and skips ten seconds on the live channel.
 
 ## [1.45.5] — 2026-11-24
 

@@ -281,7 +281,7 @@ Use the grip's **Add to list or playlist** chooser to place a title in more than
 
 ### Play in Projectionist
 
-**Play** starts the title here. Movies and episodes play as themselves; a show card plays the on-deck or first unwatched episode. Projectionist asks Plex for an HLS transcode and keeps the Plex token on the server.
+**Play** starts the title here. **Play in…** lists the household's screens and starts the film on the one you choose. Settings → Rooms is only those names. Join with the code on the screen, or ask. Until the answer is yes, the page does not name the film. The remote plays, pauses, and skips ten seconds on the live channel. Movies and episodes play as themselves; a show card plays the on-deck or first unwatched episode. Projectionist asks Plex for an HLS transcode and keeps the Plex token on the server.
 
 Dragging the scrubber holds the last frame. Letting go jumps once. The picture stays hidden until that new spot has a real frame. A bigger skip that restarts the stream still shows a short **tuning** interstitial — fuzzy TV static plus a wry living-room line — then the picture crossfades in when frames arrive. Every movie play can open with a **random trailer** from the household preroll library — the next play of the same film may lead with a different one. The trailer plays through: no title on screen, and no skip. Episodes skip it. Friends watching the same title are not locked to one bumper.
 
