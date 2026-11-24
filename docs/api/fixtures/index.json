@@ -256,6 +256,11 @@
   },
   {
     "method": "POST",
+    "path": "/api/sessions/{session_id}/handoff",
+    "file": "post-api-sessions-session_id-handoff.json"
+  },
+  {
+    "method": "POST",
     "path": "/api/sessions/{session_id}/join-requests/{request_id}",
     "file": "post-api-sessions-session_id-join-requests-request_id.json"
   }

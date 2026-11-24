@@ -326,3 +326,23 @@ def end_shared_session(session: SharedSession) -> None:
         current = _SESSIONS.pop(session.id, None)
         if current is not None and _BY_SCREEN.get(current.screen_id) == current.id:
             _BY_SCREEN.pop(current.screen_id, None)
+
+
+def handoff_session(session: SharedSession, screen_id: str) -> SharedSession:
+    """Keep the session. Move the screen. The old screen is no longer in it."""
+    screen = str(screen_id or "").strip().lower()
+    if not screen:
+        raise SharedSessionError("That room is not in this household.", status_code=404)
+    with _LOCK:
+        current = _SESSIONS.get(session.id)
+        if current is None:
+            raise SharedSessionError("That session is not available.", status_code=404)
+        previous = _BY_SCREEN.get(screen)
+        if previous and previous != current.id:
+            _SESSIONS.pop(previous, None)
+        if _BY_SCREEN.get(current.screen_id) == current.id:
+            _BY_SCREEN.pop(current.screen_id, None)
+        current.screen_id = screen
+        _BY_SCREEN[screen] = current.id
+        current.updated_at = time.time()
+        return current
