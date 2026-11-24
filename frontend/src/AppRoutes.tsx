@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "re
 import { useAuthGate } from "./components/UserMenu";
 import { resolveDefaultHome } from "./lib/defaultHome";
 import { libraryHubPath } from "./lib/libraryTabs.js";
+import { isSearchShortcut } from "./lib/searchShortcut.js";
 import RouteAnnouncer from "./components/RouteAnnouncer";
 import PrimaryBottomNav from "./components/PrimaryBottomNav";
 import SkipLink from "./components/SkipLink";
@@ -91,10 +92,25 @@ function RedirectExploreBrowse() {
   return <Navigate to={libraryHubPath("browse", extra)} replace />;
 }
 
+function SearchShortcut() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (!isSearchShortcut(event)) return;
+      event.preventDefault();
+      navigate("/search");
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navigate]);
+  return null;
+}
+
 export default function AppRoutes() {
   return (
     <>
       <SkipLink />
+      <SearchShortcut />
       {/* A11Y-004: title every route + focus the new page's h1 + announce it. */}
       <RouteAnnouncer />
       {/* UX-014: real phone/iPad primary nav, hidden over the player and

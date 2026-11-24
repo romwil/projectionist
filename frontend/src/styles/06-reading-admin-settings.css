@@ -533,11 +533,16 @@
 .settings-rail-meta-link {
   color: var(--muted);
   text-decoration: none;
+  font: inherit;
   font-size: var(--text-xs);
   padding: 8px 12px;
   min-height: 44px;
   display: inline-flex;
   align-items: center;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
 }
 
 .admin-rail-meta-link:hover,

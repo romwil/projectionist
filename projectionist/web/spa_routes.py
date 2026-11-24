@@ -217,6 +217,39 @@ def web_manifest() -> FileResponse:
     )
 
 
+def _public_file(name: str, media_type: str, cache_control: str) -> FileResponse:
+    path = _frontend_public_file(name)
+    if path is None:
+        raise HTTPException(status_code=404, detail=f"{name} not found")
+    return FileResponse(path, media_type=media_type, headers={"Cache-Control": cache_control})
+
+
+@router.get("/sw.js")
+def service_worker() -> FileResponse:
+    """App shell worker. It must not be cached for long, so an update can replace it."""
+    return _public_file("sw.js", "text/javascript", "no-cache")
+
+
+@router.get("/installable-cache.mjs")
+def installable_cache_module() -> FileResponse:
+    return _public_file("installable-cache.mjs", "text/javascript", "no-cache")
+
+
+@router.get("/offline.html")
+def offline_page() -> FileResponse:
+    return _public_file("offline.html", "text/html", "no-cache")
+
+
+@router.get("/icon-192.png")
+def icon_192() -> FileResponse:
+    return _public_file("icon-192.png", "image/png", "public, max-age=86400")
+
+
+@router.get("/icon-512.png")
+def icon_512() -> FileResponse:
+    return _public_file("icon-512.png", "image/png", "public, max-age=86400")
+
+
 @router.get("/admin", response_class=HTMLResponse)
 @router.get("/admin/{section}", response_class=HTMLResponse)
 def admin_page(section: str = "") -> HTMLResponse:

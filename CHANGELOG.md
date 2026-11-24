@@ -4,8 +4,11 @@
 
 Household playback controls live in Admin → Household → Playback. Profile keeps pause, text size, and the default page.
 
+The web app can be installed. A quiet Install entry appears when the browser offers it. The service worker stores the shell and never stores API, art, or media. Media keys follow the film that is playing. Web push waits.
+
 ### Highlights
 - **Household playback is an owner control.** Play through Projectionist, the away address, the playability report, and copies made ahead are under Admin → Household → Playback. The switch says it affects everyone in the household. Members do not see that section. An old Profile playback anchor opens the new section.
+- **Install Projectionist from the browser.** Settings and the account menu offer Install when the browser does. The installed window opens on Explore. The shell is saved for a fast start, and an offline page says when the server can't be reached. Play, pause, and seek show up on the system media keys. Ctrl or Command K opens Search.
 
 ## [1.45.4] — 2026-11-24
 
