@@ -16,7 +16,7 @@ from typing import Any, Dict, Mapping, Optional, Union
 
 from fastapi import Request
 
-from projectionist.web.rate_limit import trust_proxy_headers
+from projectionist.web.rate_limit import peer_is_trusted_proxy, trust_proxy_headers
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +58,13 @@ JOIN_LINK_DETAIL = (
 WAN_INTERLOCK_DETAIL = (
     "This instance is reachable from a public network without household login. "
     "Enable household login (multi-user) or complete setup from your local network."
+)
+LOGIN_STAYS_ON_DETAIL = (
+    "Household login stays on while a public address is set. "
+    "Clear that address before turning login off."
+)
+SETUP_EXTERNAL_DETAIL = (
+    "Setup cannot be opened from the public address. Finish it on the home network."
 )
 
 
@@ -202,7 +209,9 @@ def classify_request(
         forwarded_for_present=forwarded_header_present(request, "x-forwarded-for"),
         trusted_proxy_mode=trusted,
     )
-    preselect = "public" if classification in {"proxy", "public_failsafe", "halt_wan"} else "private"
+    preselect = (
+        "public" if classification in {"proxy", "public_failsafe", "halt_wan"} else "private"
+    )
     return {
         "classification": classification,
         "preselect_profile": preselect,
@@ -303,32 +312,56 @@ def _is_visible_public_peer(peer: Optional[IpAddress]) -> bool:
     return not (peer.is_private or peer.is_loopback or peer.is_link_local)
 
 
+def _header_token(request: Request, name: str, *, max_len: int) -> str:
+    """One header value, or empty. A list, spaces, or an overlong value is ignored."""
+    raw = (request.headers.get(name) or "").strip()
+    if not raw or len(raw) > max_len or "," in raw or any(char.isspace() for char in raw):
+        return ""
+    return raw
+
+
+def request_arrived_through_tunnel(request: Request) -> bool:
+    """True when a trusted connector attached a Cloudflare client header.
+
+    The socket peer is often a private address. ``cf-ray`` or one
+    ``cf-connecting-ip`` from that peer means the person is outside the
+    house. The same headers from any other peer are ignored, and
+    ``X-Forwarded-For`` is never this signal (SEC-020).
+    """
+    peer_host, _port = direct_peer(request)
+    if not peer_host or not peer_is_trusted_proxy(peer_host):
+        return False
+    if _header_token(request, "cf-ray", max_len=64):
+        return True
+    connecting = _header_token(request, "cf-connecting-ip", max_len=64)
+    return parse_ip(connecting) is not None
+
+
+def request_is_external(request: Request) -> bool:
+    """True for a tunnel arrival or a socket peer on the public internet."""
+    if request_arrived_through_tunnel(request):
+        return True
+    peer_host, _port = direct_peer(request)
+    return _is_visible_public_peer(parse_ip(peer_host))
+
+
 def wan_interlock_blocks(
     request: Request,
     *,
     multi_user_enabled: bool,
     bind_host: Optional[str] = None,
 ) -> bool:
-    """Block single-owner API only for a visible public client.
+    """Block single-owner API for a tunnel arrival or a visible public peer.
 
     Setup handshake posture (``setup_posture``) may still treat Docker NAT on a
-    ``0.0.0.0`` bind as Public Household. This runtime lock must not: Docker
-    bridge peers and trusted ``X-Forwarded-Proto: https`` hops are not WAN.
-    ``bind_host`` is accepted for call-site compatibility; bind is setup-only.
+    ``0.0.0.0`` bind as Public Household. This runtime lock must not: a Docker
+    bridge peer without Cloudflare headers is not WAN. ``X-Forwarded-For`` is
+    not the client. ``bind_host`` is accepted for call-site compatibility.
     """
+    del bind_host
     if multi_user_enabled:
         return False
-    trusted = trust_proxy_headers()
-    peer_host, _peer_port = direct_peer(request)
-    peer = parse_ip(peer_host)
-
-    client = peer
-    if trusted:
-        forwarded_ip = parse_ip((request.headers.get("x-forwarded-for") or "").split(",")[0].strip())
-        if forwarded_ip is not None:
-            client = forwarded_ip
-
-    return _is_visible_public_peer(client)
+    return request_is_external(request)
 
 
 def log_honeypot_ping(request: Request, *, honeypot: str) -> None:

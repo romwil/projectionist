@@ -15,9 +15,9 @@ from fastapi import Request
 
 from projectionist.public_url import sanitize_stored_public_base_url
 from projectionist.web.ingress import (
-    direct_peer,
     is_tailscale_or_cgnat,
     parse_ip,
+    request_is_external,
 )
 from projectionist.web.rate_limit import trust_proxy_headers
 
@@ -45,6 +45,22 @@ def remember_home(origin: str) -> None:
         return
     with _LOCK:
         _OBSERVED_HOME = cleaned
+
+
+def public_address_configured(settings: Any = None) -> bool:
+    """True when the household has stored an away address."""
+    if settings is None:
+        import os
+        from pathlib import Path
+
+        from projectionist.config_store import load_merged_settings
+
+        data_dir = Path(os.environ.get("DATA_DIR", "/config"))
+        try:
+            settings = load_merged_settings(data_dir)
+        except Exception:
+            return False
+    return bool(stored_public_base_url(settings))
 
 
 def stored_public_base_url(settings: Any) -> str:
@@ -82,28 +98,13 @@ def host_is_home(netloc: str) -> bool:
     return bool(parsed.is_private or parsed.is_loopback or parsed.is_link_local)
 
 
-def _client_ip(request: Request):
-    peer_host, _port = direct_peer(request)
-    client = parse_ip(peer_host)
-    if trust_proxy_headers():
-        forwarded = parse_ip((request.headers.get("x-forwarded-for") or "").split(",")[0].strip())
-        if forwarded is not None:
-            client = forwarded
-    return client
-
-
-def _is_visible_public(client: Any) -> bool:
-    """Globally routed client. Tailnet CGNAT is home, matching the ingress lock."""
-    if client is None:
-        return False
-    if is_tailscale_or_cgnat(client):
-        return False
-    return not (client.is_private or client.is_loopback or client.is_link_local)
-
-
 def peer_may_publish_home(request: Request) -> bool:
-    """A visible public client cannot teach the server a home address."""
-    return not _is_visible_public(_client_ip(request))
+    """A tunnel arrival or a public peer cannot teach the server a home address.
+
+    ``X-Forwarded-For`` is not the client. A Cloudflare header counts only
+    when the socket peer is a trusted connector (SEC-020).
+    """
+    return not request_is_external(request)
 
 
 def request_origin(request: Request) -> str:
@@ -111,7 +112,9 @@ def request_origin(request: Request) -> str:
     scheme = str(getattr(request.url, "scheme", "") or "http").lower()
     netloc = str(request.headers.get("host") or getattr(request.url, "netloc", "") or "").strip()
     if trust_proxy_headers():
-        forwarded_proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
+        forwarded_proto = (
+            (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
+        )
         if forwarded_proto in {"http", "https"}:
             scheme = forwarded_proto
         forwarded_host = (request.headers.get("x-forwarded-host") or "").split(",")[0].strip()
