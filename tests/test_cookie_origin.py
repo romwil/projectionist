@@ -73,3 +73,15 @@ class CookieOriginTests(unittest.TestCase):
             headers={"Origin": "https://evil.example"},
         )
         self.assertNotEqual(unsigned.json().get("detail"), ORIGIN_REJECTED)
+
+    def test_a_null_origin_and_a_foreign_referer_are_refused(self) -> None:
+        null_origin = self.client.post("/api/not-a-route", headers={"Origin": "null"})
+        self.assertEqual(null_origin.status_code, 403, null_origin.text)
+        self.assertEqual(null_origin.json()["detail"], ORIGIN_REJECTED)
+        referred = self.client.post(
+            "/api/not-a-route",
+            headers={"Referer": "https://evil.example/steal"},
+        )
+        self.assertEqual(referred.status_code, 403, referred.text)
+        reading = self.client.get("/api/health", headers={"Origin": "https://evil.example"})
+        self.assertEqual(reading.status_code, 200, reading.text)

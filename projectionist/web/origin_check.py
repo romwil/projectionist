@@ -42,9 +42,10 @@ def cookie_origin_rejected(request: Request) -> bool:
         return False
     if not request.cookies.get(SESSION_COOKIE_NAME):
         return False
-    presented = _origin_of(request.headers.get("origin") or "") or _origin_of(
-        request.headers.get("referer") or ""
-    )
+    raw_origin = str(request.headers.get("origin") or "").strip()
+    if raw_origin.lower() == "null":
+        return True
+    presented = _origin_of(raw_origin) or _origin_of(request.headers.get("referer") or "")
     if not presented:
         return False
 
