@@ -590,6 +590,21 @@ def preserve_require_totp(
     merged["auth"] = auth
 
 
+def preserve_mcp_remote(
+    payload: Any,
+    existing: Settings,
+    merged: Dict[str, Any],
+) -> None:
+    """Keep remote MCP when a settings save does not mention it.
+
+    The default is off. A partial save must not turn a deliberate on back off.
+    """
+    fields_set = getattr(payload, "model_fields_set", set())
+    if "mcp_remote_enabled" in fields_set:
+        return
+    merged["mcp_remote_enabled"] = bool(getattr(existing, "mcp_remote_enabled", False))
+
+
 def preserve_network_settings(
     payload: Any,
     existing: Settings,

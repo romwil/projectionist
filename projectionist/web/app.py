@@ -980,6 +980,7 @@ class SettingsPayload(BaseModel):
     mcp_api_key: str = ""
     mcp_full_api_key: str = ""
     mcp_full_confirm_enabled: bool = False
+    mcp_remote_enabled: bool = False
     mcp_tmdb_poster_size: str = "w500"
     mcp_tmdb_backdrop_size: str = "w1280"
     features: FeatureFlagsPayload = Field(default_factory=FeatureFlagsPayload)

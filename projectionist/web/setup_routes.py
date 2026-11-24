@@ -16,6 +16,7 @@ def register_setup_routes(app):
     from projectionist.web.setup import (
         merge_youth_settings_payload,
         preserve_engine_settings,
+        preserve_mcp_remote,
         preserve_network_settings,
         preserve_require_totp,
     )
@@ -250,6 +251,7 @@ def register_setup_routes(app):
         preserve_engine_settings(payload, existing, merged)
         preserve_network_settings(payload, existing, merged)
         preserve_require_totp(payload, existing, merged)
+        preserve_mcp_remote(payload, existing, merged)
         settings = _normalize_mcp_image_sizes(
             normalize_path_settings(normalize_settings_llm(Settings.from_mapping(merged)))
         )

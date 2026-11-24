@@ -864,6 +864,8 @@ class Settings:
     # stdio/CA). Default false → the full key can propose but not self-confirm;
     # a human confirms on the web plane. See review finding H3.
     mcp_full_confirm_enabled: bool = False
+    # HTTP MCP is home-network only until the owner turns this on (SEC-024).
+    mcp_remote_enabled: bool = False
     # MCP / privacy image CDN sizes (image.tmdb.org/t/p/{size}/…).
     mcp_tmdb_poster_size: str = "w500"
     mcp_tmdb_backdrop_size: str = "w1280"
