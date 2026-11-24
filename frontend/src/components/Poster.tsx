@@ -1,5 +1,6 @@
-import { useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { posterMotif, posterPalette, posterSeed } from "../lib/posterPlaceholder";
+import { cachedPosterMark, loadedPosterMark, posterIsShown } from "../lib/posterShown";
 
 type PosterProps = {
   src?: string | null;
@@ -30,7 +31,13 @@ export default function Poster({
   const paint = posterPalette(seed);
   const [loadedSrc, setLoadedSrc] = useState("");
   const art = String(src || "").trim();
-  const shown = Boolean(art) && loadedSrc === art;
+  const shown = posterIsShown(art, loadedSrc);
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  useEffect(() => {
+    const mark = cachedPosterMark(art, imgRef.current);
+    if (mark) setLoadedSrc(mark);
+  }, [art]);
 
   const style = {
     "--poster-a": paint.a,
@@ -59,12 +66,15 @@ export default function Poster({
       </div>
       {art ? (
         <img
+          ref={imgRef}
+          key={art}
           src={art}
           alt=""
           aria-hidden="true"
           className={`poster-art${shown ? " is-shown" : ""}`}
           loading="lazy"
-          onLoad={(event) => setLoadedSrc(event.currentTarget.src)}
+          onLoad={() => setLoadedSrc(loadedPosterMark(art))}
+          onError={() => setLoadedSrc("")}
         />
       ) : null}
       {titleOnArt ? <span className="poster-scrim" aria-hidden="true" /> : null}

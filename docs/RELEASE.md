@@ -438,6 +438,7 @@ A follow-up `chore: refresh release-notes.json timestamp for vX.Y.Z` commit some
 □ Docs updated if user-facing
 □ (Recommended) Security-touching: pentest harness green
 □ (Recommended) Chrome/gating: Interactive UI QA on :8792 against Hub-pulled tag (Path B), never :8788, never smartmap :8790
+□ Posters visible on Explore
 □ ./scripts/generate-release-notes.sh --require-version X.Y.Z
 □ 1. ./scripts/docker-release.sh X.Y.Z  → Hub has romwil/projectionist:X.Y.Z
 □ 2. Merge PR → main (never direct-push/bypass); then tag vX.Y.Z on merged main; gh release create with Highlights

@@ -7,6 +7,31 @@ Household playback controls live in Admin → Household → Playback. Profile ke
 ### Highlights
 - **Household playback is an owner control.** Play through Projectionist, the away address, the playability report, and copies made ahead are under Admin → Household → Playback. The switch says it affects everyone in the household. Members do not see that section. An old Profile playback anchor opens the new section.
 
+## [1.45.4] — 2026-11-24
+
+Posters show the picture again. A play no longer waits out a background probe, a film stays up while the picture is still arriving, and an HDR title is not tone-mapped when this server has no hardware transcoder.
+
+### Highlights
+- **Posters show the picture.** On Explore, Continue Watching, the title page, and search, a title that has art shows that picture. The generated placeholder stays underneath until the picture is there, and it stays if the picture fails.
+- **Play starts without waiting out a background probe.** Opening the file, probing it, and the first fragment start as soon as you press Play. The ready limit stays 30 seconds.
+- **A film stays up while the picture is still arriving.** Playback leaves only on a fatal error, or after about 10 seconds with no bytes and no movement, and only once.
+- **An HDR film is not tone-mapped without hardware.** You see that this title needs preparing for this screen, and you can ask for a copy on the overnight pass.
+
+### Fixed
+- A loaded poster fades in. The shelf marks the picture shown from the art address it was given, including a picture the browser already has in cache. A picture that fails to load stays on the generated placeholder.
+- A play stops a background probe instead of waiting it out. The 30 second ready limit is unchanged.
+- A ready engine session stays up while segment bytes or the playhead are still moving. It leaves on a fatal error, or after about 10 seconds with no bytes and no playhead movement, and only once.
+- An HDR picture is not sent to Plex for tone-mapping when the server has no hardware transcoder. The member sees “This title needs preparing for this screen.”
+
+### Verification
+- `./scripts/patch-release.sh 1.45.4` lockstep + `frontend/public/release-notes.json`.
+- `docs/api/fixtures/get-api-health.json` regenerated for 1.45.4.
+- Page speed (`npm run test:release-perf`) before Hub publish.
+- Playback fixtures are green on the commit that `v1.45.4` tags.
+- CI on the release PR (required checks).
+- Hub image built from tag `v1.45.4`; `org.opencontainers.image.revision` matches that commit.
+- QA `:8792` is a Hub pull of `romwil/projectionist:1.45.4` (Path B). Production moves to 1.45.4 only after that image is rolled and health says so.
+
 ## [1.45.3] — 2026-11-23
 
 Play starts from the file Projectionist already knows, and a slow Plex call no longer stops the next film.
