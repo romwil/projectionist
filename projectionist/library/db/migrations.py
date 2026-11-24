@@ -586,6 +586,7 @@ def _build_migrations() -> List[Migration]:
         (68, "paired_device_kind", _paired_device_kind),
         (69, "session_approvals", _session_approvals),
         (70, "timeline_files", _timeline_files),
+        (71, "totp_secrets", wrap("_migrate_totp_secrets")),
     ]
 
 

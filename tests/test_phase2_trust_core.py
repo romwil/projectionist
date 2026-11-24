@@ -94,7 +94,7 @@ class _HouseholdApp(unittest.TestCase):
                 self.db.create_local_user(
                     user_id=user_id,
                     display_name=name,
-                    password_hash=_hash_password("password123"),
+                    password_hash=_hash_password("correct-horse"),
                     role=role,
                 )
             self.db.set_user_youth("local-youth", True)
@@ -113,8 +113,11 @@ class _HouseholdApp(unittest.TestCase):
     def _client_for(self, username: str) -> TestClient:
         client = TestClient(self.app_mod.app)
         resp = client.post(
-            "/api/auth/local/login", json={"username": username, "password": "password123"}
+            "/api/auth/local/login", json={"username": username, "password": "correct-horse"}
         )
+        from tests.totp_login import finish_sign_in_code
+
+        resp = finish_sign_in_code(client, resp, username, "correct-horse")
         self.assertEqual(resp.status_code, 200, resp.text)
         clear_rate_limits()
         return client

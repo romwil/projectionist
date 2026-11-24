@@ -371,10 +371,27 @@
             ],
             "title": "Client"
           },
+          "code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
           "password": {
             "minLength": 1,
             "title": "Password",
             "type": "string"
+          },
+          "reset_sign_in_code": {
+            "default": false,
+            "title": "Reset Sign In Code",
+            "type": "boolean"
           },
           "username": {
             "minLength": 1,

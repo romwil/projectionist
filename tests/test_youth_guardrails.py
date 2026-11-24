@@ -456,7 +456,7 @@ class YouthToggleApiTests(unittest.TestCase):
             self.db.create_local_user(
                 user_id=f"local-{username}",
                 display_name=username,
-                password_hash=_hash_password("password123"),
+                password_hash=_hash_password("correct-horse"),
                 role=role,
             )
         UserMemoryService(self.db).remember(
@@ -483,8 +483,11 @@ class YouthToggleApiTests(unittest.TestCase):
     def _login(self, username: str) -> None:
         self.client.cookies.clear()
         resp = self.client.post(
-            "/api/auth/local/login", json={"username": username, "password": "password123"}
+            "/api/auth/local/login", json={"username": username, "password": "correct-horse"}
         )
+        from tests.totp_login import finish_sign_in_code
+
+        resp = finish_sign_in_code(self.client, resp, username, "correct-horse")
         self.assertEqual(resp.status_code, 200, resp.text)
 
     def _youth_events(self) -> list:

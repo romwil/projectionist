@@ -2198,6 +2198,20 @@ class SchemaMigrationsMixin:
                 "ALTER TABLE holiday_rail_titles ADD COLUMN curator_note TEXT NOT NULL DEFAULT ''"
             )
 
+    def _migrate_totp_secrets(self, conn: sqlite3.Connection) -> None:
+        """Sign-in code secret and recovery-code hashes on the account (SEC-019)."""
+        user_cols = self._table_columns(conn, "users")
+        if "totp_secret" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN totp_secret TEXT")
+        if "totp_pending_secret" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN totp_pending_secret TEXT")
+        if "totp_confirmed" not in user_cols:
+            conn.execute(
+                "ALTER TABLE users ADD COLUMN totp_confirmed INTEGER NOT NULL DEFAULT 0"
+            )
+        if "totp_recovery_hashes" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN totp_recovery_hashes TEXT")
+
     def _migrate_owner_ops(self, conn: sqlite3.Connection) -> None:
         """Owner security audit trail + stewardship checklist marks (Phase 6)."""
         conn.executescript(

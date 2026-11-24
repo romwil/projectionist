@@ -381,7 +381,7 @@ class MyDataApiTests(unittest.TestCase):
         self.db = jobs.get_job_manager().db
         for name, role in (("owner", "owner"), ("alice", "member"), ("bob", "member")):
             self.db.create_local_user(
-                user_id=f"local-{name}", display_name=name, password_hash=_hash_password("password123"), role=role
+                user_id=f"local-{name}", display_name=name, password_hash=_hash_password("correct-horse"), role=role
             )
         _ensure_syllabus_table(self.db)
         seed_every_store(self.db, "local-alice", "ALICEMARK")
@@ -409,7 +409,10 @@ class MyDataApiTests(unittest.TestCase):
 
     def _login(self, name: str) -> None:
         self.client.cookies.clear()
-        resp = self.client.post("/api/auth/local/login", json={"username": name, "password": "password123"})
+        resp = self.client.post("/api/auth/local/login", json={"username": name, "password": "correct-horse"})
+        from tests.totp_login import finish_sign_in_code
+
+        resp = finish_sign_in_code(self.client, resp, name, "correct-horse")
         self.assertEqual(resp.status_code, 200, resp.text)
 
     def test_member_export_is_their_own_only(self) -> None:

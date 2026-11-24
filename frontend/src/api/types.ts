@@ -26,7 +26,8 @@ export type RecommendationWhy = JsonObject & {
 };
 
 /** Poster/card `reason` may be a sentence string or a why object. */
-export type RecommendationReason = string | RecommendationWhy | RecommendationExplanation | null | undefined;
+export type RecommendationReason =
+  string | RecommendationWhy | RecommendationExplanation | null | undefined;
 
 export type LibraryItem = JsonObject & {
   id?: string | number;
@@ -182,4 +183,5 @@ export type ApiError = Error & {
   status?: number;
   code?: string;
   conflict?: unknown;
+  body?: unknown;
 };

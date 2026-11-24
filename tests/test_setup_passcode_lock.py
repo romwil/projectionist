@@ -156,7 +156,7 @@ class FreshInstallLockTests(_LockCase):
         self.assertNotEqual(client.get("/api/chat/threads").status_code, 200)
         raced = client.post(
             "/api/auth/local/login",
-            json={"username": "eve", "password": "password123"},
+            json={"username": "eve", "password": "correct-horse"},
         )
         self.assertNotEqual(raced.status_code, 200, raced.text)
         plex = client.post("/api/auth/plex/pin", json={})
@@ -170,7 +170,7 @@ class FreshInstallLockTests(_LockCase):
             json={
                 "profile": "private",
                 "username": "ada",
-                "password": "password123",
+                "password": "correct-horse",
                 "plex_url": "http://plex.local:32400",
                 "plex_token": "plex-token-value",
             },
@@ -205,7 +205,7 @@ class FreshInstallLockTests(_LockCase):
         self.assertIn("PROJECTIONIST_OWNER_PASSWORD", page.text)
         raced = client.post(
             "/api/auth/local/login",
-            json={"username": "eve", "password": "password123"},
+            json={"username": "eve", "password": "correct-horse"},
         )
         self.assertEqual(raced.status_code, 404, raced.text)
         self.assertFalse(has_real_owner(get_job_manager().db))

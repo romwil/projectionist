@@ -142,6 +142,45 @@ class UsersAuthMixin:
         assert row is not None
         return self._row_to_user(row)
 
+    def set_user_totp_pending(
+        self,
+        user_id: str,
+        *,
+        secret: str,
+        recovery_hashes_json: str,
+    ) -> None:
+        """Store a sign-in code that is not active until the person confirms it."""
+        with self.connect() as conn:
+            conn.execute(
+                """
+                UPDATE users
+                SET totp_pending_secret = ?, totp_recovery_hashes = ?
+                WHERE id = ?
+                """,
+                (secret, recovery_hashes_json, user_id),
+            )
+
+    def confirm_user_totp(self, user_id: str) -> None:
+        """Make the pending sign-in code the one local login accepts."""
+        with self.connect() as conn:
+            conn.execute(
+                """
+                UPDATE users
+                SET totp_secret = totp_pending_secret,
+                    totp_confirmed = 1,
+                    totp_pending_secret = NULL
+                WHERE id = ? AND totp_pending_secret IS NOT NULL
+                """,
+                (user_id,),
+            )
+
+    def set_user_recovery_hashes(self, user_id: str, recovery_hashes_json: str) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                "UPDATE users SET totp_recovery_hashes = ? WHERE id = ?",
+                (recovery_hashes_json, user_id),
+            )
+
     def bump_session_epoch(self, user_id: str) -> Dict[str, Any]:
         """Invalidate every existing session token for a user ("sign out everywhere").
 

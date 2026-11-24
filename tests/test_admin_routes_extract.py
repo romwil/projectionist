@@ -102,7 +102,7 @@ class AdminRoutesExtractApiTests(unittest.TestCase):
             db.create_local_user(
                 user_id=user_id,
                 display_name=user_id,
-                password_hash=_hash_password("password123"),
+                password_hash=_hash_password("correct-horse"),
                 role=role,
             )
         self.owner = TestClient(app_mod.app)

@@ -267,8 +267,11 @@ def commit_setup(
     name = str(username or "").strip()
     if len(name) < 2:
         raise HTTPException(status_code=400, detail="Username must be at least 2 characters")
-    if len(password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    from projectionist.web.passwords import password_rejection
+
+    rejection = password_rejection(password)
+    if rejection:
+        raise HTTPException(status_code=400, detail=rejection)
     cleaned_plex_url = str(plex_url or "").strip()
     cleaned_plex_token = str(plex_token or "").strip()
     if (cleaned_plex_url or cleaned_plex_token) and not (cleaned_plex_url and cleaned_plex_token):

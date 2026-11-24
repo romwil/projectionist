@@ -575,6 +575,21 @@ def build_setup_status(settings: Settings, db: Database | None = None) -> Dict[s
     }
 
 
+def preserve_require_totp(
+    payload: Any,
+    existing: Settings,
+    merged: Dict[str, Any],
+) -> None:
+    """Keep the household sign-in-code setting when a save does not mention it."""
+    auth_payload = getattr(payload, "auth", None)
+    fields_set = getattr(auth_payload, "model_fields_set", set()) or set()
+    if "require_totp" in fields_set:
+        return
+    auth = dict(merged.get("auth") or {})
+    auth["require_totp"] = bool(getattr(getattr(existing, "auth", None), "require_totp", False))
+    merged["auth"] = auth
+
+
 def preserve_network_settings(
     payload: Any,
     existing: Settings,

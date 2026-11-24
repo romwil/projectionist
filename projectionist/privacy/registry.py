@@ -471,7 +471,15 @@ STORES: Tuple[PersonalStore, ...] = (
         label="Your profile: name, email, sign-in links, and settings",
         match="id = ?",
         subject_cols=("id",),
-        secret_cols=("password_hash", "plex_token_enc", "apprise_urls", "session_epoch"),
+        secret_cols=(
+            "password_hash",
+            "plex_token_enc",
+            "apprise_urls",
+            "session_epoch",
+            "totp_secret",
+            "totp_pending_secret",
+            "totp_recovery_hashes",
+        ),
         covers_cols=(
             "display_name",
             "email",

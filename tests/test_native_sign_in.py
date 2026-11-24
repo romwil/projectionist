@@ -100,7 +100,7 @@ class NativeSignInTests(unittest.TestCase):
         get_job_manager().db.create_local_user(
             user_id="local-owner",
             display_name="Owner",
-            password_hash=_hash_password("password123"),
+            password_hash=_hash_password("correct-horse"),
             role="owner",
         )
 
@@ -131,9 +131,12 @@ class NativeSignInTests(unittest.TestCase):
     def test_local_login_returns_a_credential_and_skips_the_cookie(self) -> None:
         self._write_settings()
         self._seed_owner()
-        resp = self.client.post(
-            "/api/auth/local/login",
-            json={"username": "Owner", "password": "password123", "client": CLIENT},
+        payload = {"username": "Owner", "password": "correct-horse", "client": CLIENT}
+        resp = self.client.post("/api/auth/local/login", json=payload)
+        from tests.totp_login import finish_sign_in_code
+
+        resp = finish_sign_in_code(
+            self.client, resp, "Owner", "correct-horse", payload=payload
         )
         self.assertEqual(resp.status_code, 200, resp.text)
         body = resp.json()
@@ -153,8 +156,11 @@ class NativeSignInTests(unittest.TestCase):
 
         browser = self.client.post(
             "/api/auth/local/login",
-            json={"username": "Owner", "password": "password123"},
+            json={"username": "Owner", "password": "correct-horse"},
         )
+        from tests.totp_login import finish_sign_in_code
+
+        browser = finish_sign_in_code(self.client, browser, "Owner", "correct-horse")
         self.assertEqual(browser.status_code, 200, browser.text)
         self.assertNotIn("credential", browser.json())
         self.assertIn(SESSION_COOKIE_NAME, browser.cookies)
@@ -166,7 +172,7 @@ class NativeSignInTests(unittest.TestCase):
             "/api/auth/local/login",
             json={
                 "username": "Owner",
-                "password": "password123",
+                "password": "correct-horse",
                 "client": {"kind": "android", "label": "Phone"},
             },
         )
@@ -179,12 +185,15 @@ class NativeSignInTests(unittest.TestCase):
         self._seed_owner()
         owner = self.client.post(
             "/api/auth/local/login",
-            json={"username": "Owner", "password": "password123"},
+            json={"username": "Owner", "password": "correct-horse"},
         )
+        from tests.totp_login import finish_sign_in_code
+
+        owner = finish_sign_in_code(self.client, owner, "Owner", "correct-horse")
         self.assertEqual(owner.status_code, 200, owner.text)
         created = self.client.post(
             "/api/auth/local/register",
-            json={"username": "Alex", "password": "password123", "client": CLIENT},
+            json={"username": "Alex", "password": "correct-horse", "client": CLIENT},
         )
         self.assertEqual(created.status_code, 200, created.text)
         credential = self._assert_device_credential(created.json())
@@ -350,8 +359,11 @@ class NativeSignInTests(unittest.TestCase):
         self._seed_owner()
         owner = self.client.post(
             "/api/auth/local/login",
-            json={"username": "Owner", "password": "password123"},
+            json={"username": "Owner", "password": "correct-horse"},
         )
+        from tests.totp_login import finish_sign_in_code
+
+        owner = finish_sign_in_code(self.client, owner, "Owner", "correct-horse")
         self.assertEqual(owner.status_code, 200, owner.text)
         created = self.client.post(
             "/api/admin/invites",
@@ -380,7 +392,7 @@ class NativeSignInTests(unittest.TestCase):
             json={
                 "token": token,
                 "username": "Alex",
-                "password": "password123",
+                "password": "correct-horse",
                 "client": {"kind": "ipad", "label": "Sofa"},
             },
         )

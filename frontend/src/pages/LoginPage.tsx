@@ -14,7 +14,12 @@ import {
 import GlassDoor from "../components/GlassDoor";
 import InlineAlert from "../components/InlineAlert";
 import { resolveDefaultHome } from "../lib/defaultHome";
-import { loginDoorDecision, loginLede, plexAdvancedCopy, resolveAuthMethods } from "../lib/loginScreen";
+import {
+  loginDoorDecision,
+  loginLede,
+  plexAdvancedCopy,
+  resolveAuthMethods,
+} from "../lib/loginScreen";
 import { startPlexPinPoll } from "../lib/plexPinPoll";
 
 const PIN_TIMEOUT_MS = 15 * 60 * 1000;
@@ -34,6 +39,11 @@ export default function LoginPage() {
 
   const [localUsername, setLocalUsername] = useState("");
   const [localPassword, setLocalPassword] = useState("");
+  const [signInCode, setSignInCode] = useState("");
+  const [signInSetup, setSignInSetup] = useState<{
+    secret: string;
+    recoveryCodes: string[];
+  } | null>(null);
   const [requestName, setRequestName] = useState("");
   const [requestEmail, setRequestEmail] = useState("");
   const [requestMessage, setRequestMessage] = useState("");
@@ -74,7 +84,12 @@ export default function LoginPage() {
    */
   async function postLoginDestination(featuresData: any = features): Promise<string> {
     const from = (location.state as { from?: string } | null)?.from;
-    if (typeof from === "string" && from.startsWith("/") && !from.startsWith("//") && from !== "/login") {
+    if (
+      typeof from === "string" &&
+      from.startsWith("/") &&
+      !from.startsWith("//") &&
+      from !== "/login"
+    ) {
       return from;
     }
     const llmConfigured = Boolean(featuresData?.features?.llm_configured);
@@ -89,9 +104,10 @@ export default function LoginPage() {
   useEffect(() => {
     getFeatures()
       .then(async (data) => {
-        const me = data?.features?.multi_user_enabled && data?.setup_state !== "setup"
-          ? await getAuthMe().catch(() => null)
-          : null;
+        const me =
+          data?.features?.multi_user_enabled && data?.setup_state !== "setup"
+            ? await getAuthMe().catch(() => null)
+            : null;
         const decision = loginDoorDecision({ features: data, me });
         if (decision === "setup") {
           navigate("/setup", { replace: true });
@@ -214,11 +230,32 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
     try {
-      await loginWithLocal(localUsername.trim(), localPassword);
+      await loginWithLocal(localUsername.trim(), localPassword, {
+        code: signInCode.trim() || undefined,
+      });
       const to = await postLoginDestination();
       navigate(to, { replace: true });
     } catch (signInError: unknown) {
-      setError(formatApiError(signInError));
+      const body = (
+        signInError as { body?: { detail?: string; secret?: string; recovery_codes?: string[] } }
+      ).body;
+      if (body?.secret) {
+        setSignInSetup((current) => ({
+          secret: body.secret || "",
+          recoveryCodes: body.recovery_codes?.length
+            ? body.recovery_codes
+            : current?.recoveryCodes || [],
+        }));
+        setError(
+          typeof body.detail === "string"
+            ? body.detail
+            : "Set up a sign-in code to finish signing in.",
+        );
+      } else if (body?.detail === "A sign-in code is required.") {
+        setError("A sign-in code is required.");
+      } else {
+        setError(formatApiError(signInError));
+      }
       // A11Y-001: land focus on whichever field most likely needs fixing,
       // instead of leaving it on the submit button (which may now be
       // disabled mid-render) or dropping it to <body>. The fields are still
@@ -254,9 +291,11 @@ export default function LoginPage() {
   const plexEnabled = methods.includes("plex");
   const localEnabled = methods.includes("local");
   const oidcEnabled = methods.includes("oidc");
-  const oidcProviderName = features?.oidc_provider_name || features?.auth?.oidc_provider_name || "SSO";
+  const oidcProviderName =
+    features?.oidc_provider_name || features?.auth?.oidc_provider_name || "SSO";
   const noMethods = features != null && methods.length === 0;
-  const accessRequestsOn = features != null && features?.features?.access_requests_enabled !== false;
+  const accessRequestsOn =
+    features != null && features?.features?.access_requests_enabled !== false;
   const lede = featuresLoading ? "Loading sign-in options…" : loginLede(methods);
   const householdName = features?.household_domain || "Projectionist";
   const advanced = plexAdvancedCopy({ open: showTokenInput });
@@ -292,7 +331,10 @@ export default function LoginPage() {
       {error ? <InlineAlert type="error" message={error} /> : null}
 
       {noMethods ? (
-        <InlineAlert type="error" message="No sign-in methods are enabled. Ask the owner to check Configuration." />
+        <InlineAlert
+          type="error"
+          message="No sign-in methods are enabled. Ask the owner to check Configuration."
+        />
       ) : null}
 
       {plexEnabled ? (
@@ -309,7 +351,9 @@ export default function LoginPage() {
             </button>
           ) : (
             <div className="login-waiting" data-testid="plex-pin-waiting">
-              <p className="login-help">Finish signing in in the Plex window. This page updates when you are done.</p>
+              <p className="login-help">
+                Finish signing in in the Plex window. This page updates when you are done.
+              </p>
               {authUrl ? (
                 <a
                   className="login-secondary-link"
@@ -321,7 +365,12 @@ export default function LoginPage() {
                   Open Plex sign-in
                 </a>
               ) : null}
-              <button type="button" className="login-cancel" data-testid="cancel-plex-login" onClick={stopPinWait}>
+              <button
+                type="button"
+                className="login-cancel"
+                data-testid="cancel-plex-login"
+                onClick={stopPinWait}
+              >
                 Cancel
               </button>
             </div>
@@ -410,6 +459,33 @@ export default function LoginPage() {
                 disabled={loading || waitingForPlex || featuresLoading}
               />
             </label>
+            {signInSetup ? (
+              <div className="login-help" data-testid="sign-in-code-setup">
+                <p>Add this key to an authenticator app, then enter the 6-digit code.</p>
+                <p data-testid="sign-in-code-secret">{signInSetup.secret}</p>
+                {signInSetup.recoveryCodes.length ? (
+                  <ul data-testid="sign-in-recovery-codes">
+                    {signInSetup.recoveryCodes.map((entry) => (
+                      <li key={entry}>{entry}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
+            {signInSetup || error === "A sign-in code is required." ? (
+              <label className="login-field">
+                <span>Sign-in code</span>
+                <input
+                  type="text"
+                  data-testid="local-sign-in-code"
+                  value={signInCode}
+                  onChange={(e) => setSignInCode(e.target.value)}
+                  autoComplete="one-time-code"
+                  inputMode="numeric"
+                  disabled={loading || waitingForPlex || featuresLoading}
+                />
+              </label>
+            ) : null}
             <button
               type="submit"
               className="login-primary"
@@ -437,7 +513,9 @@ export default function LoginPage() {
           ) : (
             <>
               <h2 className="login-request-title">Request access</h2>
-              <p className="login-help">Ask the household admin for a join link, or send a request below.</p>
+              <p className="login-help">
+                Ask the household admin for a join link, or send a request below.
+              </p>
               <form
                 onSubmit={async (event) => {
                   event.preventDefault();

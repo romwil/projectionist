@@ -344,6 +344,14 @@ def seed_env_owner(db: Database) -> Optional[str]:
         )
         _record_env_owner_status(db, ENV_OWNER_STATUS_WEAK)
         return None
+    from projectionist.web.passwords import is_common_password
+
+    if is_common_password(password):
+        logger.warning(
+            "PROJECTIONIST_OWNER_PASSWORD is on the common-password list; refusing to seed it."
+        )
+        _record_env_owner_status(db, ENV_OWNER_STATUS_WEAK)
+        return None
 
     existing = db.get_user_by_display_name(username)
     if existing is not None:
@@ -1406,6 +1414,12 @@ def register_local_user(
             detail="Local registration is disabled. Ask the household admin for a join link.",
         )
 
+    from projectionist.web.passwords import password_rejection
+
+    rejection = password_rejection(password)
+    if rejection:
+        raise HTTPException(status_code=400, detail=rejection)
+
     existing = db.get_user_by_display_name(username)
     if existing is not None:
         raise HTTPException(status_code=409, detail="Username already taken")
@@ -1450,12 +1464,38 @@ def _note_login_failure(db: Database, *, key: str, username: str) -> None:
     )
 
 
+def _row_text(row: Any, key: str) -> str:
+    if key not in row.keys() or row[key] is None:
+        return ""
+    return str(row[key])
+
+
+def _row_flag(row: Any, key: str) -> bool:
+    if key not in row.keys() or row[key] is None:
+        return False
+    return bool(int(row[key]))
+
+
+def _local_password_needs_code(row: Any) -> bool:
+    """Owner passwords always need a sign-in code. A confirmed code stays required.
+
+    Members need one when the owner turns that on for every local password.
+    """
+    if _row_flag(row, "totp_confirmed"):
+        return True
+    if str(row["role"] or "") == "owner":
+        return True
+    return bool(getattr(_settings().auth, "require_totp", False))
+
+
 def authenticate_local_user(
     *,
     username: str,
     password: str,
     db: Database,
     request: Request,
+    code: Optional[str] = None,
+    reset_sign_in_code: bool = False,
 ) -> CurrentUser:
     """Validate credentials and return the authenticated user."""
     enforce_rate_limit(request, bucket="auth_local_login", limit=10, window_seconds=60)
@@ -1465,6 +1505,16 @@ def authenticate_local_user(
         GENERIC_LOGIN_DETAIL,
         account_throttle,
         login_key,
+    )
+    from projectionist.web.totp import (
+        SIGN_IN_CODE_INVALID,
+        SignInCodeEnrollment,
+        SignInCodeRequired,
+        new_recovery_codes,
+        new_secret,
+        otpauth_uri,
+        take_recovery_code,
+        totp_matches,
     )
 
     key = login_key(username)
@@ -1486,8 +1536,50 @@ def authenticate_local_user(
             _verify_password(password, _DUMMY_PASSWORD_HASH)
         raise HTTPException(status_code=401, detail=GENERIC_LOGIN_DETAIL)
 
-    account_throttle.record_success(key)
-    return row_to_current_user(row)
+    if row is None or not _local_password_needs_code(row):
+        account_throttle.record_success(key)
+        return row_to_current_user(row)
+
+    user_id = str(row["id"])
+    display_name = str(row["display_name"])
+    confirmed = _row_flag(row, "totp_confirmed")
+    active_secret = _row_text(row, "totp_secret")
+    pending = _row_text(row, "totp_pending_secret")
+    recovery = _row_text(row, "totp_recovery_hashes")
+    submitted = str(code or "").strip()
+
+    if not confirmed:
+        if pending and submitted and not reset_sign_in_code and totp_matches(pending, submitted):
+            db.confirm_user_totp(user_id)
+            account_throttle.record_success(key)
+            return row_to_current_user(row)
+        codes: List[str] = []
+        if reset_sign_in_code or not pending:
+            pending = new_secret()
+            codes, hashes = new_recovery_codes()
+            db.set_user_totp_pending(
+                user_id,
+                secret=pending,
+                recovery_hashes_json=hashes,
+            )
+        raise SignInCodeEnrollment(
+            secret=pending,
+            otpauth_uri=otpauth_uri(pending, display_name),
+            recovery_codes=codes,
+        )
+
+    if not submitted:
+        raise SignInCodeRequired()
+    if totp_matches(active_secret, submitted):
+        account_throttle.record_success(key)
+        return row_to_current_user(row)
+    remaining = take_recovery_code(recovery, submitted)
+    if remaining is not None:
+        db.set_user_recovery_hashes(user_id, remaining)
+        account_throttle.record_success(key)
+        return row_to_current_user(row)
+    _note_login_failure(db, key=key, username=username)
+    raise HTTPException(status_code=401, detail=SIGN_IN_CODE_INVALID)
 
 
 def row_to_current_user_from_dict(d: dict) -> CurrentUser:
