@@ -1,7 +1,8 @@
 """Playback-engine HTTP routes (ENG-001+).
 
-File paths never appear in responses. Owners store path mappings; members can
-ask what the engine can read for a title.
+File paths stay off playback plans and the saved playability report. The
+owner quality-target list names the file for that title. Owners store path
+mappings; members can ask what the engine can read for a title.
 """
 
 from __future__ import annotations
@@ -197,6 +198,7 @@ def playback_plan(
             status_code=400,
             detail=f"Unknown device profile. Use one of: {names}.",
         )
+    from projectionist.engine.quality import title_is_replaced
     from projectionist.engine.tries import failed_try_keys
 
     source = household_media_source(_settings(), _db())
@@ -207,6 +209,7 @@ def playback_plan(
         source=source,
         failed_tries=failed_try_keys(_dir()),
         ready_copy=_ready_copy(key),
+        replaced=title_is_replaced(_dir(), key),
     )
     body["rating_key"] = key
     return body
@@ -546,6 +549,14 @@ class EngineSettingPayload(BaseModel):
     play_through_projectionist: bool = False
 
 
+class QualityCeilingPayload(BaseModel):
+    quality_ceiling: str = ""
+
+
+class QualityTargetPayload(BaseModel):
+    rating_key: str = ""
+
+
 class CopyRequestPayload(BaseModel):
     rating_key: str = ""
 
@@ -566,11 +577,13 @@ def get_playability_report(
     offset: int = 0,
     user=Depends(require_role("owner")),
 ) -> dict[str, Any]:
-    """The last library playability report. Owner only. No file paths.
+    """The last library playability report. Owner only.
 
     ``view=progress`` is what Settings polls while a walk is running: shares
-    and counts, without title rows. ``profile`` and ``tier`` together return
-    one page of those rows. The saved report still holds every title.
+    and counts, without the per-profile title rows. ``above_target`` is the
+    list of titles above the quality ceiling, including each file path.
+    ``profile`` and ``tier`` together return one page of tier rows. The saved
+    report still holds every title and does not store file paths.
     """
     del user
     from projectionist.engine.playability import (
@@ -580,8 +593,6 @@ def get_playability_report(
     )
 
     report = load_playability_report(_dir())
-    if str(view or "") == "progress":
-        return playability_progress(report)
     if str(profile or "") and str(tier or ""):
         return playability_title_page(
             report,
@@ -590,7 +601,13 @@ def get_playability_report(
             limit=limit,
             offset=offset,
         )
-    return report
+    if str(view or "") == "progress":
+        body = playability_progress(report)
+    else:
+        body = dict(report)
+    body["quality_ceiling"] = _quality_ceiling()
+    body["above_target"] = _above_target(report)
+    return body
 
 
 @router.post("/api/playback/playability")
@@ -647,6 +664,128 @@ def put_engine_setting(
     save_settings(_dir(), updated)
     return {
         "play_through_projectionist": bool(updated.engine.play_through_projectionist),
+    }
+
+
+def _quality_ceiling() -> str:
+    from projectionist.engine.quality import normalize_quality_ceiling
+
+    return normalize_quality_ceiling(getattr(_settings().engine, "quality_ceiling", ""))
+
+
+def _title_path(rating_key: str) -> str:
+    from projectionist.engine.source import read_location
+
+    saved = read_location(_dir() / "engine" / "probes", rating_key)
+    if not isinstance(saved, dict):
+        return ""
+    return str(saved.get("local_path") or saved.get("source_path") or "")
+
+
+def _above_target(report: dict[str, Any]) -> dict[str, Any]:
+    from projectionist.engine.quality import above_quality_target, load_replaced_titles
+
+    return above_quality_target(
+        report,
+        ceiling=_quality_ceiling(),
+        replaced=load_replaced_titles(_dir()),
+        paths={
+            str(row.get("rating_key") or ""): _title_path(str(row.get("rating_key") or ""))
+            for block in report.get("profiles") or []
+            if isinstance(block, dict)
+            for row in block.get("titles") or []
+            if isinstance(row, dict) and str(row.get("rating_key") or "")
+        },
+    )
+
+
+def _save_quality_ceiling(ceiling: str) -> str:
+    from dataclasses import asdict
+
+    existing = _settings()
+    current = asdict(existing.engine)
+    current["quality_ceiling"] = ceiling
+    updated = Settings.from_mapping({**asdict(existing), "engine": current})
+    save_settings(_dir(), updated)
+    return str(updated.engine.quality_ceiling)
+
+
+@router.get("/api/playback/quality-ceiling")
+def get_quality_ceiling(user=Depends(require_role("owner"))) -> dict[str, Any]:
+    """The household quality ceiling. Owner only. Default 1080p."""
+    del user
+    return {"quality_ceiling": _quality_ceiling()}
+
+
+@router.put("/api/playback/quality-ceiling")
+def put_quality_ceiling(
+    payload: QualityCeilingPayload,
+    user=Depends(require_role("owner")),
+) -> dict[str, Any]:
+    """Save the ceiling. The next playability read uses it. No restart."""
+    del user
+    from projectionist.engine.quality import parse_quality_ceiling
+
+    try:
+        ceiling = parse_quality_ceiling(payload.quality_ceiling)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return {"quality_ceiling": _save_quality_ceiling(ceiling)}
+
+
+@router.post("/api/playback/quality-target/copy")
+def copy_for_quality_target(
+    payload: QualityTargetPayload,
+    user=Depends(require_role("owner")),
+) -> dict[str, Any]:
+    """Queue one 1080p copy on the existing overnight path. Does not encode the library."""
+    del user
+    from projectionist.engine.copies import remember_copy_request
+    from projectionist.engine.playability import load_playability_report
+
+    try:
+        key = validate_rating_key(payload.rating_key)
+        remember_copy_request(_dir(), key)
+    except (PlaybackError, ValueError) as error:
+        detail = getattr(error, "message", None) or str(error)
+        status = int(getattr(error, "status_code", 400) or 400)
+        raise HTTPException(status_code=status, detail=detail) from error
+    folder = str(getattr(_settings().engine, "copy_output_dir", "") or "").strip()
+    message = "Queued a 1080p copy for the overnight pass."
+    if not folder:
+        message = (
+            "Queued a 1080p copy. Choose a folder under Copies made ahead "
+            "before that pass can write the file."
+        )
+    return {
+        "rating_key": key,
+        "requested": True,
+        "message": message,
+        "above_target": _above_target(load_playability_report(_dir())),
+    }
+
+
+@router.post("/api/playback/quality-target/replaced")
+def mark_quality_target_replaced(
+    payload: QualityTargetPayload,
+    user=Depends(require_role("owner")),
+) -> dict[str, Any]:
+    """The title is replaced, so it is no longer above the quality target."""
+    del user
+    from projectionist.engine.playability import load_playability_report
+    from projectionist.engine.quality import mark_title_replaced
+
+    try:
+        key = validate_rating_key(payload.rating_key)
+        mark_title_replaced(_dir(), key)
+    except (PlaybackError, ValueError) as error:
+        detail = getattr(error, "message", None) or str(error)
+        status = int(getattr(error, "status_code", 400) or 400)
+        raise HTTPException(status_code=status, detail=detail) from error
+    return {
+        "rating_key": key,
+        "replaced": True,
+        "above_target": _above_target(load_playability_report(_dir())),
     }
 
 

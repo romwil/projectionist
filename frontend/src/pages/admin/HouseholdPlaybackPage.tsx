@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import {
   getFeatures,
+  getQualityCeiling,
   putPlayThroughProjectionist,
   putPublicBaseUrl,
+  putQualityCeiling,
 } from "../../api/client";
 import CopiesAhead from "../../components/settings/CopiesAhead";
 import PlayabilityReport from "../../components/settings/PlayabilityReport";
@@ -16,6 +18,8 @@ import SettingsPanel from "../../components/settings/SettingsPanel";
 export default function HouseholdPlaybackPage() {
   const location = useLocation();
   const [playThrough, setPlayThrough] = useState(false);
+  const [qualityCeiling, setQualityCeiling] = useState("1080p");
+  const [listRevision, setListRevision] = useState(0);
   const [awayAddress, setAwayAddress] = useState("");
   const [awaySaving, setAwaySaving] = useState(false);
   const [status, setStatus] = useState<{ type: string; message: string } | null>(null);
@@ -30,6 +34,15 @@ export default function HouseholdPlaybackPage() {
       })
       .catch(() => {
         if (live) setPlayThrough(false);
+      });
+    getQualityCeiling()
+      .then((payload) => {
+        if (!live) return;
+        const ceiling = String((payload as { quality_ceiling?: string })?.quality_ceiling || "");
+        if (ceiling) setQualityCeiling(ceiling);
+      })
+      .catch(() => {
+        if (live) setQualityCeiling("1080p");
       });
     return () => {
       live = false;
@@ -125,7 +138,8 @@ export default function HouseholdPlaybackPage() {
             } catch (error) {
               setStatus({
                 type: "error",
-                message: (error as { message?: string })?.message || "Could not save the away address.",
+                message:
+                  (error as { message?: string })?.message || "Could not save the away address.",
               });
             } finally {
               setAwaySaving(false);
@@ -135,8 +149,50 @@ export default function HouseholdPlaybackPage() {
           {awaySaving ? "Saving…" : "Save away address"}
         </button>
       </SettingsPanel>
+      <SettingsPanel
+        id="quality-ceiling"
+        title="Quality ceiling"
+        lead="The tallest picture this household aims for. The default is 1080p. Titles above it are listed on the playability report. Only the owner can change this."
+        testId="household-quality-ceiling"
+      >
+        <label htmlFor="quality-ceiling-input">
+          <span>Quality ceiling</span>
+          <select
+            id="quality-ceiling-input"
+            aria-label="Quality ceiling"
+            data-testid="quality-ceiling"
+            value={qualityCeiling}
+            onChange={async (event) => {
+              const next = event.target.value;
+              const previous = qualityCeiling;
+              setQualityCeiling(next);
+              try {
+                const saved = await putQualityCeiling(next);
+                const ceiling = String(
+                  (saved as { quality_ceiling?: string })?.quality_ceiling || next,
+                );
+                setQualityCeiling(ceiling);
+                setListRevision((current) => current + 1);
+                setStatus({ type: "ok", message: "Saved the quality ceiling." });
+              } catch (error) {
+                setQualityCeiling(previous);
+                setStatus({
+                  type: "error",
+                  message:
+                    (error as { message?: string })?.message ||
+                    "Couldn’t save the quality ceiling.",
+                });
+              }
+            }}
+          >
+            <option value="720p">720p</option>
+            <option value="1080p">1080p</option>
+            <option value="2160p">4K</option>
+          </select>
+        </label>
+      </SettingsPanel>
       <SettingsPanel id="playability" title="Playability" testId="household-playability">
-        <PlayabilityReport />
+        <PlayabilityReport listRevision={listRevision} />
       </SettingsPanel>
       <SettingsPanel id="copies" title="Copies made ahead" testId="household-copies">
         <CopiesAhead />

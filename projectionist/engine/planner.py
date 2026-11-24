@@ -221,6 +221,7 @@ def plan_playback(
     source: Optional[SourceTranscode] = None,
     failed_tries: Optional[set[tuple[str, str]]] = None,
     ready_copy: Optional[MediaAsset] = None,
+    replaced: bool = False,
 ) -> dict[str, object]:
     """Record a plan, the profile answer that chose it, and a reason. Never a file path.
 
@@ -235,7 +236,32 @@ def plan_playback(
     are plan ``try``: a remux, not a claim that it will play. ``failed_tries``
     holds ``(rating_key, profile id)`` pairs whose first frame did not arrive.
     Those titles are not tried again.
+
+    A title marked replaced is not still above the quality target. When that
+    title has a ready copy that direct-plays or remuxes, the plan uses the copy.
     """
+    if replaced:
+        chosen = plan_playback(
+            asset,
+            profile,
+            source=source,
+            failed_tries=failed_tries,
+            ready_copy=ready_copy,
+        )
+        if ready_copy is not None:
+            copy_plan = plan_playback(
+                ready_copy,
+                profile,
+                source=source,
+                failed_tries=failed_tries,
+            )
+            if str(copy_plan.get("plan") or "") in {"direct", "remux"}:
+                chosen = dict(copy_plan)
+                chosen["from_copy"] = True
+        marked = dict(chosen)
+        marked["replaced"] = True
+        marked["above_target"] = False
+        return marked
     if ready_copy is not None:
         copy_plan = plan_playback(ready_copy, profile, source=source, failed_tries=failed_tries)
         if str(copy_plan.get("plan") or "") in {"direct", "remux"}:
