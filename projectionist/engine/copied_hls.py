@@ -6,9 +6,16 @@ slice is not an IDR. VideoToolbox then fails the segment
 (``kVTVideoDecoderBadDataErr``, -12909) even though a continuous decode of
 the whole playlist still works. Chrome appends each segment on its own.
 
+A busy picture makes the same error a different way. The first slice of a
+non-IDR frame can be larger than two megabytes. Treating that length as
+impossible and stepping one byte looks like a new IDR inside the slice, so
+the next segment starts in the middle of a frame. The dark opening stays
+under that size and decodes; the first detailed stretch does not.
+
 This packs ffmpeg's fragmented MP4 and publishes a segment only when the
-picture starts on an IDR. Recovery-point fragments stay in the segment that
-began at the previous IDR, so the decoder still has the frames they use.
+first video slice really is an IDR. A length that does not fit is not an
+IDR. Recovery-point fragments stay in the segment that began at the previous
+IDR, so the decoder still has the frames they use.
 """
 
 from __future__ import annotations
@@ -70,14 +77,15 @@ def fragment_starts_on_idr(payload: bytes, codec: str = "h264") -> bool:
     if idx < 0:
         return False
     i = idx + 4
-    end = min(len(payload), i + 256_000)
     idr = _IDR[kind]
     vcl = _VCL[kind]
-    while i + 5 < end:
+    # Stay on the length prefixes. A slice larger than the old two-megabyte
+    # guess is still one NAL. Stepping a byte into it invents an IDR and
+    # cuts the segment in the middle of that frame.
+    while i + 5 <= len(payload):
         length = int.from_bytes(payload[i : i + 4], "big")
-        if length <= 0 or length > 2_000_000 or i + 4 + length > len(payload):
-            i += 1
-            continue
+        if length <= 0 or i + 4 + length > len(payload):
+            return False
         nal = payload[i + 4]
         if kind == "hevc":
             nal_type = (nal >> 1) & 0x3F
