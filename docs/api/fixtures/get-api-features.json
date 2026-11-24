@@ -31,6 +31,7 @@
       "push": 0,
       "rooms": 1,
       "session_captions": 1,
+      "session_handoff": 1,
       "session_join": 1,
       "session_object": 1,
       "shared_sessions": 1,

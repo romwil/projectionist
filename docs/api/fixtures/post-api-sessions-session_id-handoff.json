@@ -1,0 +1,23 @@
+{
+  "body": {
+    "ceiling": "",
+    "engine_session_id": "",
+    "guests": [],
+    "guests_may_remote": false,
+    "held_for_ceiling": false,
+    "id": "00000000-0000-4000-8000-000000000001",
+    "level": "off",
+    "owner_id": "bootstrap-owner",
+    "position_ms": 12000,
+    "rating_key": "movie-1",
+    "screen_id": "00000000-0000-4000-8000-000000000001",
+    "state": "paused",
+    "updated_at": 1700000000,
+    "youth": false
+  },
+  "content_type": "application/json",
+  "example_path": "/api/sessions/00000000-0000-4000-8000-000000000001/handoff",
+  "method": "POST",
+  "path": "/api/sessions/{session_id}/handoff",
+  "status": 200
+}

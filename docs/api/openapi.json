@@ -284,6 +284,17 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HandoffPayload": {
+        "properties": {
+          "screen_id": {
+            "default": "",
+            "title": "Screen Id",
+            "type": "string"
+          }
+        },
+        "title": "HandoffPayload",
+        "type": "object"
+      },
       "InviteRedeemLocalPayload": {
         "properties": {
           "client": {
@@ -3616,6 +3627,62 @@
           }
         },
         "summary": "Leave Session",
+        "tags": [
+          "client",
+          "sessions"
+        ]
+      }
+    },
+    "/api/sessions/{session_id}/handoff": {
+      "post": {
+        "description": "Same session, new screen. The starter is the only one who can move it.",
+        "operationId": "hand_off_session_api_sessions__session_id__handoff_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HandoffPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Hand Off Session Api Sessions  Session Id  Handoff Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Hand Off Session",
         "tags": [
           "client",
           "sessions"

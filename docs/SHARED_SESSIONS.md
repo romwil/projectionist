@@ -32,7 +32,7 @@ Three ideas carry that evening:
 | **Guest** | A signed-in household member who joined | Remote transport (if the owner allows), handheld captions, their own private curator chat with the session’s time context |
 | **Screen** | The device rendering the picture (Apple TV, a browser tab) | Plays the stream, renders big-screen overlays, reports position |
 
-A session has exactly one screen. Moving playback to another screen is a **handoff**: the session keeps its id, position, and track; the old screen stops.
+A session has exactly one screen. Moving playback to another screen is a **handoff**: `POST /api/sessions/{id}/handoff` keeps the id, position, and level, and the old screen can no longer read it. The capability `session_handoff` is `1`.
 
 *Proposed:* the household’s Apple TVs are visible as **rooms** (“Living Room”) to every signed-in member; *what is playing* in a room is visible only to the session owner and joined guests. Joining needs either the owner’s approval in the moment, or the code on the TV’s pause screen.
 
@@ -149,7 +149,7 @@ The household owner, or the member signed in on that screen, can rename it with 
 | SES-004 | Realtime channel (`/api/sessions/{id}/live`), command authorization, clock model (done: `shared_sessions` is 1) | SES-003 |
 | SES-005 | Join flow (owner approval or on-screen code) + guest permissions (done: `session_join` is 1) | SES-004 |
 | SES-006 | Handheld captions (done: `session_captions` is 1) | SES-004, ENG-004 |
-| SES-007 | Handoff between screens (same session, new screen) | SES-004 |
+| SES-007 | Handoff between screens (same session, new screen) (done: `session_handoff` is 1) | SES-004 |
 | SES-008 | Web client as a second screen (join from a browser) | SES-005 |
 | SES-009 | Youth join approval: owner notification, Approve tightens the session ceiling, Not now declines (done: `youth_join` is 1; push waits) | SES-005, TRK-003 |
 

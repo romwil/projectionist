@@ -25,6 +25,7 @@ from projectionist.sessions.shared import (
     end_shared_session,
     get_shared_session,
     get_shared_session_for_screen,
+    handoff_session,
     mark_declined,
     open_shared_session,
     remove_guest,
@@ -61,6 +62,10 @@ class JoinPayload(BaseModel):
 
 class DecideJoinPayload(BaseModel):
     decision: str = ""
+
+
+class HandoffPayload(BaseModel):
+    screen_id: str = ""
 
 
 def _db():
@@ -371,6 +376,28 @@ def session_captions(session_id: str, language: str = "en", user=Depends(get_cur
             raw = ""
         cues = parse_cues(raw[:2_000_000])
     return {"language": lang, "cues": cues}
+
+
+@router.post("/api/sessions/{session_id}/handoff")
+def hand_off_session(
+    session_id: str,
+    payload: HandoffPayload,
+    user=Depends(get_current_user_dep),
+) -> dict:
+    """Same session, new screen. The starter is the only one who can move it."""
+    session, user_id, _screen_user = _visible(session_id, user)
+    if session.owner_id != user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the person who started this session can move it.",
+        )
+    if screen_signed_in_user(_db(), payload.screen_id) is None:
+        raise HTTPException(status_code=404, detail="That room is not in this household.")
+    try:
+        moved = handoff_session(session, payload.screen_id)
+    except SharedSessionError as error:
+        _raise(error)
+    return moved.public()
 
 
 def _user_from_websocket(websocket: WebSocket):

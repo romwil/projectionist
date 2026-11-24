@@ -461,6 +461,15 @@ def collect_client_fixtures() -> dict[str, dict[str, Any]]:
                 example_path=f"/api/sessions/{shared_id}/captions",
             )
             keep(
+                "POST",
+                "/api/sessions/{session_id}/handoff",
+                client.post(
+                    f"/api/sessions/{shared_id}/handoff",
+                    json={"screen_id": device_id},
+                ),
+                example_path=f"/api/sessions/{shared_id}/handoff",
+            )
+            keep(
                 "DELETE",
                 "/api/sessions/{session_id}",
                 client.delete(f"/api/sessions/{shared_id}"),
