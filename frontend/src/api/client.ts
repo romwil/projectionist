@@ -2590,3 +2590,14 @@ export async function throwToAppleTv(deviceId: string, payload: JsonObject) {
   });
 }
 
+export async function listSessionApprovals() {
+  return api<{ approvals?: JsonObject[] }>("/session-approvals");
+}
+
+export async function decideSessionApproval(approvalId: string, decision: "approve" | "not_now") {
+  return api(`/session-approvals/${encodeURIComponent(approvalId)}`, {
+    method: "POST",
+    body: JSON.stringify({ decision }),
+  });
+}
+

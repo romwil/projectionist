@@ -56,6 +56,8 @@ CLIENT_ROUTES: frozenset[tuple[str, str]] = frozenset(
         ("GET", "/api/sessions/{session_id}/join-requests"),
         ("POST", "/api/sessions/{session_id}/join-requests/{request_id}"),
         ("DELETE", "/api/sessions/{session_id}/guests/me"),
+        ("GET", "/api/session-approvals"),
+        ("POST", "/api/session-approvals/{approval_id}"),
         ("GET", "/api/library/feeds/hub"),
         ("GET", "/api/library/feeds/tonight-table"),
         ("GET", "/api/library/query"),

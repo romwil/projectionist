@@ -51,6 +51,11 @@ class SharedSession:
     guests_may_remote: bool = False
     pending: list[JoinRequest] = field(default_factory=list)
     declined_ids: list[str] = field(default_factory=list)
+    ceiling: str = ""
+    content_rating: str = ""
+    held_for_ceiling: bool = False
+    youth_guest_ids: list[str] = field(default_factory=list)
+    ceiling_holds_until_next_title: bool = False
 
     def public(self) -> dict[str, Any]:
         """What a participant may read. The join code stays off this object."""
@@ -67,6 +72,8 @@ class SharedSession:
             "updated_at": self.updated_at,
             "guests": list(self.guest_ids),
             "guests_may_remote": self.guests_may_remote,
+            "ceiling": self.ceiling,
+            "held_for_ceiling": self.held_for_ceiling,
         }
 
 
@@ -122,6 +129,8 @@ def open_shared_session(
     position_ms: int = 0,
     engine_session_id: str = "",
     youth: bool = False,
+    content_rating: str = "",
+    ceiling: str = "",
 ) -> SharedSession:
     screen = str(screen_id or "").strip().lower()
     key = _rating_key(rating_key)
@@ -141,6 +150,8 @@ def open_shared_session(
         youth=bool(youth),
         updated_at=now,
         join_code=secrets.token_hex(4),
+        content_rating=str(content_rating or "")[:40],
+        ceiling=str(ceiling or "")[:20],
     )
     with _LOCK:
         previous = _BY_SCREEN.get(screen)
@@ -200,7 +211,7 @@ def update_shared_session(
         return current
 
 
-def add_guest(session: SharedSession, user_id: str) -> SharedSession:
+def add_guest(session: SharedSession, user_id: str, *, youth: bool = False) -> SharedSession:
     guest = str(user_id or "").strip()
     if not guest:
         raise SharedSessionError("That member is not available.")
@@ -210,6 +221,8 @@ def add_guest(session: SharedSession, user_id: str) -> SharedSession:
             raise SharedSessionError("That session is not available.", status_code=404)
         if guest not in current.guest_ids and guest != current.owner_id:
             current.guest_ids.append(guest)
+        if youth and guest not in current.youth_guest_ids and guest != current.owner_id:
+            current.youth_guest_ids.append(guest)
         current.pending = [item for item in current.pending if item.user_id != guest]
         current.declined_ids = [item for item in current.declined_ids if item != guest]
         current.updated_at = time.time()
@@ -223,6 +236,50 @@ def remove_guest(session: SharedSession, user_id: str) -> SharedSession:
         if current is None or guest not in current.guest_ids:
             raise SharedSessionError("You are not a guest of this session.", status_code=404)
         current.guest_ids = [item for item in current.guest_ids if item != guest]
+        was_youth = guest in current.youth_guest_ids
+        current.youth_guest_ids = [item for item in current.youth_guest_ids if item != guest]
+        if was_youth and not current.youth_guest_ids and current.ceiling:
+            current.ceiling_holds_until_next_title = True
+        current.updated_at = time.time()
+        return current
+
+
+def tighten_ceiling(session: SharedSession, ceiling: str, *, title_above: bool) -> SharedSession:
+    """Approval limits the room. A title above that limit stops."""
+    with _LOCK:
+        current = _SESSIONS.get(session.id)
+        if current is None:
+            raise SharedSessionError("That session is not available.", status_code=404)
+        current.ceiling = str(ceiling or "")[:20]
+        current.ceiling_holds_until_next_title = False
+        if title_above:
+            current.state = "paused"
+            current.held_for_ceiling = True
+        current.updated_at = time.time()
+        return current
+
+
+def change_title(session: SharedSession, rating_key: str, content_rating: str) -> SharedSession:
+    """The next title. A ceiling left by a youth member relaxes here, not mid-title."""
+    key = _rating_key(rating_key)
+    with _LOCK:
+        current = _SESSIONS.get(session.id)
+        if current is None:
+            raise SharedSessionError("That session is not available.", status_code=404)
+        current.rating_key = key
+        current.content_rating = str(content_rating or "")[:40]
+        current.position_ms = 0
+        if current.ceiling_holds_until_next_title and not current.youth_guest_ids:
+            current.ceiling = ""
+            current.held_for_ceiling = False
+            current.ceiling_holds_until_next_title = False
+        elif current.ceiling:
+            from projectionist.youth.rating_gate import content_rating_allowed
+
+            allowed = content_rating_allowed(current.content_rating, max_rating=current.ceiling)
+            current.held_for_ceiling = not allowed
+            if not allowed:
+                current.state = "paused"
         current.updated_at = time.time()
         return current
 

@@ -121,6 +121,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/session-approvals",
+    "file": "get-api-session-approvals.json"
+  },
+  {
+    "method": "GET",
     "path": "/api/sessions/{session_id}",
     "file": "get-api-sessions-session_id.json"
   },
@@ -233,6 +238,11 @@
     "method": "POST",
     "path": "/api/rooms/{room_id}/join",
     "file": "post-api-rooms-room_id-join.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/session-approvals/{approval_id}",
+    "file": "post-api-session-approvals-approval_id.json"
   },
   {
     "method": "POST",

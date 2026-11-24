@@ -447,6 +447,34 @@ def _paired_device_kind(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -
     )
 
 
+def _session_approvals(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
+    """Youth join approvals. Delivery waits. The row is the record."""
+    del db
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS session_approvals (
+            id TEXT PRIMARY KEY,
+            kind TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            requester_id TEXT NOT NULL,
+            requester_name TEXT NOT NULL,
+            owner_id TEXT NOT NULL,
+            ceiling TEXT NOT NULL,
+            title TEXT NOT NULL DEFAULT '',
+            content_rating TEXT NOT NULL DEFAULT '',
+            title_above INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            expires_at REAL NOT NULL,
+            acted_at REAL,
+            acted_by TEXT NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_session_approvals_owner
+            ON session_approvals(owner_id, status, created_at);
+        """
+    )
+
+
 def _build_migrations() -> List[Migration]:
     def wrap(method_name: str) -> MigrationFn:
         def _run(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
@@ -523,6 +551,7 @@ def _build_migrations() -> List[Migration]:
         (66, "apple_tv_devices", _apple_tv_devices),
         (67, "explore_default_home", wrap("_migrate_explore_default_home")),
         (68, "paired_device_kind", _paired_device_kind),
+        (69, "session_approvals", _session_approvals),
     ]
 
 

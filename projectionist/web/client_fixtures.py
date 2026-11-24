@@ -444,6 +444,16 @@ def collect_client_fixtures() -> dict[str, dict[str, Any]]:
                 client.delete(f"/api/sessions/{shared_id}/guests/me"),
                 example_path=f"/api/sessions/{shared_id}/guests/me",
             )
+            keep("GET", "/api/session-approvals", client.get("/api/session-approvals"))
+            keep(
+                "POST",
+                "/api/session-approvals/{approval_id}",
+                client.post(
+                    "/api/session-approvals/missing",
+                    json={"decision": "not_now"},
+                ),
+                example_path="/api/session-approvals/missing",
+            )
             keep(
                 "DELETE",
                 "/api/sessions/{session_id}",

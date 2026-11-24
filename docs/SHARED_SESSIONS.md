@@ -77,11 +77,10 @@ A guest (or the owner) can read captions on their own device while the room watc
 
 - **Taste stays personal.** A guest’s curator chat in a session is the guest’s own conversation and memory, with the same rules as Chat today. The session owner never sees a guest’s questions.
 - **Youth.** A session started by a Youth member carries the rating ceiling: track content, detour clips, and curator answers are Youth-safe. An adult guest joining a Youth session sees the session as it is; they do not loosen it.
-- **A Youth member joining an adult’s session asks first** (decided 2026-11-18). The join sends the session owner a notification: **“<Name> wants to join. Approving limits this room to <ceiling>.”** with **Approve** / **Not now**.
-  - **Approve** tightens the whole session to the Youth member’s rating ceiling for as long as they are joined: track level content (Booth Notes Heat capped at Mild), detour clips, curator notes on the big screen, and what the room may play next.
-  - **Not now** declines the join; the Youth member sees a plain sentence and nothing about what is playing.
-  - *Proposed:* if the title already playing is above the ceiling, the prompt says so — “*Heat* is rated R. Approving stops it.” — and approval stops playback and opens a For you row the whole room can watch.
-  - *Proposed:* when the Youth member leaves, the ceiling relaxes at the next title, never mid-title.
+- **A Youth member joining an adult’s session asks first** (decided 2026-11-18). The owner sees **“<Name> wants to join. Approving limits this room to <ceiling>.”** with **Approve** / **Not now**. The approval is stored and shown in Settings → Room approvals. A push is not sent; that waits on NAT-006.
+  - **Approve** tightens the whole session to the Youth member’s rating ceiling for as long as they are joined. If the title already playing is above that ceiling, playback pauses until the next title. The prompt can name the title and the rating, because the owner started it.
+  - **Not now** declines the join. The Youth member sees a plain sentence and nothing about what is playing.
+  - When the Youth member leaves, the ceiling stays until the next title.
 - **No new exports.** Session state is ephemeral; position reporting continues to feed Continue Watching and the watch tracker exactly as library Play does today.
 
 ---
@@ -153,7 +152,7 @@ The household owner, or the member signed in on that screen, can rename it with 
 | SES-006 | Handheld captions | SES-004, ENG-004 |
 | SES-007 | Handoff between screens (same session, new screen) | SES-004 |
 | SES-008 | Web client as a second screen (join from a browser) | SES-005 |
-| SES-009 | Youth join approval: owner notification, Approve tightens the session ceiling, Not now declines (absorbs review PRD-025) | SES-005, TRK-003 |
+| SES-009 | Youth join approval: owner notification, Approve tightens the session ceiling, Not now declines (done: `youth_join` is 1; push waits) | SES-005, TRK-003 |
 
 ## See also
 

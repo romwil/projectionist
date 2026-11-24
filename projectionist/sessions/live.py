@@ -55,6 +55,8 @@ def _event(session: SharedSession, kind: str, **extra: Any) -> dict[str, Any]:
         "position_ms": session.position_ms,
         "state": session.state,
         "level": session.level,
+        "ceiling": session.ceiling,
+        "held_for_ceiling": session.held_for_ceiling,
     }
     body.update(extra)
     return body
@@ -66,6 +68,8 @@ def apply_command(session: SharedSession, role: str, payload: dict[str, Any]) ->
     if not authorize_command(role, command, guests_may_remote=session.guests_may_remote):
         raise SharedSessionError("That command is not allowed.", status_code=403)
     if command == "play":
+        if session.held_for_ceiling:
+            raise SharedSessionError("This room is paused for the rating limit.", status_code=403)
         update_shared_session(session, state="playing")
         return _event(session, "state")
     if command == "pause":

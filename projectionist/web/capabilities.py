@@ -38,4 +38,5 @@ def client_capabilities() -> dict[str, int]:
         "rooms": 1,  # SES-002 named screens; the list has no playback
         "session_object": 1,  # SES-003 owner, screen, position, level
         "session_join": 1,  # SES-005 code or owner approval, guest remote
+        "youth_join": 1,  # SES-009 approval tightens the room; push waits
     }

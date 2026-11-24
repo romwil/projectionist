@@ -7,18 +7,28 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
+from projectionist.sessions.approvals import (
+    ensure_youth_approval,
+    finish_approval,
+    list_approvals,
+    open_approval,
+)
 from projectionist.sessions.join import decide_join, list_join_requests, request_join
 from projectionist.sessions.live import apply_command, server_time_ms
 from projectionist.sessions.rooms import screen_signed_in_user
 from projectionist.sessions.shared import (
-    get_shared_session_for_screen,
     SharedSessionError,
     can_read,
+    change_title,
     end_shared_session,
     get_shared_session,
+    get_shared_session_for_screen,
+    mark_declined,
     open_shared_session,
     remove_guest,
+    tighten_ceiling,
     update_shared_session,
+    add_guest,
 )
 from projectionist.web.auth import get_current_user_dep
 
@@ -40,6 +50,7 @@ class UpdateSessionPayload(BaseModel):
     state: Optional[str] = None
     level: Optional[str] = None
     guests_may_remote: Optional[bool] = None
+    rating_key: Optional[str] = None
 
 
 class JoinPayload(BaseModel):
@@ -54,6 +65,40 @@ def _db():
     from projectionist.web.jobs import get_job_manager
 
     return get_job_manager().db
+
+
+def _settings():
+    from projectionist.web.app import _settings as load
+
+    return load()
+
+
+def _title_facts(rating_key: str) -> tuple[str, str]:
+    row = _db().library_item_by_rating_key(rating_key)
+    if row is None:
+        return "", ""
+    keys = set(row.keys()) if hasattr(row, "keys") else set()
+    title = str(row["title"] or "") if "title" in keys else ""
+    rating = str(row["content_rating"] or "") if "content_rating" in keys else ""
+    return title, rating
+
+
+def _youth_ceiling() -> str:
+    from projectionist.youth.rating_gate import resolve_youth_max_rating
+
+    return resolve_youth_max_rating(_settings())
+
+
+def _ceiling_covers(session, youth_ceiling: str) -> bool:
+    from projectionist.youth.rating_gate import rating_rank
+
+    if not session.ceiling:
+        return False
+    room = rating_rank(session.ceiling)
+    theirs = rating_rank(youth_ceiling)
+    if room is None or theirs is None:
+        return False
+    return room <= theirs
 
 
 def _raise(error: SharedSessionError) -> None:
@@ -77,6 +122,8 @@ def open_session(payload: OpenSessionPayload, user=Depends(get_current_user_dep)
     screen_user = screen_signed_in_user(_db(), payload.screen_id)
     if screen_user is None:
         raise HTTPException(status_code=404, detail="That room is not in this household.")
+    _title, rating = _title_facts(payload.rating_key)
+    youth = bool(getattr(user, "is_youth", False))
     try:
         session = open_shared_session(
             owner_id=str(getattr(user, "id", "") or ""),
@@ -85,7 +132,9 @@ def open_session(payload: OpenSessionPayload, user=Depends(get_current_user_dep)
             level=payload.level,
             position_ms=payload.position_ms,
             engine_session_id=payload.engine_session_id,
-            youth=bool(getattr(user, "is_youth", False)),
+            youth=youth,
+            content_rating=rating,
+            ceiling=_youth_ceiling() if youth else "",
         )
     except SharedSessionError as error:
         _raise(error)
@@ -106,6 +155,23 @@ def patch_session(
 ) -> dict:
     session, user_id, _screen_user = _visible(session_id, user)
     try:
+        if payload.rating_key is not None:
+            if session.owner_id != user_id:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Only the person who started this session can change the title.",
+                )
+            _title, rating = _title_facts(payload.rating_key)
+            update_shared_session(
+                session,
+                position_ms=payload.position_ms,
+                state=payload.state,
+                level=payload.level,
+                guests_may_remote=payload.guests_may_remote,
+                allow_level=True,
+                allow_remote=True,
+            )
+            return change_title(session, payload.rating_key, rating).public()
         if (payload.position_ms is not None or payload.state is not None) and user_id not in {
             session.owner_id,
             screen_signed_in_user(_db(), session.screen_id),
@@ -162,6 +228,28 @@ def join_room(room_id: str, payload: JoinPayload, user=Depends(get_current_user_
     if session is None:
         raise HTTPException(status_code=404, detail="Nothing is open in that room.")
     user_id = str(getattr(user, "id", "") or "")
+    if bool(getattr(user, "is_youth", False)) and not _ceiling_covers(session, _youth_ceiling()):
+        if user_id in session.declined_ids:
+            return {"status": "declined"}
+        from projectionist.youth.rating_gate import content_rating_allowed
+
+        ceiling = _youth_ceiling()
+        title, _stored = _title_facts(session.rating_key)
+        try:
+            approval_id = ensure_youth_approval(
+                _db(),
+                session_id=session.id,
+                requester_id=user_id,
+                requester_name=_display_name(user),
+                owner_id=session.owner_id,
+                ceiling=ceiling,
+                title=title,
+                content_rating=session.content_rating,
+                title_above=not content_rating_allowed(session.content_rating, max_rating=ceiling),
+            )
+        except SharedSessionError as error:
+            _raise(error)
+        return {"status": "pending", "request_id": approval_id}
     try:
         return request_join(
             session,
@@ -218,6 +306,49 @@ def leave_session(session_id: str, user=Depends(get_current_user_dep)) -> dict:
     except SharedSessionError as error:
         _raise(error)
     return {"status": "left"}
+
+
+@router.get("/api/session-approvals")
+def read_session_approvals(user=Depends(get_current_user_dep)) -> dict:
+    """Approvals waiting on this member. A requester does not see the title."""
+    return list_approvals(_db(), viewer_id=str(getattr(user, "id", "") or ""))
+
+
+@router.post("/api/session-approvals/{approval_id}")
+def answer_session_approval(
+    approval_id: str,
+    payload: DecideJoinPayload,
+    user=Depends(get_current_user_dep),
+) -> dict:
+    """Approve tightens the room. Not now declines. Neither response names the title."""
+    decision = str(payload.decision or "").strip().lower()
+    if decision not in {"approve", "not_now"}:
+        raise HTTPException(status_code=400, detail="Choose approve or not now.")
+    actor_id = str(getattr(user, "id", "") or "")
+    row = open_approval(_db(), approval_id, actor_id=actor_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="That request is not available.")
+    session = get_shared_session(str(row["session_id"]))
+    requester = _db().get_user(str(row["requester_id"]))
+    still_youth = False
+    if requester is not None:
+        keys = set(requester.keys()) if hasattr(requester, "keys") else set()
+        still_youth = "is_youth" in keys and bool(int(requester["is_youth"] or 0))
+    if session is None or session.owner_id != actor_id or not still_youth:
+        finish_approval(_db(), str(row["id"]), actor_id=actor_id, decision="not_now")
+        raise HTTPException(status_code=404, detail="That request is not available.")
+    if not finish_approval(_db(), str(row["id"]), actor_id=actor_id, decision=decision):
+        raise HTTPException(status_code=404, detail="That request is not available.")
+    if decision == "not_now":
+        mark_declined(session, str(row["requester_id"]))
+        return {"status": "declined"}
+    from projectionist.youth.rating_gate import content_rating_allowed
+
+    ceiling = str(row["ceiling"] or "")
+    above = not content_rating_allowed(session.content_rating, max_rating=ceiling)
+    add_guest(session, str(row["requester_id"]), youth=True)
+    tighten_ceiling(session, ceiling, title_above=above)
+    return {"status": "approved"}
 
 
 def _user_from_websocket(websocket: WebSocket):
