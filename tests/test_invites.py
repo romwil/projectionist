@@ -325,7 +325,8 @@ class InviteApiTests(unittest.TestCase):
             "/api/invites/redeem/local",
             json={"token": token, "username": "alex2", "password": "password123"},
         )
-        self.assertEqual(replay.status_code, 409, replay.text)
+        self.assertEqual(replay.status_code, 400, replay.text)
+        self.assertEqual(replay.json()["detail"], "This invite can't be used.")
 
     def test_garbage_token_validate_fails_closed(self) -> None:
         resp = self.client.get("/api/invites/validate", params={"token": "garbage.not.real"})
@@ -366,7 +367,7 @@ class InviteApiTests(unittest.TestCase):
             json={"token": token, "username": "denied-user", "password": "password123"},
         )
         self.assertEqual(redeem.status_code, 400, redeem.text)
-        self.assertIn("denied", redeem.json()["detail"].lower())
+        self.assertEqual(redeem.json()["detail"], "This invite can't be used.")
         self.assertIsNone(self.db.get_user_by_display_name("denied-user"))
 
     def test_plex_new_user_blocked_without_invite(self) -> None:

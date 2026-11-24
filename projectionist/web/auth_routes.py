@@ -3,6 +3,38 @@
 Registered via ``register_auth_routes`` so app.py stays the composition root.
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def _note_invite_failure(db, *, key: str) -> None:
+    """Count a failed invite redeem. A new lock is written for the owner."""
+    from projectionist import security_audit as sa
+    from projectionist.web.account_throttle import account_throttle
+
+    started = account_throttle.record_failure(key)
+    if started is None:
+        return
+    if key.startswith("invite:") and not key.startswith("invite-unparsed:"):
+        subject = key.split(":", 1)[1][:64]
+    else:
+        subject = "unparsed"
+    minutes = max(1, int(started / 60))
+    sa.audit(
+        db,
+        sa.SIGN_IN_LOCKED,
+        outcome="locked",
+        kind="invite",
+        subject=subject,
+        lock_minutes=minutes,
+    )
+    logger.warning(
+        "sign-in locked kind=invite subject=%s minutes=%s",
+        subject,
+        minutes,
+    )
+
 
 def register_auth_routes(app):
     """Attach auth / household routes to the FastAPI app."""
@@ -817,9 +849,17 @@ def register_auth_routes(app):
         enforce_rate_limit(request, bucket="invite_redeem_local", limit=10, window_seconds=60)
         native = _client_or_400(payload.client)
         from projectionist.invites import redeem_local_invite
+        from projectionist.web.account_throttle import (
+            GENERIC_INVITE_DETAIL,
+            account_throttle,
+            invite_key,
+        )
         from projectionist.web.auth import _ensure_local_login_enabled
 
         _ensure_local_login_enabled()
+        token_key = invite_key(payload.token)
+        if account_throttle.locked(token_key):
+            raise HTTPException(status_code=400, detail=GENERIC_INVITE_DETAIL)
         try:
             result = redeem_local_invite(
                 _db(),
@@ -828,16 +868,10 @@ def register_auth_routes(app):
                 username=payload.username,
                 password=payload.password,
             )
-        except InviteConflict as error:
-            raise HTTPException(
-                status_code=409,
-                detail=str(error) or "Invite has already been used",
-            ) from error
-        except ValueError as error:
-            detail = str(error)
-            if "already been used" in detail.lower():
-                raise HTTPException(status_code=409, detail=detail) from error
-            raise HTTPException(status_code=400, detail=detail) from error
+        except (InviteConflict, ValueError) as error:
+            _note_invite_failure(_db(), key=token_key)
+            raise HTTPException(status_code=400, detail=GENERIC_INVITE_DETAIL) from error
+        account_throttle.record_success(token_key)
         new_user_id = str(result["user"]["id"])
         redeem_detail: Dict[str, Any] = {"method": "local"}
         if native is not None:

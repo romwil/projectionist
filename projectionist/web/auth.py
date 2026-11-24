@@ -1423,6 +1423,33 @@ def register_local_user(
     return row_to_current_user_from_dict(user_row)
 
 
+def _note_login_failure(db: Database, *, key: str, username: str) -> None:
+    """Count a failed local sign-in. A new lock is written for the owner."""
+    import logging
+
+    from projectionist import security_audit as sa
+    from projectionist.web.account_throttle import account_throttle
+
+    started = account_throttle.record_failure(key)
+    if started is None:
+        return
+    subject = " ".join(str(username or "").split())[:64]
+    minutes = max(1, int(started / 60))
+    sa.audit(
+        db,
+        sa.SIGN_IN_LOCKED,
+        outcome="locked",
+        kind="username",
+        subject=subject,
+        lock_minutes=minutes,
+    )
+    logging.getLogger(__name__).warning(
+        "sign-in locked kind=username subject=%s minutes=%s",
+        subject or "(blank)",
+        minutes,
+    )
+
+
 def authenticate_local_user(
     *,
     username: str,
@@ -1434,6 +1461,17 @@ def authenticate_local_user(
     enforce_rate_limit(request, bucket="auth_local_login", limit=10, window_seconds=60)
     _ensure_local_login_enabled()
 
+    from projectionist.web.account_throttle import (
+        GENERIC_LOGIN_DETAIL,
+        account_throttle,
+        login_key,
+    )
+
+    key = login_key(username)
+    if account_throttle.locked(key):
+        _verify_password(password, _DUMMY_PASSWORD_HASH)
+        raise HTTPException(status_code=401, detail=GENERIC_LOGIN_DETAIL)
+
     row = db.get_user_by_display_name(username.strip())
     stored_hash = ""
     if row is not None:
@@ -1442,13 +1480,13 @@ def authenticate_local_user(
     dummy_or_missing = (
         row is None or _user_is_disabled(row) or not stored_hash or "$" not in stored_hash
     )
-    if dummy_or_missing:
-        _verify_password(password, _DUMMY_PASSWORD_HASH)
-        raise HTTPException(status_code=401, detail="Invalid username or password")
+    if dummy_or_missing or not _verify_password(password, stored_hash):
+        _note_login_failure(db, key=key, username=username)
+        if dummy_or_missing:
+            _verify_password(password, _DUMMY_PASSWORD_HASH)
+        raise HTTPException(status_code=401, detail=GENERIC_LOGIN_DETAIL)
 
-    if not _verify_password(password, stored_hash):
-        raise HTTPException(status_code=401, detail="Invalid username or password")
-
+    account_throttle.record_success(key)
     return row_to_current_user(row)
 
 
