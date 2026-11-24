@@ -16,7 +16,7 @@ A version is **not released** until Docker Hub has `romwil/projectionist:X.Y.Z` 
 |------|------|------|
 | **0. Prepare** | Semver bump + CHANGELOG + tests on a **PR branch** (branch protection → no direct push to `main`) | CI green; versions lockstep |
 | **1. Hub** | `./scripts/docker-release.sh X.Y.Z` → `romwil/projectionist:{X.Y.Z,X.Y,latest}`; then push the listing: `docker pushrm romwil/projectionist --file docs/DOCKERHUB.md` | `docker buildx imagetools inspect romwil/projectionist:X.Y.Z` succeeds; **Hub description pushed** (Hub page matches `docs/DOCKERHUB.md`, no `curatorx` link) |
-| **2. GitHub** | Merge PR → `main`, annotated tag `vX.Y.Z`, `gh release create` | Tag + release match Hub version |
+| **2. GitHub** | Merge PR → `main`. `docker-release.sh` creates annotated tag `vX.Y.Z` after the changelog heading check, then `gh release create` | Tag + release match Hub version |
 | **3. CA proof** | On Automat (or equivalent), **pull** that Hub tag onto QA / a disposable container — same path Unraid CA will use | Running image digest matches Hub; **not** a Path A host `docker build` |
 | **4. Prod** | `ssh automat 'cd /mnt/user/appdata/projectionist && ./rollout.sh X.Y.Z'` (pull-only; not Mac mount) | LAN `http://10.10.1.202:8788/api/health` + `/app/.build-info` show `X.Y.Z` |
 
@@ -135,7 +135,7 @@ Historical note: git has **no record of a deleted patch-release script** — onl
 
 ```bash
 ./scripts/docker-release.sh X.Y.Z
-# PR merge → tag vX.Y.Z on main → gh release create
+# PR merge → docker-release.sh creates vX.Y.Z after the changelog heading check → gh release create
 # CA proof: pull Hub tag (Path B) — not Automat host build
 # Prod if asked: ssh automat 'cd /mnt/user/appdata/projectionist && ./rollout.sh X.Y.Z'
 ```
@@ -293,14 +293,7 @@ Only when the user asked to ship. Hub `:X.Y.Z` should already exist (or land in 
 
    Do **not** push directly to `main`. Never bypass branch protection — use a PR even for hotfixes.
 
-3. **After the PR is merged into `main`**, create an annotated tag on the merged tip (not before merge; not as a substitute for the PR):
-
-   ```bash
-   git checkout main
-   git pull origin main
-   git tag -a "vX.Y.Z" -m "vX.Y.Z"
-   git push origin "vX.Y.Z"
-   ```
+3. **After the PR is merged into `main`**, run `./scripts/docker-release.sh X.Y.Z` with `HEAD` on that merged commit. The script reads `CHANGELOG.md` from the commit it would tag. A missing `## [X.Y.Z] — YYYY-MM-DD` heading exits non-zero and does not create or push `vX.Y.Z`. When the tag is absent and the heading is present, the script creates the annotated tag on that commit, pushes it when `origin` exists, and builds the image from the tag. It does not move a tag that already exists. Do not create the tag by hand before the script.
 
 ---
 
@@ -410,7 +403,7 @@ A follow-up `chore: refresh release-notes.json timestamp for vX.Y.Z` commit some
 
 | Symptom | Cause | Fix |
 |---------|--------|-----|
-| `generate-release-notes.sh` / docker-release fails on `--require-version` | Missing `## [X.Y.Z] — YYYY-MM-DD` in `CHANGELOG.md` | Add the heading (correct dash/date) |
+| `generate-release-notes.sh` / docker-release fails on `--require-version`, or the script prints `Refusing to create or push` | Missing `## [X.Y.Z] — YYYY-MM-DD` in `CHANGELOG.md` on the commit that would be tagged | Add the heading (correct dash/date) and run the script again. The script exits before it creates or pushes the tag |
 | Docker build: `release-notes.json missing` | Generator not run before image build | `./scripts/generate-release-notes.sh` (docker-release does this; bare `docker build` does not) |
 | Unraid Force Update **0 B** / stale UI | Local `:latest` digest mapping not re-resolved | `docker pull` / `rollout.sh` / `unraid-force-pull.sh` — see [DOCKER.md](DOCKER.md) |
 | Dockerman “not available” | OCI index with attestations | Always use `scripts/docker-release.sh` (provenance/sbom off) |
@@ -441,7 +434,7 @@ A follow-up `chore: refresh release-notes.json timestamp for vX.Y.Z` commit some
 □ Posters visible on Explore
 □ ./scripts/generate-release-notes.sh --require-version X.Y.Z
 □ 1. ./scripts/docker-release.sh X.Y.Z  → Hub has romwil/projectionist:X.Y.Z
-□ 2. Merge PR → main (never direct-push/bypass); then tag vX.Y.Z on merged main; gh release create with Highlights
+□ 2. Merge PR → main (never direct-push/bypass); docker-release.sh creates and pushes vX.Y.Z only after the changelog heading is on that commit; gh release create with Highlights
 □ 3. CA proof: pull Hub tag (Path B) — NOT host docker build (Path A)
 □ 4. Prod only if asked: ./rollout.sh X.Y.Z (pull-only)
 □ Before that rollout, check the production data dir for a stray empty database file (a 0-byte projectionist.db next to the real database). Move it aside. Do not delete a non-empty database.

@@ -48,7 +48,7 @@ Before running without --dry-run:
 
 After this script (when user asks to ship):
   ./scripts/docker-release.sh X.Y.Z
-  PR → merge main → tag vX.Y.Z → gh release create
+  PR → merge main → docker-release.sh creates vX.Y.Z after the changelog heading check → gh release create
   CA proof: pull Hub tag (Path B) — not host docker build
   Prod (if asked): cd …/appdata/projectionist && ./rollout.sh X.Y.Z
 
@@ -355,7 +355,7 @@ Dot release ${TARGET_VERSION} — tree prep done. Ship checklist:
   □ Open/update PR into main (never push directly to main)
   □ When user asks to ship:
       1. ./scripts/docker-release.sh ${TARGET_VERSION}
-      2. Merge PR → main → tag v${TARGET_VERSION} → gh release create
+      2. Merge PR → main → docker-release.sh creates v${TARGET_VERSION} after the changelog heading check → gh release create
       3. CA proof: pull Hub tag (Path B) — not Automat host build (Path A)
       4. Prod if asked: cd …/appdata/projectionist && ./rollout.sh ${TARGET_VERSION}
       5. Spin down projectionist-qa (:8790) unless QA campaign active
