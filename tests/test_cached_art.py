@@ -7,6 +7,7 @@ import importlib
 import json
 import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -329,6 +330,114 @@ class CachedArtApiTests(unittest.TestCase):
             again = self.client.get(poster)
         self.assertEqual(again.status_code, 200)
         self.assertEqual(again.content, JPEG)
+
+    def test_feeds_share_the_hub_poster_address(self) -> None:
+        art = "/api/library/art/movie/238445?id_type=tmdb&kind=poster"
+        db = self._jobs.get_job_manager().db
+        now = int(time.time())
+        db.upsert_library_item(
+            {
+                "rating_key": "rk-secret",
+                "media_type": "movie",
+                "title": "Purgatory",
+                "year": 1999,
+                "poster_url": f"{PLEX}/library/metadata/5/thumb/9?X-Plex-Token=LEAKED",
+                "backdrop_url": "https://image.tmdb.org/t/p/w780/bg.jpg",
+                "tmdb_id": 238445,
+                "content_rating": "PG-13",
+                "added_at": now - 1000,
+                "view_count": 0,
+                "view_offset_ms": 60_000,
+                "duration_ms": 6_000_000,
+            }
+        )
+
+        def posters(payload: object) -> list[str]:
+            found: list[str] = []
+
+            def walk(node: object) -> None:
+                if isinstance(node, dict):
+                    if node.get("rating_key") == "rk-secret" and "poster_url" in node:
+                        found.append(str(node.get("poster_url") or ""))
+                    for value in node.values():
+                        walk(value)
+                elif isinstance(node, list):
+                    for value in node:
+                        walk(value)
+
+            walk(payload)
+            return found
+
+        with patch(
+            "projectionist.connectors.plex.PlexClient.on_deck",
+            side_effect=RuntimeError("plex on deck is down"),
+        ):
+            responses = {
+                "hub": self.client.get("/api/library/feeds/hub"),
+                "continue": self.client.get("/api/library/feeds/continue-watching"),
+                "recent": self.client.get("/api/library/feeds/recently-added", params={"days": 7}),
+                "search": self.client.get("/api/library/query", params={"query": "Purgatory"}),
+                "title": self.client.get("/api/title/movie/238445"),
+                "because": self.client.get("/api/library/feeds/for-you"),
+                "holiday": self.client.get("/api/library/feeds/seasonal-spotlight"),
+            }
+        for name, response in responses.items():
+            self.assertEqual(response.status_code, 200, f"{name} {response.text}")
+        required = ("hub", "continue", "recent", "search", "title")
+        seen: dict[str, list[str]] = {name: posters(response.json()) for name, response in responses.items()}
+        for name in required:
+            self.assertTrue(seen[name], name)
+            self.assertEqual(set(seen[name]), {art}, name)
+        for name, urls in seen.items():
+            if urls:
+                self.assertEqual(set(urls), {art}, name)
+            self.assertNotIn("LEAKED", responses[name].text)
+
+
+class SharedArtSerializerTests(unittest.TestCase):
+    def test_related_holiday_and_live_match_a_library_card(self) -> None:
+        from projectionist.library.cached_art import serialize_library_art, serialize_live_guide
+
+        card = {
+            "media_type": "movie",
+            "title": "Purgatory",
+            "tmdb_id": 238445,
+            "rating_key": "rk-secret",
+            "in_library": True,
+            "poster_url": f"{PLEX}/library/metadata/5/thumb/9?X-Plex-Token=LEAKED",
+            "backdrop_url": "https://image.tmdb.org/t/p/w780/bg.jpg",
+        }
+        expected = serialize_library_art(card, _settings())["poster_url"]
+        self.assertEqual(expected, "/api/library/art/movie/238445?id_type=tmdb&kind=poster")
+        related = serialize_library_art({"items": [{"peer": dict(card)}]}, _settings())
+        holiday = serialize_library_art({"items": [dict(card)]}, _settings())
+        self.assertEqual(related["items"][0]["peer"]["poster_url"], expected)
+        self.assertEqual(holiday["items"][0]["poster_url"], expected)
+
+        class _Library:
+            def library_item_by_rating_key(self, key: str):
+                self.last = key
+                return dict(card)
+
+        guide = {
+            "channels": [
+                {
+                    "programs": [
+                        {
+                            "program": {
+                                "type": "movie",
+                                "title": "Purgatory",
+                                "plexRatingKey": "rk-secret",
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+        live = serialize_live_guide(guide, _Library(), _settings())
+        program = live["channels"][0]["programs"][0]["program"]
+        self.assertEqual(program["poster_url"], expected)
+        self.assertNotIn("LEAKED", json.dumps(live))
 
 
 if __name__ == "__main__":

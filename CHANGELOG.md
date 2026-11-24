@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+Continue Watching uses the same art address as the rest of the library. The live feed was still dropping the picture after the hub had started pointing at the cache.
+
 ## [1.45.4] — 2026-11-24
 
 Posters show the picture again. A play no longer waits out a background probe, a film stays up while the picture is still arriving, and an HDR title is not tone-mapped when this server has no hardware transcoder.

@@ -1222,7 +1222,13 @@ def _sanitize_library_payload(payload: Any, user, *, attach_watch: bool = True) 
         )
     else:
         tracker_adopted = payload
-    sanitized = sanitize_library_payload(tracker_adopted, settings=settings, user=user)
+    from projectionist.library.cached_art import serialize_library_art
+
+    sanitized = sanitize_library_payload(
+        serialize_library_art(tracker_adopted, settings),
+        settings=settings,
+        user=user,
+    )
     from projectionist.youth.apply import filter_payload_for_youth
 
     filtered = filter_payload_for_youth(sanitized, user=user, settings=settings)
@@ -1949,12 +1955,11 @@ def title_detail(
     if not title_allowed_for_user(dumped, user=user, settings=settings):
         raise HTTPException(status_code=404, detail="Title not available")
     from projectionist.engine.caption_prep import note_caption_titles
-    from projectionist.library.cached_art import point_cached_art
 
     rating_key = str(dumped.get("rating_key") or "").strip()
     if rating_key:
         note_caption_titles([rating_key], data_dir=DATA_DIR, reason="title")
-    return _sanitize_library_payload(point_cached_art(dumped, settings), user)
+    return _sanitize_library_payload(dumped, user)
 
 
 def _relation_seed_row(db, media_type: str, item_id: str, id_type: str):
