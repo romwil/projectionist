@@ -111,6 +111,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/playback/warmup-lines",
+    "file": "get-api-playback-warmup-lines.json"
+  },
+  {
+    "method": "GET",
     "path": "/api/rooms",
     "file": "get-api-rooms.json"
   },

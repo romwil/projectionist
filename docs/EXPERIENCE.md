@@ -45,15 +45,15 @@ Jump to: [Densities](#one-language-three-densities) · [Items](#roadmap-items) �
 | EXP-015 | **Headline controls.** Owner setting Live → Weather → Headlines, on by default. Youth sessions hide headlines unless the owner allows them. The payload says `enabled` and per-scope `available`. Titles stay as published. Off also stops the fetches. Local headlines stay a news search for the place. Owner RSS is a hook (`local_source` stays `search`) and is not fetched | Members can turn news off, and Youth does not see it by default. The local column stays the search the server already runs | With the setting off, no client shows headlines and no news feed is fetched. With it on, local headlines are still that place search | EXP-014 | done |
 | EXP-016 | **Poster depth on the web.** One Poster component: rounded art, a rim light, a two-layer shadow, a bottom scrim when the title sits on the art, and a lift on hover and keyboard focus that reduced motion turns off. Missing art is a deterministic placeholder seeded by the item id, and cached art fades in over it. The top nav is a glass capsule with a solid fallback when blur or transparency is unavailable | Shelves should have light and an edge, and a missing poster should not be a flat fill | Explore, Title, and the seasonal live shelf use Poster. Keyboard focus shows the lift and a visible ring | EXP-006 | done |
 | EXP-017 | **Optional owner RSS for local weather headlines.** An owner may later add their own local feeds. With none set, local headlines stay the Google News search from EXP-015. Not part of EXP-015. A new feed host is listed in PRIVACY.md before any fetch | Owners who want a paper or station feed can add it, without changing the default | *Proposed.* When picked up: an owner can save feed URLs, those feeds fill the local column, and an empty list keeps today’s search. Not started | EXP-015 | proposed |
-| EXP-018 | **Warm-up lines, step names, then the web screen.** One versioned lines file, a pool per playback step, and an owner humor setting. The web screen uses that file. See [Warm-up screen](#warm-up-screen) | The wait before the first frame should tell the truth and still be worth watching | The lines route and `step` are served, and a slowed web fixture shows the matching line, the status, and a clean fallback. Not started | ENG-015's queue; session `state` from the fixes already underway | accepted |
+| EXP-018 | **Warm-up lines, step names, then the web screen.** One versioned lines file, a pool per playback step, and an owner humor setting. The web screen uses that file. See [Warm-up screen](#warm-up-screen) | The wait before the first frame should tell the truth and still be worth watching | The lines route and `step` are served. The web screen and the slowed fixture are still ahead | ENG-015's queue; session `state` from the fixes already underway | accepted |
 
-**Sequencing:** EXP-013, EXP-005, EXP-004, EXP-006, EXP-014, EXP-015, and EXP-016 are done. **EXP-001 is next in Lane B.** EXP-017 is proposed and later. Then EXP-002 → EXP-003, and the rest alongside ENG / SES. EXP-006 decided 2026-11-20 and shipped as `GET /api/library/art/{media_type}/{item_id}` (`features.cached_art`). The weather boards ship at three widths. UV index, air quality, and owner RSS stay hooks until the person asks. Local headlines stay a news search for the place. EXP-018 is accepted and not started. The lines file and the step names come first, then the web screen. It follows ENG-015. It is not a release.
+**Sequencing:** EXP-013, EXP-005, EXP-004, EXP-006, EXP-014, EXP-015, and EXP-016 are done. **EXP-001 is next in Lane B.** EXP-017 is proposed and later. Then EXP-002 → EXP-003, and the rest alongside ENG / SES. EXP-006 decided 2026-11-20 and shipped as `GET /api/library/art/{media_type}/{item_id}` (`features.cached_art`). The weather boards ship at three widths. UV index, air quality, and owner RSS stay hooks until the person asks. Local headlines stay a news search for the place. EXP-018's lines file and step names are in. The web screen follows. It follows ENG-015. It is not a release.
 
 **Client contract:** EXP items that change chrome or tokens ship a capability bump when native clients must change (see [NATIVE_CLIENTS.md](NATIVE_CLIENTS.md#capabilities)). Web-only polish may ship without a new capability number. No new weather route and no new capability number. Headline `enabled` and per-scope `available` are the EXP-015 flags. `local_source` stays `search` until an owner feed list exists. UV and air quality are not part of this web pass.
 
 ## Warm-up screen
 
-EXP-018 is accepted and not started. The lines file and the session step names come first. The web screen follows that file. Other clients use [the outbox handoff](roadmap/outbox/2026-11-22-EXP-018-apple.md). Their screens are not specified here. This follows ENG-015, which itself follows the playback-start fixes already underway. It is not a release.
+The lines file and the session step names are in. The web screen follows that file. Other clients use [the outbox handoff](roadmap/outbox/2026-11-22-EXP-018-apple.md). Their screens are not specified here. This follows ENG-015. It is not a release.
 
 Live's scope freeze (PRD-007) still holds. The static on a tune stays a short channel flip. This item adds no channel type.
 
@@ -71,13 +71,13 @@ Live's scope freeze (PRD-007) still holds. The static on a tune stays a short ch
 
 **Depends on.** The session `state` values from the work already running. Art URLs from EXP-006. It sits behind ENG-015 in the playback queue.
 
-**Client contract.** *Proposed capability:* `warmup_screen` is `1` when the lines document and `step` are served. A missing name means the client shows art and an honest status, with no joke line. The web screen in this repository is the first client. The capability is not on `GET /api/features` yet.
+**Client contract.** `warmup_screen` is `1` when the lines document and `step` are served. A missing name means the client shows art and an honest status, with no joke line. `GET /api/playback/warmup-lines` returns version `1` and a pool per step. The session read includes `step`. The web screen in this repository is the next client.
 
 **Honest limits.** The screen does not make a slow disk faster, and it does not start a transcode on its own. Humor Off and Dry are the owner's choice for the household.
 
 **Privacy.** The lines file is static copy. The step is part of the household session record. No new host is contacted.
 
-**Status.** accepted. Not started. Server file first, then the web screen.
+**Status.** The lines file and `step` are served. The web screen is not.
 
 ---
 

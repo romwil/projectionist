@@ -598,4 +598,5 @@ class PlaylistWaitTests(unittest.TestCase):
             self.assertEqual(body["plan"], "library")
             self.assertFalse(body["playable"])
             self.assertEqual(body["state"], "")
+            self.assertEqual(body["step"], "falling_back")
             self.assertIn("library path", body["reason"])

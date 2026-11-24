@@ -752,6 +752,7 @@ class EngineRouteTests(unittest.TestCase):
         self.assertEqual(opened.status_code, 200, opened.text)
         body = opened.json()
         self.assertEqual(body["state"], "preparing")
+        self.assertEqual(body["step"], "remuxing")
         self.assertIsNone(body["ready_at_handoff"])
         self.assertTrue(body["playable"])
 
@@ -821,6 +822,7 @@ class EngineRouteTests(unittest.TestCase):
             self.assertEqual(switched["library_session_id"], "lib-preroll")
             self.assertEqual(switched["stream_url"], library["stream_url"])
             self.assertEqual(switched["state"], "")
+            self.assertEqual(switched["step"], "waiting_on_plex")
             started.assert_called_once()
             self.assertEqual(started.call_args.kwargs["offset_ms"], 12000)
             self.client.post(f"/api/playback/sessions/{switched['session_id']}/stop")

@@ -85,6 +85,7 @@ include = ["projectionist*"]
 
 [tool.setuptools.package-data]
 "projectionist.web" = ["static/**/*"]
+"projectionist.engine" = ["warmup_lines.json"]
 "projectionist.facets" = ["data/*.json"]
 "projectionist.theater.weather_channel" = ["data/*.json"]
 

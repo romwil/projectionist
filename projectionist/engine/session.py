@@ -86,6 +86,7 @@ class EngineSession:
     created_at: float = field(default_factory=time.time)
     # Play asked for a preroll. Preparation runs during that bumper.
     warm: bool = False
+    step: str = ""
     ready_at: Optional[float] = None
     handoff_at: Optional[float] = None
     ready_at_handoff: Optional[bool] = None
@@ -110,6 +111,7 @@ class EngineSession:
             "state": session_playback_state(self),
             "prepare_ms": prepare_milliseconds(self),
             "ready_at_handoff": self.ready_at_handoff,
+            "step": self.step,
             "master_url": self.master_url(),
             "title": self.title,
             "duration_ms": self.duration_ms,
@@ -186,6 +188,9 @@ def refresh_warm_start(session: EngineSession) -> None:
         return
     session.library_fallback = True
     session.plan = "library"
+    from projectionist.engine.warmup import set_step
+
+    set_step(session, "falling_back")
     session.playable = False
     session.reason = (
         "The film was not ready during the preroll, so playback continues on the library path."
@@ -409,6 +414,9 @@ def open_engine_session(
                         session.process = process
                         return True
 
+                from projectionist.engine.warmup import set_step
+
+                set_step(session, "encoding_audio")
                 start_audio_transcode(
                     Path(str(play_asset.local_path)),
                     directory,
@@ -424,6 +432,9 @@ def open_engine_session(
                     max_channels=int(getattr(profile, "max_channels", 0) or 0),
                 )
             else:
+                from projectionist.engine.warmup import set_step
+
+                set_step(session, "remuxing")
                 session.process = start_remux(
                     Path(str(play_asset.local_path)),
                     directory,
@@ -435,9 +446,12 @@ def open_engine_session(
                     captions=list(captions or []),
                 )
         except FileNotFoundError:
+            from projectionist.engine.warmup import set_step
+
             session.plan = "plex-fallback"
             session.reason = "ffmpeg is not available, so this title stays on the Plex path"
             session.playable = False
+            set_step(session, "falling_back")
             session.source_reason = ""
             session.provider = ""
         else:

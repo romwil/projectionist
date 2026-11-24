@@ -17,7 +17,7 @@ The numbered list is the subject order inside that plan.
 3. **TML** — the timeline layer, after the session items
 4. **TRK** — tracks: Moments, Booth Notes, Class / Study, after the timeline
 5. **NAT** — the client contract, threaded through the lanes as each capability ships
-6. **EXP** — experience convergence (parallel). Lane B’s next item is **EXP-001** (design tokens). EXP-013, EXP-004, EXP-005, EXP-006, EXP-014, EXP-015, and EXP-016 are done. EXP-017 (owner RSS for local headlines) is proposed and later. UV index and air quality on the weather boards are hooks and wait for the person. EXP-018 is the warm-up lines file and step names, then the web screen. It is accepted and not started, and it follows ENG-015. It is not a release.
+6. **EXP** — experience convergence (parallel). Lane B’s next item is **EXP-001** (design tokens). EXP-013, EXP-004, EXP-005, EXP-006, EXP-014, EXP-015, and EXP-016 are done. EXP-017 (owner RSS for local headlines) is proposed and later. UV index and air quality on the weather boards are hooks and wait for the person. EXP-018 is the warm-up lines file and step names, then the web screen. The lines file and the session step are in. The web screen is still ahead. It is not a release.
 
 **Before the next production rollout.** Two defects from QA 1.41.1 are recorded below. They are not new capability items. The database-file fix lands before production moves. The Safari stall is investigated before any further playlist change. This record does not edit `docs/RELEASE.md`; the fix lane adds the empty-database check to that file’s pre-rollout checklist.
 
@@ -90,7 +90,7 @@ The numbered list is the subject order inside that plan.
 | EXP-015 | Weather headline controls, including Youth. Local headlines stay a news search | done | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | EXP-016 | Poster depth on the web: light, edge, generated placeholders | done | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | EXP-017 | Optional owner RSS for local weather headlines | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
-| EXP-018 | Warm-up lines and step names, then the web screen. Not started | accepted | [EXPERIENCE](../EXPERIENCE.md#warm-up-screen) |
+| EXP-018 | Warm-up lines and step names, then the web screen. The lines file and `step` are served. The web screen is still ahead | accepted | [EXPERIENCE](../EXPERIENCE.md#warm-up-screen) |
 
 ## Known defects (not roadmap items)
 

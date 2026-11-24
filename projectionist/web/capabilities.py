@@ -25,6 +25,7 @@ def client_capabilities() -> dict[str, int]:
         "throw": 1,
         "playback_engine": 1,  # ENG-003 session API, VOD fMP4 remux
         "preroll_warm_start": 1,  # ENG-015 prepare the film while a preroll plays
+        "warmup_screen": 1,  # EXP-018 lines file and session step names
         "caption_tracks": 0,  # ENG-004
         "shared_sessions": 1,  # SES-004 live channel, command authorization, clock
         "timeline": 0,  # TML-005

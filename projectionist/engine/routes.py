@@ -110,15 +110,21 @@ def describe_title(
     *,
     background: bool = False,
     source: Any = None,
+    on_step: Optional[Callable[[str], None]] = None,
 ):
     """Locate a title and probe it.
 
     Play uses the default: normal priority, and it does not wait on caption
     extraction. The library walk and caption prep pass ``background`` so their
     ffprobe shares the low-priority slot with extraction. Pass ``source`` when
-    the same object should also answer a source-transcode plan.
+    the same object should also answer a source-transcode plan. ``on_step``
+    hears ``waking_disk`` before the file is opened and ``probing`` around the
+    probe itself.
     """
     chosen = source if source is not None else household_media_source(settings, db)
+    if on_step is not None:
+        on_step("waking_disk")
+        on_step("probing")
     return chosen.locate(
         rating_key,
         cache_dir=Path(data_dir) / "engine" / "probes",
@@ -376,7 +382,10 @@ def _start_library_fallback(session: Any, user: Any) -> Optional[dict[str, Any]]
             error,
         )
         return None
+    from projectionist.engine.warmup import set_step
+
     session.library_session_id = str(started.get("session_id") or "")
+    set_step(session, "waiting_on_plex")
     return started
 
 
@@ -398,6 +407,15 @@ def _stop_library_fallback(session: Any, user: Any) -> None:
             session.library_session_id,
             error,
         )
+
+
+@router.get("/api/playback/warmup-lines")
+def playback_warmup_lines(user=Depends(get_current_user_dep)) -> dict[str, Any]:
+    """Versioned joke lines, one pool per playback step. Clients cache this."""
+    del user
+    from projectionist.engine.warmup import load_warmup_lines
+
+    return load_warmup_lines()
 
 
 @router.get("/api/playback/sessions/{session_id}")
