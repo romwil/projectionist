@@ -269,23 +269,29 @@ class LocalAuthTests(unittest.TestCase):
 
     def test_unknown_vs_wrong_password_login_latency_overlap(self) -> None:
         """Unknown usernames must not skip PBKDF2 (no 10× timing oracle)."""
+        import statistics
         import time as time_mod
 
         self._enable_local_auth()
         self._seed_owner()
+        clear_rate_limits()
+        # The first login pays startup cost. One slow sample on a busy runner
+        # can cross 10× even when both paths hash once. The median still
+        # fails if an unknown username skips PBKDF2.
+        self._login("warmup-user", "password123")
         unknown: list[float] = []
         wrong: list[float] = []
-        for _ in range(2):
+        for _ in range(3):
             started = time_mod.perf_counter()
-            self._login("no-such-user", "password123")
+            unknown_resp = self._login("no-such-user", "password123")
             unknown.append(time_mod.perf_counter() - started)
             started = time_mod.perf_counter()
-            self._login("alice", "definitely-wrong-password")
+            wrong_resp = self._login("alice", "definitely-wrong-password")
             wrong.append(time_mod.perf_counter() - started)
-        unknown_mean = sum(unknown) / len(unknown)
-        wrong_mean = sum(wrong) / len(wrong)
-        slower = max(unknown_mean, wrong_mean)
-        faster = min(unknown_mean, wrong_mean) or 1e-9
+            self.assertEqual(unknown_resp.status_code, 401)
+            self.assertEqual(wrong_resp.status_code, 401)
+        slower = max(statistics.median(unknown), statistics.median(wrong))
+        faster = min(statistics.median(unknown), statistics.median(wrong)) or 1e-9
         self.assertLess(slower / faster, 10.0)
 
     # -- Features endpoint includes auth_methods --
