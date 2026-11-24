@@ -34,6 +34,12 @@ def _settings():
     return _settings_factory()
 
 
+def _rail_with_art(payload: Dict[str, Any]) -> Dict[str, Any]:
+    from projectionist.library.cached_art import serialize_library_art
+
+    return serialize_library_art(payload, _settings())
+
+
 class HolidayCreatePayload(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     kind: Literal["fixed", "movable"] = "fixed"
@@ -165,7 +171,7 @@ def holiday_rail_preview(
     from projectionist.library.feeds import preview_holiday_rail
 
     try:
-        return preview_holiday_rail(_db(), observance_id, limit=12)
+        return _rail_with_art(preview_holiday_rail(_db(), observance_id, limit=12))
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -235,7 +241,7 @@ def set_holiday_rail_title_note(
     return {
         "item": title,
         "curation": db.list_holiday_rail_titles(observance_id),
-        "preview": preview_holiday_rail(db, observance_id, limit=12),
+        "preview": _rail_with_art(preview_holiday_rail(db, observance_id, limit=12)),
     }
 
 
@@ -276,7 +282,7 @@ def set_holiday_rail_order(
     from projectionist.library.feeds import preview_holiday_rail
 
     invalidate_explore_hub_cache()
-    preview = preview_holiday_rail(db, observance_id, limit=12)
+    preview = _rail_with_art(preview_holiday_rail(db, observance_id, limit=12))
     return {"curation": curation, "preview": preview}
 
 
@@ -343,7 +349,9 @@ def holiday_library_search(
         return {"items": [], "total": 0}
     filters = LibraryFilters(query=query, limit=max(1, min(int(limit or 12), 48)))
     result = query_library(_db(), filters)
-    return {"items": result.get("items") or [], "total": int(result.get("total") or 0)}
+    return _rail_with_art(
+        {"items": result.get("items") or [], "total": int(result.get("total") or 0)}
+    )
 
 
 @router.get("/api/admin/holidays-schedule")
@@ -352,7 +360,7 @@ def holiday_schedule(user=Depends(require_role("owner"))) -> Dict[str, Any]:
     db = _db()
     return {
         "schedule": db.list_holiday_schedule(horizon_days=90),
-        "today": feed_seasonal_spotlight(db, limit=12),
+        "today": _rail_with_art(feed_seasonal_spotlight(db, limit=12)),
     }
 
 
@@ -360,7 +368,7 @@ def holiday_schedule(user=Depends(require_role("owner"))) -> Dict[str, Any]:
 def refresh_seasonal_rail_schedule(user=Depends(require_role("owner"))) -> Dict[str, Any]:
     """Force B2 materialization of today's seasonal Explore rail."""
     del user
-    return build_seasonal_rail_snapshot(_db(), limit=12)
+    return _rail_with_art(build_seasonal_rail_snapshot(_db(), limit=12))
 
 
 def register_holidays_routes(

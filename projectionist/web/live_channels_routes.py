@@ -1456,7 +1456,13 @@ def live_channels_on_now_endpoint(user=Depends(get_current_user_dep)) -> Dict[st
     if youth_gate_active(user):
         youth_ceiling = resolve_youth_max_rating(settings)
     # SWR: last good snapshot paints immediately; Tunarr is only asked in the background.
-    snapshot = get_on_now_snapshot(settings, youth_max_rating=youth_ceiling, db=_db())
+    from projectionist.library.cached_art import serialize_live_guide
+
+    snapshot = serialize_live_guide(
+        get_on_now_snapshot(settings, youth_max_rating=youth_ceiling, db=_db()),
+        _db(),
+        settings,
+    )
     # Soft, deduped ready nudge for opt-in members (never blocks the response).
     try:
         maybe_deliver_live_channels_ready_nudge(
@@ -1488,11 +1494,17 @@ def live_channels_guide_endpoint(
     youth_ceiling = None
     if youth_gate_active(user):
         youth_ceiling = resolve_youth_max_rating(settings)
-    return get_guide_snapshot(
+    from projectionist.library.cached_art import serialize_live_guide
+
+    return serialize_live_guide(
+        get_guide_snapshot(
+            settings,
+            youth_max_rating=youth_ceiling,
+            hours=hours,
+            db=_db(),
+        ),
+        _db(),
         settings,
-        youth_max_rating=youth_ceiling,
-        hours=hours,
-        db=_db(),
     )
 
 
