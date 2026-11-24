@@ -41,6 +41,15 @@ Aim for {limit} picks (at least 6 if candidates allow; never invent ids).
 """
 
 
+def _system_prompt(limit: int) -> str:
+    """Fill the pick count without ``str.format``.
+
+    The example JSON in the prompt contains braces. ``str.format`` treats those
+    braces as placeholders and raises ``KeyError`` before any model call.
+    """
+    return _SYSTEM_PROMPT.replace("{limit}", str(int(limit)))
+
+
 def _response_text(response: Mapping[str, Any]) -> str:
     if not isinstance(response, Mapping):
         return ""
@@ -236,7 +245,7 @@ async def propose_seasonal_shelf(
         f"Pick about {capped} titles from this candidate list:\n{candidate_lines}"
     )
     messages = [
-        {"role": "system", "content": _SYSTEM_PROMPT.format(limit=capped)},
+        {"role": "system", "content": _system_prompt(capped)},
         {"role": "user", "content": user_prompt},
     ]
     response = await tracked_chat(

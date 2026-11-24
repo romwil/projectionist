@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
+from unittest.mock import patch
 
+from fastapi import HTTPException
+
+from projectionist.config_store import Settings
 from projectionist.library.db import Database
 from projectionist.library.feeds import feed_seasonal_spotlight, preview_holiday_rail
 from projectionist.library.seasonal_curation import (
@@ -14,6 +20,7 @@ from projectionist.library.seasonal_curation import (
     enrich_picks,
     normalize_proposal_picks,
 )
+from projectionist.web import holidays_routes
 
 
 class SeasonalCurationTests(unittest.TestCase):
@@ -272,6 +279,121 @@ class SeasonalCurationTests(unittest.TestCase):
             self.assertEqual(enriched[0]["title"], "Classic Haunt")
             self.assertEqual(enriched[0]["year"], 1978)
             self.assertEqual(enriched[0]["curator_note"], "Hello")
+
+    def _seed_christmas_library(self, db: Database) -> list[int]:
+        ids = []
+        for index, title in enumerate(("Home Alone", "The Shop Around the Corner", "Rare Noel")):
+            ids.append(
+                db.upsert_library_item(
+                    {
+                        "rating_key": f"xmas{index}",
+                        "media_type": "movie",
+                        "title": title,
+                        "year": 1990 + index,
+                        "keywords": ["christmas"],
+                    }
+                )
+            )
+        return ids
+
+    def test_propose_reaches_the_llm_with_a_prompt_that_keeps_example_json(self) -> None:
+        """The example JSON in the system prompt must not stop the curator call."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            ids = self._seed_christmas_library(db)
+            previous_db = holidays_routes._db_factory
+            previous_settings = holidays_routes._settings_factory
+            holidays_routes._db_factory = lambda: db
+            holidays_routes._settings_factory = lambda: Settings(llm_provider="ollama")
+            captured: dict[str, object] = {}
+
+            async def fake_chat(_db, _provider, messages, **_kwargs):
+                captured["messages"] = messages
+                return {
+                    "content": json.dumps(
+                        {
+                            "picks": [
+                                {"library_item_id": item_id, "note": "A grounded note."}
+                                for item_id in ids
+                            ]
+                        }
+                    )
+                }
+
+            try:
+                with (
+                    patch(
+                        "projectionist.agent.providers.get_chat_provider",
+                        return_value=object(),
+                    ),
+                    patch(
+                        "projectionist.telemetry.llm_track.tracked_chat",
+                        side_effect=fake_chat,
+                    ),
+                ):
+                    result = asyncio.run(
+                        holidays_routes.propose_holiday_rail_curation(
+                            "christmas", None, user=None
+                        )
+                    )
+            finally:
+                holidays_routes._db_factory = previous_db
+                holidays_routes._settings_factory = previous_settings
+
+        self.assertIn("messages", captured)
+        messages = captured["messages"]
+        assert isinstance(messages, list)
+        system = str(messages[0]["content"])
+        self.assertIn('{"picks"', system)
+        self.assertNotIn("{limit}", system)
+        self.assertIn("Aim for 3 picks", system)
+        self.assertEqual(
+            [int(pick["library_item_id"]) for pick in result["picks"]],
+            ids,
+        )
+
+    def test_non_holiday_keyerror_is_a_plain_502_not_a_missing_holiday(self) -> None:
+        previous_db = holidays_routes._db_factory
+        previous_settings = holidays_routes._settings_factory
+        holidays_routes._db_factory = lambda: object()
+        holidays_routes._settings_factory = lambda: object()
+        try:
+            with patch(
+                "projectionist.library.seasonal_curation.propose_seasonal_shelf",
+                side_effect=KeyError("picks"),
+            ):
+                with self.assertRaises(HTTPException) as caught:
+                    asyncio.run(
+                        holidays_routes.propose_holiday_rail_curation(
+                            "christmas", None, user=None
+                        )
+                    )
+        finally:
+            holidays_routes._db_factory = previous_db
+            holidays_routes._settings_factory = previous_settings
+        self.assertEqual(caught.exception.status_code, 502)
+        self.assertNotIn("picks", str(caught.exception.detail).lower())
+        self.assertNotIn("keyerror", str(caught.exception.detail).lower())
+
+    def test_missing_holiday_on_propose_stays_404(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            previous_db = holidays_routes._db_factory
+            previous_settings = holidays_routes._settings_factory
+            holidays_routes._db_factory = lambda: db
+            holidays_routes._settings_factory = lambda: Settings(llm_provider="ollama")
+            try:
+                with self.assertRaises(HTTPException) as caught:
+                    asyncio.run(
+                        holidays_routes.propose_holiday_rail_curation(
+                            "not-a-real-holiday", None, user=None
+                        )
+                    )
+            finally:
+                holidays_routes._db_factory = previous_db
+                holidays_routes._settings_factory = previous_settings
+        self.assertEqual(caught.exception.status_code, 404)
+        self.assertEqual(caught.exception.detail, "Holiday not found")
 
     def test_schema_migration_adds_curator_note_column(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
