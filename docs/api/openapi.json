@@ -260,6 +260,17 @@
         "title": "AuthMeUpdatePayload",
         "type": "object"
       },
+      "DecideJoinPayload": {
+        "properties": {
+          "decision": {
+            "default": "",
+            "title": "Decision",
+            "type": "string"
+          }
+        },
+        "title": "DecideJoinPayload",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -311,6 +322,17 @@
           "password"
         ],
         "title": "InviteRedeemLocalPayload",
+        "type": "object"
+      },
+      "JoinPayload": {
+        "properties": {
+          "code": {
+            "default": "",
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "title": "JoinPayload",
         "type": "object"
       },
       "LiveChannelsTunePayload": {
@@ -702,6 +724,17 @@
       },
       "UpdateSessionPayload": {
         "properties": {
+          "guests_may_remote": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guests May Remote"
+          },
           "level": {
             "anyOf": [
               {
@@ -3108,6 +3141,62 @@
         ]
       }
     },
+    "/api/rooms/{room_id}/join": {
+      "post": {
+        "description": "Join with the screen's code, or ask the person who started the session.",
+        "operationId": "join_room_api_rooms__room_id__join_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "room_id",
+            "required": true,
+            "schema": {
+              "title": "Room Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JoinPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Join Room Api Rooms  Room Id  Join Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Join Room",
+        "tags": [
+          "client",
+          "sessions"
+        ]
+      }
+    },
     "/api/sessions": {
       "post": {
         "description": "Start a session on a screen. The caller owns it. One session per screen.",
@@ -3288,6 +3377,206 @@
           }
         },
         "summary": "Patch Session",
+        "tags": [
+          "client",
+          "sessions"
+        ]
+      }
+    },
+    "/api/sessions/{session_id}/code": {
+      "get": {
+        "description": "The code on the screen. Guests do not receive a copy of it.",
+        "operationId": "read_join_code_api_sessions__session_id__code_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Read Join Code Api Sessions  Session Id  Code Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Join Code",
+        "tags": [
+          "client",
+          "sessions"
+        ]
+      }
+    },
+    "/api/sessions/{session_id}/guests/me": {
+      "delete": {
+        "operationId": "leave_session_api_sessions__session_id__guests_me_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Leave Session Api Sessions  Session Id  Guests Me Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Leave Session",
+        "tags": [
+          "client",
+          "sessions"
+        ]
+      }
+    },
+    "/api/sessions/{session_id}/join-requests": {
+      "get": {
+        "operationId": "read_join_requests_api_sessions__session_id__join_requests_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Read Join Requests Api Sessions  Session Id  Join Requests Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Join Requests",
+        "tags": [
+          "client",
+          "sessions"
+        ]
+      }
+    },
+    "/api/sessions/{session_id}/join-requests/{request_id}": {
+      "post": {
+        "operationId": "answer_join_request_api_sessions__session_id__join_requests__request_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideJoinPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Answer Join Request Api Sessions  Session Id  Join Requests  Request Id  Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Answer Join Request",
         "tags": [
           "client",
           "sessions"

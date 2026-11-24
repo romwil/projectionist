@@ -86,7 +86,8 @@ Invite: `GET /api/invites/validate?token=…` stays public. The body is the invi
     "cached_art": 1,         // same fact as features.cached_art
     "household_addresses": 1, // home and away on the signed-in payload
     "rooms": 1,              // SES-002 named screens, no playback
-    "session_object": 1      // SES-003 owner, screen, position, level
+    "session_object": 1,     // SES-003 owner, screen, position, level
+    "session_join": 1        // SES-005 code or starter approval, guest remote
   }
 }
 ```
@@ -99,7 +100,8 @@ curl -s http://your-host:8788/api/features | python3 -m json.tool
 - `capabilities.cached_art` is `1` while `features.cached_art` is true and `0` when that flag is off. The boolean stays on the signed-in payload only, where EXP-006 put it. The number is on the public payload too, so a client can know before sign-in.
 - Clients turn features on by capability. A client facing an older server shows the honest line (*“This Projectionist doesn’t support handheld captions yet.”*) rather than failing.
 - `shared_sessions` is `1` when `/api/sessions/{id}/live` accepts commands from the starter and the screen, and events carry `server_time_ms`. A paused playhead does not advance. `session_object` is the record those commands update.
-- `session_object` is `1` when `POST /api/sessions` records an owner, a screen, a position, and a level. Other members cannot read it.
+- `session_object` is `1` when `POST /api/sessions` records an owner, a screen, a position, and a level. Other members cannot read it until they join.
+- `session_join` is `1` when a member can join a room with the screen's code, or ask the starter. A pending request does not include the title. Guests may send transport commands only after the starter allows the remote. They cannot change the level, the room's captions, or end the session. The join code is not on the session object.
 - `rooms` is `1` when `GET /api/rooms` lists named screens. The list does not include what is playing. See [shared sessions](SHARED_SESSIONS.md#rooms).
 - `household_addresses` is `1` when this server publishes `addresses.home` and `addresses.away` to a signed-in client. The strings are absent before sign-in. Home is the last origin seen from the home network; away is the owner’s public base URL, or empty. Engine playlist and segment URLs stay relative either way. See [shared sessions](SHARED_SESSIONS.md#home-and-away).
 - **Honest limit.** A `0` means this server knows the name and does not offer that contract yet. It is not a hint that the feature is about to appear.

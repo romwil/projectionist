@@ -1,0 +1,10 @@
+{
+  "body": {
+    "detail": "You are not a guest of this session."
+  },
+  "content_type": "application/json",
+  "example_path": "/api/sessions/00000000-0000-4000-8000-000000000001/guests/me",
+  "method": "DELETE",
+  "path": "/api/sessions/{session_id}/guests/me",
+  "status": 404
+}
