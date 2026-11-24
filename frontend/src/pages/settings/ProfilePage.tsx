@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Navigate, useLocation } from "react-router-dom";
 import {
   changePassword,
   getAuthMe,
@@ -7,16 +8,13 @@ import {
   linkPlexAccount,
   patchAuthMe,
   pollPlexPinLogin,
-  putPlayThroughProjectionist,
-  putPublicBaseUrl,
   signOutEverywhere,
   startPlexPinLogin,
   uploadAuthAvatar,
 } from "../../api/client";
-import CopiesAhead from "../../components/settings/CopiesAhead";
-import PlayabilityReport from "../../components/settings/PlayabilityReport";
 import SettingsPageHeader from "../../components/settings/SettingsPageHeader";
 import SettingsPanel from "../../components/settings/SettingsPanel";
+import { householdPlaybackRedirect } from "../../lib/householdPlaybackRedirect.js";
 import WeatherLocationPicker from "../../components/weather/WeatherLocationPicker";
 import UserAvatar from "../../components/UserAvatar";
 import { startPlexPinPoll } from "../../lib/plexPinPoll";
@@ -43,6 +41,7 @@ const THEME_OPTIONS = [
 ];
 
 export default function ProfilePage() {
+  const location = useLocation();
   const [user, setUser] = useState<any | null>(null);
   const [preferredName, setPreferredName] = useState("");
   const [fontSize, setFontSize] = useState("medium");
@@ -50,9 +49,6 @@ export default function ProfilePage() {
   const [pauseWhenBackgrounded, setPauseWhenBackgrounded] = useState(() =>
     loadPauseWhenBackgrounded(),
   );
-  const [playThrough, setPlayThrough] = useState(false);
-  const [awayAddress, setAwayAddress] = useState("");
-  const [awaySaving, setAwaySaving] = useState(false);
   const [status, setStatus] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -77,17 +73,6 @@ export default function ProfilePage() {
   const [defaultPage, setDefaultPage] = useState("explore");
   const [llmConfigured, setLlmConfigured] = useState(true);
   const [engagement, setEngagement] = useState<any>({ loading: true, data: null, error: "" });
-
-  useEffect(() => {
-    getFeatures()
-      .then((features) => {
-        setPlayThrough(Boolean(features?.features?.play_through_projectionist));
-        setAwayAddress(String(features?.addresses?.away || ""));
-      })
-      .catch(() => {
-        setPlayThrough(false);
-      });
-  }, []);
 
   useEffect(() => {
     getAuthMe()
@@ -322,6 +307,11 @@ export default function ProfilePage() {
     }
   }
 
+  const householdRedirect = householdPlaybackRedirect(location.pathname, location.hash);
+  if (householdRedirect) {
+    return <Navigate to={householdRedirect} replace />;
+  }
+
   if (!user) {
     return (
       <div className="settings-stack" data-testid="settings-profile">
@@ -531,78 +521,6 @@ export default function ProfilePage() {
           <span className="field-help">
             Stored in this browser only (`projectionist.pause_when_backgrounded`). Off by default.
           </span>
-          {user?.role === "owner" ? (
-            <label className="settings-toggle-row">
-              <input
-                type="checkbox"
-                checked={playThrough}
-                data-testid="play-through-projectionist"
-                onChange={async (event) => {
-                  const next = event.target.checked;
-                  setPlayThrough(next);
-                  try {
-                    await putPlayThroughProjectionist(next);
-                  } catch (error) {
-                    setPlayThrough(!next);
-                    setStatus({
-                      type: "error",
-                      message: (error as any)?.message || "Couldn’t save playback.",
-                    });
-                  }
-                }}
-              />
-              <span>Play through Projectionist (beta)</span>
-            </label>
-          ) : null}
-          {user?.role === "owner" ? (
-            <span className="field-help">
-              When this is on, the next film or episode plays through Projectionist when the file can be remuxed. Captions stay on the usual path for now. Turning it off applies the next time you press play.
-            </span>
-          ) : null}
-          {user?.role === "owner" ? (
-            <label>
-              <span>Away address</span>
-              <input
-                type="url"
-                data-testid="away-address"
-                value={awayAddress}
-                placeholder="https://your-household"
-                autoComplete="off"
-                spellCheck={false}
-                onChange={(event) => setAwayAddress(event.target.value)}
-              />
-              <span className="field-help">
-                The address people use when they are not on the home network. Playback links stay relative, so the same film works at home and away. Leave this blank until you have one.
-              </span>
-            </label>
-          ) : null}
-          {user?.role === "owner" ? (
-            <button
-              type="button"
-              className="ghost"
-              data-testid="away-address-save"
-              disabled={awaySaving}
-              onClick={async () => {
-                setAwaySaving(true);
-                try {
-                  const saved = await putPublicBaseUrl(awayAddress.trim());
-                  setAwayAddress(String(saved?.public_base_url || ""));
-                  setStatus({ type: "ok", message: "Saved the away address." });
-                } catch (error) {
-                  setStatus({
-                    type: "error",
-                    message: (error as any)?.message || "Could not save the away address.",
-                  });
-                } finally {
-                  setAwaySaving(false);
-                }
-              }}
-            >
-              {awaySaving ? "Saving…" : "Save away address"}
-            </button>
-          ) : null}
-          {user?.role === "owner" ? <PlayabilityReport /> : null}
-          {user?.role === "owner" ? <CopiesAhead /> : null}
         </SettingsPanel>
 
         <div className="settings-actions">

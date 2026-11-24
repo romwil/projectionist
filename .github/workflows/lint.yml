@@ -2,9 +2,9 @@ name: Lint
 
 on:
   push:
-    branches: [main]
+    branches: [main, fix/feed-art-urls]
   pull_request:
-    branches: [main]
+    branches: [main, base/v1.45.4]
 
 jobs:
   backend:

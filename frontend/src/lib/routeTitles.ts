@@ -69,6 +69,7 @@ const ROUTE_TITLES: RouteTitleEntry[] = [
   { pattern: "/about", title: () => "About" },
   { pattern: "/help", title: () => "Help" },
   { pattern: "/config", title: () => "Admin" },
+  { pattern: "/admin/playback", title: () => "Playback" },
   { pattern: "/admin/health", title: () => "Health" },
   { pattern: "/admin/dashboard", title: () => "Health" },
   { pattern: "/admin/usage", title: () => "Health" },

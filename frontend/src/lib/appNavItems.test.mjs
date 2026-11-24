@@ -158,7 +158,7 @@ describe("buildAppNavItems", () => {
       pathname: "/admin/overview",
     });
     const adminLinks = items.filter((item) => item.kind === "admin");
-    assert.equal(adminLinks.length, 9);
+    assert.equal(adminLinks.length, 10);
     assert.equal(
       items.some((item) => item.id === "admin-heading-members"),
       false,

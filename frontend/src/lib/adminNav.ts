@@ -14,8 +14,9 @@ export const ADMIN_NAV = [
   { kind: "heading", id: "heading-setup", label: "Setup" },
   { to: "/admin/connections", id: "connections", label: "Connections" },
   { to: "/admin/libraries", id: "libraries", label: "Libraries" },
-  { kind: "heading", id: "heading-members", label: "Members" },
+  { kind: "heading", id: "heading-members", label: "Household" },
   { to: "/admin/household", id: "household", label: "Members" },
+  { to: "/admin/playback", id: "playback", label: "Playback" },
   { to: "/admin/access", id: "access", label: "Access" },
   { to: "/admin/youth", id: "youth", label: "Youth" },
   { kind: "heading", id: "heading-experience", label: "Experience" },
@@ -45,6 +46,7 @@ export const SINGLE_USER_ADMIN_LINK_IDS = [
   "overview",
   "connections",
   "libraries",
+  "playback",
   "lobby",
   "live-channels",
   "tasks",
@@ -55,6 +57,7 @@ export const SINGLE_USER_ADMIN_LINK_IDS = [
 
 const SINGLE_USER_OVERVIEW_IDS = ["overview"];
 const SINGLE_USER_SETUP_IDS = ["connections", "libraries"];
+const SINGLE_USER_HOUSEHOLD_IDS = ["playback"];
 const SINGLE_USER_EXPERIENCE_IDS = ["lobby", "live-channels"];
 const SINGLE_USER_HEALTH_IDS = ["tasks", "logs"];
 const SINGLE_USER_ADVANCED_IDS = ["persona", "advanced"];
@@ -72,8 +75,9 @@ function pickAdminItems(ids: JsParam) {
 }
 
 /**
- * Solo-install admin rail — same groups as multi-user, minus Members and the
- * dense Health / Advanced destinations (~9 links).
+ * Solo-install admin rail — same groups as multi-user, minus member management
+ * and the dense Health / Advanced destinations. Household keeps Playback,
+ * because those controls apply to the whole install.
  * @param {{ seerrEnabled?: boolean }} [opts]
  */
 function buildSingleUserAdminNav({ seerrEnabled = false }: JsParam = {}) {
@@ -85,6 +89,8 @@ function buildSingleUserAdminNav({ seerrEnabled = false }: JsParam = {}) {
     ...pickAdminItems(SINGLE_USER_OVERVIEW_IDS),
     { kind: "heading", id: "heading-setup", label: "Setup" },
     ...pickAdminItems(SINGLE_USER_SETUP_IDS),
+    { kind: "heading", id: "heading-household", label: "Household" },
+    ...pickAdminItems(SINGLE_USER_HOUSEHOLD_IDS),
     {
       kind: "heading",
       id: "heading-experience",
