@@ -254,6 +254,7 @@ def collect_client_fixtures() -> dict[str, dict[str, Any]]:
         ):
             keep("GET", "/api/health", client.get("/api/health"))
             keep("GET", "/api/features", client.get("/api/features"))
+            keep("GET", "/api/playback/warmup-lines", client.get("/api/playback/warmup-lines"))
             # Sign-in routes in this household are not turned on. The example is
             # that answer, so the file never holds a device credential or a PIN nonce.
             keep(

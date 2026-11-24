@@ -699,3 +699,139 @@ class EngineRouteTests(unittest.TestCase):
         queued = json.loads((self.data_dir / "caption_prep_queue.json").read_text(encoding="utf-8"))
         self.assertEqual(queued["items"][0]["rating_key"], "121986")
         self.assertEqual(queued["items"][0]["reason"], "play")
+
+    def test_preroll_hands_off_a_slowed_source_and_a_failed_engine_starts_the_library(self) -> None:
+        self._map_movie()
+        held = {}
+
+        class _Proc:
+            def __init__(self) -> None:
+                self.code = None
+                self.terminated = False
+
+            def poll(self):
+                return self.code
+
+            def terminate(self) -> None:
+                self.terminated = True
+                self.code = -15
+
+        proc = _Proc()
+
+        def fake_start(source, directory, **kwargs):
+            from projectionist.engine.remux import write_master
+
+            directory = Path(directory)
+            held["dir"] = directory
+            write_master(
+                directory,
+                kwargs.get("probe"),
+                file_size=100,
+                duration_ms=int(kwargs.get("duration_ms") or 600_000),
+                captions=kwargs.get("captions"),
+            )
+            (directory / "av").mkdir(parents=True, exist_ok=True)
+            return proc
+
+        with patch(
+            "projectionist.engine.routes.plex_part_paths",
+            return_value=["/data/media/movies/film.mkv"],
+        ), patch("projectionist.engine.source.probe_file", return_value=_probe()), patch(
+            "projectionist.engine.session.start_remux",
+            side_effect=fake_start,
+        ):
+            opened = self.client.post(
+                "/api/playback/sessions",
+                json={
+                    "rating_key": "121986",
+                    "profile": "apple-tv-4k-3",
+                    "engine_opt_in": True,
+                    "preroll": True,
+                },
+            )
+        self.assertEqual(opened.status_code, 200, opened.text)
+        body = opened.json()
+        self.assertEqual(body["state"], "preparing")
+        self.assertEqual(body["step"], "remuxing")
+        self.assertIsNone(body["ready_at_handoff"])
+        self.assertTrue(body["playable"])
+
+        (held["dir"] / "av" / "stream.m3u8").write_text(
+            "#EXTM3U\n#EXT-X-PLAYLIST-TYPE:EVENT\n#EXTINF:6.000,\nseg_0000.m4s\n",
+            encoding="utf-8",
+        )
+        handed = self.client.get(
+            f"/api/playback/sessions/{body['session_id']}",
+            params={"handoff": "true"},
+        )
+        self.assertEqual(handed.status_code, 200, handed.text)
+        self.assertEqual(handed.json()["state"], "ready")
+        self.assertTrue(handed.json()["ready_at_handoff"])
+        self.assertGreaterEqual(handed.json()["prepare_ms"], 0)
+
+        stopped = self.client.post(f"/api/playback/sessions/{body['session_id']}/stop")
+        self.assertEqual(stopped.status_code, 200, stopped.text)
+        self.assertTrue(proc.terminated)
+
+        def dead_start(source, directory, **kwargs):
+            from projectionist.engine.remux import write_master
+
+            directory = Path(directory)
+            write_master(
+                directory,
+                kwargs.get("probe"),
+                file_size=100,
+                duration_ms=int(kwargs.get("duration_ms") or 600_000),
+            )
+            (directory / "av").mkdir(parents=True, exist_ok=True)
+            return _FinishedProc()
+
+        library = {
+            "session_id": "lib-preroll",
+            "stream_url": "/api/library/playback/lib-preroll/index.m3u8",
+        }
+        with patch(
+            "projectionist.engine.routes.plex_part_paths",
+            return_value=["/data/media/movies/film.mkv"],
+        ), patch("projectionist.engine.source.probe_file", return_value=_probe()), patch(
+            "projectionist.engine.session.start_remux",
+            side_effect=dead_start,
+        ), patch(
+            "projectionist.library.playback.start_playback",
+            return_value=library,
+        ) as started, patch(
+            "projectionist.library.playback.get_session",
+            return_value=object(),
+        ), patch(
+            "projectionist.library.playback.stop_playback",
+            return_value={"ok": True},
+        ) as stopped_library:
+            failed = self.client.post(
+                "/api/playback/sessions",
+                json={
+                    "rating_key": "121986",
+                    "profile": "apple-tv-4k-3",
+                    "engine_opt_in": True,
+                    "preroll": True,
+                    "offset_ms": 12000,
+                },
+            )
+            self.assertEqual(failed.status_code, 200, failed.text)
+            switched = failed.json()
+            self.assertEqual(switched["plan"], "library")
+            self.assertEqual(switched["library_session_id"], "lib-preroll")
+            self.assertEqual(switched["stream_url"], library["stream_url"])
+            self.assertEqual(switched["state"], "")
+            self.assertEqual(switched["step"], "waiting_on_plex")
+            started.assert_called_once()
+            self.assertEqual(started.call_args.kwargs["offset_ms"], 12000)
+            self.client.post(f"/api/playback/sessions/{switched['session_id']}/stop")
+            stopped_library.assert_called_once()
+
+
+class _FinishedProc:
+    def poll(self):
+        return 1
+
+    def terminate(self) -> None:
+        return None

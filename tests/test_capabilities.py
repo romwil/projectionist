@@ -25,6 +25,8 @@ SHIPPED = {
     "device_pairing": 1,
     "throw": 1,
     "playback_engine": 1,
+    "preroll_warm_start": 1,
+    "warmup_screen": 1,
     "native_sign_in": 1,
     "cached_art": 1 if CACHED_ART_ENABLED else 0,
     "household_addresses": 1,

@@ -40,6 +40,23 @@ class IdrFragmentTests(unittest.TestCase):
         mdat = (len(recovery) + 8).to_bytes(4, "big") + b"mdat" + recovery
         self.assertFalse(fragment_starts_on_idr(b"\x00\x00\x00\x08moof" + mdat, "h264"))
 
+    def test_a_large_non_idr_slice_is_not_cut_as_an_idr(self) -> None:
+        """A slice over two megabytes used to slip one byte and look like an IDR.
+
+        The opening of a dark frame stays small and decodes. The first busy
+        picture is the large slice. Cutting there is the -12909 at about 13.7s:
+        the new segment starts inside a frame VideoToolbox cannot decode, while
+        each earlier segment, and the source around that time, still decode.
+        """
+        def fragment(body: bytes) -> bytes:
+            mdat = (len(body) + 8).to_bytes(4, "big") + b"mdat" + body
+            return b"\x00\x00\x00\x08moof" + mdat
+
+        non_idr = (3_000_000).to_bytes(4, "big") + bytes([1]) + (1).to_bytes(4, "big") + bytes([5, 0])
+        self.assertFalse(fragment_starts_on_idr(fragment(non_idr), "h264"))
+        large_idr = (3_000_000).to_bytes(4, "big") + bytes([5]) + b"\x00" * (3_000_000 - 1)
+        self.assertTrue(fragment_starts_on_idr(fragment(large_idr), "h264"))
+
 
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "ffmpeg is required")
 class OpenGopSegmentTests(unittest.TestCase):

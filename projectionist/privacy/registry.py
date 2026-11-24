@@ -164,6 +164,23 @@ STORES: Tuple[PersonalStore, ...] = (
         anonymize_cols=("updated_by",),
     ),
     PersonalStore(
+        table="session_approvals",
+        label="A request you made to join a session",
+        match=_direct("requester_id"),
+        subject_cols=("requester_id",),
+        on_delete="delete",
+        covers_cols=("requester_name",),
+    ),
+    PersonalStore(
+        table="session_approvals",
+        label="Session join requests you were asked to decide",
+        match=_direct("owner_id"),
+        subject_cols=("owner_id",),
+        export=False,
+        on_delete="anonymize",
+        anonymize_cols=("owner_id", "acted_by"),
+    ),
+    PersonalStore(
         table="security_audit_log",
         label="Security log entries about your account",
         match="actor_id = ? OR target_id = ?",

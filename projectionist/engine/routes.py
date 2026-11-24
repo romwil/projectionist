@@ -110,15 +110,21 @@ def describe_title(
     *,
     background: bool = False,
     source: Any = None,
+    on_step: Optional[Callable[[str], None]] = None,
 ):
     """Locate a title and probe it.
 
     Play uses the default: normal priority, and it does not wait on caption
     extraction. The library walk and caption prep pass ``background`` so their
     ffprobe shares the low-priority slot with extraction. Pass ``source`` when
-    the same object should also answer a source-transcode plan.
+    the same object should also answer a source-transcode plan. ``on_step``
+    hears ``waking_disk`` before the file is opened and ``probing`` around the
+    probe itself.
     """
     chosen = source if source is not None else household_media_source(settings, db)
+    if on_step is not None:
+        on_step("waking_disk")
+        on_step("probing")
     return chosen.locate(
         rating_key,
         cache_dir=Path(data_dir) / "engine" / "probes",
@@ -214,6 +220,8 @@ class PlaybackSessionPayload(BaseModel):
     # Clients that can play an engine playlist set this. Everyone else gets
     # the library path, including when the household switch is on.
     engine_opt_in: bool = False
+    # The client is about to play a preroll. Preparation starts with this post.
+    preroll: bool = False
 
 
 class PlaybackProgressBody(BaseModel):
@@ -313,6 +321,8 @@ def open_playback_session(
         profile,
         user_id=str(getattr(user, "id", "") or ""),
         title=str(playable.get("title") or ""),
+        poster_url=str(playable.get("poster_url") or ""),
+        backdrop_url=str(playable.get("backdrop_url") or ""),
         duration_ms=int(playable.get("duration_ms") or 0),
         view_offset_ms=offset,
         data_dir=_dir(),
@@ -320,19 +330,109 @@ def open_playback_session(
         captions=[] if force_reason else renditions,
         source=source,
         ready_copy=_ready_copy(str(playable.get("rating_key") or key)),
+        warm=bool(payload.preroll),
     )
-    return session.public()
+    return _session_body(session, user)
+
+
+def _session_body(session: Any, user: Any, *, handoff: bool = False) -> dict[str, Any]:
+    """Session read, including a preroll hand-off sample and a library switch."""
+    from projectionist.engine.session import note_handoff
+
+    if handoff:
+        note_handoff(session)
+    body = session.public()
+    if session.library_fallback and not session.library_session_id:
+        started = _start_library_fallback(session, user)
+        if started:
+            body = session.public()
+            body["stream_url"] = started.get("stream_url") or ""
+            body["library_session_id"] = session.library_session_id
+    elif session.library_session_id:
+        body["stream_url"] = (
+            f"/api/library/playback/{session.library_session_id}/index.m3u8"
+        )
+    return body
+
+
+def _start_library_fallback(session: Any, user: Any) -> Optional[dict[str, Any]]:
+    """Start the library transcode at the resume point once the engine has given up."""
+    from projectionist.library.playback import PlaybackError as LibraryPlaybackError
+    from projectionist.library.playback import start_playback
+
+    try:
+        if int(session.view_offset_ms or 0) <= 0:
+            started = start_playback(
+                _db(),
+                _settings(),
+                rating_key=session.rating_key,
+                user=user,
+                start_over=True,
+            )
+        else:
+            started = start_playback(
+                _db(),
+                _settings(),
+                rating_key=session.rating_key,
+                user=user,
+                offset_ms=int(session.view_offset_ms),
+            )
+    except (LibraryPlaybackError, OSError) as error:
+        logger.info(
+            "warm start library fallback did not start for %s: %s",
+            session.rating_key,
+            error,
+        )
+        return None
+    from projectionist.engine.warmup import set_step
+
+    session.library_session_id = str(started.get("session_id") or "")
+    set_step(session, "waiting_on_plex")
+    return started
+
+
+def _stop_library_fallback(session: Any, user: Any) -> None:
+    if not session.library_session_id:
+        return
+    from projectionist.library.playback import PlaybackError as LibraryPlaybackError
+    from projectionist.library.playback import get_session, stop_playback
+
+    try:
+        library = get_session(
+            session.library_session_id,
+            user_id=str(getattr(user, "id", "") or ""),
+        )
+        stop_playback(_db(), library)
+    except (LibraryPlaybackError, OSError) as error:
+        logger.info(
+            "warm start library fallback did not stop for %s: %s",
+            session.library_session_id,
+            error,
+        )
+
+
+@router.get("/api/playback/warmup-lines")
+def playback_warmup_lines(user=Depends(get_current_user_dep)) -> dict[str, Any]:
+    """Versioned joke lines, one pool per playback step. Clients cache this."""
+    del user
+    from projectionist.engine.warmup import load_warmup_lines
+
+    return load_warmup_lines()
 
 
 @router.get("/api/playback/sessions/{session_id}")
-def read_playback_session(session_id: str, user=Depends(get_current_user_dep)) -> dict[str, Any]:
+def read_playback_session(
+    session_id: str,
+    handoff: bool = False,
+    user=Depends(get_current_user_dep),
+) -> dict[str, Any]:
     from projectionist.engine.session import get_engine_session
 
     try:
         session = get_engine_session(session_id, user_id=str(getattr(user, "id", "") or ""))
     except PlaybackError as error:
         raise HTTPException(status_code=error.status_code, detail=error.message) from error
-    return session.public()
+    return _session_body(session, user, handoff=handoff)
 
 
 @router.post("/api/playback/sessions/{session_id}/progress")
@@ -403,6 +503,7 @@ def close_playback_session(session_id: str, user=Depends(get_current_user_dep)) 
         session = get_engine_session(session_id, user_id=str(getattr(user, "id", "") or ""))
     except PlaybackError as error:
         raise HTTPException(status_code=error.status_code, detail=error.message) from error
+    _stop_library_fallback(session, user)
     return stop_engine_session(session)
 
 

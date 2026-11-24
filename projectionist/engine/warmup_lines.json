@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "general": [
+    "switching VHS tapes.",
+    "finding the right burned DVD. it's the one labeled \"FINAL (real)\".",
+    "blowing on the cartridge. it never works. we do it anyway.",
+    "adjusting the tracking. a little more. no, back.",
+    "rewinding. be kind.",
+    "the projectionist is threading the reel with his teeth.",
+    "checking the gate for hair.",
+    "shushing the people in row F.",
+    "popping the popcorn. one kernel at a time.",
+    "flipping the laserdisc to side B. it was side A.",
+    "untangling the tape from the VCR's mouth.",
+    "convincing the DVD player it's region-free.",
+    "dusting off the good copy.",
+    "the film is fine. the projectionist needed a minute.",
+    "turning the lights down. slowly. dramatically."
+  ],
+  "steps": {
+    "waking_disk": [
+      "waking the hard drives. they were napping.",
+      "the disks are spinning up. they're doing their stretches.",
+      "knocking politely on drive 4."
+    ],
+    "probing": [
+      "moving the movie into a nicer box. same movie.",
+      "reading the label on the reel.",
+      "repackaging the frames. no frames were harmed."
+    ],
+    "remuxing": [
+      "moving the movie into a nicer box. same movie.",
+      "reading the label on the reel.",
+      "repackaging the frames. no frames were harmed."
+    ],
+    "encoding_audio": [
+      "teaching your surround sound to share.",
+      "translating the speakers' secret handshake.",
+      "folding seven speakers into fewer speakers."
+    ],
+    "preparing_captions": [
+      "typing up the subtitles by hand.",
+      "the captioner is a fast typist. mostly.",
+      "proofreading the subtitles. \"your\" vs \"you're\" again."
+    ],
+    "falling_back": [
+      "plan b: borrowing the neighbor's VCR.",
+      "calling in a favor from the other projector.",
+      "the backup reel is warming up."
+    ],
+    "waiting_on_plex": [
+      "plan b: borrowing the neighbor's VCR.",
+      "calling in a favor from the other projector.",
+      "the backup reel is warming up."
+    ],
+    "buffering": [
+      "the reel slipped. hold on.",
+      "someone tripped over the projector cord."
+    ]
+  }
+}

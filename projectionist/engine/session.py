@@ -75,6 +75,8 @@ class EngineSession:
     duration_ms: int
     view_offset_ms: int
     profile_id: str
+    poster_url: str = ""
+    backdrop_url: str = ""
     source_reason: str = ""
     provider: str = ""
     directory: Optional[Path] = None
@@ -84,6 +86,16 @@ class EngineSession:
     master_seen: bool = False
     media_playlist_seen: bool = False
     created_at: float = field(default_factory=time.time)
+    # Play asked for a preroll. Preparation runs during that bumper.
+    warm: bool = False
+    step: str = ""
+    ready_at: Optional[float] = None
+    handoff_at: Optional[float] = None
+    ready_at_handoff: Optional[bool] = None
+    library_fallback: bool = False
+    library_session_id: str = ""
+    prepare_frozen_ms: Optional[int] = None
+    clock: Any = field(default=time.time, repr=False, compare=False)
 
     def master_url(self) -> str:
         if not self.playable:
@@ -91,21 +103,30 @@ class EngineSession:
         return f"/api/playback/sessions/{self.session_id}/{self.token}/master.m3u8"
 
     def public(self) -> dict[str, Any]:
-        return {
+        refresh_warm_start(self)
+        body = {
             "session_id": self.session_id,
             "rating_key": self.rating_key,
             "plan": self.plan,
             "reason": self.reason,
             "playable": self.playable,
             "state": session_playback_state(self),
+            "prepare_ms": prepare_milliseconds(self),
+            "ready_at_handoff": self.ready_at_handoff,
+            "step": self.step,
             "master_url": self.master_url(),
             "title": self.title,
+            "poster_url": self.poster_url,
+            "backdrop_url": self.backdrop_url,
             "duration_ms": self.duration_ms,
             "view_offset_ms": self.view_offset_ms,
             "profile": self.profile_id,
             "source_reason": self.source_reason,
             "provider": self.provider,
         }
+        if self.library_session_id:
+            body["library_session_id"] = self.library_session_id
+        return body
 
 
 def reset_engine_sessions() -> None:
@@ -130,6 +151,68 @@ def session_for_token(session_id: str, token: str) -> EngineSession:
     if not secrets.compare_digest(session.token, str(token or "")):
         raise PlaybackError("Playback session is not valid.", status_code=404)
     return session
+
+
+def _playlist_ready(session: EngineSession) -> bool:
+    if session.directory is None:
+        return False
+    playlist = session.directory / "av" / "stream.m3u8"
+    try:
+        return playlist.is_file()
+    except OSError:
+        return False
+
+
+def prepare_milliseconds(session: EngineSession) -> int:
+    """How long preparation has taken, frozen once the film is ready or has moved on."""
+    if session.prepare_frozen_ms is not None:
+        return session.prepare_frozen_ms
+    end = session.ready_at if session.ready_at is not None else float(session.clock())
+    return max(0, int(round((end - session.created_at) * 1000)))
+
+
+def refresh_warm_start(session: EngineSession) -> None:
+    """Stamp readiness. A preroll whose engine died moves to the library plan.
+
+    The member is still watching the bumper, so this is not a failed play.
+    A session that was not opened for a preroll keeps today's failed state.
+    """
+    if session.ready_at is None and _playlist_ready(session):
+        session.ready_at = float(session.clock())
+    if (
+        not session.warm
+        or session.cancelled
+        or session.handoff_at is not None
+        or session.library_fallback
+    ):
+        return
+    if session.ready_at is not None or not session.playable:
+        return
+    if not _process_exited(session.process):
+        return
+    session.library_fallback = True
+    session.plan = "library"
+    from projectionist.engine.warmup import set_step
+
+    set_step(session, "falling_back")
+    session.playable = False
+    session.reason = (
+        "The film was not ready during the preroll, so playback continues on the library path."
+    )
+    session.source_reason = ""
+    session.provider = ""
+    session.prepare_frozen_ms = max(
+        0, int(round((float(session.clock()) - session.created_at) * 1000))
+    )
+
+
+def note_handoff(session: EngineSession) -> None:
+    """Record whether the film was ready when the preroll handed off. The first call wins."""
+    refresh_warm_start(session)
+    if session.handoff_at is not None:
+        return
+    session.handoff_at = float(session.clock())
+    session.ready_at_handoff = session_playback_state(session) == "ready"
 
 
 def session_playback_state(session: EngineSession) -> str:
@@ -247,6 +330,8 @@ def open_engine_session(
     *,
     user_id: str,
     title: str,
+    poster_url: str = "",
+    backdrop_url: str = "",
     duration_ms: int,
     view_offset_ms: int,
     data_dir: Path,
@@ -256,6 +341,7 @@ def open_engine_session(
     captions: Optional[Sequence[CaptionRendition]] = None,
     source: Any = None,
     ready_copy: Any = None,
+    warm: bool = False,
 ) -> EngineSession:
     planned = plan_playback(
         asset,
@@ -303,12 +389,15 @@ def open_engine_session(
         reason=reason,
         playable=False,
         title=title,
+        poster_url=str(poster_url or ""),
+        backdrop_url=str(backdrop_url or ""),
         duration_ms=max(0, int(duration_ms or 0)),
         view_offset_ms=max(0, int(view_offset_ms or 0)),
         profile_id=profile.id,
         source_reason=source_reason if plan == "source-transcode" else "",
         provider=provider if plan == "source-transcode" else "",
         data_dir=Path(data_dir),
+        warm=bool(warm),
     )
     if playable:
         directory = Path(data_dir) / "engine" / "sessions" / session.session_id
@@ -333,6 +422,9 @@ def open_engine_session(
                         session.process = process
                         return True
 
+                from projectionist.engine.warmup import set_step
+
+                set_step(session, "encoding_audio")
                 start_audio_transcode(
                     Path(str(play_asset.local_path)),
                     directory,
@@ -348,6 +440,9 @@ def open_engine_session(
                     max_channels=int(getattr(profile, "max_channels", 0) or 0),
                 )
             else:
+                from projectionist.engine.warmup import set_step
+
+                set_step(session, "remuxing")
                 session.process = start_remux(
                     Path(str(play_asset.local_path)),
                     directory,
@@ -359,9 +454,12 @@ def open_engine_session(
                     captions=list(captions or []),
                 )
         except FileNotFoundError:
+            from projectionist.engine.warmup import set_step
+
             session.plan = "plex-fallback"
             session.reason = "ffmpeg is not available, so this title stays on the Plex path"
             session.playable = False
+            set_step(session, "falling_back")
             session.source_reason = ""
             session.provider = ""
         else:

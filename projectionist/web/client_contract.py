@@ -65,6 +65,7 @@ CLIENT_ROUTES: frozenset[tuple[str, str]] = frozenset(
         ("GET", "/api/library/query"),
         ("GET", "/api/title/{media_type}/{item_id}"),
         ("GET", "/api/library/art/{media_type}/{item_id}"),
+        ("GET", "/api/playback/warmup-lines"),
         ("POST", "/api/library/playback/start"),
         ("POST", "/api/library/playback/{session_id}/seek"),
         ("POST", "/api/library/playback/{session_id}/progress"),

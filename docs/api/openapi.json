@@ -3138,6 +3138,31 @@
         ]
       }
     },
+    "/api/playback/warmup-lines": {
+      "get": {
+        "description": "Versioned joke lines, one pool per playback step. Clients cache this.",
+        "operationId": "playback_warmup_lines_api_playback_warmup_lines_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Playback Warmup Lines Api Playback Warmup Lines Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Playback Warmup Lines",
+        "tags": [
+          "client",
+          "playback-engine"
+        ]
+      }
+    },
     "/api/rooms": {
       "get": {
         "description": "Named screens in this household. What is playing is not on this list.",
