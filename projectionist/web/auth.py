@@ -633,7 +633,7 @@ async def multi_user_api_auth_middleware(request: Request, call_next):
 
     def _open_perimeter():
         db = get_job_manager().db
-        return db, is_setup_mode(db)
+        return db, is_setup_mode(db, request)
 
     try:
         db, setup = await run_in_threadpool(_open_perimeter)

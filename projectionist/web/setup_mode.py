@@ -65,11 +65,26 @@ def _env_setup_state() -> Optional[str]:
     return None
 
 
-def resolve_setup_state(db: Database) -> str:
+def external_cannot_reopen_setup(request: Optional[Request]) -> bool:
+    """True when a public address is set and this request is outside the house.
+
+    An external request must not be what opens setup again (SEC-020). A
+    request with no socket, and process startup, are not this case.
+    """
+    if request is None:
+        return False
+    from projectionist.web.addresses import public_address_configured
+    from projectionist.web.ingress import request_is_external
+
+    return public_address_configured() and request_is_external(request)
+
+
+def resolve_setup_state(db: Database, request: Optional[Request] = None) -> str:
     """Return setup | active. A real owner skips the wizard.
 
     Active is not permanent if that owner later disappears: the same data
     directory returns to setup so the passcode lock can open it again.
+    An external request does not do that while a public address is set.
     ``PROJECTIONIST_SETUP_STATE`` still forces a state for tests.
     """
     forced = _env_setup_state()
@@ -80,13 +95,18 @@ def resolve_setup_state(db: Database) -> str:
         if stored != SETUP_STATE_ACTIVE:
             db.set_config(SETUP_STATE_KEY, SETUP_STATE_ACTIVE)
         return SETUP_STATE_ACTIVE
+    if external_cannot_reopen_setup(request):
+        stored = str(db.get_config(SETUP_STATE_KEY) or "").strip().lower()
+        if stored == SETUP_STATE_SETUP:
+            return SETUP_STATE_SETUP
+        return SETUP_STATE_ACTIVE
     stored = str(db.get_config(SETUP_STATE_KEY) or "").strip().lower()
     if stored != SETUP_STATE_SETUP:
         db.set_config(SETUP_STATE_KEY, SETUP_STATE_SETUP)
     return SETUP_STATE_SETUP
 
 
-def is_setup_mode(db: Database) -> bool:
+def is_setup_mode(db: Database, request: Optional[Request] = None) -> bool:
     """True only while the one-way setup ratchet is still open.
 
     Once this process has seen a real owner, active mode is remembered on the
@@ -96,14 +116,18 @@ def is_setup_mode(db: Database) -> bool:
     """
     if getattr(db, "_projectionist_active_mode", False):
         return False
-    setup = resolve_setup_state(db) == SETUP_STATE_SETUP
-    if not setup:
+    setup = resolve_setup_state(db, request) == SETUP_STATE_SETUP
+    # An outside request that was refused must not pin the process in active
+    # mode. A later request on the home network can still open setup.
+    if not setup and not (
+        external_cannot_reopen_setup(request) and not has_real_owner(db)
+    ):
         db._projectionist_active_mode = True
     return setup
 
 
-def is_active_mode(db: Database) -> bool:
-    return resolve_setup_state(db) == SETUP_STATE_ACTIVE
+def is_active_mode(db: Database, request: Optional[Request] = None) -> bool:
+    return resolve_setup_state(db, request) == SETUP_STATE_ACTIVE
 
 
 def is_setup_public_path(
@@ -159,7 +183,7 @@ def load_detection_snapshot(db: Database) -> Optional[Dict[str, Any]]:
 def handshake_payload(request: Request, db: Database, *, persist: bool = True) -> Dict[str, Any]:
     classified = classify_request(request)
     snapshot = classified["snapshot"]
-    if persist and is_setup_mode(db):
+    if persist and is_setup_mode(db, request):
         snapshot = persist_detection_snapshot(db, snapshot)
     else:
         stored = load_detection_snapshot(db)
@@ -182,7 +206,7 @@ def handshake_payload(request: Request, db: Database, *, persist: bool = True) -
     else:
         message = "This looks like a private network. You can stay LAN-only or lock down for a public domain."
     return {
-        "setup_state": resolve_setup_state(db),
+        "setup_state": resolve_setup_state(db, request),
         "classification": classified["classification"],
         "preselect_profile": classified["preselect_profile"],
         "halt": halt,
@@ -234,7 +258,11 @@ def commit_setup(
     plex_pin_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Create the master owner, persist posture, and lock ACTIVE_MODE."""
-    if is_active_mode(db):
+    from projectionist.web.ingress import SETUP_EXTERNAL_DETAIL
+
+    if external_cannot_reopen_setup(request):
+        raise HTTPException(status_code=403, detail=SETUP_EXTERNAL_DETAIL)
+    if is_active_mode(db, request):
         raise HTTPException(status_code=404, detail="Not found")
 
     cleaned_profile = str(profile or "").strip().lower()

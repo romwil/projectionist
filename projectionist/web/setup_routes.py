@@ -107,9 +107,13 @@ def register_setup_routes(app):
         )
 
         from projectionist.web.auth import has_real_owner
+        from projectionist.web.addresses import public_address_configured
+        from projectionist.web.ingress import SETUP_EXTERNAL_DETAIL, request_is_external
 
         if has_real_owner(_db()):
             raise HTTPException(status_code=404, detail="Not found")
+        if public_address_configured() and request_is_external(request):
+            raise HTTPException(status_code=403, detail=SETUP_EXTERNAL_DETAIL)
         enforce_rate_limit(request, bucket="setup-unlock", limit=10, window_seconds=60.0)
         content_type = (request.headers.get("content-type") or "").lower()
         wants_json = "application/json" in content_type
@@ -250,6 +254,20 @@ def register_setup_routes(app):
             normalize_path_settings(normalize_settings_llm(Settings.from_mapping(merged)))
         )
         _validate_distinct_mcp_keys(settings)
+        from projectionist.web.addresses import stored_public_base_url
+        from projectionist.web.ingress import LOGIN_STAYS_ON_DETAIL
+
+        feature_payload = getattr(payload, "features", None)
+        feature_fields = getattr(feature_payload, "model_fields_set", set()) or set()
+        turning_login_off = (
+            existing.features.multi_user_enabled
+            and "multi_user_enabled" in feature_fields
+            and not bool(getattr(feature_payload, "multi_user_enabled", True))
+        )
+        if turning_login_off and (
+            stored_public_base_url(existing) or stored_public_base_url(settings)
+        ):
+            raise HTTPException(status_code=400, detail=LOGIN_STAYS_ON_DETAIL)
         if settings.features.multi_user_enabled and not has_usable_session_secret(DATA_DIR):
             raise HTTPException(
                 status_code=400,
