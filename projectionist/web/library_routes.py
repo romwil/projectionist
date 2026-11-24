@@ -69,7 +69,6 @@ from projectionist.scheduler.tasks.purge_candidates import (
 )
 from projectionist.web.auth import get_current_user_dep, require_role
 from projectionist.web.jobs import get_job_manager
-from projectionist.library.cached_art import point_cached_art
 from projectionist.web.library_privacy import (
     normalize_saved_library_content,
     sanitize_library_payload,
@@ -167,7 +166,13 @@ def _sanitize_library_payload(payload: Any, user, *, attach_watch: bool = True) 
         )
     else:
         tracker_adopted = payload
-    sanitized = sanitize_library_payload(tracker_adopted, settings=settings, user=user)
+    from projectionist.library.cached_art import serialize_library_art
+
+    sanitized = sanitize_library_payload(
+        serialize_library_art(tracker_adopted, settings),
+        settings=settings,
+        user=user,
+    )
     from projectionist.youth.apply import filter_payload_for_youth
 
     filtered = filter_payload_for_youth(sanitized, user=user, settings=settings)
@@ -176,12 +181,8 @@ def _sanitize_library_payload(payload: Any, user, *, attach_watch: bool = True) 
 
 
 def _sanitize_cached_art(payload: Any, user, *, attach_watch: bool = True) -> Any:
-    """Point hub, title, and search art at the cache, then apply the audience filter."""
-    return _sanitize_library_payload(
-        point_cached_art(payload, _settings()),
-        user,
-        attach_watch=attach_watch,
-    )
+    """Library responses share one art serializer inside the audience filter."""
+    return _sanitize_library_payload(payload, user, attach_watch=attach_watch)
 
 
 def _apply_youth_filters(filters, user):

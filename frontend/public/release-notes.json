@@ -1,6 +1,32 @@
 {
-  "generated_at": "2026-11-24T02:34:25Z",
+  "generated_at": "2026-11-24T03:49:04Z",
   "releases": [
+    {
+      "version": "1.45.5",
+      "date": "2026-11-24",
+      "summary": "Continue Watching uses the same art address as the rest of the library. The live feed was still dropping the picture after the hub had started pointing at the cache.",
+      "highlights": [
+        "**Continue Watching shows the picture.** A title in progress uses the same poster address as Explore, search, related titles, holiday rails, and Live."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "Library feeds share one art serializer. Continue Watching no longer sends an empty poster address when the stored picture is a Plex thumb."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "`./scripts/patch-release.sh 1.45.5` lockstep + `frontend/public/release-notes.json`.",
+            "Page speed before Hub publish.",
+            "This image is the art fix on v1.45.4. Household playback is not in it.",
+            "Hub image `romwil/projectionist:1.45.5`; `org.opencontainers.image.revision` matches the tag.",
+            "QA `:8792` is a Hub pull of that image. Production moves to 1.45.5 only after health says so."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.45.4",
       "date": "2026-11-24",

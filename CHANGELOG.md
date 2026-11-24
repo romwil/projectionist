@@ -2,10 +2,27 @@
 
 ## [Unreleased]
 
-Household playback controls live in Admin → Household → Playback. Profile keeps pause, text size, and the default page.
+Household playback controls live in Admin → Household → Playback. Profile keeps pause, text size, and the default page. That change is on main and is not in the 1.45.5 image.
 
 ### Highlights
 - **Household playback is an owner control.** Play through Projectionist, the away address, the playability report, and copies made ahead are under Admin → Household → Playback. The switch says it affects everyone in the household. Members do not see that section. An old Profile playback anchor opens the new section.
+
+## [1.45.5] — 2026-11-24
+
+Continue Watching uses the same art address as the rest of the library. The live feed was still dropping the picture after the hub had started pointing at the cache.
+
+### Highlights
+- **Continue Watching shows the picture.** A title in progress uses the same poster address as Explore, search, related titles, holiday rails, and Live.
+
+### Fixed
+- Library feeds share one art serializer. Continue Watching no longer sends an empty poster address when the stored picture is a Plex thumb.
+
+### Verification
+- `./scripts/patch-release.sh 1.45.5` lockstep + `frontend/public/release-notes.json`.
+- Page speed before Hub publish.
+- This image is the art fix on v1.45.4. Household playback is not in it.
+- Hub image `romwil/projectionist:1.45.5`; `org.opencontainers.image.revision` matches the tag.
+- QA `:8792` is a Hub pull of that image. Production health says 1.45.5.
 
 ## [1.45.4] — 2026-11-24
 

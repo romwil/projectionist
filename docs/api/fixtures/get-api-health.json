@@ -1,7 +1,7 @@
 {
   "body": {
     "status": "ok",
-    "version": "1.45.4"
+    "version": "1.45.5"
   },
   "content_type": "application/json",
   "method": "GET",
