@@ -37,9 +37,9 @@ COPY frontend/public/favicon.svg \
 # PrivacyPage / HelpPage import @docs/*.md (alias → /docs in this stage)
 COPY docs/PRIVACY.md /docs/PRIVACY.md
 COPY docs/HELP.md /docs/HELP.md
-# Copy the shell into dist after Vite. The public folder is in the image,
-# and a build that only leaves those files in public/ still 404s: the
-# runtime serves frontend/dist, the same place release notes are copied.
+# Vite copies public/ into dist. Copy the shell again afterward so the
+# runtime image still has the files if that public copy is skipped. The
+# server reads frontend/dist, the same place release notes are copied.
 RUN --mount=type=cache,target=/frontend/node_modules/.vite \
     npm run build \
     && test -s public/manifest.webmanifest \

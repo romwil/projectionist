@@ -143,6 +143,7 @@ jobs:
           docker run -d --name projectionist-ci-smoke \
             -p 8788:8788 \
             -e PROJECTIONIST_SKIP_DOTENV=1 \
+            -e PROJECTIONIST_SETUP_STATE=active \
             -v "${cfg}:/config" \
             projectionist:ci-smoke
           cleanup() {
@@ -164,17 +165,20 @@ jobs:
             exit 1
           fi
           echo "health ok, ready ok"
-          # The installable shell has to be in the image. A 404 is a failed smoke.
-          manifest="$(curl -fsS "http://127.0.0.1:8788/manifest.webmanifest")"
-          printf '%s' "$manifest" | grep -q '"name": "Projectionist"' || {
-            echo "manifest.webmanifest is missing or not the app manifest"
+          # The setup lock answers 404 until the install is active. This container
+          # is active, so a missing shell file is a real 404.
+          manifest_code="$(curl -sS -o /tmp/projectionist-manifest -w '%{http_code}' http://127.0.0.1:8788/manifest.webmanifest)"
+          if [ "$manifest_code" != "200" ] || ! grep -q '"name": "Projectionist"' /tmp/projectionist-manifest; then
+            echo "manifest.webmanifest returned ${manifest_code}"
+            cat /tmp/projectionist-manifest
             exit 1
-          }
-          worker="$(curl -fsS "http://127.0.0.1:8788/sw.js")"
-          printf '%s' "$worker" | grep -q 'installableCacheDecision' || {
-            echo "sw.js is missing or not the app shell worker"
+          fi
+          worker_code="$(curl -sS -o /tmp/projectionist-sw -w '%{http_code}' http://127.0.0.1:8788/sw.js)"
+          if [ "$worker_code" != "200" ] || ! grep -q 'installableCacheDecision' /tmp/projectionist-sw; then
+            echo "sw.js returned ${worker_code}"
+            cat /tmp/projectionist-sw
             exit 1
-          }
+          fi
           echo "installable shell ok"
           # A missing database must fail ready (503) while health stays a liveness answer.
           docker exec projectionist-ci-smoke sh -c 'mv /config/projectionist.db /config/projectionist.db.moved'
