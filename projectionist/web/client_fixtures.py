@@ -455,6 +455,12 @@ def collect_client_fixtures() -> dict[str, dict[str, Any]]:
                 example_path="/api/session-approvals/missing",
             )
             keep(
+                "GET",
+                "/api/sessions/{session_id}/captions",
+                client.get(f"/api/sessions/{shared_id}/captions"),
+                example_path=f"/api/sessions/{shared_id}/captions",
+            )
+            keep(
                 "DELETE",
                 "/api/sessions/{session_id}",
                 client.delete(f"/api/sessions/{shared_id}"),

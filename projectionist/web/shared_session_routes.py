@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
@@ -16,6 +17,7 @@ from projectionist.sessions.approvals import (
 from projectionist.sessions.join import decide_join, list_join_requests, request_join
 from projectionist.sessions.live import apply_command, server_time_ms
 from projectionist.sessions.rooms import screen_signed_in_user
+from projectionist.sessions.captions import parse_cues
 from projectionist.sessions.shared import (
     SharedSessionError,
     can_read,
@@ -349,6 +351,26 @@ def answer_session_approval(
     add_guest(session, str(row["requester_id"]), youth=True)
     tighten_ceiling(session, ceiling, title_above=above)
     return {"status": "approved"}
+
+
+@router.get("/api/sessions/{session_id}/captions")
+def session_captions(session_id: str, language: str = "en", user=Depends(get_current_user_dep)) -> dict:
+    """Cues for this device. The room's captions stay as they are."""
+    session, _user_id, _screen_user = _visible(session_id, user)
+    from projectionist.library.subtitle_cache import cache_path, iso2
+
+    lang = iso2(language)
+    if not re.fullmatch(r"[a-z]{2,8}", lang or ""):
+        raise HTTPException(status_code=400, detail="That language is not available.")
+    path = cache_path(session.rating_key, lang)
+    cues: list[dict] = []
+    if path is not None and path.is_file():
+        try:
+            raw = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            raw = ""
+        cues = parse_cues(raw[:2_000_000])
+    return {"language": lang, "cues": cues}
 
 
 def _user_from_websocket(websocket: WebSocket):

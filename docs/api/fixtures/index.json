@@ -131,6 +131,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/sessions/{session_id}/captions",
+    "file": "get-api-sessions-session_id-captions.json"
+  },
+  {
+    "method": "GET",
     "path": "/api/sessions/{session_id}/code",
     "file": "get-api-sessions-session_id-code.json"
   },
