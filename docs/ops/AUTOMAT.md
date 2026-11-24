@@ -45,7 +45,7 @@ Automat members reach the household at `https://projectionist.automat.vip`. That
 |-------|----------------|
 | **Bind** | Prod listens on host `:8788` (theater `:8791`). QA, when up, listens on host `:8792` (theater `:8795`). **`:8790` is smartmap.** `172.17.0.1` is the bridge — **setup** pre-selects Public Household; **runtime WAN interlock** does **not** lock that peer (would brick Unraid single-owner). RFC 6598 `100.64.0.0/10` (Tailscale/CGNAT) is **not** a visible public peer — runtime WAN interlock and setup halt treat it as LAN. |
 | **WAN lock** | Blocks only a **visible public client IP**. Docker-bridge and Tailscale/CGNAT (`100.64.0.0/10`) peers are not WAN. Trusted `X-Forwarded-Proto: https` alone is not WAN. Spoofed forwarded headers without `PROJECTIONIST_TRUST_PROXY_HEADERS` are ignored. |
-| **Proxy trust** | Set `PROJECTIONIST_TRUST_PROXY_HEADERS=1` (or the wizard TLS-edge confirm) **only** on the container behind Caddy/NPM. Never on a laptop tunnel. |
+| **Proxy trust** | Set `PROJECTIONIST_TRUST_PROXY_HEADERS=1` (or the wizard TLS-edge confirm) **only** on the container behind Caddy/NPM. Never on a laptop tunnel. The rate-limit key uses `CF-Connecting-IP` only when the direct peer is listed in `PROJECTIONIST_TRUSTED_PROXIES` (SEC-017). A forwarding header from any other peer is ignored. |
 | **Bare 8788** | Do not port-forward prod `:8788` to the internet. Public DNS should hit the proxy, not the app port. |
 | **MCP** | Keep `/mcp` off the WAN hostname. |
 | **SETUP_MODE** | Existing Automat installs already have an owner → `setup_state=active`. Wizard endpoints 404. Do not re-run `/api/setup/commit` against prod. |
