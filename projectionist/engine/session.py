@@ -75,6 +75,8 @@ class EngineSession:
     duration_ms: int
     view_offset_ms: int
     profile_id: str
+    poster_url: str = ""
+    backdrop_url: str = ""
     source_reason: str = ""
     provider: str = ""
     directory: Optional[Path] = None
@@ -114,6 +116,8 @@ class EngineSession:
             "step": self.step,
             "master_url": self.master_url(),
             "title": self.title,
+            "poster_url": self.poster_url,
+            "backdrop_url": self.backdrop_url,
             "duration_ms": self.duration_ms,
             "view_offset_ms": self.view_offset_ms,
             "profile": self.profile_id,
@@ -326,6 +330,8 @@ def open_engine_session(
     *,
     user_id: str,
     title: str,
+    poster_url: str = "",
+    backdrop_url: str = "",
     duration_ms: int,
     view_offset_ms: int,
     data_dir: Path,
@@ -383,6 +389,8 @@ def open_engine_session(
         reason=reason,
         playable=False,
         title=title,
+        poster_url=str(poster_url or ""),
+        backdrop_url=str(backdrop_url or ""),
         duration_ms=max(0, int(duration_ms or 0)),
         view_offset_ms=max(0, int(view_offset_ms or 0)),
         profile_id=profile.id,

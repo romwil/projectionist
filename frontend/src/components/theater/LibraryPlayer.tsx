@@ -91,6 +91,8 @@ import { normalizePrerollPayload, shouldPlayMoviePreroll } from "../../lib/prero
 import TheaterPlayer from "./TheaterPlayer";
 import LibraryPlayerOsd from "./LibraryPlayerOsd";
 import PrerollStage from "./PrerollStage";
+import WarmupScreen from "./WarmupScreen";
+import { filmReadyForHandoff, shouldPreloadDuringPreroll, warmupShouldShow } from "../../lib/warmupScreen.js";
 
 function displayHeadline(session: any) {
   if (!session) return "Play";
@@ -256,6 +258,11 @@ export default function LibraryPlayer({
   const [centerPlayOn, setCenterPlayOn] = useState(true);
   const [osdOpen, setOsdOpen] = useState(true);
   const [preroll, setPreroll] = useState<any>(null);
+  const [pictureOn, setPictureOn] = useState(false);
+  const [waitSince, setWaitSince] = useState(0);
+  const [waitTick, setWaitTick] = useState(0);
+  const [prerollLead, setPrerollLead] = useState(false);
+  const [choicesHeld, setChoicesHeld] = useState(false);
   const centerTimerRef = useRef<any>(null);
   const osdOpenRef = useRef(true);
 
@@ -269,6 +276,10 @@ export default function LibraryPlayer({
     setError("");
     setResumeOpen(false);
     setPreroll(null);
+    setPictureOn(false);
+    setWaitSince(0);
+    setPrerollLead(false);
+    setChoicesHeld(false);
     setSession(null);
     setSeekEpoch(0);
     setPictureHold(false);
@@ -668,6 +679,45 @@ export default function LibraryPlayer({
     return true;
   }, [engineClock, runEngineFirstFrameFallback]);
 
+  useEffect(() => {
+    if (!waitSince || preroll || pictureOn) return undefined;
+    const id = window.setInterval(() => setWaitTick((n) => n + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [waitSince, preroll, pictureOn]);
+
+  useEffect(() => {
+    if (!preroll || !session?.engine || !session?.session_id) return undefined;
+    const sessionId = String(session.session_id);
+    let stopped = false;
+    const look = async () => {
+      try {
+        const fresh = await readEnginePlayback(sessionId);
+        if (stopped || !fresh) return;
+        setSession((prev: any) => {
+          if (!prev || prev.session_id !== sessionId) return prev;
+          return {
+            ...prev,
+            state: fresh.state ?? prev.state,
+            step: fresh.step ?? prev.step,
+            plan: fresh.plan ?? prev.plan,
+            reason: fresh.reason ?? prev.reason,
+            poster_url: fresh.poster_url || prev.poster_url,
+            backdrop_url: fresh.backdrop_url || prev.backdrop_url,
+            stream_url: fresh.stream_url || fresh.master_url || prev.stream_url,
+          };
+        });
+      } catch {
+        // The bumper keeps playing. The next look tries again.
+      }
+    };
+    void look();
+    const id = window.setInterval(() => void look(), 1000);
+    return () => {
+      stopped = true;
+      window.clearInterval(id);
+    };
+  }, [preroll, session?.engine, session?.session_id]);
+
   const handlePlayerStatus = useCallback((next: any) => {
     setStatus(next);
     if (next === "playing") {
@@ -758,6 +808,9 @@ export default function LibraryPlayer({
       startingRef.current = true;
       setStartBusy(true);
       setError("");
+      setPictureOn(false);
+      setChoicesHeld(false);
+      setWaitSince(Date.now());
       setEnded(false);
       setStatus("loading");
       try {
@@ -775,6 +828,7 @@ export default function LibraryPlayer({
           openEngine: async () => openEnginePlayback(key, {
             profile: await detectBrowserPlaybackProfile(),
             startOver,
+            preroll: shouldPlayMoviePreroll(sessionRef.current) && (startOver || !Number(sessionRef.current?.view_offset_ms)),
           }),
           startPlex: async () =>
             startLibraryPlayback(key, {
@@ -816,6 +870,8 @@ export default function LibraryPlayer({
   useEffect(() => {
     if (!key) return undefined;
     let cancelled = false;
+    setWaitSince(Date.now());
+    setPictureOn(false);
     (async () => {
       if (cancelled) return;
       try {
@@ -1605,15 +1661,26 @@ export default function LibraryPlayer({
       data-center-play={showCenterPlay ? "visible" : "hidden"}
     >
       <TheaterPlayer
-        src={
-          resumeOpen ||
-          ended ||
-          preroll ||
-          !session?.stream_url ||
-          (session?.engine && (session.state === "preparing" || session.state === "failed"))
-            ? ""
-            : playbackSrcForSeek(session.stream_url, seekEpoch)
-        }
+        src={(() => {
+          const ready = filmReadyForHandoff({
+            state: session?.state,
+            plan: session?.plan,
+            engine: Boolean(session?.engine),
+          });
+          const preload = Boolean(preroll && prerollLead && ready);
+          const waitingOnEngine = Boolean(session?.engine && !ready && session?.plan !== "library");
+          if (
+            resumeOpen ||
+            ended ||
+            !session?.stream_url ||
+            (preroll && !preload) ||
+            (waitingOnEngine && !preload)
+          ) {
+            return "";
+          }
+          return playbackSrcForSeek(session.stream_url, seekEpoch);
+        })()}
+        deferPlay={Boolean(preroll)}
         poster={session?.poster_url || ""}
         stageLabel={session ? `Now playing: ${displayTitle(session)}` : "Now playing"}
         className="library-player"
@@ -1638,6 +1705,7 @@ export default function LibraryPlayer({
           pendingUnmuteRef.current = Boolean(result?.unmuteOnTap && result?.playing);
         }}
         onTimeUpdate={(video) => {
+          if ((video.videoWidth || 0) > 0) setPictureOn(true);
           if (!scrubbingRef.current && !pictureHoldRef.current) {
             setNowMs(playheadMsFromMedia({
               currentTimeSec: video.currentTime || 0,
@@ -1676,7 +1744,64 @@ export default function LibraryPlayer({
             testId="library-subtitle-overlay"
           />
         ) : null}
-        {preroll ? <PrerollStage src={preroll.url} onDone={() => setPreroll(null)} /> : null}
+        {preroll ? (
+          <PrerollStage
+            src={preroll.url}
+            onTime={(current, duration) => {
+              const ready = filmReadyForHandoff({
+                state: sessionRef.current?.state,
+                plan: sessionRef.current?.plan,
+                engine: Boolean(sessionRef.current?.engine),
+              });
+              setPrerollLead(shouldPreloadDuringPreroll({ currentTime: current, duration, filmReady: ready }));
+            }}
+            onDone={() => {
+              const current = sessionRef.current;
+              if (current?.engine && current.session_id) {
+                void readEnginePlayback(current.session_id, { handoff: true })
+                  .then((fresh) => {
+                    if (!fresh) return;
+                    setSession((prev: any) => {
+                      if (!prev || prev.session_id !== current.session_id) return prev;
+                      return {
+                        ...prev,
+                        state: fresh.state ?? prev.state,
+                        step: fresh.step ?? prev.step,
+                        plan: fresh.plan ?? prev.plan,
+                        reason: fresh.reason ?? prev.reason,
+                        ready_at_handoff: fresh.ready_at_handoff,
+                        stream_url: fresh.stream_url || fresh.master_url || prev.stream_url,
+                      };
+                    });
+                  })
+                  .catch(() => {});
+              }
+              setPreroll(null);
+              setPrerollLead(false);
+              setPictureOn(false);
+              setWaitSince(Date.now());
+            }}
+          />
+        ) : null}
+        {warmupShouldShow({
+          elapsedMs: waitSince ? Date.now() - waitSince : 0,
+          hasPicture: pictureOn || status === "playing",
+          prerollPlaying: Boolean(preroll || resumeOpen),
+        }) ? (
+          <WarmupScreen
+            title={session ? displayTitle(session) : ""}
+            posterUrl={session?.poster_url || ""}
+            backdropUrl={session?.backdrop_url || ""}
+            step={session?.step || (session?.state === "preparing" ? "probing" : "")}
+            reason={session?.reason || ""}
+            elapsedMs={waitSince ? Date.now() - waitSince + waitTick * 0 : 0}
+            hasPicture={pictureOn}
+            choicesHeld={choicesHeld}
+            onKeepWaiting={() => setChoicesHeld(true)}
+            onTryAgain={() => void begin({ startOver: true })}
+            onBack={leaveWatch}
+          />
+        ) : null}
         {showCenterPlay ? (
           <button
             type="button"

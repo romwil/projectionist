@@ -77,7 +77,7 @@ Live's scope freeze (PRD-007) still holds. The static on a tune stays a short ch
 
 **Privacy.** The lines file is static copy. The step is part of the household session record. No new host is contacted.
 
-**Status.** The lines file and `step` are served. The web screen is not.
+**Status.** The lines file, `step`, and the web screen are in. The owner humor control is still On. A slowed live play was not run in a browser in this pass.
 
 ---
 

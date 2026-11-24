@@ -121,6 +121,8 @@ export type TheaterPlayerProps = {
   blackFrame?: boolean;
   /** Library Play only: delayed buffering OSD. Live has its own chips. */
   bufferingEnabled?: boolean;
+  /** Load the playlist without starting playback. The preroll is still on screen. */
+  deferPlay?: boolean;
   /**
    * Live bumper/filler files use progressive (mp4) attach. Default HLS.
    * Empty `src` skips attach (preroll, resume gate, weather boards).
@@ -217,6 +219,7 @@ export default function TheaterPlayer({
   blackFrame = false,
   /** Library Play only: delayed buffering OSD. Live has its own chips. */
   bufferingEnabled = false,
+  deferPlay = false,
   /**
    * Live bumper/filler files use progressive (mp4) attach. Default HLS.
    * Empty `src` skips attach (preroll, resume gate, weather boards).
@@ -265,6 +268,7 @@ export default function TheaterPlayer({
   const onAutoplayResultRef = useRef(onAutoplayResult);
   const holdToDoubleSpeedRef = useRef(holdToDoubleSpeed);
   const bufferingEnabledRef = useRef(bufferingEnabled);
+  const deferPlayRef = useRef(deferPlay);
   const playMediaRef = useRef(playMedia);
   const onHlsErrorRef = useRef(onHlsError);
   const onManifestParsedRef = useRef(onManifestParsed);
@@ -291,6 +295,7 @@ export default function TheaterPlayer({
     onAutoplayResultRef.current = onAutoplayResult;
     holdToDoubleSpeedRef.current = holdToDoubleSpeed;
     bufferingEnabledRef.current = bufferingEnabled;
+    deferPlayRef.current = deferPlay;
     playMediaRef.current = playMedia;
     onHlsErrorRef.current = onHlsError;
     onManifestParsedRef.current = onManifestParsed;
@@ -438,6 +443,14 @@ export default function TheaterPlayer({
   }, []);
 
   useEffect(() => {
+    if (deferPlay || !src) return undefined;
+    const video = videoRef.current;
+    if (!video) return undefined;
+    video.play?.().catch(() => {});
+    return undefined;
+  }, [deferPlay, src]);
+
+  useEffect(() => {
     onRootRefRef.current?.(rootRef.current);
     return () => onRootRefRef.current?.(null);
   }, []);
@@ -539,6 +552,7 @@ export default function TheaterPlayer({
         if (destroyed) return;
         muteNativeSubs();
         onManifestParsedRef.current?.(hls);
+        if (deferPlayRef.current) return;
         startAutoplay();
       });
       hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, () => {

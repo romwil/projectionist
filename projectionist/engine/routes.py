@@ -321,6 +321,8 @@ def open_playback_session(
         profile,
         user_id=str(getattr(user, "id", "") or ""),
         title=str(playable.get("title") or ""),
+        poster_url=str(playable.get("poster_url") or ""),
+        backdrop_url=str(playable.get("backdrop_url") or ""),
         duration_ms=int(playable.get("duration_ms") or 0),
         view_offset_ms=offset,
         data_dir=_dir(),

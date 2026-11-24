@@ -12,6 +12,7 @@ import {
 export type PrerollStageProps = {
   src?: string;
   onDone?: (...args: any[]) => void;
+  onTime?: (currentTime: number, duration: number) => void;
   testId?: string;
 };
 
@@ -25,6 +26,7 @@ export type PrerollStageProps = {
 export default function PrerollStage({
   src = "",
   onDone,
+  onTime,
   testId = "preroll-stage",
 }: PrerollStageProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -38,9 +40,11 @@ export default function PrerollStage({
   // cleanup strips `src`, then the effect loads and plays again, which
   // restarts the bumper from 0.
   const onDoneRef = useRef(onDone);
+  const onTimeRef = useRef(onTime);
   useEffect(() => {
     onDoneRef.current = onDone;
-  }, [onDone]);
+    onTimeRef.current = onTime;
+  }, [onDone, onTime]);
 
   function markGestureNeeded() {
     needsGestureRef.current = true;
@@ -193,6 +197,7 @@ export default function PrerollStage({
         onTimeUpdate={() => {
           const video = videoRef.current;
           if (!video || video.currentTime < 0.2) return;
+          onTimeRef.current?.(video.currentTime, video.duration || 0);
           if (status !== "playing") markPlaying();
         }}
         onEnded={() => onDoneRef.current?.()}

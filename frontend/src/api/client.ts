@@ -1109,7 +1109,7 @@ export async function startLibraryPlayback(ratingKey: string, { startOver = fals
 /** Engine session. The web uses this only when Play through Projectionist is on.
  * Calling it is the opt-in. Clients that omit `engine_opt_in` stay on the library path.
  */
-export async function openEnginePlayback(ratingKey: string, { profile = null, startOver = false }: JsonObject = {}) {
+export async function openEnginePlayback(ratingKey: string, { profile = null, startOver = false, preroll = false }: JsonObject = {}) {
   return api("/playback/sessions", {
     method: "POST",
     body: JSON.stringify({
@@ -1117,12 +1117,18 @@ export async function openEnginePlayback(ratingKey: string, { profile = null, st
       profile: profile || "safari",
       start_over: Boolean(startOver),
       engine_opt_in: true,
+      preroll: Boolean(preroll),
     }),
   });
 }
 
-export async function readEnginePlayback(sessionId: string) {
-  return api(`/playback/sessions/${encodeURIComponent(sessionId)}`);
+export async function getWarmupLines() {
+  return api("/playback/warmup-lines");
+}
+
+export async function readEnginePlayback(sessionId: string, { handoff = false }: JsonObject = {}) {
+  const query = handoff ? "?handoff=true" : "";
+  return api(`/playback/sessions/${encodeURIComponent(sessionId)}${query}`);
 }
 
 export async function progressEnginePlayback(sessionId: string, payload: JsonObject) {
