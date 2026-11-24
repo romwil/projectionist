@@ -430,10 +430,14 @@ class HolidaysMixin:
         return self.run_write(_write, label="set_holiday_rail_curator_note")
 
     def apply_holiday_rail_curation(
-        self, scope_id: str, picks: Sequence[Mapping[str, Any]]
+        self,
+        scope_id: str,
+        picks: Sequence[Mapping[str, Any]],
+        *,
+        theme: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Pin ordered picks with curator notes (agent curation confirm path)."""
-        ordered: List[tuple[int, str]] = []
+        """Pin ordered picks with curator notes, roles, and an optional theme."""
+        ordered: List[tuple[int, str, str, str]] = []
         seen: set[int] = set()
         for raw in picks:
             try:
@@ -442,15 +446,20 @@ class HolidaysMixin:
                 continue
             if item_id < 1 or item_id in seen:
                 continue
-            seen.add(item_id)
             note = _clean_curator_note(raw.get("curator_note") or raw.get("note") or "")
-            ordered.append((item_id, note))
+            if not note:
+                continue
+            seen.add(item_id)
+            role = str(raw.get("role") or raw.get("shelf_role") or "").strip()
+            because = " ".join(str(raw.get("matched_because") or "").split()).strip()
+            ordered.append((item_id, note, role[:80], because[:180]))
         if not ordered:
             raise ValueError("At least one pick is required")
+        theme_text = None if theme is None else " ".join(str(theme or "").split()).strip()[:180]
 
         def _write() -> List[Dict[str, Any]]:
             with self.connect() as conn:
-                ids = [item_id for item_id, _ in ordered]
+                ids = [item_id for item_id, _note, _role, _because in ordered]
                 placeholders = ",".join("?" for _ in ids)
                 found = {
                     int(row["id"])
@@ -472,19 +481,21 @@ class HolidaysMixin:
                     (scope_id,),
                 )
                 now = time.time()
-                for position, (item_id, note) in enumerate(ordered):
+                for position, (item_id, note, role, because) in enumerate(ordered):
                     conn.execute(
                         """
                         INSERT INTO holiday_rail_titles (
                             scope_id, library_item_id, curation, pin_position,
-                            curator_note, created_at
-                        ) VALUES (?, ?, 'pin', ?, ?, ?)
+                            curator_note, shelf_role, matched_because, created_at
+                        ) VALUES (?, ?, 'pin', ?, ?, ?, ?, ?)
                         ON CONFLICT(scope_id, library_item_id) DO UPDATE SET
                             curation = 'pin',
                             pin_position = excluded.pin_position,
-                            curator_note = excluded.curator_note
+                            curator_note = excluded.curator_note,
+                            shelf_role = excluded.shelf_role,
+                            matched_because = excluded.matched_because
                         """,
-                        (scope_id, item_id, position, note, now),
+                        (scope_id, item_id, position, note, role, because, now),
                     )
                 # This list is the shelf. Keyword matches must not fill the tail.
                 conn.execute(
@@ -496,6 +507,15 @@ class HolidaysMixin:
                     """,
                     (scope_id,),
                 )
+                if theme_text is not None:
+                    conn.execute(
+                        """
+                        UPDATE holiday_rail_shelf_mode
+                        SET theme = ?
+                        WHERE scope_id = ?
+                        """,
+                        (theme_text, scope_id),
+                    )
                 conn.execute(
                     "DELETE FROM seasonal_rail_snapshots WHERE scope_id = ?",
                     (scope_id,),
@@ -630,6 +650,65 @@ class HolidaysMixin:
             return int(row["replaces_matches"] or 0) == 1
         except (TypeError, ValueError, KeyError):
             return False
+
+    def holiday_rail_theme(self, scope_id: str) -> str:
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT theme FROM holiday_rail_shelf_mode
+                WHERE scope_id = ?
+                """,
+                (scope_id,),
+            ).fetchone()
+        if row is None:
+            return ""
+        try:
+            return str(row["theme"] or "").strip()
+        except (TypeError, KeyError):
+            return ""
+
+    def holiday_rail_role_mix(self, scope_id: str) -> Dict[str, int]:
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT role_mix_json FROM holiday_rail_shelf_mode
+                WHERE scope_id = ?
+                """,
+                (scope_id,),
+            ).fetchone()
+        if row is None:
+            return {}
+        try:
+            payload = json.loads(str(row["role_mix_json"] or "") or "{}")
+        except (TypeError, ValueError, KeyError):
+            return {}
+        if not isinstance(payload, dict):
+            return {}
+        mix: Dict[str, int] = {}
+        for key, value in payload.items():
+            try:
+                mix[str(key)] = max(0, int(value))
+            except (TypeError, ValueError):
+                continue
+        return mix
+
+    def set_holiday_rail_role_mix(self, scope_id: str, mix: Mapping[str, int]) -> Dict[str, int]:
+        encoded = json.dumps({str(key): int(value) for key, value in mix.items()})
+
+        def _write() -> Dict[str, int]:
+            with self.connect() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO holiday_rail_shelf_mode (scope_id, replaces_matches, role_mix_json)
+                    VALUES (?, 0, ?)
+                    ON CONFLICT(scope_id) DO UPDATE SET
+                        role_mix_json = excluded.role_mix_json
+                    """,
+                    (scope_id, encoded),
+                )
+            return self.holiday_rail_role_mix(scope_id)
+
+        return self.run_write(_write, label="set_holiday_rail_role_mix") or {}
 
     def get_library_items_by_ids(self, item_ids: Sequence[int]) -> Dict[int, Any]:
         ids = [int(item_id) for item_id in item_ids]
@@ -812,6 +891,10 @@ class HolidaysMixin:
             "curation": str(row["curation"]),
             "pin_position": int(row["pin_position"]) if row["pin_position"] is not None else None,
             "curator_note": note,
+            "shelf_role": str(row["shelf_role"] or "").strip() if "shelf_role" in keys else "",
+            "matched_because": (
+                str(row["matched_because"] or "").strip() if "matched_because" in keys else ""
+            ),
             "created_at": float(row["created_at"] or 0),
             "title": str(row["library_title"] or ""),
             "year": int(row["library_year"]) if row["library_year"] is not None else None,

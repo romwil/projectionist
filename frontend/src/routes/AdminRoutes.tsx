@@ -26,6 +26,8 @@ export default function AdminRoutes() {
         <Route path="tasks" element={<ScheduledTasksPage />} />
         <Route path="youth" element={<YouthReviewPage />} />
         <Route path="holidays" element={<HolidaysPage />} />
+        <Route path="seasonal-shelves" element={<Navigate to="/admin/holidays" replace />} />
+        <Route path="live-channels/shelves" element={<Navigate to="/admin/holidays" replace />} />
         <Route path="taxonomy" element={<StagedAugmentationsPage />} />
         <Route path="access" element={<AccessRequestsPage />} />
         <Route path="mail" element={<MailSettingsPage />} />

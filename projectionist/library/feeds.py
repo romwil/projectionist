@@ -379,6 +379,67 @@ def _match_seasonal_rows(
     return matches
 
 
+def _shelf_role_mix(db: Database, scope_id: str) -> Dict[str, int]:
+    try:
+        mix = db.holiday_rail_role_mix(scope_id)
+    except Exception:  # noqa: BLE001
+        return {}
+    return dict(mix or {})
+
+
+def _shelf_theme(db: Database, scope_id: str) -> str:
+    try:
+        return str(db.holiday_rail_theme(scope_id) or "").strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _rail_pick_details(db: Database, scope_id: str) -> Dict[int, Dict[str, str]]:
+    try:
+        titles = db.list_holiday_rail_titles(scope_id)
+    except Exception:  # noqa: BLE001
+        return {}
+    details: Dict[int, Dict[str, str]] = {}
+    for title in titles:
+        try:
+            item_id = int(title["library_item_id"])
+        except (TypeError, ValueError, KeyError):
+            continue
+        details[item_id] = {
+            "note": str(title.get("curator_note") or "").strip(),
+            "shelf_role": str(title.get("shelf_role") or "").strip(),
+            "matched_because": str(title.get("matched_because") or "").strip(),
+        }
+    return details
+
+
+def _attach_shelf_details(
+    items: List[Dict[str, Any]], details: Mapping[int, Mapping[str, str]]
+) -> List[Dict[str, Any]]:
+    if not details:
+        return items
+    for item in items:
+        try:
+            item_id = int(item.get("id"))
+        except (TypeError, ValueError):
+            continue
+        detail = details.get(item_id)
+        if not detail:
+            continue
+        note = str(detail.get("note") or "").strip()
+        if note:
+            item["curator_note"] = note
+            if not str(item.get("why") or "").strip():
+                item["why"] = note
+        role = str(detail.get("shelf_role") or "").strip()
+        if role:
+            item["shelf_role"] = role
+        because = str(detail.get("matched_because") or "").strip()
+        if because:
+            item["matched_because"] = because
+    return items
+
+
 def _rail_curator_notes(db: Database, scope_id: str) -> Dict[int, str]:
     """Map library_item_id → staff-pick note for a seasonal shelf scope."""
     try:
@@ -425,7 +486,8 @@ def _apply_rail_curation(
     limit: int,
 ) -> List[Dict[str, Any]]:
     """pins → includes ∪ matches − excludes; year-sort the unpinned tail."""
-    notes = _rail_curator_notes(db, scope_id)
+    details = _rail_pick_details(db, scope_id)
+    notes = {item_id: str(detail.get("note") or "") for item_id, detail in details.items() if detail.get("note")}
     try:
         curation = db.holiday_rail_curation_maps(scope_id)
     except Exception:  # noqa: BLE001
@@ -434,18 +496,21 @@ def _apply_rail_curation(
     include_ids = list(curation.get("includes") or [])
     exclude_ids = list(curation.get("excludes") or [])
     if _shelf_replaces_matches(db, scope_id) and pin_ids:
-        return _attach_curator_notes(
-            _curated_replacement_items(
-                db,
-                pin_ids=pin_ids,
-                include_ids=include_ids,
-                exclude_ids=exclude_ids,
-                limit=limit,
+        return _attach_shelf_details(
+            _attach_curator_notes(
+                _curated_replacement_items(
+                    db,
+                    pin_ids=pin_ids,
+                    include_ids=include_ids,
+                    exclude_ids=exclude_ids,
+                    limit=limit,
+                ),
+                notes,
             ),
-            notes,
+            details,
         )
     if not pin_ids and not include_ids and not exclude_ids:
-        return _attach_curator_notes(_sort_rail_items(matches, limit), notes)
+        return _attach_shelf_details(_attach_curator_notes(_sort_rail_items(matches, limit), notes), details)
 
     needed_ids = list(dict.fromkeys([*pin_ids, *include_ids]))
     by_id = db.get_library_items_by_ids(needed_ids)
@@ -464,7 +529,7 @@ def _apply_rail_curation(
         feed_item_fn=_feed,
         sort_unpinned_fn=_sort_rail_items,
     )
-    return _attach_curator_notes(items, notes)
+    return _attach_shelf_details(_attach_curator_notes(items, notes), details)
 
 
 def _curated_replacement_items(
@@ -526,11 +591,13 @@ def _seasonal_spotlight_payload(
     total: int,
     note: Optional[str] = None,
     from_schedule: bool = False,
+    theme: str = "",
 ) -> Dict[str, Any]:
     return {
         "feed": "seasonal-spotlight",
         "date": selected_day.isoformat(),
         "label": label,
+        "theme": theme,
         "mode": mode,
         "scope_id": scope_id,
         "grounding_date": context.get("grounding_date"),
@@ -564,6 +631,7 @@ def feed_seasonal_spotlight(
     terms = tuple(context["terms"] or ())
     mode = str(context["mode"])
     scope_id = str(context["scope_id"])
+    theme = _shelf_theme(db, scope_id)
     is_weekend = selected_day.weekday() >= 5
     curated_pins = _has_curated_seasonal_pins(db, scope_id)
 
@@ -630,6 +698,8 @@ def feed_seasonal_spotlight(
     if curated_pins:
         matches = _match_seasonal_rows(db.all_library_items(), terms)
         items = _apply_rail_curation(db, scope_id=scope_id, matches=matches, limit=capped)
+        if _shelf_replaces_matches(db, scope_id):
+            items = [item for item in items if str(item.get("curator_note") or "").strip()]
         return _seasonal_spotlight_payload(
             selected_day=selected_day,
             label=label,
@@ -637,8 +707,9 @@ def feed_seasonal_spotlight(
             scope_id=scope_id,
             context=context,
             items=items,
-            total=len(matches),
+            total=len(items),
             note=None if items else f"No {label.lower()} matches in your library yet.",
+            theme=theme,
         )
 
     anniversary_items: List[Mapping[str, Any]] = []
@@ -794,6 +865,8 @@ def preview_holiday_rail(
         "curation": curation,
         "match_count": len(matches),
         "replaces_matches": replaces_matches,
+        "theme": _shelf_theme(db, scope_id),
+        "role_mix": _shelf_role_mix(db, scope_id),
         "note": None if items else "Add a favorite or loosen filter terms.",
     }
 

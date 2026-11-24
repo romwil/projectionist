@@ -610,6 +610,7 @@ def _build_migrations() -> List[Migration]:
         (70, "timeline_files", _timeline_files),
         (71, "totp_secrets", wrap("_migrate_totp_secrets")),
         (72, "sign_in_clients", _sign_in_clients),
+        (73, "holiday_shelf_theme", wrap("_migrate_holiday_shelf_theme")),
     ]
 
 

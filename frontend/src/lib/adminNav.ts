@@ -22,7 +22,7 @@ export const ADMIN_NAV = [
   { kind: "heading", id: "heading-experience", label: "Experience" },
   { to: "/admin/live-channels", id: "live-channels", label: "Live" },
   { to: "/admin/lobby", id: "lobby", label: "Lobby" },
-  { to: "/admin/holidays", id: "holidays", label: "Holidays" },
+  { to: "/admin/holidays", id: "holidays", label: "Holidays & seasons" },
   { to: "/admin/seerr", id: "seerr", label: "Seerr" },
   { kind: "heading", id: "heading-health", label: "Health" },
   { to: "/admin/tasks", id: "tasks", label: "Tasks" },
@@ -49,6 +49,7 @@ export const SINGLE_USER_ADMIN_LINK_IDS = [
   "playback",
   "lobby",
   "live-channels",
+  "holidays",
   "tasks",
   "logs",
   "persona",
@@ -58,7 +59,7 @@ export const SINGLE_USER_ADMIN_LINK_IDS = [
 const SINGLE_USER_OVERVIEW_IDS = ["overview"];
 const SINGLE_USER_SETUP_IDS = ["connections", "libraries"];
 const SINGLE_USER_HOUSEHOLD_IDS = ["playback"];
-const SINGLE_USER_EXPERIENCE_IDS = ["lobby", "live-channels"];
+const SINGLE_USER_EXPERIENCE_IDS = ["lobby", "live-channels", "holidays"];
 const SINGLE_USER_HEALTH_IDS = ["tasks", "logs"];
 const SINGLE_USER_ADVANCED_IDS = ["persona", "advanced"];
 

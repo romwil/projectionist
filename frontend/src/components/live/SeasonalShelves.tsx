@@ -1,22 +1,26 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   applyHolidayRailCuration,
   getHolidayRail,
-  listHolidays,
   proposeHolidayRailCuration,
   searchHolidayLibrary,
   setHolidayRailCuratorNote,
+  setHolidayRailMix,
   setHolidayRailOrder,
   setHolidayRailTitle,
   updateHoliday,
 } from "../../api/client";
 import {
+  DEFAULT_ROLE_MIX,
+  SHELF_PICK_ROLES,
   addShelfIdFirst,
   curateClickPlan,
   moveShelfId,
   shelfDateLabel,
   shelfFormFromItem,
   shelfPatchFromForm,
+  shelfPickRole,
   shelfRoleLabel,
   visibleCuratedShelf,
 } from "../../lib/seasonalShelves.js";
@@ -41,12 +45,23 @@ type ShelfTitle = {
   curator_note?: string;
   why?: string;
   rail_role?: string;
+  shelf_role?: string;
+  role?: string;
+  matched_because?: string;
+};
+
+type ShelfProposal = {
+  theme: string;
+  picks: Array<Record<string, unknown>>;
+  applyPicks: Array<Record<string, unknown>>;
 };
 
 type ShelfRail = {
   items?: ShelfTitle[];
   replaces_matches?: boolean;
   note?: string;
+  theme?: string;
+  role_mix?: Record<string, number>;
 };
 
 type ShelfForm = {
@@ -82,7 +97,15 @@ function errorMessage(err: unknown, fallback: string): string {
  * system): titles come from the owner's own library, order and picks persist
  * as shelf curation, and the shelf name / date / window live on the holiday.
  */
-function ShelfEditor({ item, onSaved }: { item: ShelfItem; onSaved?: (saved: ShelfItem | null) => void }) {
+export function ShelfEditor({
+  item,
+  onSaved,
+  showCalendar = false,
+}: {
+  item: ShelfItem;
+  onSaved?: (saved: ShelfItem | null) => void;
+  showCalendar?: boolean;
+}) {
   const [rail, setRail] = useState<ShelfRail | null>(null);
   const [form, setForm] = useState<ShelfForm>(() => shelfFormFromItem(item) as ShelfForm);
   const [busy, setBusy] = useState(false);
@@ -92,10 +115,17 @@ function ShelfEditor({ item, onSaved }: { item: ShelfItem; onSaved?: (saved: She
   const [noteDrafts, setNoteDrafts] = useState<Record<number, string>>({});
   const [chatTitle, setChatTitle] = useState<ShelfTitle | null>(null);
   const [curateBusy, setCurateBusy] = useState(false);
+  const [proposal, setProposal] = useState<ShelfProposal | null>(null);
+  const [mix, setMix] = useState<Record<string, number>>(DEFAULT_ROLE_MIX);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
 
   const loadRail = useCallback(async () => {
     try {
-      setRail((await getHolidayRail(item.id)) as ShelfRail);
+      const next = (await getHolidayRail(item.id)) as ShelfRail;
+      setRail(next);
+      if (next?.role_mix && Object.keys(next.role_mix).length) {
+        setMix({ ...DEFAULT_ROLE_MIX, ...next.role_mix });
+      }
     } catch (error: unknown) {
       setMessage({ type: "error", text: errorMessage(error, "Could not load this shelf.") });
     }
@@ -142,10 +172,39 @@ function ShelfEditor({ item, onSaved }: { item: ShelfItem; onSaved?: (saved: She
       data-testid={`live-shelf-editor-${item.id}`}
     >
       <div className="live-shelf-editor-main">
+        {rail?.theme ? (
+          <p className="live-shelf-theme" data-testid={`live-shelf-theme-${item.id}`}>
+            {item.name} — {rail.theme}
+          </p>
+        ) : null}
         <p className="live-studio-hint">
           {rail?.note ||
-            "Household members see these picks on Explore with staff-pick notes and can chat about each title. Ask the professor to curate a mix, or reorder / veto by hand."}
+            "Household members see these picks on Explore with staff-pick notes. Ask the professor for a theme and a mix, then apply it. Nothing changes until you do."}
         </p>
+
+        <fieldset className="live-shelf-mix" data-testid={`live-shelf-mix-${item.id}`}>
+          <legend>Mix</legend>
+          {SHELF_PICK_ROLES.map((role) => {
+            const inputId = `live-shelf-mix-${item.id}-${role.replace(/\s+/g, "-").toLowerCase()}`;
+            return (
+            <label key={role} htmlFor={inputId}>
+              <span>{role}</span>
+              <input
+                id={inputId}
+                type="number"
+                min={0}
+                max={16}
+                value={mix[role] ?? 0}
+                disabled={busy}
+                aria-label={`${role} picks`}
+                onChange={(event) =>
+                  setMix((prev) => ({ ...prev, [role]: Math.max(0, Number(event.target.value) || 0) }))
+                }
+              />
+            </label>
+            );
+          })}
+        </fieldset>
 
         <div className="live-shelf-curate-bar">
           <button
@@ -158,22 +217,105 @@ function ShelfEditor({ item, onSaved }: { item: ShelfItem; onSaved?: (saved: She
               setCurateBusy(true);
               void run(async () => {
                 try {
-                  const result = await proposeHolidayRailCuration(item.id, { limit: 10 });
+                  await setHolidayRailMix(item.id, mix);
+                  const result = (await proposeHolidayRailCuration(item.id, {
+                    limit: 10,
+                    role_mix: mix,
+                  })) as { picks?: unknown[]; theme?: string };
                   const plan = curateClickPlan({ proposal: result });
                   if (!plan.ok) throw new Error(plan.message);
-                  const applied = (await applyHolidayRailCuration(item.id, plan.applyPicks)) as { preview?: ShelfRail };
-                  if (applied?.preview) setRail(applied.preview);
-                  else await loadRail();
-                  setNoteDrafts({});
+                  setProposal({
+                    theme: plan.theme,
+                    picks: (result.picks || []) as Array<Record<string, unknown>>,
+                    applyPicks: plan.applyPicks as Array<Record<string, unknown>>,
+                  });
                 } finally {
                   setCurateBusy(false);
                 }
-              }, "Shelf curated. These picks replace the old shelf.");
+              });
             }}
           >
-            {curateBusy ? "Asking the professor…" : "Ask the professor to curate"}
+            {curateBusy ? "Asking the professor…" : proposal ? "Ask the curator to redo" : "Ask the professor to curate"}
           </button>
         </div>
+        {proposal ? (
+          <div className="live-shelf-proposal" data-testid={`live-shelf-proposal-${item.id}`}>
+            <p>
+              <strong>{proposal.theme || "A new shelf"}</strong>
+            </p>
+            <ol className="live-shelf-proposal-list">
+              {proposal.picks.map((pick) => (
+                <li key={String(pick.library_item_id || pick.id)}>
+                  <span>
+                    {String(pick.title || "Title")}
+                    {pick.year ? ` (${pick.year})` : ""}
+                  </span>
+                  {shelfPickRole(String(pick.role || pick.shelf_role || "")) ? (
+                    <span className="live-shelf-title-role">
+                      {shelfPickRole(String(pick.role || pick.shelf_role || ""))}
+                    </span>
+                  ) : null}
+                  <span>{String(pick.curator_note || pick.note || "")}</span>
+                  {pick.matched_because ? <span>Why it matched: {String(pick.matched_because)}</span> : null}
+                </li>
+              ))}
+            </ol>
+            <div className="live-shelf-proposal-actions">
+              <button
+                type="button"
+                className="primary"
+                disabled={busy}
+                data-testid={`live-shelf-apply-${item.id}`}
+                onClick={() =>
+                  void run(async () => {
+                    const applied = (await applyHolidayRailCuration(item.id, proposal.applyPicks, {
+                      theme: proposal.theme,
+                    })) as { preview?: ShelfRail };
+                    if (applied?.preview) setRail(applied.preview);
+                    else await loadRail();
+                    setProposal(null);
+                    setNoteDrafts({});
+                    onSaved?.(null);
+                  }, "Shelf updated. These picks are what Explore shows.")
+                }
+              >
+                Apply
+              </button>
+              <button
+                type="button"
+                className="ghost"
+                disabled={busy}
+                data-testid={`live-shelf-redo-${item.id}`}
+                onClick={() =>
+                  void run(async () => {
+                    const result = (await proposeHolidayRailCuration(item.id, {
+                      limit: 10,
+                      role_mix: mix,
+                    })) as { picks?: unknown[]; theme?: string };
+                    const plan = curateClickPlan({ proposal: result });
+                    if (!plan.ok) throw new Error(plan.message);
+                    setProposal({
+                      theme: plan.theme,
+                      picks: (result.picks || []) as Array<Record<string, unknown>>,
+                      applyPicks: plan.applyPicks as Array<Record<string, unknown>>,
+                    });
+                  })
+                }
+              >
+                Redo
+              </button>
+              <button
+                type="button"
+                className="ghost"
+                disabled={busy}
+                data-testid={`live-shelf-cancel-${item.id}`}
+                onClick={() => setProposal(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : null}
         {message ? (
           <p
             className={`live-studio-note live-studio-note--${message.type}`}
@@ -189,15 +331,35 @@ function ShelfEditor({ item, onSaved }: { item: ShelfItem; onSaved?: (saved: She
             {titles.map((row, index) => {
               const note = noteFor(row);
               const hasNote = Boolean(String(row.curator_note || row.why || "").trim());
+              const pickRole = shelfPickRole(row.shelf_role || row.role);
               return (
                 <li key={row.id} data-testid={`live-shelf-title-${item.id}-${row.id}`}>
                   <div className="live-shelf-title-row">
+                    <button
+                      type="button"
+                      className="ghost"
+                      draggable={!busy}
+                      aria-label={`Drag ${row.title || "title"}`}
+                      disabled={busy}
+                      onDragStart={() => setDragIndex(index)}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={() => {
+                        if (dragIndex == null || dragIndex === index) return;
+                        const next = [...ids];
+                        const [moved] = next.splice(dragIndex, 1);
+                        next.splice(index, 0, moved);
+                        setDragIndex(null);
+                        void saveOrder(next);
+                      }}
+                    >
+                      Drag
+                    </button>
                     <span className="live-shelf-title-name">
                       {row.title}
                       {row.year ? ` (${row.year})` : ""}
                     </span>
                     <span className="live-shelf-title-role">
-                      {shelfRoleLabel(row.rail_role, { hasNote })}
+                      {pickRole || shelfRoleLabel(row.rail_role, { hasNote })}
                     </span>
                     <span className="live-shelf-title-actions">
                       <button
@@ -249,6 +411,9 @@ function ShelfEditor({ item, onSaved }: { item: ShelfItem; onSaved?: (saved: She
                       </button>
                     </span>
                   </div>
+                  {row.matched_because ? (
+                    <p className="live-studio-hint">Why it matched: {row.matched_because}</p>
+                  ) : null}
                   <label className="live-shelf-note-field">
                     <span className="sr-only">Curator note for {row.title}</span>
                     <textarea
@@ -348,6 +513,7 @@ function ShelfEditor({ item, onSaved }: { item: ShelfItem; onSaved?: (saved: She
           </ul>
         ) : null}
 
+        {showCalendar ? (
         <details className="live-shelf-details">
           <summary>Name, date &amp; window</summary>
           <div className="live-shelf-form">
@@ -448,6 +614,7 @@ function ShelfEditor({ item, onSaved }: { item: ShelfItem; onSaved?: (saved: She
             </button>
           </div>
         </details>
+        ) : null}
       </div>
 
       {chatOpen ? (
@@ -463,79 +630,23 @@ function ShelfEditor({ item, onSaved }: { item: ShelfItem; onSaved?: (saved: She
   );
 }
 
+/** Live keeps channel settings. Holiday shelves live on Holidays & seasons. */
 export default function SeasonalShelves() {
-  const [items, setItems] = useState<ShelfItem[] | null>(null);
-  const [error, setError] = useState("");
-  const [openId, setOpenId] = useState<number | string>("");
-
-  useEffect(() => {
-    let cancelled = false;
-    listHolidays()
-      .then((data) => {
-        if (!cancelled) setItems(((data as { items?: ShelfItem[] })?.items || []) as ShelfItem[]);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(errorMessage(err, "Could not load seasonal shelves."));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   return (
-    <section className="live-studio-card live-shelves" data-testid="live-seasonal-shelves">
+    <section className="live-studio-card live-shelves" data-testid="live-holiday-shelves-link">
       <header className="live-studio-card-head">
         <div>
-          <h3>Seasonal shelves</h3>
+          <h3>Holiday shelves</h3>
           <p className="live-studio-hint">
-            Owner tools for the shelves members browse on Explore. Ask the professor to curate any
-            season (not just Halloween), edit notes, reorder, or mark a bad fit. Members read the
-            notes and chat about picks on Explore.
+            Themes, picks, dates, and Live blocks for the seasons on Explore are on one page.
           </p>
         </div>
       </header>
-      {error ? (
-        <p className="live-studio-note live-studio-note--error" role="alert">
-          {error}
-        </p>
-      ) : null}
-      {items === null && !error ? <p className="live-studio-hint">Loading shelves…</p> : null}
-      {items && items.length === 0 ? (
-        <p className="live-studio-hint" data-testid="live-shelves-empty">
-          No seasonal shelves yet. Add holidays under Admin → Holidays and they’ll appear here.
-        </p>
-      ) : null}
-      <ul className="live-shelf-list">
-        {(items || []).map((item) => {
-          const open = openId === item.id;
-          return (
-            <li key={item.id} className="live-shelf" data-testid={`live-shelf-${item.id}`}>
-              <button
-                type="button"
-                className="live-shelf-head"
-                aria-expanded={open}
-                data-testid={`live-shelf-toggle-${item.id}`}
-                onClick={() => setOpenId(open ? "" : item.id)}
-              >
-                <span className="live-shelf-name">{item.name}</span>
-                <span className="live-shelf-date-label">{shelfDateLabel(item)}</span>
-                <span className={item.enabled === false ? "live-shelf-pill" : "live-shelf-pill is-on"}>
-                  {item.enabled === false ? "Off" : "On"}
-                </span>
-              </button>
-              {open ? (
-                <ShelfEditor
-                  item={item}
-                  onSaved={(saved) =>
-                    saved &&
-                    setItems((prev) => (prev || []).map((row) => (row.id === saved.id ? saved : row)))
-                  }
-                />
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
+      <p className="live-studio-hint">
+        <Link to="/admin/holidays" className="btn-link" data-testid="live-open-holidays">
+          Holidays & seasons
+        </Link>
+      </p>
     </section>
   );
 }

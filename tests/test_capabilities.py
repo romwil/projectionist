@@ -30,6 +30,7 @@ SHIPPED = {
     "native_sign_in": 1,
     "cached_art": 1 if CACHED_ART_ENABLED else 0,
     "household_addresses": 1,
+    "holiday_shelves": 1,
     "rooms": 1,
     "session_object": 1,
     "shared_sessions": 1,

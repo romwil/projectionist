@@ -4,10 +4,13 @@ import test from "node:test";
 import {
   addShelfIdFirst,
   curateClickPlan,
+  holidaySummary,
   inputToTerms,
   moveShelfId,
+  observanceListState,
   seasonalCardMeta,
   seasonalPickChatSeed,
+  seasonalRailTitle,
   shelfDateLabel,
   shelfFormFromItem,
   shelfPatchFromForm,
@@ -95,6 +98,7 @@ test("curate click applies picks for both seasons and surfaces a failure", () =>
     },
   });
   assert.equal(halloween.ok, true);
+  assert.equal(halloween.stage, "preview");
   assert.deepEqual(halloween.applyPicks, [
     { library_item_id: 11, curator_note: "The doorway this year." },
     { library_item_id: 12, curator_note: "The quieter one." },
@@ -116,6 +120,60 @@ test("curate click applies picks for both seasons and surfaces a failure", () =>
   const empty = curateClickPlan({ proposal: { picks: [] } });
   assert.equal(empty.ok, false);
   assert.match(empty.message, /didn't return any picks/);
+
+  const blankNote = curateClickPlan({
+    proposal: {
+      theme: "Snowed in",
+      picks: [{ library_item_id: 4, curator_note: "   ", role: "Deep cut" }],
+    },
+  });
+  assert.equal(blankNote.ok, false);
+});
+
+test("a proposal keeps the theme, role, and why it matched for the preview", () => {
+  const plan = curateClickPlan({
+    proposal: {
+      theme: "Letters and one late sitting",
+      picks: [
+        {
+          library_item_id: 7,
+          note: "The visit the household already quotes.",
+          role: "Classic",
+          matched_because: "Keyword christmas.",
+        },
+      ],
+    },
+  });
+  assert.equal(plan.stage, "preview");
+  assert.equal(plan.theme, "Letters and one late sitting");
+  assert.deepEqual(plan.applyPicks[0], {
+    library_item_id: 7,
+    curator_note: "The visit the household already quotes.",
+    role: "Classic",
+    matched_because: "Keyword christmas.",
+  });
+});
+
+test("Explore titles the rail with the theme, and the list states stay plain", () => {
+  assert.equal(
+    seasonalRailTitle({ label: "Christmas", theme: "Letters and snow" }),
+    "Christmas — Letters and snow",
+  );
+  assert.equal(seasonalRailTitle({ label: "Christmas" }), "Christmas");
+  assert.equal(observanceListState({ id: "christmas", enabled: false }, []), "Off");
+  assert.equal(
+    observanceListState({ id: "christmas", enabled: true }, [{ id: "christmas", active_now: true }]),
+    "On Explore now",
+  );
+  assert.equal(observanceListState({ id: "christmas", enabled: true }, []), "Coming up");
+  assert.equal(
+    holidaySummary({
+      item: { id: "christmas", schedule_publish: true, grounding_date_label: "Dec 25" },
+      schedule: [{ id: "christmas", window_start: "2026-12-04", window_end: "2026-12-29" }],
+      shelfCount: 10,
+    }),
+    "2026-12-04 – 2026-12-29 · 10 on the shelf · Live block on",
+  );
 });
 
 test("a curated shelf drops old keyword cards; a hand pin does not", () => {

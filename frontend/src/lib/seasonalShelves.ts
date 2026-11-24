@@ -115,35 +115,104 @@ export function shelfChatSeedMessage(args: JsParam = {}) {
   return seasonalPickChatSeed(args);
 }
 
+export const SHELF_PICK_ROLES = [
+  "Classic",
+  "Family",
+  "New this year",
+  "Deep cut",
+  "After bedtime",
+] as const;
+
+export const DEFAULT_ROLE_MIX: Record<string, number> = {
+  Classic: 3,
+  Family: 3,
+  "New this year": 1,
+  "Deep cut": 2,
+  "After bedtime": 1,
+};
+
+/** Explore rail header: "Christmas — [theme]" when the shelf has a theme. */
+export function seasonalRailTitle(meta: { label?: string; theme?: string } | null | undefined) {
+  const label = String(meta?.label || "Seasonal picks").trim() || "Seasonal picks";
+  const theme = String(meta?.theme || "").trim();
+  if (!theme) return label;
+  return `${label} — ${theme}`;
+}
+
+/** Left-rail state for one observance. */
+export function observanceListState(
+  item: { enabled?: boolean; id?: string } | null | undefined,
+  schedule: Array<{ id?: string; active_now?: boolean }> | null | undefined,
+) {
+  if (!item || item.enabled === false) return "Off";
+  const row = (schedule || []).find((entry) => entry?.id === item.id);
+  if (row?.active_now) return "On Explore now";
+  return "Coming up";
+}
+
+/** Summary under the holiday name: dates, shelf size, Live block. */
+export function holidaySummary({
+  item,
+  schedule,
+  shelfCount = 0,
+}: {
+  item?: { id?: string; schedule_publish?: boolean; grounding_date_label?: string } | null;
+  schedule?: Array<{ id?: string; window_start?: string; window_end?: string }> | null;
+  shelfCount?: number;
+} = {}) {
+  const row = (schedule || []).find((entry) => entry?.id === item?.id);
+  const dates = row?.window_start
+    ? `${row.window_start} – ${row.window_end || row.window_start}`
+    : String(item?.grounding_date_label || "Dates follow the calendar");
+  const size = shelfCount === 1 ? "1 on the shelf" : `${shelfCount} on the shelf`;
+  const live = item?.schedule_publish === false ? "Live block off" : "Live block on";
+  return `${dates} · ${size} · ${live}`;
+}
+
+export function shelfPickRole(role?: string | null) {
+  const text = String(role || "").trim();
+  return (SHELF_PICK_ROLES as readonly string[]).includes(text) ? text : "";
+}
+
 /**
  * What one click on "Ask the professor to curate" should do.
  * A failed or empty professor reply is an error the shelf must show.
- * A real proposal is applied immediately — the owner does not clear old cards first.
- * @param {{ error?: unknown, proposal?: { picks?: Array<Record<string, unknown>> } | null }} input
+ * A real proposal stays a preview until the owner applies it.
+ * A pick with an empty note never ships.
  */
 export function curateClickPlan({ error = null, proposal = null }: JsParam = {}) {
   if (error) {
     const message = String(error).trim() || "The professor couldn't curate this shelf.";
-    return { ok: false, message, applyPicks: [] };
+    return { ok: false, stage: "preview", theme: "", message, applyPicks: [] };
   }
   const picks = Array.isArray(proposal?.picks) ? proposal.picks : [];
+  const theme = String(proposal?.theme || "").trim();
   const applyPicks: JsParam[] = [];
   for (const pick of picks) {
     const libraryItemId = Number(pick?.library_item_id || pick?.id);
     if (!Number.isFinite(libraryItemId) || libraryItemId < 1) continue;
-    applyPicks.push({
+    const note = String(pick?.curator_note || pick?.note || "").trim();
+    if (!note) continue;
+    const next: JsParam = {
       library_item_id: libraryItemId,
-      curator_note: String(pick?.curator_note || pick?.note || ""),
-    });
+      curator_note: note,
+    };
+    const role = shelfPickRole(pick?.role || pick?.shelf_role);
+    if (role) next.role = role;
+    const because = String(pick?.matched_because || "").trim();
+    if (because) next.matched_because = because;
+    applyPicks.push(next);
   }
   if (!applyPicks.length) {
     return {
       ok: false,
+      stage: "preview",
+      theme,
       message: "The professor didn't return any picks for this shelf.",
       applyPicks: [],
     };
   }
-  return { ok: true, message: "", applyPicks };
+  return { ok: true, stage: "preview", theme, message: "", applyPicks };
 }
 
 /**

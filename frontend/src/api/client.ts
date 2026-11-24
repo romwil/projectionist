@@ -2653,19 +2653,31 @@ export async function setHolidayRailOrder(
 /** Owner: ask the professor to propose seasonal shelf picks + staff-pick notes. */
 export async function proposeHolidayRailCuration(
   observanceId: string | number,
-  { limit = 10 }: JsonObject = {},
+  { limit = 10, role_mix = null }: JsonObject = {},
 ) {
   return api(`/admin/holidays/${encodeURIComponent(observanceId)}/rail/curate`, {
     method: "POST",
-    body: JSON.stringify({ limit }),
+    body: JSON.stringify({ limit, ...(role_mix ? { role_mix } : {}) }),
   });
 }
 
-/** Owner: confirm a professor proposal (replaces shelf order + notes). */
-export async function applyHolidayRailCuration(observanceId: string | number, picks: JsonObject[]) {
+/** Owner: confirm a professor proposal (replaces shelf order, notes, and theme). */
+export async function applyHolidayRailCuration(
+  observanceId: string | number,
+  picks: JsonObject[],
+  { theme = null }: { theme?: string | null } = {},
+) {
   return api(`/admin/holidays/${encodeURIComponent(observanceId)}/rail/curate/apply`, {
     method: "POST",
-    body: JSON.stringify({ picks }),
+    body: JSON.stringify({ picks, ...(theme ? { theme } : {}) }),
+  });
+}
+
+/** Owner: save the role balance the next curator pass should follow. */
+export async function setHolidayRailMix(observanceId: string | number, roleMix: JsonObject) {
+  return api(`/admin/holidays/${encodeURIComponent(observanceId)}/rail/mix`, {
+    method: "PUT",
+    body: JSON.stringify({ role_mix: roleMix }),
   });
 }
 
