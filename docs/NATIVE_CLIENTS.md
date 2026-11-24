@@ -79,6 +79,7 @@ Invite: `GET /api/invites/validate?token=…` stays public. The body is the invi
     "caption_tracks": 0,     // ENG-004
     "shared_sessions": 1,    // SES-004 live channel, commands, clock
     "timeline": 0,           // TML-005
+    "timeline_files": 1,     // TML-001 size, mtime, and duration
     "tracks": 0,             // TRK-003
     "native_sign_in": 1,     // NAT-002
     "push": 0,               // NAT-006

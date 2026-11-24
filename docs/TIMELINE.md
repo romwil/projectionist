@@ -42,7 +42,7 @@ Provenance is recorded per event (`source`, `confidence`), so the curator can sa
 
 ## Data model
 
-*Proposed* tables (names provisional; final shapes go in [DATA_MODEL.md](DATA_MODEL.md) with the migration):
+The fingerprint is the SHA-256 of `size:mtime_ns:duration_ms`. The same numbers are the same file version. `POST /api/library/timeline/files` records it for a title already in the library. The response is the id, the fingerprint, and the duration. It does not include events. `timeline_files` is `1`. `timeline` stays `0` until the asking tool exists.
 
 ```sql
 -- one row per readable media file version
@@ -110,7 +110,7 @@ Everything here applies to episodes as well as films:
 
 | ID | Item | Depends on |
 |----|------|------------|
-| TML-001 | Timeline schema + per-file fingerprinting | — |
+| TML-001 | Timeline schema + per-file fingerprinting (done: `timeline_files` is 1) | — |
 | TML-002 | Dialogue import from the household subtitle cache | TML-001 |
 | TML-003 | Scene / shot detection job (jobs engine, resumable) | TML-001 |
 | TML-004 | Speaker hints from cast map + spoken names | TML-002 |
