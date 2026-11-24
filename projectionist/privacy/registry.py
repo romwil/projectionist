@@ -379,6 +379,15 @@ STORES: Tuple[PersonalStore, ...] = (
         covers_cols=("label", "kind"),
     ),
     PersonalStore(
+        table="sign_in_clients",
+        label="Browsers that have signed in to your account",
+        match=_direct("user_id"),
+        subject_cols=("user_id",),
+        erase="activity",
+        secret_cols=("fingerprint", "session_jti_hashes"),
+        covers_cols=("label", "kind"),
+    ),
+    PersonalStore(
         table="user_notifications",
         label="Inbox: newsletters, nudges, whispers, and alerts",
         match=_direct("user_id"),

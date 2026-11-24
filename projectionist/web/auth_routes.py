@@ -108,9 +108,24 @@ def register_auth_routes(app):
         except NativeClientError as error:
             raise HTTPException(status_code=400, detail=error.detail) from error
 
-    def _with_device(body: Dict[str, Any], *, user_id: str, client: Dict[str, str]) -> Dict[str, Any]:
+    def _with_device(
+        body: Dict[str, Any],
+        *,
+        user_id: str,
+        client: Dict[str, str],
+        request: Request,
+    ) -> Dict[str, Any]:
         issued = issue_device_credential(
             _db(), user_id=user_id, kind=client["kind"], label=client["label"]
+        )
+        from projectionist.web.sign_in_notice import notice_new_sign_in
+
+        notice_new_sign_in(
+            _db(),
+            request,
+            user_id=user_id,
+            label=issued["label"],
+            kind=issued["kind"],
         )
         return attach_device_credential(body, issued)
 
@@ -485,7 +500,7 @@ def register_auth_routes(app):
         body = {"user": user.to_dict(), "authenticated": True, "pending": False}
         if native is not None:
             response.headers["Cache-Control"] = "no-store"
-            return _with_device(body, user_id=user.id, client=native)
+            return _with_device(body, user_id=user.id, client=native, request=request)
         set_session_cookie(response, user.id, request, db=_db())
         return body
 
@@ -532,7 +547,7 @@ def register_auth_routes(app):
         body = {"user": user.to_dict(), "authenticated": True}
         if native is not None:
             response.headers["Cache-Control"] = "no-store"
-            return _with_device(body, user_id=user.id, client=native)
+            return _with_device(body, user_id=user.id, client=native, request=request)
         set_session_cookie(response, user.id, request, db=_db())
         return body
 
@@ -575,7 +590,7 @@ def register_auth_routes(app):
             return body
         sa.audit(db, sa.SIGN_IN, actor_id=user.id, method="local", client_kind=native["kind"])
         response.headers["Cache-Control"] = "no-store"
-        return _with_device(body, user_id=user.id, client=native)
+        return _with_device(body, user_id=user.id, client=native, request=request)
 
 
     @router.post("/api/auth/local/login")
@@ -635,7 +650,7 @@ def register_auth_routes(app):
         body = {"user": user.to_dict(), "authenticated": True}
         if native is not None:
             response.headers["Cache-Control"] = "no-store"
-            return _with_device(body, user_id=user.id, client=native)
+            return _with_device(body, user_id=user.id, client=native, request=request)
         set_session_cookie(response, user.id, request, db=_db())
         return body
 
@@ -728,6 +743,7 @@ def register_auth_routes(app):
             {"user": user.to_dict(), "authenticated": True},
             user_id=user.id,
             client=native,
+            request=request,
         )
 
 
@@ -918,7 +934,7 @@ def register_auth_routes(app):
         body = {"authenticated": True, **result}
         if native is not None:
             response.headers["Cache-Control"] = "no-store"
-            return _with_device(body, user_id=new_user_id, client=native)
+            return _with_device(body, user_id=new_user_id, client=native, request=request)
         set_session_cookie(response, new_user_id, request, db=_db())
         return body
 

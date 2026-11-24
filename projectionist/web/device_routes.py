@@ -168,15 +168,26 @@ def pair_claim(
         _raise_pair(error)
         raise
     logger.info("Apple TV %s claimed by user %s", claimed.get("device_id"), user.id)
+    from projectionist.web.sign_in_notice import notice_new_sign_in
+
+    notice_new_sign_in(
+        _db(),
+        request,
+        user_id=str(user.id),
+        label=str(claimed.get("label") or "Apple TV"),
+        kind="tv",
+    )
     return _json(claimed)
 
 
 @router.get("/api/devices")
 def devices_list(user=Depends(get_current_user_dep)) -> JSONResponse:
     """Active paired TVs the signed-in household can throw to."""
+    from projectionist.web.sign_in_notice import list_sign_in_clients
+
     owner = str(getattr(user, "role", "") or "") == "owner"
     devices = []
-    for device in list_devices(_db()):
+    for device in list_devices(_db()) + list_sign_in_clients(_db()):
         device["can_revoke"] = owner or device["user_id"] == str(user.id)
         devices.append(device)
     return _json({"devices": devices})
@@ -184,13 +195,23 @@ def devices_list(user=Depends(get_current_user_dep)) -> JSONResponse:
 
 @router.post("/api/devices/{device_id}/revoke")
 def devices_revoke(device_id: str, user=Depends(get_current_user_dep)) -> JSONResponse:
-    """Drop a lost Apple TV. Its next member call fails in plain language."""
+    """Drop a lost screen. Its next sign-in has to start again."""
+    from projectionist.web.sign_in_notice import get_sign_in_client, revoke_sign_in_client
+
     device = get_device(_db(), device_id)
-    if device is None:
+    browser = None if device is not None else get_sign_in_client(_db(), device_id)
+    if device is None and browser is None:
         raise HTTPException(status_code=404, detail=THROW_UNPAIRED_DETAIL)
+    subject = device or browser
     owner = str(getattr(user, "role", "") or "") == "owner"
-    if not owner and device["user_id"] != str(user.id):
+    if not owner and subject["user_id"] != str(user.id):
         raise HTTPException(status_code=403, detail=REVOKE_FORBIDDEN_DETAIL)
+    if browser is not None:
+        if browser.get("revoked"):
+            raise HTTPException(status_code=409, detail="That device is already removed.")
+        revoke_sign_in_client(_db(), browser["id"])
+        logger.info("Sign-in %s revoked by user %s", browser["id"], user.id)
+        return _json({"status": "revoked", "device_id": browser["id"]})
     try:
         revoke_device(_db(), device["id"])
     except DevicePairError as error:

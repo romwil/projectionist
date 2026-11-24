@@ -12,6 +12,7 @@ function errorText(error: unknown, fallback: string) {
 type PairedTv = {
   id: string;
   label: string;
+  kind: string;
   display_name: string;
   can_revoke: boolean;
   is_youth: boolean;
@@ -21,6 +22,7 @@ function asTv(row: JsonObject): PairedTv {
   return {
     id: String(row.id || ""),
     label: String(row.label || "Apple TV"),
+    kind: String(row.kind || "tv"),
     display_name: String(row.display_name || ""),
     can_revoke: Boolean(row.can_revoke),
     is_youth: Boolean(row.is_youth),
@@ -101,13 +103,15 @@ export default function AppleTvPage() {
     }
   }
 
-  async function remove(deviceId: string) {
+  async function remove(deviceId: string, message?: string) {
     setBusyId(deviceId);
     setActionError("");
     setActionStatus("");
     try {
       await revokeAppleTv(deviceId);
-      setActionStatus("That Apple TV was removed. It will ask for a new code.");
+      setActionStatus(
+        message || "That Apple TV was removed. It will ask for a new code.",
+      );
       await loadDevices();
     } catch (error: unknown) {
       setActionError(errorText(error, "Could not remove that TV."));
@@ -116,12 +120,15 @@ export default function AppleTvPage() {
     }
   }
 
+  const screens = (devices || []).filter((device) => device.kind === "tv");
+  const others = (devices || []).filter((device) => device.kind !== "tv");
+
   return (
     <>
       <SettingsPageHeader
-        title="Apple TV"
+        title="Devices"
         testId="apple-tv-settings"
-        lead="Enter the code on the TV. The person signed in here is who that TV becomes."
+        lead="Enter the code on the TV. The person signed in here is who that TV becomes. A new browser or phone is listed below, and you can remove it."
       />
 
       <SettingsPanel title="Enter this code" testId="apple-tv-claim">
@@ -162,6 +169,35 @@ export default function AppleTvPage() {
       </SettingsPanel>
 
       <SettingsPanel
+        title="Signed-in devices"
+        lead="A new browser or phone shows up here. Remove it if you don't recognize the sign-in."
+        testId="signed-in-devices"
+      >
+        {devices && others.length === 0 ? (
+          <p className="field-help" data-testid="signed-in-devices-empty">
+            No other device has signed in.
+          </p>
+        ) : null}
+        {others.map((device) => (
+          <div key={device.id} data-testid={`signed-in-device-${device.id}`}>
+            <p>
+              {device.label}
+              {device.display_name ? ` · signed in as ${device.display_name}` : ""}
+            </p>
+            {device.can_revoke ? (
+              <Button
+                variant="danger"
+                disabled={busyId === device.id}
+                onClick={() => void remove(device.id, "That sign-in was removed.")}
+              >
+                Remove
+              </Button>
+            ) : null}
+          </div>
+        ))}
+      </SettingsPanel>
+
+      <SettingsPanel
         title="Send something"
         lead="One title or one station. A removed TV will say so in plain language."
         testId="apple-tv-throw"
@@ -171,7 +207,7 @@ export default function AppleTvPage() {
             {listError}
           </p>
         ) : null}
-        {devices && devices.length === 0 ? (
+        {devices && screens.length === 0 ? (
           <p className="field-help" data-testid="apple-tv-empty">
             No Apple TV is paired yet.
           </p>
@@ -227,7 +263,7 @@ export default function AppleTvPage() {
             />
           </label>
         )}
-        {devices?.map((device) => (
+        {screens.map((device) => (
           <div key={device.id} data-testid={`apple-tv-device-${device.id}`}>
             <p>
               {device.label}

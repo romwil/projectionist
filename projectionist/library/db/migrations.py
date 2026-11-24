@@ -475,6 +475,28 @@ def _session_approvals(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) ->
     )
 
 
+def _sign_in_clients(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
+    """Browsers that have signed in, so a new one can be noticed and revoked."""
+    del db
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS sign_in_clients (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            label TEXT NOT NULL,
+            fingerprint TEXT NOT NULL,
+            session_jti_hashes TEXT NOT NULL DEFAULT '[]',
+            created_at REAL NOT NULL,
+            revoked_at REAL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_sign_in_clients_user
+            ON sign_in_clients(user_id, revoked_at);
+        """
+    )
+
+
 def _timeline_files(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
     """One row per media-file version, and the events that sit on its clock."""
     del db
@@ -587,6 +609,7 @@ def _build_migrations() -> List[Migration]:
         (69, "session_approvals", _session_approvals),
         (70, "timeline_files", _timeline_files),
         (71, "totp_secrets", wrap("_migrate_totp_secrets")),
+        (72, "sign_in_clients", _sign_in_clients),
     ]
 
 
