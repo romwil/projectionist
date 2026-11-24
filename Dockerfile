@@ -24,7 +24,16 @@ RUN --mount=type=cache,target=/root/.npm \
 
 COPY frontend/index.html frontend/vite.config.js frontend/tsconfig.json ./
 COPY frontend/src ./src
-COPY frontend/public/favicon.svg ./public/favicon.svg
+# Vite copies public/ into dist. The favicon alone left the installable
+# shell out of the image, so /manifest.webmanifest and /sw.js were 404.
+COPY frontend/public/favicon.svg \
+     frontend/public/manifest.webmanifest \
+     frontend/public/sw.js \
+     frontend/public/installable-cache.mjs \
+     frontend/public/offline.html \
+     frontend/public/icon-192.png \
+     frontend/public/icon-512.png \
+     ./public/
 # PrivacyPage / HelpPage import @docs/*.md (alias → /docs in this stage)
 COPY docs/PRIVACY.md /docs/PRIVACY.md
 COPY docs/HELP.md /docs/HELP.md
