@@ -137,7 +137,7 @@ curl -s -H "Authorization: Bearer YOUR_CREDENTIAL" \
 
 The household owner, or the member signed in on that screen, can rename it with `PATCH /api/rooms/{id}` and `{"name": "Den"}`.
 
-**How this works.** The capability `rooms` is `1`. The list is only the name. **Honest limit.** What is playing is not on this list. Joining a room is a later item. A browser tab is not a room yet.
+**How this works.** The capability `rooms` is `1`. The list is only the name. **Honest limit.** What is playing is not on this list. A browser tab is not a room. The web client lists the names, starts a film with Play in…, and joins as a remote on the live channel.
 
 ## Roadmap items
 
@@ -150,7 +150,7 @@ The household owner, or the member signed in on that screen, can rename it with 
 | SES-005 | Join flow (owner approval or on-screen code) + guest permissions (done: `session_join` is 1) | SES-004 |
 | SES-006 | Handheld captions (done: `session_captions` is 1) | SES-004, ENG-004 |
 | SES-007 | Handoff between screens (same session, new screen) (done: `session_handoff` is 1) | SES-004 |
-| SES-008 | Web client as a second screen (join from a browser) | SES-005 |
+| SES-008 | Web client as a second screen (done: Settings → Rooms, Play in…, live-channel remote) | SES-005 |
 | SES-009 | Youth join approval: owner notification, Approve tightens the session ceiling, Not now declines (done: `youth_join` is 1; push waits) | SES-005, TRK-003 |
 
 ## See also

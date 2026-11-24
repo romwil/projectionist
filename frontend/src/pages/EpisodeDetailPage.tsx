@@ -133,6 +133,7 @@ export default function EpisodeDetailPage() {
                 compact
                 testId="episode-detail-cta"
                 playTo={playTo}
+                ratingKey={playTo ? String(episode.rating_key || "") : ""}
                 playTestId="episode-detail-play"
                 plexHref={plexHref}
                 plexTestId="episode-detail-plex"

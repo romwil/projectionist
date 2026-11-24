@@ -1,6 +1,7 @@
 import { createPortal } from "react-dom";
 import { Link, type To } from "react-router-dom";
 import { useAnchoredPopover } from "../hooks/useAnchoredPopover";
+import PlayInMenu from "./PlayInMenu";
 import {
   placeTitleCtaMoreMenu,
   TITLE_CTA_COPY,
@@ -76,6 +77,7 @@ type TitleCtaAdd = {
 type TitleCtaBarProps = {
   compact?: boolean;
   playTo?: To | null;
+  ratingKey?: string;
   playTestId?: string;
   onPlayClick?: React.MouseEventHandler<HTMLAnchorElement>;
   /** Dismiss an in-place title sheet when Chat navigates underneath it. */
@@ -109,6 +111,7 @@ type TitleCtaBarProps = {
 export default function TitleCtaBar({
   compact = false,
   playTo = null,
+  ratingKey = "",
   playTestId = "title-detail-play",
   onPlayClick,
   onChatClick,
@@ -279,6 +282,7 @@ export default function TitleCtaBar({
               {TITLE_CTA_COPY.play.label}
             </Link>
           ) : null}
+          {playTo && ratingKey ? <PlayInMenu ratingKey={ratingKey} /> : null}
           {!playTo && addPrimary ? (
             <button
               type="button"

@@ -13,6 +13,7 @@ describe("settingsNav", () => {
     assert.equal(labels.lists, "Lists");
     assert.equal(labels.privacy, "My data");
     assert.equal(labels["apple-tv"], "Apple TV");
+    assert.equal(labels.rooms, "Rooms");
     assert.equal(labels["room-approvals"], "Room approvals");
   });
 

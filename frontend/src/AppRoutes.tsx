@@ -26,6 +26,8 @@ const NotificationsSettingsPage = lazy(() => import("./pages/settings/Notificati
 const MyDataPage = lazy(() => import("./pages/settings/MyDataPage"));
 const AppleTvPage = lazy(() => import("./pages/settings/AppleTvPage"));
 const RoomApprovalsPage = lazy(() => import("./pages/settings/RoomApprovalsPage"));
+const RoomsPage = lazy(() => import("./pages/settings/RoomsPage"));
+const SessionRemotePage = lazy(() => import("./pages/SessionRemotePage"));
 const LivePage = lazy(() => import("./pages/LivePage"));
 const LiveWatchPage = lazy(() => import("./pages/LiveWatchPage"));
 const LibraryWatchPage = lazy(() => import("./pages/LibraryWatchPage"));
@@ -140,6 +142,7 @@ export default function AppRoutes() {
       <Route path="/live/popout" element={<LiveWatchPage />} />
       <Route path="/watch/:ratingKey/popout" element={<LibraryWatchPage popout />} />
       <Route path="/watch/:ratingKey" element={<LibraryWatchPage />} />
+      <Route path="/remote/:sessionId" element={<SessionRemotePage />} />
       <Route path="/title/episode/:ratingKey" element={<EpisodeDetailPage />} />
       <Route path="/library" element={<LibraryHubPage />} />
       <Route path="/library/saved" element={<LibraryPage />} />
@@ -172,6 +175,7 @@ export default function AppRoutes() {
         <Route path="lists" element={<ListsSettingsPage />} />
         <Route path="privacy" element={<MyDataPage />} />
         <Route path="apple-tv" element={<AppleTvPage />} />
+        <Route path="rooms" element={<RoomsPage />} />
         <Route path="room-approvals" element={<RoomApprovalsPage />} />
       </Route>
       <Route path="/title/:mediaType/:itemId" element={<TitleDetailPage />} />

@@ -37,6 +37,8 @@
       "shared_sessions": 1,
       "throw": 1,
       "timeline": 0,
+      "timeline_dialogue": 1,
+      "timeline_files": 1,
       "tracks": 0,
       "youth_join": 1
     },
