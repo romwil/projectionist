@@ -455,6 +455,10 @@ def set_session_cookie(
         path="/",
         secure=_cookie_should_be_secure(request),
     )
+    if request is not None and db is not None:
+        from projectionist.web.sign_in_notice import remember_browser_sign_in
+
+        remember_browser_sign_in(db, request, user_id=user_id, token=token)
 
 
 def clear_session_cookie(response: Response, request: Optional[Request] = None) -> None:

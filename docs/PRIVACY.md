@@ -285,6 +285,7 @@ Account removal runs as one database transaction, so a failure part-way leaves t
 | One-shot Send to Apple TV intents for your paired devices | Yes | Yes | Deleted | `device_throw_intents` |
 | Apple TV sign-in codes waiting to be claimed | Yes | Yes | Deleted | `device_pair_pending` |
 | Paired Apple TV companions | Yes | Yes | Deleted | `paired_devices` |
+| Browsers that have signed in to your account | Yes | Yes | Deleted | `sign_in_clients` |
 | Inbox: newsletters, nudges, whispers, and alerts | Yes | Yes | Deleted | `user_notifications` |
 | Titles someone recommended to you, and ones you recommended | Yes | Yes | Deleted | `user_recommendations` |
 | Taste profile | Yes | Yes | Deleted | `user_taste_profile` |
