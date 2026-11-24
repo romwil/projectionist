@@ -87,7 +87,8 @@ Invite: `GET /api/invites/validate?token=…` stays public. The body is the invi
     "household_addresses": 1, // home and away on the signed-in payload
     "rooms": 1,              // SES-002 named screens, no playback
     "session_object": 1,     // SES-003 owner, screen, position, level
-    "session_join": 1        // SES-005 code or starter approval, guest remote
+    "session_join": 1,       // SES-005 code or starter approval, guest remote
+    "youth_join": 1          // SES-009 approval tightens the room; push waits
   }
 }
 ```
@@ -102,6 +103,7 @@ curl -s http://your-host:8788/api/features | python3 -m json.tool
 - `shared_sessions` is `1` when `/api/sessions/{id}/live` accepts commands from the starter and the screen, and events carry `server_time_ms`. A paused playhead does not advance. `session_object` is the record those commands update.
 - `session_object` is `1` when `POST /api/sessions` records an owner, a screen, a position, and a level. Other members cannot read it until they join.
 - `session_join` is `1` when a member can join a room with the screen's code, or ask the starter. A pending request does not include the title. Guests may send transport commands only after the starter allows the remote. They cannot change the level, the room's captions, or end the session. The join code is not on the session object.
+- `youth_join` is `1` when a Youth member must be approved before joining a looser session. Approve sets the room's ceiling and pauses a title above it. The approval is stored for the owner, including on the web. A push is not sent. `push` and `approvals` stay `0` until NAT-006.
 - `rooms` is `1` when `GET /api/rooms` lists named screens. The list does not include what is playing. See [shared sessions](SHARED_SESSIONS.md#rooms).
 - `household_addresses` is `1` when this server publishes `addresses.home` and `addresses.away` to a signed-in client. The strings are absent before sign-in. Home is the last origin seen from the home network; away is the owner’s public base URL, or empty. Engine playlist and segment URLs stay relative either way. See [shared sessions](SHARED_SESSIONS.md#home-and-away).
 - **Honest limit.** A `0` means this server knows the name and does not offer that contract yet. It is not a hint that the feature is about to appear.

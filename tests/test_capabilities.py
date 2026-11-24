@@ -32,6 +32,7 @@ SHIPPED = {
     "session_object": 1,
     "shared_sessions": 1,
     "session_join": 1,
+    "youth_join": 1,
 }
 ACCEPTED_NOT_SHIPPED = {
     "caption_tracks": 0,

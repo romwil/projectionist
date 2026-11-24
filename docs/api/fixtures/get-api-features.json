@@ -35,7 +35,8 @@
       "shared_sessions": 1,
       "throw": 1,
       "timeline": 0,
-      "tracks": 0
+      "tracks": 0,
+      "youth_join": 1
     },
     "features": {
       "access_requests_enabled": true,

@@ -758,6 +758,17 @@
             ],
             "title": "Position Ms"
           },
+          "rating_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating Key"
+          },
           "state": {
             "anyOf": [
               {
@@ -3191,6 +3202,87 @@
           }
         },
         "summary": "Join Room",
+        "tags": [
+          "client",
+          "sessions"
+        ]
+      }
+    },
+    "/api/session-approvals": {
+      "get": {
+        "description": "Approvals waiting on this member. A requester does not see the title.",
+        "operationId": "read_session_approvals_api_session_approvals_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Read Session Approvals Api Session Approvals Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Read Session Approvals",
+        "tags": [
+          "client",
+          "sessions"
+        ]
+      }
+    },
+    "/api/session-approvals/{approval_id}": {
+      "post": {
+        "description": "Approve tightens the room. Not now declines. Neither response names the title.",
+        "operationId": "answer_session_approval_api_session_approvals__approval_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "approval_id",
+            "required": true,
+            "schema": {
+              "title": "Approval Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideJoinPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Answer Session Approval Api Session Approvals  Approval Id  Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Answer Session Approval",
         "tags": [
           "client",
           "sessions"

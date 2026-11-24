@@ -9,4 +9,5 @@ export const SETTINGS_NAV = [
   { to: "/settings/lists", id: "lists", label: "Lists" },
   { to: "/settings/privacy", id: "privacy", label: "My data" },
   { to: "/settings/apple-tv", id: "apple-tv", label: "Apple TV" },
+  { to: "/settings/room-approvals", id: "room-approvals", label: "Room approvals" },
 ];

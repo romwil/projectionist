@@ -1,0 +1,9 @@
+{
+  "body": {
+    "approvals": []
+  },
+  "content_type": "application/json",
+  "method": "GET",
+  "path": "/api/session-approvals",
+  "status": 200
+}

@@ -1,8 +1,10 @@
 {
   "body": {
+    "ceiling": "",
     "engine_session_id": "",
     "guests": [],
     "guests_may_remote": false,
+    "held_for_ceiling": false,
     "id": "00000000-0000-4000-8000-000000000001",
     "level": "off",
     "owner_id": "bootstrap-owner",
