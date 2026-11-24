@@ -296,7 +296,6 @@ Account removal runs as one database transaction, so a failure part-way leaves t
 | AI usage records (token counts, no words) | Yes | Yes | Deleted | `llm_usage` |
 | Private curator voices you made | Yes | Yes | Deleted | `persona_templates` |
 | The key that makes your email unsubscribe links work | No | Yes | Deleted | `mail_unsubscribe_nonces` |
-| A request to join a room | Yes | Yes | Deleted | `session_approvals` |
 | Your profile: name, email, sign-in links, and settings | Yes | No | Deleted | `users` |
 | Uploaded profile picture | No | No | Deleted | `DATA_DIR/avatars/<account>.*` |
 <!-- privacy-registry:end -->
