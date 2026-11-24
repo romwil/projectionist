@@ -1,0 +1,10 @@
+{
+  "body": {
+    "code": "abcd1234"
+  },
+  "content_type": "application/json",
+  "example_path": "/api/sessions/00000000-0000-4000-8000-000000000001/code",
+  "method": "GET",
+  "path": "/api/sessions/{session_id}/code",
+  "status": 200
+}

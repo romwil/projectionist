@@ -31,12 +31,18 @@
       "preroll_warm_start": 1,
       "push": 0,
       "rooms": 1,
+      "session_captions": 1,
+      "session_handoff": 1,
+      "session_join": 1,
       "session_object": 1,
       "shared_sessions": 1,
       "throw": 1,
       "timeline": 0,
+      "timeline_dialogue": 1,
+      "timeline_files": 1,
       "tracks": 0,
-      "warmup_screen": 1
+      "warmup_screen": 1,
+      "youth_join": 1
     },
     "features": {
       "access_requests_enabled": true,

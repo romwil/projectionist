@@ -34,7 +34,7 @@ def server_time_ms() -> int:
     return int(time.time() * 1000)
 
 
-def authorize_command(role: str, command: str) -> bool:
+def authorize_command(role: str, command: str, *, guests_may_remote: bool = False) -> bool:
     name = str(command or "").strip().lower()
     if name not in _ALL:
         return False
@@ -42,6 +42,9 @@ def authorize_command(role: str, command: str) -> bool:
         return True
     if role == "screen":
         return name in _TRANSPORT
+    if role == "guest":
+        # Guests never change the room's captions, level, or whether it ends.
+        return bool(guests_may_remote) and (name in _TRANSPORT or name == "rate")
     return False
 
 
@@ -52,6 +55,8 @@ def _event(session: SharedSession, kind: str, **extra: Any) -> dict[str, Any]:
         "position_ms": session.position_ms,
         "state": session.state,
         "level": session.level,
+        "ceiling": session.ceiling,
+        "held_for_ceiling": session.held_for_ceiling,
     }
     body.update(extra)
     return body
@@ -60,9 +65,11 @@ def _event(session: SharedSession, kind: str, **extra: Any) -> dict[str, Any]:
 def apply_command(session: SharedSession, role: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Authorize one command and fold it into the session. Raises on refusal."""
     command = str(payload.get("command") or "").strip().lower()
-    if not authorize_command(role, command):
+    if not authorize_command(role, command, guests_may_remote=session.guests_may_remote):
         raise SharedSessionError("That command is not allowed.", status_code=403)
     if command == "play":
+        if session.held_for_ceiling:
+            raise SharedSessionError("This room is paused for the rating limit.", status_code=403)
         update_shared_session(session, state="playing")
         return _event(session, "state")
     if command == "pause":

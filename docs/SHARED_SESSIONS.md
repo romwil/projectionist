@@ -32,7 +32,7 @@ Three ideas carry that evening:
 | **Guest** | A signed-in household member who joined | Remote transport (if the owner allows), handheld captions, their own private curator chat with the session’s time context |
 | **Screen** | The device rendering the picture (Apple TV, a browser tab) | Plays the stream, renders big-screen overlays, reports position |
 
-A session has exactly one screen. Moving playback to another screen is a **handoff**: the session keeps its id, position, and track; the old screen stops.
+A session has exactly one screen. Moving playback to another screen is a **handoff**: `POST /api/sessions/{id}/handoff` keeps the id, position, and level, and the old screen can no longer read it. The capability `session_handoff` is `1`.
 
 *Proposed:* the household’s Apple TVs are visible as **rooms** (“Living Room”) to every signed-in member; *what is playing* in a room is visible only to the session owner and joined guests. Joining needs either the owner’s approval in the moment, or the code on the TV’s pause screen.
 
@@ -67,9 +67,8 @@ Joined devices need sub-second state. Polling `GET /api/devices/me/intent` is ri
 
 A guest (or the owner) can read captions on their own device while the room watches clean.
 
-- The device fetches the session’s caption rendition list from the [engine](PLAYBACK_ENGINE.md#captions) and renders cues locally against the realtime playhead.
-- Language is per device: one person reads English, another the original French.
-- **How this works:** the cues are the same WebVTT the screen would use; nothing is generated per person. **Honest limit:** if the screen buffers, handheld cues pause on the next heartbeat — they can lag by up to a second during a seek.
+- The device fetches the session’s caption feed at `GET /api/sessions/{id}/captions`. The cues are the household subtitle file. Language is per request. The room's caption command is unchanged.
+- **How this works:** the cues are the same text the screen would use; nothing is generated per person. **Honest limit:** if the screen buffers, a device still has the file's clock and estimates the playhead from the live channel. The capability `session_captions` is `1`.
 
 ---
 
@@ -77,11 +76,10 @@ A guest (or the owner) can read captions on their own device while the room watc
 
 - **Taste stays personal.** A guest’s curator chat in a session is the guest’s own conversation and memory, with the same rules as Chat today. The session owner never sees a guest’s questions.
 - **Youth.** A session started by a Youth member carries the rating ceiling: track content, detour clips, and curator answers are Youth-safe. An adult guest joining a Youth session sees the session as it is; they do not loosen it.
-- **A Youth member joining an adult’s session asks first** (decided 2026-11-18). The join sends the session owner a notification: **“<Name> wants to join. Approving limits this room to <ceiling>.”** with **Approve** / **Not now**.
-  - **Approve** tightens the whole session to the Youth member’s rating ceiling for as long as they are joined: track level content (Booth Notes Heat capped at Mild), detour clips, curator notes on the big screen, and what the room may play next.
-  - **Not now** declines the join; the Youth member sees a plain sentence and nothing about what is playing.
-  - *Proposed:* if the title already playing is above the ceiling, the prompt says so — “*Heat* is rated R. Approving stops it.” — and approval stops playback and opens a For you row the whole room can watch.
-  - *Proposed:* when the Youth member leaves, the ceiling relaxes at the next title, never mid-title.
+- **A Youth member joining an adult’s session asks first** (decided 2026-11-18). The owner sees **“<Name> wants to join. Approving limits this room to <ceiling>.”** with **Approve** / **Not now**. The approval is stored and shown in Settings → Room approvals. A push is not sent; that waits on NAT-006.
+  - **Approve** tightens the whole session to the Youth member’s rating ceiling for as long as they are joined. If the title already playing is above that ceiling, playback pauses until the next title. The prompt can name the title and the rating, because the owner started it.
+  - **Not now** declines the join. The Youth member sees a plain sentence and nothing about what is playing.
+  - When the Youth member leaves, the ceiling stays until the next title.
 - **No new exports.** Session state is ephemeral; position reporting continues to feed Continue Watching and the watch tracker exactly as library Play does today.
 
 ---
@@ -118,9 +116,11 @@ curl -s -X POST http://your-host:8788/api/sessions \
   -d '{"screen_id":"ROOM_ID","rating_key":"123","level":"off"}'
 ```
 
-The starter can change the level and end the session. The member signed in on the screen can read it and report position. Any other member gets 404, including the title. Starting another session on the same screen ends the previous one.
+The starter can change the level, decide whether guests may use the remote, and end the session. The member signed in on the screen can read it and report position. A guest can read it after joining. Any other member gets 404, including the title. Starting another session on the same screen ends the previous one.
 
-**How this works.** The capability `session_object` is `1`. **Honest limit.** The object is kept in memory and is gone after a restart. It does not by itself move the picture; the screen still plays the engine playlist. Joining, guest transport, and the live channel are later items.
+A member joins the room with `POST /api/rooms/{id}/join`. The code from `GET /api/sessions/{id}/code` (the starter, or the member signed in on the screen) joins at once. Without a code, the starter sees a request and answers `approve` or `not_now`. A declined member is not told what is playing. Guests may pause, seek, and play at double speed only after the starter allows the remote. They cannot change the level, the room's captions, or end the session.
+
+**How this works.** The capability `session_object` is `1`. The capability `session_join` is `1`. **Honest limit.** The object is kept in memory and is gone after a restart. It does not by itself move the picture; the screen still plays the engine playlist. A wrong code stops answering after a few tries.
 
 ## Rooms
 
@@ -147,11 +147,11 @@ The household owner, or the member signed in on that screen, can rename it with 
 | SES-002 | Rooms registry (named screens per household) + visibility rules (done: `GET /api/rooms`, `rooms` is 1) | SES-001 |
 | SES-003 | Session object (owner, screen, position, level) on top of engine sessions (done: `session_object` is 1) | ENG-003 |
 | SES-004 | Realtime channel (`/api/sessions/{id}/live`), command authorization, clock model (done: `shared_sessions` is 1) | SES-003 |
-| SES-005 | Join flow (owner approval or on-screen code) + guest permissions | SES-004 |
-| SES-006 | Handheld captions | SES-004, ENG-004 |
-| SES-007 | Handoff between screens (same session, new screen) | SES-004 |
+| SES-005 | Join flow (owner approval or on-screen code) + guest permissions (done: `session_join` is 1) | SES-004 |
+| SES-006 | Handheld captions (done: `session_captions` is 1) | SES-004, ENG-004 |
+| SES-007 | Handoff between screens (same session, new screen) (done: `session_handoff` is 1) | SES-004 |
 | SES-008 | Web client as a second screen (join from a browser) | SES-005 |
-| SES-009 | Youth join approval: owner notification, Approve tightens the session ceiling, Not now declines (absorbs review PRD-025) | SES-005, TRK-003 |
+| SES-009 | Youth join approval: owner notification, Approve tightens the session ceiling, Not now declines (done: `youth_join` is 1; push waits) | SES-005, TRK-003 |
 
 ## See also
 

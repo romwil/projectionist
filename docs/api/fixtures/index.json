@@ -5,6 +5,11 @@
     "file": "delete-api-sessions-session_id.json"
   },
   {
+    "method": "DELETE",
+    "path": "/api/sessions/{session_id}/guests/me",
+    "file": "delete-api-sessions-session_id-guests-me.json"
+  },
+  {
     "method": "GET",
     "path": "/api/auth/me",
     "file": "get-api-auth-me.json"
@@ -121,8 +126,28 @@
   },
   {
     "method": "GET",
+    "path": "/api/session-approvals",
+    "file": "get-api-session-approvals.json"
+  },
+  {
+    "method": "GET",
     "path": "/api/sessions/{session_id}",
     "file": "get-api-sessions-session_id.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/sessions/{session_id}/captions",
+    "file": "get-api-sessions-session_id-captions.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/sessions/{session_id}/code",
+    "file": "get-api-sessions-session_id-code.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/sessions/{session_id}/join-requests",
+    "file": "get-api-sessions-session_id-join-requests.json"
   },
   {
     "method": "GET",
@@ -221,7 +246,27 @@
   },
   {
     "method": "POST",
+    "path": "/api/rooms/{room_id}/join",
+    "file": "post-api-rooms-room_id-join.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/session-approvals/{approval_id}",
+    "file": "post-api-session-approvals-approval_id.json"
+  },
+  {
+    "method": "POST",
     "path": "/api/sessions",
     "file": "post-api-sessions.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/sessions/{session_id}/handoff",
+    "file": "post-api-sessions-session_id-handoff.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/sessions/{session_id}/join-requests/{request_id}",
+    "file": "post-api-sessions-session_id-join-requests-request_id.json"
   }
 ]

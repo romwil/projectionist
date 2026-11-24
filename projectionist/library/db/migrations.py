@@ -447,6 +447,67 @@ def _paired_device_kind(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -
     )
 
 
+def _session_approvals(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
+    """Youth join approvals. Delivery waits. The row is the record."""
+    del db
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS session_approvals (
+            id TEXT PRIMARY KEY,
+            kind TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            requester_id TEXT NOT NULL,
+            requester_name TEXT NOT NULL,
+            owner_id TEXT NOT NULL,
+            ceiling TEXT NOT NULL,
+            title TEXT NOT NULL DEFAULT '',
+            content_rating TEXT NOT NULL DEFAULT '',
+            title_above INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            expires_at REAL NOT NULL,
+            acted_at REAL,
+            acted_by TEXT NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_session_approvals_owner
+            ON session_approvals(owner_id, status, created_at);
+        """
+    )
+
+
+def _timeline_files(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
+    """One row per media-file version, and the events that sit on its clock."""
+    del db
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS timeline_files (
+            id INTEGER PRIMARY KEY,
+            rating_key TEXT NOT NULL,
+            tmdb_id INTEGER,
+            season INTEGER,
+            episode INTEGER,
+            file_fingerprint TEXT NOT NULL,
+            duration_ms INTEGER NOT NULL,
+            built_at REAL,
+            build_version INTEGER NOT NULL DEFAULT 1,
+            UNIQUE (rating_key, file_fingerprint)
+        );
+        CREATE TABLE IF NOT EXISTS timeline_events (
+            id INTEGER PRIMARY KEY,
+            file_id INTEGER NOT NULL REFERENCES timeline_files(id),
+            kind TEXT NOT NULL,
+            start_ms INTEGER NOT NULL,
+            end_ms INTEGER,
+            payload TEXT NOT NULL,
+            source TEXT NOT NULL,
+            confidence REAL
+        );
+        CREATE INDEX IF NOT EXISTS timeline_events_at
+            ON timeline_events(file_id, start_ms);
+        """
+    )
+
+
 def _build_migrations() -> List[Migration]:
     def wrap(method_name: str) -> MigrationFn:
         def _run(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
@@ -523,6 +584,8 @@ def _build_migrations() -> List[Migration]:
         (66, "apple_tv_devices", _apple_tv_devices),
         (67, "explore_default_home", wrap("_migrate_explore_default_home")),
         (68, "paired_device_kind", _paired_device_kind),
+        (69, "session_approvals", _session_approvals),
+        (70, "timeline_files", _timeline_files),
     ]
 
 

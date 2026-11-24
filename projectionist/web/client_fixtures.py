@@ -236,6 +236,7 @@ def collect_client_fixtures() -> dict[str, dict[str, Any]]:
             patch("projectionist.devices.pairing.secrets.choice", side_effect=_choice),
             patch("projectionist.devices.pairing.secrets.token_urlsafe", side_effect=_token_urlsafe),
             patch("uuid.uuid4", side_effect=_uuid4),
+            patch("projectionist.sessions.shared.secrets.token_hex", return_value="abcd1234"),
             patch(
                 "projectionist.connectors.plex.cached_machine_identifier",
                 return_value="machine-1",
@@ -410,6 +411,64 @@ def collect_client_fixtures() -> dict[str, dict[str, Any]]:
                     json={"position_ms": 12000, "state": "paused"},
                 ),
                 example_path=f"/api/sessions/{shared_id}",
+            )
+            keep(
+                "GET",
+                "/api/sessions/{session_id}/code",
+                client.get(f"/api/sessions/{shared_id}/code"),
+                example_path=f"/api/sessions/{shared_id}/code",
+            )
+            keep(
+                "POST",
+                "/api/rooms/{room_id}/join",
+                client.post(f"/api/rooms/{device_id}/join", json={}),
+                example_path=f"/api/rooms/{device_id}/join",
+            )
+            keep(
+                "GET",
+                "/api/sessions/{session_id}/join-requests",
+                client.get(f"/api/sessions/{shared_id}/join-requests"),
+                example_path=f"/api/sessions/{shared_id}/join-requests",
+            )
+            keep(
+                "POST",
+                "/api/sessions/{session_id}/join-requests/{request_id}",
+                client.post(
+                    f"/api/sessions/{shared_id}/join-requests/missing",
+                    json={"decision": "not_now"},
+                ),
+                example_path=f"/api/sessions/{shared_id}/join-requests/missing",
+            )
+            keep(
+                "DELETE",
+                "/api/sessions/{session_id}/guests/me",
+                client.delete(f"/api/sessions/{shared_id}/guests/me"),
+                example_path=f"/api/sessions/{shared_id}/guests/me",
+            )
+            keep("GET", "/api/session-approvals", client.get("/api/session-approvals"))
+            keep(
+                "POST",
+                "/api/session-approvals/{approval_id}",
+                client.post(
+                    "/api/session-approvals/missing",
+                    json={"decision": "not_now"},
+                ),
+                example_path="/api/session-approvals/missing",
+            )
+            keep(
+                "GET",
+                "/api/sessions/{session_id}/captions",
+                client.get(f"/api/sessions/{shared_id}/captions"),
+                example_path=f"/api/sessions/{shared_id}/captions",
+            )
+            keep(
+                "POST",
+                "/api/sessions/{session_id}/handoff",
+                client.post(
+                    f"/api/sessions/{shared_id}/handoff",
+                    json={"screen_id": device_id},
+                ),
+                example_path=f"/api/sessions/{shared_id}/handoff",
             )
             keep(
                 "DELETE",
