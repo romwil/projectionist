@@ -88,7 +88,7 @@ A guest (or the owner) can read captions on their own device while the room watc
 
 ## Home and away
 
-A device on the home network and a device somewhere else need different origins. The owner sets the away address — the public base URL — in **Settings → Playback**. A signed-in `GET /api/features` publishes both:
+A device on the home network and a device somewhere else need different origins. The owner sets the away address — the public base URL — in **Admin → Household → Playback**. A signed-in `GET /api/features` publishes both:
 
 ```json
 "addresses": { "home": "http://10.0.0.8:8788", "away": "https://films.example.com" }

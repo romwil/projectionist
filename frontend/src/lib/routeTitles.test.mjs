@@ -30,6 +30,7 @@ describe("routeTitles", () => {
 
   it("titles dynamic admin/settings/watch routes distinctly", () => {
     assert.equal(pageTitleFor("/admin"), "Admin Overview");
+    assert.equal(pageTitleFor("/admin/playback"), "Playback");
     assert.equal(pageTitleFor("/admin/health"), "Health");
     assert.equal(pageTitleFor("/admin/mail"), "Mail");
     assert.equal(pageTitleFor("/admin/some-config-section"), "Some Config Section");

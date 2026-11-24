@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+Household playback controls live in Admin → Household → Playback. Profile keeps pause, text size, and the default page.
+
+### Highlights
+- **Household playback is an owner control.** Play through Projectionist, the away address, the playability report, and copies made ahead are under Admin → Household → Playback. The switch says it affects everyone in the household. Members do not see that section. An old Profile playback anchor opens the new section.
+
 ## [1.45.4] — 2026-11-24
 
 Posters show the picture again. A play no longer waits out a background probe, a film stays up while the picture is still arriving, and an HDR title is not tone-mapped when this server has no hardware transcoder.

@@ -11,6 +11,7 @@ import AccessRequestsPage from "../pages/AccessRequestsPage";
 import LogsPage from "../pages/LogsPage";
 import HolidaysPage from "../pages/HolidaysPage";
 import StagedAugmentationsPage from "../pages/StagedAugmentationsPage";
+import HouseholdPlaybackPage from "../pages/admin/HouseholdPlaybackPage";
 
 /** Admin pages load only after an owner enters the admin route tree. */
 export default function AdminRoutes() {
@@ -34,6 +35,7 @@ export default function AdminRoutes() {
         <Route path="scheduled-tasks" element={<Navigate to="/admin/tasks" replace />} />
         <Route path="sync" element={<Navigate to="/admin/libraries" replace />} />
         <Route path="members" element={<Navigate to="/admin/household" replace />} />
+        <Route path="playback" element={<HouseholdPlaybackPage />} />
         <Route path="live" element={<Navigate to="/admin/live-channels" replace />} />
         <Route path=":section" element={<ConfigPage />} />
       </Route>
