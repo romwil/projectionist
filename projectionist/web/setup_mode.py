@@ -117,7 +117,11 @@ def is_setup_mode(db: Database, request: Optional[Request] = None) -> bool:
     if getattr(db, "_projectionist_active_mode", False):
         return False
     setup = resolve_setup_state(db, request) == SETUP_STATE_SETUP
-    if not setup and has_real_owner(db):
+    # An outside request that was refused must not pin the process in active
+    # mode. A later request on the home network can still open setup.
+    if not setup and not (
+        external_cannot_reopen_setup(request) and not has_real_owner(db)
+    ):
         db._projectionist_active_mode = True
     return setup
 
