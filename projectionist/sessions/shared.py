@@ -163,8 +163,57 @@ def open_shared_session(
 
 
 def get_shared_session(session_id: str) -> SharedSession | None:
+    key = str(session_id or "").strip()
     with _LOCK:
-        return _SESSIONS.get(str(session_id or "").strip())
+        found = _SESSIONS.get(key)
+        if found is not None:
+            return found
+        if not key:
+            return None
+        for session in _SESSIONS.values():
+            if session.engine_session_id and session.engine_session_id == key:
+                return session
+        return None
+
+
+def adopt_engine_playback(
+    *,
+    session_id: str,
+    owner_id: str,
+    rating_key: str,
+    position_ms: int,
+    state: str,
+) -> SharedSession:
+    """A playing engine session the remote can read. It is not tied to a room.
+
+    The id is the engine session id, which is the id handoff already accepts.
+    An empty screen is not registered, so this does not end a room's session.
+    """
+    key = str(session_id or "").strip()
+    chosen = _state(state)
+    with _LOCK:
+        current = _SESSIONS.get(key)
+        if current is not None:
+            return current
+        for existing in _SESSIONS.values():
+            if existing.engine_session_id and existing.engine_session_id == key:
+                return existing
+        now = time.time()
+        session = SharedSession(
+            id=key,
+            owner_id=str(owner_id or ""),
+            screen_id="",
+            rating_key=_rating_key(rating_key),
+            position_ms=max(0, int(position_ms)),
+            state=chosen,
+            level="off",
+            engine_session_id=key[:80],
+            youth=False,
+            updated_at=now,
+            join_code=secrets.token_hex(4),
+        )
+        _SESSIONS[session.id] = session
+        return session
 
 
 def get_shared_session_for_screen(screen_id: str) -> SharedSession | None:
