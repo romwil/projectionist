@@ -457,6 +457,14 @@ STORES: Tuple[PersonalStore, ...] = (
         erase="activity",
         secret_cols=("nonce",),
     ),
+    PersonalStore(
+        table="session_approvals",
+        label="A request to join a room",
+        match=_direct("requester_id"),
+        subject_cols=("requester_id",),
+        erase="activity",
+        covers_cols=("requester_name",),
+    ),
     # --- The account itself (removed last) -----------------------------------
     PersonalStore(
         table="users",

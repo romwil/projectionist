@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Callable, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,6 +13,26 @@ from projectionist.library.query import LibraryFilters, query_library
 from projectionist.web.auth import require_role
 
 router = APIRouter(tags=["holidays"])
+logger = logging.getLogger(__name__)
+
+_MISSING_HOLIDAY = "Holiday not found"
+_CURATOR_FAILED = "The curator could not finish this request."
+
+
+def _curation_http_error(exc: BaseException) -> HTTPException:
+    """Map curator failures. Only a missing holiday is a 404.
+
+    Any other error, including a ``KeyError`` whose key is not the holiday,
+    is a 502 with a plain message. The key name must not become the response.
+    ``ValueError`` stays 400: those messages are written for the owner.
+    """
+    if isinstance(exc, KeyError) and exc.args == (_MISSING_HOLIDAY,):
+        return HTTPException(status_code=404, detail=_MISSING_HOLIDAY)
+    if isinstance(exc, ValueError):
+        return HTTPException(status_code=400, detail=str(exc))
+    logger.exception("Holiday curator request failed")
+    return HTTPException(status_code=502, detail=_CURATOR_FAILED)
+
 
 _db_factory: Optional[Callable[[], Any]] = None
 _settings_factory: Optional[Callable[[], Any]] = None
@@ -173,7 +194,7 @@ def holiday_rail_preview(
     try:
         return _rail_with_art(preview_holiday_rail(_db(), observance_id, limit=12))
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise _curation_http_error(exc) from exc
 
 
 @router.put("/api/admin/holidays/{observance_id}/rail/titles")
@@ -304,14 +325,8 @@ async def propose_holiday_rail_curation(
         return await propose_seasonal_shelf(
             _db(), _settings(), observance_id, limit=body.limit
         )
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(
-            status_code=502, detail=f"Curator request failed: {exc}"
-        ) from exc
+        raise _curation_http_error(exc) from exc
 
 
 @router.post("/api/admin/holidays/{observance_id}/rail/curate/apply")
@@ -330,10 +345,8 @@ def apply_holiday_rail_curation(
             observance_id,
             [pick.model_dump() for pick in payload.picks],
         )
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise _curation_http_error(exc) from exc
 
 
 @router.get("/api/admin/holidays-library-search")
