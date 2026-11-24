@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useConfirmModal } from "../hooks/useConfirmModal";
+import { ShelfEditor } from "../components/live/SeasonalShelves";
+import { holidaySummary, observanceListState } from "../lib/seasonalShelves";
 import {
-  clearHolidayRailTitle,
   createHoliday,
   deleteHoliday,
   getHolidayRail,
   listHolidays,
   restoreHolidayDefaults,
-  searchHolidayLibrary,
-  setHolidayRailTitle,
   updateHoliday,
 } from "../api/client";
 import SettingsPageHeader from "../components/settings/SettingsPageHeader";
@@ -61,11 +61,10 @@ export default function HolidaysPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [creating, setCreating] = useState(false);
   const [rail, setRail] = useState<any | null>(null);
-  const [libraryQuery, setLibraryQuery] = useState("");
-  const [libraryHits, setLibraryHits] = useState<any[]>([]);
   const [status, setStatus] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [tab, setTab] = useState<"shelf" | "dates" | "live" | "matching">("shelf");
 
   const selected = useMemo(
     () => items.find((item) => item.id === selectedId) || null,
@@ -204,48 +203,11 @@ export default function HolidaysPage() {
     }
   }
 
-  async function handleLibrarySearch(event: any) {
-    event.preventDefault();
-    try {
-      const data = await searchHolidayLibrary(libraryQuery.trim());
-      setLibraryHits(data.items || []);
-    } catch (error: unknown) {
-      setStatus({ type: "error", message: (error as { message?: string }).message || "Library search failed." });
-    }
-  }
-
-  async function applyCuration(libraryItemId: any, curation: any) {
-    if (!selectedId) return;
-    try {
-      const data = await setHolidayRailTitle(selectedId, {
-        library_item_id: libraryItemId,
-        curation,
-      });
-      setRail((prev: any) => ({ ...(prev || {}), curation: data.curation || [] }));
-      await loadRail(selectedId);
-      setStatus({
-        type: "success",
-        message:
-          curation === "exclude"
-            ? "Hidden from this rail."
-            : curation === "include"
-              ? "Always included on this rail."
-              : "Pinned to the front of this rail.",
-      });
-    } catch (error: unknown) {
-      setStatus({ type: "error", message: (error as { message?: string }).message || "Could not update rail title." });
-    }
-  }
-
-  async function removeCuration(libraryItemId: any) {
-    if (!selectedId) return;
-    try {
-      await clearHolidayRailTitle(selectedId, libraryItemId);
-      await loadRail(selectedId);
-    } catch (error: unknown) {
-      setStatus({ type: "error", message: (error as { message?: string }).message || "Could not clear curation." });
-    }
-  }
+  const showDates = creating || tab === "dates";
+  const showMatching = creating || tab === "matching";
+  const showLive = creating || tab === "live";
+  const showShelf = !creating && Boolean(selected) && tab === "shelf";
+  const shelfCount = Array.isArray(rail?.items) ? rail.items.length : 0;
 
   if (loading) {
     return (
@@ -258,9 +220,9 @@ export default function HolidaysPage() {
 
   return (
     <div className="settings-stack holidays-page" data-testid="admin-holidays">
-      <SettingsPageHeader title="Holidays">
-        Household calendar for Explore’s seasonal rail — grounding day, shoulder windows, and which
-        titles belong on the shelf.
+        <SettingsPageHeader title="Holidays & seasons">
+        One place for the observances Explore shelves are built around: the theme, the picks, the
+        dates, and whether Live carries the block.
       </SettingsPageHeader>
 
       {status ? (
@@ -280,7 +242,7 @@ export default function HolidaysPage() {
           footer={
             <div className="settings-actions">
               <button type="button" className="primary" onClick={startCreate} data-testid="holidays-add">
-                Add holiday
+                Add your own
               </button>
               <button
                 type="button"
@@ -311,10 +273,9 @@ export default function HolidaysPage() {
                   >
                     <strong>{item.name}</strong>
                     <span className="muted">
-                      {item.grounding_date_label || item.grounding_date || "—"}
+                      {observanceListState(item, schedule)}
                       {" · "}
-                      {item.pre_shoulder_days}d before / {item.post_shoulder_days}d after
-                      {!item.enabled ? " · off" : ""}
+                      {item.grounding_date_label || item.grounding_date || "—"}
                     </span>
                   </button>
                 </li>
@@ -326,13 +287,58 @@ export default function HolidaysPage() {
         <form onSubmit={handleSave} className="holidays-editor">
           <SettingsPanel
             title={creating ? "New holiday" : selected ? selected.name : "Edit holiday"}
-            lead="Grounding date is the day the holiday is pinned to. Shoulders can differ."
+            lead={
+              creating
+                ? "Grounding date is the day the holiday is pinned to. Shoulders can differ."
+                : "On or off for Explore. The tabs are the shelf, the dates, Live, and the words that match."
+            }
             testId="holidays-editor-panel"
           >
             {!creating && !selected ? (
               <p className="muted">Pick an observance on the left, or add a family day.</p>
             ) : (
               <>
+                {!creating && selected ? (
+                  <>
+                    <p data-testid="holiday-summary">
+                      {holidaySummary({ item: selected, schedule, shelfCount })}
+                    </p>
+                    <div className="holiday-tabs" role="tablist" aria-label="Holiday sections">
+                      {(
+                        [
+                          ["shelf", "The shelf"],
+                          ["dates", "Dates"],
+                          ["live", "On Live"],
+                          ["matching", "Matching"],
+                        ] as const
+                      ).map(([id, label]) => (
+                        <button
+                          key={id}
+                          type="button"
+                          role="tab"
+                          aria-selected={tab === id}
+                          className={tab === id ? "ghost is-active" : "ghost"}
+                          data-testid={`holiday-tab-${id}`}
+                          onClick={() => setTab(id)}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                ) : null}
+                {showShelf && selected ? (
+                  <div data-testid="holidays-rail-panel">
+                    <ShelfEditor
+                      item={selected}
+                      onSaved={() => {
+                        void load();
+                      }}
+                    />
+                  </div>
+                ) : null}
+                {showDates ? (
+                <>
                 <label className="settings-field">
                   <span>Name</span>
                   <input
@@ -426,17 +432,24 @@ export default function HolidaysPage() {
                     />
                   </label>
                 </div>
-
+                </>
+                ) : null}
+                {showMatching ? (
                 <label className="settings-field">
-                  <span>Search / filter terms</span>
+                  <span>Keyword terms</span>
                   <textarea
                     rows={3}
                     value={form.search_terms}
                     onChange={(e) => patchForm({ search_terms: e.target.value })}
-                    placeholder="christmas, holiday, winter, family"
+                    placeholder="christmas, santa claus, nutcracker"
                     data-testid="holiday-search-terms"
                   />
+                  <span className="settings-field-hint">
+                    Specific words count on their own. Broad words such as winter or family only
+                    count when a keyword or the plot already matches the holiday.
+                  </span>
                 </label>
+                ) : null}
 
                 <SettingsToggle
                   id="holiday-enabled"
@@ -446,6 +459,8 @@ export default function HolidaysPage() {
                   help="Disabled holidays stay on the list but never drive the rail."
                   testId="holiday-enabled-toggle"
                 />
+                {showLive ? (
+                <>
                 <SettingsToggle
                   id="holiday-schedule"
                   checked={Boolean(form.schedule_publish)}
@@ -454,7 +469,18 @@ export default function HolidaysPage() {
                   help="When on, the daily seasonal rail task may publish this window to Explore."
                   testId="holiday-schedule-toggle"
                 />
+                <p className="settings-field-hint">
+                  When the Live block is on, this window can publish on the seasonal rail. Channel
+                  settings stay on{" "}
+                  <Link to="/admin/live-channels" data-testid="holiday-live-link">
+                    Live
+                  </Link>
+                  .
+                </p>
+                </>
+                ) : null}
 
+                {creating || tab !== "shelf" ? (
                 <div className="settings-actions">
                   <button type="submit" disabled={saving} data-testid="holiday-save">
                     {saving ? "Saving…" : creating ? "Create holiday" : "Save changes"}
@@ -470,124 +496,13 @@ export default function HolidaysPage() {
                     </button>
                   ) : null}
                 </div>
+                ) : null}
               </>
             )}
           </SettingsPanel>
         </form>
       </div>
 
-      {selected && !creating ? (
-        <SettingsPanel
-          title="Rail titles"
-          lead="Not a fit hides a bad match. Always include adds a favorite. Show first pins the head of the rail."
-          testId="holidays-rail-panel"
-        >
-          {rail?.note ? <p className="muted">{rail.note}</p> : null}
-          <div className="holidays-rail-preview" data-testid="holiday-rail-preview">
-            <h4 className="settings-subsection-title">
-              Preview · {rail?.label || selected.name}
-              {rail?.grounding_date ? ` · grounded ${rail.grounding_date}` : ""}
-            </h4>
-            {(rail?.items || []).length ? (
-              <ol className="holidays-rail-items">
-                {rail.items.map((item: any) => (
-                  <li key={item.id}>
-                    <span>
-                      {item.title}
-                      {item.year ? ` (${item.year})` : ""}
-                      {item.rail_role ? ` · ${item.rail_role}` : ""}
-                    </span>
-                    <span className="holidays-rail-actions">
-                      <button
-                        type="button"
-                        className="ghost"
-                        onClick={() => applyCuration(item.id, "pin")}
-                        data-testid={`rail-pin-${item.id}`}
-                      >
-                        Show first
-                      </button>
-                      <button
-                        type="button"
-                        className="ghost"
-                        onClick={() => applyCuration(item.id, "exclude")}
-                        data-testid={`rail-exclude-${item.id}`}
-                      >
-                        Not a fit
-                      </button>
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <p className="muted">No titles on this rail yet.</p>
-            )}
-          </div>
-
-          <div className="settings-subsection" data-testid="holiday-curation-list">
-            <h4 className="settings-subsection-title">Saved curation</h4>
-            {(rail?.curation || []).length ? (
-              <ul>
-                {(rail.curation || []).map((entry: any) => (
-                  <li key={`${entry.curation}-${entry.library_item_id}`}>
-                    <strong>{entry.title || `#${entry.library_item_id}`}</strong>
-                    {" · "}
-                    {entry.curation}
-                    <button
-                      type="button"
-                      className="ghost"
-                      onClick={() => removeCuration(entry.library_item_id)}
-                      data-testid={`rail-clear-${entry.library_item_id}`}
-                    >
-                      Clear
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="muted">No pins, includes, or excludes yet.</p>
-            )}
-          </div>
-
-          <form onSubmit={handleLibrarySearch} className="holidays-library-search">
-            <label className="settings-field">
-              <span>Search library to add</span>
-              <input
-                type="search"
-                value={libraryQuery}
-                onChange={(e) => setLibraryQuery(e.target.value)}
-                placeholder="Title in your collection"
-                data-testid="holiday-library-search"
-              />
-            </label>
-            <button type="submit" className="ghost" data-testid="holiday-library-search-submit">
-              Search
-            </button>
-          </form>
-          {libraryHits.length ? (
-            <ul className="holidays-library-hits" data-testid="holiday-library-hits">
-              {libraryHits.map((hit) => (
-                <li key={hit.id}>
-                  <span>
-                    {hit.title}
-                    {hit.year ? ` (${hit.year})` : ""}
-                  </span>
-                  <span className="holidays-rail-actions">
-                    <button type="button" className="ghost" onClick={() => applyCuration(hit.id, "include")}>
-                      Always include
-                    </button>
-                    <button type="button" className="ghost" onClick={() => applyCuration(hit.id, "pin")}>
-                      Show first
-                    </button>
-                    <button type="button" className="ghost" onClick={() => applyCuration(hit.id, "exclude")}>
-                      Not a fit
-                    </button>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </SettingsPanel>
-      ) : null}
 
       <SettingsPanel
         title="Upcoming scheduled rails"

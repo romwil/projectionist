@@ -105,15 +105,23 @@ class RailCuratorNotePayload(BaseModel):
 
 class RailCurateProposePayload(BaseModel):
     limit: int = Field(default=10, ge=6, le=16)
+    role_mix: Optional[Dict[str, int]] = None
 
 
 class RailCuratePick(BaseModel):
     library_item_id: int = Field(ge=1)
     curator_note: str = Field(default="", max_length=280)
+    role: str = Field(default="", max_length=40)
+    matched_because: str = Field(default="", max_length=180)
 
 
 class RailCurateApplyPayload(BaseModel):
     picks: List[RailCuratePick] = Field(default_factory=list)
+    theme: Optional[str] = Field(default=None, max_length=180)
+
+
+class RailRoleMixPayload(BaseModel):
+    role_mix: Dict[str, int] = Field(default_factory=dict)
 
 
 @router.get("/api/admin/holidays")
@@ -307,6 +315,30 @@ def set_holiday_rail_order(
     return {"curation": curation, "preview": preview}
 
 
+@router.put("/api/admin/holidays/{observance_id}/rail/mix")
+def set_holiday_rail_mix(
+    observance_id: str,
+    payload: RailRoleMixPayload,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Owner override for the curator's role balance. The next proposal uses it."""
+    del user
+    from projectionist.library.seasonal_curation import SHELF_ROLES
+
+    db = _db()
+    if db.get_holiday_observance(observance_id) is None and not observance_id.startswith(
+        "season:"
+    ):
+        raise HTTPException(status_code=404, detail="Holiday not found")
+    mix = {
+        role: max(0, min(int(payload.role_mix.get(role) or 0), 16))
+        for role in SHELF_ROLES
+    }
+    if sum(mix.values()) < 1:
+        raise HTTPException(status_code=400, detail="Choose at least one pick.")
+    return {"role_mix": db.set_holiday_rail_role_mix(observance_id, mix)}
+
+
 @router.post("/api/admin/holidays/{observance_id}/rail/curate")
 async def propose_holiday_rail_curation(
     observance_id: str,
@@ -323,7 +355,11 @@ async def propose_holiday_rail_curation(
     body = payload or RailCurateProposePayload()
     try:
         return await propose_seasonal_shelf(
-            _db(), _settings(), observance_id, limit=body.limit
+            _db(),
+            _settings(),
+            observance_id,
+            limit=body.limit,
+            role_mix=body.role_mix,
         )
     except Exception as exc:  # noqa: BLE001
         raise _curation_http_error(exc) from exc
@@ -344,6 +380,7 @@ def apply_holiday_rail_curation(
             _db(),
             observance_id,
             [pick.model_dump() for pick in payload.picks],
+            theme=payload.theme,
         )
     except Exception as exc:  # noqa: BLE001
         raise _curation_http_error(exc) from exc

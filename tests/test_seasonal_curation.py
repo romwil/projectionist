@@ -309,13 +309,20 @@ class SeasonalCurationTests(unittest.TestCase):
 
             async def fake_chat(_db, _provider, messages, **_kwargs):
                 captured["messages"] = messages
+                roles = ("Classic", "Family", "Deep cut")
                 return {
                     "content": json.dumps(
                         {
+                            "theme": "A small Christmas shelf",
                             "picks": [
-                                {"library_item_id": item_id, "note": "A grounded note."}
-                                for item_id in ids
-                            ]
+                                {
+                                    "library_item_id": item_id,
+                                    "role": roles[index],
+                                    "note": "A grounded note.",
+                                    "matched_because": "Keyword christmas.",
+                                }
+                                for index, item_id in enumerate(ids)
+                            ],
                         }
                     )
                 }
@@ -344,7 +351,7 @@ class SeasonalCurationTests(unittest.TestCase):
         messages = captured["messages"]
         assert isinstance(messages, list)
         system = str(messages[0]["content"])
-        self.assertIn('{"picks"', system)
+        self.assertIn('"picks"', system)
         self.assertNotIn("{limit}", system)
         self.assertIn("Aim for 3 picks", system)
         self.assertEqual(
@@ -401,6 +408,263 @@ class SeasonalCurationTests(unittest.TestCase):
             with db.connect() as conn:
                 cols = {row["name"] for row in conn.execute("PRAGMA table_info(holiday_rail_titles)")}
             self.assertIn("curator_note", cols)
+
+    def test_prompt_asks_for_a_theme_roles_and_grounded_notes(self) -> None:
+        from projectionist.library.seasonal_curation import _system_prompt
+
+        prompt = _system_prompt(10)
+        self.assertIn("10", prompt)
+        self.assertNotIn("{limit}", prompt)
+        self.assertIn("theme", prompt)
+        for role in ("Classic", "Family", "New this year", "Deep cut", "After bedtime"):
+            self.assertIn(role, prompt)
+        self.assertIn("Do not invent", prompt)
+        # Example JSON stays literal. str.format would have raised before this return.
+        self.assertIn('"picks"', prompt)
+
+    def test_schema_requires_a_theme_and_known_roles(self) -> None:
+        from projectionist.library.seasonal_curation import parse_curator_payload
+
+        parsed = parse_curator_payload(
+            {
+                "theme": "  Snowed-in comfort  ",
+                "picks": [{"library_item_id": 1, "role": "Classic", "note": "A note."}],
+            }
+        )
+        self.assertEqual(parsed["theme"], "Snowed-in comfort")
+        self.assertEqual(parsed["picks"][0]["role"], "Classic")
+        with self.assertRaises(ValueError):
+            parse_curator_payload({"picks": []})
+        with self.assertRaises(ValueError):
+            parse_curator_payload(
+                {"theme": "A theme", "picks": [{"library_item_id": 1, "role": "Bonus"}]}
+            )
+
+    def test_role_mix_caps_each_role(self) -> None:
+        from projectionist.library.seasonal_curation import DEFAULT_ROLE_MIX, apply_role_mix
+
+        picks = []
+        for role, count in (
+            ("Classic", 5),
+            ("Family", 4),
+            ("New this year", 2),
+            ("Deep cut", 3),
+            ("After bedtime", 2),
+        ):
+            for index in range(count):
+                picks.append(
+                    {
+                        "library_item_id": len(picks) + 1,
+                        "role": role,
+                        "curator_note": f"{role} {index} belongs on the shelf.",
+                        "matched_because": "keyword",
+                    }
+                )
+        picks.append(
+            {"library_item_id": 99, "role": "Classic", "curator_note": "   ", "matched_because": "plot"}
+        )
+        balanced = apply_role_mix(picks, DEFAULT_ROLE_MIX)
+        counts: dict[str, int] = {}
+        for pick in balanced:
+            counts[pick["role"]] = counts.get(pick["role"], 0) + 1
+            self.assertTrue(str(pick["curator_note"]).strip())
+        self.assertEqual(counts, dict(DEFAULT_ROLE_MIX))
+
+    def test_scoring_prefers_keyword_and_plot_over_weak_terms(self) -> None:
+        from projectionist.library.seasonal_curation import score_seasonal_candidates
+
+        observance = {
+            "id": "christmas",
+            "search_terms": ["christmas", "holiday", "winter", "family", "nutcracker"],
+        }
+        rows = [
+            {
+                "id": 1,
+                "title": "Santa Claus Conquers the Martians",
+                "year": 1964,
+                "keywords": ["santa claus", "christmas eve"],
+                "genres": ["Family"],
+                "summary": "Martians kidnap Santa.",
+            },
+            {
+                "id": 2,
+                "title": "The Station",
+                "year": 1988,
+                "keywords": [],
+                "genres": ["Drama"],
+                "summary": "Strangers spend Christmas Eve snowed in at a station.",
+            },
+            {
+                "id": 3,
+                "title": "Cousins",
+                "year": 2019,
+                "keywords": ["family"],
+                "genres": ["Family"],
+                "summary": "A reunion with no particular day on the calendar.",
+            },
+            {
+                "id": 4,
+                "title": "Plain Story",
+                "year": 2001,
+                "keywords": [],
+                "genres": ["Drama"],
+                "summary": "Nothing seasonal in the plot.",
+                "view_count": 2,
+                "last_viewed_at": 1734681600,  # 2024-12-20, a previous Christmas window
+            },
+        ]
+        scored = score_seasonal_candidates(rows, observance, today=date(2026, 11, 24))
+        by_id = {row["library_item_id"]: row for row in scored}
+        self.assertNotIn(3, by_id)
+        self.assertIn(1, by_id)
+        self.assertIn(2, by_id)
+        self.assertIn(4, by_id)
+        self.assertGreater(by_id[1]["score"], by_id[2]["score"])
+        self.assertIn("keyword", by_id[1]["signals"])
+        self.assertIn("plot", by_id[2]["signals"])
+        self.assertIn("household", by_id[4]["signals"])
+        # Owner-added "nutcracker" ships as a strong term beside the built-in Christmas keywords.
+        self.assertIn("nutcracker", scored[0]["available_strong_terms"])
+
+    def test_candidate_pool_keeps_era_variety_and_drops_weak_only(self) -> None:
+        from projectionist.library.seasonal_curation import candidate_pool
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            classic = db.upsert_library_item(
+                {
+                    "rating_key": "xmas-classic",
+                    "media_type": "movie",
+                    "title": "The Shop Around the Corner",
+                    "year": 1940,
+                    "keywords": ["christmas"],
+                    "summary": "Letters at Christmas.",
+                    "genres": ["Romance"],
+                    "content_rating": "NR",
+                }
+            )
+            weak = db.upsert_library_item(
+                {
+                    "rating_key": "xmas-weak",
+                    "media_type": "movie",
+                    "title": "Winter Picnic",
+                    "year": 2024,
+                    "keywords": ["winter", "family"],
+                    "genres": ["Family"],
+                    "summary": "A cold weekend outdoors.",
+                }
+            )
+            newest = []
+            for index in range(70):
+                newest.append(
+                    db.upsert_library_item(
+                        {
+                            "rating_key": f"xmas-new-{index}",
+                            "media_type": "movie",
+                            "title": f"New Christmas {index}",
+                            "year": 2024,
+                            "keywords": ["christmas"],
+                            "summary": "A new Christmas story.",
+                            "genres": ["Comedy"],
+                            "content_rating": "PG",
+                        }
+                    )
+                )
+            db.set_holiday_rail_title("christmas", newest[0], curation="exclude")
+            pool = candidate_pool(db, "christmas", today=date(2026, 11, 24))
+            ids = [row["library_item_id"] for row in pool["candidates"]]
+            self.assertIn(classic, ids)
+            self.assertNotIn(weak, ids)
+            self.assertNotIn(newest[0], ids)
+            self.assertLessEqual(len(ids), 60)
+            classic_row = next(row for row in pool["candidates"] if row["library_item_id"] == classic)
+            self.assertTrue(classic_row["synopsis"])
+            self.assertIn("genres", classic_row)
+            self.assertIn("christmas", classic_row["matching_keywords"])
+            self.assertIn("youth_safe", classic_row)
+            self.assertFalse(classic_row["youth_safe"])
+
+    def test_apply_stores_theme_and_explore_hides_empty_notes_and_after_bedtime(self) -> None:
+        from projectionist.library.seasonal_curation import apply_seasonal_shelf_proposal
+        from projectionist.youth.apply import filter_payload_for_youth
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            classic = db.upsert_library_item(
+                {
+                    "rating_key": "theme-classic",
+                    "media_type": "movie",
+                    "title": "Classic Christmas",
+                    "year": 1947,
+                    "keywords": ["christmas"],
+                    "content_rating": "PG",
+                    "summary": "A Christmas visit.",
+                }
+            )
+            late = db.upsert_library_item(
+                {
+                    "rating_key": "theme-late",
+                    "media_type": "movie",
+                    "title": "After the House Is Quiet",
+                    "year": 1992,
+                    "keywords": ["christmas"],
+                    "content_rating": "PG",
+                    "summary": "A Christmas argument.",
+                }
+            )
+            blank = db.upsert_library_item(
+                {
+                    "rating_key": "theme-blank",
+                    "media_type": "movie",
+                    "title": "Untitled Card",
+                    "year": 2001,
+                    "keywords": ["christmas"],
+                    "content_rating": "PG",
+                }
+            )
+            result = apply_seasonal_shelf_proposal(
+                db,
+                "christmas",
+                [
+                    {
+                        "library_item_id": classic,
+                        "curator_note": "The visit the household already quotes.",
+                        "role": "Classic",
+                        "matched_because": "Keyword christmas.",
+                    },
+                    {
+                        "library_item_id": late,
+                        "note": "For after the younger members are in bed.",
+                        "role": "After bedtime",
+                        "matched_because": "Keyword christmas.",
+                    },
+                    {
+                        "library_item_id": blank,
+                        "curator_note": "   ",
+                        "role": "Deep cut",
+                    },
+                ],
+                theme="Letters, snow, and one late sitting",
+            )
+            self.assertEqual(result["preview"].get("theme"), "Letters, snow, and one late sitting")
+            preview_ids = [int(item["id"]) for item in result["preview"]["items"]]
+            self.assertNotIn(blank, preview_ids)
+            self.assertEqual(
+                result["preview"]["items"][0].get("shelf_role"),
+                "Classic",
+            )
+            live = feed_seasonal_spotlight(db, today=date(2026, 12, 25), prefer_snapshot=False)
+            self.assertEqual(live.get("theme"), "Letters, snow, and one late sitting")
+            self.assertIn("Letters, snow", live["label"] + " " + live.get("theme", ""))
+            live_ids = [int(item["id"]) for item in live["items"]]
+            self.assertNotIn(blank, live_ids)
+            self.assertTrue(all(str(item.get("curator_note") or "").strip() for item in live["items"]))
+            youth = filter_payload_for_youth(
+                live, user={"is_youth": True}, settings=Settings()
+            )
+            youth_ids = [int(item["id"]) for item in youth["items"]]
+            self.assertIn(classic, youth_ids)
+            self.assertNotIn(late, youth_ids)
 
 
 if __name__ == "__main__":
