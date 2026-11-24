@@ -20,6 +20,8 @@ from projectionist.sessions.rooms import screen_signed_in_user
 from projectionist.sessions.captions import parse_cues
 from projectionist.sessions.shared import (
     SharedSessionError,
+    add_guest,
+    adopt_engine_playback,
     can_read,
     change_title,
     end_shared_session,
@@ -31,7 +33,6 @@ from projectionist.sessions.shared import (
     remove_guest,
     tighten_ceiling,
     update_shared_session,
-    add_guest,
 )
 from projectionist.web.auth import get_current_user_dep
 
@@ -112,8 +113,41 @@ def _raise(error: SharedSessionError) -> None:
     raise HTTPException(status_code=error.status_code, detail=error.detail) from error
 
 
+def _remote_state(engine_state: str) -> str:
+    """The remote's clock uses playing, paused, or buffering. Ready means the picture is up."""
+    if engine_state == "ready":
+        return "playing"
+    if engine_state == "preparing":
+        return "buffering"
+    return "paused"
+
+
+def _shared_for_engine(session_id: str, user):
+    """The engine session handoff accepts, as a remote session for that same member."""
+    from projectionist.engine.session import get_engine_session, session_playback_state
+    from projectionist.library.playback import PlaybackError
+
+    user_id = str(getattr(user, "id", "") or "")
+    try:
+        engine = get_engine_session(session_id, user_id=user_id)
+    except PlaybackError:
+        return None
+    try:
+        return adopt_engine_playback(
+            session_id=engine.session_id,
+            owner_id=str(engine.user_id or user_id),
+            rating_key=engine.rating_key,
+            position_ms=int(engine.view_offset_ms or 0),
+            state=_remote_state(session_playback_state(engine)),
+        )
+    except SharedSessionError:
+        return None
+
+
 def _visible(session_id: str, user):
     session = get_shared_session(session_id)
+    if session is None:
+        session = _shared_for_engine(session_id, user)
     if session is None:
         raise HTTPException(status_code=404, detail=_UNAVAILABLE)
     screen_user = screen_signed_in_user(_db(), session.screen_id)
@@ -424,6 +458,8 @@ async def session_live(websocket: WebSocket, session_id: str) -> None:
     await websocket.accept()
     user = _user_from_websocket(websocket)
     session = get_shared_session(session_id)
+    if session is None and user is not None:
+        session = _shared_for_engine(session_id, user)
     user_id = str(getattr(user, "id", "") or "")
     role = _role(session, user_id) if session is not None and user is not None else None
     if session is None or role is None:
