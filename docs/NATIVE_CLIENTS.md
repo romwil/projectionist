@@ -76,6 +76,7 @@ Invite: `GET /api/invites/validate?token=…` stays public. The body is the invi
     "device_pairing": 1,
     "throw": 1,
     "playback_engine": 0,    // ENG-003 ships → 1
+    "preroll_warm_start": 1, // ENG-015 film session during a preroll
     "caption_tracks": 0,     // ENG-004
     "shared_sessions": 1,    // SES-004 live channel, commands, clock
     "timeline": 0,           // TML-005
@@ -103,7 +104,8 @@ curl -s http://your-host:8788/api/features | python3 -m json.tool
 - `rooms` is `1` when `GET /api/rooms` lists named screens. The list does not include what is playing. See [shared sessions](SHARED_SESSIONS.md#rooms).
 - `household_addresses` is `1` when this server publishes `addresses.home` and `addresses.away` to a signed-in client. The strings are absent before sign-in. Home is the last origin seen from the home network; away is the owner’s public base URL, or empty. Engine playlist and segment URLs stay relative either way. See [shared sessions](SHARED_SESSIONS.md#home-and-away).
 - **Honest limit.** A `0` means this server knows the name and does not offer that contract yet. It is not a hint that the feature is about to appear.
-- *Proposed, not on this manifest:* `preroll_warm_start` (ENG-015) and `warmup_screen` (EXP-018). A client treats a missing name the way it treats `0`. Neither name is served until those items ship. ENG-015 adds no route. EXP-018's lines document is *proposed* as `GET /api/playback/warmup-lines`.
+- `preroll_warm_start` is `1` when Play can prepare the film while a preroll runs. No new route. `POST /api/playback/sessions` accepts optional `preroll: true` and starts that preparation at the resume point. The session read adds `prepare_ms` and `ready_at_handoff`. `GET /api/playback/sessions/{id}?handoff=true` records the hand-off once. If the engine stops before the film is ready, the same read moves to plan `library` and starts the library transcode. Stop ends both. A missing name means the client plays the preroll first and opens the film session after.
+- *Proposed, not on this manifest:* `warmup_screen` (EXP-018). A client treats a missing name the way it treats `0`. EXP-018's lines document is *proposed* as `GET /api/playback/warmup-lines`.
 
 ---
 

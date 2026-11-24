@@ -506,3 +506,96 @@ class PlaylistWaitTests(unittest.TestCase):
                 )
             self.assertEqual(caught.exception.status_code, 404)
             self.assertEqual(slept, [])
+
+    def test_preroll_handoff_records_readiness_after_a_slowed_source(self) -> None:
+        """A preroll covers the wait. The slowed source publishes during that wait.
+
+        Handoff then records that the film was ready, and how long it took.
+        A later read does not rewrite the sample.
+        """
+        import tempfile
+
+        from projectionist.engine.session import note_handoff
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "av").mkdir()
+            now = {"t": 1_000.0}
+            session = self._session(root, _Running())
+            session.warm = True
+            session.created_at = 1_000.0
+            session.clock = lambda: now["t"]
+
+            opening = session.public()
+            self.assertEqual(opening["state"], "preparing")
+            self.assertIsNone(opening["ready_at_handoff"])
+            self.assertEqual(opening["prepare_ms"], 0)
+
+            now["t"] = 1_004.0
+            self.assertEqual(session.public()["state"], "preparing")
+            self.assertEqual(session.public()["prepare_ms"], 4000)
+
+            (root / "av" / "stream.m3u8").write_text(
+                "#EXTM3U\n#EXT-X-PLAYLIST-TYPE:EVENT\n#EXTINF:6.000,\nseg_0000.m4s\n",
+                encoding="utf-8",
+            )
+            now["t"] = 1_006.5
+            ready = session.public()
+            self.assertEqual(ready["state"], "ready")
+            self.assertEqual(ready["prepare_ms"], 6500)
+            self.assertIsNone(ready["ready_at_handoff"])
+
+            note_handoff(session)
+            handed = session.public()
+            self.assertTrue(handed["ready_at_handoff"])
+            self.assertEqual(handed["state"], "ready")
+            self.assertEqual(handed["prepare_ms"], 6500)
+
+            now["t"] = 1_020.0
+            note_handoff(session)
+            self.assertTrue(session.public()["ready_at_handoff"])
+            self.assertEqual(session.public()["prepare_ms"], 6500)
+
+    def test_back_during_the_preroll_stops_ffmpeg(self) -> None:
+        import tempfile
+
+        from projectionist.engine.session import stop_engine_session
+
+        class _Proc:
+            def __init__(self) -> None:
+                self.code = None
+                self.terminated = False
+
+            def poll(self):
+                return self.code
+
+            def terminate(self) -> None:
+                self.terminated = True
+                self.code = -15
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "av").mkdir()
+            proc = _Proc()
+            session = self._session(root, proc)
+            session.warm = True
+            self.assertEqual(session.public()["state"], "preparing")
+            stop_engine_session(session)
+            self.assertTrue(proc.terminated)
+            self.assertIsNone(session.process)
+            self.assertTrue(session.cancelled)
+            self.assertEqual(session.public()["plan"], "remux")
+
+    def test_engine_failure_during_the_preroll_becomes_the_library_plan(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "av").mkdir()
+            session = self._session(root, _Finished())
+            session.warm = True
+            body = session.public()
+            self.assertEqual(body["plan"], "library")
+            self.assertFalse(body["playable"])
+            self.assertEqual(body["state"], "")
+            self.assertIn("library path", body["reason"])
