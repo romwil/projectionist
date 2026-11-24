@@ -89,6 +89,7 @@ Invite: `GET /api/invites/validate?token=…` stays public. The body is the invi
     "approvals": 0,          // NAT-006
     "cached_art": 1,         // same fact as features.cached_art
     "household_addresses": 1, // home and away on the signed-in payload
+    "holiday_shelves": 1,    // EXP-020 theme, roles, and grounded notes
     "rooms": 1,              // SES-002 named screens, no playback
     "session_object": 1,     // SES-003 owner, screen, position, level
     "session_join": 1,       // SES-005 code or starter approval, guest remote
@@ -115,6 +116,7 @@ curl -s http://your-host:8788/api/features | python3 -m json.tool
 - **Honest limit.** A `0` means this server knows the name and does not offer that contract yet. It is not a hint that the feature is about to appear.
 - `preroll_warm_start` is `1` when Play can prepare the film while a preroll runs. No new route. `POST /api/playback/sessions` accepts optional `preroll: true` and starts that preparation at the resume point. The session read adds `prepare_ms` and `ready_at_handoff`. `GET /api/playback/sessions/{id}?handoff=true` records the hand-off once. If the engine stops before the film is ready, the same read moves to plan `library` and starts the library transcode. Stop ends both. A missing name means the client plays the preroll first and opens the film session after.
 - `warmup_screen` is `1` when `GET /api/playback/warmup-lines` returns the versioned lines document and the session read includes `step`. The step is one of `waking_disk`, `probing`, `remuxing`, `encoding_audio`, `preparing_captions`, `falling_back`, `waiting_on_plex`, `buffering`. A missing name means the client shows art and an honest status, and does not show a joke line. The web screen is not part of this capability.
+- `holiday_shelves` is `1` when a curated seasonal rail carries `theme` and each pick may carry `shelf_role`, `curator_note`, and `matched_because`. The header line is the holiday name, then the theme. Roles are Classic, Family, New this year, Deep cut, and After bedtime. A Youth response omits After bedtime. A pick with an empty note is not on the member rail. A missing name means the client shows the holiday name and any note already on the card.
 
 ---
 

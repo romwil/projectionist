@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+A holiday shelf can carry a theme and a reason for each pick. The owner previews that mix and applies it. Youth members do not see After bedtime. Holidays and seasons are one admin page. This is not in the 1.46.1 image.
+
+### Highlights
+
+- **A holiday shelf has a theme and a reason.** Ask the professor, read the preview, then apply. Explore shows the theme and each note. Youth members do not see After bedtime. Holidays and seasons are one admin page. This is not in the 1.46.1 image.
+
 ## [1.46.1] — 2026-11-24
 
 Tag `v1.46.0` was created and never published. This is the Hub image after 1.45.5. It contains that tag's commit and the merges after it, including pull request 323, "Treat a tunnel request as outside the house," and pull request 325, "Keep household API responses out of a shared cache."
@@ -9,6 +15,7 @@ Tag `v1.46.0` was created and never published. This is the Hub image after 1.45.
 A holiday question reaches the curator. The film prepares while the preroll plays. Household playback lives under Admin. The web app can be installed, and a browser can start a film on another screen. An owner password needs a sign-in code.
 
 ### Highlights
+
 - **A holiday question reaches the curator.** Ask the curator answers. It no longer comes back as the word "picks".
 - **The film prepares while the preroll plays.** A warm-up screen says what is happening, and the movie is ready when the preroll ends.
 - **Household playback is an owner control.** Play through Projectionist, the away address, the playability report, and copies made ahead are under Admin → Household → Playback. The switch says it affects everyone in the household. Members do not see that section. An old Profile playback anchor opens the new section.

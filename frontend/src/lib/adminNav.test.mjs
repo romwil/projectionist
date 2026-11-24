@@ -33,7 +33,7 @@ describe("adminNav", () => {
       adminNavLinks().find((item) => item.id === "newsletters")?.to,
       "/admin/newsletters",
     );
-    assert.equal(adminNavLinks().find((item) => item.id === "holidays")?.label, "Holidays");
+    assert.equal(adminNavLinks().find((item) => item.id === "holidays")?.label, "Holidays & seasons");
     assert.equal(adminNavLinks().find((item) => item.id === "holidays")?.to, "/admin/holidays");
     assert.equal(
       adminNavLinks().some((item) => item.id === "house" || item.to === "/admin/house"),
@@ -161,13 +161,13 @@ describe("adminNav", () => {
         ["overview"],
         ["connections", "libraries"],
         ["playback"],
-        ["lobby", "live-channels"],
+        ["lobby", "live-channels", "holidays"],
         ["tasks", "logs"],
         ["persona", "advanced"],
       ],
     );
     assert.match(String(groups[3].subtitle || ""), /On the wall/i);
-    assert.equal(links.length, 10);
+    assert.equal(links.length, 11);
     assert.equal(links.some((item) => item.id === "health"), false);
     assert.equal(links.some((item) => item.id === "taxonomy"), false);
   });
@@ -181,7 +181,7 @@ describe("adminNav", () => {
     );
     assert.deepEqual(
       experience.links.map((item) => item.id),
-      ["lobby", "live-channels", "seerr"],
+      ["lobby", "live-channels", "holidays", "seerr"],
     );
   });
 });

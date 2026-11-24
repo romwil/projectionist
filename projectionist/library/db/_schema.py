@@ -2248,6 +2248,30 @@ class SchemaMigrationsMixin:
             """
         )
 
+    def _migrate_holiday_shelf_theme(self, conn: sqlite3.Connection) -> None:
+        """Theme, role mix, and why-it-matched on a curated seasonal shelf."""
+        title_cols = self._table_columns(conn, "holiday_rail_titles")
+        if title_cols:
+            if "shelf_role" not in title_cols:
+                conn.execute(
+                    "ALTER TABLE holiday_rail_titles ADD COLUMN shelf_role TEXT NOT NULL DEFAULT ''"
+                )
+            if "matched_because" not in title_cols:
+                conn.execute(
+                    "ALTER TABLE holiday_rail_titles ADD COLUMN matched_because TEXT NOT NULL DEFAULT ''"
+                )
+        mode_cols = self._table_columns(conn, "holiday_rail_shelf_mode")
+        if not mode_cols:
+            return
+        if "theme" not in mode_cols:
+            conn.execute(
+                "ALTER TABLE holiday_rail_shelf_mode ADD COLUMN theme TEXT NOT NULL DEFAULT ''"
+            )
+        if "role_mix_json" not in mode_cols:
+            conn.execute(
+                "ALTER TABLE holiday_rail_shelf_mode ADD COLUMN role_mix_json TEXT NOT NULL DEFAULT ''"
+            )
+
     def _migrate_holiday_rail_shelf_mode(self, conn: sqlite3.Connection) -> None:
         """Per-scope flag: a professor curate replaces the keyword dump."""
         conn.execute(

@@ -64,19 +64,32 @@ def title_allowed_for_user(
     return content_rating_allowed(rating, max_rating=max_rating)
 
 
+_AFTER_BEDTIME = "After bedtime"
+
+
+def _items_for_youth(items: Sequence[Mapping[str, Any]], *, max_rating: str) -> List[Mapping[str, Any]]:
+    """Youth viewers never see an After bedtime pick, even when the rating would pass."""
+    visible = [
+        item
+        for item in items
+        if str(item.get("shelf_role") or "") != _AFTER_BEDTIME
+    ]
+    return filter_items_for_youth(visible, max_rating=max_rating)
+
+
 def _filter_value(value: Any, *, max_rating: str) -> Any:
     if isinstance(value, list):
         if value and all(isinstance(item, Mapping) for item in value):
             # Prefer content_rating key when present; otherwise leave list alone
             # (not every list is a title list).
             if any("content_rating" in item or "rating_key" in item for item in value):
-                return filter_items_for_youth(value, max_rating=max_rating)
+                return _items_for_youth(value, max_rating=max_rating)
         return [_filter_value(item, max_rating=max_rating) for item in value]
     if isinstance(value, dict):
         out: Dict[str, Any] = {}
         for key, child in value.items():
             if key in {"items", "results", "titles", "cards"} and isinstance(child, list):
-                out[key] = filter_items_for_youth(child, max_rating=max_rating)
+                out[key] = _items_for_youth(child, max_rating=max_rating)
                 if key == "items" and "total" in value and isinstance(value.get("total"), int):
                     out["total"] = len(out[key])
             else:

@@ -20,6 +20,7 @@ import SeasonalSpotlightRail from "../components/SeasonalSpotlightRail";
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { chatFromRailHref } from "../lib/backNav.js";
+import { seasonalRailTitle } from "../lib/seasonalShelves.js";
 import { ROUTES, decadeYearRange, exploreSectionPath, libraryBrowsePath } from "../lib/browseLinks.js";
 import LanguageLandingPage from "./LanguageLandingPage";
 import { buildPulseStats, normalizeFeed } from "../lib/exploreFeeds.js";
@@ -895,7 +896,7 @@ function ExploreHubPage() {
         {seasonalSpotlight.items.length || seasonalSpotlight.loading ? (
           <ExploreSection
             id="seasonal-spotlight"
-            title={seasonalSpotlight.meta?.label || "Seasonal picks"}
+            title={seasonalRailTitle(seasonalSpotlight.meta)}
             isOwner={ownerChrome}
             empty={seasonalSpotlight.error || (!seasonalSpotlight.loading && !seasonalSpotlight.items.length ? seasonalSpotlight.note : null)}
           >
