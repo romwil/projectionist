@@ -475,6 +475,39 @@ def _session_approvals(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) ->
     )
 
 
+def _timeline_files(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
+    """One row per media-file version, and the events that sit on its clock."""
+    del db
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS timeline_files (
+            id INTEGER PRIMARY KEY,
+            rating_key TEXT NOT NULL,
+            tmdb_id INTEGER,
+            season INTEGER,
+            episode INTEGER,
+            file_fingerprint TEXT NOT NULL,
+            duration_ms INTEGER NOT NULL,
+            built_at REAL,
+            build_version INTEGER NOT NULL DEFAULT 1,
+            UNIQUE (rating_key, file_fingerprint)
+        );
+        CREATE TABLE IF NOT EXISTS timeline_events (
+            id INTEGER PRIMARY KEY,
+            file_id INTEGER NOT NULL REFERENCES timeline_files(id),
+            kind TEXT NOT NULL,
+            start_ms INTEGER NOT NULL,
+            end_ms INTEGER,
+            payload TEXT NOT NULL,
+            source TEXT NOT NULL,
+            confidence REAL
+        );
+        CREATE INDEX IF NOT EXISTS timeline_events_at
+            ON timeline_events(file_id, start_ms);
+        """
+    )
+
+
 def _build_migrations() -> List[Migration]:
     def wrap(method_name: str) -> MigrationFn:
         def _run(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
@@ -552,6 +585,7 @@ def _build_migrations() -> List[Migration]:
         (67, "explore_default_home", wrap("_migrate_explore_default_home")),
         (68, "paired_device_kind", _paired_device_kind),
         (69, "session_approvals", _session_approvals),
+        (70, "timeline_files", _timeline_files),
     ]
 
 

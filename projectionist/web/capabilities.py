@@ -27,6 +27,7 @@ def client_capabilities() -> dict[str, int]:
         "caption_tracks": 0,  # ENG-004
         "shared_sessions": 1,  # SES-004 live channel, command authorization, clock
         "timeline": 0,  # TML-005
+        "timeline_files": 1,  # TML-001 fingerprint of size, mtime, and duration
         "tracks": 0,  # TRK-003
         "native_sign_in": 1,  # NAT-002 device credential on every web sign-in path
         "push": 0,  # NAT-006, accepted, not shipped
