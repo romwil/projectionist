@@ -150,7 +150,8 @@ const FIELD_HELP: Record<string, string> = {
     "Path this container uses for movies (usually /movies or the host folder bind-mounted read-write). PROJECTIONIST_MOVIE_MEDIA wins when set. Needed so Investigate can rename files.",
   tv_root:
     "Path this container uses for TV (usually /tv or the host folder bind-mounted read-write). PROJECTIONIST_TV_MEDIA wins when set. Investigate Apply renames episode files here — the bind must be rw, not :ro.",
-  library_enrich_workers: "How many titles to enrich at once during sync. Lower if Unraid feels busy.",
+  library_enrich_workers:
+    "How many titles to enrich at once during sync. Lower if Unraid feels busy.",
 };
 
 function fieldLabel(field: string) {
@@ -221,7 +222,17 @@ function SecretInput({
   );
 }
 
-function InlineAlert({ type, message, details, testId }: { type?: string; message?: string; details?: JsParam; testId?: string }) {
+function InlineAlert({
+  type,
+  message,
+  details,
+  testId,
+}: {
+  type?: string;
+  message?: string;
+  details?: JsParam;
+  testId?: string;
+}) {
   if (!message || (type !== "success" && type !== "error")) return null;
   const detailList = Array.isArray(details)
     ? details.map((item) => String(item || "").trim()).filter(Boolean)
@@ -234,7 +245,10 @@ function InlineAlert({ type, message, details, testId }: { type?: string; messag
     >
       <div className="inline-alert-message">{message}</div>
       {detailList.length ? (
-        <ul className="inline-alert-details" data-testid={`${testId || `inline-alert-${type}`}-details`}>
+        <ul
+          className="inline-alert-details"
+          data-testid={`${testId || `inline-alert-${type}`}-details`}
+        >
           {detailList.map((item) => (
             <li key={item}>{item}</li>
           ))}
@@ -244,30 +258,52 @@ function InlineAlert({ type, message, details, testId }: { type?: string; messag
   );
 }
 
-function CertifiedBadge({ certified, testing, serviceId }: { certified?: boolean; testing?: boolean; serviceId: string }) {
+function CertifiedBadge({
+  certified,
+  testing,
+  serviceId,
+}: {
+  certified?: boolean;
+  testing?: boolean;
+  serviceId: string;
+}) {
   if (testing) {
     return (
-      <span className="certified-badge certified-badge-testing" data-testid={`certified-badge-${serviceId}`}>
+      <span
+        className="certified-badge certified-badge-testing"
+        data-testid={`certified-badge-${serviceId}`}
+      >
         Testing…
       </span>
     );
   }
   if (certified) {
     return (
-      <span className="certified-badge certified-badge-ok" data-testid={`certified-badge-${serviceId}`}>
+      <span
+        className="certified-badge certified-badge-ok"
+        data-testid={`certified-badge-${serviceId}`}
+      >
         Connected ✓
       </span>
     );
   }
   return (
-    <span className="certified-badge certified-badge-pending" data-testid={`certified-badge-${serviceId}`}>
+    <span
+      className="certified-badge certified-badge-pending"
+      data-testid={`certified-badge-${serviceId}`}
+    >
       Not connected
     </span>
   );
 }
 
 /** Prefer the Connected pill; only surface InlineAlert for errors or non-Connected feedback. */
-function connectionStatusAlert(actionAlert: JsParam, area: string, result: JsParam, certified: boolean) {
+function connectionStatusAlert(
+  actionAlert: JsParam,
+  area: string,
+  result: JsParam,
+  certified: boolean,
+) {
   if (actionAlert?.area === area) {
     return { type: actionAlert.type, message: actionAlert.message };
   }
@@ -281,8 +317,7 @@ function serviceCredentialsPresent(service: string, settings: JsParam) {
   switch (service) {
     case "llm":
       return Boolean(
-        settings.llm_model &&
-          (settings.llm_provider === "ollama" || settings.llm_api_key_set),
+        settings.llm_model && (settings.llm_provider === "ollama" || settings.llm_api_key_set),
       );
     case "plex":
       return Boolean(settings.plex_url && settings.plex_token_set);
@@ -303,7 +338,13 @@ function serviceCredentialsPresent(service: string, settings: JsParam) {
   }
 }
 
-function ProviderSelect({ value, onChange }: { value?: string; onChange: (event: ChangeEvent<HTMLSelectElement>) => void }) {
+function ProviderSelect({
+  value,
+  onChange,
+}: {
+  value?: string;
+  onChange: (event: ChangeEvent<HTMLSelectElement>) => void;
+}) {
   return (
     <select value={value || "openai"} onChange={onChange}>
       {LLM_PROVIDER_OPTIONS.map(({ value: providerValue, label }) => (
@@ -483,8 +524,8 @@ export default function ConfigPage() {
   }
 
   useEffect(() => {
-    Promise.all([getSettings(), getPersona(), getWizardStatus()]).then(
-      ([settingsData, personaData, wizardData]) => {
+    Promise.all([getSettings(), getPersona(), getWizardStatus()])
+      .then(([settingsData, personaData, wizardData]) => {
         const normalizedModel = resolveModelForProvider(
           settingsData.llm_provider,
           settingsData.llm_model,
@@ -502,20 +543,31 @@ export default function ConfigPage() {
         }
         setVerification({
           identity: wizardData.steps.identity_seed.curator_name_set,
-          llm: wizardData.certifications?.llm?.certified || wizardData.steps.infrastructure.llm_verified,
-          plex: wizardData.certifications?.plex?.certified || wizardData.steps.infrastructure.plex_verified,
+          llm:
+            wizardData.certifications?.llm?.certified ||
+            wizardData.steps.infrastructure.llm_verified,
+          plex:
+            wizardData.certifications?.plex?.certified ||
+            wizardData.steps.infrastructure.plex_verified,
           sections: wizardData.steps.dropdown_mapping.sections_set,
-          radarr: wizardData.certifications?.radarr?.certified || wizardData.steps.infrastructure.radarr_verified,
-          sonarr: wizardData.certifications?.sonarr?.certified || wizardData.steps.infrastructure.sonarr_verified,
+          radarr:
+            wizardData.certifications?.radarr?.certified ||
+            wizardData.steps.infrastructure.radarr_verified,
+          sonarr:
+            wizardData.certifications?.sonarr?.certified ||
+            wizardData.steps.infrastructure.sonarr_verified,
         });
-        if (wizardData.steps.infrastructure.plex_verified || wizardData.certifications?.plex?.certified) {
+        if (
+          wizardData.steps.infrastructure.plex_verified ||
+          wizardData.certifications?.plex?.certified
+        ) {
           setPlexCollapsed(true);
         }
         if (!wizardData.onboarding_complete) {
           setStepIndex(firstIncompleteWizardStep(wizardData));
         }
-      },
-    ).catch(console.error);
+      })
+      .catch(console.error);
     getFeatures()
       .then((data) => setFeatureFlags(data))
       .catch(() => setFeatureFlags(null));
@@ -784,11 +836,7 @@ export default function ConfigPage() {
     try {
       await patchUserDisabled(entry.id, nextDisabled);
       await refreshManagedUsers();
-      setActionFeedback(
-        "users",
-        "success",
-        nextDisabled ? "User disabled." : "User re-enabled.",
-      );
+      setActionFeedback("users", "success", nextDisabled ? "User disabled." : "User re-enabled.");
     } catch (error) {
       setActionFeedback("users", "error", (error as ApiError).message);
     }
@@ -916,7 +964,7 @@ export default function ConfigPage() {
     }
 
     const currentValue =
-      field === "seerr.api_key" ? settings?.seerr?.api_key ?? "" : settings?.[field] ?? "";
+      field === "seerr.api_key" ? (settings?.seerr?.api_key ?? "") : (settings?.[field] ?? "");
     if (String(currentValue).length > 0) {
       setVisibleSecrets((prev: JsParam) => ({ ...prev, [field]: true }));
       return;
@@ -948,7 +996,11 @@ export default function ConfigPage() {
             : field.endsWith("_api_key")
               ? field.replace(/_api_key$/, "")
               : "llm";
-      setActionFeedback(alertArea, "error", (error as ApiError).message || "Could not reveal secret");
+      setActionFeedback(
+        alertArea,
+        "error",
+        (error as ApiError).message || "Could not reveal secret",
+      );
     } finally {
       setRevealingSecret(null);
     }
@@ -970,7 +1022,12 @@ export default function ConfigPage() {
     );
   }
 
-  function setActionFeedback(area: string, type: JsParam = null, message: JsParam = null, options: JsParam = {}) {
+  function setActionFeedback(
+    area: string,
+    type: JsParam = null,
+    message: JsParam = null,
+    options: JsParam = {},
+  ) {
     const details = Array.isArray(options.details) ? options.details : null;
     setActionAlert({ area, type, message, details });
     // Areas that render their own InlineAlert should not also fill the page footer
@@ -1027,7 +1084,10 @@ export default function ConfigPage() {
     const rows = modelCatalog?.models || [];
     if (rows.length) return rows;
     if (settings?.llm_provider === "anthropic") {
-      return ANTHROPIC_MODEL_OPTIONS.map((id) => ({ id, hint: id.includes("haiku") ? "cheaper-tier" : "standard-tier" }));
+      return ANTHROPIC_MODEL_OPTIONS.map((id) => ({
+        id,
+        hint: id.includes("haiku") ? "cheaper-tier" : "standard-tier",
+      }));
     }
     const fallback = LLM_MODEL_DEFAULTS[settings?.llm_provider] || "";
     return fallback ? [{ id: fallback, hint: null }] : [];
@@ -1049,7 +1109,11 @@ export default function ConfigPage() {
         <datalist id={listId}>
           {options.map((row: JsParam) => (
             <option key={row.id} value={row.id}>
-              {row.hint === "cheaper-tier" ? "cheaper tier" : row.hint === "standard-tier" ? "standard" : ""}
+              {row.hint === "cheaper-tier"
+                ? "cheaper tier"
+                : row.hint === "standard-tier"
+                  ? "standard"
+                  : ""}
             </option>
           ))}
         </datalist>
@@ -1073,9 +1137,13 @@ export default function ConfigPage() {
             ? "Loading provider model list…"
             : modelCatalog?.source === "pinned"
               ? modelCatalog?.note || modelCatalog?.error || "Showing pinned model options."
-              : `Loaded ${options.length} models from ${modelCatalog?.source || "provider"}.`}
-          {" "}
-          <button type="button" className="ghost" onClick={() => refreshModelCatalog()} disabled={modelCatalogLoading}>
+              : `Loaded ${options.length} models from ${modelCatalog?.source || "provider"}.`}{" "}
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => refreshModelCatalog()}
+            disabled={modelCatalogLoading}
+          >
             Refresh models
           </button>
         </p>
@@ -1285,7 +1353,11 @@ export default function ConfigPage() {
             setSettings((prev: JsParam) => ({ ...prev, ...saved }));
           } catch (error) {
             if (!silent) {
-              setActionFeedback("llm", "error", `Verified, but failed to save settings: ${(error as ApiError).message}`);
+              setActionFeedback(
+                "llm",
+                "error",
+                `Verified, but failed to save settings: ${(error as ApiError).message}`,
+              );
             }
           }
         }
@@ -1332,7 +1404,8 @@ export default function ConfigPage() {
     if (!onboardingReady(verification)) {
       setFooterAlert({
         type: "error",
-        message: "Connect your language model, Plex, Radarr, and Sonarr, and choose movie and TV libraries before finishing.",
+        message:
+          "Connect your language model, Plex, Radarr, and Sonarr, and choose movie and TV libraries before finishing.",
       });
       return;
     }
@@ -1415,7 +1488,11 @@ export default function ConfigPage() {
         delete next[which];
         return next;
       });
-      setActionFeedback("mcp", "success", `${label.charAt(0).toUpperCase() + label.slice(1)} MCP key cleared.`);
+      setActionFeedback(
+        "mcp",
+        "success",
+        `${label.charAt(0).toUpperCase() + label.slice(1)} MCP key cleared.`,
+      );
     } catch (error) {
       setActionFeedback("mcp", "error", (error as ApiError).message);
     } finally {
@@ -1481,9 +1558,9 @@ export default function ConfigPage() {
         <section className="wizard-panel wizard-card">
           <h2>Step 2 — Connect your stack</h2>
           <p className="wizard-note">
-            Plex is required — Projectionist reads your library from it. A language model, Radarr, and
-            Sonarr are optional here; connect them now or finish setup with Plex only and add them later
-            from Admin → Connections.
+            Plex is required — Projectionist reads your library from it. A language model, Radarr,
+            and Sonarr are optional here; connect them now or finish setup with Plex only and add
+            them later from Admin → Connections.
           </p>
 
           <div className="service-cards">
@@ -1540,10 +1617,15 @@ export default function ConfigPage() {
                           type="text"
                           value={settings.llm_base_url ?? ""}
                           onChange={(event) => updateSettings({ llm_base_url: event.target.value })}
-                          placeholder={(LLM_PROVIDER_DEFAULTS as Record<string, string>)[settings.llm_provider] || "https://api.openai.com/v1"}
+                          placeholder={
+                            (LLM_PROVIDER_DEFAULTS as Record<string, string>)[
+                              settings.llm_provider
+                            ] || "https://api.openai.com/v1"
+                          }
                         />
                         <span className="wizard-note field-help">
-                          Where your model lives (OpenAI, Anthropic, Ollama, or another OpenAI-compatible endpoint).
+                          Where your model lives (OpenAI, Anthropic, Ollama, or another
+                          OpenAI-compatible endpoint).
                         </span>
                       </label>
                       <label>
@@ -1577,7 +1659,10 @@ export default function ConfigPage() {
                     <div className="service-card-title">
                       <h3>{label}</h3>
                       {id !== "plex" ? (
-                        <span className="service-optional-badge" data-testid={`${id}-optional-badge`}>
+                        <span
+                          className="service-optional-badge"
+                          data-testid={`${id}-optional-badge`}
+                        >
                           Optional
                         </span>
                       ) : null}
@@ -1659,13 +1744,22 @@ export default function ConfigPage() {
       <section className="wizard-panel wizard-card">
         <h2>Step 3 — Choose your libraries</h2>
         <p className="wizard-note">
-          Plex is connected. Select which movie and TV libraries Projectionist should index. You can change
-          these later under Settings.
+          Plex is connected. Select which movie and TV libraries Projectionist should index. You can
+          change these later under Settings.
         </p>
         <div className="wizard-actions">
-          <CertifiedBadge certified={certifications.plex?.certified} testing={testing === "plex"} serviceId="plex" />
+          <CertifiedBadge
+            certified={certifications.plex?.certified}
+            testing={testing === "plex"}
+            serviceId="plex"
+          />
           {!sections.length ? (
-            <button type="button" className="ghost" onClick={() => runTest("plex")} disabled={testing === "plex"}>
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => runTest("plex")}
+              disabled={testing === "plex"}
+            >
               {testing === "plex" ? "Loading libraries…" : "Reload Plex libraries"}
             </button>
           ) : null}
@@ -1800,7 +1894,8 @@ export default function ConfigPage() {
     } catch (error) {
       setActionFeedback("sonarr-missing", {
         type: "error",
-        message: (error as ApiError).message || "Could not cancel remaining EpisodeSearch commands.",
+        message:
+          (error as ApiError).message || "Could not cancel remaining EpisodeSearch commands.",
       });
     }
   }
@@ -1882,22 +1977,22 @@ export default function ConfigPage() {
         ) : null}
 
         {showSection("persona") ? (
-        <PersonaSection
-          persona={persona}
-          setPersona={setPersona}
-          savingPersona={savingPersona}
-          setSavingPersona={setSavingPersona}
-          actionAlert={actionAlert}
-          setActionFeedback={setActionFeedback}
-          showCuratorName
-          onCuratorNameBlur={async (name) => {
-            await putSystemConfig({ curator_name: String(name) });
-            setVerification((prev: JsParam) => ({
-              ...prev,
-              identity: Boolean(String(name || "").trim()),
-            }));
-          }}
-        />
+          <PersonaSection
+            persona={persona}
+            setPersona={setPersona}
+            savingPersona={savingPersona}
+            setSavingPersona={setSavingPersona}
+            actionAlert={actionAlert}
+            setActionFeedback={setActionFeedback}
+            showCuratorName
+            onCuratorNameBlur={async (name) => {
+              await putSystemConfig({ curator_name: String(name) });
+              setVerification((prev: JsParam) => ({
+                ...prev,
+                identity: Boolean(String(name || "").trim()),
+              }));
+            }}
+          />
         ) : null}
 
         {showSection("connections") ? (
@@ -1948,7 +2043,6 @@ export default function ConfigPage() {
           />
         ) : null}
 
-
         {!showWizard && showSection("seerr") ? (
           <SeerrSection
             settings={settings}
@@ -1981,7 +2075,6 @@ export default function ConfigPage() {
             CertifiedBadge={CertifiedBadge}
           />
         ) : null}
-
 
         {showSection("libraries") ? (
           <LibrariesSection
@@ -2028,6 +2121,20 @@ export default function ConfigPage() {
             onRotateMcpKey={handleRotateMcpKey}
             onClearMcpKey={handleClearMcpKey}
             onCopyMcpKey={copyMcpKey}
+            onRemoteMcp={(enabled) => {
+              updateSettings({ mcp_remote_enabled: enabled });
+              persistSettings({ mcp_remote_enabled: enabled })
+                .then(() =>
+                  setActionFeedback(
+                    "mcp",
+                    "success",
+                    enabled
+                      ? "MCP can be reached from the public address."
+                      : "MCP stays on the home network.",
+                  ),
+                )
+                .catch((error) => setActionFeedback("mcp", "error", (error as ApiError).message));
+            }}
             mcpRevealedKeys={mcpRevealedKeys}
             mcpKeyBusy={mcpKeyBusy}
             saveAlert={
@@ -2057,7 +2164,9 @@ export default function ConfigPage() {
       <header className="topbar admin-section-topbar">
         <div>
           {showWizard ? <p className="eyebrow">Configuration</p> : null}
-          <h1>{showWizard ? "First-run setup" : SECTION_TITLES[section || "overview"] || "Admin"}</h1>
+          <h1>
+            {showWizard ? "First-run setup" : SECTION_TITLES[section || "overview"] || "Admin"}
+          </h1>
           {!showWizard && SECTION_LEADS[section || ""] ? (
             <p className="muted admin-section-lead">{SECTION_LEADS[section || ""]}</p>
           ) : null}
@@ -2107,7 +2216,12 @@ export default function ConfigPage() {
 
           <div className="wizard-footer">
             {stepIndex > 0 ? (
-              <button type="button" className="ghost" data-testid="wizard-back" onClick={() => setStepIndex((prev: JsParam) => prev - 1)}>
+              <button
+                type="button"
+                className="ghost"
+                data-testid="wizard-back"
+                onClick={() => setStepIndex((prev: JsParam) => prev - 1)}
+              >
                 Back
               </button>
             ) : (
@@ -2115,15 +2229,29 @@ export default function ConfigPage() {
             )}
             <div className="wizard-footer-actions">
               {stepIndex < WIZARD_STEPS.length - 1 ? (
-                <button type="button" data-testid="wizard-next" onClick={handleNext} disabled={!canAdvance(stepIndex, verification)}>
+                <button
+                  type="button"
+                  data-testid="wizard-next"
+                  onClick={handleNext}
+                  disabled={!canAdvance(stepIndex, verification)}
+                >
                   Next
                 </button>
               ) : (
-                <button type="button" data-testid="wizard-finish" onClick={handleFinishOnboarding} disabled={!onboardingReady(verification)}>
+                <button
+                  type="button"
+                  data-testid="wizard-finish"
+                  onClick={handleFinishOnboarding}
+                  disabled={!onboardingReady(verification)}
+                >
                   Finish setup
                 </button>
               )}
-              <InlineAlert type={footerAlert?.type} message={footerAlert?.message} testId="wizard-footer-alert" />
+              <InlineAlert
+                type={footerAlert?.type}
+                message={footerAlert?.message}
+                testId="wizard-footer-alert"
+              />
             </div>
           </div>
         </>
