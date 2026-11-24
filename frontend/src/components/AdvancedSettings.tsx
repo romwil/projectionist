@@ -59,17 +59,10 @@ type McpKeyRowProps = {
   onCopy?: (...args: any[]) => void;
 };
 
-function McpKeyRow({
-  which,
-  settings,
-  revealed,
-  busy,
-  onRotate,
-  onClear,
-  onCopy,
-}: McpKeyRowProps) {
+function McpKeyRow({ which, settings, revealed, busy, onRotate, onClear, onCopy }: McpKeyRowProps) {
   const field = which === "privacy" ? "mcp_api_key" : "mcp_full_api_key";
-  const envName = which === "privacy" ? "PROJECTIONIST_MCP_API_KEY" : "PROJECTIONIST_MCP_FULL_API_KEY";
+  const envName =
+    which === "privacy" ? "PROJECTIONIST_MCP_API_KEY" : "PROJECTIONIST_MCP_FULL_API_KEY";
   const title = which === "privacy" ? "Privacy MCP key" : "Full MCP key";
   const description =
     which === "privacy"
@@ -103,7 +96,11 @@ function McpKeyRow({
             ) : (
               "Key configured."
             )}
-            {source === "env" ? " · Set by the host environment" : source ? ` · Source: ${source}` : null}
+            {source === "env"
+              ? " · Set by the host environment"
+              : source
+                ? ` · Source: ${source}`
+                : null}
           </p>
         ) : (
           <p className="mcp-key-meta">HTTP MCP stays disabled for this mode until a key is set.</p>
@@ -118,7 +115,12 @@ function McpKeyRow({
           <label className="mcp-key-reveal">
             <span>New key (copy now)</span>
             <div className="mcp-key-reveal-row">
-              <input type="text" readOnly value={revealed} data-testid={`mcp-key-${which}-revealed`} />
+              <input
+                type="text"
+                readOnly
+                value={revealed}
+                data-testid={`mcp-key-${which}-revealed`}
+              />
               <button type="button" className="ghost" onClick={onCopy}>
                 Copy
               </button>
@@ -160,6 +162,7 @@ type AdvancedSettingsProps = {
   onRotateMcpKey?: (...args: any[]) => void;
   onClearMcpKey?: (...args: any[]) => void;
   onCopyMcpKey?: (...args: any[]) => void;
+  onRemoteMcp?: (enabled: boolean) => void;
   mcpRevealedKeys?: any;
   mcpKeyBusy?: any;
   saveAlert?: any;
@@ -173,6 +176,7 @@ export default function AdvancedSettings({
   onRotateMcpKey,
   onClearMcpKey,
   onCopyMcpKey,
+  onRemoteMcp,
   mcpRevealedKeys,
   mcpKeyBusy,
   saveAlert,
@@ -185,8 +189,8 @@ export default function AdvancedSettings({
           <header className="config-panel-header">
             <h2>Disk paths</h2>
             <p className="config-panel-lead">
-              TV and movie library paths this container can see. Bind-mount them
-              read-write (<code>/tv</code> and <code>/movies</code>) so Investigate can rename files on disk.
+              TV and movie library paths this container can see. Bind-mount them read-write (
+              <code>/tv</code> and <code>/movies</code>) so Investigate can rename files on disk.
             </p>
           </header>
           <div className="config-grid config-grid-2col">
@@ -200,7 +204,9 @@ export default function AdvancedSettings({
                     updateSettings({ [key]: parseNumericSetting(key, event.target.value) })
                   }
                 />
-                {(FIELD_HELP as any)[key] ? <span className="field-help">{(FIELD_HELP as any)[key]}</span> : null}
+                {(FIELD_HELP as any)[key] ? (
+                  <span className="field-help">{(FIELD_HELP as any)[key]}</span>
+                ) : null}
               </label>
             ))}
           </div>
@@ -224,7 +230,9 @@ export default function AdvancedSettings({
                     updateSettings({ [key]: parseNumericSetting(key, event.target.value) })
                   }
                 />
-                {(FIELD_HELP as any)[key] ? <span className="field-help">{(FIELD_HELP as any)[key]}</span> : null}
+                {(FIELD_HELP as any)[key] ? (
+                  <span className="field-help">{(FIELD_HELP as any)[key]}</span>
+                ) : null}
               </label>
             ))}
             <label className="config-form-field">
@@ -256,7 +264,12 @@ export default function AdvancedSettings({
             </label>
           </div>
           <footer className="config-panel-footer">
-            <button type="button" className="primary" data-testid="advanced-paths-sync-save" onClick={onSavePathsAndSync}>
+            <button
+              type="button"
+              className="primary"
+              data-testid="advanced-paths-sync-save"
+              onClick={onSavePathsAndSync}
+            >
               Save paths &amp; sync
             </button>
             <InlineAlert type={saveAlert?.type} message={saveAlert?.message} />
@@ -268,12 +281,21 @@ export default function AdvancedSettings({
         <header className="config-panel-header">
           <h2>MCP (Model Context Protocol)</h2>
           <p className="config-panel-lead">
-            Dual-mode HTTP endpoint at <code>/mcp</code>. Send{" "}
-            <code>X-Projectionist-MCP-Key</code> or Bearer auth. Keys must differ. Regenerating writes{" "}
-            <code>settings.json</code>. See{" "}
+            Dual-mode HTTP endpoint at <code>/mcp</code>. Send <code>X-Projectionist-MCP-Key</code>{" "}
+            or Bearer auth. Keys must differ. Regenerating writes <code>settings.json</code>. See{" "}
             <Link to="/privacy">Privacy</Link> for exposure details.
           </p>
         </header>
+        <label className="config-form-field">
+          <span>Allow MCP from the public address</span>
+          <input
+            type="checkbox"
+            data-testid="mcp-remote-enabled"
+            checked={Boolean(settings?.mcp_remote_enabled)}
+            onChange={(event) => onRemoteMcp?.(event.target.checked)}
+          />
+          <span className="field-help">MCP answers only on the home network until this is on.</span>
+        </label>
         <div className="mcp-key-list">
           <McpKeyRow
             which="privacy"
@@ -294,7 +316,17 @@ export default function AdvancedSettings({
             onCopy={() => onCopyMcpKey?.("full")}
           />
         </div>
-        <InlineAlert type={mcpAlert?.type} message={mcpAlert?.message} />
+        <footer className="config-panel-footer">
+          <button
+            type="button"
+            className="primary"
+            data-testid="mcp-remote-save"
+            onClick={onSavePathsAndSync}
+          >
+            Save
+          </button>
+          <InlineAlert type={mcpAlert?.type} message={mcpAlert?.message} />
+        </footer>
       </section>
     </div>
   );
