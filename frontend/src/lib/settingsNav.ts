@@ -8,7 +8,7 @@ export const SETTINGS_NAV = [
   { to: "/settings/watchlist", id: "watchlist", label: "Watchlist" },
   { to: "/settings/lists", id: "lists", label: "Lists" },
   { to: "/settings/privacy", id: "privacy", label: "My data" },
-  { to: "/settings/apple-tv", id: "apple-tv", label: "Apple TV" },
+  { to: "/settings/apple-tv", id: "apple-tv", label: "Devices" },
   { to: "/settings/rooms", id: "rooms", label: "Rooms" },
   { to: "/settings/room-approvals", id: "room-approvals", label: "Room approvals" },
 ];
