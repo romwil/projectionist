@@ -103,7 +103,7 @@ class InviteDbTests(unittest.TestCase):
             Settings(auth=Settings().auth),
             raw_token=raw,
             username="joiner",
-            password="password123",
+            password="correct-horse",
         )
         # Force local login flag for redeem helper path that ignores settings.auth;
         # redeem_local_invite doesn't check local_login — that's the API layer.
@@ -178,7 +178,7 @@ class InviteDbTests(unittest.TestCase):
                 Settings(),
                 raw_token=created["token"],
                 username="blocked-user",
-                password="password123",
+                password="correct-horse",
             )
         self.assertIn("denied", str(ctx.exception).lower())
 
@@ -265,13 +265,16 @@ class InviteApiTests(unittest.TestCase):
         self.db.create_local_user(
             user_id="local-owner-invite",
             display_name="owner",
-            password_hash=_hash_password("password123"),
+            password_hash=_hash_password("correct-horse"),
             role="owner",
         )
         resp = self.client.post(
             "/api/auth/local/login",
-            json={"username": "owner", "password": "password123"},
+            json={"username": "owner", "password": "correct-horse"},
         )
+        from tests.totp_login import finish_sign_in_code
+
+        resp = finish_sign_in_code(self.client, resp, "owner", "correct-horse")
         self.assertEqual(resp.status_code, 200, resp.text)
 
     def test_owner_create_revoke_authz(self) -> None:
@@ -286,8 +289,11 @@ class InviteApiTests(unittest.TestCase):
         # Owner can create + revoke.
         login = self.client.post(
             "/api/auth/local/login",
-            json={"username": "owner", "password": "password123"},
+            json={"username": "owner", "password": "correct-horse"},
         )
+        from tests.totp_login import finish_sign_in_code
+
+        login = finish_sign_in_code(self.client, login, "owner", "correct-horse")
         self.assertEqual(login.status_code, 200, login.text)
         created = self.client.post(
             "/api/admin/invites",
@@ -316,14 +322,14 @@ class InviteApiTests(unittest.TestCase):
 
         redeem = self.client.post(
             "/api/invites/redeem/local",
-            json={"token": token, "username": "alex", "password": "password123"},
+            json={"token": token, "username": "alex", "password": "correct-horse"},
         )
         self.assertEqual(redeem.status_code, 200, redeem.text)
         self.assertTrue(redeem.json()["authenticated"])
 
         replay = self.client.post(
             "/api/invites/redeem/local",
-            json={"token": token, "username": "alex2", "password": "password123"},
+            json={"token": token, "username": "alex2", "password": "correct-horse"},
         )
         self.assertEqual(replay.status_code, 400, replay.text)
         self.assertEqual(replay.json()["detail"], "This invite can't be used.")
@@ -364,7 +370,7 @@ class InviteApiTests(unittest.TestCase):
         self.client.cookies.clear()
         redeem = self.client.post(
             "/api/invites/redeem/local",
-            json={"token": token, "username": "denied-user", "password": "password123"},
+            json={"token": token, "username": "denied-user", "password": "correct-horse"},
         )
         self.assertEqual(redeem.status_code, 400, redeem.text)
         self.assertEqual(redeem.json()["detail"], "This invite can't be used.")

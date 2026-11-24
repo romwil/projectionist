@@ -1,6 +1,17 @@
 import { createId } from "../lib/id.js";
 import { formatApiError, parseApiErrorBody } from "../lib/apiError.js";
-import type {ApiError, AuthMe, ChatMessage, ChatThread, ExploreHubPayload, Features, Job, JsonObject, JsParam, QueryParams} from "./types";
+import type {
+  ApiError,
+  AuthMe,
+  ChatMessage,
+  ChatThread,
+  ExploreHubPayload,
+  Features,
+  Job,
+  JsonObject,
+  JsParam,
+  QueryParams,
+} from "./types";
 
 export type {
   ApiError,
@@ -37,6 +48,11 @@ const CHAT_TIMEOUT_MS = 120_000;
 function throwApiError(text: string, statusText: string, status: number): never {
   const error = new Error(parseApiErrorBody(text, statusText, status)) as ApiError;
   error.status = status;
+  try {
+    error.body = JSON.parse(text);
+  } catch {
+    error.body = null;
+  }
   throw error;
 }
 
@@ -84,7 +100,9 @@ export async function createThread(payload: JsonObject = {}) {
 }
 
 export async function getThreadMessages(sessionId: string) {
-  return api<{ messages?: ChatMessage[] }>(`/chat/threads/${encodeURIComponent(sessionId)}/messages`);
+  return api<{ messages?: ChatMessage[] }>(
+    `/chat/threads/${encodeURIComponent(sessionId)}/messages`,
+  );
 }
 
 export async function saveLibraryPage(payload: JsonObject) {
@@ -385,7 +403,10 @@ export async function linkPlexAccount({ pinId, password }: { pinId?: string; pas
   });
 }
 
-export async function loginWithPlex(authToken: string, { inviteToken }: { inviteToken?: string } = {}) {
+export async function loginWithPlex(
+  authToken: string,
+  { inviteToken }: { inviteToken?: string } = {},
+) {
   return api("/auth/plex", {
     method: "POST",
     body: JSON.stringify({
@@ -402,10 +423,18 @@ export async function registerLocalUser(username: string, password: string) {
   });
 }
 
-export async function loginWithLocal(username: string, password: string) {
+export async function loginWithLocal(
+  username: string,
+  password: string,
+  { code }: { code?: string } = {},
+) {
   return api("/auth/local/login", {
     method: "POST",
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({
+      username,
+      password,
+      ...(code ? { code } : {}),
+    }),
   });
 }
 
@@ -485,7 +514,13 @@ export async function deleteMyMemoryNote(noteId: string) {
 /** Settings → My data: what the owner did to this account (PRIV-023). */
 export async function listMyOwnerAccess() {
   return api<{
-    items: Array<{ created_at: number; event: string; label: string; outcome?: string; actor_name?: string }>;
+    items: Array<{
+      created_at: number;
+      event: string;
+      label: string;
+      outcome?: string;
+      actor_name?: string;
+    }>;
   }>("/me/owner-access");
 }
 
@@ -525,7 +560,11 @@ export async function getThreadFeedback(sessionId: string) {
   return api<{ items?: JsonObject[] }>(`/chat/threads/${encodeURIComponent(sessionId)}/feedback`);
 }
 
-export async function submitMessageFeedback(messageId: string, sessionId: string, feedback: string | null) {
+export async function submitMessageFeedback(
+  messageId: string,
+  sessionId: string,
+  feedback: string | null,
+) {
   if (!feedback) {
     const query = new URLSearchParams({ session_id: sessionId });
     return api(`/chat/messages/${encodeURIComponent(messageId)}/feedback?${query.toString()}`, {
@@ -767,11 +806,18 @@ export async function deleteCuratedListItem(listId: string, itemId: string | num
 }
 
 /** Owner authoring: set a course step's note and/or ordering position. */
-export async function updateCuratedListItem(listId?: string | number | null, itemId?: string | number | null, payload: JsonObject = {}) {
-  return api(`/lists/${encodeURIComponent(String(listId ?? ""))}/items/${encodeURIComponent(String(itemId ?? ""))}`, {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  });
+export async function updateCuratedListItem(
+  listId?: string | number | null,
+  itemId?: string | number | null,
+  payload: JsonObject = {},
+) {
+  return api(
+    `/lists/${encodeURIComponent(String(listId ?? ""))}/items/${encodeURIComponent(String(itemId ?? ""))}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 /** Owner-only: publish a list to household members or make it private again. */
@@ -911,7 +957,11 @@ export async function getKnowledgeOpsTelemetryTrend({ days }: JsonObject = {}) {
   return api(`/admin/knowledge-ops/telemetry/trend${search.toString() ? `?${search}` : ""}`);
 }
 
-export async function getKnowledgeOpsTelemetryTopEvents({ event_type, entity_type, limit }: JsonObject = {}) {
+export async function getKnowledgeOpsTelemetryTopEvents({
+  event_type,
+  entity_type,
+  limit,
+}: JsonObject = {}) {
   const search = new URLSearchParams();
   if (event_type) search.set("event_type", event_type);
   if (entity_type) search.set("entity_type", entity_type);
@@ -942,7 +992,10 @@ export async function getJourneyExploration() {
   return api("/journey/exploration");
 }
 
-export async function postCourseProgress(listId: string, { position = 0, completed = false }: JsonObject = {}) {
+export async function postCourseProgress(
+  listId: string,
+  { position = 0, completed = false }: JsonObject = {},
+) {
   return api(`/engagement/courses/${encodeURIComponent(listId)}/progress`, {
     method: "POST",
     body: JSON.stringify({ position, completed }),
@@ -995,13 +1048,19 @@ export async function getPickForMeFeed({ limit = 8 }: JsonObject = {}) {
 export const EXPLORE_RAIL_LIMIT = 50;
 
 /** Single Explore home payload (rails + pulse). Prefer over per-rail fetches. */
-export async function getExploreHub({ limit = EXPLORE_RAIL_LIMIT, refresh = false }: JsonObject = {}) {
+export async function getExploreHub({
+  limit = EXPLORE_RAIL_LIMIT,
+  refresh = false,
+}: JsonObject = {}) {
   const params = new URLSearchParams({ limit: String(limit) });
   if (refresh) params.set("refresh", "true");
   return api<ExploreHubPayload>(`/library/feeds/hub?${params}`);
 }
 
-export async function syllabusPublishHandoff(listId: string, { confirm = false, target = "plex" }: JsonObject = {}) {
+export async function syllabusPublishHandoff(
+  listId: string,
+  { confirm = false, target = "plex" }: JsonObject = {},
+) {
   return api(`/syllabus/courses/${encodeURIComponent(listId)}/publish-handoff`, {
     method: "POST",
     body: JSON.stringify({ confirm, target }),
@@ -1094,7 +1153,10 @@ export async function requestPreparedCopy(ratingKey: string) {
 }
 
 /** Household: start an in-app library HLS session (movie / episode / show key). */
-export async function startLibraryPlayback(ratingKey: string, { startOver = false, rec = "", profile = null }: JsonObject = {}) {
+export async function startLibraryPlayback(
+  ratingKey: string,
+  { startOver = false, rec = "", profile = null }: JsonObject = {},
+) {
   return api("/library/playback/start", {
     method: "POST",
     body: JSON.stringify({
@@ -1109,7 +1171,10 @@ export async function startLibraryPlayback(ratingKey: string, { startOver = fals
 /** Engine session. The web uses this only when Play through Projectionist is on.
  * Calling it is the opt-in. Clients that omit `engine_opt_in` stay on the library path.
  */
-export async function openEnginePlayback(ratingKey: string, { profile = null, startOver = false, preroll = false }: JsonObject = {}) {
+export async function openEnginePlayback(
+  ratingKey: string,
+  { profile = null, startOver = false, preroll = false }: JsonObject = {},
+) {
   return api("/playback/sessions", {
     method: "POST",
     body: JSON.stringify({
@@ -1221,7 +1286,10 @@ export async function seekLibraryPlayback(sessionId: string, offsetMs: number) {
 }
 
 /** Restart the Plex transcode with a burn-in stream, or Off (`subtitles=none`). */
-export async function setLibraryPlaybackSubtitles(sessionId: string, { subtitleStreamId = null, offsetMs = 0 }: JsonObject = {}) {
+export async function setLibraryPlaybackSubtitles(
+  sessionId: string,
+  { subtitleStreamId = null, offsetMs = 0 }: JsonObject = {},
+) {
   const raw = subtitleStreamId == null ? "" : String(subtitleStreamId).trim();
   return api(`/library/playback/${encodeURIComponent(sessionId)}/subtitles`, {
     method: "POST",
@@ -1355,7 +1423,8 @@ export async function listJobs() {
   return api<Job[]>("/jobs");
 }
 
-export async function sendChat(message: JsonObject,
+export async function sendChat(
+  message: JsonObject,
   lensId?: string,
   {
     timeoutMs = CHAT_TIMEOUT_MS,
@@ -1393,7 +1462,8 @@ export async function sendChat(message: JsonObject,
  * @param {function} [options.onError]    - ({error}) on stream error
  * @param {AbortSignal} [options.signal]  - abort controller signal
  */
-export async function sendChatStream(message: string | JsonObject,
+export async function sendChatStream(
+  message: string | JsonObject,
   {
     sessionId: sid,
     personaId,
@@ -1673,7 +1743,10 @@ export async function getLibraryOverview() {
   return api("/library/overview");
 }
 
-export async function getLibraryAggregate(groupBy: string, { mediaType, topExamples }: JsonObject = {}) {
+export async function getLibraryAggregate(
+  groupBy: string,
+  { mediaType, topExamples }: JsonObject = {},
+) {
   const params = new URLSearchParams({ group_by: groupBy });
   if (mediaType === "movie" || mediaType === "show") params.set("media_type", mediaType);
   if (topExamples != null) params.set("top_examples", String(topExamples));
@@ -1684,13 +1757,11 @@ export async function getLibraryHealth() {
   return api("/library/health");
 }
 
-export async function getExploreFeedRecentlyAddedEpisodes(
-  {
+export async function getExploreFeedRecentlyAddedEpisodes({
   limit = 12,
   days = 30,
   offset = 0,
-}: JsonObject = {},
-) {
+}: JsonObject = {}) {
   const params = new URLSearchParams({
     limit: String(limit),
     days: String(days),
@@ -1699,14 +1770,12 @@ export async function getExploreFeedRecentlyAddedEpisodes(
   return api(`/library/feeds/recently-added-episodes?${params}`);
 }
 
-export async function getExploreFeedRecentlyAdded(
-  {
+export async function getExploreFeedRecentlyAdded({
   limit = 12,
   days = 30,
   offset = 0,
   mediaType,
-}: JsonObject = {},
-) {
+}: JsonObject = {}) {
   const params = new URLSearchParams({
     limit: String(limit),
     days: String(days),
@@ -1716,14 +1785,12 @@ export async function getExploreFeedRecentlyAdded(
   return api(`/library/feeds/recently-added?${params}`);
 }
 
-export async function getExploreFeedRecentReleases(
-  {
+export async function getExploreFeedRecentReleases({
   limit = 12,
   days = 90,
   offset = 0,
   mediaType,
-}: JsonObject = {},
-) {
+}: JsonObject = {}) {
   const params = new URLSearchParams({
     limit: String(limit),
     days: String(days),
@@ -1797,7 +1864,10 @@ export async function getLibraryMotifs({ limit = 160 }: JsonObject = {}) {
   return api(`/library/motifs?${params}`);
 }
 
-export async function getLibraryNeighbors(itemId: string | number, { mode = "similar", limit = 12 }: JsonObject = {}) {
+export async function getLibraryNeighbors(
+  itemId: string | number,
+  { mode = "similar", limit = 12 }: JsonObject = {},
+) {
   const params = new URLSearchParams({
     mode: String(mode || "similar"),
     limit: String(limit),
@@ -1939,7 +2009,21 @@ async function readRemovalNdjson(response: Response, onEvent?: (event: JsonObjec
 }
 
 /** Stream per-title removal progress (NDJSON). One library lookup per title. */
-async function streamLibraryRemoval(path: string, ratingKeys: string[], { mode, onEvent, signal, runId }: { mode?: string; onEvent?: (event: JsonObject) => void; signal?: AbortSignal; runId?: string } = {}) {
+async function streamLibraryRemoval(
+  path: string,
+  ratingKeys: string[],
+  {
+    mode,
+    onEvent,
+    signal,
+    runId,
+  }: {
+    mode?: string;
+    onEvent?: (event: JsonObject) => void;
+    signal?: AbortSignal;
+    runId?: string;
+  } = {},
+) {
   const response = await fetch(`${API}${path}`, {
     method: "POST",
     credentials: "include",
@@ -1971,7 +2055,20 @@ export async function cancelLibraryRemoval(runId: string) {
  * Pass ``mode: "index"`` for undoable index-only prune.
  * Pass ``onEvent`` to stream per-title progress.
  */
-export async function deletePurgeCandidates(ratingKeys: string[], { mode = "full", onEvent, signal, runId }: { mode?: string; onEvent?: (event: JsonObject) => void; signal?: AbortSignal; runId?: string } = {}) {
+export async function deletePurgeCandidates(
+  ratingKeys: string[],
+  {
+    mode = "full",
+    onEvent,
+    signal,
+    runId,
+  }: {
+    mode?: string;
+    onEvent?: (event: JsonObject) => void;
+    signal?: AbortSignal;
+    runId?: string;
+  } = {},
+) {
   if (onEvent || runId) {
     return streamLibraryRemoval("/library/purge-candidates/delete", ratingKeys, {
       mode,
@@ -1990,7 +2087,20 @@ export async function deletePurgeCandidates(ratingKeys: string[], { mode = "full
  * Pass ``mode: "full"`` to also delete via *arr (files + exclusion) and Plex.
  * Pass ``onEvent`` to stream per-title progress instead of one batch response.
  */
-export async function deleteLibraryItems(ratingKeys: string[], { mode = "index", onEvent, signal, runId }: { mode?: string; onEvent?: (event: JsonObject) => void; signal?: AbortSignal; runId?: string } = {}) {
+export async function deleteLibraryItems(
+  ratingKeys: string[],
+  {
+    mode = "index",
+    onEvent,
+    signal,
+    runId,
+  }: {
+    mode?: string;
+    onEvent?: (event: JsonObject) => void;
+    signal?: AbortSignal;
+    runId?: string;
+  } = {},
+) {
   if (onEvent || runId) {
     return streamLibraryRemoval("/library/items/delete", ratingKeys, {
       mode,
@@ -2043,14 +2153,12 @@ export async function getShowWatchSummary(ratingKey: string) {
 }
 
 /** Seasons + nested episodes for a library show (title detail). */
-export async function getShowSeasons(
-  {
+export async function getShowSeasons({
   showId = null,
   tmdbId = null,
   tvdbId = null,
   show = "",
-}: JsonObject = {},
-) {
+}: JsonObject = {}) {
   const params = new URLSearchParams();
   if (showId != null && showId !== "") params.set("show_id", String(showId));
   if (tmdbId != null && tmdbId !== "") params.set("tmdb_id", String(tmdbId));
@@ -2383,7 +2491,12 @@ export async function completeMondayPass() {
 }
 
 /** Owner: security audit trail (sign-ins, passwords, invites, roles, settings). */
-export async function getSecurityAudit({ event = "", userId = "", limit = 50, offset = 0 }: JsonObject = {}) {
+export async function getSecurityAudit({
+  event = "",
+  userId = "",
+  limit = 50,
+  offset = 0,
+}: JsonObject = {}) {
   const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
   if (event) params.set("event", String(event));
   if (userId) params.set("user_id", String(userId));
@@ -2431,7 +2544,10 @@ export async function resetScheduledTaskQuarantine(name: string) {
   });
 }
 
-export async function getScheduledTaskLog(name: string, { after_seq = 0, limit = 200 }: JsonObject = {}) {
+export async function getScheduledTaskLog(
+  name: string,
+  { after_seq = 0, limit = 200 }: JsonObject = {},
+) {
   const search = new URLSearchParams({
     after_seq: String(after_seq || 0),
     limit: String(limit || 200),
@@ -2524,7 +2640,10 @@ export async function refreshHolidaySchedule() {
 }
 
 /** Owner: order a seasonal shelf — pins these titles to the front, in this order. */
-export async function setHolidayRailOrder(observanceId: string | number, libraryItemIds: (string | number)[]) {
+export async function setHolidayRailOrder(
+  observanceId: string | number,
+  libraryItemIds: (string | number)[],
+) {
   return api(`/admin/holidays/${encodeURIComponent(observanceId)}/rail/order`, {
     method: "PUT",
     body: JSON.stringify({ library_item_ids: libraryItemIds }),
@@ -2532,7 +2651,10 @@ export async function setHolidayRailOrder(observanceId: string | number, library
 }
 
 /** Owner: ask the professor to propose seasonal shelf picks + staff-pick notes. */
-export async function proposeHolidayRailCuration(observanceId: string | number, { limit = 10 }: JsonObject = {}) {
+export async function proposeHolidayRailCuration(
+  observanceId: string | number,
+  { limit = 10 }: JsonObject = {},
+) {
   return api(`/admin/holidays/${encodeURIComponent(observanceId)}/rail/curate`, {
     method: "POST",
     body: JSON.stringify({ limit }),
@@ -2548,7 +2670,11 @@ export async function applyHolidayRailCuration(observanceId: string | number, pi
 }
 
 /** Owner: save a staff-pick curator note for one shelf title. */
-export async function setHolidayRailCuratorNote(observanceId: string | number, libraryItemId: string | number, curatorNote: string) {
+export async function setHolidayRailCuratorNote(
+  observanceId: string | number,
+  libraryItemId: string | number,
+  curatorNote: string,
+) {
   return api(
     `/admin/holidays/${encodeURIComponent(observanceId)}/rail/titles/${encodeURIComponent(libraryItemId)}/note`,
     {
@@ -2654,10 +2780,13 @@ export async function decideJoinRequest(
   requestId: string,
   decision: "approve" | "not_now",
 ) {
-  return api(`/sessions/${encodeURIComponent(sessionId)}/join-requests/${encodeURIComponent(requestId)}`, {
-    method: "POST",
-    body: JSON.stringify({ decision }),
-  });
+  return api(
+    `/sessions/${encodeURIComponent(sessionId)}/join-requests/${encodeURIComponent(requestId)}`,
+    {
+      method: "POST",
+      body: JSON.stringify({ decision }),
+    },
+  );
 }
 
 export async function listSessionApprovals() {
@@ -2670,4 +2799,3 @@ export async function decideSessionApproval(approvalId: string, decision: "appro
     body: JSON.stringify({ decision }),
   });
 }
-

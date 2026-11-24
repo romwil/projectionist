@@ -474,6 +474,9 @@ class YouthChatHistoryReadTests(unittest.TestCase):
             "/api/auth/local/login",
             json={"username": username, "password": password},
         )
+        from tests.totp_login import finish_sign_in_code
+
+        resp = finish_sign_in_code(self.client, resp, username, password)
         self.assertEqual(resp.status_code, 200, resp.text)
 
     def _seed_thread_with_mixed_cards(self, *, user_id: str, session_id: str) -> None:
@@ -504,16 +507,16 @@ class YouthChatHistoryReadTests(unittest.TestCase):
     def test_youth_history_load_filters_over_ceiling_and_empty_rating(self) -> None:
         from projectionist.web.session_tokens import SESSION_COOKIE_NAME
 
-        self._register("owner", "password123")
+        self._register("owner", "correct-horse")
         owner_cookie = self.client.cookies.get(SESSION_COOKIE_NAME)
         self.assertIsNotNone(owner_cookie)
-        youth_id = self._create_local("youth", "password123", role="member")
+        youth_id = self._create_local("youth", "correct-horse", role="member")
         self.db.set_user_youth(youth_id, True)
 
         session_id = "youth-hist-1"
         self._seed_thread_with_mixed_cards(user_id=youth_id, session_id=session_id)
 
-        self._login("youth", "password123")
+        self._login("youth", "correct-horse")
         resp = self.client.get(f"/api/chat/threads/{session_id}/messages")
         self.assertEqual(resp.status_code, 200, resp.text)
         messages = resp.json()["messages"]
@@ -525,7 +528,7 @@ class YouthChatHistoryReadTests(unittest.TestCase):
         self.assertNotIn("Mystery Box", titles)
 
     def test_owner_history_load_keeps_r_and_empty_rating_cards(self) -> None:
-        self._register("owner", "password123")
+        self._register("owner", "correct-horse")
         me = self.client.get("/api/auth/me")
         self.assertEqual(me.status_code, 200, me.text)
         owner_id = me.json()["user"]["id"]

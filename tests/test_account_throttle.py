@@ -119,10 +119,13 @@ class SignInLockHttpTests(unittest.TestCase):
         self._tmpdir.cleanup()
 
     def _login(self, username: str, password: str = "wrong-password"):
-        return self.client.post(
+        from tests.totp_login import finish_sign_in_code
+
+        resp = self.client.post(
             "/api/auth/local/login",
             json={"username": username, "password": password},
         )
+        return finish_sign_in_code(self.client, resp, username, password)
 
     def test_missing_and_known_accounts_fail_the_same_way(self) -> None:
         missing = self._login("nobody")
@@ -164,10 +167,10 @@ class SignInLockHttpTests(unittest.TestCase):
         self.db.create_local_user(
             user_id="local-owner",
             display_name="owner",
-            password_hash=_hash_password("password123"),
+            password_hash=_hash_password("correct-horse"),
             role="owner",
         )
-        login = self._login("owner", "password123")
+        login = self._login("owner", "correct-horse")
         self.assertEqual(login.status_code, 200, login.text)
         created = self.client.post(
             "/api/admin/invites",
@@ -180,7 +183,7 @@ class SignInLockHttpTests(unittest.TestCase):
 
         garbage = self.client.post(
             "/api/invites/redeem/local",
-            json={"token": "not-a-real-token", "username": "sam", "password": "password123"},
+            json={"token": "not-a-real-token", "username": "sam", "password": "correct-horse"},
         )
         self.assertEqual(garbage.status_code, 400)
         self.assertEqual(garbage.json()["detail"], GENERIC_INVITE_DETAIL)
@@ -191,14 +194,14 @@ class SignInLockHttpTests(unittest.TestCase):
         clear_rate_limits()
         failed = self.client.post(
             "/api/invites/redeem/local",
-            json={"token": token, "username": "owner", "password": "password123"},
+            json={"token": token, "username": "owner", "password": "correct-horse"},
         )
         self.assertEqual(failed.status_code, 400)
         self.assertEqual(failed.json()["detail"], GENERIC_INVITE_DETAIL)
         clear_rate_limits()
         locked = self.client.post(
             "/api/invites/redeem/local",
-            json={"token": token, "username": "sam", "password": "password123"},
+            json={"token": token, "username": "sam", "password": "correct-horse"},
         )
         self.assertEqual(locked.json(), garbage.json())
         with self.db.connect() as conn:

@@ -586,12 +586,36 @@ def register_auth_routes(app):
     ) -> Dict[str, Any]:
         """Authenticate with username/password and set session cookie."""
         native = _client_or_400(payload.client)
+        from projectionist.web.totp import (
+            SIGN_IN_CODE_REQUIRED,
+            SIGN_IN_CODE_SETUP,
+            SignInCodeEnrollment,
+            SignInCodeRequired,
+        )
+
         try:
             user = authenticate_local_user(
                 username=payload.username,
                 password=payload.password,
                 db=_db(),
                 request=request,
+                code=payload.code,
+                reset_sign_in_code=payload.reset_sign_in_code,
+            )
+        except SignInCodeRequired:
+            return JSONResponse(
+                status_code=401,
+                content={"detail": SIGN_IN_CODE_REQUIRED},
+            )
+        except SignInCodeEnrollment as enrollment:
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "detail": SIGN_IN_CODE_SETUP,
+                    "secret": enrollment.secret,
+                    "otpauth_uri": enrollment.otpauth_uri,
+                    "recovery_codes": enrollment.recovery_codes,
+                },
             )
         except HTTPException as error:
             if error.status_code in (401, 403):
@@ -746,6 +770,11 @@ def register_auth_routes(app):
         if not _verify_password(payload.current_password, str(stored_hash)):
             sa.audit(db, sa.PASSWORD_CHANGE, actor_id=user.id, target_id=user.id, outcome="denied")
             raise HTTPException(status_code=401, detail="Current password is incorrect")
+        from projectionist.web.passwords import password_rejection
+
+        rejection = password_rejection(payload.new_password)
+        if rejection:
+            raise HTTPException(status_code=400, detail=rejection)
         updated = db.update_user_password(user.id, _hash_password(payload.new_password))
         sa.audit(db, sa.PASSWORD_CHANGE, actor_id=user.id, target_id=user.id)
         # Changing the password bumps the session epoch (signs out every other
@@ -855,6 +884,7 @@ def register_auth_routes(app):
             invite_key,
         )
         from projectionist.web.auth import _ensure_local_login_enabled
+        from projectionist.web.passwords import WeakPasswordError
 
         _ensure_local_login_enabled()
         token_key = invite_key(payload.token)
@@ -868,6 +898,8 @@ def register_auth_routes(app):
                 username=payload.username,
                 password=payload.password,
             )
+        except WeakPasswordError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
         except (InviteConflict, ValueError) as error:
             _note_invite_failure(_db(), key=token_key)
             raise HTTPException(status_code=400, detail=GENERIC_INVITE_DETAIL) from error
@@ -1247,6 +1279,11 @@ def register_auth_routes(app):
                 status_code=400,
                 detail="This account signs in with Plex, not a password — there is nothing to reset here.",
             )
+        from projectionist.web.passwords import password_rejection
+
+        rejection = password_rejection(payload.new_password)
+        if rejection:
+            raise HTTPException(status_code=400, detail=rejection)
         updated = db.update_user_password(user_id, _hash_password(payload.new_password))
         sa.audit(db, sa.PASSWORD_RESET, actor_id=user.id, target_id=user_id)
         return {"user": updated}

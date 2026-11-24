@@ -17,6 +17,7 @@ def register_setup_routes(app):
         merge_youth_settings_payload,
         preserve_engine_settings,
         preserve_network_settings,
+        preserve_require_totp,
     )
 
     ANTHROPIC_MODEL_OPTIONS = app_mod.ANTHROPIC_MODEL_OPTIONS
@@ -244,6 +245,7 @@ def register_setup_routes(app):
         preserve_omitted_ask_delete_confirmation(payload, existing, merged)
         preserve_engine_settings(payload, existing, merged)
         preserve_network_settings(payload, existing, merged)
+        preserve_require_totp(payload, existing, merged)
         settings = _normalize_mcp_image_sizes(
             normalize_path_settings(normalize_settings_llm(Settings.from_mapping(merged)))
         )

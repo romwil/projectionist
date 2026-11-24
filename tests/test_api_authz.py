@@ -515,7 +515,7 @@ class ApiAuthzTests(unittest.TestCase):
         self.assertEqual(self.client.get("/api/auth/me").status_code, 401)
         register = self.client.post(
             "/api/auth/local/register",
-            json={"username": "intruder", "password": "password123"},
+            json={"username": "intruder", "password": "correct-horse"},
         )
         self.assertEqual(register.status_code, 403)
         self.assertEqual(self.client.get("/api/guest/tour").status_code, 404)

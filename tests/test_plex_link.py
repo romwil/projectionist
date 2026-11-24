@@ -54,13 +54,16 @@ class PlexLinkTests(unittest.TestCase):
         self.db.create_local_user(
             user_id="local-owner-link",
             display_name="owner",
-            password_hash=_hash_password("password123"),
+            password_hash=_hash_password("correct-horse"),
             role="owner",
         )
         login = self.client.post(
             "/api/auth/local/login",
-            json={"username": "owner", "password": "password123"},
+            json={"username": "owner", "password": "correct-horse"},
         )
+        from tests.totp_login import finish_sign_in_code
+
+        login = finish_sign_in_code(self.client, login, "owner", "correct-horse")
         self.assertEqual(login.status_code, 200, login.text)
 
     def tearDown(self) -> None:
@@ -202,7 +205,7 @@ class PlexLinkTests(unittest.TestCase):
             self.assertFalse(self.db.get_user("local-owner-link")["plex_user_id"])
             linked = self.client.post(
                 "/api/auth/plex/link",
-                json={"pin_id": 42, "password": "password123"},
+                json={"pin_id": 42, "password": "correct-horse"},
             )
         self.assertEqual(linked.status_code, 200, linked.text)
         self.assertTrue(linked.json()["linked"])
@@ -212,7 +215,7 @@ class PlexLinkTests(unittest.TestCase):
         self.db.create_local_user(
             user_id="local-other",
             display_name="other",
-            password_hash=_hash_password("password123"),
+            password_hash=_hash_password("correct-horse"),
             role="member",
         )
         self.db.bind_plex_user_id("local-other", plex_user_id="plex-claimed")
@@ -226,7 +229,7 @@ class PlexLinkTests(unittest.TestCase):
         ):
             resp = self.client.post(
                 "/api/auth/plex/link",
-                json={"pin_id": 9, "password": "password123"},
+                json={"pin_id": 9, "password": "correct-horse"},
             )
         self.assertEqual(resp.status_code, 409, resp.text)
         self.assertFalse(self.db.get_user("local-owner-link")["plex_user_id"])

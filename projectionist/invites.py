@@ -248,6 +248,11 @@ def redeem_local_invite(
         raise ValueError("Password must be at least 8 characters")
     if db.get_user_by_display_name(name) is not None:
         raise ValueError("Username already taken")
+    from projectionist.web.passwords import WeakPasswordError, password_rejection
+
+    rejection = password_rejection(password)
+    if rejection:
+        raise WeakPasswordError(rejection)
 
     user_id = f"local-{secrets.token_hex(12)}"
     result = db.create_local_user_and_redeem_invite(

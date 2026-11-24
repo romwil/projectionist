@@ -66,7 +66,7 @@ class MailUnsubscribeTests(unittest.TestCase):
             self.db.create_local_user(
                 user_id=f"local-{name}",
                 display_name=name,
-                password_hash=_hash_password("password123"),
+                password_hash=_hash_password("correct-horse"),
                 role=role,
             )
             self.db.update_user_profile(
@@ -142,7 +142,10 @@ class MailUnsubscribeTests(unittest.TestCase):
 
     def test_member_can_turn_a_muted_program_back_on(self) -> None:
         self._post(make_unsubscribe_token(self.db, "local-alex", "arrival"))
-        login = self.client.post("/api/auth/local/login", json={"username": "alex", "password": "password123"})
+        login = self.client.post("/api/auth/local/login", json={"username": "alex", "password": "correct-horse"})
+        from tests.totp_login import finish_sign_in_code
+
+        login = finish_sign_in_code(self.client, login, "alex", "correct-horse")
         self.assertEqual(login.status_code, 200, login.text)
         resp = self.client.patch("/api/auth/me", json={"email_muted_kinds": ["bogus"]})
         self.assertEqual(resp.status_code, 200, resp.text)

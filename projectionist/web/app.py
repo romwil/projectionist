@@ -692,6 +692,7 @@ class AuthSettingsPayload(BaseModel):
     plex_login_enabled: bool = True
     oidc_enabled: bool = False
     local_login_enabled: bool = False
+    require_totp: bool = False
     oidc_issuer_url: str = ""
     oidc_client_id: str = ""
     oidc_client_secret: str = ""
@@ -708,6 +709,8 @@ class LocalRegisterPayload(BaseModel):
 class LocalLoginPayload(BaseModel):
     username: str = Field(min_length=1)
     password: str = Field(min_length=1)
+    code: Optional[str] = Field(default=None, max_length=64)
+    reset_sign_in_code: bool = False
     client: Optional[Dict[str, Any]] = None
 
 

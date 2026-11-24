@@ -388,13 +388,13 @@ class ScheduledTasksAdminApiTests(unittest.TestCase):
         db.create_local_user(
             user_id="local-owner1",
             display_name="owner1",
-            password_hash=_hash_password("password123"),
+            password_hash=_hash_password("correct-horse"),
             role="owner",
         )
         db.create_local_user(
             user_id="local-member1",
             display_name="member1",
-            password_hash=_hash_password("password123"),
+            password_hash=_hash_password("correct-horse"),
             role="member",
         )
         bare = TestClient(self.app_mod.app)

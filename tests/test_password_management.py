@@ -76,10 +76,13 @@ class PasswordManagementTests(unittest.TestCase):
         )
 
     def _login(self, username: str, password: str):
-        return self.client.post(
+        from tests.totp_login import finish_sign_in_code
+
+        resp = self.client.post(
             "/api/auth/local/login",
             json={"username": username, "password": password},
         )
+        return finish_sign_in_code(self.client, resp, username, password)
 
     def _cookie_headers(self, cookie: str) -> dict:
         return {"Cookie": f"{SESSION_COOKIE_NAME}={cookie}"}
@@ -87,13 +90,13 @@ class PasswordManagementTests(unittest.TestCase):
     # -- Self-service password change --
 
     def test_change_password_success_keeps_caller_signed_in(self) -> None:
-        self._seed_local_user("local-alice", "alice", "password123")
-        login = self._login("alice", "password123")
+        self._seed_local_user("local-alice", "alice", "correct-horse")
+        login = self._login("alice", "correct-horse")
         cookie = self._extract_session_cookie(login)
 
         resp = self.client.post(
             "/api/auth/password",
-            json={"current_password": "password123", "new_password": "newpassword456"},
+            json={"current_password": "correct-horse", "new_password": "newpassword456"},
             headers=self._cookie_headers(cookie),
         )
         self.assertEqual(resp.status_code, 200, resp.text)
@@ -113,8 +116,8 @@ class PasswordManagementTests(unittest.TestCase):
         self.assertEqual(relogin.status_code, 200)
 
     def test_change_password_wrong_current_password_rejected(self) -> None:
-        self._seed_local_user("local-alice", "alice", "password123")
-        login = self._login("alice", "password123")
+        self._seed_local_user("local-alice", "alice", "correct-horse")
+        login = self._login("alice", "correct-horse")
         cookie = self._extract_session_cookie(login)
 
         resp = self.client.post(
@@ -125,13 +128,13 @@ class PasswordManagementTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 401)
 
     def test_change_password_too_short_rejected(self) -> None:
-        self._seed_local_user("local-alice", "alice", "password123")
-        login = self._login("alice", "password123")
+        self._seed_local_user("local-alice", "alice", "correct-horse")
+        login = self._login("alice", "correct-horse")
         cookie = self._extract_session_cookie(login)
 
         resp = self.client.post(
             "/api/auth/password",
-            json={"current_password": "password123", "new_password": "short"},
+            json={"current_password": "correct-horse", "new_password": "short"},
             headers=self._cookie_headers(cookie),
         )
         self.assertEqual(resp.status_code, 422)
@@ -147,7 +150,7 @@ class PasswordManagementTests(unittest.TestCase):
 
     def test_owner_resets_member_password(self) -> None:
         self._seed_local_user("local-owner", "owner", "ownerpass123", role="owner")
-        self._seed_local_user("local-bob", "bob", "oldpassword123", role="member")
+        self._seed_local_user("local-bob", "bob", "oldcorrect-horse", role="member")
         owner_login = self._login("owner", "ownerpass123")
         owner_cookie = self._extract_session_cookie(owner_login)
 
@@ -158,16 +161,16 @@ class PasswordManagementTests(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 200, resp.text)
 
-        old_login = self._login("bob", "oldpassword123")
+        old_login = self._login("bob", "oldcorrect-horse")
         self.assertEqual(old_login.status_code, 401)
         new_login = self._login("bob", "brandnewpass456")
         self.assertEqual(new_login.status_code, 200)
 
     def test_member_cannot_reset_another_users_password(self) -> None:
         self._seed_local_user("local-owner", "owner", "ownerpass123", role="owner")
-        self._seed_local_user("local-bob", "bob", "oldpassword123", role="member")
+        self._seed_local_user("local-bob", "bob", "oldcorrect-horse", role="member")
         self._seed_local_user("local-carol", "carol", "carolpass123", role="member")
-        bob_login = self._login("bob", "oldpassword123")
+        bob_login = self._login("bob", "oldcorrect-horse")
         bob_cookie = self._extract_session_cookie(bob_login)
 
         resp = self.client.post(
@@ -201,9 +204,9 @@ class PasswordManagementTests(unittest.TestCase):
     # -- Sign out everywhere --
 
     def test_sign_out_everywhere_kills_other_sessions_not_this_one(self) -> None:
-        self._seed_local_user("local-alice", "alice", "password123")
-        session_a = self._extract_session_cookie(self._login("alice", "password123"))
-        session_b = self._extract_session_cookie(self._login("alice", "password123"))
+        self._seed_local_user("local-alice", "alice", "correct-horse")
+        session_a = self._extract_session_cookie(self._login("alice", "correct-horse"))
+        session_b = self._extract_session_cookie(self._login("alice", "correct-horse"))
 
         resp = self.client.post(
             "/api/auth/sign-out-everywhere",

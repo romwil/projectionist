@@ -517,6 +517,8 @@ class AuthSettings:
     plex_login_enabled: bool = True
     oidc_enabled: bool = False
     local_login_enabled: bool = False
+    # When true, every local password also needs a sign-in code. Owners always do.
+    require_totp: bool = False
     oidc_issuer_url: str = ""
     oidc_client_id: str = ""
     oidc_client_secret: str = ""

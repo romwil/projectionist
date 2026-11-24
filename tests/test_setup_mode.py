@@ -119,7 +119,7 @@ class SetupModeApiTests(unittest.TestCase):
             json={
                 "profile": "private",
                 "username": "owner",
-                "password": "password123",
+                "password": "correct-horse",
             },
         )
         self.assertEqual(commit.status_code, 403, commit.text)
@@ -169,7 +169,7 @@ class SetupModeApiTests(unittest.TestCase):
             json={
                 "profile": "public",
                 "username": "owner",
-                "password": "password123",
+                "password": "correct-horse",
                 "household_domain": "movies.example.com",
                 "trust_proxy": True,
             },
@@ -190,7 +190,7 @@ class SetupModeApiTests(unittest.TestCase):
                 json={
                     "profile": "public",
                     "username": "owner",
-                    "password": "password123",
+                    "password": "correct-horse",
                     "household_domain": "movies.example.com",
                     "trust_proxy": True,
                 },
@@ -207,7 +207,7 @@ class SetupModeApiTests(unittest.TestCase):
             json={
                 "profile": "public",
                 "username": "owner",
-                "password": "password123",
+                "password": "correct-horse",
                 "household_domain": "movies.example.com",
                 "trust_proxy": True,
             },
@@ -226,7 +226,7 @@ class SetupModeApiTests(unittest.TestCase):
             json={
                 "profile": "private",
                 "username": "owner",
-                "password": "password123",
+                "password": "correct-horse",
             },
         )
         self.assertEqual(commit.status_code, 200, commit.text)
@@ -244,7 +244,7 @@ class SetupModeApiTests(unittest.TestCase):
             json={
                 "profile": "private",
                 "username": "owner",
-                "password": "password123",
+                "password": "correct-horse",
             },
         )
         self.assertEqual(commit.status_code, 200, commit.text)
@@ -258,7 +258,7 @@ class SetupModeApiTests(unittest.TestCase):
             json={
                 "profile": "public",
                 "username": "owner",
-                "password": "password123",
+                "password": "correct-horse",
                 "household_domain": "movies.example.com",
                 "trust_proxy": True,
                 "allow_access_requests": True,
@@ -292,7 +292,7 @@ class SetupModeApiTests(unittest.TestCase):
             json={
                 "profile": "private",
                 "username": "owner",
-                "password": "password123",
+                "password": "correct-horse",
             },
         )
         self.assertEqual(commit.status_code, 200, commit.text)
@@ -309,7 +309,7 @@ class SetupModeApiTests(unittest.TestCase):
             json={
                 "profile": "private",
                 "username": "owner",
-                "password": "password123",
+                "password": "correct-horse",
                 "trust_proxy": True,
                 "household_domain": "movies.example.com",
             },
@@ -329,7 +329,7 @@ class SetupModeApiTests(unittest.TestCase):
             json={
                 "profile": "private",
                 "username": "owner",
-                "password": "password123",
+                "password": "correct-horse",
                 "invite_only": True,
             },
         )
@@ -344,7 +344,7 @@ class SetupModeApiTests(unittest.TestCase):
             json={
                 "profile": "public",
                 "username": "owner",
-                "password": "password123",
+                "password": "correct-horse",
                 "household_domain": "movies.example.com",
                 "trust_proxy": True,
             },
@@ -363,7 +363,7 @@ class SetupModeApiTests(unittest.TestCase):
             json={
                 "profile": "private",
                 "username": "owner",
-                "password": "password123",
+                "password": "correct-horse",
                 "invite_only": False,
             },
         )
@@ -374,7 +374,7 @@ class SetupModeApiTests(unittest.TestCase):
             json={
                 "profile": "private",
                 "username": "other",
-                "password": "password123",
+                "password": "correct-horse",
             },
         )
         self.assertEqual(again.status_code, 404)

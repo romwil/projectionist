@@ -634,7 +634,7 @@ class WeatherRoutesTests(unittest.TestCase):
         self.client = TestClient(app_mod.app)
         db = jobs.get_job_manager().db
         for name, role in (("owner", "owner"), ("alice", "member")):
-            db.create_local_user(user_id=f"local-{name}", display_name=name, password_hash=_hash_password("password123"), role=role)
+            db.create_local_user(user_id=f"local-{name}", display_name=name, password_hash=_hash_password("correct-horse"), role=role)
 
     def tearDown(self) -> None:
         import os
@@ -652,7 +652,10 @@ class WeatherRoutesTests(unittest.TestCase):
 
     def _login(self, name: str) -> None:
         self.client.cookies.clear()
-        resp = self.client.post("/api/auth/local/login", json={"username": name, "password": "password123"})
+        resp = self.client.post("/api/auth/local/login", json={"username": name, "password": "correct-horse"})
+        from tests.totp_login import finish_sign_in_code
+
+        resp = finish_sign_in_code(self.client, resp, name, "correct-horse")
         self.assertEqual(resp.status_code, 200, resp.text)
 
     def test_narration_admin_is_owner_only_and_key_is_masked(self) -> None:

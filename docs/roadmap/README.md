@@ -18,7 +18,7 @@ The numbered list is the subject order inside that plan.
 4. **TRK** — tracks: Moments, Booth Notes, Class / Study, after the timeline
 5. **NAT** — the client contract, threaded through the lanes as each capability ships
 6. **EXP** — experience convergence (parallel). Lane B’s next item is **EXP-001** (design tokens). EXP-013, EXP-004, EXP-005, EXP-006, EXP-014, EXP-015, and EXP-016 are done. EXP-017 (owner RSS for local headlines) is proposed and later. UV index and air quality on the weather boards are hooks and wait for the person. EXP-018 is the warm-up lines file, the step names, and the web screen, on main (pull request 298, `54649269`). The slowed fixture is still ahead. EXP-019, the installable web app, is done on main (pull request 309, `a0d72b62`). Push waits. Neither is in production 1.45.5.
-7. **SEC** — the public front door, continued from the review series at the next free numbers (SEC-017 onward). SEC-017 through SEC-022 are the gate before the extra login on the public hostname can come off. That login stays until the person removes it. SEC-017 (tunnel client address) is on main. SEC-018 (per-account sign-in lock) is in this change and is not a release image. Edge rules are a separate plan and are not applied here.
+7. **SEC** — the public front door, continued from the review series at the next free numbers (SEC-017 onward). SEC-017 through SEC-022 are the gate before the extra login on the public hostname can come off. That login stays until the person removes it. SEC-017 (tunnel client address) and SEC-018 (per-account sign-in lock) are on main. SEC-019 (a sign-in code for owner passwords) is in this change and is not a release image. Edge rules are a separate plan and are not applied here.
 
 **Before the next production rollout.** Two defects from QA 1.41.1 are recorded below. They are not new capability items. The database-file fix lands before production moves. The Safari stall is investigated before any further playlist change. This record does not edit `docs/RELEASE.md`; the fix lane adds the empty-database check to that file’s pre-rollout checklist.
 
@@ -95,7 +95,7 @@ The numbered list is the subject order inside that plan.
 | EXP-019 | Installable web app. Manifest, shell worker, quiet install, media keys, shortcuts. On main (pull request 309, `a0d72b62`). Push waits. Not in production 1.45.5 | done | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | SEC-017 | Use the tunnel client address for rate limits | done | [SECURITY](../SECURITY.md#roadmap-items) |
 | SEC-018 | Throttle sign-in failures per account | done | [SECURITY](../SECURITY.md#roadmap-items) |
-| SEC-019 | Require a second factor for owner accounts | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
+| SEC-019 | Require a second factor for owner accounts | done | [SECURITY](../SECURITY.md#roadmap-items) |
 | SEC-020 | Treat the tunnel as outside the house | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
 | SEC-021 | Keep private responses out of shared caches | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
 | SEC-022 | Give anonymous callers only the sign-in card | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
@@ -172,7 +172,7 @@ SES-001 and NAT-002 describe the same work from two sides; build them as one cha
 | 2026-11-24 | **The browser can install Projectionist.** The manifest, a shell worker that does not store API responses, art, or media, a quiet Install entry, media keys, and the player shortcuts are on main. Push waits on NAT-006. EXP-019 is done (pull request 309, `a0d72b62`). This is not in production 1.45.5 |
 | 2026-11-24 | **The web lists rooms, Play in… starts a film on one of them, and the remote follows that session.** SES-008 is done (pull request 311, `b2d3b226`). This is not in production 1.45.5 |
 | 2026-11-24 | **The film prepares during the preroll, and the web warm-up screen is on main.** ENG-015 and EXP-018 landed in pull request 298 (`54649269`). The slowed warm-up fixture is still ahead. This is not in production 1.45.5 |
-| 2026-11-24 | **The public hostname will rely on household sign-in.** SEC-017 through SEC-026 are accepted, continuing the existing SEC series. SEC-017 through SEC-022 are the gate. The extra login in front of the hostname stays until the person removes it. Edge rules are not applied in this pass. SEC-017 is on main and is not a release |
+| 2026-11-24 | **The public hostname will rely on household sign-in.** SEC-017 through SEC-026 are accepted, continuing the existing SEC series. SEC-017 through SEC-022 are the gate. The extra login in front of the hostname stays until the person removes it. Edge rules are not applied in this pass. SEC-017 and SEC-018 are on main. SEC-019 is in this change and is not a release |
 
 ## Superseded review rows (carry-forward)
 

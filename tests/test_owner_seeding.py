@@ -300,6 +300,9 @@ class OwnerSeedingIntegrationTests(unittest.TestCase):
         login = self.client.post(
             "/api/auth/local/login", json={"username": "boss", "password": "seededownerpw"}
         )
+        from tests.totp_login import finish_sign_in_code
+
+        login = finish_sign_in_code(self.client, login, "boss", "seededownerpw")
         self.assertEqual(login.status_code, 200, login.text)
         self.assertEqual(login.json()["user"]["role"], "owner")
         self.client.post("/api/auth/logout")
