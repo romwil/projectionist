@@ -160,6 +160,7 @@ type AdvancedSettingsProps = {
   onRotateMcpKey?: (...args: any[]) => void;
   onClearMcpKey?: (...args: any[]) => void;
   onCopyMcpKey?: (...args: any[]) => void;
+  onRemoteMcp?: (enabled: boolean) => void;
   mcpRevealedKeys?: any;
   mcpKeyBusy?: any;
   saveAlert?: any;
@@ -173,6 +174,7 @@ export default function AdvancedSettings({
   onRotateMcpKey,
   onClearMcpKey,
   onCopyMcpKey,
+  onRemoteMcp,
   mcpRevealedKeys,
   mcpKeyBusy,
   saveAlert,
@@ -274,6 +276,16 @@ export default function AdvancedSettings({
             <Link to="/privacy">Privacy</Link> for exposure details.
           </p>
         </header>
+        <label className="config-form-field">
+          <span>Allow MCP from the public address</span>
+          <input
+            type="checkbox"
+            data-testid="mcp-remote-enabled"
+            checked={Boolean(settings?.mcp_remote_enabled)}
+            onChange={(event) => updateSettings({ mcp_remote_enabled: event.target.checked })}
+          />
+          <span className="field-help">MCP answers only on the home network until this is on.</span>
+        </label>
         <div className="mcp-key-list">
           <McpKeyRow
             which="privacy"
@@ -294,7 +306,12 @@ export default function AdvancedSettings({
             onCopy={() => onCopyMcpKey?.("full")}
           />
         </div>
-        <InlineAlert type={mcpAlert?.type} message={mcpAlert?.message} />
+        <footer className="config-panel-footer">
+          <button type="button" className="primary" data-testid="mcp-remote-save" onClick={onSavePathsAndSync}>
+            Save
+          </button>
+          <InlineAlert type={mcpAlert?.type} message={mcpAlert?.message} />
+        </footer>
       </section>
     </div>
   );
