@@ -704,14 +704,21 @@ class NetworkSettings:
     ``public_base_url`` is an http(s) origin the owner sets. The home address
     is observed from requests and is not stored here. An invalid value is
     dropped at load so a bad settings file cannot stop startup.
+
+    ``trusted_proxies`` lists the tunnel connector addresses (one IP or
+    CIDR each). ``CF-Connecting-IP`` is the client only for those peers
+    (SEC-017). ``PROJECTIONIST_TRUSTED_PROXIES`` overrides this list.
     """
 
     public_base_url: str = ""
+    trusted_proxies: list = field(default_factory=list)
 
     def __post_init__(self) -> None:
         from projectionist.public_url import sanitize_stored_public_base_url
+        from projectionist.web.rate_limit import normalize_trusted_proxies
 
         self.public_base_url = sanitize_stored_public_base_url(self.public_base_url)
+        self.trusted_proxies = normalize_trusted_proxies(self.trusted_proxies)
 
 
 @dataclass

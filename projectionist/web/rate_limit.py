@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import threading
 import time
 from collections import defaultdict, deque
-from typing import Deque, Dict, Tuple
+from typing import Deque, Dict, List, Tuple
 
 from fastapi import HTTPException, Request
 
@@ -70,12 +71,12 @@ _limiter = SlidingWindowRateLimiter()
 
 
 def trust_proxy_headers() -> bool:
-    """True when Projectionist sits behind a trusted reverse proxy.
+    """True when forwarded protocol headers may be believed.
 
-    Without this flag, ``X-Forwarded-For`` is ignored for rate limiting so
-    clients cannot rotate spoofed IPs to bypass auth throttles on a direct
-    LAN bind (default homelab deployment). Wizard confirm writes the same
-    flag into settings; env still wins when set.
+    This flag still decides ``Secure`` cookies and ``X-Forwarded-Proto``.
+    It does **not** choose the rate-limit key. That key uses
+    ``CF-Connecting-IP`` only when the direct peer is on the trusted-proxy
+    list (SEC-017). A client-supplied ``X-Forwarded-For`` is never the key.
     """
     from projectionist.envcompat import branded_env
 
@@ -94,13 +95,113 @@ def trust_proxy_headers() -> bool:
         return False
 
 
+def normalize_trusted_proxies(value: object) -> List[str]:
+    """Keep tokens that are one IP or one CIDR. Drop anything else."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        parts = value.split(",")
+    elif isinstance(value, (list, tuple)):
+        parts = []
+        for item in value:
+            parts.extend(str(item).split(","))
+    else:
+        return []
+    cleaned: List[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        token = str(part).strip()
+        if not token or token in seen:
+            continue
+        try:
+            ipaddress.ip_network(token, strict=False)
+        except ValueError:
+            continue
+        seen.add(token)
+        cleaned.append(token)
+    return cleaned
+
+
+def configured_trusted_proxies() -> List[str]:
+    """Connector addresses that may supply ``CF-Connecting-IP``.
+
+    ``PROJECTIONIST_TRUSTED_PROXIES`` wins when it is set. Otherwise the
+    list is ``network.trusted_proxies`` in settings. An empty list means
+    no peer is trusted, including loopback.
+    """
+    from projectionist.envcompat import branded_env
+
+    env_raw = branded_env("TRUSTED_PROXIES")
+    if env_raw is not None:
+        return normalize_trusted_proxies(env_raw)
+    try:
+        from pathlib import Path
+
+        from projectionist.config_store import load_merged_settings
+
+        data_dir = Path(os.environ.get("DATA_DIR", "/config"))
+        network = load_merged_settings(data_dir).network
+        return normalize_trusted_proxies(getattr(network, "trusted_proxies", []))
+    except Exception:
+        return []
+
+
+def _peer_addresses(host: str) -> List[ipaddress.IPv4Address | ipaddress.IPv6Address]:
+    try:
+        ip = ipaddress.ip_address(str(host).strip())
+    except ValueError:
+        return []
+    found: List[ipaddress.IPv4Address | ipaddress.IPv6Address] = [ip]
+    mapped = getattr(ip, "ipv4_mapped", None)
+    if mapped is not None:
+        found.append(mapped)
+    return found
+
+
+def peer_is_trusted_proxy(host: str) -> bool:
+    """True when this socket peer is a configured tunnel connector."""
+    peers = _peer_addresses(host)
+    if not peers:
+        return False
+    for token in configured_trusted_proxies():
+        try:
+            network = ipaddress.ip_network(token, strict=False)
+        except ValueError:
+            continue
+        if any(peer in network for peer in peers):
+            return True
+    return False
+
+
+def _single_ip_header(request: Request, name: str) -> str:
+    """One valid IP, or empty. A list or a junk value is ignored."""
+    raw = (request.headers.get(name) or "").strip()
+    if not raw or "," in raw or any(char.isspace() for char in raw):
+        return ""
+    try:
+        ipaddress.ip_address(raw)
+    except ValueError:
+        return ""
+    return raw
+
+
 def client_ip(request: Request) -> str:
-    if trust_proxy_headers():
-        forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
-        if forwarded:
-            return forwarded
+    """Address used as the rate-limit key (SEC-017).
+
+    ``CF-Connecting-IP`` counts only when the direct peer is on the
+    trusted-proxy list. Otherwise the key is the socket peer. The first
+    ``X-Forwarded-For`` hop is never the key, trusted peer or not.
+    """
+    peer = ""
     if request.client and request.client.host:
-        return request.client.host
+        peer = str(request.client.host).strip()
+    if peer and peer_is_trusted_proxy(peer):
+        connecting = _single_ip_header(request, "cf-connecting-ip")
+        if connecting:
+            return connecting
+        return peer
+    if peer:
+        return peer
     return "unknown"
 
 

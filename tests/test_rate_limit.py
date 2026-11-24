@@ -20,6 +20,7 @@ from projectionist.web.rate_limit import (
     clear_rate_limits,
     client_ip,
     enforce_rate_limit,
+    normalize_trusted_proxies,
 )
 
 
@@ -111,10 +112,23 @@ class SlidingWindowRateLimiterTests(unittest.TestCase):
 
 
 class ClientIpExtractionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        os.environ.pop("PROJECTIONIST_TRUST_PROXY_HEADERS", None)
+        os.environ.pop("PROJECTIONIST_TRUSTED_PROXIES", None)
+        self._tmpdir = tempfile.TemporaryDirectory()
+        os.environ["DATA_DIR"] = self._tmpdir.name
+
+    def tearDown(self) -> None:
+        os.environ.pop("PROJECTIONIST_TRUST_PROXY_HEADERS", None)
+        os.environ.pop("PROJECTIONIST_TRUSTED_PROXIES", None)
+        os.environ.pop("DATA_DIR", None)
+        self._tmpdir.cleanup()
+
     def _make_request(
         self,
         *,
         forwarded_for: str | None = None,
+        connecting_ip: str | None = None,
         client_host: str | None = "127.0.0.1",
     ) -> Request:
         scope: dict = {
@@ -124,24 +138,72 @@ class ClientIpExtractionTests(unittest.TestCase):
             "headers": [],
         }
         if forwarded_for is not None:
-            scope["headers"].append(
-                (b"x-forwarded-for", forwarded_for.encode())
-            )
+            scope["headers"].append((b"x-forwarded-for", forwarded_for.encode()))
+        if connecting_ip is not None:
+            scope["headers"].append((b"cf-connecting-ip", connecting_ip.encode()))
         if client_host:
             scope["client"] = (client_host, 12345)
         else:
             scope["client"] = None
         return Request(scope)
 
-    def test_prefers_x_forwarded_for(self) -> None:
+    def test_spoofed_headers_from_an_untrusted_peer_do_not_change_the_key(self) -> None:
         os.environ["PROJECTIONIST_TRUST_PROXY_HEADERS"] = "1"
-        req = self._make_request(forwarded_for="203.0.113.50, 10.0.0.1")
-        self.assertEqual(client_ip(req), "203.0.113.50")
+        req = self._make_request(
+            forwarded_for="203.0.113.50, 10.0.0.1",
+            connecting_ip="203.0.113.50",
+            client_host="192.0.2.10",
+        )
+        self.assertEqual(client_ip(req), "192.0.2.10")
 
-    def test_ignores_x_forwarded_for_without_trust_flag(self) -> None:
-        os.environ.pop("PROJECTIONIST_TRUST_PROXY_HEADERS", None)
+    def test_ignores_x_forwarded_for_without_a_trusted_proxy_list(self) -> None:
         req = self._make_request(forwarded_for="203.0.113.50", client_host="127.0.0.1")
         self.assertEqual(client_ip(req), "127.0.0.1")
+
+    def test_trusted_peer_uses_cf_connecting_ip_not_the_first_xff_hop(self) -> None:
+        os.environ["PROJECTIONIST_TRUSTED_PROXIES"] = "127.0.0.1"
+        req = self._make_request(
+            forwarded_for="198.51.100.5, 203.0.113.8",
+            connecting_ip="203.0.113.8",
+            client_host="127.0.0.1",
+        )
+        self.assertEqual(client_ip(req), "203.0.113.8")
+
+    def test_trusted_peer_without_cf_header_stays_the_peer(self) -> None:
+        os.environ["PROJECTIONIST_TRUSTED_PROXIES"] = "127.0.0.1"
+        req = self._make_request(forwarded_for="198.51.100.5", client_host="127.0.0.1")
+        self.assertEqual(client_ip(req), "127.0.0.1")
+
+    def test_cf_header_must_be_one_ip(self) -> None:
+        os.environ["PROJECTIONIST_TRUSTED_PROXIES"] = "10.0.0.0/8"
+        req = self._make_request(
+            connecting_ip="203.0.113.8, 198.51.100.5",
+            client_host="10.1.1.1",
+        )
+        self.assertEqual(client_ip(req), "10.1.1.1")
+
+    def test_two_clients_through_the_trusted_proxy_get_separate_buckets(self) -> None:
+        os.environ["PROJECTIONIST_TRUSTED_PROXIES"] = "127.0.0.1"
+        clear_rate_limits()
+        first = self._make_request(connecting_ip="203.0.113.10", client_host="127.0.0.1")
+        second = self._make_request(connecting_ip="203.0.113.11", client_host="127.0.0.1")
+        for _ in range(3):
+            enforce_rate_limit(first, bucket="sec017", limit=3, window_seconds=60)
+        enforce_rate_limit(second, bucket="sec017", limit=3, window_seconds=60)
+        from fastapi import HTTPException
+
+        with self.assertRaises(HTTPException):
+            enforce_rate_limit(first, bucket="sec017", limit=3, window_seconds=60)
+        clear_rate_limits()
+
+    def test_settings_list_is_used_when_the_env_is_unset(self) -> None:
+        path = Path(self._tmpdir.name) / "settings.json"
+        path.write_text(
+            json.dumps({"network": {"trusted_proxies": ["127.0.0.1"]}}),
+            encoding="utf-8",
+        )
+        req = self._make_request(connecting_ip="203.0.113.20", client_host="127.0.0.1")
+        self.assertEqual(client_ip(req), "203.0.113.20")
 
     def test_falls_back_to_client_host(self) -> None:
         req = self._make_request(client_host="192.168.1.100")
@@ -151,13 +213,11 @@ class ClientIpExtractionTests(unittest.TestCase):
         req = self._make_request(forwarded_for=None, client_host=None)
         self.assertEqual(client_ip(req), "unknown")
 
-    def test_single_forwarded_for_value(self) -> None:
-        os.environ["PROJECTIONIST_TRUST_PROXY_HEADERS"] = "1"
-        req = self._make_request(forwarded_for="198.51.100.5")
-        self.assertEqual(client_ip(req), "198.51.100.5")
-
-    def tearDown(self) -> None:
-        os.environ.pop("PROJECTIONIST_TRUST_PROXY_HEADERS", None)
+    def test_drops_invalid_proxy_tokens(self) -> None:
+        self.assertEqual(
+            normalize_trusted_proxies("127.0.0.1, not-an-ip, 10.0.0.0/8"),
+            ["127.0.0.1", "10.0.0.0/8"],
+        )
 
 
 class ChatRateLimitIntegrationTests(unittest.TestCase):
@@ -248,6 +308,7 @@ class LocalAuthRateLimitXffTests(unittest.TestCase):
         os.environ["LLM_PROVIDER"] = "ollama"
         os.environ["PROJECTIONIST_SESSION_SECRET"] = "test-xff-rate-limit-session-secret"
         os.environ.pop("PROJECTIONIST_TRUST_PROXY_HEADERS", None)
+        os.environ.pop("PROJECTIONIST_TRUSTED_PROXIES", None)
         from projectionist.web.session_tokens import clear_session_secret_cache
 
         clear_session_secret_cache()
@@ -284,6 +345,7 @@ class LocalAuthRateLimitXffTests(unittest.TestCase):
 
         clear_session_secret_cache()
         os.environ.pop("PROJECTIONIST_TRUST_PROXY_HEADERS", None)
+        os.environ.pop("PROJECTIONIST_TRUSTED_PROXIES", None)
         os.environ.pop("PROJECTIONIST_SESSION_SECRET", None)
         for key in ("PROJECTIONIST_SKIP_DOTENV", "LLM_PROVIDER", "DATA_DIR"):
             os.environ.pop(key, None)
