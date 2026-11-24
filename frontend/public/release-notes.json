@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-11-24T16:48:19Z",
+  "generated_at": "2026-11-24T17:10:15Z",
   "releases": [
     {
       "version": "1.46.1",
       "date": "2026-11-24",
-      "summary": "Tag `v1.46.0` was created and never published. This is the Hub image after 1.45.5. It contains that tag's commit and the merges after it. Pull request 323, \"Treat a tunnel request as outside the house,\" had not merged, so it is not in this image.",
+      "summary": "Tag `v1.46.0` was created and never published. This is the Hub image after 1.45.5. It contains that tag's commit and the merges after it, including pull request 323, \"Treat a tunnel request as outside the house.\"",
       "highlights": [
         "**A holiday question reaches the curator.** Ask the curator answers. It no longer comes back as the word \"picks\".",
         "**The film prepares while the preroll plays.** A warm-up screen says what is happening, and the movie is ready when the preroll ends.",
@@ -30,7 +30,9 @@
             "Import dialogue from the household subtitle cache.",
             "Require a sign-in code for an owner password.",
             "Lock a username or invite after repeated sign-in failures.",
-            "Count tunnel clients only from a listed connector."
+            "Count tunnel clients only from a listed connector.",
+            "Treat a tunnel request as outside the house.",
+            "Remember active mode after the setup check."
           ]
         },
         {
@@ -55,7 +57,8 @@
           "bullets": [
             "SEC-017 counts tunnel clients only from a listed connector. A forwarding header from any other peer is not the rate-limit key.",
             "SEC-018 locks a username or an invite after repeated sign-in failures. The error is the same when the account or invite does not exist.",
-            "SEC-019 requires a sign-in code for an owner password."
+            "SEC-019 requires a sign-in code for an owner password.",
+            "SEC-020 treats a tunnel request as outside the house. A request that arrived through the connector is external even when the socket address is private. Active mode is remembered after the setup check."
           ]
         },
         {
@@ -68,7 +71,7 @@
             "CI on the release PR (required checks).",
             "Hub image `romwil/projectionist:1.46.1`; `org.opencontainers.image.revision` matches tag `v1.46.1`.",
             "QA `:8792` is a Hub pull of that image (Path B). Production stays on 1.45.5.",
-            "Pull request 323 had not merged at the cut."
+            "Pull request 323, \"Treat a tunnel request as outside the house,\" is in this image."
           ]
         }
       ]

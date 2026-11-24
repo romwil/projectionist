@@ -4,7 +4,7 @@
 
 ## [1.46.1] — 2026-11-24
 
-Tag `v1.46.0` was created and never published. This is the Hub image after 1.45.5. It contains that tag's commit and the merges after it. Pull request 323, "Treat a tunnel request as outside the house," had not merged, so it is not in this image.
+Tag `v1.46.0` was created and never published. This is the Hub image after 1.45.5. It contains that tag's commit and the merges after it, including pull request 323, "Treat a tunnel request as outside the house."
 
 A holiday question reaches the curator. The film prepares while the preroll plays. Household playback lives under Admin. The web app can be installed, and a browser can start a film on another screen. An owner password needs a sign-in code.
 
@@ -31,6 +31,8 @@ A holiday question reaches the curator. The film prepares while the preroll play
 - Require a sign-in code for an owner password.
 - Lock a username or invite after repeated sign-in failures.
 - Count tunnel clients only from a listed connector.
+- Treat a tunnel request as outside the house.
+- Remember active mode after the setup check.
 
 ### Changed
 - Move household playback controls into Admin. Profile keeps pause, text size, and the default page.
@@ -50,6 +52,7 @@ A holiday question reaches the curator. The film prepares while the preroll play
 - SEC-017 counts tunnel clients only from a listed connector. A forwarding header from any other peer is not the rate-limit key.
 - SEC-018 locks a username or an invite after repeated sign-in failures. The error is the same when the account or invite does not exist.
 - SEC-019 requires a sign-in code for an owner password.
+- SEC-020 treats a tunnel request as outside the house. A request that arrived through the connector is external even when the socket address is private. Active mode is remembered after the setup check.
 
 ### Verification
 - `./scripts/patch-release.sh 1.46.1` lockstep + `frontend/public/release-notes.json`.
@@ -59,7 +62,7 @@ A holiday question reaches the curator. The film prepares while the preroll play
 - CI on the release PR (required checks).
 - Hub image `romwil/projectionist:1.46.1`; `org.opencontainers.image.revision` matches tag `v1.46.1`.
 - QA `:8792` is a Hub pull of that image (Path B). Production stays on 1.45.5.
-- Pull request 323 had not merged at the cut.
+- Pull request 323, "Treat a tunnel request as outside the house," is in this image.
 
 ## [1.45.5] — 2026-11-24
 
