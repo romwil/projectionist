@@ -460,8 +460,8 @@ STORES: Tuple[PersonalStore, ...] = (
     PersonalStore(
         table="session_approvals",
         label="A request to join a room",
-        match="owner_id = ? OR requester_id = ?",
-        subject_cols=("owner_id", "requester_id"),
+        match=_direct("requester_id"),
+        subject_cols=("requester_id",),
         erase="activity",
         covers_cols=("requester_name",),
     ),
