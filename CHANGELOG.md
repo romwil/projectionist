@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Highlights
+- **Posters show the picture.** On Explore, a title that has art shows that picture. The generated placeholder stays underneath until the picture is there, and it stays if the picture fails.
+
+### Fixed
+- A loaded poster fades in. The shelf marks the picture shown from the art address it was given, including a picture the browser already has in cache. A picture that fails to load stays on the generated placeholder.
+
 ## [1.45.3] — 2026-11-23
 
 Play starts from the file Projectionist already knows, and a slow Plex call no longer stops the next film.

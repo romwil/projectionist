@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { mockCuratorApis, resetMockCertifications } from "./fixtures/api-mocks";
+import { mockCuratorApis, mockExploreHubPayload, resetMockCertifications } from "./fixtures/api-mocks";
 
 test.describe("Explore hub", () => {
   test.beforeEach(async ({ page }) => {
@@ -50,6 +50,39 @@ test.describe("Explore hub", () => {
     await expect(page.getByTestId("title-detail-open-full")).toBeVisible();
     await page.getByTestId("title-detail-open-full").click();
     await expect(page).toHaveURL(/\/title\/movie\/348/);
+  });
+
+  test("a poster with art is visible on Explore", async ({ page }) => {
+    const art = "/api/library/art/movie/348?id_type=tmdb&kind=poster";
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      "base64",
+    );
+    const payload = mockExploreHubPayload();
+    payload.rails.recently_added.items[0].poster_url = art;
+    await page.route("**/api/library/art/**", async (route) => {
+      await route.fulfill({ status: 200, contentType: "image/png", body: png });
+    });
+    await page.route("**/api/library/feeds/hub**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(payload),
+      });
+    });
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/explore");
+    const card = page.getByRole("article").filter({ has: page.getByRole("heading", { name: "Alien" }) }).first();
+    await expect(card).toBeVisible();
+    await card.scrollIntoViewIfNeeded();
+    await expect.poll(async () =>
+      card.evaluate((node, relative) => {
+        const img = [...node.querySelectorAll("img")].find((el) => el.getAttribute("src") === relative);
+        if (!img || img.naturalWidth <= 0) return "hidden";
+        return getComputedStyle(img).opacity;
+      }, art),
+    ).toBe("1");
   });
 
   test("shelves use a generated poster and the top nav keeps a solid fill", async ({ page }) => {
