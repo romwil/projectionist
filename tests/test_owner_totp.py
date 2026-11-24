@@ -112,6 +112,10 @@ class OwnerSignInCodeTests(unittest.TestCase):
         self.assertEqual(missing.json(), known.json())
         self.assertEqual(missing.json()["detail"], GENERIC_LOGIN_DETAIL)
         self.assertNotIn("secret", missing.json())
+        self.assertNotIn("secret", known.json())
+        features = self.client.get("/api/features")
+        self.assertNotIn("secret", features.text)
+        self.assertNotIn("recovery_codes", features.text)
 
     def test_owner_password_sets_up_a_code_before_a_session(self) -> None:
         setup = self._login("Ada")

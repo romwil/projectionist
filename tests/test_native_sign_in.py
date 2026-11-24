@@ -179,6 +179,7 @@ class NativeSignInTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 400, resp.text)
         self.assertNotIn(SESSION_COOKIE_NAME, resp.cookies)
         self.assertNotIn("credential", resp.json())
+        self.assertNotIn("secret", resp.json())
 
     def test_owner_register_can_hand_the_new_account_a_device(self) -> None:
         self._write_settings()

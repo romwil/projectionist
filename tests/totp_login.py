@@ -22,20 +22,27 @@ def finish_sign_in_code(
     payload: dict | None = None,
     **request_kwargs: Any,
 ):
-    key = (id(client), str(username).casefold())
-    try:
-        body = response.json()
-    except Exception:
-        return response
-    if response.status_code != 401 or not isinstance(body, dict):
-        return response
-    secret = body.get("secret")
-    if isinstance(secret, str) and secret:
-        _SECRETS[key] = secret
-    elif key not in _SECRETS:
-        return response
-    from projectionist.web.totp import current_code
+    from projectionist.web.totp import SIGN_IN_CODE_REQUIRED, current_code
 
-    sent = dict(payload or {"username": username, "password": password})
-    sent["code"] = current_code(_SECRETS[key])
-    return client.post("/api/auth/local/login", json=sent, **request_kwargs)
+    key = (id(client), str(username).casefold())
+    current = response
+    # The first answer may be the setup step. A follow-up that still carries a
+    # secret is the same step with a replacement key. Try the code each time.
+    for _ in range(2):
+        try:
+            body = current.json()
+        except Exception:
+            return current
+        if current.status_code != 401 or not isinstance(body, dict):
+            return current
+        secret = body.get("secret")
+        if isinstance(secret, str) and secret:
+            _SECRETS[key] = secret
+        elif body.get("detail") == SIGN_IN_CODE_REQUIRED and key in _SECRETS:
+            secret = _SECRETS[key]
+        else:
+            return current
+        sent = dict(payload or {"username": username, "password": password})
+        sent["code"] = current_code(str(secret))
+        current = client.post("/api/auth/local/login", json=sent, **request_kwargs)
+    return current
