@@ -1265,7 +1265,7 @@ def _features_payload(
     from projectionist.web.capabilities import CACHED_ART_ENABLED
     from projectionist.web.setup_mode import resolve_setup_state
 
-    setup_state = resolve_setup_state(_db())
+    setup_state = resolve_setup_state(_db(), request)
     if not authenticated:
         methods = available_auth_methods(settings)
         public: Dict[str, Any] = {

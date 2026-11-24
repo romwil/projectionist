@@ -158,9 +158,15 @@ def request_passes_setup_lock(request: Request) -> bool:
         if resolve_setup_state(db) == SETUP_STATE_ACTIVE:
             db._projectionist_active_mode = True
         return True
+    # An external request must not open setup again once a public address
+    # is set. A request on the home network still can.
+    from projectionist.web.setup_mode import external_cannot_reopen_setup
+
+    if external_cannot_reopen_setup(request):
+        return False
     # No owner: force the setup ratchet back open, including after a previous
     # active boot whose owner row is gone.
-    resolve_setup_state(db)
+    resolve_setup_state(db, request)
     return setup_unlock_cookie_ok(db, request)
 
 
