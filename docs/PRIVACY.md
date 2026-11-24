@@ -257,6 +257,8 @@ Account removal runs as one database transaction, so a failure part-way leaves t
 | Library clean-up actions you ran (who ran them) | No | No | Name removed | `grooming_action_log` |
 | Temporary Plex collections you made (who made them) | No | No | Name removed | `ephemeral_plex_collections` |
 | Owner checklist ticks (who ticked them) | No | No | Name removed | `owner_checklist_marks` |
+| A request you made to join a session | Yes | No | Deleted | `session_approvals` |
+| Session join requests you were asked to decide | No | No | Name removed | `session_approvals` |
 | Security log entries about your account | No | No | **Kept** | `security_audit_log` |
 | Plex viewing: finished titles | Yes | Yes | Deleted | `watch_completions` |
 | Plex viewing: session links | No | Yes | Deleted | `watch_session_events` |
