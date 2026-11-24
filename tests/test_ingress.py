@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -143,7 +144,9 @@ class WanInterlockTests(unittest.TestCase):
         request.client.host = host
         request.client.port = 1234
         header_map = {k.decode().lower(): v.decode() for k, v in (headers or [])}
-        request.headers.get.side_effect = lambda name, default="": header_map.get(name.lower(), default)
+        request.headers.get.side_effect = lambda name, default="": header_map.get(
+            name.lower(), default
+        )
         return request
 
     def test_docker_nat_does_not_block_single_owner(self) -> None:
@@ -192,7 +195,8 @@ class WanInterlockTests(unittest.TestCase):
                 wan_interlock_blocks(lan, multi_user_enabled=False, bind_host="0.0.0.0")
             )
 
-    def test_trusted_forwarded_public_client_still_blocks(self) -> None:
+    def test_forwarded_for_does_not_make_a_private_peer_external(self) -> None:
+        """The first X-Forwarded-For hop is not the tunnel signal."""
         request = self._request(
             "172.17.0.1",
             headers=[
@@ -204,11 +208,11 @@ class WanInterlockTests(unittest.TestCase):
             "projectionist.web.ingress.trust_proxy_headers",
             return_value=True,
         ):
-            self.assertTrue(
+            self.assertFalse(
                 wan_interlock_blocks(request, multi_user_enabled=False, bind_host="0.0.0.0")
             )
 
-    def test_trusted_forwarded_private_client_does_not_block_public_peer(self) -> None:
+    def test_forwarded_for_does_not_hide_a_public_peer(self) -> None:
         request = self._request(
             "8.8.8.8",
             headers=[(b"x-forwarded-for", b"10.10.1.50")],
@@ -217,6 +221,36 @@ class WanInterlockTests(unittest.TestCase):
             "projectionist.web.ingress.trust_proxy_headers",
             return_value=True,
         ):
+            self.assertTrue(
+                wan_interlock_blocks(request, multi_user_enabled=False, bind_host="0.0.0.0")
+            )
+
+    def test_cloudflare_headers_from_a_trusted_connector_are_external(self) -> None:
+        request = self._request(
+            "172.17.0.1",
+            headers=[(b"cf-ray", b"9abc-EWR"), (b"cf-connecting-ip", b"203.0.113.8")],
+        )
+        with unittest.mock.patch.dict(os.environ, {"PROJECTIONIST_TRUSTED_PROXIES": "172.17.0.1"}):
+            self.assertTrue(
+                wan_interlock_blocks(request, multi_user_enabled=False, bind_host="0.0.0.0")
+            )
+
+    def test_cloudflare_headers_from_another_peer_do_not_count(self) -> None:
+        request = self._request(
+            "192.168.1.20",
+            headers=[(b"cf-ray", b"9abc-EWR"), (b"cf-connecting-ip", b"8.8.8.8")],
+        )
+        with unittest.mock.patch.dict(os.environ, {"PROJECTIONIST_TRUSTED_PROXIES": "172.17.0.1"}):
+            self.assertFalse(
+                wan_interlock_blocks(request, multi_user_enabled=False, bind_host="0.0.0.0")
+            )
+
+    def test_a_connector_without_cloudflare_headers_is_not_external(self) -> None:
+        request = self._request(
+            "172.17.0.1",
+            headers=[(b"x-forwarded-for", b"8.8.8.8")],
+        )
+        with unittest.mock.patch.dict(os.environ, {"PROJECTIONIST_TRUSTED_PROXIES": "172.17.0.1"}):
             self.assertFalse(
                 wan_interlock_blocks(request, multi_user_enabled=False, bind_host="0.0.0.0")
             )
@@ -240,15 +274,70 @@ class WanInterlockTests(unittest.TestCase):
                 (b"x-forwarded-for", b"192.168.1.20"),
             ],
         )
-        self.assertFalse(
-            wan_interlock_blocks(lan, multi_user_enabled=False, bind_host="0.0.0.0")
-        )
+        self.assertFalse(wan_interlock_blocks(lan, multi_user_enabled=False, bind_host="0.0.0.0"))
         self.assertFalse(
             wan_interlock_blocks(docker, multi_user_enabled=False, bind_host="0.0.0.0")
         )
-        self.assertTrue(
-            wan_interlock_blocks(public, multi_user_enabled=False, bind_host="0.0.0.0")
+        self.assertTrue(wan_interlock_blocks(public, multi_user_enabled=False, bind_host="0.0.0.0"))
+
+
+class SetupReopenTests(unittest.TestCase):
+    def _request(self, host: str, headers: dict[str, str] | None = None):
+        request = MagicMock()
+        request.client.host = host
+        request.client.port = 1234
+        header_map = {key.lower(): value for key, value in (headers or {}).items()}
+        request.headers.get.side_effect = lambda name, default="": header_map.get(
+            name.lower(), default
         )
+        return request
+
+    def test_an_external_request_does_not_reopen_setup(self) -> None:
+        from projectionist.web.setup_mode import SETUP_STATE_KEY, resolve_setup_state
+
+        previous = {
+            key: os.environ.get(key)
+            for key in (
+                "DATA_DIR",
+                "PROJECTIONIST_SKIP_DOTENV",
+                "PROJECTIONIST_TRUSTED_PROXIES",
+                "PROJECTIONIST_SETUP_STATE",
+                "PROJECTIONIST_OWNER_PASSWORD",
+            )
+        }
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                os.environ["DATA_DIR"] = tmp
+                os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
+                os.environ["PROJECTIONIST_TRUSTED_PROXIES"] = "172.17.0.1"
+                os.environ.pop("PROJECTIONIST_SETUP_STATE", None)
+                os.environ.pop("PROJECTIONIST_OWNER_PASSWORD", None)
+                (Path(tmp) / "settings.json").write_text(
+                    json.dumps({"network": {"public_base_url": "https://films.example.com"}}),
+                    encoding="utf-8",
+                )
+                external_db = Database(Path(tmp) / "external.db")
+                external_db.set_config(SETUP_STATE_KEY, "active")
+                state = resolve_setup_state(
+                    external_db,
+                    self._request("172.17.0.1", {"cf-ray": "9abc-EWR"}),
+                )
+                self.assertEqual(state, "active")
+                self.assertEqual(external_db.get_config(SETUP_STATE_KEY), "active")
+
+                home_db = Database(Path(tmp) / "home.db")
+                home_db.set_config(SETUP_STATE_KEY, "active")
+                self.assertEqual(
+                    resolve_setup_state(home_db, self._request("192.168.1.20")),
+                    "setup",
+                )
+                self.assertEqual(home_db.get_config(SETUP_STATE_KEY), "setup")
+        finally:
+            for key, value in previous.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
 
 
 if __name__ == "__main__":

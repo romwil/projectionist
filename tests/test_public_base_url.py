@@ -23,7 +23,11 @@ from projectionist.web.addresses import (
 )
 from projectionist.web.auth import clear_pin_bindings
 from projectionist.web.rate_limit import clear_rate_limits
-from projectionist.web.session_tokens import SESSION_COOKIE_NAME, clear_session_secret_cache, create_session_token
+from projectionist.web.session_tokens import (
+    SESSION_COOKIE_NAME,
+    clear_session_secret_cache,
+    create_session_token,
+)
 
 
 def _request(host: str, peer: str, headers: dict[str, str] | None = None):
@@ -74,6 +78,7 @@ class HomeObservationTests(unittest.TestCase):
     def tearDown(self) -> None:
         reset_observed_home()
         os.environ.pop("PROJECTIONIST_TRUST_PROXY_HEADERS", None)
+        os.environ.pop("PROJECTIONIST_TRUSTED_PROXIES", None)
 
     def test_home_names(self) -> None:
         self.assertTrue(host_is_home("10.0.0.8:8788"))
@@ -85,7 +90,9 @@ class HomeObservationTests(unittest.TestCase):
         self.assertFalse(host_is_home("testserver"))
 
     def test_private_request_is_remembered_for_a_later_public_host(self) -> None:
-        settings = SimpleNamespace(network=SimpleNamespace(public_base_url="https://films.example.com"))
+        settings = SimpleNamespace(
+            network=SimpleNamespace(public_base_url="https://films.example.com")
+        )
         first = addresses_payload(_request("10.0.0.8:8788", "10.0.0.8"), settings)
         self.assertEqual(first["home"], "http://10.0.0.8:8788")
         self.assertEqual(first["away"], "https://films.example.com")
@@ -99,31 +106,32 @@ class HomeObservationTests(unittest.TestCase):
         self.assertEqual(planted["home"], "")
         self.assertEqual(planted["away"], "")
 
-    def test_trusted_proxy_uses_the_forwarded_client(self) -> None:
-        os.environ["PROJECTIONIST_TRUST_PROXY_HEADERS"] = "1"
+    def test_a_tunnel_arrival_cannot_plant_a_home_address(self) -> None:
+        os.environ["PROJECTIONIST_TRUSTED_PROXIES"] = "127.0.0.1"
         settings = SimpleNamespace(network=SimpleNamespace(public_base_url=""))
         planted = addresses_payload(
             _request(
                 "10.0.0.8:8788",
                 "127.0.0.1",
-                {"x-forwarded-for": "8.8.8.8", "x-forwarded-host": "10.0.0.8:8788"},
-            ),
-            settings,
-        )
-        self.assertEqual(planted["home"], "")
-        home = addresses_payload(
-            _request(
-                "films.example.com",
-                "127.0.0.1",
                 {
+                    "cf-ray": "9abc-EWR",
+                    "cf-connecting-ip": "203.0.113.8",
                     "x-forwarded-for": "10.0.0.8",
                     "x-forwarded-host": "10.0.0.8:8788",
-                    "x-forwarded-proto": "http",
                 },
             ),
             settings,
         )
-        self.assertEqual(home["home"], "http://10.0.0.8:8788")
+        self.assertEqual(planted["home"], "")
+        spoofed = addresses_payload(
+            _request(
+                "10.0.0.8:8788",
+                "192.168.1.20",
+                {"cf-ray": "9abc-EWR", "cf-connecting-ip": "8.8.8.8"},
+            ),
+            settings,
+        )
+        self.assertEqual(spoofed["home"], "http://10.0.0.8:8788")
 
 
 class EnginePlaylistStaysRelativeTests(unittest.TestCase):
@@ -285,3 +293,40 @@ class PublicBaseUrlApiTests(unittest.TestCase):
         allowed = self.client.get("/api/network/public-base-url")
         self.assertEqual(allowed.status_code, 200, allowed.text)
         self.assertEqual(allowed.json()["public_base_url"], "https://films.example.com")
+
+    def test_household_login_stays_on_while_a_public_address_is_set(self) -> None:
+        path = Path(self._tmpdir.name) / "settings.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "features": {"multi_user_enabled": True},
+                    "llm_provider": "ollama",
+                    "network": {"public_base_url": "https://films.example.com"},
+                }
+            ),
+            encoding="utf-8",
+        )
+        db = self.app_mod._db()
+        db.upsert_plex_user(
+            user_id="owner-1",
+            display_name="Owner",
+            email=None,
+            plex_user_id="1",
+            role="owner",
+        )
+        self.client.cookies.set(SESSION_COOKIE_NAME, create_session_token("owner-1"))
+        refused = self.client.put(
+            "/api/settings",
+            json={"features": {"multi_user_enabled": False}},
+        )
+        self.assertEqual(refused.status_code, 400, refused.text)
+        self.assertIn("public address", refused.json()["detail"].lower())
+        self.assertTrue(self.app_mod._settings().features.multi_user_enabled)
+        cleared = self.client.put("/api/network/public-base-url", json={"public_base_url": ""})
+        self.assertEqual(cleared.status_code, 200, cleared.text)
+        turned_off = self.client.put(
+            "/api/settings",
+            json={"features": {"multi_user_enabled": False}},
+        )
+        self.assertEqual(turned_off.status_code, 200, turned_off.text)
+        self.assertFalse(turned_off.json()["features"]["multi_user_enabled"])
