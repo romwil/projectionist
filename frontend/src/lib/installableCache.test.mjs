@@ -49,7 +49,7 @@ describe("installable cache policy", () => {
   it("the service worker asks this policy before it stores anything", () => {
     const worker = readFileSync(join(here, "../../public/sw.js"), "utf8");
     assert.match(worker, /installableCacheDecision/);
-    assert.match(worker, /decision !== "static"/);
+    assert.match(worker, /if \(decision !== "static"\) return;/);
     assert.doesNotMatch(worker, /caches\.put\([\s\S]*\/api/);
     assert.match(worker, /offline\.html/);
   });

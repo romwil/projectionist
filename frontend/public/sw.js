@@ -35,16 +35,13 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.mode === "navigate") {
-    event.respondWith(
-      fetch(request).catch(() => caches.match("/offline.html")),
-    );
+    event.respondWith(fetch(request).catch(() => caches.match("/offline.html")));
     return;
   }
   const decision = installableCacheDecision(request.url, request.method, self.location.origin);
-  if (decision !== "static") {
-    event.respondWith(fetch(request));
-    return;
-  }
+  // Leave API, art, and media on the page's own request. respondWith(fetch())
+  // would hide them from the document, and this worker must not store them.
+  if (decision !== "static") return;
   event.respondWith(
     fetch(request)
       .then((response) => {

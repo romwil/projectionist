@@ -10,6 +10,8 @@ import {
   resetMockCertifications,
 } from "./fixtures/api-mocks";
 
+test.use({ serviceWorkers: "allow" });
+
 test.describe("Installable web app", () => {
   test.beforeEach(async ({ page }) => {
     resetMockCertifications();
