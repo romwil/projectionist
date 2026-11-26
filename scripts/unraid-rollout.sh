@@ -25,6 +25,7 @@
 #   cd /mnt/user/appdata/projectionist
 #   ./rollout.sh                     # romwil/projectionist:latest
 #   ./rollout.sh 1.27.3              # pin a release tag
+#   ./rollout.sh --smoke-only        # signed-in smoke against the CURRENT image
 #
 # First migration from an Unraid dockerman-managed container: this script
 # removes a same-named container (stop/rm only; never docker volume rm /
@@ -43,7 +44,31 @@ if [[ -f "$SCRIPT_DIR/.env" ]]; then
   set +a
 fi
 
-IMAGE_TAG="${1:-${IMAGE_TAG:-latest}}"
+SMOKE_ONLY=0
+IMAGE_TAG="${IMAGE_TAG:-latest}"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --smoke-only)
+      SMOKE_ONLY=1
+      shift
+      ;;
+    -h|--help)
+      printf '%s\n' "Usage: $0 [<tag>] [--smoke-only]"
+      printf '%s\n' "  <tag>         Hub tag to pull (default: latest, or IMAGE_TAG)"
+      printf '%s\n' "  --smoke-only  Run signed-in smoke on the current container; do not replace it"
+      exit 0
+      ;;
+    --*)
+      printf 'ERROR: unknown option %s\n' "$1" >&2
+      exit 1
+      ;;
+    *)
+      IMAGE_TAG="$1"
+      shift
+      ;;
+  esac
+done
+
 HOST_PORT="${HOST_PORT:-8788}"
 THEATER_HOST_PORT="${THEATER_HOST_PORT:-8791}"
 # New installs / recreate prefer container name projectionist. Override if your
@@ -69,6 +94,8 @@ STARTUP_PATTERN='Projectionist startup'
 # Accept legacy log line during image transition
 STARTUP_PATTERN_LEGACY='CuratorX startup'
 WAIT_SECS="${ROLLOUT_WAIT_SECS:-90}"
+# Signed-in smoke may wait for features / rails after ready.
+SMOKE_WAIT_SECS="${ROLLOUT_SMOKE_WAIT_SECS:-60}"
 
 log() { printf '%s\n' "$*"; }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
@@ -272,6 +299,9 @@ smoke_ready() {
   die "ready check failed: $READY_URL (health is not enough; the app must be able to read and write settings and the database)"
 }
 
+# Member-visible smoke. Do not require llm_provider: 1.45.x features expose
+# llm_configured for members and omit the provider name; gate 6 (SEC-022) is
+# the signed-out sign-in card, not an owner-only provider field.
 smoke_signed_in() {
   local user="${PROJECTIONIST_SMOKE_USERNAME:-}"
   local pass="${PROJECTIONIST_SMOKE_PASSWORD:-}"
@@ -300,34 +330,62 @@ smoke_signed_in() {
     rm -rf "$work"
     die "Signed-in smoke failed: local login returned HTTP ${login_code:-none}."
   fi
-  local features_code
-  features_code="$(curl -sS -o "$work/features" -w '%{http_code}' -b "$work/cookies" --max-time 20 "$APP_ORIGIN/api/features" || true)"
-  if [[ "$features_code" != "200" ]]; then
-    rm -rf "$work"
-    die "Signed-in smoke failed: features returned HTTP ${features_code:-none}."
-  fi
-  if ! "$py" -c '
+
+  local deadline=$((SECONDS + SMOKE_WAIT_SECS))
+  local features_code="" rail_code="" last_reason="smoke not checked yet" reason=""
+  while (( SECONDS < deadline )); do
+    features_code="$(curl -sS -o "$work/features" -w '%{http_code}' -b "$work/cookies" --max-time 20 "$APP_ORIGIN/api/features" || true)"
+    if [[ "$features_code" != "200" ]]; then
+      last_reason="features returned HTTP ${features_code:-none}"
+      sleep 2
+      continue
+    fi
+    if ! reason="$("$py" -c '
 import json, sys
 data = json.load(open(sys.argv[1]))
 features = data.get("features") or {}
-provider = features.get("llm_provider")
 if data.get("authenticated") is not True:
     sys.exit("features is not signed in")
-if not isinstance(provider, str) or not provider.strip():
-    sys.exit("features did not show a chat provider")
+# Chat available to members: llm_configured. Do not require llm_provider —
+# older images omit it for everyone, and the provider name is not the member signal.
+if features.get("llm_configured") is not True:
+    sys.exit("features did not show chat available (llm_configured)")
 if "live_channels_enabled" not in features:
     sys.exit("features did not show live channels")
-' "$work/features"; then
-    rm -rf "$work"
-    die "Signed-in smoke failed: features did not show the chat provider and live channels."
-  fi
-  local rail_code
-  rail_code="$(curl -sS -o "$work/rail" -w '%{http_code}' -b "$work/cookies" --max-time 60 "$APP_ORIGIN/api/library/feeds/hub" || true)"
-  if [[ "$rail_code" != "200" ]]; then
-    rm -rf "$work"
-    die "Signed-in smoke failed: the hub rail returned HTTP ${rail_code:-none}."
-  fi
-  log "Signed-in smoke: features show the chat provider and live channels, and the hub rail returned 200."
+' "$work/features" 2>&1)"; then
+      last_reason="${reason:-features check failed}"
+      sleep 2
+      continue
+    fi
+    rail_code="$(curl -sS -o "$work/rail" -w '%{http_code}' -b "$work/cookies" --max-time 60 "$APP_ORIGIN/api/library/feeds/hub" || true)"
+    if [[ "$rail_code" != "200" ]]; then
+      last_reason="hub rail returned HTTP ${rail_code:-none}"
+      sleep 2
+      continue
+    fi
+    if ! reason="$("$py" -c '
+import json, sys
+data = json.load(open(sys.argv[1]))
+rails = data.get("rails") or {}
+posters = 0
+for rail in rails.values():
+    if not isinstance(rail, dict):
+        continue
+    for item in rail.get("items") or []:
+        if isinstance(item, dict) and item.get("poster_url"):
+            posters += 1
+if posters < 1:
+    sys.exit("hub rail returned 200 but had no posters")
+' "$work/rail" 2>&1)"; then
+      last_reason="${reason:-hub posters check failed}"
+      sleep 2
+      continue
+    fi
+    log "Signed-in smoke: chat available (llm_configured), live channels present, hub rail 200 with posters."
+    return 0
+  done
+  log "Signed-in smoke failed after ${SMOKE_WAIT_SECS}s: ${last_reason:-unknown}."
+  return 1
 }
 
 # Root-only credentials for the signed-in smoke. Not the app .env, and not
@@ -362,6 +420,22 @@ require_smoke_env() {
   log "Smoke env ${smoke_env} is mode 600, owned by root. Username: ${PROJECTIONIST_SMOKE_USERNAME}."
 }
 
+require_smoke_env
+
+if [[ "$SMOKE_ONLY" -eq 1 ]]; then
+  log "=== Projectionist smoke-only (no container replace) ==="
+  log "Dir:   $SCRIPT_DIR"
+  log "Port:  ${HOST_PORT}"
+  log "Container: $CONTAINER_NAME (unchanged)"
+  if ! docker inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
+    die "Smoke-only needs a running container named ${CONTAINER_NAME}."
+  fi
+  log "Signed-in smoke against the current image..."
+  smoke_signed_in || die "Smoke-only failed against the current image."
+  log "=== Smoke-only OK ==="
+  exit 0
+fi
+
 log "=== Projectionist rollout ==="
 log "Dir:   $SCRIPT_DIR"
 log "Image: $IMAGE"
@@ -373,7 +447,15 @@ log "TV library (rw): $TV_MEDIA → /tv (and same-path when host dir exists)"
 log "Movie library (rw): $MOVIE_MEDIA → /movies (and same-path when host dir exists)"
 log "Preroll bumpers (rw): $PREROLL_MEDIA → /preroll (and same-path when host dir exists)"
 log "Host data dir (Tunarr binds): PROJECTIONIST_HOST_DATA_DIR=$CONFIG_DIR"
-require_smoke_env
+
+# Baseline: the smoke must pass on the CURRENT image before we replace it.
+# If it fails here, the check is broken — not the release we were about to pull.
+log "Baseline signed-in smoke on the current image (before replace)..."
+if ! docker inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
+  die "No current container named ${CONTAINER_NAME}. Refusing to roll without a baseline smoke."
+fi
+smoke_signed_in || die "Baseline smoke failed on the current image. The check is broken, not the release. Aborting before replace."
+log "Baseline smoke passed. Continuing with ${IMAGE}."
 
 if ((${#COMPOSE[@]})); then
   run_compose
@@ -387,7 +469,7 @@ wait_for_startup_log
 log "Ready check..."
 smoke_ready
 log "Signed-in smoke..."
-smoke_signed_in
+smoke_signed_in || die "Signed-in smoke failed after replace."
 
 if docker exec -u "$APP_UID" "$CONTAINER_NAME" cat /app/.build-info >/dev/null 2>&1; then
   log "Build info:"

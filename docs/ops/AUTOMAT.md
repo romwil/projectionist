@@ -104,6 +104,8 @@ Env: `PROJECTIONIST_TV_MEDIA` / `PROJECTIONIST_MOVIE_MEDIA` (win over settings).
 
 That directory is a sibling of the Projectionist appdata kit. It is not the `/config` bind (`/mnt/user/appdata/projectionist/config`) and it is not in git. `rollout.sh` refuses to replace the container unless the directory is mode 700 and owned by root, and the file is mode 600 and owned by root.
 
+The signed-in smoke asserts **member-visible** signals: `llm_configured` (chat available; not `llm_provider`, which older images omit), `live_channels_enabled` present, and a hub rail HTTP 200 with at least one poster. It retries for up to about 60 seconds. `./rollout.sh --smoke-only` runs that smoke against the **current** container and does not replace it. A normal roll runs the same smoke first as a baseline; if the current image fails, the script aborts before pull ("the check is broken, not the release").
+
 The file used to sit at `/boot/config/projectionist-smoke.env`. `/boot` is FAT32, so a mode of 600 is not enforced there, and Unraid Connect flash backup copies the flash. The credentials were moved off the flash for that reason. Do not put them back on `/boot`.
 
 **Sync kit from repo after script changes** (does not restart prod):
