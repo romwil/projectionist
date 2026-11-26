@@ -226,6 +226,24 @@ The same list can live in `{DATA_DIR}/settings.json` under `network.trusted_prox
 | SEC-026 | Review the public handshake | The routes that answer before sign-in are listed, and each token is hard to guess. | Every `PUBLIC_HANDSHAKE_EXACT` entry and the path-token patterns (engine media, PIN poll, pair pending) are checked for at least 128 bits of token entropy, a TTL, and a rate limit. No response reveals whether an account exists. The findings are written in this file. | SEC-017, SEC-018 | done |
 | SEC-027 | Give engine media tokens a lifetime | A playlist URL stops working when the film stops, and when nobody has been watching. | The path token is refused when the session has ended. It also expires 6 hours after the last time playback moved: a media playlist or segment request, or a playhead that changed. The same token stays in the URL. | SEC-026 | done |
 
+### Gate status, checked 2026-11-26
+
+Read against `origin/main` at `d410cccb`. Every front-door gate is already in that tree. Nothing in this check was missing, so this pass does not add a second implementation. These gates stay. They are the community baseline and defense in depth for any exposed install. Cloudflare Access stays on `projectionist.automat.vip`. This table is not a step toward turning Access off.
+
+| Drop item | What it is | Where it lives | Status |
+|-----------|------------|----------------|--------|
+| 1 | `CF-Connecting-IP` is the rate-limit key only when the socket peer is on the trusted-proxy list. The first `X-Forwarded-For` hop is never the key. | `projectionist/web/rate_limit.py` (`client_ip`), `tests/test_rate_limit.py` | Present (SEC-017) |
+| 2 | Ten failed sign-ins for one username, or ten failed redeems for one invite, lock for 15 minutes and then double, up to 24 hours. The error does not say whether the account exists. A new lock is an audit row the owner reads in Admin → Health and Logs. | `projectionist/web/account_throttle.py`, `projectionist/web/auth.py`, `tests/test_account_throttle.py` | Present (SEC-018) |
+| 3 | An owner or admin password needs a sign-in code. Members may keep a password. A new password is refused when it is too short or on the bundled common-password list. | `projectionist/web/auth.py`, `projectionist/web/totp.py`, `tests/test_owner_totp.py` | Present (SEC-019) |
+| 4 | `cf-ray` or `cf-connecting-ip` from a trusted connector is outside the house. A public base URL keeps household login on, and an external request cannot re-enter setup. | `projectionist/web/ingress.py`, `tests/test_tunnel_external.py`, `tests/test_ingress.py` | Present (SEC-020) |
+| 5 | Art, playlists, segments, subtitles, avatars, and every `/api/` response are private. Content-addressed static files stay public. | `projectionist/web/private_cache.py`, `tests/test_private_cache.py` | Present (SEC-021) |
+| 6 | A signed-out `GET /api/features` is the sign-in card: capability flags and sign-in methods, without home or away addresses, library facts, or the server version. | `projectionist/web/auth.py`, `tests/test_anonymous_features.py` | Present (SEC-022) |
+| 7 | A cookie write whose `Origin` or `Referer` is not this household is rejected. A bearer client is exempt. | `projectionist/web/origin_check.py`, `tests/test_cookie_origin.py` | Present (SEC-023) |
+| 8 | `/mcp` from outside the house is refused unless the owner turns on remote MCP. A failed MCP sign-in is logged. | `projectionist/web/ingress.py`, `tests/test_mcp_remote.py` | Present (SEC-024) |
+| 9 | A new device or browser writes an inbox letter for the owner and, when an email is set, for the account holder. The owner revokes the device from Settings → Devices. | `projectionist/web/sign_in_notice.py`, `tests/test_sign_in_notice.py` | Present (SEC-025) |
+| 10 | The public handshake review records entropy, lifetime, and rate limits. The typed TV code stays 40 bits and 5 minutes. | This file, `tests/test_api_authz.py` | Present (SEC-026) |
+| Media token | An engine media token stops working when the session ends, and 6 hours after playback last moved. A playlist, a segment, or a moved playhead renews it. | `projectionist/engine/session.py`, `tests/test_engine_session.py` | Present (SEC-027) |
+
 ### Public handshake review (SEC-026)
 
 Read on 2026-11-24 against `PUBLIC_HANDSHAKE_EXACT` and the three path patterns in `projectionist/web/auth.py`. Bit counts are `secrets.token_urlsafe(n)` as `n` random bytes, so 8n bits.
