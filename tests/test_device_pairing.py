@@ -1,6 +1,8 @@
 """Apple TV sign-in codes, device bearer, revoke, and throw."""
 
+
 from __future__ import annotations
+from projectionist.web.plex_session import sign_in_plex_token
 
 import importlib
 import json
@@ -89,7 +91,7 @@ class DevicePairingTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": plex_id, "title": title},
         ):
-            resp = self.client.post("/api/auth/plex", json={"auth_token": f"token-{plex_id}"})
+            resp = sign_in_plex_token(self.client, f"token-{plex_id}")
         self.assertEqual(resp.status_code, 200, resp.text)
         return resp.json()["user"]
 

@@ -6,7 +6,9 @@ member's reviews through the agent (SEC-009), take an ownerless server
 (SEC-008), or get a "You watched" line from someone else's history (PRIV-001).
 """
 
+
 from __future__ import annotations
+from projectionist.web.plex_session import sign_in_plex_token
 
 import asyncio
 import importlib
@@ -368,7 +370,7 @@ class OwnerClaimTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": plex_id, "title": f"P{plex_id}", "email": f"p{plex_id}@example.com"},
         ):
-            resp = client.post("/api/auth/plex", json={"auth_token": f"tok-{plex_id}"})
+            resp = sign_in_plex_token(client, f"tok-{plex_id}")
         clear_rate_limits()
         return resp
 

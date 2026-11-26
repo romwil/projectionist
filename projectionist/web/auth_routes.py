@@ -65,7 +65,6 @@ def register_auth_routes(app):
     MyAppriseTestPayload = app_mod.MyAppriseTestPayload
     OwnerPasswordResetPayload = app_mod.OwnerPasswordResetPayload
     PasswordChangePayload = app_mod.PasswordChangePayload
-    PlexLoginPayload = app_mod.PlexLoginPayload
     SESSION_COOKIE_NAME = app_mod.SESSION_COOKIE_NAME
     SeerrSyncPayload = app_mod.SeerrSyncPayload
     UserMemoryService = app_mod.UserMemoryService
@@ -527,29 +526,6 @@ def register_auth_routes(app):
         )
         clear_pin_nonce_cookie(response, request)
         return {"user": linked.to_dict(), "authenticated": True, "linked": True}
-
-
-    @router.post("/api/auth/plex")
-    def auth_plex(payload: PlexLoginPayload, request: Request, response: Response) -> Dict[str, Any]:
-        """Advanced fallback: sign in with a raw Plex auth token."""
-        enforce_rate_limit(request, bucket="auth_plex_token", limit=10, window_seconds=60)
-        native = _client_or_400(payload.client)
-        user = authenticate_plex_user(
-            payload.auth_token,
-            _db(),
-            invite_token=payload.invite_token,
-            request=request,
-        )
-        audit_detail = {"method": "plex_token"}
-        if native is not None:
-            audit_detail["client_kind"] = native["kind"]
-        sa.audit(_db(), sa.SIGN_IN, actor_id=user.id, **audit_detail)
-        body = {"user": user.to_dict(), "authenticated": True}
-        if native is not None:
-            response.headers["Cache-Control"] = "no-store"
-            return _with_device(body, user_id=user.id, client=native, request=request)
-        set_session_cookie(response, user.id, request, db=_db())
-        return body
 
 
     @router.post("/api/auth/local/register")

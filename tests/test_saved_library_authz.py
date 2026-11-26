@@ -6,7 +6,9 @@ empty ``user_id`` to the DB: a signed-out or unscoped request must be rejected
 able to read another member's saved page (404).
 """
 
+
 from __future__ import annotations
+from projectionist.web.plex_session import sign_in_plex_token
 
 import importlib
 import json
@@ -74,7 +76,7 @@ class SavedLibraryAuthzTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": plex_id, "title": title, "email": f"{title}@example.com"},
         ):
-            resp = self.client.post("/api/auth/plex", json={"auth_token": f"token-{plex_id}"})
+            resp = sign_in_plex_token(self.client, f"token-{plex_id}")
         self.assertEqual(resp.status_code, 200, resp.text)
 
     def _create_saved_page(self, name: str = "Sci-fi gaps") -> str:

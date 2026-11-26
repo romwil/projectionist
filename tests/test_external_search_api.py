@@ -1,6 +1,8 @@
 """Tests for the GET /api/search/external ("Search beyond the collection") endpoint."""
 
+
 from __future__ import annotations
+from projectionist.web.plex_session import sign_in_plex_token
 
 import importlib
 import json
@@ -124,7 +126,7 @@ class ExternalSearchApiTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": plex_id, "title": title, "email": f"{title}@example.com"},
         ):
-            resp = self.client.post("/api/auth/plex", json={"auth_token": f"token-{plex_id}"})
+            resp = sign_in_plex_token(self.client, f"token-{plex_id}")
         self.assertEqual(resp.status_code, 200, resp.text)
 
     def _mock_tmdb(self, mock_cls):

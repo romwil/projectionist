@@ -8,7 +8,6 @@ PUBLIC_BODY_CLAMP_PATHS = frozenset(
     {
         "/api/auth/local/login",
         "/api/setup/unlock",
-        "/api/auth/plex",
         "/api/auth/plex/pin",
         "/api/auth/oidc/authorize",
         "/api/auth/oidc/exchange",

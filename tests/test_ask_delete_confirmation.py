@@ -1,6 +1,8 @@
 """Owner preference for the typed DELETE library-removal gate."""
 
+
 from __future__ import annotations
+from projectionist.web.plex_session import sign_in_plex_token
 
 import importlib
 import json
@@ -58,7 +60,7 @@ class AskDeleteConfirmationTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": plex_id, "title": title, "email": f"{title}@example.com"},
         ):
-            resp = self.client.post("/api/auth/plex", json={"auth_token": f"token-{plex_id}"})
+            resp = sign_in_plex_token(self.client, f"token-{plex_id}")
         self.assertEqual(resp.status_code, 200, resp.text)
 
     def test_default_asks_for_delete(self) -> None:

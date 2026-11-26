@@ -33,7 +33,6 @@ CLIENT_ROUTES: frozenset[tuple[str, str]] = frozenset(
         ("GET", "/api/devices/pair/pending/{pending_id}"),
         ("POST", "/api/auth/plex/pin"),
         ("GET", "/api/auth/plex/pin/{pin_id}"),
-        ("POST", "/api/auth/plex"),
         ("POST", "/api/auth/local/login"),
         ("POST", "/api/auth/local/register"),
         ("GET", "/api/auth/oidc/authorize"),

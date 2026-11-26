@@ -1,6 +1,8 @@
 """Invite-only household join (1.26)."""
 
+
 from __future__ import annotations
+from projectionist.web.plex_session import sign_in_plex_token
 
 import importlib
 import json
@@ -383,7 +385,7 @@ class InviteApiTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": "plex-999", "title": "Newbie", "email": "n@ex.com"},
         ):
-            resp = self.client.post("/api/auth/plex", json={"auth_token": "fake-token"})
+            resp = sign_in_plex_token(self.client, "fake-token")
         self.assertEqual(resp.status_code, 403, resp.text)
         self.assertIn("invite", resp.json()["detail"].lower())
 
@@ -400,10 +402,7 @@ class InviteApiTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": "plex-888", "title": "Invited", "email": "i@ex.com"},
         ):
-            resp = self.client.post(
-                "/api/auth/plex",
-                json={"auth_token": "fake-token", "invite_token": token},
-            )
+            resp = sign_in_plex_token(self.client, "fake-token", invite_token=token)
         self.assertEqual(resp.status_code, 200, resp.text)
         self.assertEqual(resp.json()["user"]["role"], "member")
         # Replay
@@ -411,10 +410,7 @@ class InviteApiTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": "plex-777", "title": "Other", "email": "o@ex.com"},
         ):
-            replay = self.client.post(
-                "/api/auth/plex",
-                json={"auth_token": "fake-token-2", "invite_token": token},
-            )
+            replay = sign_in_plex_token(self.client, "fake-token-2", invite_token=token)
         self.assertEqual(replay.status_code, 403, replay.text)
 
     def test_open_auto_provision_preserves_upsert(self) -> None:
@@ -430,7 +426,7 @@ class InviteApiTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": "plex-open-1", "title": "OpenUser", "email": "o@ex.com"},
         ):
-            resp = self.client.post("/api/auth/plex", json={"auth_token": "fake-token"})
+            resp = sign_in_plex_token(self.client, "fake-token")
         os.environ.pop("PROJECTIONIST_ALLOW_OPEN_JOIN", None)
         self.assertEqual(resp.status_code, 200, resp.text)
         self.assertEqual(resp.json()["user"]["role"], "member")

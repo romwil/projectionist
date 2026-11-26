@@ -1,6 +1,8 @@
 """Tests for application log parsing, filters, and owner API."""
 
+
 from __future__ import annotations
+from projectionist.web.plex_session import sign_in_plex_token
 
 import importlib
 import json
@@ -176,7 +178,7 @@ class AdminLogsApiTests(unittest.TestCase):
                 "email": f"{title}@example.com",
             },
         ):
-            resp = self.client.post("/api/auth/plex", json={"auth_token": f"token-{plex_id}"})
+            resp = sign_in_plex_token(self.client, f"token-{plex_id}")
         self.assertEqual(resp.status_code, 200, resp.text)
 
     def test_owner_can_read_logs(self) -> None:

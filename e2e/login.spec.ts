@@ -33,7 +33,7 @@ test.describe("Login flow", () => {
     await expect(page.getByTestId("login-page")).toContainText("Plex");
     await expect(page.getByTestId("login-page")).not.toContainText("Multi-user");
     await expect(page.getByTestId("plex-token-input")).toHaveCount(0);
-    await expect(page.getByTestId("show-token-login")).toHaveText("Advanced");
+    await expect(page.getByTestId("show-token-login")).toHaveCount(0);
   });
 
   test("plex PIN login returns to Explore home", async ({ page }) => {
@@ -50,22 +50,16 @@ test.describe("Login flow", () => {
     await expect(page.getByTestId("login-page")).toHaveCount(0);
   });
 
-  test("advanced token login stays behind Advanced disclosure", async ({ page }) => {
+  test("the login page does not ask for a Plex token", async ({ page }) => {
     await mockFeatures(page, { multi_user_enabled: true });
     await mockPlexLogin(page);
 
     await page.goto("/login");
     await expect(page.getByTestId("login-page")).toBeVisible();
     await expect(page.getByTestId("plex-token-input")).toHaveCount(0);
-    await page.getByTestId("show-token-login").click();
-    await expect(page.getByTestId("plex-token-input")).toBeVisible();
-    await expect(page.getByTestId("login-page")).toContainText("Recovery only");
-    await expect(page.getByTestId("show-token-login")).toHaveText("Hide advanced");
-    await page.getByTestId("plex-token-input").fill("mock-plex-token");
-    await page.getByTestId("submit-plex-login").click();
-
-    await expect(page).toHaveURL(/\/explore$/);
-    await expect(page.getByTestId("explore-hub-links")).toBeVisible();
+    await expect(page.getByTestId("show-token-login")).toHaveCount(0);
+    await expect(page.getByTestId("submit-plex-login")).toHaveCount(0);
+    await expect(page.getByTestId("sign-in-with-plex")).toBeVisible();
   });
 
   test("shows user menu when authenticated in multi-user mode", async ({ page }) => {

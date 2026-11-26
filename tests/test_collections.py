@@ -1,6 +1,8 @@
 """Collections/courses: publish-to-members + ordered sequencing (M4)."""
 
+
 from __future__ import annotations
+from projectionist.web.plex_session import sign_in_plex_token
 
 import importlib
 import json
@@ -146,7 +148,7 @@ class CollectionsApiTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 1, "title": "Owner"},
         ):
-            self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
+            sign_in_plex_token(self.client, "owner-token")
         owner_db = self.app_mod._db()
         # Owner publishes a shared (NULL-user) collection.
         owner_db.create_curated_list(list_id="shared", user_id=None, name="Shared picks")

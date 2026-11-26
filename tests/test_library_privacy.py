@@ -1,6 +1,8 @@
 """Member vs owner library API audience sanitization."""
 
+
 from __future__ import annotations
+from projectionist.web.plex_session import sign_in_plex_token
 
 import importlib
 import json
@@ -59,7 +61,7 @@ class LibraryAudienceApiTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 10, "title": "Owner"},
         ):
-            login = self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
+            login = sign_in_plex_token(self.client, "owner-token")
         self.assertEqual(login.status_code, 200)
 
         db = jobs.get_job_manager().db
@@ -109,7 +111,7 @@ class LibraryAudienceApiTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 20, "title": "Member", "email": "member@example.com"},
         ):
-            login = self.client.post("/api/auth/plex", json={"auth_token": "member-token"})
+            login = sign_in_plex_token(self.client, "member-token")
         self.assertEqual(login.status_code, 200)
         self.assertEqual(login.json()["user"]["role"], "member")
 

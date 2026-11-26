@@ -1,6 +1,8 @@
 """Env-seeded owner + first-owner race close (review finding H2)."""
 
+
 from __future__ import annotations
+from projectionist.web.plex_session import sign_in_plex_token
 
 import importlib
 import os
@@ -311,7 +313,7 @@ class OwnerSeedingIntegrationTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 99, "title": "Neighbor", "email": "n@example.com"},
         ):
-            plex = self.client.post("/api/auth/plex", json={"auth_token": "neighbor-token"})
+            plex = sign_in_plex_token(self.client, "neighbor-token")
         # Invite-only may be on; neighbor without invite should be 403, or member if open.
         self.assertIn(plex.status_code, (200, 403), plex.text)
         if plex.status_code == 200:

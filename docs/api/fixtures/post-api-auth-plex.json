@@ -1,9 +1,0 @@
-{
-  "body": {
-    "detail": "Multi-user auth is not enabled"
-  },
-  "content_type": "application/json",
-  "method": "POST",
-  "path": "/api/auth/plex",
-  "status": 400
-}

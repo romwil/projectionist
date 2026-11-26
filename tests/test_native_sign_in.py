@@ -252,7 +252,7 @@ class NativeSignInTests(unittest.TestCase):
             replay = bare.get("/api/auth/plex/pin/77", headers={PIN_HEADER: nonce})
         self.assertIn(replay.status_code, (401, 409))
 
-    def test_plex_token_login_returns_a_credential(self) -> None:
+    def test_plex_token_login_is_not_a_route(self) -> None:
         self._write_settings(plex_login_enabled=True, mode="plex")
         with patch(
             "projectionist.web.auth.fetch_plex_account",
@@ -262,10 +262,7 @@ class NativeSignInTests(unittest.TestCase):
                 "/api/auth/plex",
                 json={"auth_token": "plex-token", "client": CLIENT},
             )
-        self.assertEqual(resp.status_code, 200, resp.text)
-        self.assertNotIn(SESSION_COOKIE_NAME, resp.cookies)
-        credential = self._assert_device_credential(resp.json())
-        self.assertEqual(self._device_me(credential)["role"], "owner")
+        self.assertEqual(resp.status_code, 401, resp.text)
         self.assertNotIn("plex-token", resp.text)
 
     def test_oidc_uses_pkce_and_a_single_use_code(self) -> None:

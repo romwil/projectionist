@@ -1,6 +1,8 @@
 """Owner purge-candidate delete: default full remove + optional index undo."""
 
+
 from __future__ import annotations
+from projectionist.web.plex_session import sign_in_plex_token
 
 import importlib
 import json
@@ -182,7 +184,7 @@ class PurgeCandidatesDeleteApiTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 10, "title": "Owner"},
         ):
-            self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
+            sign_in_plex_token(self.client, "owner-token")
 
         import projectionist.web.jobs as jobs
 
