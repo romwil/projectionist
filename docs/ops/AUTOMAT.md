@@ -27,7 +27,7 @@ Agents (and humans) have concluded prod was still on an older build by hitting t
 # Authoritative prod version / health on Automat LAN
 curl -s http://10.10.1.202:8788/api/health
 # Optional: confirm image build metadata inside the container (on Unraid SSH)
-# docker exec projectionist cat /app/.build-info
+# docker exec -u 1000 projectionist cat /app/.build-info
 ```
 
 **Gotchas**
@@ -87,7 +87,7 @@ Prod media binds (read-write — Investigate Apply renames files; never `:ro`):
 | `/mnt/user/data/media/tv` | `/tv` and same-path |
 | `/mnt/user/data/media/movies` | `/movies` and same-path |
 
-Env: `PROJECTIONIST_TV_MEDIA` / `PROJECTIONIST_MOVIE_MEDIA` (win over settings). After `rollout.sh`, confirm with `docker exec projectionist ls /tv /movies`.
+Env: `PROJECTIONIST_TV_MEDIA` / `PROJECTIONIST_MOVIE_MEDIA` (win over settings). After `rollout.sh`, confirm with `docker exec -u 1000 projectionist ls /tv /movies`.
 ```
 
 **Do not place in prod appdata:** `.git/`, `frontend/`, `tests/`, `.venv`, CI caches, or any full source tree. Development belongs in a normal git checkout (e.g. maintainer laptop), not on Unraid appdata.

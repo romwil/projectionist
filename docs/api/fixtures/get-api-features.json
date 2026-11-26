@@ -53,6 +53,7 @@
       "live_channels_enabled": false,
       "live_channels_ready": false,
       "llm_configured": true,
+      "llm_provider": "ollama",
       "multi_user_enabled": false,
       "open_auto_provision": false,
       "play_through_projectionist": false,

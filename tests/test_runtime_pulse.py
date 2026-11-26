@@ -136,6 +136,42 @@ class ReadyMeansWorkingTests(_AppCase):
         self.assertEqual(resp.status_code, 503)
         self.assertIn("error", resp.json()["detail"])
 
+    def test_unreadable_settings_fails_ready_but_not_health(self) -> None:
+        self.app_mod.app.state.ready = True
+        path = Path(self._tmp.name) / "settings.json"
+        path.chmod(0o000)
+        try:
+            resp = self.client.get("/api/ready")
+            self.assertEqual(resp.status_code, 503)
+            self.assertIn("settings not readable", resp.json()["detail"])
+            health = self.client.get("/api/health")
+            self.assertEqual(health.status_code, 200)
+            self.assertEqual(health.json()["status"], "ok")
+        finally:
+            path.chmod(0o600)
+
+    def test_settings_load_failure_fails_ready(self) -> None:
+        self.app_mod.app.state.ready = True
+        path = Path(self._tmp.name) / "settings.json"
+        path.write_text("{", encoding="utf-8")
+        resp = self.client.get("/api/ready")
+        self.assertEqual(resp.status_code, 503)
+        self.assertEqual(resp.json()["detail"], "settings load failed")
+        self.assertEqual(self.client.get("/api/health").status_code, 200)
+
+    def test_database_not_writable_fails_ready(self) -> None:
+        self.app_mod.app.state.ready = True
+        path = Path(self.db.path)
+        mode = path.stat().st_mode
+        path.chmod(0o444)
+        try:
+            resp = self.client.get("/api/ready")
+            self.assertEqual(resp.status_code, 503)
+            self.assertIn("database not writable", resp.json()["detail"])
+            self.assertEqual(self.client.get("/api/health").json()["status"], "ok")
+        finally:
+            path.chmod(mode)
+
     def test_slow_database_fails_ready(self) -> None:
         self.app_mod.app.state.ready = True
         path = Path(self.db.path)

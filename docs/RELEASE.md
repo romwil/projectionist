@@ -390,7 +390,7 @@ gh release view "vX.Y.Z"
 # Optional Unraid host (config preserved) — from laptop use ssh automat (not Mac SMB mount)
 # ssh automat 'cd /mnt/user/appdata/projectionist && ./rollout.sh X.Y.Z'
 # curl -s http://10.10.1.202:8788/api/health
-# ssh automat 'docker exec projectionist cat /app/.build-info'
+# ssh automat 'docker exec -u 1000 projectionist cat /app/.build-info'
 ```
 
 Confirm About / What’s New shows the new version after the container runs the new image (`/release-notes.json` includes `X.Y.Z`).

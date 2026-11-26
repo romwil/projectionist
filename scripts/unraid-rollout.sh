@@ -63,6 +63,10 @@ case "${MOUNT_DOCKER_SOCK:-}" in
   1|true|TRUE|yes|YES|on|ON) DOCKER_SOCK="${DOCKER_SOCK:-/var/run/docker.sock}" ;;
 esac
 HEALTH_URL="http://127.0.0.1:${HOST_PORT}/api/health"
+READY_URL="http://127.0.0.1:${HOST_PORT}/api/ready"
+APP_ORIGIN="http://127.0.0.1:${HOST_PORT}"
+# App uid. docker exec without -u is root and can rewrite settings.json as root.
+APP_UID=1000
 STARTUP_PATTERN='Projectionist startup'
 # Accept legacy log line during image transition
 STARTUP_PATTERN_LEGACY='CuratorX startup'
@@ -251,33 +255,90 @@ wait_for_startup_log() {
   die "timed out after ${WAIT_SECS}s waiting for startup log matching /${STARTUP_PATTERN}/"
 }
 
-smoke_health() {
+fetch_url() {
+  local url="$1"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsS --max-time 5 "$url" 2>/dev/null || true
+    return 0
+  fi
+  if command -v wget >/dev/null 2>&1; then
+    wget -qO- --timeout=5 "$url" 2>/dev/null || true
+    return 0
+  fi
+  docker exec -u "$APP_UID" "$CONTAINER_NAME" python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8788${url#${APP_ORIGIN}}', timeout=5).read().decode())" 2>/dev/null || true
+}
+
+smoke_ready() {
   local deadline=$((SECONDS + 30))
   local body=""
   while (( SECONDS < deadline )); do
-    if command -v curl >/dev/null 2>&1; then
-      body="$(curl -fsS --max-time 5 "$HEALTH_URL" 2>/dev/null || true)"
-      if [[ -n "$body" ]]; then
-        log "Health: $body"
-        printf '%s' "$body" | grep -q '"status"[[:space:]]*:[[:space:]]*"ok"' || die "health JSON missing status=ok"
-        return 0
-      fi
-    elif command -v wget >/dev/null 2>&1; then
-      body="$(wget -qO- --timeout=5 "$HEALTH_URL" 2>/dev/null || true)"
-      if [[ -n "$body" ]]; then
-        log "Health: $body"
-        printf '%s' "$body" | grep -q '"status"[[:space:]]*:[[:space:]]*"ok"' || die "health JSON missing status=ok"
-        return 0
-      fi
-    else
-      if docker exec "$CONTAINER_NAME" wget -qO- --timeout=5 "http://127.0.0.1:8788/api/health" 2>/dev/null \
-        || docker exec "$CONTAINER_NAME" python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8788/api/health', timeout=5).read().decode())" 2>/dev/null; then
-        return 0
-      fi
+    body="$(fetch_url "$READY_URL")"
+    if [[ -n "$body" ]] && printf '%s' "$body" | grep -q '"status"[[:space:]]*:[[:space:]]*"ready"'; then
+      log "Ready: $body"
+      return 0
     fi
     sleep 2
   done
-  die "health check failed: $HEALTH_URL"
+  log "Last ready body: ${body:-<empty>}"
+  die "ready check failed: $READY_URL (health is not enough; the app must be able to read and write settings and the database)"
+}
+
+smoke_signed_in() {
+  local user="${PROJECTIONIST_SMOKE_USERNAME:-}"
+  local pass="${PROJECTIONIST_SMOKE_PASSWORD:-}"
+  if [[ -z "$user" || -z "$pass" ]]; then
+    die "Refusing to report success without a signed-in smoke. Set PROJECTIONIST_SMOKE_USERNAME and PROJECTIONIST_SMOKE_PASSWORD in the host environment. No account was created."
+  fi
+  command -v curl >/dev/null 2>&1 || die "Signed-in smoke needs curl on the host."
+  command -v python >/dev/null 2>&1 || command -v python3 >/dev/null 2>&1 || die "Signed-in smoke needs python on the host."
+  local py="python3"
+  command -v python3 >/dev/null 2>&1 || py="python"
+  local work
+  work="$(mktemp -d)"
+  # shellcheck disable=SC2064
+  trap "rm -rf '$work'" RETURN
+  local login_code
+  login_code="$(
+    PROJECTIONIST_SMOKE_USERNAME="$user" PROJECTIONIST_SMOKE_PASSWORD="$pass" "$py" -c 'import json,os; print(json.dumps({"username":os.environ["PROJECTIONIST_SMOKE_USERNAME"],"password":os.environ["PROJECTIONIST_SMOKE_PASSWORD"]}))' \
+      | curl -sS -o "$work/login" -w '%{http_code}' -c "$work/cookies" -H 'Content-Type: application/json' --data-binary @- \
+        "$APP_ORIGIN/api/auth/local/login" || true
+  )"
+  if [[ "$login_code" != "200" ]]; then
+    if grep -q "sign-in code" "$work/login" 2>/dev/null; then
+      rm -rf "$work"
+      die "Signed-in smoke stopped: this account requires a sign-in code. PROJECTIONIST_SMOKE_USERNAME can sign in only as far as that code, so the rollout will not report success."
+    fi
+    rm -rf "$work"
+    die "Signed-in smoke failed: local login returned HTTP ${login_code:-none}."
+  fi
+  local features_code
+  features_code="$(curl -sS -o "$work/features" -w '%{http_code}' -b "$work/cookies" --max-time 20 "$APP_ORIGIN/api/features" || true)"
+  if [[ "$features_code" != "200" ]]; then
+    rm -rf "$work"
+    die "Signed-in smoke failed: features returned HTTP ${features_code:-none}."
+  fi
+  if ! "$py" -c '
+import json, sys
+data = json.load(open(sys.argv[1]))
+features = data.get("features") or {}
+provider = features.get("llm_provider")
+if data.get("authenticated") is not True:
+    sys.exit("features is not signed in")
+if not isinstance(provider, str) or not provider.strip():
+    sys.exit("features did not show a chat provider")
+if "live_channels_enabled" not in features:
+    sys.exit("features did not show live channels")
+' "$work/features"; then
+    rm -rf "$work"
+    die "Signed-in smoke failed: features did not show the chat provider and live channels."
+  fi
+  local rail_code
+  rail_code="$(curl -sS -o "$work/rail" -w '%{http_code}' -b "$work/cookies" --max-time 60 "$APP_ORIGIN/api/library/feeds/hub" || true)"
+  if [[ "$rail_code" != "200" ]]; then
+    rm -rf "$work"
+    die "Signed-in smoke failed: the hub rail returned HTTP ${rail_code:-none}."
+  fi
+  log "Signed-in smoke: features show the chat provider and live channels, and the hub rail returned 200."
 }
 
 log "=== Projectionist rollout ==="
@@ -309,12 +370,14 @@ fi
 log "Waiting for startup confirmation..."
 wait_for_startup_log
 
-log "Smoke check..."
-smoke_health
+log "Ready check..."
+smoke_ready
+log "Signed-in smoke..."
+smoke_signed_in
 
-if docker exec "$CONTAINER_NAME" cat /app/.build-info >/dev/null 2>&1; then
+if docker exec -u "$APP_UID" "$CONTAINER_NAME" cat /app/.build-info >/dev/null 2>&1; then
   log "Build info:"
-  docker exec "$CONTAINER_NAME" cat /app/.build-info || true
+  docker exec -u "$APP_UID" "$CONTAINER_NAME" cat /app/.build-info || true
 fi
 
 log "=== Rollout OK (tag=${IMAGE_TAG}) ==="

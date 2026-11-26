@@ -41,7 +41,7 @@ cd /mnt/user/appdata/projectionist && ./rollout.sh latest
 Verify what you're actually running:
 
 ```bash
-docker exec projectionist cat /app/.build-info
+docker exec -u 1000 projectionist cat /app/.build-info
 ```
 
 Details: [DOCKER.md](DOCKER.md#unraid-force-update-pulls-0-b--stays-on-an-old-version).

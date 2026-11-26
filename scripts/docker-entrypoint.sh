@@ -13,6 +13,9 @@ set -e
 # That stray file is chowned on its own and named in a warning. This script
 # never creates a database file.
 #
+# This script never writes settings.json. It only repairs ownership, then
+# drops to uid 1000. Settings migrations run in the app after that drop.
+#
 # Tests set PROJECTIONIST_CONFIG_DIR. The container uses /config.
 config_dir="${PROJECTIONIST_CONFIG_DIR:-/config}"
 

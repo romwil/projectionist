@@ -533,6 +533,26 @@ class SettingsFailClosedTests(_HouseholdApp):
 
         path = save_settings(self.data_dir, load_merged_settings(self.data_dir))
         self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(path.stat().st_uid, os.getuid())
+
+    def test_root_save_chowns_to_app_user_before_rename(self) -> None:
+        from projectionist.config_store import load_merged_settings, save_settings
+
+        order: list[str] = []
+        real_replace = os.replace
+
+        def tracking_replace(src, dst):
+            order.append("replace")
+            return real_replace(src, dst)
+
+        def tracking_chown(_path, uid, gid):
+            order.append(f"chown:{uid}:{gid}")
+
+        with patch("projectionist.config_store.os.geteuid", return_value=0), patch(
+            "projectionist.config_store.os.chown", side_effect=tracking_chown
+        ), patch("projectionist.config_store.os.replace", side_effect=tracking_replace):
+            save_settings(self.data_dir, load_merged_settings(self.data_dir))
+        self.assertEqual(order, ["chown:1000:1000", "replace"])
 
 
 class SessionAndExportTests(_HouseholdApp):

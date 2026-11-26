@@ -959,6 +959,41 @@ class SettingsCorruptError(RuntimeError):
     """settings.json exists but cannot be parsed. Callers must not fall back to defaults."""
 
 
+def settings_file_readiness(data_dir: Path) -> str | None:
+    """None when this process can read, write, and load settings.
+
+    A missing file is fine: first boot uses defaults. An existing file the
+    app user cannot use, or a file that does not load, is not ready.
+    The reason is a fixed phrase and never includes file contents.
+    """
+    path = data_dir / "settings.json"
+    if not path.exists():
+        if os.access(data_dir, os.W_OK):
+            return None
+        return "settings directory not writable"
+    if not os.access(path, os.R_OK):
+        return "settings not readable"
+    if not os.access(path, os.W_OK):
+        return "settings not writable"
+    try:
+        Settings.load(path)
+    except Exception:
+        logger.warning("Settings load failed during readiness")
+        return "settings load failed"
+    return None
+
+
+def database_file_readiness(path: Path) -> str | None:
+    """None when this process can read and write an existing database file."""
+    if not path.is_file():
+        return None
+    if not os.access(path, os.R_OK):
+        return "database not readable"
+    if not os.access(path, os.W_OK):
+        return "database not writable"
+    return None
+
+
 def _atomic_write_json(path: Path, payload: Any) -> None:
     """Write JSON via temp file + fsync + ``os.replace`` so readers never see a partial file.
 
@@ -979,6 +1014,11 @@ def _atomic_write_json(path: Path, payload: Any) -> None:
             os.chmod(tmp_name, 0o600)
         except OSError:
             logger.debug("Could not chmod %s to 0600 (unsupported filesystem?)", tmp_name)
+        # A root docker exec must not leave settings.json owned by root.
+        # The entrypoint drops to uid 1000 before the app migrates; this is
+        # the backstop when a write still happens as root.
+        if hasattr(os, "geteuid") and os.geteuid() == 0:
+            os.chown(tmp_name, 1000, 1000)
         os.replace(tmp_name, path)
     except BaseException:
         try:
