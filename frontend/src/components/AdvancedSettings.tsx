@@ -13,9 +13,9 @@ const FIELD_LABELS = {
 
 const FIELD_HELP = {
   movies_root:
-    "Container path for movies (usually /movies). Bind-mount the host library read-write. PROJECTIONIST_MOVIE_MEDIA wins when set.",
+    "Container path for movies (usually /movies). The install mounts it read-only. PROJECTIONIST_MOVIE_MEDIA wins when set.",
   tv_root:
-    "Container path for TV (usually /tv). Bind-mount the host library read-write so Investigate can rename files. PROJECTIONIST_TV_MEDIA wins when set.",
+    "Container path for TV (usually /tv). The install mounts it read-only. Apply can rename a file only when Allow file renames is on and this mount is read-write. PROJECTIONIST_TV_MEDIA wins when set.",
   library_enrich_workers: "Titles enriched in parallel during sync. Lower if the host feels busy.",
 };
 

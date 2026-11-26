@@ -395,7 +395,7 @@ If an older install still has a legacy custom prompt, Admin shows a one-click **
 
 ### Library folders (Investigate / ffmpeg)
 
-Bind the host TV and movie libraries **read-write** into the container (`/tv` and `/movies`, or the same host path). Investigate Apply renames episode files on disk — a read-only bind will fail. Set **Admin → Connections → Library folders** (`tv_root` / `movies_root`), or host env `PROJECTIONIST_TV_MEDIA` / `PROJECTIONIST_MOVIE_MEDIA` (those win when set). Unraid/Automat defaults: `/mnt/user/data/media/tv` and `/mnt/user/data/media/movies`.
+Bind the host TV and movie libraries **read-only** into the container (`/tv` and `/movies`). That is the shipped default. Investigate Apply renames a file only when **Allow file renames** is on and you mount the library read-write for that repair. Set **Admin → Connections → Library folders** (`tv_root` / `movies_root`), or host env `PROJECTIONIST_TV_MEDIA` / `PROJECTIONIST_MOVIE_MEDIA` (those win when set). Unraid/Automat defaults: `/mnt/user/data/media/tv` and `/mnt/user/data/media/movies`.
 
 ### Investigate episodes (wrong file vs wrong show)
 

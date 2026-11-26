@@ -36,6 +36,7 @@ MCP_KEY_ROTATE = "mcp_key_rotate"
 MCP_KEY_CLEAR = "mcp_key_clear"
 HOUSEHOLD_BACKUP = "household_backup"
 EMAIL_UNSUBSCRIBE = "email_unsubscribe"
+FILE_RENAME = "file_rename"
 # OPS-008: owner Youth memory review. Prefer YOUTH_MEMORY_READ in new writes.
 YOUTH_MEMORY_READ = "youth_memory_read"
 MEMORY_REVIEW = YOUTH_MEMORY_READ  # back-compat alias
@@ -65,6 +66,7 @@ AUDIT_EVENTS = (
     MCP_KEY_CLEAR,
     HOUSEHOLD_BACKUP,
     EMAIL_UNSUBSCRIBE,
+    FILE_RENAME,
     YOUTH_MEMORY_READ,
 )
 

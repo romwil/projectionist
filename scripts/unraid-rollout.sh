@@ -51,17 +51,11 @@ THEATER_HOST_PORT="${THEATER_HOST_PORT:-8791}"
 CONTAINER_NAME="${CONTAINER_NAME:-projectionist}"
 IMAGE="romwil/projectionist:${IMAGE_TAG}"
 CONFIG_DIR="$SCRIPT_DIR/config"
-# Host media libraries — rw so Investigate Apply can rename files. Automat defaults.
+# Host media libraries are read-only. Apply renames only with an opt-in mount.
 TV_MEDIA="${PROJECTIONIST_TV_MEDIA:-/mnt/user/data/media/tv}"
 MOVIE_MEDIA="${PROJECTIONIST_MOVIE_MEDIA:-/mnt/user/data/media/movies}"
 PREROLL_MEDIA="${PROJECTIONIST_PREROLL_MEDIA:-/mnt/user/data/media/preroll}"
-# Optional Live Channels managed Tunarr (root-equivalent). Set in .env:
-#   MOUNT_DOCKER_SOCK=1
-# or DOCKER_SOCK=/var/run/docker.sock
-DOCKER_SOCK="${DOCKER_SOCK:-}"
-case "${MOUNT_DOCKER_SOCK:-}" in
-  1|true|TRUE|yes|YES|on|ON) DOCKER_SOCK="${DOCKER_SOCK:-/var/run/docker.sock}" ;;
-esac
+COPIES_DIR="${PROJECTIONIST_COPIES_DIR:-}"
 HEALTH_URL="http://127.0.0.1:${HOST_PORT}/api/health"
 READY_URL="http://127.0.0.1:${HOST_PORT}/api/ready"
 APP_ORIGIN="http://127.0.0.1:${HOST_PORT}"
@@ -74,6 +68,11 @@ WAIT_SECS="${ROLLOUT_WAIT_SECS:-90}"
 
 log() { printf '%s\n' "$*"; }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+
+# A Docker socket is root on the host. Ignore any leftover opt-in and never mount one.
+if [[ -n "${DOCKER_SOCK:-}" || -n "${MOUNT_DOCKER_SOCK:-}" ]]; then
+  log "WARN: DOCKER_SOCK / MOUNT_DOCKER_SOCK is set and is ignored. Projectionist does not mount a Docker socket."
+fi
 
 command -v docker >/dev/null 2>&1 || die "docker not found in PATH"
 [[ -d "$CONFIG_DIR" ]] || die "config directory missing at $CONFIG_DIR (refusing to create empty tree)"
@@ -144,23 +143,35 @@ run_plain_docker() {
     -p "${THEATER_HOST_PORT}:8791"
     -v "${CONFIG_DIR}:/config"
     --add-host=host.docker.internal:host-gateway
+    --security-opt no-new-privileges:true
+    --cap-drop ALL
+    --cap-add CHOWN
+    --cap-add SETUID
+    --cap-add SETGID
+    --cap-add DAC_OVERRIDE
+    --read-only
+    --tmpfs /tmp:rw,nosuid,size=256m,mode=1777
   )
-  _mount_media_rw() {
+  _mount_media_ro() {
     local host_path="$1" container_path="$2" label="$3"
     if [[ ! -d "$host_path" ]]; then
-      log "WARN: $label host path missing ($host_path) — skipping bind (Investigate cannot rename under $container_path)."
+      log "WARN: $label host path missing ($host_path) — skipping read-only bind at $container_path."
       return 0
     fi
-    log "Mounting $label $host_path → $container_path (rw)"
-    run_args+=(-v "${host_path}:${container_path}")
+    log "Mounting $label $host_path → $container_path (ro)"
+    run_args+=(-v "${host_path}:${container_path}:ro")
     if [[ "$host_path" != "$container_path" ]]; then
-      log "Mounting $label same-path $host_path → $host_path (rw)"
-      run_args+=(-v "${host_path}:${host_path}")
+      log "Mounting $label same-path $host_path → $host_path (ro)"
+      run_args+=(-v "${host_path}:${host_path}:ro")
     fi
   }
-  _mount_media_rw "$TV_MEDIA" /tv "TV library"
-  _mount_media_rw "$MOVIE_MEDIA" /movies "Movie library"
-  _mount_media_rw "$PREROLL_MEDIA" /preroll "Preroll bumpers"
+  _mount_media_ro "$TV_MEDIA" /tv "TV library"
+  _mount_media_ro "$MOVIE_MEDIA" /movies "Movie library"
+  _mount_media_ro "$PREROLL_MEDIA" /preroll "Preroll bumpers"
+  if [[ -n "$COPIES_DIR" && -d "$COPIES_DIR" ]]; then
+    log "Mounting copies $COPIES_DIR → /copies (rw)"
+    run_args+=(-v "${COPIES_DIR}:/copies")
+  fi
   run_args+=(
     -e "PROJECTIONIST_TV_MEDIA=${TV_MEDIA}"
     -e "PROJECTIONIST_MOVIE_MEDIA=${MOVIE_MEDIA}"
@@ -170,20 +181,6 @@ run_plain_docker() {
     -e PROJECTIONIST_THEATER_PORT=8791
     -e "PROJECTIONIST_HOST_DATA_DIR=${CONFIG_DIR}"
   )
-  if [[ -n "$DOCKER_SOCK" ]]; then
-    if [[ ! -S "$DOCKER_SOCK" && ! -e "$DOCKER_SOCK" ]]; then
-      die "DOCKER_SOCK path missing on host: $DOCKER_SOCK"
-    fi
-    log "Mounting Docker socket $DOCKER_SOCK → /var/run/docker.sock (Live Channels orchestration)"
-    run_args+=(-v "${DOCKER_SOCK}:/var/run/docker.sock")
-    # App drops to uid 1000; sock is usually 660 root:docker — grant that GID.
-    sock_gid="$(stat -c '%g' "$DOCKER_SOCK" 2>/dev/null || true)"
-    if [[ -n "$sock_gid" && "$sock_gid" != "0" ]]; then
-      log "Adding container group-add $sock_gid (docker.sock group) for non-root access"
-      run_args+=(--group-add "$sock_gid")
-    fi
-  fi
-
   local key val
   for key in "${ENV_KEYS[@]}"; do
     # Portable under bash 3.2+ / set -u: read only if set & non-empty.
@@ -345,25 +342,17 @@ log "=== Projectionist rollout ==="
 log "Dir:   $SCRIPT_DIR"
 log "Image: $IMAGE"
 log "Port:  ${HOST_PORT} → 8788"
-log "Theater port: ${THEATER_HOST_PORT} → 8791 (LAN only)"
-if [[ -n "$DOCKER_SOCK" ]]; then
-  log "Docker socket: ${DOCKER_SOCK} → /var/run/docker.sock"
-fi
+log "Theater port: ${THEATER_HOST_PORT} → 8791 (LAN only; never put this port on a tunnel)"
 log "Config bind: $CONFIG_DIR → /config (preserved)"
-log "TV library (rw): $TV_MEDIA → /tv (and same-path when host dir exists)"
-log "Movie library (rw): $MOVIE_MEDIA → /movies (and same-path when host dir exists)"
-log "Preroll bumpers (rw): $PREROLL_MEDIA → /preroll (and same-path when host dir exists)"
-log "Host data dir (Tunarr binds): PROJECTIONIST_HOST_DATA_DIR=$CONFIG_DIR"
+log "TV library (ro): $TV_MEDIA → /tv (and same-path when host dir exists)"
+log "Movie library (ro): $MOVIE_MEDIA → /movies (and same-path when host dir exists)"
+log "Preroll bumpers (ro): $PREROLL_MEDIA → /preroll (and same-path when host dir exists)"
+log "Host data dir: PROJECTIONIST_HOST_DATA_DIR=$CONFIG_DIR"
 
-# Compose reference YAML keeps docker.sock commented (opt-in). When the host
-# .env asks for MOUNT_DOCKER_SOCK / DOCKER_SOCK, prefer plain docker so Live
-# Channels / Tunarr orchestration keeps the socket + group-add.
-if ((${#COMPOSE[@]})) && [[ -z "$DOCKER_SOCK" ]]; then
+# Plain docker and compose both use the read-only library. Neither mounts a socket.
+if ((${#COMPOSE[@]})); then
   run_compose
 else
-  if ((${#COMPOSE[@]})) && [[ -n "$DOCKER_SOCK" ]]; then
-    log "DOCKER_SOCK set — using plain Docker CLI so the socket mount is applied."
-  fi
   run_plain_docker
 fi
 

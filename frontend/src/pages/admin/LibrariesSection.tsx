@@ -1311,6 +1311,11 @@ function InvestigatePanel({ focusHint }: InvestigatePanelProps) {
   return (
     <section className="config-section" data-testid="episode-investigate-card" id="episode-investigate">
       <h2>Investigate episodes</h2>
+      {health?.file_renames?.reason ? (
+        <p className="wizard-note" data-testid="investigate-rename-reason">
+          {health.file_renames.reason}
+        </p>
+      ) : null}
       <p className="wizard-note">{SCENE_NAMES_NOT_EVIDENCE}</p>
       <p className="wizard-note" data-testid="investigate-stills-leave-lan">
         {STILLS_LEAVE_LAN}
@@ -1448,7 +1453,7 @@ function InvestigatePanel({ focusHint }: InvestigatePanelProps) {
               className={applyButtonClass(selectedIds.length)}
               data-testid="investigate-apply"
               onClick={handleApply}
-              disabled={!selectedIds.length || applying}
+              disabled={!selectedIds.length || applying || health?.file_renames?.allowed === false}
             >
               {applying ? "Applying…" : "Apply selected"}
             </button>
