@@ -120,13 +120,15 @@ def build_secrets_health(db: Any, settings: Any, data_dir: Optional[Path]) -> Di
     for service in CERTIFIED_SERVICES:
         cert = certs.get(service) or {}
         certified = bool(cert.get("certified"))
+        row = db.get_service_integration(service)
+        raw_certified = bool(row and ("certified" in row.keys()) and row["certified"])
         key_unreadable = _service_field(service) in unreadable
         key_set = _service_key_set(settings, service) and not key_unreadable
         if key_unreadable:
             state = "needs_key"
         elif certified and key_set:
             state = "connected"
-        elif certified:
+        elif raw_certified and not key_set:
             state = "stale"
         elif key_set:
             state = "untested"
