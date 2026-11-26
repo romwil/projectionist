@@ -17,8 +17,9 @@ The numbered list is the subject order inside that plan.
 3. **TML** — the timeline layer, after the session items
 4. **TRK** — tracks: Moments, Booth Notes, Class / Study, after the timeline
 5. **NAT** — the client contract, threaded through the lanes as each capability ships
-6. **EXP** — experience convergence (parallel). Lane B’s next item is **EXP-001** (design tokens). EXP-013, EXP-004, EXP-005, EXP-006, EXP-014, EXP-015, and EXP-016 are done. EXP-017 (owner RSS for local headlines) is proposed and later. UV index and air quality on the weather boards are hooks and wait for the person. EXP-018 is the warm-up lines file, the step names, and the web screen, on main (pull request 298, `54649269`). The slowed fixture is still ahead. EXP-019, the installable web app, is done on main (pull request 309, `a0d72b62`). Push waits. Neither is in production 1.45.5. EXP-020, holiday shelves with a theme, is in this change and is not in the 1.46.1 image.
-7. **SEC** — the public front door, continued from the review series at the next free numbers (SEC-017 onward). SEC-017 through SEC-022 are the gate before the extra login on the public hostname can come off. That login stays until the person removes it. SEC-017 through SEC-026 are on main. SEC-027 (an engine media token expires when playback stops) is in this change and is not in the 1.46.1 image. Edge rules are a separate plan and are not applied here.
+6. **EXP** — experience convergence (parallel). Lane B’s next item is **EXP-001** (design tokens). EXP-013, EXP-004, EXP-005, EXP-006, EXP-014, EXP-015, EXP-016, EXP-019, and EXP-020 are done. EXP-019 is the installable web app (pull request 309, `a0d72b62`; the image serves the shell in pull request 334, `89fc56c8`). EXP-020 is holiday shelves (section 1 in pull request 317; sections 2 and 3 in pull request 326, `a452fb37`). EXP-017 (owner RSS for local headlines) is proposed and later. UV index and air quality on the weather boards are hooks and wait for the person. EXP-018 is the warm-up lines file, the step names, and the web screen, on main (pull request 298, `54649269`). The slowed fixture is still ahead. Push waits. None of this is in production 1.45.5. EXP-021, recommendation reasons with no raw plot phrase, is the small priority for the next playback release. EXP-022, the weekly letter, follows that release. EXP-023, where to watch, starts when the front-door lane finishes.
+7. **SEC** — the public front door, continued from the review series at the next free numbers (SEC-017 onward). SEC-017 through SEC-027 are on main. Checked 2026-11-26: trusted `CF-Connecting-IP` is done (SEC-017, pull request 319, `fa442d2f`). These gates stay. They are the community baseline and defense in depth. Cloudflare Access on the public hostname stays on permanently. There is no Access-removal item. Edge rules are a written plan and are not applied here. Next, in order: container hardening (SEC-035), identity items 1–3 (SEC-028, SEC-029, SEC-030), the app door (SEC-036), then built-in passkeys and TOTP (SEC-031) and the rest of identity. Each identity pull request waits for an approval comment before it merges. The pentest items (SEC-037 through SEC-042) do not run against production.
+8. **Community launch** — still last, still no date, and still after Jellyfin (ENG-010). PRD-026, PRD-027, and PRD-028 are the setup, Doctor, and remote-access guide. They start after SEC-035 and SEC-036. They are not this run.
 
 **Before the next production rollout.** Two defects from QA 1.41.1 are recorded below. They are not new capability items. The database-file fix lands before production moves. The Safari stall is investigated before any further playlist change. This record does not edit `docs/RELEASE.md`; the fix lane adds the empty-database check to that file’s pre-rollout checklist.
 
@@ -48,7 +49,7 @@ The numbered list is the subject order inside that plan.
 | SES-005 | Join flow + guest permissions | done | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
 | SES-006 | Handheld captions | done | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
 | SES-007 | Handoff between screens | done | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
-| SES-008 | Web client as a second screen. Settings → Rooms, Play in…, and the live-channel remote are on main (pull request 311, `b2d3b226`). Not in production 1.45.5 | done | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
+| SES-008 | Web client as a second screen. Settings → Rooms, Play in…, and the live-channel remote are on main (pull request 311, `b2d3b226`). The remote reads a playing engine session (pull request 335, `e0d8d6bb`). Not in production 1.45.5 | done | [SHARED_SESSIONS](../SHARED_SESSIONS.md#roadmap-items) |
 | SES-009 | Youth join approval tightens the session ceiling | done | [SHARED_SESSIONS](../SHARED_SESSIONS.md#privacy-and-youth) |
 | TML-001 | Timeline schema + file fingerprinting | done | [TIMELINE](../TIMELINE.md#roadmap-items) |
 | TML-002 | Dialogue import from the household subtitle cache | done | [TIMELINE](../TIMELINE.md#roadmap-items) |
@@ -92,8 +93,12 @@ The numbered list is the subject order inside that plan.
 | EXP-016 | Poster depth on the web: light, edge, generated placeholders | done | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | EXP-017 | Optional owner RSS for local weather headlines | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | EXP-018 | Warm-up lines, step names, and the web screen are on main (pull request 298, `54649269`). Humor stays On. The slowed fixture is still ahead. Not in production 1.45.5 | accepted | [EXPERIENCE](../EXPERIENCE.md#warm-up-screen) |
-| EXP-019 | Installable web app. Manifest, shell worker, quiet install, media keys, shortcuts. On main (pull request 309, `a0d72b62`). Push waits. Not in production 1.45.5 | done | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
-| EXP-020 | Holiday shelves: theme, roles, grounded notes, owner preview, one admin page. Capability `holiday_shelves`. In this change. Not in the 1.46.1 image | accepted | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| EXP-019 | Installable web app. Manifest, shell worker, quiet install, media keys, shortcuts. On main (pull request 309, `a0d72b62`). The image serves the shell (pull request 334, `89fc56c8`). Push waits. Not in production 1.45.5 | done | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| EXP-020 | Holiday shelves: theme, roles, grounded notes, owner preview, one admin page. Capability `holiday_shelves`. Section 1 is pull request 317. Sections 2 and 3 are pull request 326, `a452fb37`. Not in production 1.45.5 | done | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| EXP-021 | Recommendation reasons use a ranked link. Raw plot phrases never become a sentence. Priority for the next playback release | accepted | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| EXP-022 | A weekly letter with inline posters. Follows the playback release that includes EXP-021 | accepted | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| EXP-023 | Where to watch, from TMDB providers, with JustWatch attribution. Starts when the front-door lane finishes | accepted | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
+| EXP-024 | Optional Trakt history. Not now | proposed | [EXPERIENCE](../EXPERIENCE.md#roadmap-items) |
 | SEC-017 | Use the tunnel client address for rate limits | done | [SECURITY](../SECURITY.md#roadmap-items) |
 | SEC-018 | Throttle sign-in failures per account | done | [SECURITY](../SECURITY.md#roadmap-items) |
 | SEC-019 | Require a second factor for owner accounts | done | [SECURITY](../SECURITY.md#roadmap-items) |
@@ -104,7 +109,25 @@ The numbered list is the subject order inside that plan.
 | SEC-024 | Keep MCP on the LAN unless the owner says otherwise | done | [SECURITY](../SECURITY.md#roadmap-items) |
 | SEC-025 | Notice a new sign-in | done | [SECURITY](../SECURITY.md#roadmap-items) |
 | SEC-026 | Review the public handshake | done | [SECURITY](../SECURITY.md#roadmap-items) |
-| SEC-027 | Give engine media tokens a lifetime | done | [SECURITY](../SECURITY.md#roadmap-items) |
+| SEC-027 | Give engine media tokens a lifetime. Pull request 333, `4c6a21ed` | done | [SECURITY](../SECURITY.md#roadmap-items) |
+| SEC-028 | Remove the Plex-token sign-in | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
+| SEC-029 | Linked accounts on the person, and the move off the Plex columns | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
+| SEC-030 | Pick a media-server user on the invite, then three onboarding steps | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
+| SEC-031 | Built-in passkeys and TOTP, in an isolated module. No companion container | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
+| SEC-032 | Plex sign-in is an owner option, off by default | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
+| SEC-033 | Ask existing members to add a passkey or a password | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
+| SEC-034 | The login page and anonymous features list only the enabled methods | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
+| SEC-035 | Harden the container and maintain the Unraid template. Access stays on | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
+| SEC-036 | Two doors: an app door for bearer clients, plus QR and Bonjour | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
+| SEC-037 | CI security scanners, failing on high or critical fixable issues | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
+| SEC-038 | A generated authorization matrix for every route and role | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
+| SEC-039 | Checklist cases for metadata, tokens, proxy trust, and SSRF | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
+| SEC-040 | Attacker-box skeleton and rules of engagement. It does not run yet | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
+| SEC-041 | App-door cases, once that door exists | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
+| SEC-042 | Passkey ceremony tests, after built-in passkeys have merged | accepted | [SECURITY](../SECURITY.md#roadmap-items) |
+| PRD-026 | First-run setup and the install paths. After two doors and container hardening | accepted | [PRODUCT](../PRODUCT.md#community-launch) |
+| PRD-027 | Doctor, the owner console, and a member diagnostic report | accepted | [PRODUCT](../PRODUCT.md#community-launch) |
+| PRD-028 | Guided remote access, a confirm-first Cloudflare assistant, and a test from outside | accepted | [PRODUCT](../PRODUCT.md#community-launch) |
 
 ## Known defects (not roadmap items)
 
@@ -174,7 +197,10 @@ SES-001 and NAT-002 describe the same work from two sides; build them as one cha
 | 2026-11-24 | **The browser can install Projectionist.** The manifest, a shell worker that does not store API responses, art, or media, a quiet Install entry, media keys, and the player shortcuts are on main. Push waits on NAT-006. EXP-019 is done (pull request 309, `a0d72b62`). This is not in production 1.45.5 |
 | 2026-11-24 | **The web lists rooms, Play in… starts a film on one of them, and the remote follows that session.** SES-008 is done (pull request 311, `b2d3b226`). This is not in production 1.45.5 |
 | 2026-11-24 | **The film prepares during the preroll, and the web warm-up screen is on main.** ENG-015 and EXP-018 landed in pull request 298 (`54649269`). The slowed warm-up fixture is still ahead. This is not in production 1.45.5 |
-| 2026-11-24 | **The public hostname will rely on household sign-in.** SEC-017 through SEC-026 are accepted, continuing the existing SEC series. SEC-017 through SEC-022 are the gate. The extra login in front of the hostname stays until the person removes it. Edge rules are not applied in this pass. SEC-017 through SEC-026 are on main. SEC-027 is in this change and is not in the 1.46.1 image |
+| 2026-11-24 | **The public hostname will rely on household sign-in.** SEC-017 through SEC-026 are accepted, continuing the existing SEC series. SEC-017 through SEC-022 are the gate. Edge rules are not applied in this pass. SEC-017 through SEC-026 are on main. SEC-027 is the engine media-token lifetime (pull request 333, `4c6a21ed`) |
+| 2026-11-26 | **Cloudflare Access stays on the public hostname permanently.** The ten gates and the media-token lifetime stay on main as the community baseline and as defense in depth. There is no Access-removal item. Trusted `CF-Connecting-IP` is done (SEC-017, pull request 319, `fa442d2f`): that header is the client only when the direct peer is on the trusted-proxy list |
+| 2026-11-26 | **Passkeys are built in.** `py_webauthn` for passkeys and `pyotp` for TOTP, in an isolated identity module (SEC-031). No Pocket ID companion, and no `id.automat.vip`. Generic OIDC stays. The order is SEC-028, SEC-029, SEC-030, then the app door (SEC-036) after container hardening (SEC-035), then SEC-031, SEC-032, SEC-033, and SEC-034. Each identity pull request waits for an explicit approval comment before it merges |
+| 2026-11-26 | **Recommendation reasons are the priority for the next playback release** (EXP-021). A shared plot phrase never becomes a sentence. The weekly letter (EXP-022) follows that release. Where to watch (EXP-023) starts when the front-door lane finishes. Setup, Doctor, and guided remote access (PRD-026, PRD-027, PRD-028) are the community-launch track, after two doors and container hardening, and are not this run |
 
 ## Superseded review rows (carry-forward)
 

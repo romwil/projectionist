@@ -59,3 +59,8 @@ Holiday settings live today in Admin → Holidays (the observance editor) **and*
 - Section 1 (the prompt-format bug and the error mapping) already merged as pull request 317 and is in tag `v1.46.0` (`4c36a9ad`). Not redone here.
 - Sections 2 and 3 are EXP-020, in this change. Capability `holiday_shelves`. Not in the 1.46.1 image. Held until tag `v1.46.1` exists.
 - Outbox: `docs/roadmap/outbox/2026-11-24-EXP-020-holiday-shelves.md` (platform fields only).
+---
+## Processing note (agent, 2026-11-26)
+- Updated: EXP-020 is done. Section 1 merged as pull request 317 and is in tag `v1.46.1`. Sections 2 and 3 merged as pull request 326, `a452fb37`. They are in the 1.46.2 image on Docker Hub. Production is 1.45.5.
+- Outbox: `docs/roadmap/outbox/2026-11-24-EXP-020-holiday-shelves.md` (already filed).
+- Needs the person: nothing.
