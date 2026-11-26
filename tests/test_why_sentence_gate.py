@@ -176,17 +176,135 @@ class WatchedBridgeGateTests(unittest.TestCase):
         self.assertIn("Brandon Christensen is behind both", explanation["sentence"])
         self.assertNotIn("brandon Christensen", explanation["sentence"])
 
-    def test_plot_clause_folds_they_share(self) -> None:
+    def test_plot_phrase_does_not_become_a_reason(self) -> None:
         seed = _title(self.db, rating_key="rk-c", tmdb_id=3, title="Bake Off", summary=BAKE_PLOT)
         peer = _title(self.db, rating_key="rk-d", tmdb_id=4, title="Rivals", summary=RIVAL_PLOT)
-        _explainable_neighbor(self.db, seed, peer, seed_text=BAKE_PLOT, peer_text=RIVAL_PLOT)
         seed_row = {"id": seed, "title": "Bake Off", "year": 2015, "summary": BAKE_PLOT}
         peer_row = {"id": peer, "title": "Rivals", "year": 2015, "summary": RIVAL_PLOT}
         explanation = watched_bridge(self.db, peer_row, seed_row)
+        self.assertIsNone(explanation)
+
+
+class RankedLinkTests(unittest.TestCase):
+    """Production pairs that only share a plot phrase get no reason sentence."""
+
+    def setUp(self) -> None:
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.db = Database(Path(self._tmpdir.name) / "ranked.db")
+
+    def tearDown(self) -> None:
+        self._tmpdir.cleanup()
+
+    def test_golden_bad_pairs_have_no_share_sentence(self) -> None:
+        pairs = (
+            ("Beetlejuice", 1988, "Saving Private Ryan", 1998, "video games"),
+            ("Family Guy", 1999, "Madden", 2026, "a super bowl"),
+            ("Left", 1990, "Right", 1991, "a small town"),
+            ("Commercial", 2001, "Spot", 2002, "commercial"),
+            ("Variety", 1965, "Hour", 1966, "a live variety"),
+        )
+        for index, (seed_title, seed_year, peer_title, peer_year, phrase) in enumerate(pairs):
+            summary = f"The story keeps returning to {phrase} in the middle of the plot."
+            seed = _title(
+                self.db,
+                rating_key=f"bad-seed-{index}",
+                tmdb_id=500 + index,
+                title=seed_title,
+                year=seed_year,
+                summary=summary,
+            )
+            peer = _title(
+                self.db,
+                rating_key=f"bad-peer-{index}",
+                tmdb_id=600 + index,
+                title=peer_title,
+                year=peer_year,
+                summary=summary,
+            )
+            explanation = watched_bridge(
+                self.db,
+                {"id": peer, "title": peer_title, "year": peer_year, "summary": summary},
+                {
+                    "id": seed,
+                    "title": seed_title,
+                    "year": seed_year,
+                    "summary": summary,
+                    "seed_source": "completion",
+                },
+            )
+            self.assertIsNone(explanation, phrase)
+
+    def test_same_collection_outranks_a_shared_phrase(self) -> None:
+        summary = "Both plots mention a small town and nothing else in common."
+        seed = _title(
+            self.db,
+            rating_key="col-seed",
+            tmdb_id=701,
+            title="Heat",
+            year=1995,
+            summary=summary,
+        )
+        peer = _title(
+            self.db,
+            rating_key="col-peer",
+            tmdb_id=702,
+            title="Thief",
+            year=1981,
+            summary=summary,
+        )
+        with self.db.connect() as conn:
+            conn.execute(
+                "UPDATE library_items SET tmdb_collection_id = ?, collection_name = ? WHERE id IN (?, ?)",
+                (42, "Mann", seed, peer),
+            )
+        explanation = watched_bridge(
+            self.db,
+            {
+                "id": peer,
+                "title": "Thief",
+                "year": 1981,
+                "summary": summary,
+                "tmdb_collection_id": 42,
+                "collection_name": "Mann",
+            },
+            {
+                "id": seed,
+                "title": "Heat",
+                "year": 1995,
+                "summary": summary,
+                "tmdb_collection_id": 42,
+                "collection_name": "Mann",
+                "seed_source": "completion",
+            },
+        )
         assert explanation is not None
-        self.assertIn("— they share", explanation["sentence"])
-        self.assertNotIn("both stories turn on", explanation["sentence"])
-        self.assertNotIn("both are about", explanation["sentence"])
+        self.assertEqual(explanation["evidence"]["link_kind"], "collection")
+        self.assertIn("both belong to Mann", explanation["sentence"])
+        self.assertNotIn("share", explanation["sentence"].casefold())
+
+    def test_shared_lead_is_named(self) -> None:
+        seed = _title(self.db, rating_key="cast-seed", tmdb_id=801, title="Beetlejuice", year=1988)
+        peer = _title(self.db, rating_key="cast-peer", tmdb_id=802, title="Batman", year=1989)
+        credit = [
+            {
+                "tmdb_person_id": 90,
+                "name": "Michael Keaton",
+                "department": "Acting",
+                "job": "Actor",
+                "billing_order": 0,
+            }
+        ]
+        self.db.upsert_credits_for_item(seed, credit)
+        self.db.upsert_credits_for_item(peer, credit)
+        explanation = watched_bridge(
+            self.db,
+            {"id": peer, "title": "Batman", "year": 1989},
+            {"id": seed, "title": "Beetlejuice", "year": 1988, "seed_source": "completion"},
+        )
+        assert explanation is not None
+        self.assertEqual(explanation["evidence"]["link_kind"], "shared_cast")
+        self.assertIn("Michael Keaton leads both", explanation["sentence"])
+        self.assertNotIn("share", explanation["sentence"].casefold())
 
 
 class ForYouRailTests(unittest.TestCase):
@@ -235,6 +353,7 @@ class ForYouRailTests(unittest.TestCase):
                 summary=RIVAL_PLOT,
             )
             _explainable_neighbor(self.db, seed_a, peer, seed_text=BAKE_PLOT, peer_text=RIVAL_PLOT)
+            _explainable_neighbor(self.db, seed_b, peer, seed_text=BAKE_PLOT, peer_text=RIVAL_PLOT)
         _insert_completion(
             self.db, user_id="will", rating_key="rk-sa", completed_at_ms=1_700_000_000_000
         )

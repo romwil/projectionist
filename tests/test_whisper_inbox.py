@@ -90,6 +90,18 @@ def _neighbor(db: Database, seed_id: int, peer_id: int, *, seed_plot: str = "", 
             """,
             (int(seed_id), int(peer_id), 0.9, 0.1, explainable, link_json or "{}"),
         )
+    if link:
+        credit = [
+            {
+                "tmdb_person_id": 55,
+                "name": "Adam McKay",
+                "department": "Directing",
+                "job": "Director",
+                "billing_order": 0,
+            }
+        ]
+        db.upsert_credits_for_item(int(seed_id), credit)
+        db.upsert_credits_for_item(int(peer_id), credit)
 
 
 class WhisperCopyTests(unittest.TestCase):
@@ -217,7 +229,7 @@ class WhisperDeliveryTests(unittest.TestCase):
         stored = self.db.list_notifications_for_user(member["id"], kinds=["nudge"])
         self.assertTrue(stored)
         stored_body = str(stored[0].get("body") or "")
-        self.assertIn("amateur bakers", stored_body)
+        self.assertIn("Adam McKay", stored_body)
         self.assertTrue(stored_body.rstrip().endswith("."))
         self.assertNotIn("still belongs", stored_body)
         self.assertNotEqual(member_rows[0]["id"], owner_rows[0]["id"])

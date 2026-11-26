@@ -7,11 +7,11 @@ viewing may stand in. TV episode watches overlay
 that episode's plot onto the show seed so For you / inbox / newsletter peers
 match what actually finished. Empty episode plots stay off the search blob —
 the episode title is never plot text. Display sentences name the show (and
-year), not the episode as a watched work. Peers must share a named link
-(explainable neighbor, shared crew, collection, or episode-plot phrase). The
-resulting explanation kind is ``watched_bridge`` when a seed exists; cosine
-proximity alone is never a reason. ``watched_bridge`` is the one builder used
-by For you, inbox, and ``build_member_newsletter``.
+year), not the episode as a watched work. A reason uses the strongest named
+link: the same collection, a shared director or writer, then a shared lead.
+A raw plot phrase never becomes a sentence. With no named link, there is no
+reason sentence. ``watched_bridge`` is the one builder used by For you, the
+inbox, nudges, whispers, and ``build_member_newsletter``.
 """
 
 from __future__ import annotations
@@ -22,13 +22,9 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 from projectionist.library.db import Database
 from projectionist.library.plot_kinship import (
     build_explanation,
-    checkable_plot_link,
     distinctive_plot_phrases,
-    parse_plot_link_json,
-    plot_blob,
     member_facing_why,
     readable_why,
-    specific_plot_link,
 )
 
 _CREW_JOBS = ("director", "writer", "screenplay", "creator")
@@ -626,39 +622,8 @@ def _load_items(db: Database, item_ids: Sequence[int]) -> Dict[int, Dict[str, An
     return {int(row["id"]): _as_dict(row) for row in rows}
 
 
-def _credit_names(db: Database, *item_ids: int) -> set[str]:
-    """Director/writer names for plot-link shelf blocking (same jobs as ``_why_payload``)."""
-    ids = sorted({int(item_id) for item_id in item_ids if int(item_id) > 0})
-    if not ids:
-        return set()
-    placeholders = ",".join("?" for _ in ids)
-    jobs = ",".join("?" for _ in _CREW_JOBS)
-    try:
-        with db.connect() as conn:
-            rows = conn.execute(
-                f"""
-                SELECT p.name AS name
-                FROM credits c
-                JOIN people p ON p.id = c.person_id
-                WHERE c.item_id IN ({placeholders})
-                  AND (
-                    c.department IN ('Directing', 'Writing', 'Directors', 'Creator')
-                    OR lower(COALESCE(c.job, '')) IN ({jobs})
-                  )
-                """,
-                (*ids, *_CREW_JOBS),
-            ).fetchall()
-    except Exception:  # noqa: BLE001
-        return set()
-    names: set[str] = set()
-    for row in rows:
-        text = str(row["name"] or "").strip().casefold()
-        if text:
-            names.add(text)
-    return names
-
-
 def _shared_creator(db: Database, left_id: int, right_id: int) -> Optional[str]:
+    """Shared director, writer, or creator. Directors win over writers."""
     jobs = ",".join("?" for _ in _CREW_JOBS)
     try:
         with db.connect() as conn:
@@ -670,18 +635,55 @@ def _shared_creator(db: Database, left_id: int, right_id: int) -> Optional[str]:
                   ON b.person_id = a.person_id AND b.item_id = ?
                 JOIN people p ON p.id = a.person_id
                 WHERE a.item_id = ?
-                  AND (
-                    a.department IN ('Directing', 'Writing')
-                    OR lower(COALESCE(a.job, '')) IN ({jobs})
-                  )
-                  AND (
-                    b.department IN ('Directing', 'Writing')
-                    OR lower(COALESCE(b.job, '')) IN ({jobs})
-                  )
-                ORDER BY p.name ASC
+                  AND lower(COALESCE(a.job, '')) IN ({jobs})
+                  AND lower(COALESCE(b.job, '')) IN ({jobs})
+                ORDER BY
+                  CASE lower(COALESCE(a.job, ''))
+                    WHEN 'director' THEN 0
+                    WHEN 'writer' THEN 1
+                    WHEN 'screenplay' THEN 2
+                    WHEN 'creator' THEN 3
+                    ELSE 9
+                  END,
+                  p.name ASC
                 LIMIT 1
                 """,
                 (int(right_id), int(left_id), *_CREW_JOBS, *_CREW_JOBS),
+            ).fetchone()
+    except Exception:  # noqa: BLE001
+        return None
+    if row is None:
+        return None
+    name = str(row["name"] or "").strip()
+    return name or None
+
+
+def _shared_lead(db: Database, left_id: int, right_id: int) -> Optional[str]:
+    """A top-billed actor credited on both titles."""
+    try:
+        with db.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT p.name AS name
+                FROM credits a
+                JOIN credits b
+                  ON b.person_id = a.person_id AND b.item_id = ?
+                JOIN people p ON p.id = a.person_id
+                WHERE a.item_id = ?
+                  AND COALESCE(a.billing_order, 99) <= 2
+                  AND COALESCE(b.billing_order, 99) <= 2
+                  AND (
+                    a.department = 'Acting'
+                    OR lower(COALESCE(a.job, '')) IN ('actor', 'actress')
+                  )
+                  AND (
+                    b.department = 'Acting'
+                    OR lower(COALESCE(b.job, '')) IN ('actor', 'actress')
+                  )
+                ORDER BY COALESCE(a.billing_order, 99) ASC, p.name ASC
+                LIMIT 1
+                """,
+                (int(right_id), int(left_id)),
             ).fetchone()
     except Exception:  # noqa: BLE001
         return None
@@ -714,69 +716,6 @@ def _inner_link(
     if candidate_id <= 0 or seed_id <= 0 or candidate_id == seed_id:
         return None
 
-    shelf = _labels(candidate.get("genres")) | _labels(candidate.get("keywords"))
-    shelf |= _labels(seed.get("genres")) | _labels(seed.get("keywords"))
-    shelf |= _credit_names(db, candidate_id, seed_id)
-
-    def _accept_plot(link: Optional[Mapping[str, Any]]) -> Optional[Dict[str, Any]]:
-        accepted = checkable_plot_link(link, shelf_labels=shelf)
-        if not accepted or not accepted.get("sentence"):
-            return None
-        sentence = str(accepted["sentence"])
-        if "both stories turn on" in sentence.casefold():
-            return None
-        return {
-            "link_kind": "plot_link",
-            "sentence": sentence,
-            "terms": list(accepted.get("terms") or []),
-        }
-
-    def _live_plot_link() -> Optional[Dict[str, Any]]:
-        return _accept_plot(
-            specific_plot_link(
-                seed_text=plot_blob(seed),
-                peer_text=plot_blob(candidate),
-                shelf_labels=shelf,
-            )
-        )
-
-    # Finished-episode overlay: live plot first so show-level cosine cache cannot win.
-    if seed.get("episode_rating_key"):
-        live = _live_plot_link()
-        if live:
-            return live
-
-    # Prefer materialized explainable neighbor plot link when present.
-    try:
-        neighbors = db.get_neighbors(seed_id, limit=24, explainable_only=True) or []
-    except Exception:  # noqa: BLE001
-        neighbors = []
-    for neighbor in neighbors:
-        try:
-            if int(neighbor["neighbor_id"]) != candidate_id:
-                continue
-        except (TypeError, ValueError, KeyError):
-            continue
-        stored = parse_plot_link_json(neighbor["plot_link_json"] if "plot_link_json" in neighbor.keys() else None)
-        accepted = _accept_plot(stored)
-        if accepted:
-            return accepted
-
-    live = _live_plot_link()
-    if live:
-        return live
-
-    creator = _shared_creator(db, candidate_id, seed_id)
-    if creator:
-        display = _display_crew_name(creator)
-        if not display:
-            return None
-        return {
-            "link_kind": "shared_crew",
-            "sentence": f"{display} is behind both",
-            "terms": [display],
-        }
-
     try:
         candidate_collection = int(candidate.get("tmdb_collection_id") or 0)
         seed_collection = int(seed.get("tmdb_collection_id") or 0)
@@ -786,16 +725,32 @@ def _inner_link(
     collection = str(
         candidate.get("collection_name") or seed.get("collection_name") or ""
     ).strip()
-    if (
-        candidate_collection > 0
-        and candidate_collection == seed_collection
-        and collection
-    ):
+    if candidate_collection > 0 and candidate_collection == seed_collection and collection:
         return {
             "link_kind": "collection",
             "sentence": f"both belong to {collection}",
             "terms": [collection],
         }
+
+    creator = _shared_creator(db, candidate_id, seed_id)
+    if creator:
+        display = _display_crew_name(creator)
+        if display:
+            return {
+                "link_kind": "shared_crew",
+                "sentence": f"{display} is behind both",
+                "terms": [display],
+            }
+
+    lead = _shared_lead(db, candidate_id, seed_id)
+    if lead:
+        display = _display_crew_name(lead)
+        if display:
+            return {
+                "link_kind": "shared_cast",
+                "sentence": f"{display} leads both",
+                "terms": [display],
+            }
     return None
 
 
@@ -838,6 +793,8 @@ def watched_bridge(
     if clause.endswith("."):
         clause = clause[:-1]
     if not readable_why(clause):
+        return None
+    if "share" in clause.casefold():
         return None
     sentence = _finish(f"You {verb} {seed_label}; {candidate_label} — {clause}")
     # Full outer line may contain "an episode of …" (seed label). Only refuse
