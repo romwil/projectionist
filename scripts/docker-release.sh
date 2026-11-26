@@ -73,6 +73,8 @@ if [[ -z "$ALSO_LINE" ]]; then
   ALSO_LINE="$(echo "$VERSION" | awk -F. '{print $1"."$2}')"
 fi
 
+IMAGE="romwil/projectionist"
+
 if [[ "$MOVE_POINTERS" -eq 1 ]]; then
   if [[ "$VERSION" == "1.46.3" ]]; then
     echo "1.46.3 already moved ${IMAGE}:1.46 and ${IMAGE}:latest. Refusing to move them again." >&2
