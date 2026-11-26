@@ -21,11 +21,10 @@
   <CPUset/>
   <Requires>Plex Media Server on your LAN. Optional: Radarr, Sonarr, Tautulli, Fanart.tv, and an LLM API key or Ollama on the Unraid host.</Requires>
   <Changes>
-### Unreleased
-No host socket. The library, prerolls, and the lobby port stay read-only or LAN only. The container drops privileges. Copy this template onto a running host only after you capture its current run config.
-
 ### 1.46.3
 Settings stay owned by the app user, and ready fails when they are not.
+
+Template source after that image: no host socket, the library and prerolls are read-only, the lobby port is LAN only, and the container drops privileges. Copy this template onto a running host only after you capture its current run config.
 
 ### 1.46.2
 Holiday shelves, a quality ceiling, the installable web app, and playback links that expire.
