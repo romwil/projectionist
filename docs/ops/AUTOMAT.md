@@ -77,7 +77,7 @@ Production appdata is a **rollout kit + live `/config` bind mount**, not a copy 
 ├── rollout.sh               # from scripts/unraid-rollout.sh (pull-only Hub tag + recreate)
 ├── unraid-force-pull.sh     # from scripts/unraid-force-pull.sh (image refresh before Dockerman Force Update)
 ├── docker-compose.yml       # from docker-compose.unraid.yml (optional; plain docker also works on stock Unraid)
-├── .env                     # optional host overrides (Plex/TMDB/LLM keys, TZ, media paths, MOUNT_DOCKER_SOCK) — not in git
+├── .env                     # optional host overrides (Plex/TMDB/LLM keys, TZ, media paths) — not in git. Do not set MOUNT_DOCKER_SOCK.
 └── .env.example             # from scripts/unraid.env.example (placeholders only)
 
 Prod media binds (read-write — Investigate Apply renames files; never `:ro`):

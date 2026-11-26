@@ -1,0 +1,29 @@
+name: Attacker box
+
+# Manual only. There is no schedule and no pull_request trigger.
+# The script refuses every host except a future staging edge, and even then
+# it does not start a scanner. Will approves that edge before anyone wires tools.
+on:
+  workflow_dispatch:
+    inputs:
+      note:
+        description: "Optional note. This run still does not contact a host."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  skeleton:
+    name: Wait for an approved staging edge
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Refuse to scan
+        env:
+          # Repository variables, set later by Will. Empty means do not run.
+          PENTEST_STAGING_APPROVED: ${{ vars.PENTEST_STAGING_APPROVED }}
+          PENTEST_STAGING_EDGE: ${{ vars.PENTEST_STAGING_EDGE }}
+        run: bash scripts/security/pentest/attacker-box.sh

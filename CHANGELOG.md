@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Security
+
+- Subtitle cues are escaped before they are served, so a caption file cannot carry a script tag.
+- Plot text and tags that reach the curator are marked as data, not instructions.
+- The Unraid template and the rollout script do not mount the Docker socket.
+- Pull requests run secret scanning, semgrep, and dependency audits. The image build fails on a socket mount and on a fixable critical image finding.
+
 ## [1.46.3] — 2026-11-25
 
 This is the Hub image after 1.46.2. Settings stay owned by the app user. Readiness fails when the app cannot read or write settings or the database. Health stays a process-up signal.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import logging
 import re
 import urllib.parse
@@ -526,11 +527,37 @@ def download_preferred_subtitles(
     }
 
 
+def neutralize_subtitle_cues(vtt: str) -> str:
+    """Escape cue text so a subtitle file cannot carry HTML or script.
+
+    Timing lines, the WEBVTT header, and NOTE/STYLE/REGION blocks stay as
+    WebVTT syntax. Cue payload is escaped. A player that paints cue text
+    as HTML then shows the characters, not a tag.
+    """
+    out: List[str] = []
+    for line in str(vtt or "").split("\n"):
+        stripped = line.strip()
+        if (
+            not stripped
+            or stripped == "WEBVTT"
+            or stripped.startswith(("NOTE", "STYLE", "REGION", "X-TIMESTAMP"))
+            or "-->" in stripped
+        ):
+            out.append(line)
+            continue
+        out.append(html.escape(line, quote=False))
+    rendered = "\n".join(out)
+    if not rendered.endswith("\n"):
+        rendered += "\n"
+    return rendered
+
+
 def srt_to_vtt(raw: str) -> str:
-    """Minimal SRT → WebVTT conversion for sidecar tracks (cue text left intact)."""
+    """Minimal SRT → WebVTT conversion. Cue text is escaped, not left as HTML."""
     text = raw.replace("\r\n", "\n").replace("\r", "\n").lstrip("\ufeff").strip()
     if text.upper().startswith("WEBVTT"):
-        return text if text.endswith("\n") else text + "\n"
+        rendered = text if text.endswith("\n") else text + "\n"
+        return neutralize_subtitle_cues(rendered)
     src = text.split("\n")
     lines: List[str] = ["WEBVTT", ""]
     for i, line in enumerate(src):
@@ -542,7 +569,7 @@ def srt_to_vtt(raw: str) -> str:
         if "-->" in stripped:
             stripped = re.sub(r"(\d),(\d{1,3})", r"\1.\2", stripped)
         lines.append(stripped)
-    return "\n".join(lines).rstrip() + "\n"
+    return neutralize_subtitle_cues("\n".join(lines).rstrip() + "\n")
 
 
 def live_subtitles_payload(
