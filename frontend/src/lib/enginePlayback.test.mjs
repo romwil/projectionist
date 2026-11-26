@@ -29,6 +29,22 @@ test("the household switch defaults the web player to the Plex path", async () =
   assert.equal(playThroughProjectionist(null), false);
 });
 
+test("just for me uses the engine while the household switch stays off", async () => {
+  let engineCalls = 0;
+  const played = await chooseWebPlayback({
+    features: {
+      features: { play_through_projectionist: false, play_through_just_for_me: true },
+    },
+    openEngine: async () => {
+      engineCalls += 1;
+      return { playable: true, master_url: "/engine", plan: "remux" };
+    },
+    startPlex: async () => ({ stream_url: "/plex", engine: false }),
+  });
+  assert.equal(engineCalls, 1);
+  assert.equal(played.stream_url, "/engine");
+});
+
 test("a playable remux uses the engine master and keeps the Plex path for captions", async () => {
   const profile = browserPlaybackProfile(
     (type) => type.includes("avc1") || type.includes("mp4a.40.2"),

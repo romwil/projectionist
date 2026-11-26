@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import {
   getFeatures,
   getQualityCeiling,
+  patchAuthMe,
   putPlayThroughProjectionist,
   putPublicBaseUrl,
   putQualityCeiling,
@@ -18,6 +19,7 @@ import SettingsPanel from "../../components/settings/SettingsPanel";
 export default function HouseholdPlaybackPage() {
   const location = useLocation();
   const [playThrough, setPlayThrough] = useState(false);
+  const [justForMe, setJustForMe] = useState(false);
   const [qualityCeiling, setQualityCeiling] = useState("1080p");
   const [listRevision, setListRevision] = useState(0);
   const [awayAddress, setAwayAddress] = useState("");
@@ -30,6 +32,12 @@ export default function HouseholdPlaybackPage() {
       .then((features) => {
         if (!live) return;
         setPlayThrough(Boolean(features?.features?.play_through_projectionist));
+        setJustForMe(
+          Boolean(
+            features?.features?.play_through_just_for_me ||
+              features?.user?.play_through_just_for_me,
+          ),
+        );
         setAwayAddress(String(features?.addresses?.away || ""));
       })
       .catch(() => {
@@ -101,6 +109,32 @@ export default function HouseholdPlaybackPage() {
           </label>
           <span className="field-help" data-testid="play-through-household-note">
             This affects everyone in the household.
+          </span>
+          <label className="settings-toggle-row" htmlFor="play-through-just-for-me-input">
+            <input
+              id="play-through-just-for-me-input"
+              type="checkbox"
+              aria-label="Play through Projectionist — just for me"
+              checked={justForMe}
+              data-testid="play-through-just-for-me"
+              onChange={async (event) => {
+                const next = event.target.checked;
+                setJustForMe(next);
+                try {
+                  await patchAuthMe({ play_through_just_for_me: next });
+                } catch (error) {
+                  setJustForMe(!next);
+                  setStatus({
+                    type: "error",
+                    message: (error as { message?: string })?.message || "Couldn’t save playback.",
+                  });
+                }
+              }}
+            />
+            <span>Play through Projectionist — just for me</span>
+          </label>
+          <span className="field-help" data-testid="play-through-just-for-me-note">
+            Only your plays use Projectionist. The household switch stays as it is.
           </span>
         </div>
       </SettingsPanel>

@@ -194,7 +194,9 @@ export default function ConnectionsSection({
                     <label key={field}>
                       <span>{fieldLabel?.(field)}</span>
                       {SECRET_FIELDS.includes(field) ? (
-                        renderSecretInput(field, { placeholder: FIELD_PLACEHOLDERS[field] })
+                        renderSecretInput(field, {
+                          placeholder: secretPlaceholder(settings, field, FIELD_PLACEHOLDERS[field] || ""),
+                        })
                       ) : (
                         <input
                           type="text"
@@ -297,7 +299,9 @@ export default function ConnectionsSection({
                     <label key={field}>
                       <span>{fieldLabel?.(field)}</span>
                       {SECRET_FIELDS.includes(field) ? (
-                        renderSecretInput(field, { placeholder: FIELD_PLACEHOLDERS[field] })
+                        renderSecretInput(field, {
+                          placeholder: secretPlaceholder(settings, field, FIELD_PLACEHOLDERS[field] || ""),
+                        })
                       ) : (
                         <input
                           type="text"

@@ -95,6 +95,112 @@ def _integration_token_marker(token: str) -> str:
     return "***configured***"
 
 
+_SERVICE_FIELDS = {
+    "plex": ("plex_url", "plex_token"),
+    "radarr": ("radarr_url", "radarr_api_key"),
+    "sonarr": ("sonarr_url", "sonarr_api_key"),
+    "tmdb": ("tmdb_api_key",),
+    "fanart": ("fanart_api_key",),
+    "tautulli": ("tautulli_url", "tautulli_api_key"),
+    "llm": ("llm_provider", "llm_base_url", "llm_api_key", "llm_model"),
+    "seerr": ("seerr_url", "seerr_api_key"),
+    "tunarr": ("tunarr_url",),
+}
+
+
+def service_credential_stored(settings: Any, service_name: str) -> bool:
+    """True when this service has the credential a Connected badge requires."""
+    if settings is None:
+        return False
+    if service_name == "plex":
+        return bool(str(settings.plex_url or "").strip() and str(settings.plex_token or "").strip())
+    if service_name == "radarr":
+        return bool(
+            str(settings.radarr_url or "").strip() and str(settings.radarr_api_key or "").strip()
+        )
+    if service_name == "sonarr":
+        return bool(
+            str(settings.sonarr_url or "").strip() and str(settings.sonarr_api_key or "").strip()
+        )
+    if service_name == "tmdb":
+        return bool(str(settings.tmdb_api_key or "").strip())
+    if service_name == "fanart":
+        return bool(str(settings.fanart_api_key or "").strip())
+    if service_name == "tautulli":
+        return bool(
+            str(settings.tautulli_url or "").strip() and str(settings.tautulli_api_key or "").strip()
+        )
+    if service_name == "llm":
+        if str(settings.llm_provider or "").strip().lower() == "ollama":
+            return bool(str(settings.llm_base_url or "").strip() or str(settings.llm_model or "").strip())
+        return bool(str(settings.llm_api_key or "").strip())
+    if service_name == "seerr":
+        return bool(str(settings.seerr.url or "").strip() and str(settings.seerr.api_key or "").strip())
+    if service_name == "tunarr":
+        return bool(str(getattr(settings.tunarr, "url", "") or "").strip())
+    return False
+
+
+def persist_tested_fields(data_dir: Path, service_name: str, incoming: Mapping[str, Any]) -> None:
+    """Save the fields the owner just tested. A blank field keeps the stored secret."""
+    from projectionist.config_store import Settings
+
+    fields = _SERVICE_FIELDS.get(service_name)
+    if not fields:
+        return
+    path = Path(data_dir) / "settings.json"
+    settings = Settings.load(path) if path.exists() else Settings()
+    changed = False
+    if service_name == "seerr":
+        url = str(incoming.get("seerr_url") or "").strip()
+        key = str(incoming.get("seerr_api_key") or "").strip()
+        if url and settings.seerr.url != url:
+            settings.seerr.url = url
+            changed = True
+        if key and settings.seerr.api_key != key:
+            settings.seerr.api_key = key
+            changed = True
+    elif service_name == "tunarr":
+        url = str(incoming.get("tunarr_url") or "").strip()
+        if url and settings.tunarr.url != url:
+            settings.tunarr.url = url
+            changed = True
+    else:
+        for field in fields:
+            value = str(incoming.get(field) or "").strip()
+            if not value or getattr(settings, field) == value:
+                continue
+            setattr(settings, field, value)
+            changed = True
+    if changed:
+        settings.save(path)
+
+
+def complete_service_test(
+    db: Database,
+    data_dir: Path,
+    service_name: str,
+    incoming: Mapping[str, Any],
+    *,
+    base_url: str = "",
+    api_token: str = "",
+    ok: bool,
+) -> None:
+    """Record the test. A pass saves fields and requires a stored credential."""
+    from projectionist.config_store import load_merged_settings
+
+    if ok:
+        persist_tested_fields(data_dir, service_name, incoming)
+        ok = service_credential_stored(load_merged_settings(Path(data_dir)), service_name)
+    record_service_integration(
+        db,
+        service_name,
+        base_url=base_url,
+        api_token=api_token,
+        ok=ok,
+    )
+
+
 def record_service_integration(
     db: Database,
     service_name: str,
@@ -397,6 +503,17 @@ def build_certifications_status(db: Database, data_dir: Optional[Path] = None) -
                 certified = False
                 status = "needs_key"
                 message = SECRET_UNREADABLE_MESSAGE
+            elif certified and data_dir is not None:
+                try:
+                    from projectionist.config_store import load_merged_settings
+
+                    stored = load_merged_settings(Path(data_dir))
+                except Exception:  # noqa: BLE001
+                    stored = None
+                if stored is not None and not service_credential_stored(stored, service_name):
+                    certified = False
+                    status = "needs_key"
+                    message = ""
             services[service_name] = {
                 "certified": certified,
                 "connection_status": status,

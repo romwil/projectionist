@@ -206,6 +206,7 @@ from projectionist.web.setup import (
     merge_secret_fields,
     merge_theater_settings_payload,
     preserve_omitted_ask_delete_confirmation,
+    complete_service_test,
     record_service_integration,
     resolve_test_payload,
     sync_settings_to_db,
@@ -804,6 +805,7 @@ class AuthMeUpdatePayload(BaseModel):
     clear_weather_location: Optional[bool] = None
     default_page: Optional[str] = Field(default=None, pattern="^(auto|chat|explore)$")
     email_muted_kinds: Optional[List[str]] = Field(default=None, max_length=16)
+    play_through_just_for_me: Optional[bool] = None
 
 
 class RecommendPayload(BaseModel):
@@ -1348,6 +1350,10 @@ def _features_payload(
             "play_through_projectionist": bool(
                 getattr(getattr(settings, "engine", None), "play_through_projectionist", False)
             ),
+            # This member only. The household switch stays separate.
+            "play_through_just_for_me": bool(
+                getattr(user, "play_through_just_for_me", False)
+            ),
         },
         "setup_state": setup_state,
         "household_domain": str(getattr(settings, "household_domain", "") or ""),
@@ -1395,6 +1401,7 @@ def _features_payload(
             "seerr_user_id": user.seerr_user_id,
             "avatar_url": user.avatar_url,
             "default_page": str(getattr(user, "default_page", "explore") or "explore"),
+            "play_through_just_for_me": bool(getattr(user, "play_through_just_for_me", False)),
         }
         payload["youth"] = {
             "max_content_rating": str(

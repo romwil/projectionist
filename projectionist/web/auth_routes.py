@@ -325,6 +325,8 @@ def register_auth_routes(app):
             updates["default_page"] = payload.default_page
         if "email_muted_kinds" in fields_set:
             updates["email_muted_kinds"] = payload.email_muted_kinds or []
+        if "play_through_just_for_me" in fields_set:
+            updates["play_through_just_for_me"] = bool(payload.play_through_just_for_me)
         if payload.clear_weather_location:
             updates["weather_location"] = None
         elif any(key in fields_set for key in ("weather_place", "weather_lat", "weather_lon")):

@@ -22,6 +22,7 @@
       "notify_channel_email": false,
       "notify_channel_inbox": true,
       "nudge_opt_in": false,
+      "play_through_just_for_me": false,
       "plex_user_id": null,
       "preferred_name": "Member",
       "role": "owner",

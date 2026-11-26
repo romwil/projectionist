@@ -340,6 +340,16 @@ def _member_autoconfirm_adds(db: "SchemaMigrationsMixin", conn: sqlite3.Connecti
         )
 
 
+def _play_through_just_for_me(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
+    """Per-member engine opt-in. The household switch stays a separate flag."""
+    del db
+    columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(users)")}
+    if "play_through_just_for_me" not in columns:
+        conn.execute(
+            "ALTER TABLE users ADD COLUMN play_through_just_for_me INTEGER NOT NULL DEFAULT 0"
+        )
+
+
 def _subtitle_state(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
     """Per-title household subtitle ledger so a backfill resumes after a restart."""
     del db
@@ -611,6 +621,7 @@ def _build_migrations() -> List[Migration]:
         (71, "totp_secrets", wrap("_migrate_totp_secrets")),
         (72, "sign_in_clients", _sign_in_clients),
         (73, "holiday_shelf_theme", wrap("_migrate_holiday_shelf_theme")),
+        (74, "play_through_just_for_me", _play_through_just_for_me),
     ]
 
 

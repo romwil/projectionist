@@ -138,6 +138,7 @@ class CurrentUser:
     weather_lon: Optional[float] = None
     auth_method: str = "plex"
     default_page: str = "explore"
+    play_through_just_for_me: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -165,6 +166,7 @@ class CurrentUser:
             "weather_lon": self.weather_lon,
             "auth_method": self.auth_method,
             "default_page": self.default_page,
+            "play_through_just_for_me": self.play_through_just_for_me,
         }
 
 
@@ -238,6 +240,9 @@ def row_to_current_user(row) -> CurrentUser:
             default_page = "chat"
         elif cleaned_default_page in {"auto", "explore"}:
             default_page = "explore"
+    play_through_just_for_me = (
+        "play_through_just_for_me" in keys and bool(int(row["play_through_just_for_me"] or 0))
+    )
     user_id = str(row["id"])
     return CurrentUser(
         id=user_id,
@@ -264,6 +269,7 @@ def row_to_current_user(row) -> CurrentUser:
         weather_place=weather_place,
         weather_lat=weather_lat,
         weather_lon=weather_lon,
+        play_through_just_for_me=play_through_just_for_me,
     )
 
 
