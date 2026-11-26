@@ -344,17 +344,25 @@ if "live_channels_enabled" not in features:
   log "Signed-in smoke: features show the chat provider and live channels, and the hub rail returned 200."
 }
 
-# Root-only credentials for the signed-in smoke. Not the app .env: that file
-# lives on the share and is not root-only. This file is outside the container
-# bind and outside git. Fail before the container is replaced.
+# Root-only credentials for the signed-in smoke. Not the app .env, and not
+# /boot: the flash is FAT32, so mode 600 is not real there, and Unraid Connect
+# may back the flash up. This directory is outside the container /config bind
+# and outside git. Fail before the container is replaced.
 require_smoke_env() {
-  local smoke_env="${PROJECTIONIST_SMOKE_ENV:-/boot/config/projectionist-smoke.env}"
+  local smoke_env="${PROJECTIONIST_SMOKE_ENV:-/mnt/user/appdata/projectionist-secrets/smoke.env}"
+  local smoke_dir
+  smoke_dir="$(dirname "$smoke_env")"
   if [[ ! -f "$smoke_env" ]]; then
     die "Smoke env file is missing at ${smoke_env}. Refusing to replace the container."
   fi
-  local smoke_mode smoke_owner
+  local smoke_mode smoke_owner dir_mode dir_owner
   smoke_mode="$(stat -c '%a' "$smoke_env")"
   smoke_owner="$(stat -c '%u' "$smoke_env")"
+  dir_mode="$(stat -c '%a' "$smoke_dir")"
+  dir_owner="$(stat -c '%u' "$smoke_dir")"
+  if [[ "$dir_mode" != "700" || "$dir_owner" != "0" ]]; then
+    die "Smoke env directory ${smoke_dir} must be mode 700 and owned by root. Refusing to replace the container."
+  fi
   if [[ "$smoke_mode" != "600" || "$smoke_owner" != "0" ]]; then
     die "Smoke env ${smoke_env} must be mode 600 and owned by root. Refusing to replace the container."
   fi
