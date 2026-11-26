@@ -174,6 +174,35 @@ UNTRUSTED_MEMORY_TOOLS: frozenset = frozenset(
     }
 )
 
+# Library and catalog rows are stored data. A plot, tag, or filename can carry
+# instructions. Those tool results are fenced the same way as memory.
+UNTRUSTED_LIBRARY_TOOLS: frozenset = frozenset(
+    {
+        "search_library",
+        "find_similar_titles",
+        "get_title_detail",
+        "query_library",
+        "summarize_library",
+        "get_library_overview",
+        "query_tv_episodes",
+        "get_library_snapshot",
+        "get_tonight_picks",
+        "titles_by_person",
+        "list_relations",
+        "walk_relations",
+        "suggest_double_feature",
+        "suggest_follow_ups",
+        "get_user_reviews",
+    }
+)
+
+
+def fence_tool_result(name: str, result: str) -> str:
+    """Fence tool output that is stored library data or memory, not a command."""
+    if str(name) in UNTRUSTED_MEMORY_TOOLS or str(name) in UNTRUSTED_LIBRARY_TOOLS:
+        return wrap_untrusted_data(result)
+    return result
+
 
 def wrap_untrusted_data(content: str) -> str:
     """Fence stored/retrieved content so the model treats it as data, not instructions.

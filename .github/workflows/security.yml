@@ -1,0 +1,103 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan commits for secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  semgrep:
+    name: semgrep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: New high-severity findings
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install semgrep
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE="HEAD~1"
+          fi
+          # The baseline is the parent commit, so existing findings stay
+          # visible in a full scan and this job fails when the change adds
+          # an ERROR-severity finding.
+          semgrep scan \
+            --config p/python \
+            --config p/javascript \
+            --severity ERROR \
+            --error \
+            --metrics=off \
+            --baseline-commit "$BASE"
+
+  audits:
+    name: pip-audit and npm audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements/runtime.lock
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      # The runtime lock job already fails on any known vulnerability.
+      # This step is the high-severity floor from the pentest plan.
+      - name: pip-audit runtime lock
+        uses: pypa/gh-action-pip-audit@v1.1.0
+        with:
+          inputs: requirements/runtime.lock
+
+      # High and critical in dependencies that ship. Dev-only advisories
+      # (the Vite dev server currently needs a major upgrade) stay out of
+      # this floor so a Windows-only dev-server finding does not block the build.
+      - name: npm audit (high, production dependencies)
+        run: |
+          npm audit --audit-level=high --omit=dev
+          cd frontend && npm audit --audit-level=high --omit=dev
+
+  packaging:
+    name: No Docker socket
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Shipped packaging does not mount a socket
+        run: python3 scripts/security/check-no-docker-socket.py

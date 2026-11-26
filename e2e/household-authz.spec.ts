@@ -1,6 +1,8 @@
 /**
  * Household authz e2e (M9): local login, OIDC entrypoint, member Admin deny.
  * Mocked against the Playwright temp server — no live IdP / QA sidecar required.
+ * The generated route matrix (anonymous, guest, Youth, member, other member, owner)
+ * runs in tests/test_authz_matrix.py. This file checks the same roles on the shell.
  */
 import { expect, test } from "@playwright/test";
 import {
@@ -92,6 +94,37 @@ test.describe("Household authz", () => {
     await page.goto("/admin");
     await expect(page).toHaveURL(/\/settings/);
     await expect(page.getByTestId("admin-layout")).toHaveCount(0);
+  });
+
+  test("youth has no Admin link and /admin redirects to Settings", async ({ page }) => {
+    await mockFeatures(page, { multi_user_enabled: true });
+    await mockAuthUser(page, {
+      id: "youth-1",
+      display_name: "Household Youth",
+      role: "member",
+      is_youth: true,
+    });
+
+    await page.goto("/chat");
+    await page.getByTestId("composer-input").waitFor();
+    await expect(page.getByTestId("topbar-admin-link")).toHaveCount(0);
+
+    await page.goto("/admin");
+    await expect(page).toHaveURL(/\/settings/);
+    await expect(page.getByTestId("admin-layout")).toHaveCount(0);
+  });
+
+  test("another member has no Admin link", async ({ page }) => {
+    await mockFeatures(page, { multi_user_enabled: true });
+    await mockAuthUser(page, {
+      id: "member-2",
+      display_name: "Other Member",
+      role: "member",
+    });
+
+    await page.goto("/chat");
+    await page.getByTestId("composer-input").waitFor();
+    await expect(page.getByTestId("topbar-admin-link")).toHaveCount(0);
   });
 
   test("owner still sees Admin and can open the shell", async ({ page }) => {
