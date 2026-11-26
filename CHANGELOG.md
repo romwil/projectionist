@@ -2,12 +2,43 @@
 
 ## [Unreleased]
 
+## [1.46.4] — 2026-11-26
+
+This is the Hub image after 1.46.3. One member can play through Projectionist just for themselves. A successful Connections test keeps the key. A pick explains a real connection, or it says nothing. `:latest` and the minor tag move only after QA or production. Settings ownership from 1.46.3 stays in this image. 1.46.3 is superseded for production.
+
+### Highlights
+
+- **Play through Projectionist can be just for you.** A household member turns it on for their own profile. The household switch stays off for everyone else.
+- **A successful Connections test keeps the key.** Refresh and Verify write the credential that passed. A failed test does not replace a stored key, and a Connected badge needs that key on disk.
+- **A pick explains a real connection, or it says nothing.** Shared plot phrases and raw tags are not reasons.
+- **`:latest` and the minor line wait.** Publish writes only `:1.46.4`. Those other tags move after this version passes QA or reaches production. 1.46.3 already moved them once; this script will not move them again.
+
+### Added
+
+- Let one member opt in to engine playback with `play_through_just_for_me` on their profile. Features and `/api/auth/me` expose the flag. The household switch stays separate.
+- Persist tested connection fields on a successful `/api/setup/test/<service>`. Mark a certified service without a stored key as stale.
+
+### Changed
+
+- Stop raw plot phrases from becoming a recommendation reason (EXP-021).
+- `scripts/docker-release.sh` publishes the version tag only. `--move-pointers` moves `:1.46` and `:latest` after QA or production, and refuses to move them for 1.46.3 again.
+- Rollout loads smoke credentials from a root-owned file, waits for `/api/ready`, then runs a signed-in smoke.
+
 ### Security
 
 - Subtitle cues are escaped before they are served, so a caption file cannot carry a script tag.
 - Plot text and tags that reach the curator are marked as data, not instructions.
 - The Unraid template and the rollout script do not mount the Docker socket.
-- Pull requests run secret scanning, semgrep, and dependency audits. The image build fails on a socket mount and on a fixable critical image finding.
+- Pull requests run secret scanning, semgrep, and dependency audits. The image build fails on a socket mount and on a fixable critical image finding. The attacker-box workflow stays manual and does not connect to anything.
+
+### Verification
+
+- `./scripts/patch-release.sh 1.46.4` lockstep + `frontend/public/release-notes.json`.
+- `docs/api/fixtures/get-api-health.json` records 1.46.4.
+- CI on the release pull request.
+- Hub image `romwil/projectionist:1.46.4`; `org.opencontainers.image.revision` matches tag `v1.46.4`.
+- Pull requests 343 (reasons), 344 (release pointers), 346 (pentest checks), 347 (just for me and connections), and 338 (settings ownership, already in 1.46.3) are in this image.
+- This publish does not move `:1.46` or `:latest`. Production rolls only when QA of this tag is clean.
 
 ## [1.46.3] — 2026-11-25
 
