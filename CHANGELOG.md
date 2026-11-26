@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+## [1.46.3] — 2026-11-25
+
+This is the Hub image after 1.46.2. Settings stay owned by the app user. Readiness fails when the app cannot read or write settings or the database. Health stays a process-up signal.
+
+### Highlights
+
+- **A settings file written as root no longer locks the household out.** The entrypoint repairs ownership and drops to uid 1000 before the app migrates. A settings write that still runs as root chowns the file to uid 1000 before it lands. `/api/ready` fails when settings or the database are not usable. Rollout waits for ready, then a signed-in smoke.
+
+### Security
+
+- Settings writes are mode 600 and uid 1000. A root write chowns to uid 1000 before the rename. Scripts that enter the app container use `docker exec -u 1000`.
+
+### Verification
+
+- `./scripts/patch-release.sh 1.46.3` lockstep + `frontend/public/release-notes.json`.
+- `docs/api/fixtures/get-api-health.json` records 1.46.3.
+- CI on the release pull request.
+- Hub image `romwil/projectionist:1.46.3`; `org.opencontainers.image.revision` matches tag `v1.46.3`.
+- Pull request 338, "Keep settings owned by the app user," is in this image.
+- This publish does not roll production. Production stays 1.45.5 until the person says so.
+
 ## [1.46.2] — 2026-11-25
 
 This is the Hub image after 1.46.1. A holiday shelf carries a theme and a reason for each pick. The owner sets a quality ceiling. The installable web app is served from the image, and the remote follows a film already playing. A playback link stops when the session ends, and six hours after playback last moved.
