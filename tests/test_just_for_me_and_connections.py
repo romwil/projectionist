@@ -108,3 +108,40 @@ class JustForMeAndConnectionsTests(unittest.TestCase):
         self.assertTrue(
             self.client.get("/api/setup/certifications").json()["services"]["fanart"]["certified"]
         )
+
+    def test_successful_plex_test_persists_the_token(self) -> None:
+        with patch(
+            "projectionist.web.setup.PlexClient.list_sections",
+            return_value=[],
+        ):
+            ok = self.client.post(
+                "/api/setup/test/plex",
+                json={"plex_url": "http://plex.test:32400", "plex_token": "good-token"},
+            )
+        self.assertEqual(ok.status_code, 200, ok.text)
+        self.assertTrue(ok.json()["ok"])
+        saved = self.client.get("/api/settings").json()
+        self.assertEqual(saved["plex_url"], "http://plex.test:32400")
+        self.assertTrue(saved["plex_token_set"])
+        self.assertTrue(
+            self.client.get("/api/setup/certifications").json()["services"]["plex"]["certified"]
+        )
+
+    def test_failed_plex_test_does_not_persist_the_token(self) -> None:
+        self.assertFalse(self.client.get("/api/settings").json()["plex_token_set"])
+        with patch(
+            "projectionist.web.setup.PlexClient.list_sections",
+            side_effect=RuntimeError("refused"),
+        ):
+            failed = self.client.post(
+                "/api/setup/test/plex",
+                json={"plex_url": "http://plex.test:32400", "plex_token": "bad-token"},
+            )
+        self.assertEqual(failed.status_code, 200, failed.text)
+        self.assertFalse(failed.json()["ok"])
+        after_fail = self.client.get("/api/settings").json()
+        self.assertFalse(after_fail["plex_token_set"])
+        self.assertNotEqual(after_fail.get("plex_url"), "http://plex.test:32400")
+        self.assertFalse(
+            self.client.get("/api/setup/certifications").json()["services"]["plex"]["certified"]
+        )
