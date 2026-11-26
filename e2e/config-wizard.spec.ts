@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { mockCuratorApis, mockServiceFailure, resetMockCertifications, setForceWizardIncomplete } from "./fixtures/api-mocks";
 import { resetOnboarding } from "./fixtures/helpers";
-import { certifyInfrastructureStep } from "./fixtures/selectors";
+import { certifyInfrastructureStep, settingsField } from "./fixtures/selectors";
 
 async function goToInfrastructureStep(page: import("@playwright/test").Page) {
   await page.getByTestId("wizard-step-infrastructure").click();
@@ -63,6 +63,21 @@ test.describe("Config onboarding wizard", () => {
     await expect(page.getByTestId("inline-alert-error")).toContainText("Invalid API key", {
       timeout: 10_000,
     });
+  });
+
+  test("a failed service test shows no Connected badge", async ({ page }) => {
+    await mockServiceFailure(page, "plex", "Plex refused the token");
+    await goToInfrastructureStep(page);
+
+    await settingsField(page, "plex_url").fill("http://plex.local");
+    await settingsField(page, "plex_token").fill("bad-token");
+    await page.getByTestId("verify-plex").click();
+
+    await expect(page.getByTestId("inline-alert-error")).toContainText("Plex refused the token", {
+      timeout: 10_000,
+    });
+    await expect(page.locator('[data-testid="certified-badge-plex"].certified-badge-ok')).toHaveCount(0);
+    await expect(page.getByTestId("certified-badge-plex")).toHaveClass(/certified-badge-pending/);
   });
 
   test("secret show/hide toggle works in wizard after typing a draft", async ({ page }) => {

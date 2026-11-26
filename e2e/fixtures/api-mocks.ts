@@ -7,6 +7,8 @@ const MOCK_SECTIONS = [
 
 const certifiedServices = new Set<string>();
 let forceWizardIncomplete = false;
+/** Overlay for GET /api/settings. A successful mocked test persists like the server. */
+let mockSettingsOverlay: Record<string, unknown> = {};
 
 type MockThread = {
   id: string;
@@ -170,9 +172,99 @@ function ensureMockThread(sessionId: string, title = "New conversation") {
 export function resetMockCertifications() {
   certifiedServices.clear();
   forceWizardIncomplete = false;
+  mockSettingsOverlay = {};
   mockThreads.clear();
   mockMessages.clear();
   mockFeedback.clear();
+}
+
+function nonEmptyString(value: unknown): string {
+  const text = typeof value === "string" ? value.trim() : "";
+  return text;
+}
+
+/**
+ * Mirror `persist_tested_fields` + public `*_key_set` flags after a successful
+ * `/api/setup/test/<service>`. A failed test must not call this.
+ */
+function persistMockedServiceTest(service: string, body: Record<string, unknown>) {
+  if (service === "llm") {
+    const provider = nonEmptyString(body.llm_provider);
+    const baseUrl = nonEmptyString(body.llm_base_url);
+    const model = nonEmptyString(body.llm_model);
+    const key = nonEmptyString(body.llm_api_key);
+    if (provider) mockSettingsOverlay.llm_provider = provider;
+    if (baseUrl) mockSettingsOverlay.llm_base_url = baseUrl;
+    if (model) mockSettingsOverlay.llm_model = model;
+    if (key) mockSettingsOverlay.llm_api_key_set = true;
+    return;
+  }
+  if (service === "plex") {
+    const url = nonEmptyString(body.plex_url);
+    const token = nonEmptyString(body.plex_token);
+    if (url) mockSettingsOverlay.plex_url = url;
+    if (token) mockSettingsOverlay.plex_token_set = true;
+    return;
+  }
+  if (service === "radarr") {
+    const url = nonEmptyString(body.radarr_url);
+    const key = nonEmptyString(body.radarr_api_key);
+    if (url) mockSettingsOverlay.radarr_url = url;
+    if (key) mockSettingsOverlay.radarr_api_key_set = true;
+    return;
+  }
+  if (service === "sonarr") {
+    const url = nonEmptyString(body.sonarr_url);
+    const key = nonEmptyString(body.sonarr_api_key);
+    if (url) mockSettingsOverlay.sonarr_url = url;
+    if (key) mockSettingsOverlay.sonarr_api_key_set = true;
+    return;
+  }
+  if (service === "tmdb") {
+    if (nonEmptyString(body.tmdb_api_key)) mockSettingsOverlay.tmdb_api_key_set = true;
+    return;
+  }
+  if (service === "fanart") {
+    if (nonEmptyString(body.fanart_api_key)) mockSettingsOverlay.fanart_api_key_set = true;
+    return;
+  }
+  if (service === "tautulli") {
+    const url = nonEmptyString(body.tautulli_url);
+    const key = nonEmptyString(body.tautulli_api_key);
+    if (url) mockSettingsOverlay.tautulli_url = url;
+    if (key) mockSettingsOverlay.tautulli_api_key_set = true;
+    return;
+  }
+  if (service === "seerr") {
+    const url = nonEmptyString(body.seerr_url);
+    const key = nonEmptyString(body.seerr_api_key);
+    const previous =
+      mockSettingsOverlay.seerr && typeof mockSettingsOverlay.seerr === "object"
+        ? { ...(mockSettingsOverlay.seerr as Record<string, unknown>) }
+        : {};
+    if (url) previous.url = url;
+    if (key) previous.api_key_set = true;
+    mockSettingsOverlay.seerr = previous;
+  }
+}
+
+function mergeSettingsWithMockOverlay(body: Record<string, unknown>) {
+  const merged: Record<string, unknown> = { ...body, ...mockSettingsOverlay };
+  if (mockSettingsOverlay.seerr && typeof body.seerr === "object" && body.seerr) {
+    merged.seerr = {
+      ...(body.seerr as Record<string, unknown>),
+      ...(mockSettingsOverlay.seerr as Record<string, unknown>),
+    };
+  }
+  // Secrets stay masked on GET, same as the real settings payload.
+  merged.llm_api_key = "";
+  merged.plex_token = "";
+  merged.radarr_api_key = "";
+  merged.sonarr_api_key = "";
+  merged.tmdb_api_key = "";
+  merged.fanart_api_key = "";
+  merged.tautulli_api_key = "";
+  return merged;
 }
 
 /** Keep Config in the onboarding wizard even when the shared e2e server already completed setup. */
@@ -424,14 +516,22 @@ export async function mockCuratorApis(page: Page) {
     });
   });
 
-  for (const service of ["llm", "plex", "radarr", "sonarr", "tmdb", "fanart", "tautulli"]) {
+  for (const service of ["llm", "plex", "radarr", "sonarr", "tmdb", "fanart", "tautulli", "seerr"]) {
     await page.route(`**/api/setup/test/${service}`, async (route: Route) => {
+      let body: Record<string, unknown> = {};
+      try {
+        body = (route.request().postDataJSON() as Record<string, unknown>) ?? {};
+      } catch {
+        body = {};
+      }
+      // Successful mocked tests persist credentials the way complete_service_test does.
+      persistMockedServiceTest(service, body);
+      certifiedServices.add(service);
+
       const payload =
         service === "plex"
           ? { ok: true, message: "Plex verified", sections: MOCK_SECTIONS }
           : { ok: true, message: `${service} verified` };
-
-      certifiedServices.add(service);
 
       await route.fulfill({
         status: 200,
@@ -794,7 +894,29 @@ export async function mockCuratorApis(page: Page) {
   });
 
   await page.route("**/api/settings", async (route: Route) => {
-    if (route.request().method() !== "PUT") {
+    const method = route.request().method();
+    if (method === "GET") {
+      try {
+        const response = await route.fetch();
+        const body = (await response.json()) as Record<string, unknown>;
+        await route.fulfill({
+          status: response.status(),
+          contentType: "application/json",
+          body: JSON.stringify(mergeSettingsWithMockOverlay(body)),
+        });
+      } catch {
+        if (!route.request().isNavigationRequest()) {
+          try {
+            await route.abort();
+          } catch {
+            // already closed
+          }
+        }
+      }
+      return;
+    }
+
+    if (method !== "PUT") {
       await route.continue();
       return;
     }
@@ -806,20 +928,41 @@ export async function mockCuratorApis(page: Page) {
       body = {};
     }
 
+    // Keep overlay in sync with PUT so a later GET after Verify still shows key_set.
+    if (nonEmptyString(body.llm_api_key)) mockSettingsOverlay.llm_api_key_set = true;
+    if (nonEmptyString(body.llm_provider)) mockSettingsOverlay.llm_provider = nonEmptyString(body.llm_provider);
+    if (nonEmptyString(body.llm_base_url)) mockSettingsOverlay.llm_base_url = nonEmptyString(body.llm_base_url);
+    if (nonEmptyString(body.llm_model)) mockSettingsOverlay.llm_model = nonEmptyString(body.llm_model);
+    if (nonEmptyString(body.plex_url)) mockSettingsOverlay.plex_url = nonEmptyString(body.plex_url);
+    if (nonEmptyString(body.plex_token)) mockSettingsOverlay.plex_token_set = true;
+    if (nonEmptyString(body.radarr_url)) mockSettingsOverlay.radarr_url = nonEmptyString(body.radarr_url);
+    if (nonEmptyString(body.radarr_api_key)) mockSettingsOverlay.radarr_api_key_set = true;
+    if (nonEmptyString(body.sonarr_url)) mockSettingsOverlay.sonarr_url = nonEmptyString(body.sonarr_url);
+    if (nonEmptyString(body.sonarr_api_key)) mockSettingsOverlay.sonarr_api_key_set = true;
+    if (nonEmptyString(body.tmdb_api_key)) mockSettingsOverlay.tmdb_api_key_set = true;
+    if (nonEmptyString(body.fanart_api_key)) mockSettingsOverlay.fanart_api_key_set = true;
+    if (nonEmptyString(body.tautulli_url)) mockSettingsOverlay.tautulli_url = nonEmptyString(body.tautulli_url);
+    if (nonEmptyString(body.tautulli_api_key)) mockSettingsOverlay.tautulli_api_key_set = true;
+
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({
-        ...body,
-        llm_api_key: "",
-        llm_api_key_set: Boolean(body.llm_api_key),
-        plex_token: "",
-        plex_token_set: Boolean(body.plex_token),
-        radarr_api_key: "",
-        radarr_api_key_set: Boolean(body.radarr_api_key),
-        sonarr_api_key: "",
-        sonarr_api_key_set: Boolean(body.sonarr_api_key),
-      }),
+      body: JSON.stringify(
+        mergeSettingsWithMockOverlay({
+          ...body,
+          llm_api_key_set: Boolean(body.llm_api_key) || Boolean(mockSettingsOverlay.llm_api_key_set),
+          plex_token_set: Boolean(body.plex_token) || Boolean(mockSettingsOverlay.plex_token_set),
+          radarr_api_key_set:
+            Boolean(body.radarr_api_key) || Boolean(mockSettingsOverlay.radarr_api_key_set),
+          sonarr_api_key_set:
+            Boolean(body.sonarr_api_key) || Boolean(mockSettingsOverlay.sonarr_api_key_set),
+          tmdb_api_key_set: Boolean(body.tmdb_api_key) || Boolean(mockSettingsOverlay.tmdb_api_key_set),
+          fanart_api_key_set:
+            Boolean(body.fanart_api_key) || Boolean(mockSettingsOverlay.fanart_api_key_set),
+          tautulli_api_key_set:
+            Boolean(body.tautulli_api_key) || Boolean(mockSettingsOverlay.tautulli_api_key_set),
+        }),
+      ),
     });
   });
 
@@ -869,6 +1012,7 @@ export async function mockChatFailure(page: Page, detail = "LLM provider unavail
 }
 
 export async function mockServiceFailure(page: Page, service: string, message = "Connection failed") {
+  // A failed test must not touch mockSettingsOverlay — same as the server.
   certifiedServices.delete(service);
   await page.route(`**/api/setup/test/${service}`, async (route: Route) => {
     await route.fulfill({

@@ -56,6 +56,7 @@
       "llm_provider": "ollama",
       "multi_user_enabled": false,
       "open_auto_provision": false,
+      "play_through_just_for_me": false,
       "play_through_projectionist": false,
       "plex_collections_enabled": false,
       "seerr_enabled": false,
@@ -107,6 +108,7 @@
       "display_name": "Owner",
       "id": "bootstrap-owner",
       "is_youth": false,
+      "play_through_just_for_me": false,
       "preferred_name": null,
       "role": "owner",
       "seerr_user_id": null

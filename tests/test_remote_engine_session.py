@@ -72,6 +72,8 @@ class RemoteEngineSessionTests(unittest.TestCase):
 
         importlib.reload(app_mod)
         self.client = TestClient(app_mod.app)
+        turned = self.client.patch("/api/auth/me", json={"play_through_just_for_me": True})
+        self.assertEqual(turned.status_code, 200, turned.text)
         self.db = jobs.get_job_manager().db
         self.db.upsert_library_item(
             {

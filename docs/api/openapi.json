@@ -171,6 +171,17 @@
             ],
             "title": "Nudge Opt In"
           },
+          "play_through_just_for_me": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Play Through Just For Me"
+          },
           "preferred_name": {
             "anyOf": [
               {

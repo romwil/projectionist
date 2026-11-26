@@ -39,6 +39,8 @@ async function certifyService(page: Page, service: "llm" | "plex" | "radarr" | "
 }
 
 export async function certifyInfrastructureStep(page: Page) {
+  // OpenAI needs a key for Connected; the mocked test persists llm_api_key_set.
+  await llmApiKeyInput(page).fill("sk-e2e-test-key");
   await certifyService(page, "llm");
 
   await settingsField(page, "plex_url").fill("http://plex.local");

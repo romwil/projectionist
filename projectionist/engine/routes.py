@@ -277,6 +277,12 @@ def open_playback_session(
         raise HTTPException(status_code=error.status_code, detail=error.message) from error
     if not payload.engine_opt_in:
         return declined_engine_session(key)
+    household_on = bool(
+        getattr(getattr(_settings(), "engine", None), "play_through_projectionist", False)
+    )
+    just_for_me = bool(getattr(user, "play_through_just_for_me", False))
+    if not household_on and not just_for_me:
+        return declined_engine_session(key)
     profile = _profile_from_body(payload.profile)
     try:
         playable = resolve_playable_item(_db(), key)

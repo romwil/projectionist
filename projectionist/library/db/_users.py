@@ -298,6 +298,7 @@ class UsersAuthMixin:
         weather_location: Any = ...,
         default_page: Any = ...,
         email_muted_kinds: Any = ...,
+        play_through_just_for_me: Any = ...,
     ) -> Dict[str, Any]:
         with self.connect() as conn:
             existing = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
@@ -379,6 +380,9 @@ class UsersAuthMixin:
                     cleaned_default_page = "explore"
                 updates.append("default_page = ?")
                 params.append(cleaned_default_page)
+            if play_through_just_for_me is not ... and "play_through_just_for_me" in cols:
+                updates.append("play_through_just_for_me = ?")
+                params.append(1 if play_through_just_for_me else 0)
             if email_muted_kinds is not ... and "email_muted_kinds" in cols:
                 from projectionist.mail.unsubscribe import PROGRAM_LABELS
 
@@ -726,6 +730,9 @@ class UsersAuthMixin:
                 "plex_token_enc" in keys and row["plex_token_enc"]
             ),
             "auth_method": str(row["auth_method"]) if "auth_method" in keys and row["auth_method"] is not None else "plex",
+            "play_through_just_for_me": (
+                "play_through_just_for_me" in keys and bool(int(row["play_through_just_for_me"] or 0))
+            ),
             "session_epoch": (
                 int(row["session_epoch"])
                 if "session_epoch" in keys and row["session_epoch"] is not None

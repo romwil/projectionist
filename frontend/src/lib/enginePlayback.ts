@@ -246,7 +246,10 @@ export function detectBrowserPlaybackProfile(): Promise<WebPlaybackProfile> {
 }
 
 export function playThroughProjectionist(features: any) {
-  return Boolean(features?.features?.play_through_projectionist);
+  if (features?.features?.play_through_projectionist) return true;
+  return Boolean(
+    features?.features?.play_through_just_for_me || features?.user?.play_through_just_for_me,
+  );
 }
 
 export function engineSessionForPlayer(session: any) {

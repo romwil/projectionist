@@ -62,6 +62,8 @@ class EngineRouteTests(unittest.TestCase):
 
         importlib.reload(app_mod)
         self.client = TestClient(app_mod.app)
+        turned = self.client.patch("/api/auth/me", json={"play_through_just_for_me": True})
+        self.assertEqual(turned.status_code, 200, turned.text)
         self.db = jobs.get_job_manager().db
         self.db.upsert_library_item(
             {
@@ -416,6 +418,7 @@ class EngineRouteTests(unittest.TestCase):
             plex_user_id="plex-device",
             role="owner",
         )
+        self.db.update_user_profile("owner-device", play_through_just_for_me=True)
         issued = issue_device_credential(
             self.db, user_id="owner-device", kind="iphone", label="Phone"
         )
@@ -518,6 +521,7 @@ class EngineRouteTests(unittest.TestCase):
             plex_user_id="plex-device",
             role="owner",
         )
+        self.db.update_user_profile("owner-device", play_through_just_for_me=True)
         issued = issue_device_credential(
             self.db, user_id="owner-device", kind="iphone", label="Living Room"
         )

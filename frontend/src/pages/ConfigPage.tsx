@@ -1328,12 +1328,29 @@ export default function ConfigPage() {
       if (result.hints) setOnboardingHints(result.hints);
       else if (result.hint) setOnboardingHints([result.hint]);
 
+      let nextSettings = settings;
+      if (result.ok) {
+        try {
+          const saved = await getSettings();
+          nextSettings = { ...settings, ...saved };
+          setSettings(nextSettings);
+        } catch (error) {
+          if (!silent) {
+            setActionFeedback(
+              service,
+              "error",
+              `Verified, but failed to reload settings: ${(error as ApiError).message}`,
+            );
+          }
+        }
+      }
+      const connected = Boolean(result.ok) && serviceCredentialsPresent(service, nextSettings);
       setCertifications((prev: JsParam) => ({
         ...prev,
         [service]: {
           ...(prev[service] || {}),
-          certified: Boolean(result.ok),
-          connection_status: result.ok ? "verified" : "failed",
+          certified: connected,
+          connection_status: connected ? "verified" : "failed",
         },
       }));
 
@@ -1586,7 +1603,10 @@ export default function ConfigPage() {
                           Optional
                         </span>
                         <CertifiedBadge
-                          certified={certifications.llm?.certified}
+                          certified={
+                            Boolean(certifications.llm?.certified) &&
+                            serviceCredentialsPresent("llm", settings)
+                          }
                           testing={testing === "llm"}
                           serviceId="llm"
                         />
@@ -1667,7 +1687,10 @@ export default function ConfigPage() {
                         </span>
                       ) : null}
                       <CertifiedBadge
-                        certified={certifications[id]?.certified}
+                        certified={
+                          Boolean(certifications[id]?.certified) &&
+                          serviceCredentialsPresent(id, settings)
+                        }
                         testing={testing === id}
                         serviceId={id}
                       />

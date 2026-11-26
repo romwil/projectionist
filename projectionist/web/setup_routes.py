@@ -54,7 +54,17 @@ def register_setup_routes(app):
     normalize_path_settings = app_mod.normalize_path_settings
     normalize_plex_type = app_mod.normalize_plex_type
     normalize_settings_llm = app_mod.normalize_settings_llm
-    record_service_integration = app_mod.record_service_integration
+    complete_service_test = app_mod.complete_service_test
+
+    def _finish_test(service: str, payload: TestPayload, result: Dict[str, Any], **extra: Any) -> None:
+        complete_service_test(
+            _db(),
+            app_mod.DATA_DIR,
+            service,
+            payload.model_dump(),
+            ok=bool(result.get("ok")),
+            **extra,
+        )
     require_role = app_mod.require_role
     resolve_radarr_root_folder = app_mod.resolve_radarr_root_folder
     resolve_sonarr_root_folder = app_mod.resolve_sonarr_root_folder
@@ -429,12 +439,12 @@ def register_setup_routes(app):
         del user
         resolved = _resolve_test_payload(payload)
         result = test_plex(resolved["plex_url"], resolved["plex_token"])
-        record_service_integration(
-            _db(),
+        _finish_test(
             "plex",
+            payload,
+            result,
             base_url=payload.plex_url or resolved["plex_url"],
             api_token=resolved["plex_token"],
-            ok=bool(result.get("ok")),
         )
         return result
 
@@ -450,12 +460,12 @@ def register_setup_routes(app):
             resolved["radarr_api_key"],
             configured_root_folder=resolve_radarr_root_folder(settings),
         )
-        record_service_integration(
-            _db(),
+        _finish_test(
             "radarr",
+            payload,
+            result,
             base_url=resolved["radarr_url"],
             api_token=resolved["radarr_api_key"],
-            ok=bool(result.get("ok")),
         )
         return result
 
@@ -471,12 +481,12 @@ def register_setup_routes(app):
             resolved["sonarr_api_key"],
             configured_root_folder=resolve_sonarr_root_folder(settings),
         )
-        record_service_integration(
-            _db(),
+        _finish_test(
             "sonarr",
+            payload,
+            result,
             base_url=resolved["sonarr_url"],
             api_token=resolved["sonarr_api_key"],
-            ok=bool(result.get("ok")),
         )
         return result
 
@@ -485,12 +495,7 @@ def register_setup_routes(app):
         del user
         resolved = _resolve_test_payload(payload)
         result = test_tmdb(resolved["tmdb_api_key"])
-        record_service_integration(
-            _db(),
-            "tmdb",
-            api_token=resolved["tmdb_api_key"],
-            ok=bool(result.get("ok")),
-        )
+        _finish_test("tmdb", payload, result, api_token=resolved["tmdb_api_key"])
         return result
 
     @router.post("/api/setup/test/fanart")
@@ -500,12 +505,7 @@ def register_setup_routes(app):
         del user
         resolved = _resolve_test_payload(payload)
         result = test_fanart(resolved["fanart_api_key"])
-        record_service_integration(
-            _db(),
-            "fanart",
-            api_token=resolved["fanart_api_key"],
-            ok=bool(result.get("ok")),
-        )
+        _finish_test("fanart", payload, result, api_token=resolved["fanart_api_key"])
         return result
 
     @router.post("/api/setup/test/tautulli")
@@ -515,12 +515,12 @@ def register_setup_routes(app):
         del user
         resolved = _resolve_test_payload(payload)
         result = test_tautulli(resolved["tautulli_url"], resolved["tautulli_api_key"])
-        record_service_integration(
-            _db(),
+        _finish_test(
             "tautulli",
+            payload,
+            result,
             base_url=resolved["tautulli_url"],
             api_token=resolved["tautulli_api_key"],
-            ok=bool(result.get("ok")),
         )
         return result
 
@@ -529,12 +529,12 @@ def register_setup_routes(app):
         del user
         resolved = _resolve_test_payload(payload)
         result = test_seerr(resolved["seerr_url"], resolved["seerr_api_key"])
-        record_service_integration(
-            _db(),
+        _finish_test(
             "seerr",
+            payload,
+            result,
             base_url=resolved["seerr_url"],
             api_token=resolved["seerr_api_key"],
-            ok=bool(result.get("ok")),
         )
         return result
 
@@ -545,12 +545,12 @@ def register_setup_routes(app):
         del user
         resolved = _resolve_test_payload(payload)
         result = test_tunarr(resolved.get("tunarr_url") or "")
-        record_service_integration(
-            _db(),
+        _finish_test(
             "tunarr",
+            payload,
+            result,
             base_url=resolved.get("tunarr_url") or "",
             api_token="",
-            ok=bool(result.get("ok")),
         )
         return result
 
@@ -564,12 +564,12 @@ def register_setup_routes(app):
             resolved["llm_api_key"],
             resolved["llm_model"],
         )
-        record_service_integration(
-            _db(),
+        _finish_test(
             "llm",
+            payload,
+            result,
             base_url=resolved["llm_base_url"],
             api_token=resolved["llm_api_key"],
-            ok=bool(result.get("ok")),
         )
         return result
 
