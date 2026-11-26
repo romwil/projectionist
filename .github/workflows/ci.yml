@@ -166,6 +166,11 @@ jobs:
             docker rm -f projectionist-ci-smoke >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
+          if docker inspect projectionist-ci-smoke --format '{{range .Mounts}}{{.Source}} {{.Destination}}{{"\n"}}{{end}}' | grep -q 'docker.sock'; then
+            echo "CI container has a Docker socket mounted"
+            exit 1
+          fi
+          echo "CI container has no Docker socket"
           healthy=""
           for _ in $(seq 1 45); do
             if curl -fsS "http://127.0.0.1:8788/api/health" | grep -q '"status"' \
@@ -204,6 +209,16 @@ jobs:
             exit 1
           fi
           echo "ready reports the missing database"
+
+      - name: Trivy (critical, fixable)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: projectionist:ci-smoke
+          format: table
+          exit-code: "1"
+          severity: CRITICAL
+          ignore-unfixed: true
+          vuln-type: os,library
 
   # Real Chrome playback of generated clips. The job always reports a result.
   # The browser run happens when the pull request touches playback.

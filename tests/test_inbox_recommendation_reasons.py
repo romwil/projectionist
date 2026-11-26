@@ -34,6 +34,18 @@ def _neighbor(db: Database, seed_id: int, peer_id: int, *, seed_plot: str = "", 
         )
     link_json = plot_link_json(link) if link else "{}"
     explainable = 1 if link else 0
+    credit = [
+        {
+            "tmdb_person_id": 55,
+            "name": "Adam McKay",
+            "department": "Directing",
+            "job": "Director",
+            "billing_order": 0,
+        }
+    ]
+    if link:
+        db.upsert_credits_for_item(int(seed_id), credit)
+        db.upsert_credits_for_item(int(peer_id), credit)
     with db.connect() as conn:
         conn.execute(
             """
@@ -119,7 +131,7 @@ class InboxRecommendationReasonTests(unittest.TestCase):
         self.assertIsNotNone(pick)
         assert pick is not None
         why = str(pick["why"])
-        self.assertIn("amateur bakers", why)
+        self.assertIn("Adam McKay", why)
         self.assertIn("Heat", why)
         self.assertIn("Thief", why)
         self.assertTrue(why.endswith("."))
@@ -129,7 +141,7 @@ class InboxRecommendationReasonTests(unittest.TestCase):
 
     def test_weekly_note_skips_bare_arrivals_and_names_a_real_link(self) -> None:
         now = time.time()
-        self.db.upsert_library_item(
+        heat_id = self.db.upsert_library_item(
             {
                 "rating_key": "rk-heat",
                 "media_type": "movie",
@@ -156,7 +168,7 @@ class InboxRecommendationReasonTests(unittest.TestCase):
                 "genres": ["Comedy"],
             }
         )
-        self.db.upsert_library_item(
+        thief_id = self.db.upsert_library_item(
             {
                 "rating_key": "rk-thief",
                 "media_type": "movie",
@@ -169,6 +181,7 @@ class InboxRecommendationReasonTests(unittest.TestCase):
                 "genres": ["Thriller"],
             }
         )
+        _neighbor(self.db, heat_id, thief_id, seed_plot=BAKE_PLOT, peer_plot=SPY_PLOT)
         content = build_member_newsletter(
             self.db,
             user={"preferred_name": "Will", "display_name": "Will", "role": "owner"},
@@ -178,14 +191,14 @@ class InboxRecommendationReasonTests(unittest.TestCase):
         self.assertNotIn("New in the library this week", body)
         self.assertNotIn("Open CuratorX", body)
         self.assertNotIn("SpongeBob", body)
-        self.assertIn("amateur bakers", body)
+        self.assertIn("Adam McKay", body)
         self.assertIn("Thief", body)
         self.assertIn("Heat", body)
         self.assertTrue(body.rstrip().endswith("."))
         titles = [pick["title"] for pick in content["picks"]]
         self.assertEqual(titles, ["Thief"])
-        self.assertIn("amateur bakers", content["picks"][0]["why"])
-        self.assertIn("amateur bakers", content["blurb"])
+        self.assertIn("Adam McKay", content["picks"][0]["why"])
+        self.assertIn("Adam McKay", content["blurb"])
 
 
 if __name__ == "__main__":

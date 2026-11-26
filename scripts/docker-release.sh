@@ -26,6 +26,11 @@
 #   ./scripts/docker-release.sh 1.8.11
 #   ./scripts/docker-release.sh 1.8.11 --also-line 1.8
 #   ./scripts/docker-release.sh 1.8.11 --date-tag          # also :latest-YYYYMMDD
+#   ./scripts/docker-release.sh 1.8.11 --move-pointers     # after QA or production
+#
+# Publish pushes only :X.Y.Z. :latest and :X.Y move later, with --move-pointers,
+# after that version passes QA or reaches production. 1.46.3 already moved
+# those pointers at publish; this script refuses to move them again.
 #
 set -euo pipefail
 
@@ -41,6 +46,7 @@ shift || true
 
 ALSO_LINE=""
 DATE_TAG=0
+MOVE_POINTERS=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --also-line)
@@ -49,6 +55,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --date-tag)
       DATE_TAG=1
+      shift
+      ;;
+    --move-pointers)
+      MOVE_POINTERS=1
       shift
       ;;
     *)
@@ -61,6 +71,20 @@ done
 if [[ -z "$ALSO_LINE" ]]; then
   # Derive line tag from semver X.Y.Z → X.Y
   ALSO_LINE="$(echo "$VERSION" | awk -F. '{print $1"."$2}')"
+fi
+
+if [[ "$MOVE_POINTERS" -eq 1 ]]; then
+  if [[ "$VERSION" == "1.46.3" ]]; then
+    echo "1.46.3 already moved ${IMAGE}:1.46 and ${IMAGE}:latest. Refusing to move them again." >&2
+    exit 1
+  fi
+  echo "Moving ${IMAGE}:${ALSO_LINE} and ${IMAGE}:latest to ${IMAGE}:${VERSION}"
+  echo "Run this only after ${VERSION} passes QA or reaches production."
+  docker buildx imagetools create \
+    -t "${IMAGE}:${ALSO_LINE}" \
+    -t "${IMAGE}:latest" \
+    "${IMAGE}:${VERSION}"
+  exit 0
 fi
 
 IMAGE="romwil/projectionist"
@@ -181,10 +205,9 @@ verify_published_revision() {
   fi
 }
 
+# Version tag only. :latest and the minor line move with --move-pointers.
 TAGS=(
   -t "${IMAGE}:${VERSION}"
-  -t "${IMAGE}:${ALSO_LINE}"
-  -t "${IMAGE}:latest"
 )
 
 if [[ "$DATE_TAG" -eq 1 ]]; then
@@ -207,7 +230,8 @@ echo "Generating release notes from ${TAG_NAME} (${RELEASE_COMMIT})"
 echo "Writing version-stable dependency manifests (.docker-deps/)"
 ( cd "${BUILD_DIR}" && ./scripts/docker-dep-manifests.sh )
 
-echo "Building ${IMAGE}:${VERSION} (+ :${ALSO_LINE} :latest) for ${PLATFORMS}"
+echo "Building ${IMAGE}:${VERSION} for ${PLATFORMS}"
+echo "Not moving ${IMAGE}:${ALSO_LINE} or ${IMAGE}:latest until --move-pointers."
 echo "Source commit: ${TAG_NAME} ${RELEASE_COMMIT}"
 echo "Build identity: version=${VERSION} created=${BUILD_DATE} revision=${RELEASE_COMMIT}"
 echo "Flags: --provenance=false --sbom=false (Unraid-compatible Docker v2 manifests)"
@@ -234,8 +258,7 @@ docker buildx imagetools inspect "${IMAGE}:${VERSION}" | head -30
 echo ""
 echo "=== Digests (paste into release notes / Unraid verify) ==="
 for ref in \
-  "${IMAGE}:${VERSION}" \
-  "${IMAGE}:latest"
+  "${IMAGE}:${VERSION}"
 do
   echo "Tag ${ref}:"
   docker buildx imagetools inspect "${ref}" --format '{{.Manifest.Digest}}' 2>/dev/null \

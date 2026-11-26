@@ -63,6 +63,18 @@ def _explainable_neighbor(db: Database, seed_id: int, peer_id: int, *, seed_text
             """,
             (int(seed_id), int(peer_id), 0.92, 0.8, 1 if link else 0, link_json),
         )
+    if link:
+        credit = [
+            {
+                "tmdb_person_id": 55,
+                "name": "Adam McKay",
+                "department": "Directing",
+                "job": "Director",
+                "billing_order": 0,
+            }
+        ]
+        db.upsert_credits_for_item(int(seed_id), credit)
+        db.upsert_credits_for_item(int(peer_id), credit)
 
 
 def _ensure_user(db: Database, user_id: str) -> None:

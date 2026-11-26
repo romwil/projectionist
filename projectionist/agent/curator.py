@@ -10,11 +10,10 @@ from typing import Any, AsyncIterator, Dict, List, Mapping, Optional
 
 from projectionist.agent.providers import get_chat_provider
 from projectionist.agent.tools import (
-    UNTRUSTED_MEMORY_TOOLS,
     ToolRegistry,
     build_system_prompt,
     build_tool_definitions,
-    wrap_untrusted_data,
+    fence_tool_result,
 )
 from projectionist.config_store import Settings, uses_seerr_request_path
 from projectionist.library.db import DEFAULT_LENS_ID, Database
@@ -702,11 +701,7 @@ class CuratorAgent:
                     )
                 except Exception:
                     logger.debug("Failed to record tool-invocation telemetry", exc_info=True)
-                tool_content = (
-                    wrap_untrusted_data(result)
-                    if str(name) in UNTRUSTED_MEMORY_TOOLS
-                    else result
-                )
+                tool_content = fence_tool_result(str(name), result)
                 messages.append(
                     {
                         "role": "tool",
@@ -1077,9 +1072,7 @@ async def stream_agent(
                     )
                 except Exception:
                     logger.debug("Failed to record stream tool-invocation telemetry", exc_info=True)
-                tool_content = (
-                    wrap_untrusted_data(result) if str(name) in UNTRUSTED_MEMORY_TOOLS else result
-                )
+                tool_content = fence_tool_result(str(name), result)
                 messages.append({"role": "tool", "tool_call_id": call.get("id"), "content": tool_content})
                 summary = household_tool_summary(result)
                 yield json.dumps({"type": "tool_result", "name": name, "summary": summary}) + "\n"

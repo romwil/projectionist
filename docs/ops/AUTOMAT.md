@@ -77,7 +77,7 @@ Production appdata is a **rollout kit + live `/config` bind mount**, not a copy 
 ├── rollout.sh               # from scripts/unraid-rollout.sh (pull-only Hub tag + recreate)
 ├── unraid-force-pull.sh     # from scripts/unraid-force-pull.sh (image refresh before Dockerman Force Update)
 ├── docker-compose.yml       # from docker-compose.unraid.yml (optional; plain docker also works on stock Unraid)
-├── .env                     # optional host overrides (Plex/TMDB/LLM keys, TZ, media paths) — not in git
+├── .env                     # optional host overrides (Plex/TMDB/LLM keys, TZ, media paths) — not in git. Do not set MOUNT_DOCKER_SOCK.
 └── .env.example             # from scripts/unraid.env.example (placeholders only)
 ```
 
@@ -91,6 +91,20 @@ The shipped compose file mounts the library read-only. The container that is alr
 Env: `PROJECTIONIST_TV_MEDIA` / `PROJECTIONIST_MOVIE_MEDIA` (win over settings). After `rollout.sh`, confirm with `docker exec -u 1000 projectionist ls /tv /movies`.
 
 **Do not place in prod appdata:** `.git/`, `frontend/`, `tests/`, `.venv`, CI caches, or any full source tree. Development belongs in a normal git checkout (e.g. maintainer laptop), not on Unraid appdata.
+
+### Signed-in smoke credentials
+
+`rollout.sh` signs in as the `smoke` member before it reports success. The username and password live only on the Automat host:
+
+| | |
+|--|--|
+| File | `/mnt/user/appdata/projectionist-secrets/smoke.env` |
+| Directory | mode `700`, owner root |
+| File | mode `600`, owner root |
+
+That directory is a sibling of the Projectionist appdata kit. It is not the `/config` bind (`/mnt/user/appdata/projectionist/config`) and it is not in git. `rollout.sh` refuses to replace the container unless the directory is mode 700 and owned by root, and the file is mode 600 and owned by root.
+
+The file used to sit at `/boot/config/projectionist-smoke.env`. `/boot` is FAT32, so a mode of 600 is not enforced there, and Unraid Connect flash backup copies the flash. The credentials were moved off the flash for that reason. Do not put them back on `/boot`.
 
 **Sync kit from repo after script changes** (does not restart prod):
 

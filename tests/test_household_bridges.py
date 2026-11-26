@@ -51,6 +51,20 @@ def _title(db: Database, **fields) -> int:
     return db.upsert_library_item(payload)
 
 
+def _shared_director(db: Database, *item_ids: int, name: str = "Adam McKay", person_id: int = 55) -> None:
+    credit = [
+        {
+            "tmdb_person_id": person_id,
+            "name": name,
+            "department": "Directing",
+            "job": "Director",
+            "billing_order": 0,
+        }
+    ]
+    for item_id in item_ids:
+        db.upsert_credits_for_item(int(item_id), credit)
+
+
 def _explainable_neighbor(db: Database, seed_id: int, peer_id: int, *, seed_text: str, peer_text: str) -> None:
     link = specific_plot_link(seed_text=seed_text, peer_text=peer_text, shelf_labels=set())
     link_json = plot_link_json(link) or "{}"
@@ -64,6 +78,8 @@ def _explainable_neighbor(db: Database, seed_id: int, peer_id: int, *, seed_text
             """,
             (int(seed_id), int(peer_id), 0.92, 0.8, explainable, link_json),
         )
+    if link:
+        _shared_director(db, seed_id, peer_id)
 
 
 def _ensure_user(db: Database, user_id: str) -> None:
@@ -225,7 +241,7 @@ class HouseholdBridgeTests(unittest.TestCase):
         why = str(pick["why"])
         self.assertIn("Heat", why)
         self.assertIn("Thief", why)
-        self.assertIn("amateur bakers", why.lower())
+        self.assertIn("adam mckay", why.lower())
         self.assertTrue(why.lower().startswith("you finished"))
         self.assertTrue(why.endswith("."))
         explanation = pick.get("explanation") or {}
@@ -457,6 +473,7 @@ class HouseholdBridgeTests(unittest.TestCase):
             media_type="episode",
             completed_at_ms=1_700_000_000_000,
         )
+        _shared_director(self.db, show, peer)
 
         pick = pick_linked_unwatched(self.db)
         self.assertIsNotNone(pick)
@@ -466,7 +483,7 @@ class HouseholdBridgeTests(unittest.TestCase):
         self.assertIn("colony bake-off", why)
         self.assertIn("an episode of colony bake-off", why)
         self.assertNotIn("colony bake-off (2018) — signature bake", why)
-        self.assertIn("amateur bakers", why)
+        self.assertIn("adam mckay", why)
         self.assertTrue(str(pick["why"]).lower().startswith("you finished"))
         evidence = (pick.get("explanation") or {}).get("evidence") or {}
         self.assertEqual(evidence.get("episode_rating_key"), "ep-signature")
@@ -1012,7 +1029,7 @@ class HouseholdBridgeTests(unittest.TestCase):
         self.assertEqual(len(feed["items"]), 1)
         why = str(feed["items"][0].get("why") or "")
         self.assertIn("an episode of High Potential (2024)", why)
-        self.assertIn("amateur bakers", why.lower())
+        self.assertIn("adam mckay", why.lower())
         self.assertNotIn("Signature Bake", why)
         self.assertNotIn("team investigates", why.lower())
 
@@ -1515,7 +1532,7 @@ class HouseholdBridgeTests(unittest.TestCase):
         self.assertEqual(len(reason_lines), 1)
         self.assertEqual(reason_lines[0].lower().count("family guy"), 1)
         self.assertNotIn("both stories turn on", letter["body"].lower())
-        self.assertIn("amateur bakers", letter["body"].lower())
+        self.assertIn("adam mckay", letter["body"].lower())
         guy_picks = [
             pick for pick in letter["picks"] if "family guy" in str(pick.get("why") or "").lower()
         ]

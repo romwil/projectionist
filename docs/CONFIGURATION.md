@@ -144,7 +144,7 @@ Default values (also in `config/settings.example.json`):
 
 **Publish note:** Re-publishing starters is additive by channel number. Existing numbers refresh lineups when `fill_programming=true` (default); with `fill_programming=false` they count as skipped (`number_exists`). A free number with a colliding name is renamed (for example `Mystery 2`) and still created. Craft publish remaps an occupied form number to the next free dial slot.
 
-**Unraid CA:** the template does not mount a Docker socket. Live Channels uses a Tunarr URL you already run. `PROJECTIONIST_HOST_DATA_DIR` is the host path of Config (default `/mnt/user/appdata/projectionist/config`). See [UNRAID.md](UNRAID.md).
+**Unraid CA:** the template does not mount a Docker socket. `rollout.sh` stops if `MOUNT_DOCKER_SOCK` or `DOCKER_SOCK` is set. Live Channels uses a Tunarr URL you already run. The library mounts are read-only. `PROJECTIONIST_HOST_DATA_DIR` is the host path of Config (default `/mnt/user/appdata/projectionist/config`). See [UNRAID.md](UNRAID.md).
 
 **For a new install:** set `PROJECTIONIST_OWNER_PASSWORD` (8+ characters). The server stays on the lock page until that passcode is entered, then setup creates the owner with sign-in on. An install that already has an owner keeps its current mode and does not show the lock.
 

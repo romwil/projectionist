@@ -265,12 +265,13 @@ Canonical image: **`romwil/projectionist`**. Platforms: `linux/amd64,linux/arm64
 
 ```bash
 ./scripts/docker-release.sh X.Y.Z
-# optional:
-# ./scripts/docker-release.sh X.Y.Z --also-line X.Y   # default already derives X.Y
+# optional at publish:
 # ./scripts/docker-release.sh X.Y.Z --date-tag        # also :latest-YYYYMMDD
+# after QA passes, or after the version reaches production:
+# ./scripts/docker-release.sh X.Y.Z --move-pointers   # moves :X.Y and :latest
 ```
 
-Tags pushed on `romwil/projectionist`: `:X.Y.Z`, `:X.Y`, `:latest` (and `:latest-YYYYMMDD` with `--date-tag`).
+Publish pushes `:X.Y.Z` only. `:X.Y` and `:latest` move with `--move-pointers` after that version passes QA or reaches production. `:latest-YYYYMMDD` is still the optional `--date-tag`. 1.46.3 already moved `:1.46` and `:latest`; the script refuses to move those pointers for 1.46.3 again.
 
 The script sets `--provenance=false --sbom=false` so Unraid Dockerman sees Docker v2 **manifest lists** (not OCI attestation indexes). It builds the commit tag `vX.Y.Z` points at and stamps `org.opencontainers.image.revision` with that commit. The image revision must match the tag; the script exits if they differ. It prints Hub digests — paste into notes or keep for Unraid verify.
 

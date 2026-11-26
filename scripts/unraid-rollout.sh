@@ -56,10 +56,15 @@ TV_MEDIA="${PROJECTIONIST_TV_MEDIA:-/mnt/user/data/media/tv}"
 MOVIE_MEDIA="${PROJECTIONIST_MOVIE_MEDIA:-/mnt/user/data/media/movies}"
 PREROLL_MEDIA="${PROJECTIONIST_PREROLL_MEDIA:-/mnt/user/data/media/preroll}"
 COPIES_DIR="${PROJECTIONIST_COPIES_DIR:-}"
+_REQUESTED_DOCKER_SOCK="${DOCKER_SOCK:-}"
+DOCKER_SOCK=""
 HEALTH_URL="http://127.0.0.1:${HOST_PORT}/api/health"
 READY_URL="http://127.0.0.1:${HOST_PORT}/api/ready"
 APP_ORIGIN="http://127.0.0.1:${HOST_PORT}"
 # App uid. docker exec without -u is root and can rewrite settings.json as root.
+# At 05:22:53 UTC a rollout session ran `docker exec -i projectionist python -`
+# as root. That process rewrote settings.json. Every docker exec here passes
+# -u "$APP_UID". Do not drop it.
 APP_UID=1000
 STARTUP_PATTERN='Projectionist startup'
 # Accept legacy log line during image transition
@@ -69,9 +74,9 @@ WAIT_SECS="${ROLLOUT_WAIT_SECS:-90}"
 log() { printf '%s\n' "$*"; }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
-# A Docker socket is root on the host. Ignore any leftover opt-in and never mount one.
-if [[ -n "${DOCKER_SOCK:-}" || -n "${MOUNT_DOCKER_SOCK:-}" ]]; then
-  log "WARN: DOCKER_SOCK / MOUNT_DOCKER_SOCK is set and is ignored. Projectionist does not mount a Docker socket."
+# A Docker socket is root on the host. Refuse before any container is created.
+if [[ -n "${MOUNT_DOCKER_SOCK:-}" || -n "${_REQUESTED_DOCKER_SOCK}" ]]; then
+  die "Refusing to mount a Docker socket. Unset MOUNT_DOCKER_SOCK and DOCKER_SOCK. Use a Tunarr URL instead."
 fi
 
 command -v docker >/dev/null 2>&1 || die "docker not found in PATH"
@@ -338,18 +343,51 @@ if "live_channels_enabled" not in features:
   log "Signed-in smoke: features show the chat provider and live channels, and the hub rail returned 200."
 }
 
+# Root-only credentials for the signed-in smoke. Not the app .env, and not
+# /boot: the flash is FAT32, so mode 600 is not real there, and Unraid Connect
+# may back the flash up. This directory is outside the container /config bind
+# and outside git. Fail before the container is replaced.
+require_smoke_env() {
+  local smoke_env="${PROJECTIONIST_SMOKE_ENV:-/mnt/user/appdata/projectionist-secrets/smoke.env}"
+  local smoke_dir
+  smoke_dir="$(dirname "$smoke_env")"
+  if [[ ! -f "$smoke_env" ]]; then
+    die "Smoke env file is missing at ${smoke_env}. Refusing to replace the container."
+  fi
+  local smoke_mode smoke_owner dir_mode dir_owner
+  smoke_mode="$(stat -c '%a' "$smoke_env")"
+  smoke_owner="$(stat -c '%u' "$smoke_env")"
+  dir_mode="$(stat -c '%a' "$smoke_dir")"
+  dir_owner="$(stat -c '%u' "$smoke_dir")"
+  if [[ "$dir_mode" != "700" || "$dir_owner" != "0" ]]; then
+    die "Smoke env directory ${smoke_dir} must be mode 700 and owned by root. Refusing to replace the container."
+  fi
+  if [[ "$smoke_mode" != "600" || "$smoke_owner" != "0" ]]; then
+    die "Smoke env ${smoke_env} must be mode 600 and owned by root. Refusing to replace the container."
+  fi
+  set -a
+  # shellcheck disable=SC1090
+  source "$smoke_env"
+  set +a
+  if [[ -z "${PROJECTIONIST_SMOKE_USERNAME:-}" || -z "${PROJECTIONIST_SMOKE_PASSWORD:-}" ]]; then
+    die "Smoke env ${smoke_env} is missing a username or password. Refusing to replace the container."
+  fi
+  log "Smoke env ${smoke_env} is mode 600, owned by root. Username: ${PROJECTIONIST_SMOKE_USERNAME}."
+}
+
 log "=== Projectionist rollout ==="
 log "Dir:   $SCRIPT_DIR"
 log "Image: $IMAGE"
 log "Port:  ${HOST_PORT} → 8788"
 log "Theater port: ${THEATER_HOST_PORT} → 8791 (LAN only; never put this port on a tunnel)"
+log "Docker socket: not mounted"
 log "Config bind: $CONFIG_DIR → /config (preserved)"
 log "TV library (ro): $TV_MEDIA → /tv (and same-path when host dir exists)"
 log "Movie library (ro): $MOVIE_MEDIA → /movies (and same-path when host dir exists)"
 log "Preroll bumpers (ro): $PREROLL_MEDIA → /preroll (and same-path when host dir exists)"
 log "Host data dir: PROJECTIONIST_HOST_DATA_DIR=$CONFIG_DIR"
+require_smoke_env
 
-# Plain docker and compose both use the read-only library. Neither mounts a socket.
 if ((${#COMPOSE[@]})); then
   run_compose
 else

@@ -33,3 +33,8 @@ Some households use the web app as their client. Installing it gives that househ
 - Updated: SES-008 is done on main. Pull request 311, `b2d3b226d23abef8c2554b8789fea526de083669`. Settings → Rooms lists the screens, Play in… starts a film on one of them, and the remote follows that session. This is not in production 1.45.5.
 - Outbox: none. Web only.
 - Needs the person: nothing.
+---
+## Processing note (agent, 2026-11-26)
+- Updated: the release image serves the shell. Pull request 334, `89fc56c8`. Rooms, Play in…, and the remote remain pull request 311, `b2d3b226`. The web remote reads a playing engine session in pull request 335, `e0d8d6bb`. All three are on main and in the 1.46.2 image. Production is 1.45.5.
+- Outbox: none. Web only.
+- Needs the person: nothing.
