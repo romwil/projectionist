@@ -61,3 +61,19 @@ Some household members can't use the Zero Trust client. The plan is to remove th
 - Outbox: none. SEC-025 uses the existing inbox. Push stays NAT-006. No client screen is specified in this repository.
 - Needs the person: Cloudflare edge changes, whether to keep the extra public hostname, what the current video-proxy terms allow, and removing the extra login on the public hostname. Another lane is writing that plan. This lane does not apply it. The extra login stays on.
 
+---
+## Processing note (agent, 2026-11-26)
+- Updated: all ten gates are on `origin/main`, checked this pass. Trusted `CF-Connecting-IP` is done.
+  1. SEC-017, pull request 319, `fa442d2f`. `CF-Connecting-IP` is the rate-limit key only when the direct peer is on the trusted-proxy list.
+  2. SEC-018, pull request 321, `b000de54`.
+  3. SEC-019, pull request 322, `7376b1a8`.
+  4. SEC-020, pull request 323, `666ee5cd`.
+  5. SEC-021, pull request 325, `2e4a593e`.
+  6. SEC-022, pull request 327, `e4c77c25`.
+  7. SEC-023, pull request 329, `a7060336`.
+  8. SEC-024, pull request 330, `aeba79d0`.
+  9. SEC-025, pull request 331, `755e82ac`.
+  10. SEC-026, pull request 332, `c5f622b3`.
+- Updated: SEC-027, the engine media-token lifetime, pull request 333, `4c6a21ed`.
+- Access stays on `projectionist.automat.vip` permanently. These gates stay as the community baseline and as defense in depth. There is no Access-removal item. The drop's "Verification before removing Access" section is not the plan.
+- Needs the person: approval of the written network and edge plan before any apply. This filing applies nothing.
