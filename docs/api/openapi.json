@@ -684,43 +684,6 @@
         "title": "PlaybackSubtitlesPayload",
         "type": "object"
       },
-      "PlexLoginPayload": {
-        "properties": {
-          "auth_token": {
-            "minLength": 1,
-            "title": "Auth Token",
-            "type": "string"
-          },
-          "client": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Client"
-          },
-          "invite_token": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Invite Token"
-          }
-        },
-        "required": [
-          "auth_token"
-        ],
-        "title": "PlexLoginPayload",
-        "type": "object"
-      },
       "PlexPinStartPayload": {
         "properties": {
           "client": {
@@ -1249,51 +1212,6 @@
           }
         },
         "summary": "Auth Oidc Exchange",
-        "tags": [
-          "auth",
-          "client"
-        ]
-      }
-    },
-    "/api/auth/plex": {
-      "post": {
-        "description": "Advanced fallback: sign in with a raw Plex auth token.",
-        "operationId": "auth_plex_api_auth_plex_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PlexLoginPayload"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Auth Plex Api Auth Plex Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Auth Plex",
         "tags": [
           "auth",
           "client"

@@ -270,11 +270,6 @@ def collect_client_fixtures() -> dict[str, dict[str, Any]]:
             )
             keep(
                 "POST",
-                "/api/auth/plex",
-                client.post("/api/auth/plex", json={"auth_token": "not-a-token"}),
-            )
-            keep(
-                "POST",
                 "/api/auth/local/login",
                 client.post(
                     "/api/auth/local/login",

@@ -191,11 +191,6 @@
   },
   {
     "method": "POST",
-    "path": "/api/auth/plex",
-    "file": "post-api-auth-plex.json"
-  },
-  {
-    "method": "POST",
     "path": "/api/auth/plex/pin",
     "file": "post-api-auth-plex-pin.json"
   },

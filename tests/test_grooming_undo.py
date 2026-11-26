@@ -1,6 +1,8 @@
 """Reversible grooming action log + safe undo (M4)."""
 
+
 from __future__ import annotations
+from projectionist.web.plex_session import sign_in_plex_token
 
 import importlib
 import json
@@ -172,7 +174,7 @@ class GroomingUndoApiTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 1, "title": "Owner"},
         ):
-            self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
+            sign_in_plex_token(self.client, "owner-token")
         import projectionist.web.jobs as jobs
 
         jobs.get_job_manager().db.upsert_plex_user(

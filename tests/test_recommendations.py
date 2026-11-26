@@ -1,6 +1,8 @@
 """Tests for household recommendations and UI font preference."""
 
+
 from __future__ import annotations
+from projectionist.web.plex_session import sign_in_plex_token
 
 import importlib
 import json
@@ -79,7 +81,7 @@ class RecommendationsAndPrefsTests(unittest.TestCase):
             "thumb": None,
         }
         with patch("projectionist.web.auth.fetch_plex_account", return_value=profile):
-            resp = self.client.post("/api/auth/plex", json={"auth_token": f"tok-{plex_id}"})
+            resp = sign_in_plex_token(self.client, f"tok-{plex_id}")
         self.assertEqual(resp.status_code, 200)
         return resp.json()["user"]
 
@@ -146,7 +148,7 @@ class RecommendationsAndPrefsTests(unittest.TestCase):
             "thumb": None,
         }
         with patch("projectionist.web.auth.fetch_plex_account", return_value=profile):
-            member_login = member_client.post("/api/auth/plex", json={"auth_token": "tok-2"})
+            member_login = sign_in_plex_token(member_client, "tok-2")
         self.assertEqual(member_login.status_code, 200)
         member = member_login.json()["user"]
 
@@ -197,7 +199,7 @@ class RecommendationsAndPrefsTests(unittest.TestCase):
             "thumb": None,
         }
         with patch("projectionist.web.auth.fetch_plex_account", return_value=profile):
-            member_login = member_client.post("/api/auth/plex", json={"auth_token": "tok-11"})
+            member_login = sign_in_plex_token(member_client, "tok-11")
         self.assertEqual(member_login.status_code, 200)
         member = member_login.json()["user"]
 
@@ -234,7 +236,7 @@ class RecommendationsAndPrefsTests(unittest.TestCase):
             "thumb": None,
         }
         with patch("projectionist.web.auth.fetch_plex_account", return_value=profile):
-            member_login = member_client.post("/api/auth/plex", json={"auth_token": "tok-21"})
+            member_login = sign_in_plex_token(member_client, "tok-21")
         self.assertEqual(member_login.status_code, 200)
         member = member_login.json()["user"]
 

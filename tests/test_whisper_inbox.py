@@ -1,6 +1,8 @@
 """Named-member whisper inbox: 12-word why, not Good News, not a grab ping."""
 
+
 from __future__ import annotations
+from projectionist.web.plex_session import sign_in_plex_token
 
 import importlib
 import json
@@ -398,7 +400,7 @@ class WhisperApiTests(unittest.TestCase):
     def _login(self, *, plex_id: int, title: str, email: str) -> dict:
         profile = {"id": plex_id, "title": title, "email": email, "thumb": None}
         with patch("projectionist.web.auth.fetch_plex_account", return_value=profile):
-            resp = self.client.post("/api/auth/plex", json={"auth_token": f"tok-{plex_id}"})
+            resp = sign_in_plex_token(self.client, f"tok-{plex_id}")
         self.assertEqual(resp.status_code, 200)
         return resp.json()["user"]
 

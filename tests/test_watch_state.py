@@ -1,6 +1,8 @@
 """Tests for mark watched/unwatched (DB + mocked Plex scrobble)."""
 
+
 from __future__ import annotations
+from projectionist.web.plex_session import sign_in_plex_token
 
 import importlib
 import json
@@ -366,7 +368,7 @@ class WatchStateApiTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 10, "title": "Owner"},
         ):
-            self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
+            sign_in_plex_token(self.client, "owner-token")
 
         member_id = "plex-member-1"
         self.db.upsert_plex_user(
@@ -415,7 +417,7 @@ class WatchStateApiTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 10, "title": "Owner"},
         ):
-            self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
+            sign_in_plex_token(self.client, "owner-token")
 
         guest_id = "plex-guest-1"
         self.db.upsert_plex_user(

@@ -403,19 +403,6 @@ export async function linkPlexAccount({ pinId, password }: { pinId?: string; pas
   });
 }
 
-export async function loginWithPlex(
-  authToken: string,
-  { inviteToken }: { inviteToken?: string } = {},
-) {
-  return api("/auth/plex", {
-    method: "POST",
-    body: JSON.stringify({
-      auth_token: authToken,
-      ...(inviteToken ? { invite_token: inviteToken } : {}),
-    }),
-  });
-}
-
 export async function registerLocalUser(username: string, password: string) {
   return api("/auth/local/register", {
     method: "POST",

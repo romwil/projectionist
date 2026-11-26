@@ -1,6 +1,8 @@
 """Tests for optional multi-user Plex auth."""
 
+
 from __future__ import annotations
+from projectionist.web.plex_session import sign_in_plex_token
 
 import importlib
 import json
@@ -132,7 +134,7 @@ class AuthTests(unittest.TestCase):
             "thumb": "https://plex.test/avatar.jpg",
         }
         with patch("projectionist.web.auth.fetch_plex_account", return_value=profile):
-            resp = self.client.post("/api/auth/plex", json={"auth_token": "plex-token-1"})
+            resp = sign_in_plex_token(self.client, "plex-token-1")
         self.assertEqual(resp.status_code, 200)
         body = resp.json()
         self.assertTrue(body["authenticated"])
@@ -305,11 +307,11 @@ class AuthTests(unittest.TestCase):
         owner_profile = {"id": 1, "title": "Owner", "email": "owner@example.com"}
         member_profile = {"id": 2, "title": "Member", "email": "member@example.com"}
         with patch("projectionist.web.auth.fetch_plex_account", return_value=owner_profile):
-            self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
+            sign_in_plex_token(self.client, "owner-token")
         self.client.post("/api/auth/logout")
 
         with patch("projectionist.web.auth.fetch_plex_account", return_value=member_profile):
-            resp = self.client.post("/api/auth/plex", json={"auth_token": "member-token"})
+            resp = sign_in_plex_token(self.client, "member-token")
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()["user"]["role"], "member")
 
@@ -321,7 +323,7 @@ class AuthTests(unittest.TestCase):
             "projectionist.web.auth.SeerrClient.link_plex_user",
             return_value=seerr_payload,
         ):
-            resp = self.client.post("/api/auth/plex", json={"auth_token": "plex-token"})
+            resp = sign_in_plex_token(self.client, "plex-token")
         self.assertEqual(resp.status_code, 200)
         user = resp.json()["user"]
         self.assertEqual(user["seerr_user_id"], 7)
@@ -340,7 +342,7 @@ class AuthTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 5, "title": "Logout User"},
         ):
-            login = self.client.post("/api/auth/plex", json={"auth_token": "token"})
+            login = sign_in_plex_token(self.client, "token")
         self.assertEqual(login.status_code, 200)
 
         logout = self.client.post("/api/auth/logout")
@@ -356,7 +358,7 @@ class AuthTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 10, "title": "Owner"},
         ):
-            self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
+            sign_in_plex_token(self.client, "owner-token")
 
         listed = self.client.get("/api/users")
         self.assertEqual(listed.status_code, 200)
@@ -392,7 +394,7 @@ class AuthTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 40, "title": "Owner"},
         ):
-            self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
+            sign_in_plex_token(self.client, "owner-token")
 
         import projectionist.web.jobs as jobs
 
@@ -423,7 +425,7 @@ class AuthTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 50, "title": "Solo Owner"},
         ):
-            login = self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
+            login = sign_in_plex_token(self.client, "owner-token")
         owner_id = login.json()["user"]["id"]
 
         self_disable = self.client.patch(f"/api/users/{owner_id}", json={"disabled": True})
@@ -453,7 +455,7 @@ class AuthTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 60, "title": "Owner"},
         ):
-            self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
+            sign_in_plex_token(self.client, "owner-token")
 
         import projectionist.web.jobs as jobs
 
@@ -471,7 +473,7 @@ class AuthTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 61, "title": "Member"},
         ):
-            denied = self.client.post("/api/auth/plex", json={"auth_token": "member-token"})
+            denied = sign_in_plex_token(self.client, "member-token")
         self.assertEqual(denied.status_code, 403)
         self.assertIn("disabled", denied.json()["detail"].lower())
 
@@ -493,7 +495,7 @@ class AuthTests(unittest.TestCase):
             "projectionist.web.auth.SeerrClient.link_plex_user",
             return_value={"id": 99, "permissions": 0},
         ):
-            self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
+            sign_in_plex_token(self.client, "owner-token")
         self.client.post("/api/auth/logout")
 
         with patch(
@@ -503,7 +505,7 @@ class AuthTests(unittest.TestCase):
             "projectionist.web.auth.SeerrClient.link_plex_user",
             return_value={"id": 55, "permissions": 0},
         ):
-            self.client.post("/api/auth/plex", json={"auth_token": "member-token"})
+            sign_in_plex_token(self.client, "member-token")
 
         payload = {"results": [], "pageInfo": {"results": 0, "pages": 0, "page": 1, "pageSize": 20}}
         with patch("projectionist.web.app.SeerrClient.list_requests", return_value=payload) as mock_list:

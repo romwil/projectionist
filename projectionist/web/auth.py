@@ -62,7 +62,6 @@ PUBLIC_HANDSHAKE_EXACT = frozenset(
         ("POST", "/api/invites/redeem/local"),
         ("POST", "/api/auth/local/login"),
         ("POST", "/api/auth/plex/pin"),
-        ("POST", "/api/auth/plex"),
         ("POST", "/api/auth/logout"),
         ("GET", "/api/auth/oidc/authorize"),
         ("POST", "/api/auth/oidc/authorize"),

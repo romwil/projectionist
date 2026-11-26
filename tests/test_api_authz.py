@@ -1,6 +1,8 @@
 """API authorization when multi-user auth is enabled."""
 
+
 from __future__ import annotations
+from projectionist.web.plex_session import sign_in_plex_token
 
 import importlib
 import json
@@ -91,7 +93,7 @@ class ApiAuthzTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": plex_id, "title": title, "email": f"{title}@example.com"},
         ):
-            resp = self.client.post("/api/auth/plex", json={"auth_token": f"token-{plex_id}"})
+            resp = sign_in_plex_token(self.client, f"token-{plex_id}")
         self.assertEqual(resp.status_code, 200, resp.text)
 
     def test_unauthenticated_mutating_routes_require_session(self) -> None:
@@ -392,10 +394,7 @@ class ApiAuthzTests(unittest.TestCase):
                 "email": f"{title}@example.com",
             },
         ):
-            resp = self.client.post(
-                "/api/auth/plex",
-                json={"auth_token": f"token-{plex_id}"},
-            )
+            resp = sign_in_plex_token(self.client, f"token-{plex_id}")
         return resp.json()["user"]["id"]
 
     def test_secure_cookie_ignored_without_trusted_proxy(self) -> None:
@@ -404,11 +403,7 @@ class ApiAuthzTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 9, "title": "Secure User"},
         ):
-            resp = self.client.post(
-                "/api/auth/plex",
-                json={"auth_token": "secure-token"},
-                headers={"X-Forwarded-Proto": "https"},
-            )
+            resp = sign_in_plex_token(self.client, "secure-token", headers={"X-Forwarded-Proto": "https"})
         self.assertEqual(resp.status_code, 200)
         set_cookie = resp.headers.get("set-cookie", "")
         self.assertIn("curatorx_session=", set_cookie)
@@ -422,11 +417,7 @@ class ApiAuthzTests(unittest.TestCase):
                 "projectionist.web.auth.fetch_plex_account",
                 return_value={"id": 11, "title": "Trusted User"},
             ):
-                resp = self.client.post(
-                    "/api/auth/plex",
-                    json={"auth_token": "trusted-token"},
-                    headers={"X-Forwarded-Proto": "https"},
-                )
+                resp = sign_in_plex_token(self.client, "trusted-token", headers={"X-Forwarded-Proto": "https"})
         finally:
             os.environ.pop("PROJECTIONIST_TRUST_PROXY_HEADERS", None)
         self.assertEqual(resp.status_code, 200)
@@ -445,7 +436,6 @@ class ApiAuthzTests(unittest.TestCase):
             ("POST", "/api/invites/redeem/local"),
             ("POST", "/api/auth/local/login"),
             ("POST", "/api/auth/plex/pin"),
-            ("POST", "/api/auth/plex"),
             ("POST", "/api/auth/logout"),
             ("GET", "/api/auth/oidc/authorize"),
             ("POST", "/api/auth/oidc/authorize"),

@@ -733,12 +733,6 @@ class LocalLoginPayload(BaseModel):
     client: Optional[Dict[str, Any]] = None
 
 
-class PlexLoginPayload(BaseModel):
-    auth_token: str = Field(min_length=1)
-    invite_token: Optional[str] = None
-    client: Optional[Dict[str, Any]] = None
-
-
 class InviteCreatePayload(BaseModel):
     role: str = Field(default="member", pattern="^member$")
     is_youth: bool = False

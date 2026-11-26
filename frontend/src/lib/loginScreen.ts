@@ -65,20 +65,3 @@ export function loginDoorDecision({
   if (me?.user) return "redirect";
   return "form";
 }
-
-/**
- * Copy + control labels for the tucked-away Plex token recovery path.
- *
- * @param {{ open?: boolean }} [options]
- */
-export function plexAdvancedCopy(options: JsParam = {}) {
-  const open = Boolean(options.open);
-  return {
-    toggleLabel: open ? "Hide advanced" : "Advanced",
-    tokenLabel: "Plex token",
-    tokenPlaceholder: "Paste token",
-    tokenHelp: "Recovery only — prefer Sign in with Plex above.",
-    submitLabel: "Continue with token",
-    emptyError: "Paste a Plex token to continue.",
-  };
-}

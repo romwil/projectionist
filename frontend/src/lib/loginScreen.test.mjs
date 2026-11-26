@@ -6,7 +6,6 @@ import {
   LOGIN_PRODUCT_STATEMENT,
   loginDoorDecision,
   loginLede,
-  plexAdvancedCopy,
   resolveAuthMethods,
 } from "./loginScreen.ts";
 
@@ -58,22 +57,6 @@ describe("loginLede", () => {
     for (const methods of [["plex"], ["local", "plex"], ["local", "oidc"]]) {
       assert.ok(loginLede(methods).startsWith(LOGIN_PRODUCT_STATEMENT));
     }
-  });
-});
-
-describe("plexAdvancedCopy", () => {
-  it("uses a discreet Advanced toggle when closed", () => {
-    const copy = plexAdvancedCopy({ open: false });
-    assert.equal(copy.toggleLabel, "Advanced");
-    assert.doesNotMatch(copy.toggleLabel, /token/i);
-  });
-
-  it("exposes recovery labels only after open", () => {
-    const copy = plexAdvancedCopy({ open: true });
-    assert.equal(copy.toggleLabel, "Hide advanced");
-    assert.match(copy.tokenHelp, /Recovery only/i);
-    assert.match(copy.tokenHelp, /Sign in with Plex/i);
-    assert.equal(copy.emptyError, "Paste a Plex token to continue.");
   });
 });
 

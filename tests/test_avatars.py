@@ -1,6 +1,8 @@
 """Tests for local avatar storage and validation."""
 
+
 from __future__ import annotations
+from projectionist.web.plex_session import sign_in_plex_token
 
 import importlib
 import json
@@ -109,7 +111,7 @@ class AvatarUploadApiTests(unittest.TestCase):
             "projectionist.web.avatars.cache_remote_avatar",
             return_value=None,
         ):
-            login = self.client.post("/api/auth/plex", json={"auth_token": "tok"})
+            login = sign_in_plex_token(self.client, "tok")
         self.assertEqual(login.status_code, 200)
 
     def tearDown(self) -> None:

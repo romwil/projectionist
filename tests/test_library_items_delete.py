@@ -1,6 +1,8 @@
 """Owner-only library index delete by rating_key."""
 
+
 from __future__ import annotations
+from projectionist.web.plex_session import sign_in_plex_token
 
 import importlib
 import json
@@ -144,7 +146,7 @@ class LibraryItemsDeleteApiTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 10, "title": "Owner"},
         ):
-            self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
+            sign_in_plex_token(self.client, "owner-token")
 
         import projectionist.web.jobs as jobs
 
@@ -173,7 +175,7 @@ class LibraryItemsDeleteApiTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 10, "title": "Owner"},
         ):
-            self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
+            sign_in_plex_token(self.client, "owner-token")
 
         import projectionist.web.jobs as jobs
 
@@ -200,7 +202,7 @@ class LibraryItemsDeleteApiTests(unittest.TestCase):
             "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 11, "title": "Owner"},
         ):
-            login = self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
+            login = sign_in_plex_token(self.client, "owner-token")
         self.assertEqual(login.status_code, 200)
         self._seed_item("rk-owner-ok", title="Owner Delete")
         resp = self.client.post(
