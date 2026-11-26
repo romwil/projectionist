@@ -95,7 +95,7 @@ docker pull romwil/projectionist:latest
 # ./unraid-force-pull.sh latest --rmi-retry   # if pull still no-ops
 ```
 
-Keep the appdata kit in sync with the repo: `scripts/unraid-rollout.sh` → `rollout.sh`, `docker-compose.unraid.yml` → `docker-compose.yml`, `scripts/unraid.env.example` → `.env.example`, `scripts/unraid-force-pull.sh`. Confirm: `docker exec projectionist cat /app/.build-info` and the `Projectionist startup (version …)` log line. Full root-cause: [../DOCKER.md](../DOCKER.md#unraid-force-update-pulls-0-b--stays-on-an-old-version).
+Keep the appdata kit in sync with the repo: `scripts/unraid-rollout.sh` → `rollout.sh`, `docker-compose.unraid.yml` → `docker-compose.yml`, `scripts/unraid.env.example` → `.env.example`, `scripts/unraid-force-pull.sh`. Confirm: `docker exec -u 1000 projectionist cat /app/.build-info` and the `Projectionist startup (version …)` log line. Full root-cause: [../DOCKER.md](../DOCKER.md#unraid-force-update-pulls-0-b--stays-on-an-old-version).
 
 An interrupted sync job is marked failed; start sync again — phase checkpoints resume unfinished work when still valid (≤72h).
 

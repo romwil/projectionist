@@ -147,6 +147,27 @@ class EntrypointOwnershipTests(unittest.TestCase):
             )
             self.assertFalse(find_log.exists())
 
+    def test_root_owned_settings_is_chowned_before_the_app_runs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            settings = root / "config" / "settings.json"
+            completed, chown_log, gosu_log, _find_log, _marker = self._run(
+                root,
+                uid="0",
+                stat_uid="1000",
+                stat_gid="1000",
+                find_paths=f"{settings}\n",
+                forbid_find=False,
+                args=["marker"],
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertIn(f"fixing ownership of {settings}", completed.stderr)
+            self.assertIn(
+                f"projectionist:projectionist {settings}",
+                chown_log.read_text(encoding="utf-8"),
+            )
+            self.assertIn("projectionist marker", gosu_log.read_text(encoding="utf-8"))
+
     def test_non_root_does_not_chown(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

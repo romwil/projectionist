@@ -1340,6 +1340,7 @@ def _features_payload(
             "llm_configured": bool(
                 settings.llm_api_key or settings.llm_provider == "ollama"
             ),
+            "llm_provider": str(settings.llm_provider or ""),
             # EXP-006: hub, title, and search art URLs point at the cache route.
             # Same fact as capabilities.cached_art (1 when this is true).
             "cached_art": CACHED_ART_ENABLED,
@@ -1425,13 +1426,23 @@ def health() -> Dict[str, str]:
 
 @app.get("/api/ready")
 def ready() -> Dict[str, str]:
-    """Readiness: startup finished and the database answers within 100 ms.
+    """Readiness: startup finished, settings load, and the database answers.
 
     Never reads the movie library. ``/api/health`` stays a liveness check.
+    A settings file or database the app user cannot read and write is not ready.
     """
     if not bool(getattr(app.state, "ready", False)):
         raise HTTPException(status_code=503, detail="Starting")
-    database = runtime_metrics.probe_database(_db().path)
+    from projectionist.config_store import database_file_readiness, settings_file_readiness
+
+    settings_problem = settings_file_readiness(DATA_DIR)
+    if settings_problem:
+        raise HTTPException(status_code=503, detail=settings_problem)
+    db_path = _db().path
+    database_access = database_file_readiness(db_path)
+    if database_access:
+        raise HTTPException(status_code=503, detail=database_access)
+    database = runtime_metrics.probe_database(db_path)
     if database != "ok":
         raise HTTPException(status_code=503, detail=f"Database {database}")
     return {"status": "ready", "version": __version__, "database": database}

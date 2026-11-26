@@ -114,6 +114,7 @@ class FeaturesLiveReadyTests(unittest.TestCase):
         features = resp.json()["features"]
         self.assertTrue(features["live_channels_enabled"])
         self.assertTrue(features["live_channels_ready"])
+        self.assertTrue(str(features["llm_provider"]).strip())
         saved = json.loads((Path(self._tmpdir.name) / "settings.json").read_text(encoding="utf-8"))
         self.assertEqual(str(saved["tunarr"]["url"]).strip(), "")
 

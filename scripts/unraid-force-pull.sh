@@ -113,9 +113,9 @@ else
   log "Digest/ID moved (or first pull) — local tag now tracks Hub."
 fi
 
-if docker inspect "$CONTAINER_NAME" >/dev/null 2>&1 && docker exec "$CONTAINER_NAME" cat /app/.build-info >/dev/null 2>&1; then
+if docker inspect "$CONTAINER_NAME" >/dev/null 2>&1 && docker exec -u 1000 "$CONTAINER_NAME" cat /app/.build-info >/dev/null 2>&1; then
   log "Running container build-info (may still be old until recreate):"
-  docker exec "$CONTAINER_NAME" cat /app/.build-info || true
+  docker exec -u 1000 "$CONTAINER_NAME" cat /app/.build-info || true
 fi
 
 if [[ "$RECREATE" -eq 1 ]]; then
@@ -133,5 +133,5 @@ else
   log "Or: cd /mnt/user/appdata/projectionist && ./rollout.sh ${IMAGE_TAG}"
 fi
 
-log "Verify after recreate: docker exec $CONTAINER_NAME cat /app/.build-info"
+log "Verify after recreate: docker exec -u 1000 $CONTAINER_NAME cat /app/.build-info"
 log "=== force-pull done ==="
