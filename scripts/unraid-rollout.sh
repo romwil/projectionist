@@ -66,6 +66,9 @@ HEALTH_URL="http://127.0.0.1:${HOST_PORT}/api/health"
 READY_URL="http://127.0.0.1:${HOST_PORT}/api/ready"
 APP_ORIGIN="http://127.0.0.1:${HOST_PORT}"
 # App uid. docker exec without -u is root and can rewrite settings.json as root.
+# At 05:22:53 UTC a rollout session ran `docker exec -i projectionist python -`
+# as root. That process rewrote settings.json. Every docker exec here passes
+# -u "$APP_UID". Do not drop it.
 APP_UID=1000
 STARTUP_PATTERN='Projectionist startup'
 # Accept legacy log line during image transition
@@ -341,6 +344,30 @@ if "live_channels_enabled" not in features:
   log "Signed-in smoke: features show the chat provider and live channels, and the hub rail returned 200."
 }
 
+# Root-only credentials for the signed-in smoke. Not the app .env: that file
+# lives on the share and is not root-only. This file is outside the container
+# bind and outside git. Fail before the container is replaced.
+require_smoke_env() {
+  local smoke_env="${PROJECTIONIST_SMOKE_ENV:-/boot/config/projectionist-smoke.env}"
+  if [[ ! -f "$smoke_env" ]]; then
+    die "Smoke env file is missing at ${smoke_env}. Refusing to replace the container."
+  fi
+  local smoke_mode smoke_owner
+  smoke_mode="$(stat -c '%a' "$smoke_env")"
+  smoke_owner="$(stat -c '%u' "$smoke_env")"
+  if [[ "$smoke_mode" != "600" || "$smoke_owner" != "0" ]]; then
+    die "Smoke env ${smoke_env} must be mode 600 and owned by root. Refusing to replace the container."
+  fi
+  set -a
+  # shellcheck disable=SC1090
+  source "$smoke_env"
+  set +a
+  if [[ -z "${PROJECTIONIST_SMOKE_USERNAME:-}" || -z "${PROJECTIONIST_SMOKE_PASSWORD:-}" ]]; then
+    die "Smoke env ${smoke_env} is missing a username or password. Refusing to replace the container."
+  fi
+  log "Smoke env ${smoke_env} is mode 600, owned by root. Username: ${PROJECTIONIST_SMOKE_USERNAME}."
+}
+
 log "=== Projectionist rollout ==="
 log "Dir:   $SCRIPT_DIR"
 log "Image: $IMAGE"
@@ -354,6 +381,7 @@ log "TV library (rw): $TV_MEDIA → /tv (and same-path when host dir exists)"
 log "Movie library (rw): $MOVIE_MEDIA → /movies (and same-path when host dir exists)"
 log "Preroll bumpers (rw): $PREROLL_MEDIA → /preroll (and same-path when host dir exists)"
 log "Host data dir (Tunarr binds): PROJECTIONIST_HOST_DATA_DIR=$CONFIG_DIR"
+require_smoke_env
 
 # Compose reference YAML keeps docker.sock commented (opt-in). When the host
 # .env asks for MOUNT_DOCKER_SOCK / DOCKER_SOCK, prefer plain docker so Live
