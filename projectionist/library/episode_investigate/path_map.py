@@ -16,7 +16,7 @@ from projectionist.config_store import normalize_root_path
 
 logger = logging.getLogger(__name__)
 
-# Sonarr / Radarr namespaces this image bind-mounts read-write.
+# Sonarr / Radarr namespaces. The shipped bind is read-only.
 CONTAINER_MEDIA_ROOTS = (
     "/tv",
     "/movies",

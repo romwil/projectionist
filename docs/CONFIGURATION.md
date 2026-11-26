@@ -39,8 +39,8 @@ Canonical branded variables use the `PROJECTIONIST_*` prefix.
 | OMDb API key | `OMDB_API_KEY` | Required only when synopsis source is `omdb` (or `auto` fallback). Free OMDb key. |
 
 | Tautulli URL / key | `TAUTULLI_URL`, `TAUTULLI_API_KEY` | Watch stats for purge scoring |
-| TV library path | `PROJECTIONIST_TV_MEDIA` (wins when set) or `TV_ROOT` | Container-visible TV root (`tv_root`). Unraid/Automat host default `/mnt/user/data/media/tv`, bind-mounted **read-write** at `/tv` (and the same host path). Investigate Apply renames episode files — never `:ro`. |
-| Movie library path | `PROJECTIONIST_MOVIE_MEDIA` (wins when set) or `MOVIES_ROOT` | Container-visible movie root (`movies_root`). Unraid/Automat host default `/mnt/user/data/media/movies`, bind-mounted **read-write** at `/movies`. Paths are not secrets. |
+| TV library path | `PROJECTIONIST_TV_MEDIA` (wins when set) or `TV_ROOT` | Container-visible TV root (`tv_root`). Unraid/Automat host default `/mnt/user/data/media/tv`, bind-mounted **read-only** at `/tv` (and the same host path). Apply renames a file only when Allow file renames is on and the mount is read-write. |
+| Movie library path | `PROJECTIONIST_MOVIE_MEDIA` (wins when set) or `MOVIES_ROOT` | Container-visible movie root (`movies_root`). Unraid/Automat host default `/mnt/user/data/media/movies`, bind-mounted **read-only** at `/movies`. Paths are not secrets. |
 | Radarr root folder | `RADARR_ROOT_FOLDER` | Default path for movie adds |
 | Sonarr root folder | `SONARR_ROOT_FOLDER` | Default path for series adds |
 | Quality profile IDs | `RADARR_QUALITY_PROFILE_ID`, `SONARR_QUALITY_PROFILE_ID` | *arr quality profiles |
@@ -144,7 +144,7 @@ Default values (also in `config/settings.example.json`):
 
 **Publish note:** Re-publishing starters is additive by channel number. Existing numbers refresh lineups when `fill_programming=true` (default); with `fill_programming=false` they count as skipped (`number_exists`). A free number with a colliding name is renamed (for example `Mystery 2`) and still created. Craft publish remaps an occupied form number to the next free dial slot.
 
-**Unraid CA:** the template does not mount the Docker socket. A socket is root on the host, and `rollout.sh` stops if `MOUNT_DOCKER_SOCK` or `DOCKER_SOCK` is set. Point Live Channels at a Tunarr URL you run yourself. `PROJECTIONIST_HOST_DATA_DIR` still names the host path of the Config volume (default `/mnt/user/appdata/projectionist/config`).
+**Unraid CA:** the template does not mount a Docker socket. `rollout.sh` stops if `MOUNT_DOCKER_SOCK` or `DOCKER_SOCK` is set. Live Channels uses a Tunarr URL you already run. The library mounts are read-only. `PROJECTIONIST_HOST_DATA_DIR` is the host path of Config (default `/mnt/user/appdata/projectionist/config`). See [UNRAID.md](UNRAID.md).
 
 **For a new install:** set `PROJECTIONIST_OWNER_PASSWORD` (8+ characters). The server stays on the lock page until that passcode is entered, then setup creates the owner with sign-in on. An install that already has an owner keeps its current mode and does not show the lock.
 

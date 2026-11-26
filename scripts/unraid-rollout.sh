@@ -51,10 +51,11 @@ THEATER_HOST_PORT="${THEATER_HOST_PORT:-8791}"
 CONTAINER_NAME="${CONTAINER_NAME:-projectionist}"
 IMAGE="romwil/projectionist:${IMAGE_TAG}"
 CONFIG_DIR="$SCRIPT_DIR/config"
-# Host media libraries — rw so Investigate Apply can rename files. Automat defaults.
+# Host media libraries are read-only. Apply renames only with an opt-in mount.
 TV_MEDIA="${PROJECTIONIST_TV_MEDIA:-/mnt/user/data/media/tv}"
 MOVIE_MEDIA="${PROJECTIONIST_MOVIE_MEDIA:-/mnt/user/data/media/movies}"
 PREROLL_MEDIA="${PROJECTIONIST_PREROLL_MEDIA:-/mnt/user/data/media/preroll}"
+COPIES_DIR="${PROJECTIONIST_COPIES_DIR:-}"
 _REQUESTED_DOCKER_SOCK="${DOCKER_SOCK:-}"
 DOCKER_SOCK=""
 HEALTH_URL="http://127.0.0.1:${HOST_PORT}/api/health"
@@ -73,7 +74,7 @@ WAIT_SECS="${ROLLOUT_WAIT_SECS:-90}"
 log() { printf '%s\n' "$*"; }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
-# The Docker socket is root on the host. Refuse before any container is created.
+# A Docker socket is root on the host. Refuse before any container is created.
 if [[ -n "${MOUNT_DOCKER_SOCK:-}" || -n "${_REQUESTED_DOCKER_SOCK}" ]]; then
   die "Refusing to mount a Docker socket. Unset MOUNT_DOCKER_SOCK and DOCKER_SOCK. Use a Tunarr URL instead."
 fi
@@ -147,23 +148,35 @@ run_plain_docker() {
     -p "${THEATER_HOST_PORT}:8791"
     -v "${CONFIG_DIR}:/config"
     --add-host=host.docker.internal:host-gateway
+    --security-opt no-new-privileges:true
+    --cap-drop ALL
+    --cap-add CHOWN
+    --cap-add SETUID
+    --cap-add SETGID
+    --cap-add DAC_OVERRIDE
+    --read-only
+    --tmpfs /tmp:rw,nosuid,size=256m,mode=1777
   )
-  _mount_media_rw() {
+  _mount_media_ro() {
     local host_path="$1" container_path="$2" label="$3"
     if [[ ! -d "$host_path" ]]; then
-      log "WARN: $label host path missing ($host_path) — skipping bind (Investigate cannot rename under $container_path)."
+      log "WARN: $label host path missing ($host_path) — skipping read-only bind at $container_path."
       return 0
     fi
-    log "Mounting $label $host_path → $container_path (rw)"
-    run_args+=(-v "${host_path}:${container_path}")
+    log "Mounting $label $host_path → $container_path (ro)"
+    run_args+=(-v "${host_path}:${container_path}:ro")
     if [[ "$host_path" != "$container_path" ]]; then
-      log "Mounting $label same-path $host_path → $host_path (rw)"
-      run_args+=(-v "${host_path}:${host_path}")
+      log "Mounting $label same-path $host_path → $host_path (ro)"
+      run_args+=(-v "${host_path}:${host_path}:ro")
     fi
   }
-  _mount_media_rw "$TV_MEDIA" /tv "TV library"
-  _mount_media_rw "$MOVIE_MEDIA" /movies "Movie library"
-  _mount_media_rw "$PREROLL_MEDIA" /preroll "Preroll bumpers"
+  _mount_media_ro "$TV_MEDIA" /tv "TV library"
+  _mount_media_ro "$MOVIE_MEDIA" /movies "Movie library"
+  _mount_media_ro "$PREROLL_MEDIA" /preroll "Preroll bumpers"
+  if [[ -n "$COPIES_DIR" && -d "$COPIES_DIR" ]]; then
+    log "Mounting copies $COPIES_DIR → /copies (rw)"
+    run_args+=(-v "${COPIES_DIR}:/copies")
+  fi
   run_args+=(
     -e "PROJECTIONIST_TV_MEDIA=${TV_MEDIA}"
     -e "PROJECTIONIST_MOVIE_MEDIA=${MOVIE_MEDIA}"
@@ -366,13 +379,13 @@ log "=== Projectionist rollout ==="
 log "Dir:   $SCRIPT_DIR"
 log "Image: $IMAGE"
 log "Port:  ${HOST_PORT} → 8788"
-log "Theater port: ${THEATER_HOST_PORT} → 8791 (LAN only)"
+log "Theater port: ${THEATER_HOST_PORT} → 8791 (LAN only; never put this port on a tunnel)"
 log "Docker socket: not mounted"
 log "Config bind: $CONFIG_DIR → /config (preserved)"
-log "TV library (rw): $TV_MEDIA → /tv (and same-path when host dir exists)"
-log "Movie library (rw): $MOVIE_MEDIA → /movies (and same-path when host dir exists)"
-log "Preroll bumpers (rw): $PREROLL_MEDIA → /preroll (and same-path when host dir exists)"
-log "Host data dir (Tunarr binds): PROJECTIONIST_HOST_DATA_DIR=$CONFIG_DIR"
+log "TV library (ro): $TV_MEDIA → /tv (and same-path when host dir exists)"
+log "Movie library (ro): $MOVIE_MEDIA → /movies (and same-path when host dir exists)"
+log "Preroll bumpers (ro): $PREROLL_MEDIA → /preroll (and same-path when host dir exists)"
+log "Host data dir: PROJECTIONIST_HOST_DATA_DIR=$CONFIG_DIR"
 require_smoke_env
 
 if ((${#COMPOSE[@]})); then

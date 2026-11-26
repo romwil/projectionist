@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from projectionist.config_store import AcrcloudSettings, load_merged_settings, save_settings, Settings
+from projectionist.library.episode_investigate.rename_gate import file_rename_refusal, file_rename_status
 from projectionist.web.auth import require_role
 
 router = APIRouter(tags=["investigate"])
@@ -62,6 +63,22 @@ def _data_dir() -> Path:
     from projectionist.web.jobs import get_job_manager
 
     return Path(get_job_manager().data_dir)
+
+
+def _refuse_file_rename(user: Any) -> None:
+    """403 when Apply is not allowed. A refusal is an audit row."""
+    reason = file_rename_refusal(_settings())
+    if not reason:
+        return
+    from projectionist import security_audit as sa
+
+    sa.audit(
+        _db(),
+        sa.FILE_RENAME,
+        actor_id=getattr(user, "id", None),
+        outcome="refused",
+    )
+    raise HTTPException(status_code=403, detail=reason)
 
 
 def _posix_path(value: str) -> str:
@@ -167,7 +184,9 @@ def investigate_health(user=Depends(require_role("owner"))) -> Dict[str, Any]:
     del user
     from projectionist.library.episode_investigate.capabilities import health_payload
 
-    return health_payload(_settings())
+    payload = health_payload(_settings())
+    payload["file_renames"] = file_rename_status(_settings())
+    return payload
 
 
 @router.get("/api/admin/investigate/shows")
@@ -245,7 +264,8 @@ def investigate_cancel(user=Depends(require_role("owner"))) -> Dict[str, Any]:
 def investigate_apply(
     payload: InvestigateApplyPayload, user=Depends(require_role("owner"))
 ) -> Dict[str, Any]:
-    del user
+    _refuse_file_rename(user)
+    from projectionist import security_audit as sa
     from projectionist.library.episode_investigate.job import start_apply_job
 
     snap = start_apply_job(
@@ -255,6 +275,13 @@ def investigate_apply(
     )
     if snap.get("accepted") is False and snap.get("error"):
         raise HTTPException(status_code=400, detail=str(snap.get("error")))
+    sa.audit(
+        _db(),
+        sa.FILE_RENAME,
+        actor_id=getattr(user, "id", None),
+        outcome="started",
+        files=len(payload.file_ids),
+    )
     return snap
 
 
@@ -278,6 +305,7 @@ def investigate_apply_cancel(user=Depends(require_role("owner"))) -> Dict[str, A
 def investigate_undo(
     payload: InvestigateUndoPayload, user=Depends(require_role("owner"))
 ) -> Dict[str, Any]:
+    _refuse_file_rename(user)
     del user
     from projectionist.library.episode_investigate.job import start_undo_job
 

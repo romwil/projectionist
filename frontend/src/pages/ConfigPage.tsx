@@ -147,9 +147,9 @@ const FIELD_HELP: Record<string, string> = {
     "Defaults to wikipedia (free, no key, deeper plot without LLM). Set to off to disable, or omdb / auto.",
   tautulli_url: "Optional: watch history for purge suggestions and “what we’ve been watching”.",
   movies_root:
-    "Path this container uses for movies (usually /movies or the host folder bind-mounted read-write). PROJECTIONIST_MOVIE_MEDIA wins when set. Needed so Investigate can rename files.",
+    "Path this container uses for movies (usually /movies). The install mounts it read-only. PROJECTIONIST_MOVIE_MEDIA wins when set.",
   tv_root:
-    "Path this container uses for TV (usually /tv or the host folder bind-mounted read-write). PROJECTIONIST_TV_MEDIA wins when set. Investigate Apply renames episode files here — the bind must be rw, not :ro.",
+    "Path this container uses for TV (usually /tv). The install mounts it read-only. PROJECTIONIST_TV_MEDIA wins when set. Apply can rename a file only when Allow file renames is on and this mount is read-write.",
   library_enrich_workers:
     "How many titles to enrich at once during sync. Lower if Unraid feels busy.",
 };

@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- Unraid Community Applications template — CuratorX (compatibility pointer; prefer Projectionist) -->
+<!-- Legacy alias. Prefer unraid/projectionist.xml. Do not add a Docker socket or a read-write library here. -->
 <!-- Canonical template: templates/projectionist.xml — product renamed to Projectionist. -->
 <Container version="2">
   <Name>curatorx</Name>

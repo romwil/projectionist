@@ -509,6 +509,9 @@ class FeatureFlags:
     # Projectionist Live Channels. Off until the owner enables them.
     # Nav readiness is "enabled and at least one station", not a Tunarr URL.
     live_channels_enabled: bool = False
+    # Investigate Apply may rename episode files. Off unless the owner opts in
+    # and the library mount is read-write. The shipped mount is read-only.
+    allow_file_renames: bool = False
 
 
 @dataclass

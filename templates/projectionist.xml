@@ -16,13 +16,15 @@
   <WebUI>http://[IP]:[PORT:8788]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/romwil/projectionist/main/templates/projectionist.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/romwil/projectionist/main/unraid/projectionist-icon.png</Icon>
-  <ExtraParams>--add-host=host.docker.internal:host-gateway --group-add 281</ExtraParams>
+  <ExtraParams>--add-host=host.docker.internal:host-gateway --security-opt no-new-privileges:true --cap-drop ALL --cap-add CHOWN --cap-add SETUID --cap-add SETGID --cap-add DAC_OVERRIDE --read-only --tmpfs /tmp:rw,nosuid,size=256m,mode=1777</ExtraParams>
   <PostArgs/>
   <CPUset/>
   <Requires>Plex Media Server on your LAN. Optional: Radarr, Sonarr, Tautulli, Fanart.tv, and an LLM API key or Ollama on the Unraid host.</Requires>
   <Changes>
 ### 1.46.3
 Settings stay owned by the app user, and ready fails when they are not.
+
+Template source after that image: no host socket, the library and prerolls are read-only, the lobby port is LAN only, and the container drops privileges. Copy this template onto a running host only after you capture its current run config.
 
 ### 1.46.2
 Holiday shelves, a quality ceiling, the installable web app, and playback links that expire.
@@ -591,7 +593,7 @@ Year in Review beats get honest: multi-day rewatches only, Plex stars when we ca
 - Full notes: https://github.com/romwil/projectionist/blob/main/CHANGELOG.md
 
 ### 1.29.4
-- Entrypoint joins docker.sock group; Unraid rollout/CA keep --group-add for sock access
+- The container does not mount a host socket. Live Channels uses a Tunarr address you already run.
 - Full notes: https://github.com/romwil/projectionist/blob/main/CHANGELOG.md
 
 ### 1.29.3
@@ -889,23 +891,24 @@ Projectionist is a private movie-and-TV companion for your Plex household: ask f
 
 **Optional:** Tautulli for watch stats and purge suggestions; Fanart.tv for richer poster art. For Ollama on the Unraid host, set `LLM_PROVIDER=ollama` and `LLM_BASE_URL=http://host.docker.internal:11434/v1` (Extra Parameters already add `host.docker.internal`).
 
-**Live Channels (Tunarr):** Point Projectionist at a Tunarr URL you run yourself. This template does not mount the Docker socket. A socket mount is root on the host, and CI rejects it.
+**Live Channels:** point Projectionist at a Tunarr address you already run. This template does not mount a host socket. The library folders are read-only. Investigate can rename a file only when you turn on Allow file renames and change that folder to read-write for the repair. Port 8791 is LAN only and must not go on a tunnel or a public proxy.
 
 **Support:** [GitHub Issues](https://github.com/romwil/projectionist/issues) · [Unraid wiki](https://github.com/romwil/projectionist/blob/main/docs/wiki/Unraid.md)
   </Description>
   <Config Name="Web UI port" Target="8788" Default="8788" Mode="tcp" Description="Projectionist web interface (LAN only recommended)" Type="Port" Display="always" Required="true" Mask="false">8788</Config>
-  <Config Name="Lobby theater port" Target="8791" Default="8791" Mode="tcp" Description="Open LAN lobby lightbox (NOW PLAYING). Do NOT publish through a public reverse proxy or WAN port-forward." Type="Port" Display="always" Required="false" Mask="false">8791</Config>
+  <Config Name="Lobby theater port" Target="8791" Default="8791" Mode="tcp" Description="LAN only lobby lightbox (NOW PLAYING). Never add this port to a tunnel, a public proxy, or a WAN forward." Type="Port" Display="always" Required="false" Mask="false">8791</Config>
   <Config Name="Config" Target="/config" Default="/mnt/user/appdata/projectionist/config" Mode="rw" Description="settings.json, SQLite database, and auto-generated session secret" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/projectionist/config</Config>
-  <Config Name="TV library" Target="/tv" Default="/mnt/user/data/media/tv" Mode="rw" Description="Host TV library, read-write so Investigate can rename episode files. Mapped to /tv (Sonarr namespace). Automat default /mnt/user/data/media/tv. Do not set read-only." Type="Path" Display="always" Required="false" Mask="false">/mnt/user/data/media/tv</Config>
-  <Config Name="Movie library" Target="/movies" Default="/mnt/user/data/media/movies" Mode="rw" Description="Host movie library, read-write. Mapped to /movies (Radarr namespace). Automat default /mnt/user/data/media/movies. Do not set read-only." Type="Path" Display="always" Required="false" Mask="false">/mnt/user/data/media/movies</Config>
-  <Config Name="Preroll bumpers" Target="/preroll" Default="/mnt/user/data/media/preroll" Mode="rw" Description="Host preroll / bumper folder for Play movie starts and Live tune-in (also weather muzak). Mapped to /preroll. Automat default /mnt/user/data/media/preroll." Type="Path" Display="always" Required="false" Mask="false">/mnt/user/data/media/preroll</Config>
-  <Config Name="PROJECTIONIST_TV_MEDIA" Target="PROJECTIONIST_TV_MEDIA" Default="/mnt/user/data/media/tv" Mode="" Description="TV library path for settings (env wins). Same host path as the TV library bind. Read-write mount — Investigate Apply renames files." Type="Variable" Display="advanced" Required="false" Mask="false">/mnt/user/data/media/tv</Config>
-  <Config Name="PROJECTIONIST_MOVIE_MEDIA" Target="PROJECTIONIST_MOVIE_MEDIA" Default="/mnt/user/data/media/movies" Mode="" Description="Movie library path for settings (env wins). Same host path as the Movie library bind. Read-write mount." Type="Variable" Display="advanced" Required="false" Mask="false">/mnt/user/data/media/movies</Config>
+  <Config Name="TV library" Target="/tv" Default="/mnt/user/data/media/tv" Mode="ro" Description="Host TV library, read-only. Mapped to /tv. Apply can rename a file only when Allow file renames is on and you switch this mount to read-write for the repair." Type="Path" Display="always" Required="false" Mask="false">/mnt/user/data/media/tv</Config>
+  <Config Name="Movie library" Target="/movies" Default="/mnt/user/data/media/movies" Mode="ro" Description="Host movie library, read-only. Mapped to /movies." Type="Path" Display="always" Required="false" Mask="false">/mnt/user/data/media/movies</Config>
+  <Config Name="Preroll bumpers" Target="/preroll" Default="/mnt/user/data/media/preroll" Mode="ro" Description="Host preroll / bumper folder, read-only. Mapped to /preroll." Type="Path" Display="always" Required="false" Mask="false">/mnt/user/data/media/preroll</Config>
+  <Config Name="Copies folder" Target="/copies" Default="" Mode="rw" Description="Optional folder for copies made ahead. Writable. Do not point this at the movie or TV library." Type="Path" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="PROJECTIONIST_TV_MEDIA" Target="PROJECTIONIST_TV_MEDIA" Default="/mnt/user/data/media/tv" Mode="" Description="TV library path for settings (env wins). Same host path as the TV library bind, which is read-only." Type="Variable" Display="advanced" Required="false" Mask="false">/mnt/user/data/media/tv</Config>
+  <Config Name="PROJECTIONIST_MOVIE_MEDIA" Target="PROJECTIONIST_MOVIE_MEDIA" Default="/mnt/user/data/media/movies" Mode="" Description="Movie library path for settings (env wins). Same host path as the Movie library bind, which is read-only." Type="Variable" Display="advanced" Required="false" Mask="false">/mnt/user/data/media/movies</Config>
   <Config Name="PROJECTIONIST_PREROLL_MEDIA" Target="PROJECTIONIST_PREROLL_MEDIA" Default="/mnt/user/data/media/preroll" Mode="" Description="Preroll / bumper path for settings (env wins). Same host path as the Preroll bumpers bind." Type="Variable" Display="advanced" Required="false" Mask="false">/mnt/user/data/media/preroll</Config>
   <Config Name="PROJECTIONIST_WEATHER_LAT" Target="PROJECTIONIST_WEATHER_LAT" Default="41.88" Mode="" Description="Optional Weather Channel latitude (Open-Meteo egress). Default Chicago-ish." Type="Variable" Display="advanced" Required="false" Mask="false">41.88</Config>
   <Config Name="PROJECTIONIST_WEATHER_LON" Target="PROJECTIONIST_WEATHER_LON" Default="-87.63" Mode="" Description="Optional Weather Channel longitude (Open-Meteo egress)." Type="Variable" Display="advanced" Required="false" Mask="false">-87.63</Config>
   <Config Name="PROJECTIONIST_WEATHER_PLACE" Target="PROJECTIONIST_WEATHER_PLACE" Default="your area" Mode="" Description="Optional Weather Channel place label spoken/shown in the cable experience." Type="Variable" Display="advanced" Required="false" Mask="false">your area</Config>
-  <Config Name="Host data dir (Tunarr)" Target="PROJECTIONIST_HOST_DATA_DIR" Default="/mnt/user/appdata/projectionist/config" Mode="" Description="Host path of the Config volume. Must match the Config host path above. The Docker socket is not mounted." Type="Variable" Display="advanced" Required="false" Mask="false">/mnt/user/appdata/projectionist/config</Config>
+  <Config Name="Host data dir" Target="PROJECTIONIST_HOST_DATA_DIR" Default="/mnt/user/appdata/projectionist/config" Mode="" Description="Host path of the Config volume. Must match the Config host path above. This container does not mount a host socket." Type="Variable" Display="advanced" Required="false" Mask="false">/mnt/user/appdata/projectionist/config</Config>
   <Config Name="TZ" Target="TZ" Default="UTC" Mode="" Description="Container timezone for preferred library sync hour (e.g. America/New_York)" Type="Variable" Display="advanced" Required="false" Mask="false">UTC</Config>
   <Config Name="PLEX_URL" Target="PLEX_URL" Default="" Mode="" Description="Optional seed: Plex server URL (e.g. http://192.168.1.10:32400)" Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="PLEX_TOKEN" Target="PLEX_TOKEN" Default="" Mode="" Description="Optional seed: Plex Media Server token for library access (not household Sign in with Plex)" Type="Variable" Display="advanced" Required="false" Mask="true"/>

@@ -60,6 +60,8 @@ class InvestigateRoutesTests(unittest.TestCase):
         self.assertEqual(body["status"], "ok")
         self.assertTrue(body["available"])
         self.assertIn("leaves_lan", body["vision"])
+        self.assertFalse(body["file_renames"]["allowed"])
+        self.assertIn("File renames are off", body["file_renames"]["reason"])
         self.assertFalse(body["acrcloud"]["available"])
         self.assertFalse(body["acrcloud"]["deferred"])
 
@@ -120,8 +122,17 @@ class InvestigateRoutesTests(unittest.TestCase):
         self.assertEqual(body["seasons_with_files"], [1, 17])
         self.assertNotIn(18, body["seasons"])
 
-    def test_apply_without_review_is_400(self) -> None:
+    def test_apply_refused_when_renames_are_off(self) -> None:
         resp = self.client.post("/api/admin/investigate/apply", json={"file_ids": ["1"]})
+        self.assertEqual(resp.status_code, 403)
+        self.assertIn("File renames are off", resp.json()["detail"])
+
+    def test_apply_without_review_is_400(self) -> None:
+        with patch(
+            "projectionist.web.investigate_routes.file_rename_refusal",
+            return_value=None,
+        ):
+            resp = self.client.post("/api/admin/investigate/apply", json={"file_ids": ["1"]})
         self.assertEqual(resp.status_code, 400)
 
     def test_status_idle_snapshot(self) -> None:
@@ -200,7 +211,14 @@ class InvestigateRoutesTests(unittest.TestCase):
         apply_cancel = self.client.post("/api/admin/investigate/apply/cancel")
         self.assertEqual(apply_cancel.status_code, 200)
         undo = self.client.post("/api/admin/investigate/undo", json={"apply_id": "missing"})
-        self.assertEqual(undo.status_code, 400)
+        self.assertEqual(undo.status_code, 403)
+        self.assertIn("File renames are off", undo.json()["detail"])
+        with patch(
+            "projectionist.web.investigate_routes.file_rename_refusal",
+            return_value=None,
+        ):
+            opened = self.client.post("/api/admin/investigate/undo", json={"apply_id": "missing"})
+        self.assertEqual(opened.status_code, 400)
 
     def test_new_routes_are_registered(self) -> None:
         from projectionist.web import investigate_routes as routes

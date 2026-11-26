@@ -2,6 +2,8 @@
 
 Projectionist is packaged for Unraid Community Applications as a single container with one config volume. The CA template uses **`romwil/projectionist:latest`**. Pin a minor line (e.g. `:1.12`) or an exact release (e.g. `:1.12.0`) if you prefer a fixed tag.
 
+Install, the read-only library, and the privilege defaults are in [UNRAID.md](../UNRAID.md).
+
 CA stays a free self-host household app. New releases are **AGPL-3.0-only** (source on GitHub). Already-shipped Hub tags through **1.36.2** remain MIT.
 
 Keep port **8788** on a trusted LAN. Do not expose it to the internet without an authenticated reverse proxy in front.
@@ -40,8 +42,8 @@ Resize from a larger master if needed: `sips -z 256 256 source.png --out unraid/
 | Host port | `8788` (or map freely) |
 | Config (new / migrated) | `/mnt/user/appdata/projectionist/config` → `/config` |
 | Config (legacy, never migrated) | `/mnt/user/appdata/curatorx/config` → `/config` — keep that path if you never moved |
-| TV library (rw) | Host TV folder → `/tv` (Automat: `/mnt/user/data/media/tv`). **Read-write** — Investigate Apply renames episode files. Do not set `:ro`. |
-| Movie library (rw) | Host movies folder → `/movies` (Automat: `/mnt/user/data/media/movies`). **Read-write.** |
+| TV library (ro) | Host TV folder → `/tv` (Automat: `/mnt/user/data/media/tv`). **Read-only.** |
+| Movie library (ro) | Host movies folder → `/movies` (Automat: `/mnt/user/data/media/movies`). **Read-only.** |
 | TZ (advanced) | e.g. `America/New_York` — needed so preferred `library_sync_hour` matches wall clock |
 
 4. Apply / Start, then open the WebUI link.

@@ -97,6 +97,8 @@ RUN addgroup --system --gid 1000 projectionist \
 ENV DATA_DIR=/config
 ENV PORT=8788
 ENV PROJECTIONIST_THEATER_PORT=8791
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV TMPDIR=/tmp
 
 EXPOSE 8788 8791
 
@@ -129,7 +131,7 @@ RUN VERSION="${PROJECTIONIST_VERSION}"; \
     echo "${VERSION} built ${BUILD_DATE} rev ${VCS_REF}" > /app/.build-info
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8788/api/health')" || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8788/api/ready')" || exit 1
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["python", "-m", "projectionist.web"]

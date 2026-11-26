@@ -79,8 +79,9 @@ Production appdata is a **rollout kit + live `/config` bind mount**, not a copy 
 ├── docker-compose.yml       # from docker-compose.unraid.yml (optional; plain docker also works on stock Unraid)
 ├── .env                     # optional host overrides (Plex/TMDB/LLM keys, TZ, media paths) — not in git. Do not set MOUNT_DOCKER_SOCK.
 └── .env.example             # from scripts/unraid.env.example (placeholders only)
+```
 
-Prod media binds (read-write — Investigate Apply renames files; never `:ro`):
+The shipped compose file mounts the library read-only. The container that is already running is not changed by a docs or script edit. Adopt that template only in the written change plan, after the current `docker inspect` is saved. Until then the host binds stay as they are:
 
 | Host | Container |
 |------|-----------|
@@ -88,7 +89,6 @@ Prod media binds (read-write — Investigate Apply renames files; never `:ro`):
 | `/mnt/user/data/media/movies` | `/movies` and same-path |
 
 Env: `PROJECTIONIST_TV_MEDIA` / `PROJECTIONIST_MOVIE_MEDIA` (win over settings). After `rollout.sh`, confirm with `docker exec -u 1000 projectionist ls /tv /movies`.
-```
 
 **Do not place in prod appdata:** `.git/`, `frontend/`, `tests/`, `.venv`, CI caches, or any full source tree. Development belongs in a normal git checkout (e.g. maintainer laptop), not on Unraid appdata.
 

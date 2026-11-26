@@ -101,6 +101,30 @@ export default function HouseholdSection({
           owner. Turn sign-in on unless that is what you want.
         </p>
       )}
+      <label className="config-toggle" data-testid="allow-file-renames-toggle">
+        <input
+          type="checkbox"
+          checked={Boolean(settings?.features?.allow_file_renames)}
+          onChange={(event) => {
+            const enabled = event.target.checked;
+            updateFeatureFlags({ allow_file_renames: enabled });
+            persistSettings({
+              features: { ...(settings.features || {}), allow_file_renames: enabled },
+            }).catch((error: any) =>
+              setActionFeedback?.(
+                "file-renames",
+                "error",
+                (error as { message?: string }).message,
+              ),
+            );
+          }}
+        />
+        <span>Allow file renames</span>
+      </label>
+      <p className="wizard-note field-help">
+        Off by default. Investigate can rename an episode file only when this is on and the
+        library folder is mounted read-write. The install mounts that folder read-only.
+      </p>
       {settings?.features?.multi_user_enabled ? (
         <>
           <label className="config-toggle" data-testid="agent-may-mutate-personal-data-toggle">

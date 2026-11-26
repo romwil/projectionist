@@ -19,6 +19,11 @@ set -e
 # Tests set PROJECTIONIST_CONFIG_DIR. The container uses /config.
 config_dir="${PROJECTIONIST_CONFIG_DIR:-/config}"
 
+# A mounted Docker socket is root on the host. This image does not use one.
+if [ -S /var/run/docker.sock ]; then
+    echo "projectionist: warning: a Docker socket is mounted at /var/run/docker.sock. Remove that mount. This container does not use it." >&2
+fi
+
 if [ "$(id -u)" = "0" ]; then
     cfg_uid="$(stat -c '%u' "$config_dir" 2>/dev/null || echo 0)"
     cfg_gid="$(stat -c '%g' "$config_dir" 2>/dev/null || echo 0)"

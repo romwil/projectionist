@@ -18,6 +18,21 @@ services:
     image: romwil/projectionist:${IMAGE_TAG:-latest}
     container_name: projectionist
     restart: unless-stopped
+    # Least privilege. The entrypoint still starts as root so it can repair
+    # /config ownership, then drops to uid 1000. Those four caps are the ones
+    # that repair needs. The app process keeps none of them.
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    security_opt:
+      - no-new-privileges:true
     # Optional seed env via ./.env (Compose loads it for ${VAR} interpolation).
     # Most settings already persist in ./config/settings.json.
     ports:
@@ -65,27 +80,29 @@ services:
       PROJECTIONIST_MCP_FULL_CONFIRM: ${PROJECTIONIST_MCP_FULL_CONFIRM:-${CURATORX_MCP_FULL_CONFIRM:-}}
       PROJECTIONIST_SECRETS_KEY: ${PROJECTIONIST_SECRETS_KEY:-}
       PROJECTIONIST_LOG_LEVEL: ${PROJECTIONIST_LOG_LEVEL:-${CURATORX_LOG_LEVEL:-INFO}}
-      # Host media paths (env wins in settings). Bind-mounted rw at /tv and /movies.
+      # Host media paths (env wins in settings). Bind-mounted read-only.
       PROJECTIONIST_TV_MEDIA: ${PROJECTIONIST_TV_MEDIA:-/mnt/user/data/media/tv}
       PROJECTIONIST_MOVIE_MEDIA: ${PROJECTIONIST_MOVIE_MEDIA:-/mnt/user/data/media/movies}
       PROJECTIONIST_PREROLL_MEDIA: ${PROJECTIONIST_PREROLL_MEDIA:-/mnt/user/data/media/preroll}
     volumes:
       # Host appdata config — do not use docker volume rm / wipe this path
       - ./config:/config
-      # Read-write — Investigate Apply renames episode files. Never :ro.
-      - ${PROJECTIONIST_TV_MEDIA:-/mnt/user/data/media/tv}:/tv
-      - ${PROJECTIONIST_TV_MEDIA:-/mnt/user/data/media/tv}:${PROJECTIONIST_TV_MEDIA:-/mnt/user/data/media/tv}
-      - ${PROJECTIONIST_MOVIE_MEDIA:-/mnt/user/data/media/movies}:/movies
-      - ${PROJECTIONIST_MOVIE_MEDIA:-/mnt/user/data/media/movies}:${PROJECTIONIST_MOVIE_MEDIA:-/mnt/user/data/media/movies}
+      # Read-only. Apply can rename only after an owner mounts these read-write
+      # and turns on Allow file renames. Copies go to their own folder, not here.
+      - ${PROJECTIONIST_TV_MEDIA:-/mnt/user/data/media/tv}:/tv:ro
+      - ${PROJECTIONIST_TV_MEDIA:-/mnt/user/data/media/tv}:${PROJECTIONIST_TV_MEDIA:-/mnt/user/data/media/tv}:ro
+      - ${PROJECTIONIST_MOVIE_MEDIA:-/mnt/user/data/media/movies}:/movies:ro
+      - ${PROJECTIONIST_MOVIE_MEDIA:-/mnt/user/data/media/movies}:${PROJECTIONIST_MOVIE_MEDIA:-/mnt/user/data/media/movies}:ro
       # Optional host preroll bumpers (Play movies + Live tune-in) + weather muzak.
-      - ${PROJECTIONIST_PREROLL_MEDIA:-/mnt/user/data/media/preroll}:/preroll
-      - ${PROJECTIONIST_PREROLL_MEDIA:-/mnt/user/data/media/preroll}:${PROJECTIONIST_PREROLL_MEDIA:-/mnt/user/data/media/preroll}
-      # Live does not start a broadcast container. Do not mount the Docker socket for that.
+      - ${PROJECTIONIST_PREROLL_MEDIA:-/mnt/user/data/media/preroll}:/preroll:ro
+      - ${PROJECTIONIST_PREROLL_MEDIA:-/mnt/user/data/media/preroll}:${PROJECTIONIST_PREROLL_MEDIA:-/mnt/user/data/media/preroll}:ro
+      # Optional copies folder. Uncomment and point it at a directory that is not the library.
+      # - ${PROJECTIONIST_COPIES_DIR:-./copies}:/copies
     extra_hosts:
       # Matches Unraid CA ExtraParams: --add-host=host.docker.internal:host-gateway
       - "host.docker.internal:host-gateway"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8788/api/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8788/api/ready')"]
       interval: 30s
       timeout: 5s
       retries: 3
